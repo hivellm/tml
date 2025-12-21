@@ -6,14 +6,24 @@
 
 **TML (To Machine Language)** is a programming language created specifically to be processed by Large Language Models. Unlike other languages designed for humans and later adapted for tools, TML was built from the ground up with deterministic parsing and code generation as priorities.
 
-## Why Not Use Rust/Go/TypeScript?
+## Why Not Use Existing Languages?
 
 | Language | Problem for LLMs |
 |----------|------------------|
-| **Rust** | `<T>` conflicts with comparison, lifetimes `'a` are noise, closures `\|x\|` ambiguous |
-| **Go** | No expressive generics, verbose and repetitive error handling |
+| **Rust** | `<T>` conflicts with comparison, lifetimes `'a` are noise, `\|x\|` closures ambiguous, `#[...]` cryptic |
+| **Go** | No expressive generics, verbose error handling |
 | **TypeScript** | `{}` ambiguous (object vs block), `<T>` conflicts with JSX |
 | **Python** | Indentation-sensitive breaks patches, optional typing |
+
+## TML Design Philosophy
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Words over symbols** | `and`, `or`, `not`, `ref`, `to` instead of `&&`, `\|\|`, `!`, `&`, `..` |
+| **Explicit over implicit** | `if x then y else z`, mandatory `return` |
+| **Self-documenting types** | `Maybe[T]`, `Outcome[T, E]`, `Shared[T]` |
+| **Natural language directives** | `@when(os: linux)` instead of `#[cfg(...)]` |
+| **No cryptic syntax** | `@auto(debug)` instead of `#[derive(Debug)]` |
 
 ## Specification Index
 
@@ -21,7 +31,7 @@
 
 | Document | Description |
 |----------|-------------|
-| [01-OVERVIEW.md](./01-OVERVIEW.md) | Philosophy, principles, and comparison with Rust |
+| [01-OVERVIEW.md](./01-OVERVIEW.md) | Philosophy and principles |
 | [02-LEXICAL.md](./02-LEXICAL.md) | Tokens, keywords, operators |
 | [03-GRAMMAR.md](./03-GRAMMAR.md) | Complete EBNF grammar |
 | [04-TYPES.md](./04-TYPES.md) | Type system |
@@ -87,7 +97,7 @@ func greet(name: String) -> String {
 }
 
 // Generics use [] not <>
-func first[T](list: List[T]) -> Option[T] {
+func first[T](list: List[T]) -> Maybe[T] {
     return list.get(0)
 }
 ```
@@ -110,6 +120,19 @@ extend Point {
 }
 ```
 
+### References (Borrowing)
+```tml
+// Immutable reference
+func length(s: ref String) -> U64 {
+    return s.len()
+}
+
+// Mutable reference
+func append(s: mut ref String, suffix: String) {
+    s.push(suffix)
+}
+```
+
 ### Control Flow
 ```tml
 // if-then-else (always with then)
@@ -117,13 +140,17 @@ if x > 0 then positive() else negative()
 
 // when (pattern matching)
 when value {
-    Some(x) -> process(x),
-    None -> default(),
+    Just(x) -> process(x),
+    Nothing -> default(),
 }
 
 // unified loop
 loop item in items {
     process(item)
+}
+
+loop i in 0 to 10 {
+    print(i)
 }
 
 loop while condition {
@@ -143,10 +170,45 @@ let config = parse(data)! else default_config()
 catch {
     let file = open(path)!
     let data = file.read()!
-    return Ok(parse(data)!)
+    return Success(parse(data)!)
 } else |err| {
     log.error(err)
-    return Err(err)
+    return Failure(err)
+}
+```
+
+### Behaviors (Interfaces)
+```tml
+behavior Printable {
+    func to_text(this) -> String
+}
+
+extend Point with Printable {
+    func to_text(this) -> String {
+        return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+    }
+}
+```
+
+### Directives
+```tml
+@when(os: linux)
+func linux_only() { ... }
+
+@auto(debug, duplicate, equal)
+type Config {
+    name: String,
+    value: I32,
+}
+
+@test
+func test_addition() {
+    assert(add(2, 2) == 4)
+}
+
+@lowlevel
+func raw_memory(p: ptr U8) -> U8 {
+    return p.read()
 }
 ```
 
@@ -155,10 +217,10 @@ catch {
 ### 1. Generics with `[]` not `<>`
 ```tml
 // TML - no ambiguity
-let list: List[Int] = List.new()
+let list: List[I32] = List.new()
 if a < b then ...
 
-// Rust - ambiguous
+// Other languages - ambiguous
 let list: Vec<i32> = Vec::new();
 if a < b { ... }  // is < comparison or generic?
 ```
@@ -168,7 +230,7 @@ if a < b { ... }  // is < comparison or generic?
 // TML - clear words
 if a and b or not c then ...
 
-// Rust - symbols
+// Other languages - symbols
 if a && b || !c { ... }
 ```
 
@@ -178,34 +240,60 @@ if a && b || !c { ... }
 let add = do(x, y) x + y
 items.map(do(x) x * 2)
 
-// Rust - | is also bitwise OR
+// Other languages - | is also bitwise OR
 let add = |x, y| x + y;
 ```
 
-### 4. Unified Loop
+### 4. References with `ref`
 ```tml
-// TML - one keyword
-loop i in 0..10 { ... }
-loop while running { ... }
-loop { ... }
+// TML - clear words
+func process(data: ref String) -> ref String
+func modify(data: mut ref String)
 
-// Rust - three keywords
-for i in 0..10 { ... }
-while running { ... }
-loop { ... }
+// Other languages - symbols
+fn process(data: &String) -> &String
+fn modify(data: &mut String)
 ```
 
-### 5. No Explicit Lifetimes
+### 5. Natural Ranges
 ```tml
-// TML - inferred
-func longest(a: &String, b: &String) -> &String {
-    if a.len() > b.len() then a else b
-}
+// TML - reads like English
+loop i in 0 to 10 { ... }      // 0, 1, 2, ... 9
+loop i in 0 through 10 { ... } // 0, 1, 2, ... 10
 
-// Rust - verbose
-fn longest<'a>(a: &'a str, b: &'a str) -> &'a str {
-    if a.len() > b.len() { a } else { b }
-}
+// Other languages - cryptic
+for i in 0..10 { ... }
+for i in 0..=10 { ... }
+```
+
+### 6. Self-Documenting Types
+```tml
+// TML - descriptive names
+Maybe[User]           // Maybe there's a user
+Outcome[Data, Error]  // Outcome is success or failure
+Shared[Cache]         // Shared reference-counted
+Heap[LargeData]       // Allocated on heap
+
+// Other languages - abbreviations
+Option<User>          // What option?
+Result<Data, Error>   // Result of what?
+Rc<Cache>             // Rc = ?
+Box<LargeData>        // Box = ?
+```
+
+### 7. Directives with `@`
+```tml
+// TML - universal, readable
+@when(os: linux)
+@auto(debug, equal)
+@test
+@lowlevel
+
+// Other languages - cryptic
+#[cfg(target_os = "linux")]
+#[derive(Debug, Eq)]
+#[test]
+#[unsafe]
 ```
 
 ## File Extensions
@@ -226,6 +314,17 @@ tml test               # run tests
 tml check              # check without compiling
 tml fmt                # format code
 ```
+
+## Type Summary
+
+| Category | Types |
+|----------|-------|
+| **Primitives** | `Bool`, `I8`-`I128`, `U8`-`U128`, `F32`, `F64`, `Char`, `String` |
+| **Maybe** | `Maybe[T]` = `Just(T)` \| `Nothing` |
+| **Outcome** | `Outcome[T, E]` = `Success(T)` \| `Failure(E)` |
+| **Collections** | `List[T]`, `Map[K, V]`, `Set[T]` |
+| **Memory** | `Heap[T]`, `Shared[T]`, `Sync[T]` |
+| **References** | `ref T`, `mut ref T` |
 
 ## Status
 

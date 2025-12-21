@@ -40,7 +40,7 @@ extern type pthread_t = U64
 extern type pthread_mutex_t = [U8; 40]  // platform-specific size
 
 // Extern struct (C layout)
-#[repr(C)]
+@repr(C)
 extern type timespec {
     tv_sec: I64,
     tv_nsec: I64,
@@ -88,7 +88,7 @@ extern "C" func printf(format: *const U8, ...) -> I32
 extern "C" func sprintf(buf: *mut U8, format: *const U8, ...) -> I32
 
 // Calling variadic functions
-unsafe {
+lowlevel {
     printf(c"Hello %s, you are %d years old\n", name.as_ptr(), age)
 }
 ```
@@ -107,14 +107,14 @@ unsafe {
 ### 4.2 Pointer Operations
 
 ```tml
-unsafe func pointer_ops() {
+lowlevel func pointer_ops() {
     var x: I32 = 42
 
     // Create pointers
-    let p: *const I32 = &x as *const I32
-    let pm: *mut I32 = &mut x as *mut I32
+    let p: *const I32 = ref x as *const I32
+    let pm: *mut I32 = mut ref x as *mut I32
 
-    // Dereference (unsafe)
+    // Dereference (lowlevel)
     let value = *p
     *pm = 100
 
@@ -142,8 +142,8 @@ extend *const T {
     func offset(this, count: I64) -> *const T
     func add(this, count: U64) -> *const T
     func sub(this, count: U64) -> *const T
-    unsafe func read(this) -> T
-    unsafe func read_volatile(this) -> T
+    lowlevel func read(this) -> T
+    lowlevel func read_volatile(this) -> T
 }
 
 extend *mut T {
@@ -151,21 +151,21 @@ extend *mut T {
     func offset(this, count: I64) -> *mut T
     func add(this, count: U64) -> *mut T
     func sub(this, count: U64) -> *mut T
-    unsafe func read(this) -> T
-    unsafe func write(this, value: T)
-    unsafe func read_volatile(this) -> T
-    unsafe func write_volatile(this, value: T)
+    lowlevel func read(this) -> T
+    lowlevel func write(this, value: T)
+    lowlevel func read_volatile(this) -> T
+    lowlevel func write_volatile(this, value: T)
 }
 ```
 
 ## 5. Unsafe Blocks
 
-### 5.1 Unsafe Keyword
+### 5.1 Lowlevel Keyword
 
 ```tml
 func safe_wrapper() -> I32 {
-    // Unsafe operations require explicit block
-    unsafe {
+    // Low-level operations require explicit block
+    lowlevel {
         let ptr = malloc(100)
         if ptr.is_null() {
             return -1
@@ -180,36 +180,36 @@ func safe_wrapper() -> I32 {
 }
 ```
 
-### 5.2 Unsafe Functions
+### 5.2 Lowlevel Functions
 
 ```tml
-// Entire function is unsafe
-unsafe func dangerous_operation(ptr: *mut I32, len: U64) -> I32 {
-    // No need for unsafe block inside
+// Entire function is lowlevel
+lowlevel func dangerous_operation(ptr: *mut I32, len: U64) -> I32 {
+    // No need for lowlevel block inside
     var sum: I32 = 0
-    loop i in 0..len {
+    loop i in 0 to len {
         sum += *(ptr.add(i))
     }
     return sum
 }
 
-// Calling unsafe function
+// Calling lowlevel function
 func caller() {
-    unsafe {
+    lowlevel {
         let result = dangerous_operation(data.as_mut_ptr(), data.len())
     }
 }
 ```
 
-### 5.3 What Requires Unsafe
+### 5.3 What Requires Lowlevel
 
-| Operation | Unsafe Required |
-|-----------|-----------------|
+| Operation | Lowlevel Required |
+|-----------|-------------------|
 | Raw pointer dereference | Yes |
 | Calling extern functions | Yes |
-| Calling unsafe functions | Yes |
+| Calling lowlevel functions | Yes |
 | Accessing mutable statics | Yes |
-| Implementing unsafe traits | Yes |
+| Implementing lowlevel behaviors | Yes |
 | Union field access | Yes |
 | Inline assembly | Yes |
 
@@ -235,7 +235,7 @@ func use_c_string() {
     let c_str = CString.new("Hello")!
 
     // Get raw pointer for FFI
-    unsafe {
+    lowlevel {
         puts(c_str.as_ptr())
     }
 
@@ -244,7 +244,7 @@ func use_c_string() {
 }
 
 // From raw C string
-unsafe func from_c(ptr: *const U8) -> String {
+lowlevel func from_c(ptr: *const U8) -> String {
     let c_str = CString.from_ptr(ptr)
     return c_str.to_string()
 }
@@ -255,7 +255,7 @@ unsafe func from_c(ptr: *const U8) -> String {
 ```tml
 import std.ffi.CStr
 
-unsafe func process_c_string(ptr: *const U8) {
+lowlevel func process_c_string(ptr: *const U8) {
     // Borrow without taking ownership
     let c_str = CStr.from_ptr(ptr)
 
@@ -263,12 +263,12 @@ unsafe func process_c_string(ptr: *const U8) {
     let len = c_str.len()
 
     // Convert to bytes slice
-    let bytes: &[U8] = c_str.as_bytes()
+    let bytes: ref [U8] = c_str.as_bytes()
 
     // Try to convert to string (may fail if not UTF-8)
     when c_str.to_str() {
-        Ok(s) -> println(s),
-        Err(_) -> println("invalid UTF-8"),
+        Success(s) -> println(s),
+        Failure(_) -> println("invalid UTF-8"),
     }
 }
 ```
@@ -315,21 +315,21 @@ type c_wchar = I32    // or U16 on Windows
 
 ```tml
 // C-compatible struct layout
-#[repr(C)]
+@repr(C)
 type Point {
     x: F64,
     y: F64,
 }
 
 // Packed struct (no padding)
-#[repr(C, packed)]
+@repr(C, packed)
 type PackedData {
     flag: U8,
     value: U32,  // no padding before
 }
 
 // Aligned struct
-#[repr(C, align(16))]
+@repr(C, align(16))
 type AlignedData {
     data: [U8; 64],
 }
@@ -341,18 +341,18 @@ type AlignedData {
 
 ```tml
 // C-style union
-#[repr(C)]
+@repr(C)
 union Value {
     i: I64,
     f: F64,
     ptr: *mut Void,
 }
 
-// Usage (requires unsafe)
+// Usage (requires lowlevel)
 func use_union() {
     var v = Value { i: 42 }
 
-    unsafe {
+    lowlevel {
         println(v.i.to_string())  // 42
         v.f = 3.14
         // Reading v.i now is undefined behavior!
@@ -363,13 +363,13 @@ func use_union() {
 ### 8.2 Tagged Union Pattern
 
 ```tml
-#[repr(C)]
+@repr(C)
 type TaggedValue {
     tag: U8,
     value: ValueUnion,
 }
 
-#[repr(C)]
+@repr(C)
 union ValueUnion {
     int_val: I64,
     float_val: F64,
@@ -380,11 +380,11 @@ const TAG_INT: U8 = 0
 const TAG_FLOAT: U8 = 1
 const TAG_STRING: U8 = 2
 
-func get_int(tv: &TaggedValue) -> Option[I64] {
+func get_int(tv: ref TaggedValue) -> Maybe[I64] {
     if tv.tag == TAG_INT {
-        unsafe { Some(tv.value.int_val) }
+        lowlevel { Just(tv.value.int_val) }
     } else {
-        None
+        Nothing
     }
 }
 ```
@@ -407,7 +407,7 @@ extern "C" func qsort(
 
 // TML callback
 func compare_i32(a: *const Void, b: *const Void) -> I32 {
-    unsafe {
+    lowlevel {
         let va = *(a as *const I32)
         let vb = *(b as *const I32)
         return va - vb
@@ -417,7 +417,7 @@ func compare_i32(a: *const Void, b: *const Void) -> I32 {
 func sort_array() {
     var arr: [I32; 5] = [5, 2, 8, 1, 9]
 
-    unsafe {
+    lowlevel {
         qsort(
             arr.as_mut_ptr() as *mut Void,
             5,
@@ -446,17 +446,17 @@ type CallbackWrapper[F] {
 func with_callback[F: Fn()](callback: F) {
     var wrapper = CallbackWrapper { func_ptr: callback }
 
-    unsafe {
+    lowlevel {
         set_callback(
             trampoline[F],
-            &mut wrapper as *mut Void
+            mut ref wrapper as *mut Void
         )
     }
 }
 
 func trampoline[F: Fn()](user_data: *mut Void) {
-    unsafe {
-        let wrapper = &*(user_data as *const CallbackWrapper[F])
+    lowlevel {
+        let wrapper = ref *(user_data as *const CallbackWrapper[F])
         (wrapper.func_ptr)()
     }
 }
@@ -464,30 +464,30 @@ func trampoline[F: Fn()](user_data: *mut Void) {
 
 ## 10. Library Linking
 
-### 10.1 Link Attributes
+### 10.1 Link Directives
 
 ```tml
 // Link to system library
-#[link(name = "m")]
+@link(name = "m")
 extern "C" {
     func sin(x: F64) -> F64
     func cos(x: F64) -> F64
 }
 
 // Static library
-#[link(name = "mylib", kind = "static")]
+@link(name = "mylib", kind = "static")
 extern "C" {
     func my_function() -> I32
 }
 
 // Dynamic library
-#[link(name = "ssl", kind = "dylib")]
+@link(name = "ssl", kind = "dylib")
 extern "C" {
     func SSL_new(ctx: *mut Void) -> *mut Void
 }
 
 // Framework (macOS)
-#[link(name = "CoreFoundation", kind = "framework")]
+@link(name = "CoreFoundation", kind = "framework")
 extern "C" {
     func CFRetain(cf: *const Void) -> *const Void
 }
@@ -524,7 +524,7 @@ frameworks = ["Foundation", "Security"]
 
 ```tml
 // Inline assembly (platform-specific)
-unsafe func get_cpu_id() -> U32 {
+lowlevel func get_cpu_id() -> U32 {
     var result: U32 = 0
 
     asm! {
@@ -566,27 +566,27 @@ preserves_flags      // doesn't modify flags
 ### 12.1 Conditional Compilation
 
 ```tml
-#[cfg(target_os = "linux")]
+@when(target_os = "linux")
 func platform_specific() {
     // Linux-only code
 }
 
-#[cfg(target_os = "windows")]
+@when(target_os = "windows")
 func platform_specific() {
     // Windows-only code
 }
 
-#[cfg(target_os = "macos")]
+@when(target_os = "macos")
 func platform_specific() {
     // macOS-only code
 }
 
-#[cfg(target_arch = "x86_64")]
+@when(target_arch = "x86_64")
 func optimized_routine() {
     // x86_64 optimizations
 }
 
-#[cfg(target_arch = "aarch64")]
+@when(target_arch = "aarch64")
 func optimized_routine() {
     // ARM64 optimizations
 }
@@ -597,20 +597,20 @@ func optimized_routine() {
 ```tml
 module mylib.platform
 
-#[cfg(target_os = "linux")]
+@when(target_os = "linux")
 public use linux.*
 
-#[cfg(target_os = "windows")]
+@when(target_os = "windows")
 public use windows.*
 
-#[cfg(target_os = "macos")]
+@when(target_os = "macos")
 public use macos.*
 
 // Unified interface
-public trait Platform {
-    func get_home_dir() -> Result[String, Error]
+public behavior Platform {
+    func get_home_dir() -> Outcome[String, Error]
     func get_temp_dir() -> String
-    func spawn_process(cmd: String) -> Result[Process, Error]
+    func spawn_process(cmd: String) -> Outcome[Process, Error]
 }
 ```
 
@@ -621,21 +621,21 @@ public trait Platform {
 ```tml
 // Always provide safe wrappers for FFI
 
-// Unsafe C function
+// Lowlevel C function
 extern "C" func dangerous_alloc(size: U64) -> *mut U8
 
 // Safe wrapper
-public func safe_alloc(size: U64) -> Result[Box[U8], AllocError] {
+public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
     if size == 0 {
-        return Err(AllocError.ZeroSize)
+        return Failure(AllocError.ZeroSize)
     }
 
-    unsafe {
+    lowlevel {
         let ptr = dangerous_alloc(size)
         if ptr.is_null() {
-            return Err(AllocError.OutOfMemory)
+            return Failure(AllocError.OutOfMemory)
         }
-        return Ok(Box.from_raw(ptr))
+        return Success(Heap.from_raw(ptr))
     }
 }
 ```
@@ -653,23 +653,23 @@ public type SafeFile {
 }
 
 extend SafeFile {
-    public func open(path: String, mode: String) -> Result[This, IoError] {
-        let c_path = CString.new(path)?
-        let c_mode = CString.new(mode)?
+    public func open(path: String, mode: String) -> Outcome[This, IoError] {
+        let c_path = CString.new(path)!
+        let c_mode = CString.new(mode)!
 
-        unsafe {
+        lowlevel {
             let handle = fopen(c_path.as_ptr(), c_mode.as_ptr())
             if handle.is_null() {
-                return Err(IoError.from_errno())
+                return Failure(IoError.from_errno())
             }
-            return Ok(This { handle: handle })
+            return Success(This { handle: handle })
         }
     }
 }
 
-extend SafeFile with Drop {
+extend SafeFile with Disposable {
     func drop(this) {
-        unsafe {
+        lowlevel {
             fclose(this.handle)
         }
     }

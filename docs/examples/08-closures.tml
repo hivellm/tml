@@ -58,8 +58,8 @@ public func main() {
     // Find - first matching element
     let first_even = numbers.find(do(n) n % 2 == 0)
     when first_even {
-        Some(n) -> println("First even: " + n.to_string()),
-        None -> println("No even found"),
+        Just(n) -> println("First even: " + n.to_string()),
+        Nothing -> println("No even found"),
     }
 
     // Any/All predicates
@@ -126,17 +126,17 @@ public func main() {
     println(add_ten(3).to_string())    // 13
 
     // ============================================
-    // CLOSURE WITH OPTION/RESULT
+    // CLOSURE WITH MAYBE/OUTCOME
     // ============================================
 
-    let maybe_value: Option[I32] = Some(42)
+    let maybe_value: Maybe[I32] = Just(42)
 
-    // Map over Option
+    // Map over Maybe
     let doubled_opt = maybe_value.map(do(n) n * 2)
 
     // Flat map (and_then)
     let processed = maybe_value
-        .and_then(do(n) if n > 0 then Some(n * 2) else None)
+        .and_then(do(n) if n > 0 then Just(n * 2) else Nothing)
 
     // Unwrap with default using closure
     let value = maybe_value.unwrap_or_else(do() compute_default())

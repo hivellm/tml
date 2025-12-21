@@ -36,8 +36,8 @@ func pointer_examples() {
     var arr: [I32; 5] = [1, 2, 3, 4, 5]
 
     // From references (safe)
-    let p: *const I32 = &x as *const I32
-    let pm: *mut I32 = &mut x as *mut I32
+    let p: *const I32 = ptr_of(ref x)
+    let pm: *mut I32 = ptr_of_mut(mut ref x)
 
     // From array
     let arr_ptr: *const I32 = arr.as_ptr()
@@ -46,8 +46,8 @@ func pointer_examples() {
     // Null pointer
     let null_ptr: *const I32 = null
 
-    // From address (unsafe)
-    unsafe {
+    // From address (lowlevel)
+    lowlevel {
         let addr_ptr: *mut I32 = 0x1000 as *mut I32
     }
 }
@@ -72,14 +72,14 @@ extend *const T {
     /// Distance between pointers (in elements)
     public func offset_from(this, origin: *const T) -> I64
 
-    /// Read value (unsafe)
-    public unsafe func read(this) -> T
+    /// Read value (lowlevel)
+    public lowlevel func read(this) -> T
 
     /// Read volatile (no optimization)
-    public unsafe func read_volatile(this) -> T
+    public lowlevel func read_volatile(this) -> T
 
     /// Read unaligned
-    public unsafe func read_unaligned(this) -> T
+    public lowlevel func read_unaligned(this) -> T
 
     /// Cast to different pointer type
     public func cast[U](this) -> *const U
@@ -91,43 +91,43 @@ extend *const T {
 extend *mut T {
     // All *const T methods plus:
 
-    /// Write value (unsafe)
-    public unsafe func write(this, value: T)
+    /// Write value (lowlevel)
+    public lowlevel func write(this, value: T)
 
     /// Write volatile
-    public unsafe func write_volatile(this, value: T)
+    public lowlevel func write_volatile(this, value: T)
 
     /// Write unaligned
-    public unsafe func write_unaligned(this, value: T)
+    public lowlevel func write_unaligned(this, value: T)
 
     /// Write bytes (memset)
-    public unsafe func write_bytes(this, value: U8, count: U64)
+    public lowlevel func write_bytes(this, value: U8, count: U64)
 
     /// Copy from source (memcpy, non-overlapping)
-    public unsafe func copy_from_nonoverlapping(this, src: *const T, count: U64)
+    public lowlevel func copy_from_nonoverlapping(this, src: *const T, count: U64)
 
     /// Copy from source (memmove, may overlap)
-    public unsafe func copy_from(this, src: *const T, count: U64)
+    public lowlevel func copy_from(this, src: *const T, count: U64)
 
     /// Swap values at two pointers
-    public unsafe func swap(this, other: *mut T)
+    public lowlevel func swap(this, other: *mut T)
 
     /// Replace value, returning old
-    public unsafe func replace(this, value: T) -> T
+    public lowlevel func replace(this, value: T) -> T
 
     /// Drop value in place
-    public unsafe func drop_in_place(this)
+    public lowlevel func drop_in_place(this)
 }
 ```
 
 ### 2.4 Pointer Arithmetic
 
 ```tml
-unsafe func array_sum(ptr: *const I32, len: U64) -> I32 {
+lowlevel func array_sum(ptr: *const I32, len: U64) -> I32 {
     var sum: I32 = 0
     var current = ptr
 
-    loop i in 0..len {
+    loop i in 0 to len {
         sum += current.read()
         current = current.add(1)
     }
@@ -135,7 +135,7 @@ unsafe func array_sum(ptr: *const I32, len: U64) -> I32 {
     return sum
 }
 
-unsafe func reverse_array(ptr: *mut I32, len: U64) {
+lowlevel func reverse_array(ptr: *mut I32, len: U64) {
     var left = ptr
     var right = ptr.add(len - 1)
 
@@ -274,20 +274,20 @@ extend U32 {
 
 ```tml
 /// Reinterpret bits without conversion
-public unsafe func transmute[T, U](value: T) -> U
+public lowlevel func transmute[T, U](value: T) -> U
     where size_of[T]() == size_of[U]()
 
 // Examples
 func bit_cast_examples() {
     // Float to int bits
     let f: F32 = 3.14
-    let bits: U32 = unsafe { transmute(f) }
+    let bits: U32 = lowlevel { transmute(f) }
 
     // Int bits to float
-    let back: F32 = unsafe { transmute(bits) }
+    let back: F32 = lowlevel { transmute(bits) }
 
     // Pointer to integer
-    let ptr: *const I32 = &x
+    let ptr: *const I32 = ptr_of(ref x)
     let addr: U64 = ptr.addr()  // Safe alternative
 }
 ```
@@ -304,10 +304,10 @@ public func size_of[T]() -> U64
 public func align_of[T]() -> U64
 
 /// Size of value
-public func size_of_val[T](val: &T) -> U64
+public func size_of_val[T](val: ref T) -> U64
 
 /// Alignment of value
-public func align_of_val[T](val: &T) -> U64
+public func align_of_val[T](val: ref T) -> U64
 
 /// Minimum alignment (usually 1)
 public const MIN_ALIGN: U64 = 1
@@ -331,19 +331,19 @@ extend Layout {
     }
 
     /// Create with explicit size and alignment
-    public func from_size_align(size: U64, align: U64) -> Result[This, LayoutError]
+    public func from_size_align(size: U64, align: U64) -> Outcome[This, LayoutError]
 
     /// Create for array of T
-    public func array[T](n: U64) -> Result[This, LayoutError]
+    public func array[T](n: U64) -> Outcome[This, LayoutError]
 
     /// Extend layout for next field
-    public func extend(this, next: Layout) -> Result[(This, U64), LayoutError]
+    public func extend(this, next: Layout) -> Outcome[(This, U64), LayoutError]
 
     /// Pad to alignment
     public func pad_to_align(this) -> This
 
     /// Repeat layout n times
-    public func repeat(this, n: U64) -> Result[(This, U64), LayoutError]
+    public func repeat(this, n: U64) -> Outcome[(This, U64), LayoutError]
 }
 ```
 
@@ -353,31 +353,31 @@ extend Layout {
 module mem
 
 /// Copy bytes (non-overlapping)
-public unsafe func copy[T](dst: *mut T, src: *const T, count: U64)
+public lowlevel func copy[T](dst: *mut T, src: *const T, count: U64)
 
 /// Copy bytes (may overlap)
-public unsafe func copy_overlapping[T](dst: *mut T, src: *const T, count: U64)
+public lowlevel func copy_overlapping[T](dst: *mut T, src: *const T, count: U64)
 
 /// Set bytes to value
-public unsafe func set[T](dst: *mut T, value: U8, count: U64)
+public lowlevel func set[T](dst: *mut T, value: U8, count: U64)
 
 /// Compare bytes
-public unsafe func compare[T](a: *const T, b: *const T, count: U64) -> I32
+public lowlevel func compare[T](a: *const T, b: *const T, count: U64) -> I32
 
 /// Zero memory
-public unsafe func zero[T](dst: *mut T, count: U64)
+public lowlevel func zero[T](dst: *mut T, count: U64)
 
 /// Swap memory regions
-public unsafe func swap[T](a: *mut T, b: *mut T, count: U64)
+public lowlevel func swap[T](a: *mut T, b: *mut T, count: U64)
 
 /// Replace value, returning old
-public func replace[T](dest: &mut T, value: T) -> T
+public func replace[T](dest: mut ref T, value: T) -> T
 
 /// Take value, leaving default
-public func take[T: Default](dest: &mut T) -> T
+public func take[T: Default](dest: mut ref T) -> T
 
 /// Swap two values
-public func swap_refs[T](a: &mut T, b: &mut T)
+public func swap_refs[T](a: mut ref T, b: mut ref T)
 
 /// Forget value (don't run destructor)
 public func forget[T](value: T)
@@ -417,10 +417,10 @@ extend MaybeUninit[T] {
     public func new(value: T) -> This
 
     /// Write value
-    public func write(this, value: T) -> &mut T
+    public func write(this, value: T) -> mut ref T
 
-    /// Assume initialized (unsafe)
-    public unsafe func assume_init(this) -> T
+    /// Assume initialized (lowlevel)
+    public lowlevel func assume_init(this) -> T
 
     /// Get pointer to value
     public func as_ptr(this) -> *const T
@@ -453,7 +453,7 @@ public type AtomicPtr[T] { inner: *mut T }
 ### 5.2 Memory Ordering
 
 ```tml
-public type Ordering =
+public type MemoryOrdering =
     | Relaxed    // No synchronization
     | Acquire    // Acquire semantics (loads)
     | Release    // Release semantics (stores)
@@ -469,58 +469,58 @@ extend AtomicI64 {
     public func new(value: I64) -> This
 
     /// Load value
-    public func load(this, order: Ordering) -> I64
+    public func load(this, order: MemoryOrdering) -> I64
 
     /// Store value
-    public func store(this, value: I64, order: Ordering)
+    public func store(this, value: I64, order: MemoryOrdering)
 
     /// Swap values
-    public func swap(this, value: I64, order: Ordering) -> I64
+    public func swap(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Compare and swap
     public func compare_exchange(
         this,
         current: I64,
         new: I64,
-        success: Ordering,
-        failure: Ordering
-    ) -> Result[I64, I64]
+        success: MemoryOrdering,
+        failure: MemoryOrdering
+    ) -> Outcome[I64, I64]
 
     /// Weak compare and swap (may fail spuriously)
     public func compare_exchange_weak(
         this,
         current: I64,
         new: I64,
-        success: Ordering,
-        failure: Ordering
-    ) -> Result[I64, I64]
+        success: MemoryOrdering,
+        failure: MemoryOrdering
+    ) -> Outcome[I64, I64]
 
     /// Fetch and add
-    public func fetch_add(this, value: I64, order: Ordering) -> I64
+    public func fetch_add(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and subtract
-    public func fetch_sub(this, value: I64, order: Ordering) -> I64
+    public func fetch_sub(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and AND
-    public func fetch_and(this, value: I64, order: Ordering) -> I64
+    public func fetch_and(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and OR
-    public func fetch_or(this, value: I64, order: Ordering) -> I64
+    public func fetch_or(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and XOR
-    public func fetch_xor(this, value: I64, order: Ordering) -> I64
+    public func fetch_xor(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch and NAND
-    public func fetch_nand(this, value: I64, order: Ordering) -> I64
+    public func fetch_nand(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch max
-    public func fetch_max(this, value: I64, order: Ordering) -> I64
+    public func fetch_max(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Fetch min
-    public func fetch_min(this, value: I64, order: Ordering) -> I64
+    public func fetch_min(this, value: I64, order: MemoryOrdering) -> I64
 
     /// Get mutable reference (when exclusively owned)
-    public func get_mut(this) -> &mut I64
+    public func get_mut(this) -> mut ref I64
 }
 ```
 
@@ -528,10 +528,10 @@ extend AtomicI64 {
 
 ```tml
 /// Memory fence
-public func fence(order: Ordering)
+public func fence(order: MemoryOrdering)
 
 /// Compiler fence (no CPU barrier)
-public func compiler_fence(order: Ordering)
+public func compiler_fence(order: MemoryOrdering)
 
 /// Spin-loop hint
 public func spin_loop_hint()
@@ -550,29 +550,31 @@ public type Thread {
 
 public type JoinHandle[T] {
     thread: Thread,
-    result: *mut Option[T],
+    result: *mut Maybe[T],
 }
 
 /// Spawn new thread
 public func spawn[F, T](f: F) -> JoinHandle[T]
-    where F: FnOnce() -> T + Send
+where F: Callable[(), T] + Sendable,
+      T: Sendable
 effects: [io.thread]
 
 /// Spawn with builder
-public func spawn_builder[F, T](builder: Builder, f: F) -> Result[JoinHandle[T], SpawnError]
-    where F: FnOnce() -> T + Send
+public func spawn_builder[F, T](builder: Builder, f: F) -> Outcome[JoinHandle[T], SpawnError]
+where F: Callable[(), T] + Sendable,
+      T: Sendable
 effects: [io.thread]
 
 extend JoinHandle[T] {
     /// Wait for thread to finish
-    public func join(this) -> Result[T, JoinError]
+    public func join(this) -> Outcome[T, JoinError]
     effects: [io.thread]
 
     /// Check if thread finished
     public func is_finished(this) -> Bool
 
     /// Get thread reference
-    public func thread(this) -> &Thread
+    public func thread(this) -> ref Thread
 }
 
 extend Thread {
@@ -580,7 +582,7 @@ extend Thread {
     public func id(this) -> ThreadId
 
     /// Get thread name
-    public func name(this) -> Option[&str]
+    public func name(this) -> Maybe[ref str]
 
     /// Unpark thread
     public func unpark(this)
@@ -598,16 +600,17 @@ public func sleep(dur: Duration) effects: [io.time]
 
 ```tml
 public type Builder {
-    name: Option[String],
-    stack_size: Option[U64],
+    name: Maybe[String],
+    stack_size: Maybe[U64],
 }
 
 extend Builder {
     public func new() -> This
     public func name(this, name: String) -> This
     public func stack_size(this, size: U64) -> This
-    public func spawn[F, T](this, f: F) -> Result[JoinHandle[T], SpawnError]
-        where F: FnOnce() -> T + Send
+    public func spawn[F, T](this, f: F) -> Outcome[JoinHandle[T], SpawnError]
+    where F: Callable[(), T] + Sendable,
+          T: Sendable
 }
 ```
 
@@ -615,7 +618,7 @@ extend Builder {
 
 ```tml
 /// Thread-local variable
-#[thread_local]
+@thread_local
 var COUNTER: I32 = 0
 
 /// Thread-local with lazy initialization
@@ -627,13 +630,13 @@ extend ThreadLocal[T] {
     public func new(init: func() -> T) -> This
 
     /// Get or initialize value
-    public func get(this) -> &T
+    public func get(this) -> ref T
 
     /// Get mutable reference
-    public func get_mut(this) -> &mut T
+    public func get_mut(this) -> mut ref T
 
-    /// Try get (None if not initialized)
-    public func try_get(this) -> Option[&T]
+    /// Try get (Nothing if not initialized)
+    public func try_get(this) -> Maybe[ref T]
 }
 ```
 
@@ -645,30 +648,30 @@ module sync
 /// Mutex
 public type Mutex[T] {
     locked: AtomicBool,
-    data: UnsafeCell[T],
+    data: LowlevelCell[T],
 }
 
 extend Mutex[T] {
     public func new(value: T) -> This
     public func lock(this) -> MutexGuard[T]
-    public func try_lock(this) -> Option[MutexGuard[T]]
+    public func try_lock(this) -> Maybe[MutexGuard[T]]
     public func is_locked(this) -> Bool
-    public func get_mut(this) -> &mut T  // When exclusively owned
+    public func get_mut(this) -> mut ref T  // When exclusively owned
     public func into_inner(this) -> T
 }
 
 /// Read-write lock
 public type RwLock[T] {
     state: AtomicU64,
-    data: UnsafeCell[T],
+    data: LowlevelCell[T],
 }
 
 extend RwLock[T] {
     public func new(value: T) -> This
     public func read(this) -> RwLockReadGuard[T]
-    public func try_read(this) -> Option[RwLockReadGuard[T]]
+    public func try_read(this) -> Maybe[RwLockReadGuard[T]]
     public func write(this) -> RwLockWriteGuard[T]
-    public func try_write(this) -> Option[RwLockWriteGuard[T]]
+    public func try_write(this) -> Maybe[RwLockWriteGuard[T]]
 }
 
 /// Condition variable
@@ -719,22 +722,22 @@ extend Semaphore {
 }
 ```
 
-## 7. Unsafe Cell
+## 7. Lowlevel Cell
 
 ```tml
 /// Interior mutability primitive
-public type UnsafeCell[T] {
+public type LowlevelCell[T] {
     value: T,
 }
 
-extend UnsafeCell[T] {
+extend LowlevelCell[T] {
     public func new(value: T) -> This
 
     /// Get raw pointer to inner value
     public func get(this) -> *mut T
 
     /// Get mutable reference (when exclusively owned)
-    public func get_mut(this) -> &mut T
+    public func get_mut(this) -> mut ref T
 
     /// Get inner value
     public func into_inner(this) -> T
@@ -742,14 +745,14 @@ extend UnsafeCell[T] {
 
 /// Cell (single-threaded interior mutability)
 public type Cell[T] {
-    value: UnsafeCell[T],
+    value: LowlevelCell[T],
 }
 
 extend Cell[T: Copy] {
     public func new(value: T) -> This
     public func get(this) -> T
     public func set(this, value: T)
-    public func swap(this, other: &Cell[T])
+    public func swap(this, other: ref Cell[T])
     public func replace(this, value: T) -> T
     public func take(this) -> T where T: Default
 }
@@ -757,15 +760,15 @@ extend Cell[T: Copy] {
 /// RefCell (runtime borrow checking)
 public type RefCell[T] {
     borrow_state: Cell[I32],
-    value: UnsafeCell[T],
+    value: LowlevelCell[T],
 }
 
 extend RefCell[T] {
     public func new(value: T) -> This
     public func borrow(this) -> Ref[T]
-    public func try_borrow(this) -> Result[Ref[T], BorrowError]
+    public func try_borrow(this) -> Outcome[Ref[T], BorrowError]
     public func borrow_mut(this) -> RefMut[T]
-    public func try_borrow_mut(this) -> Result[RefMut[T], BorrowMutError]
+    public func try_borrow_mut(this) -> Outcome[RefMut[T], BorrowMutError]
 }
 ```
 
@@ -774,7 +777,7 @@ extend RefCell[T] {
 ### 8.1 Basic Syntax
 
 ```tml
-unsafe func read_timestamp() -> U64 {
+lowlevel func read_timestamp() -> U64 {
     var low: U32 = 0
     var high: U32 = 0
 
@@ -828,8 +831,8 @@ asm! {
 ### 8.3 Platform-Specific Examples
 
 ```tml
-#[cfg(target_arch = "x86_64")]
-unsafe func cpuid(leaf: U32) -> (U32, U32, U32, U32) {
+@cfg(target_arch = "x86_64")
+lowlevel func cpuid(leaf: U32) -> (U32, U32, U32, U32) {
     var eax: U32 = 0
     var ebx: U32 = 0
     var ecx: U32 = 0
@@ -846,8 +849,8 @@ unsafe func cpuid(leaf: U32) -> (U32, U32, U32, U32) {
     return (eax, ebx, ecx, edx)
 }
 
-#[cfg(target_arch = "aarch64")]
-unsafe func read_cycle_counter() -> U64 {
+@cfg(target_arch = "aarch64")
+lowlevel func read_cycle_counter() -> U64 {
     var count: U64 = 0
 
     asm! {
@@ -865,7 +868,7 @@ unsafe func read_cycle_counter() -> U64 {
 ### 9.1 Vector Types
 
 ```tml
-#[cfg(target_feature = "sse2")]
+@cfg(target_feature = "sse2")
 module simd.x86
 
 // 128-bit vectors
@@ -877,13 +880,13 @@ public type F32x4 = [F32; 4]
 public type F64x2 = [F64; 2]
 
 // 256-bit vectors (AVX)
-#[cfg(target_feature = "avx")]
+@cfg(target_feature = "avx")
 public type I8x32 = [I8; 32]
 public type F32x8 = [F32; 8]
 public type F64x4 = [F64; 4]
 
 // 512-bit vectors (AVX-512)
-#[cfg(target_feature = "avx512f")]
+@cfg(target_feature = "avx512f")
 public type F32x16 = [F32; 16]
 public type F64x8 = [F64; 8]
 ```
@@ -891,7 +894,7 @@ public type F64x8 = [F64; 8]
 ### 9.2 SIMD Operations
 
 ```tml
-#[cfg(target_feature = "sse2")]
+@cfg(target_feature = "sse2")
 module simd.x86.sse2
 
 /// Add packed 32-bit integers
@@ -916,16 +919,16 @@ public func cmpeq_i32x4(a: I32x4, b: I32x4) -> I32x4
 public func shuffle_f32x4[const MASK: U8](a: F32x4, b: F32x4) -> F32x4
 
 /// Load aligned
-public unsafe func load_i32x4(ptr: *const I32) -> I32x4
+public lowlevel func load_i32x4(ptr: *const I32) -> I32x4
 
 /// Load unaligned
-public unsafe func loadu_i32x4(ptr: *const I32) -> I32x4
+public lowlevel func loadu_i32x4(ptr: *const I32) -> I32x4
 
 /// Store aligned
-public unsafe func store_i32x4(ptr: *mut I32, v: I32x4)
+public lowlevel func store_i32x4(ptr: *mut I32, v: I32x4)
 
 /// Store unaligned
-public unsafe func storeu_i32x4(ptr: *mut I32, v: I32x4)
+public lowlevel func storeu_i32x4(ptr: *mut I32, v: I32x4)
 ```
 
 ### 9.3 Portable SIMD
@@ -970,7 +973,7 @@ type Pool {
 }
 
 extend Pool {
-    pub unsafe func new(memory: *mut U8, size: U64, block_size: U64) -> This {
+    public lowlevel func new(memory: *mut U8, size: U64, block_size: U64) -> This {
         assert(block_size >= size_of[Block]())
         assert(size >= block_size)
 
@@ -985,7 +988,7 @@ extend Pool {
         let num_blocks = size / block_size
         var current = pool.free_list
 
-        loop i in 0..(num_blocks - 1) {
+        loop i in 0 to (num_blocks - 1) {
             let next = (current as *mut U8).add(block_size) as *mut Block
             current.write(Block { next: next })
             current = next
@@ -995,7 +998,7 @@ extend Pool {
         return pool
     }
 
-    pub unsafe func alloc(this) -> *mut U8 {
+    public lowlevel func alloc(this) -> *mut U8 {
         if this.free_list.is_null() {
             return null
         }
@@ -1005,7 +1008,7 @@ extend Pool {
         return block as *mut U8
     }
 
-    pub unsafe func free(this, ptr: *mut U8) {
+    public lowlevel func free(this, ptr: *mut U8) {
         let block = ptr as *mut Block
         block.write(Block { next: this.free_list })
         this.free_list = block
@@ -1028,48 +1031,48 @@ type Stack[T] {
 }
 
 extend Stack[T] {
-    pub func new() -> This {
+    public func new() -> This {
         return This { head: AtomicPtr.new(null) }
     }
 
-    pub func push(this, value: T) {
-        unsafe {
+    public func push(this, value: T) {
+        lowlevel {
             let node = alloc[Node[T]]()
             node.write(Node { value: value, next: null })
 
             loop {
-                let head = this.head.load(Ordering.Relaxed)
+                let head = this.head.load(MemoryOrdering.Relaxed)
                 (*node).next = head
 
                 when this.head.compare_exchange_weak(
-                    head, node, Ordering.Release, Ordering.Relaxed
+                    head, node, MemoryOrdering.Release, MemoryOrdering.Relaxed
                 ) {
-                    Ok(_) -> break,
-                    Err(_) -> continue,
+                    Success(_) -> break,
+                    Failure(_) -> continue,
                 }
             }
         }
     }
 
-    pub func pop(this) -> Option[T] {
-        unsafe {
+    public func pop(this) -> Maybe[T] {
+        lowlevel {
             loop {
-                let head = this.head.load(Ordering.Acquire)
+                let head = this.head.load(MemoryOrdering.Acquire)
                 if head.is_null() {
-                    return None
+                    return Nothing
                 }
 
                 let next = (*head).next
 
                 when this.head.compare_exchange_weak(
-                    head, next, Ordering.Release, Ordering.Relaxed
+                    head, next, MemoryOrdering.Release, MemoryOrdering.Relaxed
                 ) {
-                    Ok(_) -> {
+                    Success(_) -> {
                         let value = head.read().value
                         dealloc(head)
-                        return Some(value)
+                        return Just(value)
                     },
-                    Err(_) -> continue,
+                    Failure(_) -> continue,
                 }
             }
         }
@@ -1080,12 +1083,12 @@ extend Stack[T] {
 ### 10.3 SIMD String Search
 
 ```tml
-#[cfg(target_feature = "sse4.2")]
+@cfg(target_feature = "sse4.2")
 module fast_search
 
 import simd.x86.sse42.*
 
-pub func find_char(haystack: &[U8], needle: U8) -> Option[U64] {
+public func find_char(haystack: ref [U8], needle: U8) -> Maybe[U64] {
     let len = haystack.len()
     let ptr = haystack.as_ptr()
 
@@ -1093,14 +1096,14 @@ pub func find_char(haystack: &[U8], needle: U8) -> Option[U64] {
     let needle_vec = set1_i8x16(needle as I8)
     var i: U64 = 0
 
-    unsafe {
+    lowlevel {
         loop while i + 16 <= len {
             let chunk = loadu_i8x16(ptr.add(i) as *const I8)
             let mask = cmpeq_i8x16(chunk, needle_vec)
             let bits = movemask_i8x16(mask)
 
             if bits != 0 {
-                return Some(i + bits.trailing_zeros() as U64)
+                return Just(i + bits.trailing_zeros() as U64)
             }
 
             i += 16
@@ -1109,13 +1112,13 @@ pub func find_char(haystack: &[U8], needle: U8) -> Option[U64] {
         // Handle remaining bytes
         loop while i < len {
             if ptr.add(i).read() == needle {
-                return Some(i)
+                return Just(i)
             }
             i += 1
         }
     }
 
-    return None
+    return Nothing
 }
 ```
 

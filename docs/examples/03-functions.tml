@@ -21,7 +21,7 @@ func add(a: I32, b: I32) -> I32 {
 // Function with loop
 func power(base: I32, exp: I32) -> I32 {
     var result = 1
-    loop _ in 0..exp {
+    loop _ in 0 to exp {
         result *= base
     }
     return result
@@ -44,12 +44,12 @@ func swap[T, U](pair: (T, U)) -> (U, T) {
 }
 
 // Function with immutable reference
-func length(s: &String) -> U64 {
+func length(s: ref String) -> U64 {
     return s.len()
 }
 
 // Function with mutable reference
-func append(s: &mut String, suffix: String) {
+func append(s: mut ref String, suffix: String) {
     s.push(suffix)
 }
 
@@ -72,10 +72,10 @@ public func main() {
 
     // References
     let text = "Hello"
-    let len = length(&text)
+    let len = length(ref text)
 
     var buffer = String.new()
-    append(&mut buffer, "Hello")
-    append(&mut buffer, " World")
+    append(mut ref buffer, "Hello")
+    append(mut ref buffer, " World")
     println(buffer)
 }

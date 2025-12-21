@@ -27,23 +27,23 @@ public type Regex {
 
 extend Regex {
     /// Compiles a regex pattern
-    public func new(pattern: String) -> Result[Regex, RegexError] {
+    public func new(pattern: String) -> Outcome[Regex, RegexError] {
         Regex.with_options(pattern, RegexOptions.default())
     }
 
     /// Compiles with options
-    public func with_options(pattern: String, options: RegexOptions) -> Result[Regex, RegexError]
+    public func with_options(pattern: String, options: RegexOptions) -> Outcome[Regex, RegexError]
 
     /// Returns the original pattern
-    public func as_str(this) -> &String {
-        &this.pattern
+    public func as_str(this) -> ref String {
+        ref this.pattern
     }
 
     /// Returns the number of capture groups
     public func captures_len(this) -> U64
 
     /// Returns the names of capture groups
-    public func capture_names(this) -> Vec[Option[String]]
+    public func capture_names(this) -> Vec[Maybe[String]]
 }
 
 /// Regex compilation options
@@ -114,10 +114,10 @@ public type RegexError {
 ```tml
 extend Regex {
     /// Returns true if the pattern matches anywhere in the text
-    public func is_match(this, text: &String) -> Bool
+    public func is_match(this, text: ref String) -> Bool
 
     /// Returns true if the pattern matches at the start of text
-    public func is_match_at(this, text: &String, start: U64) -> Bool
+    public func is_match_at(this, text: ref String, start: U64) -> Bool
 }
 
 // Example:
@@ -131,13 +131,13 @@ assert(not re.is_match("12-345"))
 ```tml
 extend Regex {
     /// Finds the first match in the text
-    public func find(this, text: &String) -> Option[Match]
+    public func find(this, text: ref String) -> Maybe[Match]
 
     /// Finds the first match starting at position
-    public func find_at(this, text: &String, start: U64) -> Option[Match]
+    public func find_at(this, text: ref String, start: U64) -> Maybe[Match]
 
     /// Finds all non-overlapping matches
-    public func find_all(this, text: &String) -> Matches
+    public func find_all(this, text: ref String) -> Matches
 }
 
 /// A single match
@@ -149,8 +149,8 @@ public type Match {
 
 extend Match {
     /// Returns the matched text
-    public func as_str(this) -> &String {
-        &this.text
+    public func as_str(this) -> ref String {
+        ref this.text
     }
 
     /// Returns the start byte position
@@ -170,7 +170,7 @@ extend Match {
 
     /// Returns the byte range
     public func range(this) -> Range[U64] {
-        this.start..this.end
+        this.start to this.end
     }
 }
 
@@ -184,13 +184,13 @@ public type Matches {
 implement Iterator for Matches {
     type Item = Match
 
-    func next(mut this) -> Option[Match] {
-        when this.regex.find_at(&this.text, this.pos) {
-            Some(m) -> {
+    func next(mut this) -> Maybe[Match] {
+        when this.regex.find_at(ref this.text, this.pos) {
+            Just(m) -> {
                 this.pos = m.end
-                return Some(m)
+                return Just(m)
             },
-            None -> return None,
+            Nothing -> return None,
         }
     }
 }
@@ -205,31 +205,31 @@ implement Iterator for Matches {
 ```tml
 extend Regex {
     /// Captures the first match and all groups
-    public func captures(this, text: &String) -> Option[Captures]
+    public func captures(this, text: ref String) -> Maybe[Captures]
 
     /// Captures all matches and their groups
-    public func captures_all(this, text: &String) -> CapturesIter
+    public func captures_all(this, text: ref String) -> CapturesIter
 }
 
 /// All capture groups from a single match
 public type Captures {
-    groups: Vec[Option[Match]],
+    groups: Vec[Maybe[Match]],
     names: HashMap[String, U64],
 }
 
 extend Captures {
     /// Returns the full match (group 0)
-    public func get_match(this) -> &Match {
+    public func get_match(this) -> ref Match {
         this.groups[0].as_ref().unwrap()
     }
 
     /// Returns capture group by index
-    public func get(this, index: U64) -> Option[&Match] {
+    public func get(this, index: U64) -> Maybe[ref Match] {
         this.groups.get(index).and_then(|g| g.as_ref())
     }
 
     /// Returns capture group by name
-    public func name(this, name: &String) -> Option[&Match] {
+    public func name(this, name: ref String) -> Maybe[ref Match] {
         this.names.get(name).and_then(|i| this.get(*i))
     }
 
@@ -244,7 +244,7 @@ extend Captures {
     }
 
     /// Expands a replacement template
-    public func expand(this, template: &String, dest: &mut String) {
+    public func expand(this, template: ref String, dest: mut ref String) {
         // $0 = full match, $1 = group 1, $name = named group
     }
 }
@@ -259,13 +259,13 @@ public type CapturesIter {
 implement Iterator for CapturesIter {
     type Item = Captures
 
-    func next(mut this) -> Option[Captures] {
-        when this.regex.captures_at(&this.text, this.pos) {
-            Some(caps) -> {
+    func next(mut this) -> Maybe[Captures] {
+        when this.regex.captures_at(ref this.text, this.pos) {
+            Just(caps) -> {
                 this.pos = caps.get_match().end
-                return Some(caps)
+                return Just(caps)
             },
-            None -> return None,
+            Nothing -> return None,
         }
     }
 }
@@ -278,13 +278,13 @@ implement Iterator for CapturesIter {
 let re = Regex.new(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})").unwrap()
 
 when re.captures("2024-03-15") {
-    Some(caps) -> {
+    Just(caps) -> {
         let year = caps.name("year").unwrap().as_str()
         let month = caps.name("month").unwrap().as_str()
         let day = caps.name("day").unwrap().as_str()
         print(year + "/" + month + "/" + day)
     },
-    None -> print("No match"),
+    Nothing -> print("No match"),
 }
 ```
 
@@ -297,21 +297,21 @@ when re.captures("2024-03-15") {
 ```tml
 extend Regex {
     /// Replaces the first match
-    public func replace(this, text: &String, rep: &String) -> String
+    public func replace(this, text: ref String, rep: ref String) -> String
 
     /// Replaces all matches
-    public func replace_all(this, text: &String, rep: &String) -> String
+    public func replace_all(this, text: ref String, rep: ref String) -> String
 
     /// Replaces the first match using a function
-    public func replace_fn[F](this, text: &String, f: F) -> String
-        where F: Fn(&Captures) -> String
+    public func replace_fn[F](this, text: ref String, f: F) -> String
+        where F: Fn(ref Captures) -> String
 
     /// Replaces all matches using a function
-    public func replace_all_fn[F](this, text: &String, f: F) -> String
-        where F: Fn(&Captures) -> String
+    public func replace_all_fn[F](this, text: ref String, f: F) -> String
+        where F: Fn(ref Captures) -> String
 
     /// Replaces with limit
-    public func replacen(this, text: &String, limit: U64, rep: &String) -> String
+    public func replacen(this, text: ref String, limit: U64, rep: ref String) -> String
 }
 
 // Replacement syntax:
@@ -346,10 +346,10 @@ let result = re.replace_fn("hello world", do(caps) {
 ```tml
 extend Regex {
     /// Splits text by the pattern
-    public func split(this, text: &String) -> Split
+    public func split(this, text: ref String) -> Split
 
     /// Splits with limit
-    public func splitn(this, text: &String, limit: U64) -> SplitN
+    public func splitn(this, text: ref String, limit: U64) -> SplitN
 }
 
 /// Iterator over split segments
@@ -363,18 +363,18 @@ public type Split {
 implement Iterator for Split {
     type Item = String
 
-    func next(mut this) -> Option[String] {
+    func next(mut this) -> Maybe[String] {
         if this.done then return None
 
-        when this.regex.find_at(&this.text, this.pos) {
-            Some(m) -> {
+        when this.regex.find_at(ref this.text, this.pos) {
+            Just(m) -> {
                 let segment = this.text[this.pos..m.start].to_string()
                 this.pos = m.end
-                return Some(segment)
+                return Just(segment)
             },
-            None -> {
+            Nothing -> {
                 this.done = true
-                return Some(this.text[this.pos..].to_string())
+                return Just(this.text[this.pos..].to_string())
             },
         }
     }
@@ -486,13 +486,13 @@ public type RegexSet {
 
 extend RegexSet {
     /// Creates a regex set from patterns
-    public func new(patterns: &[String]) -> Result[RegexSet, RegexError]
+    public func new(patterns: ref [String]) -> Outcome[RegexSet, RegexError]
 
     /// Returns true if any pattern matches
-    public func is_match(this, text: &String) -> Bool
+    public func is_match(this, text: ref String) -> Bool
 
     /// Returns indices of matching patterns
-    public func matches(this, text: &String) -> RegexSetMatches
+    public func matches(this, text: ref String) -> RegexSetMatches
 
     /// Returns the number of patterns
     public func len(this) -> U64
@@ -524,7 +524,7 @@ extend RegexSetMatches {
 }
 
 // Example:
-let set = RegexSet.new(&[
+let set = RegexSet.new(ref [
     r"^\d+$",      // all digits
     r"^[a-z]+$",   // all lowercase
     r"^[A-Z]+$",   // all uppercase
@@ -594,7 +594,7 @@ extend RegexBuilder {
     public func size_limit(mut this, limit: U64) -> RegexBuilder
 
     /// Builds the regex
-    public func build(this) -> Result[Regex, RegexError] {
+    public func build(this) -> Outcome[Regex, RegexError] {
         Regex.with_options(this.pattern, this.options)
     }
 }
@@ -606,7 +606,7 @@ extend RegexBuilder {
 
 ```tml
 /// Escapes special regex characters in a string
-public func escape(text: &String) -> String {
+public func escape(text: ref String) -> String {
     var result = String.new()
     loop c in text.chars() {
         when c {
@@ -639,7 +639,7 @@ assert(re.is_match("hello (world)"))
 ```tml
 import std.regex.Regex
 
-func validate_email(email: &String) -> Bool {
+func validate_email(email: ref String) -> Bool {
     let re = Regex.new(
         r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     ).unwrap()
@@ -658,16 +658,16 @@ type LogEntry {
     message: String,
 }
 
-func parse_log_line(line: &String) -> Option[LogEntry] {
+func parse_log_line(line: ref String) -> Maybe[LogEntry] {
     let re = Regex.new(
         r"^\[(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[(?P<level>\w+)\] (?P<msg>.*)$"
     ).unwrap()
 
     re.captures(line).map(do(caps) {
         LogEntry {
-            timestamp: caps.name("time").unwrap().as_str().clone(),
-            level: caps.name("level").unwrap().as_str().clone(),
-            message: caps.name("msg").unwrap().as_str().clone(),
+            timestamp: caps.name("time").unwrap().as_str().duplicate(),
+            level: caps.name("level").unwrap().as_str().duplicate(),
+            message: caps.name("msg").unwrap().as_str().duplicate(),
         }
     })
 }
@@ -678,13 +678,13 @@ func parse_log_line(line: &String) -> Option[LogEntry] {
 ```tml
 import std.regex.Regex
 
-func extract_urls(text: &String) -> Vec[String] {
+func extract_urls(text: ref String) -> Vec[String] {
     let re = Regex.new(
         r"https?://[^\s<>\[\]{}|\\^`\"]+"
     ).unwrap()
 
     re.find_all(text)
-        .map(do(m) m.as_str().clone())
+        .map(do(m) m.as_str().duplicate())
         .collect()
 }
 ```
@@ -694,12 +694,12 @@ func extract_urls(text: &String) -> Vec[String] {
 ```tml
 import std.regex.Regex
 
-func process_template(template: &String, vars: &HashMap[String, String]) -> String {
+func process_template(template: ref String, vars: ref HashMap[String, String]) -> String {
     let re = Regex.new(r"\{\{(\w+)\}\}").unwrap()
 
     re.replace_all_fn(template, do(caps) {
         let name = caps.get(1).unwrap().as_str()
-        vars.get(name).cloned().unwrap_or("".to_string())
+        vars.get(name).duplicated().unwrap_or("".to_string())
     })
 }
 
@@ -708,7 +708,7 @@ var vars = HashMap.new()
 vars.insert("name", "World")
 vars.insert("greeting", "Hello")
 
-let result = process_template("{{greeting}}, {{name}}!", &vars)
+let result = process_template("{{greeting}}, {{name}}!", ref vars)
 // result: "Hello, World!"
 ```
 
@@ -726,12 +726,12 @@ let EMAIL_RE: Lazy[Regex] = Lazy.new(do() {
     Regex.new(r"^[\w.+-]+@[\w.-]+\.\w+$").unwrap()
 })
 
-func is_email(s: &String) -> Bool {
+func is_email(s: ref String) -> Bool {
     EMAIL_RE.is_match(s)
 }
 
 // Bad: recompiles every call
-func is_email_slow(s: &String) -> Bool {
+func is_email_slow(s: ref String) -> Bool {
     Regex.new(r"^[\w.+-]+@[\w.-]+\.\w+$").unwrap().is_match(s)
 }
 ```

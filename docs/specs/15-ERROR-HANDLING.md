@@ -11,19 +11,19 @@ TML's error handling is designed for:
 ## 1. The `!` Operator (Propagate or Panic)
 
 Every fallible function call ends with `!` which means:
-- **If Ok**: unwrap and continue
-- **If Err**: propagate to caller (if caller returns Result) OR panic (if caller returns value)
+- **If Success**: unwrap and continue
+- **If Failure**: propagate to caller (if caller returns Outcome) OR panic (if caller returns value)
 
 ```tml
 // Simple and clear - every ! is a potential exit point
-func process_file(path: String) -> Result[Data, Error] {
+func process_file(path: String) -> Outcome[Data, Error] {
     let file = File.open(path)!        // propagate on error
     let content = file.read_all()!     // propagate on error
     let data = parse(content)!         // propagate on error
-    return Ok(data)
+    return Success(data)
 }
 
-// In a non-Result function, ! panics on error
+// In a non-Outcome function, ! panics on error
 func must_load_config() -> Config {
     let content = File.read("config.json")!  // panic if fails
     return parse(content)!                    // panic if fails
@@ -51,7 +51,7 @@ let port = env.get("PORT")!
 
 let user = db.find_user(id)! else {
     log.warn("User not found: " + id.to_string())
-    return Err(Error.NotFound)
+    return Failure(Error.NotFound)
 }
 ```
 
@@ -71,16 +71,16 @@ let data = fetch_remote(url)! else |err| {
 For multiple operations that share error handling:
 
 ```tml
-func sync_data() -> Result[Unit, SyncError] {
+func sync_data() -> Outcome[Unit, SyncError] {
     catch {
         let local = load_local()!
         let remote = fetch_remote()!
         let merged = merge(local, remote)!
         save(merged)!
-        return Ok(())
+        return Success(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())
-        return Err(SyncError.from(err))
+        return Failure(SyncError.from(err))
     }
 }
 ```
@@ -104,55 +104,55 @@ func robust_process() -> Data {
 }
 ```
 
-## 4. Result Type
+## 4. Outcome Type
 
 ```tml
-type Result[T, E] = Ok(T) | Err(E)
+type Outcome[T, E] = Success(T) | Failure(E)
 ```
 
 ### Methods
 
 ```tml
 // Check state
-result.is_ok() -> Bool
-result.is_err() -> Bool
+outcome.is_success() -> Bool
+outcome.is_failure() -> Bool
 
 // Transform
-result.map(do(t) ...)         // Map Ok value
-result.map_err(do(e) ...)     // Map Err value
-result.and_then(do(t) ...)    // Chain fallible operations
+outcome.map(do(t) ...)         // Map Success value
+outcome.map_err(do(e) ...)     // Map Failure value
+outcome.and_then(do(t) ...)    // Chain fallible operations
 
 // Extract
-result.unwrap() -> T          // Panic if Err
-result.unwrap_or(default)     // Default if Err
-result.unwrap_or_else(do() default)  // Lazy default
+outcome.unwrap() -> T          // Panic if Failure
+outcome.unwrap_or(default)     // Default if Failure
+outcome.unwrap_or_else(do() default)  // Lazy default
 
 // Convert
-result.ok() -> Option[T]      // Discard error
-result.err() -> Option[E]     // Discard value
+outcome.to_maybe() -> Maybe[T]  // Discard error
+outcome.err() -> Maybe[E]       // Discard value
 ```
 
-## 5. Option Type
+## 5. Maybe Type
 
 ```tml
-type Option[T] = Some(T) | None
+type Maybe[T] = Just(T) | Nothing
 ```
 
-### Using `!` with Option
+### Using `!` with Maybe
 
 ```tml
-func find_user(id: U64) -> Option[User] { ... }
+func find_user(id: U64) -> Maybe[User] { ... }
 
-// In Result-returning function: converts None to Err
-func get_user_email(id: U64) -> Result[String, Error] {
-    let user = find_user(id)!  // None becomes Err(Error.NoneValue)
-    return Ok(user.email)
+// In Outcome-returning function: converts Nothing to Failure
+func get_user_email(id: U64) -> Outcome[String, Error] {
+    let user = find_user(id)!  // Nothing becomes Failure(Error.NothingValue)
+    return Success(user.email)
 }
 
 // With custom error via else
-func get_user_email(id: U64) -> Result[String, Error] {
-    let user = find_user(id)! else return Err(Error.UserNotFound(id))
-    return Ok(user.email)
+func get_user_email(id: U64) -> Outcome[String, Error] {
+    let user = find_user(id)! else return Failure(Error.UserNotFound(id))
+    return Success(user.email)
 }
 ```
 
@@ -173,7 +173,7 @@ type ParseError =
 type Error {
     kind: ErrorKind,
     message: String,
-    source: Option[Box[Error]],  // Cause chain
+    source: Maybe[Heap[Error]],  // Cause chain
     location: Location,           // File/line info
 }
 
@@ -186,12 +186,12 @@ type ErrorKind =
     | Unauthorized
 ```
 
-### The `Error` trait
+### The `Error` behavior
 
 ```tml
-trait Error {
+behavior Error {
     func message(this) -> String
-    func source(this) -> Option[&dyn Error]  // Optional cause
+    func source(this) -> Maybe[ref dyn Error]  // Optional cause
 }
 
 // Auto-implement for simple enums
@@ -205,13 +205,13 @@ extend ParseError with Error {
         }
     }
 
-    func source(this) -> Option[&dyn Error] { None }
+    func source(this) -> Maybe[ref dyn Error] { Nothing }
 }
 ```
 
 ## 7. Error Conversion
 
-### Automatic conversion with `From` trait
+### Automatic conversion with `From` behavior
 
 ```tml
 type AppError = Io(IoError) | Parse(ParseError) | Db(DbError)
@@ -225,10 +225,10 @@ extend AppError with From[ParseError] {
 }
 
 // Now ! automatically converts:
-func load_and_parse() -> Result[Data, AppError] {
+func load_and_parse() -> Outcome[Data, AppError] {
     let content = File.read("data.txt")!  // IoError -> AppError
     let data = parse(content)!             // ParseError -> AppError
-    return Ok(data)
+    return Success(data)
 }
 ```
 
@@ -251,7 +251,7 @@ func divide(a: I32, b: I32) -> I32
     return a / b
 }
 
-func binary_search(items: List[I32], target: I32) -> Option[U64]
+func binary_search(items: List[I32], target: I32) -> Maybe[U64]
     requires items.is_sorted()
 {
     // ...
@@ -299,24 +299,24 @@ func safe_handler(request: Request) -> Response {
 ### Before (verbose try)
 
 ```tml
-func process() -> Result[Output, Error] {
+func process() -> Outcome[Output, Error] {
     let a = try step_a()
     let b = try step_b(a)
     let c = try step_c(b)
     let d = try step_d(c)
-    return Ok(d)
+    return Success(d)
 }
 ```
 
 ### After (clear ! markers)
 
 ```tml
-func process() -> Result[Output, Error] {
+func process() -> Outcome[Output, Error] {
     let a = step_a()!
     let b = step_b(a)!
     let c = step_c(b)!
     let d = step_d(c)!
-    return Ok(d)
+    return Success(d)
 }
 ```
 
@@ -324,12 +324,12 @@ func process() -> Result[Output, Error] {
 
 ```tml
 // We explicitly DON'T do this
-func process() -> Result[Output, Error] {
+func process() -> Outcome[Output, Error] {
     let a, err1 = step_a()
-    if err1 then return Err(err1)
+    if err1 then return Failure(err1)
 
     let b, err2 = step_b(a)
-    if err2 then return Err(err2)
+    if err2 then return Failure(err2)
 
     // ... repetitive and noisy
 }
@@ -341,18 +341,18 @@ func process() -> Result[Output, Error] {
 
 ```tml
 @id("fetch-data")
-func fetch_data(url: String) -> Result[Data, FetchError] {
+func fetch_data(url: String) -> Outcome[Data, FetchError] {
     @id("http-get")
     let response = http.get(url)! else |e| {
-        return Err(FetchError.Network(e))
+        return Failure(FetchError.Network(e))
     }
 
     @id("parse-json")
     let data = response.json[Data]()! else |e| {
-        return Err(FetchError.Parse(e))
+        return Failure(FetchError.Parse(e))
     }
 
-    return Ok(data)
+    return Success(data)
 }
 ```
 

@@ -5,8 +5,8 @@
 TML has a static and strong type system:
 - **Local inference** — types inferred within functions
 - **Explicit at boundaries** — parameters and returns annotated
-- **No null** — Option[T] for optional values
-- **No exceptions** — Result[T, E] for errors
+- **No null** — Maybe[T] for optional values
+- **No exceptions** — Outcome[T, E] for errors
 
 ## 2. Primitive Types
 
@@ -60,7 +60,7 @@ let big = 1.5e10    // F64 with exponent
 let yes: Bool = true
 let no: Bool = false
 
-// Operators
+// Operators (keywords, not symbols)
 let a = true and false   // false
 let b = true or false    // true
 let c = not true         // false
@@ -89,7 +89,7 @@ let multi = """
 
 // Operations
 s.len()           // bytes
-s.chars()         // Iterator[Char]
+s.chars()         // Iterable[Char]
 s + " world"      // concatenation
 s.slice(0, 5)     // substring
 ```
@@ -103,7 +103,7 @@ let data: Bytes = b"hello"
 let raw: Bytes = b"\x00\xFF\x42"
 
 data.len()        // 5
-data.get(0)       // Some(104)  (ASCII 'h')
+data.get(0)       // Just(104)  (ASCII 'h')
 ```
 
 ## 3. Composite Types
@@ -119,7 +119,7 @@ type Point {
 type Person {
     name: String,
     age: U32,
-    email: String?,   // optional
+    email: String?,   // optional (Maybe[String])
 }
 
 // Construction
@@ -127,7 +127,7 @@ let p = Point { x: 1.0, y: 2.0 }
 let person = Person {
     name: "Alice",
     age: 30,
-    email: None,
+    email: Nothing,
 }
 
 // Access
@@ -145,15 +145,15 @@ let p2 = Point { x: 5.0, ..p }
 type Color = Red | Green | Blue
 
 // With data
-type Option[T] = Some(T) | None
+type Maybe[T] = Just(T) | Nothing
 
-type Result[T, E] = Ok(T) | Err(E)
+type Outcome[T, E] = Success(T) | Failure(E)
 
 type JsonValue =
     | Null
     | Bool(Bool)
     | Number(F64)
-    | Str(String)
+    | Text(String)
     | Array(List[JsonValue])
     | Object(Map[String, JsonValue])
 
@@ -165,7 +165,7 @@ type Message =
 
 // Usage
 let color = Red
-let opt = Some(42)
+let opt = Just(42)
 let msg = Text { content: "hi", sender: "alice" }
 ```
 
@@ -210,7 +210,7 @@ let items = List.of(1, 2, 3)
 // Operations
 items.push(4)
 items.pop()
-items.get(0)      // Option[I32]
+items.get(0)      // Maybe[I32]
 items.len()
 items.is_empty()
 
@@ -235,7 +235,7 @@ let scores: Map[String, I32] = Map.new()
 scores.insert("alice", 100)
 scores.insert("bob", 85)
 
-scores.get("alice")    // Option[I32]
+scores.get("alice")    // Maybe[I32]
 scores.contains("bob") // Bool
 scores.remove("bob")
 
@@ -264,51 +264,51 @@ tags.intersection(other)
 
 ## 5. Special Types
 
-### 5.1 Option[T]
+### 5.1 Maybe[T]
 
 ```tml
-type Option[T] = Some(T) | None
+type Maybe[T] = Just(T) | Nothing
 
-let maybe: Option[I32] = Some(42)
-let empty: Option[I32] = None
+let maybe: Maybe[I32] = Just(42)
+let empty: Maybe[I32] = Nothing
 
 // Pattern matching
 when maybe {
-    Some(x) -> use(x),
-    None -> default(),
+    Just(x) -> use(x),
+    Nothing -> default(),
 }
 
 // Methods
-maybe.unwrap()           // panic if None
+maybe.unwrap()           // panic if Nothing
 maybe.unwrap_or(0)       // default value
-maybe.map(do(x) x * 2)   // Option[I32]
+maybe.map(do(x) x * 2)   // Maybe[I32]
 maybe.and_then(do(x) validate(x))
 
-// Sugar: T? = Option[T]
+// Sugar: T? = Maybe[T]
 let name: String? = get_name()
 ```
 
-### 5.2 Result[T, E]
+### 5.2 Outcome[T, E]
 
 ```tml
-type Result[T, E] = Ok(T) | Err(E)
+type Outcome[T, E] = Success(T) | Failure(E)
 
-func divide(a: F64, b: F64) -> Result[F64, String] {
-    if b == 0.0 then return Err("division by zero")
-    return Ok(a / b)
+func divide(a: F64, b: F64) -> Outcome[F64, String] {
+    if b == 0.0 then return Failure("division by zero")
+    return Success(a / b)
 }
 
 // Pattern matching
 when divide(10.0, 2.0) {
-    Ok(result) -> print(result),
-    Err(msg) -> print("Error: " + msg),
+    Success(result) -> print(result),
+    Failure(msg) -> print("Error: " + msg),
 }
 
 // ! propagates errors
-func calculate() -> Result[F64, String] {
+func calculate() -> Outcome[F64, String] {
     let x = divide(10.0, 2.0)!
     let y = divide(x, 3.0)!
-    return Ok(y)
+    return Success(y)
 }
 
 // else for fallback
@@ -347,55 +347,83 @@ func infinite() -> Never {
 }
 ```
 
-## 6. References
+## 6. Memory Types
 
-### 6.1 Immutable: &T
+### 6.1 Heap[T]
+
+Heap-allocated, single owner.
 
 ```tml
-func print_point(p: &Point) {
+let data: Heap[LargeStruct] = Heap.new(create_large())
+```
+
+### 6.2 Shared[T]
+
+Reference-counted, shared ownership (single-threaded).
+
+```tml
+let cache: Shared[Map[String, Data]] = Shared.new(Map.new())
+let copy = cache.duplicate()  // increments ref count
+```
+
+### 6.3 Sync[T]
+
+Atomic reference-counted, thread-safe shared ownership.
+
+```tml
+let global: Sync[Config] = Sync.new(load_config())
+// Can be safely shared across threads
+```
+
+## 7. References
+
+### 7.1 Immutable: ref T
+
+```tml
+func print_point(p: ref Point) {
     print(p.x.to_string())
 }
 
 let point = Point { x: 1.0, y: 2.0 }
-print_point(&point)
+print_point(ref point)
 ```
 
-### 6.2 Mutable: &mut T
+### 7.2 Mutable: mut ref T
 
 ```tml
-func increment(counter: &mut I32) {
-    *counter += 1
+func increment(counter: mut ref I32) {
+    counter += 1
 }
 
 var count = 0
-increment(&mut count)
+increment(mut ref count)
 ```
 
-### 6.3 Borrowing Rules
+### 7.3 Borrowing Rules
 
 1. Multiple immutable references OK
 2. One exclusive mutable reference
-3. Cannot have &T and &mut T simultaneously
+3. Cannot have ref T and mut ref T simultaneously
 
 ```tml
-let mut data = List.of(1, 2, 3)
+var data = List.of(1, 2, 3)
 
 // OK: multiple reads
-let a = &data
-let b = &data
+let a = ref data
+let b = ref data
 print(a.len())
 print(b.len())
 
 // OK: one exclusive write
-let c = &mut data
+let c = mut ref data
 c.push(4)
 
 // ERROR: simultaneous read and write
-let d = &data
-let e = &mut data  // error: already has immutable reference
+let d = ref data
+let e = mut ref data  // error: already has immutable reference
 ```
 
-## 7. Function Types
+## 8. Function Types
 
 ```tml
 // Function type
@@ -412,9 +440,9 @@ let double = do(x) x * 2
 let result = apply(double, 21)  // 42
 ```
 
-## 8. Generics
+## 9. Generics
 
-### 8.1 Generic Functions
+### 9.1 Generic Functions
 
 ```tml
 func identity[T](x: T) -> T {
@@ -430,7 +458,7 @@ let x = identity(42)        // I32
 let y = identity("hello")   // String
 ```
 
-### 8.2 Generic Types
+### 9.2 Generic Types
 
 ```tml
 type Pair[T] {
@@ -447,33 +475,33 @@ let pair = Pair { first: 1, second: 2 }
 let entry = Entry { key: "name", value: "Alice" }
 ```
 
-### 8.3 Bounds (Constraints)
+### 9.3 Bounds (Constraints)
 
 ```tml
-// T must implement Add
-func sum[T: Add](items: List[T]) -> T {
+// T must implement Addable
+func sum[T: Addable](items: List[T]) -> T {
     return items.fold(T.zero(), do(acc, x) acc + x)
 }
 
 // Multiple bounds
-func sorted[T: Ord + Clone](items: List[T]) -> List[T] {
+func sorted[T: Ordered + Duplicate](items: List[T]) -> List[T] {
     // ...
 }
 
 // Where clause for complex bounds
 func merge[K, V](a: Map[K, V], b: Map[K, V]) -> Map[K, V]
-where K: Eq + Hash, V: Clone
+where K: Equal + Hashable, V: Duplicate
 {
     // ...
 }
 ```
 
-## 9. Traits
+## 10. Behaviors
 
-### 9.1 Definition
+### 10.1 Definition
 
 ```tml
-trait Eq {
+behavior Equal {
     func eq(this, other: This) -> Bool
 
     // Default implementation
@@ -482,30 +510,30 @@ trait Eq {
     }
 }
 
-trait Ord: Eq {
-    func cmp(this, other: This) -> Ordering
+behavior Ordered: Equal {
+    func compare(this, other: This) -> Ordering
 }
 
-trait Clone {
-    func clone(this) -> This
+behavior Duplicate {
+    func duplicate(this) -> This
 }
 
-trait Default {
+behavior Default {
     func default() -> This
 }
 ```
 
-### 9.2 Implementation
+### 10.2 Implementation
 
 ```tml
-extend Point with Eq {
+extend Point with Equal {
     func eq(this, other: This) -> Bool {
         return this.x == other.x and this.y == other.y
     }
 }
 
-extend Point with Clone {
-    func clone(this) -> This {
+extend Point with Duplicate {
+    func duplicate(this) -> This {
         return This { x: this.x, y: this.y }
     }
 }
@@ -517,25 +545,25 @@ extend Point with Default {
 }
 ```
 
-### 9.3 Automatic Derive
+### 10.3 Automatic Generation
 
 ```tml
-#[derive(Eq, Clone, Default, Debug)]
+@auto(equal, duplicate, default, debug)
 type Point {
     x: F64,
     y: F64,
 }
 ```
 
-Derivable traits:
-- `Eq` — structural equality
-- `Ord` — ordering (requires Eq)
-- `Clone` — deep copy
-- `Default` — default value
-- `Debug` — debug representation
-- `Hash` — hash for Map/Set
+Auto-generatable behaviors:
+- `equal` — structural equality
+- `order` — ordering (requires equal)
+- `duplicate` — deep copy
+- `default` — default value
+- `debug` — debug representation
+- `hash` — hash for Map/Set
 
-## 10. Type Aliases
+## 11. Type Aliases
 
 ```tml
 type UserId = U64
@@ -548,9 +576,9 @@ let id: UserId = 12345
 let users: StringMap[User] = Map.new()
 ```
 
-## 11. Type Inference
+## 12. Type Inference
 
-### 11.1 Where It Works
+### 12.1 Where It Works
 
 ```tml
 // Local variables
@@ -565,7 +593,7 @@ let add = do(x, y) x + y    // types inferred from usage
 let list = List.of(1, 2, 3) // List[I32] inferred
 ```
 
-### 11.2 Where It's Required
+### 12.2 Where It's Required
 
 ```tml
 // Function parameters
@@ -578,9 +606,9 @@ type Point { x: F64, y: F64 }
 public const MAX: U32 = 1000
 ```
 
-## 12. Coercions
+## 13. Coercions
 
-### 12.1 No Implicit Coercion
+### 13.1 No Implicit Coercion
 
 ```tml
 let x: I32 = 42
@@ -589,7 +617,7 @@ let y: I64 = x        // ERROR: different types
 let y: I64 = x.to_i64()  // OK: explicit conversion
 ```
 
-### 12.2 Conversions
+### 13.2 Conversions
 
 ```tml
 // Numbers
@@ -599,21 +627,21 @@ x.to_f32()  x.to_f64()
 
 // Strings
 42.to_string()
-"42".parse[I32]()    // Result[I32, ParseError]
+"42".parse[I32]()    // Outcome[I32, ParseError]
 
-// Checked (returns Option)
+// Checked (returns Maybe)
 x.checked_add(y)
 x.checked_mul(y)
 ```
 
-## 13. Subtyping
+## 14. Subtyping
 
-TML has no data type subtyping, only via traits:
+TML has no data type subtyping, only via behaviors:
 
 ```tml
 // No struct inheritance
 
-// Polymorphism via traits
+// Polymorphism via behaviors
 func print_all[T: Debug](items: List[T]) {
     loop item in items {
         print(item.debug())

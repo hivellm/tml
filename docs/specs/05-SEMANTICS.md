@@ -32,7 +32,7 @@ io
 
 system
 ├── system.ffi
-├── system.unsafe
+├── system.lowlevel
 └── system.alloc
 
 crypto
@@ -108,12 +108,77 @@ module auto {
 To explicitly limit:
 
 ```tml
-#[caps_boundary]
+@caps_boundary
 module restricted {
     caps: [io.file.read]  // explicit limit
 
     // ERROR if code tries to use more than this
 }
+```
+
+### 1.5 Custom Capabilities
+
+Modules MAY define custom effect categories for domain-specific effects:
+
+```tml
+module database {
+    // Define custom effect category
+    effect db.query
+    effect db.mutate
+
+    caps: [db.query, db.mutate, io.network]
+
+    func read_users() -> List[User]
+    effects: [db.query]
+    {
+        // ...
+    }
+
+    func delete_user(id: UserId)
+    effects: [db.mutate]
+    {
+        // ...
+    }
+}
+```
+
+### 1.6 Extensibility Rules
+
+**EXT-1: Builtin caps are fixed**
+The builtin hierarchies (`io`, `system`, `crypto`) cannot be extended by user code.
+
+**EXT-2: Custom caps are module-scoped**
+Custom effects like `db.query` are local to the declaring module and its submodules.
+
+**EXT-3: Cross-module usage requires import**
+```tml
+import database  // brings db.query, db.mutate into scope
+
+module app {
+    caps: [database.db.query]  // use prefixed form
+
+    func list_users() -> List[User]
+    effects: [database.db.query]
+    {
+        return database.read_users()
+    }
+}
+```
+
+**EXT-4: No diamond inheritance**
+Effect hierarchies must be trees, not DAGs. Each effect has exactly one parent.
+
+```tml
+// OK: Linear hierarchy
+effect mylib.core
+effect mylib.core.read
+effect mylib.core.write
+
+// ERROR: Diamond inheritance not allowed
+// effect shared
+// effect a : shared
+// effect b : shared
+// effect c : a, b  // NOT ALLOWED
 ```
 
 ## 2. Effects
@@ -241,7 +306,7 @@ pre: b != 0
     return a / b
 }
 
-func sort[T: Ord](items: List[T]) -> List[T]
+func sort[T: Ordered](items: List[T]) -> List[T]
 post(result): result.is_sorted() and result.len() == items.len()
 {
     // implementation
@@ -273,12 +338,12 @@ post(r): r == x * 2
 
 **CTR-3: Contracts are inherited**
 ```tml
-trait Sortable {
+behavior Sortable {
     func sort(this) -> This
     post(r): r.is_sorted()
 }
 
-extend List[T: Ord] with Sortable {
+extend List[T: Ordered] with Sortable {
     func sort(this) -> This {
         // must satisfy inherited post
     }
@@ -320,10 +385,10 @@ print(s2)          // OK
 let s = String.from("hello")
 
 // Immutable borrow
-let len = calculate_length(&s)
+let len = calculate_length(ref s)
 print(s)  // OK: s is still valid
 
-func calculate_length(s: &String) -> U64 {
+func calculate_length(s: ref String) -> U64 {
     return s.len()
 }
 ```
@@ -332,10 +397,10 @@ func calculate_length(s: &String) -> U64 {
 var s = String.from("hello")
 
 // Mutable borrow
-append_world(&mut s)
+append_world(mut ref s)
 print(s)  // "hello world"
 
-func append_world(s: &mut String) {
+func append_world(s: mut ref String) {
     s.push(" world")
 }
 ```
@@ -344,26 +409,26 @@ func append_world(s: &mut String) {
 
 **OWN-1: Multiple immutable borrows OK**
 ```tml
-let data = vec![1, 2, 3]
-let r1 = &data
-let r2 = &data
+let data = List.of(1, 2, 3)
+let r1 = ref data
+let r2 = ref data
 print(r1.len())  // OK
 print(r2.len())  // OK
 ```
 
 **OWN-2: One exclusive mutable borrow**
 ```tml
-var data = vec![1, 2, 3]
-let r = &mut data
+var data = List.of(1, 2, 3)
+let r = mut ref data
 // ERROR: cannot have another borrow while r exists
-let r2 = &data
+let r2 = ref data
 ```
 
-**OWN-3: Don't mix & and &mut**
+**OWN-3: Don't mix ref and mut ref**
 ```tml
-var data = vec![1, 2, 3]
-let r1 = &data
-let r2 = &mut data  // ERROR: already has immutable borrow
+var data = List.of(1, 2, 3)
+let r1 = ref data
+let r2 = mut ref data  // ERROR: already has immutable borrow
 ```
 
 ### 4.5 Copy Types
@@ -390,8 +455,8 @@ TML infers lifetimes automatically in most cases:
 
 ```tml
 // Lifetimes inferred
-func first(items: &List[I32]) -> &I32 {
-    return &items[0]
+func first(items: ref List[I32]) -> ref I32 {
+    return ref items[0]
 }
 
 // The compiler understands that the return lives as long as items
@@ -399,14 +464,14 @@ func first(items: &List[I32]) -> &I32 {
 
 ### 5.2 Elision Rules
 
-1. Each &T parameter gets a separate lifetime
-2. If there's a &self/&mut self, return has same lifetime
+1. Each ref T parameter gets a separate lifetime
+2. If there's a this/mut ref this, return has same lifetime
 3. If there's exactly one ref parameter, return uses it
 
 ```tml
 // Rule 3: return lives as long as s
-func get_first(s: &String) -> &Char {
-    return &s.chars()[0]
+func get_first(s: ref String) -> ref Char {
+    return ref s.chars()[0]
 }
 ```
 
@@ -416,14 +481,14 @@ When inference doesn't work, use the compiler to guide:
 
 ```tml
 // ERROR: compiler doesn't know which lifetime to use
-func longest(a: &String, b: &String) -> &String {
+func longest(a: ref String, b: ref String) -> ref String {
     if a.len() > b.len() then a else b
 }
 
 // The compiler suggests: both must have same lifetime
 // Solution: return owned value
-func longest(a: &String, b: &String) -> String {
-    if a.len() > b.len() then a.clone() else b.clone()
+func longest(a: ref String, b: ref String) -> String {
+    if a.len() > b.len() then a.duplicate() else b.duplicate()
 }
 ```
 
@@ -449,8 +514,8 @@ func describe(s: Status) -> String {
 
 ```tml
 when value {
-    Some(x) -> use(x),      // x is binding
-    None -> default(),
+    Just(x) -> use(x),      // x is binding
+    Nothing -> default(),
 }
 
 when point {
@@ -478,12 +543,12 @@ when x {
 
 ## 7. Error Handling
 
-### 7.1 Result[T, E]
+### 7.1 Outcome[T, E]
 
 ```tml
-type Result[T, E] = Ok(T) | Err(E)
+type Outcome[T, E] = Success(T) | Failure(E)
 
-func parse_int(s: String) -> Result[I32, ParseError] {
+func parse_int(s: String) -> Outcome[I32, ParseError] {
     // ...
 }
 ```
@@ -493,14 +558,14 @@ func parse_int(s: String) -> Result[I32, ParseError] {
 Every fallible call ends with `!` - highly visible error points:
 
 ```tml
-func process() -> Result[Data, Error] {
+func process() -> Outcome[Data, Error] {
     let file = File.open("data.txt")!   // propagate on error
     let content = file.read()!           // propagate on error
     let parsed = parse(content)!         // propagate on error
-    return Ok(parsed)
+    return Success(parsed)
 }
 
-// In non-Result function, ! panics on error
+// In non-Outcome function, ! panics on error
 func must_load() -> Config {
     let content = File.read("config.json")!  // panic if fails
     return parse(content)!
@@ -521,22 +586,22 @@ let data = fetch(url)! else |err| {
 
 // Early return
 let user = find_user(id)! else {
-    return Err(Error.NotFound)
+    return Failure(Error.NotFound)
 }
 ```
 
 ### 7.4 Block-Level Error Handling (catch)
 
 ```tml
-func sync_data() -> Result[Unit, SyncError] {
+func sync_data() -> Outcome[Unit, SyncError] {
     catch {
         let local = load_local()!
         let remote = fetch_remote()!
         save(merge(local, remote)!)!
-        return Ok(())
+        return Success(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())
-        return Err(SyncError.from(err))
+        return Failure(SyncError.from(err))
     }
 }
 ```
@@ -587,8 +652,8 @@ Almost everything is an expression:
 let x = if cond then 1 else 2
 
 let y = when opt {
-    Some(n) -> n,
-    None -> 0,
+    Just(n) -> n,
+    Nothing -> 0,
 }
 
 let z = {

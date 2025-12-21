@@ -13,17 +13,17 @@ TML provides direct access to operating system system calls for:
 ### 2.1 Linux System Calls
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module sys.linux
 
 /// Raw syscall with variable arguments
-public unsafe func syscall0(nr: U64) -> I64
-public unsafe func syscall1(nr: U64, a1: U64) -> I64
-public unsafe func syscall2(nr: U64, a1: U64, a2: U64) -> I64
-public unsafe func syscall3(nr: U64, a1: U64, a2: U64, a3: U64) -> I64
-public unsafe func syscall4(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64) -> I64
-public unsafe func syscall5(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64, a5: U64) -> I64
-public unsafe func syscall6(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64, a5: U64, a6: U64) -> I64
+public lowlevel func syscall0(nr: U64) -> I64
+public lowlevel func syscall1(nr: U64, a1: U64) -> I64
+public lowlevel func syscall2(nr: U64, a1: U64, a2: U64) -> I64
+public lowlevel func syscall3(nr: U64, a1: U64, a2: U64, a3: U64) -> I64
+public lowlevel func syscall4(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64) -> I64
+public lowlevel func syscall5(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64, a5: U64) -> I64
+public lowlevel func syscall6(nr: U64, a1: U64, a2: U64, a3: U64, a4: U64, a5: U64, a6: U64) -> I64
 
 // Syscall numbers (x86_64)
 public const SYS_READ: U64 = 0
@@ -108,31 +108,31 @@ public const SYS_EXIT_GROUP: U64 = 231
 ### 2.2 Typed Linux Wrappers
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module sys.linux.io
 
 /// Read from file descriptor
-public unsafe func read(fd: I32, buf: *mut U8, count: U64) -> I64 {
+public lowlevel func read(fd: I32, buf: *mut U8, count: U64) -> I64 {
     return syscall3(SYS_READ, fd as U64, buf as U64, count)
 }
 
 /// Write to file descriptor
-public unsafe func write(fd: I32, buf: *const U8, count: U64) -> I64 {
+public lowlevel func write(fd: I32, buf: *const U8, count: U64) -> I64 {
     return syscall3(SYS_WRITE, fd as U64, buf as U64, count)
 }
 
 /// Open file
-public unsafe func open(path: *const U8, flags: I32, mode: U32) -> I32 {
+public lowlevel func open(path: *const U8, flags: I32, mode: U32) -> I32 {
     return syscall3(SYS_OPEN, path as U64, flags as U64, mode as U64) as I32
 }
 
 /// Close file descriptor
-public unsafe func close(fd: I32) -> I32 {
+public lowlevel func close(fd: I32) -> I32 {
     return syscall1(SYS_CLOSE, fd as U64) as I32
 }
 
 /// Seek
-public unsafe func lseek(fd: I32, offset: I64, whence: I32) -> I64 {
+public lowlevel func lseek(fd: I32, offset: I64, whence: I32) -> I64 {
     return syscall3(SYS_LSEEK, fd as U64, offset as U64, whence as U64)
 }
 
@@ -156,11 +156,11 @@ public const SEEK_END: I32 = 2
 ### 2.3 Linux Memory Management
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module sys.linux.mem
 
 /// Memory map
-public unsafe func mmap(
+public lowlevel func mmap(
     addr: *mut Void,
     length: U64,
     prot: I32,
@@ -180,17 +180,17 @@ public unsafe func mmap(
 }
 
 /// Memory unmap
-public unsafe func munmap(addr: *mut Void, length: U64) -> I32 {
+public lowlevel func munmap(addr: *mut Void, length: U64) -> I32 {
     return syscall2(SYS_MUNMAP, addr as U64, length) as I32
 }
 
 /// Memory protect
-public unsafe func mprotect(addr: *mut Void, length: U64, prot: I32) -> I32 {
+public lowlevel func mprotect(addr: *mut Void, length: U64, prot: I32) -> I32 {
     return syscall3(SYS_MPROTECT, addr as U64, length, prot as U64) as I32
 }
 
 /// Program break
-public unsafe func brk(addr: *mut Void) -> *mut Void {
+public lowlevel func brk(addr: *mut Void) -> *mut Void {
     return syscall1(SYS_BRK, addr as U64) as *mut Void
 }
 
@@ -215,38 +215,38 @@ public const MAP_FAILED: *mut Void = -1 as *mut Void
 ### 2.4 Linux Process Management
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module sys.linux.process
 
 /// Exit process
-public unsafe func exit(code: I32) -> ! {
+public lowlevel func exit(code: I32) -> ! {
     syscall1(SYS_EXIT, code as U64)
     unreachable()
 }
 
 /// Exit thread group
-public unsafe func exit_group(code: I32) -> ! {
+public lowlevel func exit_group(code: I32) -> ! {
     syscall1(SYS_EXIT_GROUP, code as U64)
     unreachable()
 }
 
 /// Get process ID
-public unsafe func getpid() -> I32 {
+public lowlevel func getpid() -> I32 {
     return syscall0(SYS_GETPID) as I32
 }
 
 /// Get parent process ID
-public unsafe func getppid() -> I32 {
+public lowlevel func getppid() -> I32 {
     return syscall0(SYS_GETPPID) as I32
 }
 
 /// Fork process
-public unsafe func fork() -> I32 {
+public lowlevel func fork() -> I32 {
     return syscall0(SYS_FORK) as I32
 }
 
 /// Clone (create thread/process)
-public unsafe func clone(
+public lowlevel func clone(
     flags: U64,
     stack: *mut Void,
     parent_tid: *mut I32,
@@ -257,7 +257,7 @@ public unsafe func clone(
 }
 
 /// Execute program
-public unsafe func execve(
+public lowlevel func execve(
     path: *const U8,
     argv: *const *const U8,
     envp: *const *const U8
@@ -266,7 +266,7 @@ public unsafe func execve(
 }
 
 /// Wait for child process
-public unsafe func wait4(
+public lowlevel func wait4(
     pid: I32,
     status: *mut I32,
     options: I32,
@@ -276,7 +276,7 @@ public unsafe func wait4(
 }
 
 /// Send signal
-public unsafe func kill(pid: I32, sig: I32) -> I32 {
+public lowlevel func kill(pid: I32, sig: I32) -> I32 {
     return syscall2(SYS_KILL, pid as U64, sig as U64) as I32
 }
 
@@ -294,10 +294,10 @@ public const CLONE_CHILD_CLEARTID: U64 = 0x00200000
 ### 2.5 Linux Futex
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module sys.linux.futex
 
-public unsafe func futex(
+public lowlevel func futex(
     uaddr: *mut U32,
     futex_op: I32,
     val: U32,
@@ -317,16 +317,16 @@ public unsafe func futex(
 }
 
 /// Wait if *uaddr == val
-public unsafe func futex_wait(uaddr: *mut U32, val: U32, timeout: Option[&Timespec]) -> I64 {
+public lowlevel func futex_wait(uaddr: *mut U32, val: U32, timeout: Maybe[ref Timespec]) -> I64 {
     let timeout_ptr = when timeout {
-        Some(t) -> t as *const Timespec,
-        None -> null,
+        Just(t) -> t as *const Timespec,
+        Nothing -> null,
     }
     return futex(uaddr, FUTEX_WAIT, val, timeout_ptr, null, 0)
 }
 
 /// Wake up to n waiters
-public unsafe func futex_wake(uaddr: *mut U32, n: U32) -> I64 {
+public lowlevel func futex_wake(uaddr: *mut U32, n: U32) -> I64 {
     return futex(uaddr, FUTEX_WAKE, n, null, null, 0)
 }
 
@@ -347,11 +347,11 @@ public type Timespec {
 ### 3.1 Windows NT Syscalls
 
 ```tml
-#[cfg(target_os = "windows")]
+@cfg(target_os = "windows")
 module sys.windows
 
 /// NT system call
-public unsafe func syscall(nr: U32, ...) -> I32
+public lowlevel func syscall(nr: U32, ...) -> I32
 
 // Note: Windows syscall numbers vary between versions
 // Typically access through ntdll.dll
@@ -360,7 +360,7 @@ public unsafe func syscall(nr: U32, ...) -> I32
 ### 3.2 Windows Kernel32 Functions
 
 ```tml
-#[cfg(target_os = "windows")]
+@cfg(target_os = "windows")
 module sys.windows.kernel32
 
 // These are FFI declarations, not raw syscalls
@@ -519,11 +519,11 @@ public const WAIT_FAILED: U32 = 0xFFFFFFFF
 ### 4.1 macOS/Darwin Syscalls
 
 ```tml
-#[cfg(target_os = "macos")]
+@cfg(target_os = "macos")
 module sys.macos
 
 // macOS syscall interface (similar to Linux)
-public unsafe func syscall(nr: I32, ...) -> I64
+public lowlevel func syscall(nr: I32, ...) -> I64
 
 // Syscall numbers (different from Linux!)
 public const SYS_READ: I32 = 3
@@ -548,7 +548,7 @@ public const SYS_LISTEN: I32 = 106
 ### 4.2 macOS libSystem Functions
 
 ```tml
-#[cfg(target_os = "macos")]
+@cfg(target_os = "macos")
 module sys.macos.libsystem
 
 extern "C" from "libSystem" {
@@ -592,7 +592,7 @@ public type mach_timebase_info_t {
 ### 5.1 Unix Errno
 
 ```tml
-#[cfg(unix)]
+@cfg(unix)
 module sys.errno
 
 /// Get errno value
@@ -656,31 +656,31 @@ public const ETIMEDOUT: I32 = 110
 ### 5.2 Result Conversion
 
 ```tml
-#[cfg(unix)]
+@cfg(unix)
 module sys.result
 
-/// Check syscall result and convert to Result
-public func check(result: I64) -> Result[U64, Errno] {
+/// Check syscall result and convert to Outcome
+public func check(result: I64) -> Outcome[U64, Errno] {
     if result < 0 {
-        return Err(Errno(-result as I32))
+        return Failure(Errno(-result as I32))
     }
-    return Ok(result as U64)
+    return Success(result as U64)
 }
 
 /// Check syscall result for I32 return
-public func check_i32(result: I32) -> Result[I32, Errno] {
+public func check_i32(result: I32) -> Outcome[I32, Errno] {
     if result < 0 {
-        return Err(Errno(errno.errno()))
+        return Failure(Errno(errno.errno()))
     }
-    return Ok(result)
+    return Success(result)
 }
 
 public type Errno(I32)
 
 extend Errno {
-    pub func code(this) -> I32 { this.0 }
+    public func code(this) -> I32 { this.0 }
 
-    pub func message(this) -> &'static str {
+    public func message(this) -> ref static str {
         when this.0 {
             EPERM -> "Operation not permitted",
             ENOENT -> "No such file or directory",
@@ -699,37 +699,37 @@ extend Errno {
 ### 6.1 Simple File I/O (Linux)
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module example.file
 
 use sys.linux.io.*
 use sys.result.*
 
-pub func read_file(path: &str) -> Result[List[U8], Errno] {
-    unsafe {
+public func read_file(path: ref str) -> Outcome[List[U8], Errno] {
+    lowlevel {
         // Open file
         let fd = check_i32(open(
             path.as_ptr(),
             O_RDONLY,
             0
-        ))?
+        ))!
 
         // Read contents
         var buffer = List.with_capacity(4096)
         var buf: [U8; 4096] = [0; 4096]
 
         loop {
-            let n = check(read(fd, buf.as_mut_ptr(), buf.len()))?
+            let n = check(read(fd, buf.as_mut_ptr(), buf.len()))!
             if n == 0 {
                 break
             }
-            buffer.extend_from_slice(&buf[0..n as U64])
+            buffer.extend_from_slice(ref buf[0 to n as U64])
         }
 
         // Close file
         close(fd)
 
-        return Ok(buffer)
+        return Success(buffer)
     }
 }
 ```
@@ -737,7 +737,7 @@ pub func read_file(path: &str) -> Result[List[U8], Errno] {
 ### 6.2 Memory Allocator (Linux)
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module example.alloc
 
 use sys.linux.mem.*
@@ -750,7 +750,7 @@ type BumpAllocator {
 }
 
 extend BumpAllocator {
-    pub unsafe func new(size: U64) -> Result[This, Errno] {
+    public lowlevel func new(size: U64) -> Outcome[This, Errno] {
         let ptr = mmap(
             null,
             size,
@@ -761,17 +761,17 @@ extend BumpAllocator {
         )
 
         if ptr == MAP_FAILED {
-            return Err(Errno(errno.errno()))
+            return Failure(Errno(errno.errno()))
         }
 
-        return Ok(This {
+        return Success(This {
             base: ptr as *mut U8,
             size: size,
             offset: 0,
         })
     }
 
-    pub unsafe func alloc(this, size: U64, align: U64) -> *mut U8 {
+    public lowlevel func alloc(this, size: U64, align: U64) -> *mut U8 {
         let aligned_offset = (this.offset + align - 1) & ~(align - 1)
 
         if aligned_offset + size > this.size {
@@ -783,11 +783,11 @@ extend BumpAllocator {
         return ptr
     }
 
-    pub unsafe func reset(this) {
+    public lowlevel func reset(this) {
         this.offset = 0
     }
 
-    pub unsafe func drop(this) {
+    public lowlevel func drop(this) {
         munmap(this.base as *mut Void, this.size)
     }
 }
@@ -796,7 +796,7 @@ extend BumpAllocator {
 ### 6.3 Thread Creation (Linux)
 
 ```tml
-#[cfg(target_os = "linux")]
+@cfg(target_os = "linux")
 module example.thread
 
 use sys.linux.process.*
@@ -805,7 +805,7 @@ use sys.linux.futex.*
 
 const STACK_SIZE: U64 = 1024 * 1024  // 1 MB
 
-pub unsafe func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut Void) -> Result[I32, Errno] {
+public lowlevel func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut Void) -> Outcome[I32, Errno] {
     // Allocate stack
     let stack = mmap(
         null,
@@ -817,7 +817,7 @@ pub unsafe func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut Void
     )
 
     if stack == MAP_FAILED {
-        return Err(Errno(errno.errno()))
+        return Failure(Errno(errno.errno()))
     }
 
     // Stack grows down, so start at top
@@ -837,10 +837,10 @@ pub unsafe func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut Void
 
     if tid < 0 {
         munmap(stack, STACK_SIZE)
-        return Err(Errno(-tid as I32))
+        return Failure(Errno(-tid as I32))
     }
 
-    return Ok(tid as I32)
+    return Success(tid as I32)
 }
 ```
 

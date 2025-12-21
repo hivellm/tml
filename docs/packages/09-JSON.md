@@ -108,54 +108,54 @@ extend Json {
 ```tml
 extend Json {
     /// Get as boolean
-    public func as_bool(this) -> Option[Bool] {
-        when this { Bool(v) -> Some(v), _ -> None }
+    public func as_bool(this) -> Maybe[Bool] {
+        when this { Bool(v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as f64
-    public func as_f64(this) -> Option[F64] {
-        when this { Number(v) -> Some(v), _ -> None }
+    public func as_f64(this) -> Maybe[F64] {
+        when this { Number(v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as i64
-    public func as_i64(this) -> Option[I64] {
+    public func as_i64(this) -> Maybe[I64] {
         when this {
-            Number(v) -> if v.fract() == 0.0 { Some(v as I64) } else { None },
-            _ -> None,
+            Number(v) -> if v.fract() == 0.0 { Just(v as I64) } else { None },
+            _ -> Nothing,
         }
     }
 
     /// Get as u64
-    public func as_u64(this) -> Option[U64] {
+    public func as_u64(this) -> Maybe[U64] {
         when this {
-            Number(v) -> if v.fract() == 0.0 and v >= 0.0 { Some(v as U64) } else { None },
-            _ -> None,
+            Number(v) -> if v.fract() == 0.0 and v >= 0.0 { Just(v as U64) } else { None },
+            _ -> Nothing,
         }
     }
 
     /// Get as string
-    public func as_str(this) -> Option[&str] {
-        when this { String(ref v) -> Some(v.as_str()), _ -> None }
+    public func as_str(this) -> Maybe[ref str] {
+        when this { String(ref v) -> Just(v.as_str()), _ -> Nothing }
     }
 
     /// Get as array
-    public func as_array(this) -> Option[&List[Json]] {
-        when this { Array(ref v) -> Some(v), _ -> None }
+    public func as_array(this) -> Maybe[ref List[Json]] {
+        when this { Array(ref v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as mutable array
-    public func as_array_mut(this) -> Option[&mut List[Json]] {
-        when this { Array(ref mut v) -> Some(v), _ -> None }
+    public func as_array_mut(this) -> Maybe[mut refList[Json]] {
+        when this { Array(ref mut v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as object
-    public func as_object(this) -> Option[&Map[String, Json]] {
-        when this { Object(ref v) -> Some(v), _ -> None }
+    public func as_object(this) -> Maybe[ref Map[String, Json]] {
+        when this { Object(ref v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as mutable object
-    public func as_object_mut(this) -> Option[&mut Map[String, Json]] {
-        when this { Object(ref mut v) -> Some(v), _ -> None }
+    public func as_object_mut(this) -> Maybe[mut refMap[String, Json]] {
+        when this { Object(ref mut v) -> Just(v), _ -> Nothing }
     }
 }
 ```
@@ -165,56 +165,56 @@ extend Json {
 ```tml
 extend Json {
     /// Get value by key (for objects)
-    public func get(this, key: &str) -> Option[&Json] {
+    public func get(this, key: ref str) -> Maybe[ref Json] {
         when this {
             Object(ref map) -> map.get(key),
-            _ -> None,
+            _ -> Nothing,
         }
     }
 
     /// Get value by index (for arrays)
-    public func get_index(this, index: U64) -> Option[&Json] {
+    public func get_index(this, index: U64) -> Maybe[ref Json] {
         when this {
             Array(ref arr) -> arr.get(index),
-            _ -> None,
+            _ -> Nothing,
         }
     }
 
     /// Get mutable value by key
-    public func get_mut(this, key: &str) -> Option[&mut Json] {
+    public func get_mut(this, key: ref str) -> Maybe[mut refJson] {
         when this {
             Object(ref mut map) -> map.get_mut(key),
-            _ -> None,
+            _ -> Nothing,
         }
     }
 
     /// Get nested value by path
-    public func pointer(this, path: &str) -> Option[&Json] {
+    public func pointer(this, path: ref str) -> Maybe[ref Json] {
         if path.is_empty() {
-            return Some(this)
+            return Just(this)
         }
 
         var current = this
         loop part in path.trim_start_matches('/').split('/') {
             current = when current {
-                Object(map) -> map.get(part)?,
+                Object(map) -> map.get(part)!,
                 Array(arr) -> {
-                    let idx: U64 = part.parse().ok()?
-                    arr.get(idx)?
+                    let idx: U64 = part.parse().ok()!
+                    arr.get(idx)!
                 },
                 _ -> return None,
             }
         }
-        return Some(current)
+        return Just(current)
     }
 }
 
 // Index operator for objects
-extend Json with Index[&str] {
+extend Json with Index[ref str] {
     type Output = Json
 
-    func index(this, key: &str) -> &Json {
-        this.get(key).unwrap_or(&Null)
+    func index(this, key: ref str) -> ref Json {
+        this.get(key).unwrap_or(ref Null)
     }
 }
 
@@ -222,8 +222,8 @@ extend Json with Index[&str] {
 extend Json with Index[U64] {
     type Output = Json
 
-    func index(this, index: U64) -> &Json {
-        this.get_index(index).unwrap_or(&Null)
+    func index(this, index: U64) -> ref Json {
+        this.get_index(index).unwrap_or(ref Null)
     }
 }
 ```
@@ -249,10 +249,10 @@ extend Json {
     }
 
     /// Remove object key
-    public func remove(this, key: &str) -> Option[Json] {
+    public func remove(this, key: ref str) -> Maybe[Json] {
         when this {
             Object(ref mut map) -> map.remove(key),
-            _ -> None,
+            _ -> Nothing,
         }
     }
 
@@ -269,13 +269,13 @@ extend Json {
 
 ```tml
 /// Parse JSON string
-public func parse(s: &str) -> Result[Json, ParseError]
+public func parse(s: ref str) -> Outcome[Json, ParseError]
 
 /// Parse JSON bytes
-public func parse_bytes(bytes: &[U8]) -> Result[Json, ParseError]
+public func parse_bytes(bytes: ref [U8]) -> Outcome[Json, ParseError]
 
 /// Parse from reader
-public func parse_reader[R: Read](reader: R) -> Result[Json, ParseError]
+public func parse_reader[R: Read](reader: R) -> Outcome[Json, ParseError]
 ```
 
 ### 4.2 ParseError
@@ -325,7 +325,7 @@ extend ParserOptions {
 }
 
 /// Parse with options
-public func parse_with_options(s: &str, opts: ParserOptions) -> Result[Json, ParseError]
+public func parse_with_options(s: ref str, opts: ParserOptions) -> Outcome[Json, ParseError]
 ```
 
 ## 5. Serialization
@@ -334,16 +334,16 @@ public func parse_with_options(s: &str, opts: ParserOptions) -> Result[Json, Par
 
 ```tml
 /// Serialize to compact JSON string
-public func stringify(value: &Json) -> String
+public func stringify(value: ref Json) -> String
 
 /// Serialize to pretty-printed JSON string
-public func stringify_pretty(value: &Json) -> String
+public func stringify_pretty(value: ref Json) -> String
 
 /// Serialize with options
-public func stringify_with_options(value: &Json, opts: StringifyOptions) -> String
+public func stringify_with_options(value: ref Json, opts: StringifyOptions) -> String
 
 /// Serialize to writer
-public func stringify_to[W: Write](value: &Json, writer: &mut W) -> Result[Unit, IoError]
+public func stringify_to[W: Write](value: ref Json, writer: mut refW) -> Outcome[Unit, IoError]
 ```
 
 ### 5.2 StringifyOptions
@@ -365,7 +365,7 @@ extend StringifyOptions {
     }
 
     public func pretty(this) -> This { this.pretty = true; this }
-    public func indent(this, indent: &str) -> This { this.indent = indent.into(); this }
+    public func indent(this, indent: ref str) -> This { this.indent = indent.into(); this }
     public func sort_keys(this) -> This { this.sort_keys = true; this }
 }
 ```
@@ -375,7 +375,7 @@ extend StringifyOptions {
 ### 6.1 Serialize Trait
 
 ```tml
-public trait Serialize {
+public behaviorSerialize {
     func serialize(this) -> Json
 }
 
@@ -397,17 +397,17 @@ extend F64 with Serialize {
 }
 
 extend String with Serialize {
-    func serialize(this) -> Json { Json.string(this.clone()) }
+    func serialize(this) -> Json { Json.string(this.duplicate()) }
 }
 
-extend &str with Serialize {
+extend ref str with Serialize {
     func serialize(this) -> Json { Json.string(this.into()) }
 }
 
-extend Option[T: Serialize] with Serialize {
+extend Maybe[T: Serialize] with Serialize {
     func serialize(this) -> Json {
         when this {
-            Some(v) -> v.serialize(),
+            Just(v) -> v.serialize(),
             None -> Json.null(),
         }
     }
@@ -424,7 +424,7 @@ extend Map[String, V: Serialize] with Serialize {
     func serialize(this) -> Json {
         var obj = Map.new()
         loop (k, v) in this.entries() {
-            obj.insert(k.clone(), v.serialize())
+            obj.insert(k.duplicate(), v.serialize())
         }
         return Json.from_object(obj)
     }
@@ -434,8 +434,8 @@ extend Map[String, V: Serialize] with Serialize {
 ### 6.2 Deserialize Trait
 
 ```tml
-public trait Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError]
+public behaviorDeserialize {
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError]
 }
 
 public type DeserializeError {
@@ -451,40 +451,40 @@ public type DeserializeErrorKind =
 
 // Built-in implementations
 extend Bool with Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError] {
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError] {
         json.as_bool().ok_or(DeserializeError.type_mismatch("bool", json.type_name()))
     }
 }
 
 extend I64 with Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError] {
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError] {
         json.as_i64().ok_or(DeserializeError.type_mismatch("i64", json.type_name()))
     }
 }
 
 extend String with Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError> {
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError> {
         json.as_str().map(String.from).ok_or(DeserializeError.type_mismatch("string", json.type_name()))
     }
 }
 
-extend Option[T: Deserialize] with Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError> {
+extend Maybe[T: Deserialize] with Deserialize {
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError> {
         if json.is_null() {
-            return Ok(None)
+            return Success(None)
         }
-        return Ok(Some(T.deserialize(json)?))
+        return Success(Just(T.deserialize(json)!))
     }
 }
 
 extend List[T: Deserialize] with Deserialize {
-    func deserialize(json: &Json) -> Result[This, DeserializeError> {
-        let arr = json.as_array().ok_or(DeserializeError.type_mismatch("array", json.type_name()))?
+    func deserialize(json: ref Json) -> Outcome[This, DeserializeError> {
+        let arr = json.as_array().ok_or(DeserializeError.type_mismatch("array", json.type_name()))!
         var result = List.with_capacity(arr.len())
         loop (i, item) in arr.iter().enumerate() {
-            result.push(T.deserialize(item).map_err(|e| e.with_path(i.to_string()))?)
+            result.push(T.deserialize(item).map_err(|e| e.with_path(i.to_string()))!)
         }
-        return Ok(result)
+        return Success(result)
     }
 }
 ```
@@ -493,35 +493,35 @@ extend List[T: Deserialize] with Deserialize {
 
 ```tml
 // Automatic derive for structs
-#[derive(Serialize, Deserialize)]
+@derive(Serialize, Deserialize)]
 type User {
     name: String,
     email: String,
-    age: Option[I32],
+    age: Maybe[I32],
 }
 
 // With field renaming
-#[derive(Serialize, Deserialize)]
+@derive(Serialize, Deserialize)]
 type ApiResponse {
-    #[json(rename = "statusCode")]
+    @json(rename = "statusCode")]
     status_code: I32,
 
-    #[json(rename = "data")]
+    @json(rename = "data")]
     payload: Json,
 
-    #[json(skip_serializing_if = "Option.is_none")]
-    error: Option[String],
+    @json(skip_serializing_if = "Option.is_none")]
+    error: Maybe[String],
 }
 
 // With default values
-#[derive(Deserialize)]
+@derive(Deserialize)]
 type Config {
     host: String,
 
-    #[json(default = "8080")]
+    @json(default = "8080")]
     port: I32,
 
-    #[json(default)]
+    @json(default)]
     debug: Bool,
 }
 ```
@@ -554,11 +554,11 @@ extend ObjectBuilder {
         }
     }
 
-    public func merge(this, other: &Json) -> This {
+    public func merge(this, other: ref Json) -> This {
         when other {
             Object(ref map) -> {
                 loop (k, v) in map.entries() {
-                    this.map.insert(k.clone(), v.clone())
+                    this.map.insert(k.duplicate(), v.duplicate())
                 }
             },
             _ -> unit,
@@ -613,7 +613,7 @@ extend JsonReader[R: Read] {
     public func new(reader: R) -> This
 
     /// Read next JSON value
-    public func read(this) -> Result[Option[Json], ParseError]
+    public func read(this) -> Outcome[Maybe[Json], ParseError]
 
     /// Read all values (for JSON Lines / NDJSON)
     public func read_all(this) -> JsonValues[R]
@@ -622,7 +622,7 @@ extend JsonReader[R: Read] {
 public type JsonValues[R: Read] { ... }
 
 extend JsonValues[R: Read] with Iterator {
-    type Item = Result[Json, ParseError]
+    type Item = Outcome[Json, ParseError]
 }
 
 public type JsonWriter[W: Write] {
@@ -633,12 +633,12 @@ extend JsonWriter[W: Write] {
     public func new(writer: W) -> This
 
     /// Write JSON value with newline (NDJSON)
-    public func write(this, value: &Json) -> Result[Unit, IoError]
+    public func write(this, value: ref Json) -> Outcome[Unit, IoError]
 
     /// Write with custom separator
-    public func write_sep(this, value: &Json, sep: &str) -> Result[Unit, IoError]
+    public func write_sep(this, value: ref Json, sep: ref str) -> Outcome[Unit, IoError]
 
-    public func flush(this) -> Result[Unit, IoError]
+    public func flush(this) -> Outcome[Unit, IoError]
 }
 ```
 
@@ -650,9 +650,9 @@ extend JsonWriter[W: Write] {
 module json_example
 import std.json.{Json, parse, stringify, stringify_pretty}
 
-func main() -> Result[Unit, Error] {
+func main() -> Outcome[Unit, Error] {
     // Parse JSON
-    let json = parse(r#"{"name": "Alice", "age": 30}"#)?
+    let json = parse(r#"{"name": "Alice", "age": 30}"#)!
 
     // Access values
     let name = json["name"].as_str().unwrap()
@@ -666,9 +666,9 @@ func main() -> Result[Unit, Error] {
         .set("active", true)
         .build()
 
-    println(stringify_pretty(&user))
+    println(stringify_pretty(ref user))
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 
@@ -678,7 +678,7 @@ func main() -> Result[Unit, Error] {
 module typed_json
 import std.json.{Json, Serialize, Deserialize}
 
-#[derive(Serialize, Deserialize)]
+@derive(Serialize, Deserialize)]
 type User {
     id: U64,
     name: String,
@@ -686,7 +686,7 @@ type User {
     roles: List[String],
 }
 
-func main() -> Result[Unit, Error] {
+func main() -> Outcome[Unit, Error] {
     // Serialize
     let user = User {
         id: 1,
@@ -700,12 +700,12 @@ func main() -> Result[Unit, Error] {
 
     // Deserialize
     let json_str = r#"{"id": 2, "name": "Bob", "email": "bob@example.com", "roles": ["user"]}"#
-    let parsed = parse(json_str)?
-    let user: User = User.deserialize(&parsed)?
+    let parsed = parse(json_str)!
+    let user: User = User.deserialize(ref parsed)!
 
     println("Loaded user: " + user.name)
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 
@@ -715,7 +715,7 @@ func main() -> Result[Unit, Error] {
 module pointer_example
 import std.json.parse
 
-func main() -> Result[Unit, Error] {
+func main() -> Outcome[Unit, Error] {
     let json = parse(r#"
     {
         "users": [
@@ -723,7 +723,7 @@ func main() -> Result[Unit, Error] {
             {"name": "Bob", "address": {"city": "LA"}}
         ]
     }
-    "#)?
+    "#)!
 
     // Access nested value
     let city = json.pointer("/users/0/address/city")
@@ -732,7 +732,7 @@ func main() -> Result[Unit, Error] {
 
     println("First user's city: " + city)
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 

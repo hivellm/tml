@@ -48,8 +48,8 @@ _TML$v1$mylib$utils$Parser$drop$m3n4o5p6
 | Module init | `_TML$v1$<module>$__init` |
 | Module cleanup | `_TML$v1$<module>$__fini` |
 | Type drop | `_TML$v1$<module>$<Type>$drop$<hash>` |
-| Type clone | `_TML$v1$<module>$<Type>$clone$<hash>` |
-| Trait vtable | `_TML$v1$<module>$<Type>$<Trait>$vtable` |
+| Type duplicate | `_TML$v1$<module>$<Type>$duplicate$<hash>` |
+| Behavior vtable | `_TML$v1$<module>$<Type>$<Behavior>$vtable` |
 
 ### 2.4 Extern "C" (No Mangling)
 
@@ -58,7 +58,7 @@ _TML$v1$mylib$utils$Parser$drop$m3n4o5p6
 extern "C" func my_c_function() -> I32
 // Symbol: my_c_function
 
-#[export_name = "custom_name"]
+@export_name("custom_name")
 public func exported() -> I32
 // Symbol: custom_name
 ```
@@ -155,23 +155,23 @@ Low addresses (rsp)
 
 | Type | Size | Alignment |
 |------|------|-----------|
-| `&T` | 8 | 8 |
-| `&mut T` | 8 | 8 |
+| `ref T` | 8 | 8 |
+| `mut ref T` | 8 | 8 |
 | `*const T` | 8 | 8 |
 | `*mut T` | 8 | 8 |
-| `Box[T]` | 8 | 8 |
+| `Heap[T]` | 8 | 8 |
 
 ### 4.3 Fat Pointers
 
 ```
-Slice &[T]:
+Slice ref [T]:
 ┌─────────────────┬─────────────────┐
 │   data: *T      │    len: U64     │
 │   (8 bytes)     │    (8 bytes)    │
 └─────────────────┴─────────────────┘
 Size: 16, Align: 8
 
-Trait object &dyn Trait:
+Behavior object ref dyn Behavior:
 ┌─────────────────┬─────────────────┐
 │   data: *T      │  vtable: *VTable│
 │   (8 bytes)     │    (8 bytes)    │
@@ -192,7 +192,7 @@ Layout (default - Rust-like):
 Size: 16, Align: 8
 
 // With repr(C)
-#[repr(C)]
+@repr(C)
 type CPoint { x: F64, y: F64 }
 // Same layout, but guaranteed C-compatible order
 
@@ -222,18 +222,18 @@ type Color = Red | Green | Blue
 // Size: 1, Align: 1 (fits in U8 tag)
 
 // Enum with data
-type Option[T] = Some(T) | None
+type Maybe[T] = Just(T) | Nothing
 
-Layout for Option[I32]:
+Layout for Maybe[I32]:
 ┌─────┬─────────┬──────────┐
 │ tag │ padding │   value  │
 │  1  │    3    │    4     │
 └─────┴─────────┴──────────┘
 Size: 8, Align: 4
 
-// Niche optimization for Option[&T]:
-// Uses null pointer for None
-// Size: 8 (same as &T)
+// Niche optimization for Maybe[ref T]:
+// Uses null pointer for Nothing
+// Size: 8 (same as ref T)
 
 // Complex enum
 type Value =
@@ -270,29 +270,29 @@ List[T] (Vec):
 └─────────────────┴─────────────────┴─────────────────┘
 Size: 24, Align: 8
 
-Box[T]:
+Heap[T]:
 ┌─────────────────┐
 │    ptr: *T      │
 │   (8 bytes)     │
 └─────────────────┘
 Size: 8, Align: 8
 
-Rc[T]:
+Shared[T]:
 ┌─────────────────┐
 │  ptr: *RcInner  │  → RcInner { strong: U64, weak: U64, value: T }
 │   (8 bytes)     │
 └─────────────────┘
 Size: 8, Align: 8
 
-Arc[T]: Same as Rc, but with atomic counters
+Sync[T]: Same as Shared, but with atomic counters
 ```
 
-## 5. Trait Objects (Virtual Tables)
+## 5. Behavior Objects (Virtual Tables)
 
 ### 5.1 VTable Layout
 
 ```
-VTable for trait Show:
+VTable for behavior Show:
 ┌─────────────────┐
 │   drop_fn       │  0: destructor
 ├─────────────────┤
@@ -303,7 +303,7 @@ VTable for trait Show:
 │   show_fn       │ 24: Show.show method
 └─────────────────┘
 
-For trait with multiple methods:
+For behavior with multiple methods:
 ┌─────────────────┐
 │   drop_fn       │  0
 │   size          │  8
@@ -314,10 +314,10 @@ For trait with multiple methods:
 └─────────────────┘
 ```
 
-### 5.2 Trait Object Calls
+### 5.2 Behavior Object Calls
 
 ```tml
-func call_show(obj: &dyn Show) {
+func call_show(obj: ref dyn Show) {
     obj.show()
 }
 
@@ -339,7 +339,7 @@ TML uses platform unwinding mechanism:
 Unwinding flow:
 1. Panic called
 2. Runtime searches for handlers
-3. Each frame's cleanup runs (Drop calls)
+3. Each frame's cleanup runs (Disposable calls)
 4. If no catch, process terminates
 ```
 
@@ -382,7 +382,7 @@ extern "C" _Unwind_Reason_Code __tml_personality(
 ### 7.1 TLS Variables
 
 ```tml
-#[thread_local]
+@thread_local
 var COUNTER: I32 = 0
 
 // Access generates TLS lookup

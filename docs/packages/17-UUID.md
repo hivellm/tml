@@ -44,17 +44,17 @@ extend Uuid {
         caps: [io.random]
 
     /// Creates a time-based UUID (version 1)
-    public func v1(node: &[U8; 6]) -> Uuid
+    public func v1(node: ref [U8; 6]) -> Uuid
         caps: [io.time, io.random]
 
     /// Creates a name-based UUID using SHA-1 (version 5)
-    public func v5(namespace: &Uuid, name: &[U8]) -> Uuid
+    public func v5(namespace: ref Uuid, name: ref [U8]) -> Uuid
 
     /// Creates a name-based UUID using MD5 (version 3)
-    public func v3(namespace: &Uuid, name: &[U8]) -> Uuid
+    public func v3(namespace: ref Uuid, name: ref [U8]) -> Uuid
 
     /// Creates a time-ordered UUID (version 6)
-    public func v6(node: &[U8; 6]) -> Uuid
+    public func v6(node: ref [U8; 6]) -> Uuid
         caps: [io.time, io.random]
 
     /// Creates a Unix timestamp UUID (version 7)
@@ -70,32 +70,32 @@ extend Uuid {
     }
 
     /// Creates from byte slice
-    public func from_slice(slice: &[U8]) -> Result[Uuid, UuidError] {
+    public func from_slice(slice: ref [U8]) -> Outcome[Uuid, UuidError] {
         if slice.len() != 16 then {
-            return Err(UuidError.InvalidLength)
+            return Failure(UuidError.InvalidLength)
         }
         var bytes = [0u8; 16]
         bytes.copy_from_slice(slice)
-        return Ok(Uuid { bytes })
+        return Success(Uuid { bytes })
     }
 
     /// Parses from string
-    public func parse(s: &String) -> Result[Uuid, UuidError]
+    public func parse(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from hyphenated format
-    public func parse_hyphenated(s: &String) -> Result[Uuid, UuidError]
+    public func parse_hyphenated(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from simple (no hyphens) format
-    public func parse_simple(s: &String) -> Result[Uuid, UuidError]
+    public func parse_simple(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from URN format
-    public func parse_urn(s: &String) -> Result[Uuid, UuidError]
+    public func parse_urn(s: ref String) -> Outcome[Uuid, UuidError]
 
     // Accessors
 
     /// Returns the raw bytes
-    public func as_bytes(this) -> &[U8; 16] {
-        &this.bytes
+    public func as_bytes(this) -> ref [U8; 16] {
+        ref this.bytes
     }
 
     /// Returns the UUID version
@@ -129,7 +129,7 @@ extend Uuid {
     }
 
     /// Returns the timestamp for time-based UUIDs (v1, v6, v7)
-    public func timestamp(this) -> Option[I64]
+    public func timestamp(this) -> Maybe[I64]
 
     // Formatting
 
@@ -189,17 +189,17 @@ public type UuidVersion =
     | Unknown
 
 extend UuidVersion {
-    public func from_u8(v: U8) -> Option[UuidVersion] {
+    public func from_u8(v: U8) -> Maybe[UuidVersion] {
         when v {
-            1 -> Some(V1),
-            2 -> Some(V2),
-            3 -> Some(V3),
-            4 -> Some(V4),
-            5 -> Some(V5),
-            6 -> Some(V6),
-            7 -> Some(V7),
-            8 -> Some(V8),
-            _ -> None,
+            1 -> Just(V1),
+            2 -> Just(V2),
+            3 -> Just(V3),
+            4 -> Just(V4),
+            5 -> Just(V5),
+            6 -> Just(V6),
+            7 -> Just(V7),
+            8 -> Just(V8),
+            _ -> Nothing,
         }
     }
 
@@ -303,33 +303,33 @@ extend UuidGenerator {
 
 ```tml
 implement Eq for Uuid {
-    func eq(this, other: &Uuid) -> Bool {
+    func eq(this, other: ref Uuid) -> Bool {
         this.bytes == other.bytes
     }
 }
 
 implement Ord for Uuid {
-    func cmp(this, other: &Uuid) -> Ordering {
-        this.bytes.cmp(&other.bytes)
+    func cmp(this, other: ref Uuid) -> Ordering {
+        this.bytes.cmp(ref other.bytes)
     }
 }
 
 implement Hash for Uuid {
-    func hash(this, hasher: &mut Hasher) {
-        hasher.write(&this.bytes)
+    func hash(this, hasher: mut ref Hasher) {
+        hasher.write(ref this.bytes)
     }
 }
 
 implement Display for Uuid {
-    func fmt(this, f: &mut Formatter) -> FmtResult {
-        f.write_str(&this.to_hyphenated_lower())
+    func fmt(this, f: mut ref Formatter) -> FmtResult {
+        f.write_str(ref this.to_hyphenated_lower())
     }
 }
 
 implement Debug for Uuid {
-    func fmt(this, f: &mut Formatter) -> FmtResult {
+    func fmt(this, f: mut ref Formatter) -> FmtResult {
         f.write_str("Uuid(")?
-        f.write_str(&this.to_hyphenated_lower())?
+        f.write_str(ref this.to_hyphenated_lower())?
         f.write_str(")")
     }
 }
@@ -337,7 +337,7 @@ implement Debug for Uuid {
 implement FromStr for Uuid {
     type Err = UuidError
 
-    func from_str(s: &String) -> Result[Uuid, UuidError] {
+    func from_str(s: ref String) -> Outcome[Uuid, UuidError] {
         Uuid.parse(s)
     }
 }
@@ -361,11 +361,11 @@ func uuid_examples()
 
     // Time-based UUID
     let node = [0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E]
-    let time_id = Uuid.v1(&node)
+    let time_id = Uuid.v1(ref node)
     print("Time-based UUID: " + time_id.to_string())
 
     // Name-based UUID (deterministic)
-    let name_id = Uuid.v5(&namespace.DNS, "example.com".as_bytes())
+    let name_id = Uuid.v5(ref namespace.DNS, "example.com".as_bytes())
     print("Name-based UUID: " + name_id.to_string())
 
     // Modern time-ordered UUID (v7)
@@ -428,7 +428,7 @@ extend UserStore {
         return id
     }
 
-    func get_user(this, id: &Uuid) -> Option[&User] {
+    func get_user(this, id: ref Uuid) -> Maybe[ref User] {
         this.users.get(id)
     }
 }

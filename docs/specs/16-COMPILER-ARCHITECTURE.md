@@ -179,7 +179,7 @@ struct Token {
 
 // Rules enforced:
 // - Single owner
-// - Multiple &T OR single &mut T
+// - Multiple ref T OR single mut ref T
 // - No use after move
 // - No dangling references
 ```
@@ -247,11 +247,11 @@ enum class TypeKind {
     Struct, Enum, Tuple, Array,
 
     // References
-    Ref,      // &T
-    RefMut,   // &mut T
+    Ref,      // ref T
+    RefMut,   // mut ref T
 
     // Smart pointers (library types)
-    Box, Rc, Arc,
+    Heap, Shared, Sync,
 
     // Generic
     TypeVar,      // T (unresolved)
@@ -262,8 +262,8 @@ enum class TypeKind {
     Func,         // func(A, B) -> C
 
     // Special
-    Option,       // T?
-    Result,       // Result[T, E]
+    Maybe,        // Maybe[T]
+    Outcome,      // Outcome[T, E]
 
     // Error
     Error,        // type checking failed
@@ -294,7 +294,7 @@ Key rules:
 - Literals: infer numeric type from context or default
 - Variables: lookup in environment
 - Function calls: instantiate generics, check args
-- Method calls: resolve trait, check receiver
+- Method calls: resolve behavior, check receiver
 - Lambdas: may need CHECK mode for param types
 ```
 
@@ -304,13 +304,13 @@ Key rules:
 For generic functions:
 
 1. Collect constraints from:
-   - Explicit bounds: T: Ord
-   - Usage sites: T + T requires Add
+   - Explicit bounds: T: Ordered
+   - Usage sites: T + T requires Addable
    - Return type requirements
 
 2. Solve constraints:
    - Unify type variables
-   - Check trait implementations
+   - Check behavior implementations
    - Report unsatisfied bounds
 ```
 
@@ -358,26 +358,26 @@ enum class Place {
 
 ```cpp
 // When creating a new borrow:
-func check_borrow(place: Place, kind: BorrowKind) -> Result[(), BorrowError] {
+func check_borrow(place: Place, kind: BorrowKind) -> Outcome[(), BorrowError] {
     let existing = state.get_borrows(place);
 
     for borrow in existing {
         if conflicts(borrow.kind, kind) {
-            return Err(BorrowError::Conflict {
+            return Failure(BorrowError::Conflict {
                 existing: borrow,
                 new_kind: kind,
             });
         }
     }
 
-    Ok(())
+    Success(())
 }
 
 // Conflict rules:
-// &T + &T = OK
-// &T + &mut T = ERROR
-// &mut T + &T = ERROR
-// &mut T + &mut T = ERROR
+// ref T + ref T = OK
+// ref T + mut ref T = ERROR
+// mut ref T + ref T = ERROR
+// mut ref T + mut ref T = ERROR
 ```
 
 ## 5. Effect System Implementation
@@ -412,7 +412,7 @@ enum class EffectKind {
 ### 5.2 Effect Inference
 
 ```cpp
-func infer_effects(body: &FuncBody) -> Effect {
+func infer_effects(body: ref FuncBody) -> Effect {
     let effects = Effect::pure();
 
     for stmt in body.statements {
@@ -422,8 +422,8 @@ func infer_effects(body: &FuncBody) -> Effect {
     effects
 }
 
-func infer_stmt_effects(stmt: &Stmt) -> Effect {
-    match stmt {
+func infer_stmt_effects(stmt: ref Stmt) -> Effect {
+    when stmt {
         Call(func, args) => {
             let func_effects = lookup_function_effects(func);
             let arg_effects = args.map(infer_expr_effects).union_all();
@@ -437,17 +437,17 @@ func infer_stmt_effects(stmt: &Stmt) -> Effect {
 ### 5.3 Capability Checking
 
 ```cpp
-func check_capabilities(module: &Module) -> Result[(), CapError] {
+func check_capabilities(module: ref Module) -> Outcome[(), CapError] {
     let declared_caps = module.caps;
     let required_caps = infer_required_caps(module);
 
-    if !declared_caps.covers(required_caps) {
-        return Err(CapError::Missing {
+    if not declared_caps.covers(required_caps) {
+        return Failure(CapError::Missing {
             required: required_caps.difference(declared_caps),
         });
     }
 
-    Ok(())
+    Success(())
 }
 ```
 
@@ -487,11 +487,11 @@ Never -> noreturn
 
 // Compound types
 String -> { i8*, i64 }  // ptr, len
-&T -> T*
-&mut T -> T*
-Box[T] -> T*
-Option[T] -> { i1, T }  // tag, value (if fits)
-Result[T,E] -> { i8, max(T,E) }  // tag, union
+ref T -> T*
+mut ref T -> T*
+Heap[T] -> T*
+Maybe[T] -> { i1, T }  // tag, value (if fits)
+Outcome[T,E] -> { i8, max(T,E) }  // tag, union
 
 // Struct -> LLVM struct (field order preserved)
 // Enum -> tagged union
@@ -528,11 +528,11 @@ extern "C" void tml_dealloc(void* ptr, size_t size, size_t align);
 // Panic handling
 extern "C" [[noreturn]] void tml_panic(const char* msg, size_t len);
 
-// Reference counting (for Rc/Arc)
-extern "C" void tml_rc_inc(void* ptr);
-extern "C" void tml_rc_dec(void* ptr);
-extern "C" void tml_arc_inc(void* ptr);
-extern "C" void tml_arc_dec(void* ptr);
+// Reference counting (for Shared/Sync)
+extern "C" void tml_shared_inc(void* ptr);
+extern "C" void tml_shared_dec(void* ptr);
+extern "C" void tml_sync_inc(void* ptr);
+extern "C" void tml_sync_dec(void* ptr);
 ```
 
 ### 7.2 Memory Layout
@@ -562,7 +562,7 @@ struct RcHeader {
 // - Windows: SEH
 
 // Cleanup during unwind:
-// - Drop trait implementations called
+// - Disposable behavior implementations called
 // - RAII resources released
 ```
 
@@ -683,18 +683,18 @@ func needs_recompile(module: ModuleId) -> bool {
 const SYNC_TOKENS = [
     Func,     // function start
     Type,     // type start
-    Trait,    // trait start
+    Behavior, // behavior start
     Extend,   // extend start
     RBrace,   // end of block
     Semicolon // end of statement (if used)
 ];
 
-func recover(parser: &mut Parser) {
-    while !parser.at_end() {
+func recover(parser: mut ref Parser) {
+    loop while not parser.at_end() {
         if SYNC_TOKENS.contains(parser.current().kind) {
-            return;
+            return
         }
-        parser.advance();
+        parser.advance()
     }
 }
 ```
@@ -705,10 +705,10 @@ func recover(parser: &mut Parser) {
 // On type error, use Error type to continue checking
 // This allows reporting multiple errors
 
-func check_expr(expr: &Expr, expected: Type) -> Type {
+func check_expr(expr: ref Expr, expected: Type) -> Type {
     let actual = infer(expr);
 
-    if !unify(actual, expected) {
+    if not unify(actual, expected) {
         report_error(TypeMismatch { expected, actual, span: expr.span });
         return Type::Error;  // Continue with error type
     }

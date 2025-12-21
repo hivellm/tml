@@ -37,7 +37,7 @@ extend Buffer {
     }
 
     /// Create from bytes
-    public func from_bytes(bytes: &[U8]) -> This {
+    public func from_bytes(bytes: ref [U8]) -> This {
         var data = List.with_capacity(bytes.len())
         data.extend_from_slice(bytes)
         return This { data: data, position: 0 }
@@ -79,17 +79,17 @@ extend Buffer {
     }
 
     /// Get bytes slice
-    public func as_bytes(this) -> &[U8] {
+    public func as_bytes(this) -> ref [U8] {
         return this.data.as_slice()
     }
 
     /// Get mutable bytes slice
-    public func as_bytes_mut(this) -> &mut [U8] {
+    public func as_bytes_mut(this) -> mut ref [U8] {
         return this.data.as_mut_slice()
     }
 
     /// Get remaining bytes from position
-    public func remaining_bytes(this) -> &[U8] {
+    public func remaining_bytes(this) -> ref [U8] {
         return &this.data.as_slice()[this.position..]
     }
 
@@ -118,7 +118,7 @@ extend Buffer {
     }
 
     /// Extend with bytes
-    public func extend(this, bytes: &[U8]) {
+    public func extend(this, bytes: ref [U8]) {
         this.data.extend_from_slice(bytes)
     }
 
@@ -133,33 +133,33 @@ extend Buffer {
 }
 
 extend Buffer with Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError] {
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         let available = this.remaining()
         let to_read = buf.len().min(available)
 
         if to_read == 0 {
-            return Ok(0)
+            return Success(0)
         }
 
         buf[..to_read].copy_from_slice(&this.data[this.position..this.position + to_read])
         this.position += to_read
-        return Ok(to_read)
+        return Success(to_read)
     }
 }
 
 extend Buffer with Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError] {
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError] {
         this.data.extend_from_slice(buf)
-        return Ok(buf.len())
+        return Success(buf.len())
     }
 
-    func flush(this) -> Result[Unit, IoError] {
-        return Ok(unit)
+    func flush(this) -> Outcome[Unit, IoError] {
+        return Success(unit)
     }
 }
 
 extend Buffer with Seek {
-    func seek(this, pos: SeekFrom) -> Result[U64, IoError] {
+    func seek(this, pos: SeekFrom) -> Outcome[U64, IoError] {
         let new_pos = when pos {
             Start(n) -> n,
             End(n) -> (this.data.len() as I64 + n) as U64,
@@ -167,11 +167,11 @@ extend Buffer with Seek {
         }
 
         if new_pos > this.data.len() {
-            return Err(IoError.new(InvalidInput, "seek beyond end"))
+            return Failure(IoError.new(InvalidInput, "seek beyond end"))
         }
 
         this.position = new_pos
-        return Ok(new_pos)
+        return Success(new_pos)
     }
 }
 ```
@@ -190,86 +190,86 @@ extend ByteReader[R: Read] {
     }
 
     /// Read exact number of bytes
-    public func read_exact(this, buf: &mut [U8]) -> Result[Unit, IoError] {
+    public func read_exact(this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
         this.inner.read_exact(buf)
     }
 
     /// Read single byte
-    public func read_u8(this) -> Result[U8, IoError] {
-        this.inner.read_exact(&mut this.buf[0..1])?
-        return Ok(this.buf[0])
+    public func read_u8(this) -> Outcome[U8, IoError] {
+        this.inner.read_exact(mut ref this.buf[0 to 1])!
+        return Success(this.buf[0])
     }
 
     /// Read signed byte
-    public func read_i8(this) -> Result[I8, IoError] {
-        return Ok(this.read_u8()? as I8)
+    public func read_i8(this) -> Outcome[I8, IoError] {
+        return Success(this.read_u8()! as I8)
     }
 
     // Little-endian reads
-    public func read_u16_le(this) -> Result[U16, IoError] {
-        this.inner.read_exact(&mut this.buf[0..2])?
-        return Ok(U16.from_le_bytes([this.buf[0], this.buf[1]]))
+    public func read_u16_le(this) -> Outcome[U16, IoError] {
+        this.inner.read_exact(mut ref this.buf[0 to 2])!
+        return Success(U16.from_le_bytes([this.buf[0], this.buf[1]]))
     }
 
-    public func read_u32_le(this) -> Result[U32, IoError] {
-        this.inner.read_exact(&mut this.buf[0..4])?
-        return Ok(U32.from_le_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
+    public func read_u32_le(this) -> Outcome[U32, IoError] {
+        this.inner.read_exact(mut ref this.buf[0 to 4])!
+        return Success(U32.from_le_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
     }
 
-    public func read_u64_le(this) -> Result[U64, IoError] {
-        this.inner.read_exact(&mut this.buf)?
-        return Ok(U64.from_le_bytes(this.buf))
+    public func read_u64_le(this) -> Outcome[U64, IoError] {
+        this.inner.read_exact(mut ref this.buf)!
+        return Success(U64.from_le_bytes(this.buf))
     }
 
-    public func read_i16_le(this) -> Result[I16, IoError] {
-        return Ok(this.read_u16_le()? as I16)
+    public func read_i16_le(this) -> Outcome[I16, IoError] {
+        return Success(this.read_u16_le()! as I16)
     }
 
-    public func read_i32_le(this) -> Result[I32, IoError] {
-        return Ok(this.read_u32_le()? as I32)
+    public func read_i32_le(this) -> Outcome[I32, IoError] {
+        return Success(this.read_u32_le()! as I32)
     }
 
-    public func read_i64_le(this) -> Result[I64, IoError] {
-        return Ok(this.read_u64_le()? as I64)
+    public func read_i64_le(this) -> Outcome[I64, IoError] {
+        return Success(this.read_u64_le()! as I64)
     }
 
-    public func read_f32_le(this) -> Result[F32, IoError] {
-        return Ok(F32.from_bits(this.read_u32_le()?))
+    public func read_f32_le(this) -> Outcome[F32, IoError] {
+        return Success(F32.from_bits(this.read_u32_le()!))
     }
 
-    public func read_f64_le(this) -> Result[F64, IoError] {
-        return Ok(F64.from_bits(this.read_u64_le()?))
+    public func read_f64_le(this) -> Outcome[F64, IoError] {
+        return Success(F64.from_bits(this.read_u64_le()!))
     }
 
     // Big-endian reads
-    public func read_u16_be(this) -> Result[U16, IoError] {
-        this.inner.read_exact(&mut this.buf[0..2])?
-        return Ok(U16.from_be_bytes([this.buf[0], this.buf[1]]))
+    public func read_u16_be(this) -> Outcome[U16, IoError] {
+        this.inner.read_exact(mut ref this.buf[0 to 2])!
+        return Success(U16.from_be_bytes([this.buf[0], this.buf[1]]))
     }
 
-    public func read_u32_be(this) -> Result[U32, IoError] {
-        this.inner.read_exact(&mut this.buf[0..4])?
-        return Ok(U32.from_be_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
+    public func read_u32_be(this) -> Outcome[U32, IoError] {
+        this.inner.read_exact(mut ref this.buf[0 to 4])!
+        return Success(U32.from_be_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
     }
 
-    public func read_u64_be(this) -> Result[U64, IoError] {
-        this.inner.read_exact(&mut this.buf)?
-        return Ok(U64.from_be_bytes(this.buf))
+    public func read_u64_be(this) -> Outcome[U64, IoError] {
+        this.inner.read_exact(mut ref this.buf)!
+        return Success(U64.from_be_bytes(this.buf))
     }
 
-    public func read_i16_be(this) -> Result[I16, IoError]
-    public func read_i32_be(this) -> Result[I32, IoError]
-    public func read_i64_be(this) -> Result[I64, IoError]
-    public func read_f32_be(this) -> Result[F32, IoError]
-    public func read_f64_be(this) -> Result[F64, IoError]
+    public func read_i16_be(this) -> Outcome[I16, IoError]
+    public func read_i32_be(this) -> Outcome[I32, IoError]
+    public func read_i64_be(this) -> Outcome[I64, IoError]
+    public func read_f32_be(this) -> Outcome[F32, IoError]
+    public func read_f64_be(this) -> Outcome[F64, IoError]
 
     // Variable-length integers (LEB128)
-    public func read_varint(this) -> Result[I64, IoError] {
+    public func read_varint(this) -> Outcome[I64, IoError] {
         var result: I64 = 0
         var shift: U32 = 0
 
         loop {
-            let byte = this.read_u8()?
+            let byte = this.read_u8()!
             result |= ((byte & 0x7F) as I64) << shift
 
             if (byte & 0x80) == 0 {
@@ -282,19 +282,19 @@ extend ByteReader[R: Read] {
 
             shift += 7
             if shift >= 64 {
-                return Err(IoError.new(InvalidData, "varint too long"))
+                return Failure(IoError.new(InvalidData, "varint too long"))
             }
         }
 
-        return Ok(result)
+        return Success(result)
     }
 
-    public func read_uvarint(this) -> Result[U64, IoError] {
+    public func read_uvarint(this) -> Outcome[U64, IoError] {
         var result: U64 = 0
         var shift: U32 = 0
 
         loop {
-            let byte = this.read_u8()?
+            let byte = this.read_u8()!
             result |= ((byte & 0x7F) as U64) << shift
 
             if (byte & 0x80) == 0 {
@@ -303,35 +303,35 @@ extend ByteReader[R: Read] {
 
             shift += 7
             if shift >= 64 {
-                return Err(IoError.new(InvalidData, "uvarint too long"))
+                return Failure(IoError.new(InvalidData, "uvarint too long"))
             }
         }
 
-        return Ok(result)
+        return Success(result)
     }
 
     // Strings
-    public func read_string(this, len: U64) -> Result[String, IoError] {
+    public func read_string(this, len: U64) -> Outcome[String, IoError] {
         var bytes = List.with_capacity(len)
         bytes.resize(len, 0)
-        this.inner.read_exact(bytes.as_mut_slice())?
-        return String.from_utf8(bytes).map_err(|_| IoError.new(InvalidData, "invalid UTF-8"))
+        this.inner.read_exact(bytes.as_mut_slice())!
+        return String.from_utf8(bytes).map_err(do(_) IoError.new(InvalidData, "invalid UTF-8"))
     }
 
-    public func read_cstring(this) -> Result[String, IoError] {
+    public func read_cstring(this) -> Outcome[String, IoError] {
         var bytes = List.new()
         loop {
-            let b = this.read_u8()?
+            let b = this.read_u8()!
             if b == 0 {
                 break
             }
             bytes.push(b)
         }
-        return String.from_utf8(bytes).map_err(|_| IoError.new(InvalidData, "invalid UTF-8"))
+        return String.from_utf8(bytes).map_err(do(_) IoError.new(InvalidData, "invalid UTF-8"))
     }
 
-    public func read_length_prefixed_string(this) -> Result[String, IoError] {
-        let len = this.read_uvarint()?
+    public func read_length_prefixed_string(this) -> Outcome[String, IoError] {
+        let len = this.read_uvarint()!
         return this.read_string(len)
     }
 
@@ -356,50 +356,50 @@ extend ByteWriter[W: Write] {
     }
 
     /// Write single byte
-    public func write_u8(this, v: U8) -> Result[Unit, IoError] {
+    public func write_u8(this, v: U8) -> Outcome[Unit, IoError] {
         this.buf[0] = v
-        this.inner.write_all(&this.buf[0..1])
+        this.inner.write_all(&this.buf[0 to 1])
     }
 
     /// Write signed byte
-    public func write_i8(this, v: I8) -> Result[Unit, IoError] {
+    public func write_i8(this, v: I8) -> Outcome[Unit, IoError] {
         this.write_u8(v as U8)
     }
 
     // Little-endian writes
-    public func write_u16_le(this, v: U16) -> Result[Unit, IoError] {
+    public func write_u16_le(this, v: U16) -> Outcome[Unit, IoError] {
         let bytes = v.to_le_bytes()
         this.inner.write_all(&bytes)
     }
 
-    public func write_u32_le(this, v: U32) -> Result[Unit, IoError] {
+    public func write_u32_le(this, v: U32) -> Outcome[Unit, IoError] {
         let bytes = v.to_le_bytes()
         this.inner.write_all(&bytes)
     }
 
-    public func write_u64_le(this, v: U64) -> Result[Unit, IoError] {
+    public func write_u64_le(this, v: U64) -> Outcome[Unit, IoError] {
         let bytes = v.to_le_bytes()
         this.inner.write_all(&bytes)
     }
 
-    public func write_i16_le(this, v: I16) -> Result[Unit, IoError]
-    public func write_i32_le(this, v: I32) -> Result[Unit, IoError]
-    public func write_i64_le(this, v: I64) -> Result[Unit, IoError]
-    public func write_f32_le(this, v: F32) -> Result[Unit, IoError]
-    public func write_f64_le(this, v: F64) -> Result[Unit, IoError]
+    public func write_i16_le(this, v: I16) -> Outcome[Unit, IoError]
+    public func write_i32_le(this, v: I32) -> Outcome[Unit, IoError]
+    public func write_i64_le(this, v: I64) -> Outcome[Unit, IoError]
+    public func write_f32_le(this, v: F32) -> Outcome[Unit, IoError]
+    public func write_f64_le(this, v: F64) -> Outcome[Unit, IoError]
 
     // Big-endian writes
-    public func write_u16_be(this, v: U16) -> Result[Unit, IoError]
-    public func write_u32_be(this, v: U32) -> Result[Unit, IoError]
-    public func write_u64_be(this, v: U64) -> Result[Unit, IoError]
-    public func write_i16_be(this, v: I16) -> Result[Unit, IoError]
-    public func write_i32_be(this, v: I32) -> Result[Unit, IoError]
-    public func write_i64_be(this, v: I64) -> Result[Unit, IoError]
-    public func write_f32_be(this, v: F32) -> Result[Unit, IoError]
-    public func write_f64_be(this, v: F64) -> Result[Unit, IoError]
+    public func write_u16_be(this, v: U16) -> Outcome[Unit, IoError]
+    public func write_u32_be(this, v: U32) -> Outcome[Unit, IoError]
+    public func write_u64_be(this, v: U64) -> Outcome[Unit, IoError]
+    public func write_i16_be(this, v: I16) -> Outcome[Unit, IoError]
+    public func write_i32_be(this, v: I32) -> Outcome[Unit, IoError]
+    public func write_i64_be(this, v: I64) -> Outcome[Unit, IoError]
+    public func write_f32_be(this, v: F32) -> Outcome[Unit, IoError]
+    public func write_f64_be(this, v: F64) -> Outcome[Unit, IoError]
 
     // Variable-length integers
-    public func write_varint(this, v: I64) -> Result[Unit, IoError] {
+    public func write_varint(this, v: I64) -> Outcome[Unit, IoError] {
         var value = v
         loop {
             let byte = (value & 0x7F) as U8
@@ -409,47 +409,47 @@ extend ByteWriter[W: Write] {
                        (value == -1 and (byte & 0x40) != 0)
 
             if done {
-                this.write_u8(byte)?
+                this.write_u8(byte)!
                 break
             } else {
-                this.write_u8(byte | 0x80)?
+                this.write_u8(byte | 0x80)!
             }
         }
-        return Ok(unit)
+        return Success(unit)
     }
 
-    public func write_uvarint(this, v: U64) -> Result[Unit, IoError] {
+    public func write_uvarint(this, v: U64) -> Outcome[Unit, IoError] {
         var value = v
         loop {
             let byte = (value & 0x7F) as U8
             value >>= 7
 
             if value == 0 {
-                this.write_u8(byte)?
+                this.write_u8(byte)!
                 break
             } else {
-                this.write_u8(byte | 0x80)?
+                this.write_u8(byte | 0x80)!
             }
         }
-        return Ok(unit)
+        return Success(unit)
     }
 
     // Strings
-    public func write_string(this, s: &str) -> Result[Unit, IoError] {
+    public func write_string(this, s: ref str) -> Outcome[Unit, IoError] {
         this.inner.write_all(s.as_bytes())
     }
 
-    public func write_cstring(this, s: &str) -> Result[Unit, IoError] {
-        this.inner.write_all(s.as_bytes())?
+    public func write_cstring(this, s: ref str) -> Outcome[Unit, IoError] {
+        this.inner.write_all(s.as_bytes())!
         this.write_u8(0)
     }
 
-    public func write_length_prefixed_string(this, s: &str) -> Result[Unit, IoError] {
-        this.write_uvarint(s.len())?
+    public func write_length_prefixed_string(this, s: ref str) -> Outcome[Unit, IoError] {
+        this.write_uvarint(s.len())!
         this.write_string(s)
     }
 
-    public func flush(this) -> Result[Unit, IoError] {
+    public func flush(this) -> Outcome[Unit, IoError] {
         this.inner.flush()
     }
 
@@ -485,12 +485,12 @@ extend BufReader[R: Read] {
     }
 
     /// Fill internal buffer
-    func fill_buf(this) -> Result[&[U8], IoError] {
+    func fill_buf(this) -> Outcome[ref [U8], IoError] {
         if this.pos >= this.cap {
-            this.cap = this.inner.read(this.buf.as_mut_slice())?
+            this.cap = this.inner.read(this.buf.as_mut_slice())!
             this.pos = 0
         }
-        return Ok(&this.buf[this.pos..this.cap])
+        return Success(&this.buf[this.pos..this.cap])
     }
 
     /// Consume n bytes from buffer
@@ -499,19 +499,19 @@ extend BufReader[R: Read] {
     }
 
     /// Read until delimiter
-    public func read_until(this, delim: U8, buf: &mut List[U8]) -> Result[U64, IoError] {
+    public func read_until(this, delim: U8, buf: mut ref List[U8]) -> Outcome[U64, IoError] {
         var read: U64 = 0
         loop {
-            let available = this.fill_buf()?
+            let available = this.fill_buf()!
             if available.is_empty() {
                 break
             }
 
             when available.iter().position(|b| *b == delim) {
-                Some(i) -> {
-                    buf.extend_from_slice(&available[..=i])
+                Just(i) -> {
+                    buf.extend_from_slice(&available[through i])
                     this.consume(i + 1)
-                    return Ok(read + i + 1)
+                    return Success(read + i + 1)
                 },
                 None -> {
                     buf.extend_from_slice(available)
@@ -521,16 +521,16 @@ extend BufReader[R: Read] {
                 },
             }
         }
-        return Ok(read)
+        return Success(read)
     }
 
     /// Read line (until \n)
-    public func read_line(this, buf: &mut String) -> Result[U64, IoError] {
+    public func read_line(this, buf: mut ref String) -> Outcome[U64, IoError] {
         var bytes = List.new()
-        let n = this.read_until(b'\n', &mut bytes)?
-        let s = String.from_utf8(bytes).map_err(|_| IoError.new(InvalidData, "invalid UTF-8"))?
+        let n = this.read_until(b'\n', mut ref bytes)!
+        let s = String.from_utf8(bytes).map_err(do(_) IoError.new(InvalidData, "invalid UTF-8"))!
         buf.push_str(&s)
-        return Ok(n)
+        return Success(n)
     }
 
     /// Iterator over lines
@@ -544,17 +544,17 @@ extend BufReader[R: Read] {
 }
 
 extend BufReader[R: Read] with Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError] {
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         // If buf is larger than internal buffer, read directly
         if this.pos == this.cap and buf.len() >= this.buf.len() {
             return this.inner.read(buf)
         }
 
-        let available = this.fill_buf()?
+        let available = this.fill_buf()!
         let n = buf.len().min(available.len())
         buf[..n].copy_from_slice(&available[..n])
         this.consume(n)
-        return Ok(n)
+        return Success(n)
     }
 }
 
@@ -563,14 +563,14 @@ public type Lines[R: Read] {
 }
 
 extend Lines[R: Read] with Iterator {
-    type Item = Result[String, IoError]
+    type Item = Outcome[String, IoError]
 
-    func next(this) -> Option[Result[String, IoError]] {
+    func next(this) -> Maybe[Outcome[String, IoError]] {
         var line = String.new()
-        when this.reader.read_line(&mut line) {
-            Ok(0) -> None,
-            Ok(_) -> Some(Ok(line)),
-            Err(e) -> Some(Err(e)),
+        when this.reader.read_line(mut ref line) {
+            Success(0) -> Nothing,
+            Success(_) -> Just(Success(line)),
+            Failure(e) -> Just(Failure(e)),
         }
     }
 }
@@ -594,52 +594,52 @@ extend BufWriter[W: Write] {
     }
 
     /// Flush buffer to inner writer
-    func flush_buf(this) -> Result[Unit, IoError] {
+    func flush_buf(this) -> Outcome[Unit, IoError] {
         if not this.buf.is_empty() {
-            this.inner.write_all(this.buf.as_slice())?
+            this.inner.write_all(this.buf.as_slice())!
             this.buf.clear()
         }
-        return Ok(unit)
+        return Success(unit)
     }
 
     /// Get reference to inner writer
-    public func get_ref(this) -> &W {
+    public func get_ref(this) -> ref W {
         return &this.inner
     }
 
     /// Get mutable reference to inner writer
-    public func get_mut(this) -> &mut W {
-        return &mut this.inner
+    public func get_mut(this) -> mut ref W {
+        return mut ref this.inner
     }
 
     /// Into inner writer (flushes first)
-    public func into_inner(this) -> Result[W, IoError] {
-        this.flush()?
-        return Ok(this.inner)
+    public func into_inner(this) -> Outcome[W, IoError] {
+        this.flush()!
+        return Success(this.inner)
     }
 }
 
 extend BufWriter[W: Write] with Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError] {
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError] {
         // If buf is larger than capacity, flush and write directly
         if buf.len() > this.buf.capacity() - this.buf.len() {
-            this.flush_buf()?
+            this.flush_buf()!
             if buf.len() >= this.buf.capacity() {
                 return this.inner.write(buf)
             }
         }
 
         this.buf.extend_from_slice(buf)
-        return Ok(buf.len())
+        return Success(buf.len())
     }
 
-    func flush(this) -> Result[Unit, IoError] {
-        this.flush_buf()?
+    func flush(this) -> Outcome[Unit, IoError] {
+        this.flush_buf()!
         this.inner.flush()
     }
 }
 
-extend BufWriter[W: Write] with Drop {
+extend BufWriter[W: Write] with Disposable {
     func drop(this) {
         this.flush().ok()
     }
@@ -705,20 +705,20 @@ extend RingBuffer[T] {
         return true
     }
 
-    public func pop_front(this) -> Option[T] {
+    public func pop_front(this) -> Maybe[T] {
         if this.is_empty() {
-            return None
+            return Nothing
         }
 
-        let value = this.data[this.head].clone()
+        let value = this.data[this.head].duplicate()
         this.head = (this.head + 1) % this.capacity()
         this.len -= 1
-        return Some(value)
+        return Just(value)
     }
 
-    public func pop_back(this) -> Option[T] {
+    public func pop_back(this) -> Maybe[T] {
         if this.is_empty() {
-            return None
+            return Nothing
         }
 
         this.tail = if this.tail == 0 {
@@ -727,19 +727,19 @@ extend RingBuffer[T] {
             this.tail - 1
         }
         this.len -= 1
-        return Some(this.data[this.tail].clone())
+        return Just(this.data[this.tail].duplicate())
     }
 
-    public func front(this) -> Option[&T] {
-        if this.is_empty() { None } else { Some(&this.data[this.head]) }
+    public func front(this) -> Maybe[ref T] {
+        if this.is_empty() { Nothing } else { Just(&this.data[this.head]) }
     }
 
-    public func back(this) -> Option[&T] {
+    public func back(this) -> Maybe[ref T] {
         if this.is_empty() {
-            return None
+            return Nothing
         }
         let idx = if this.tail == 0 { this.capacity() - 1 } else { this.tail - 1 }
-        return Some(&this.data[idx])
+        return Just(&this.data[idx])
     }
 
     public func clear(this) {
@@ -766,7 +766,7 @@ type Message {
 extend Message {
     func encode(this) -> List[U8] {
         var buf = Buffer.new()
-        var writer = ByteWriter.new(&mut buf)
+        var writer = ByteWriter.new(mut ref buf)
 
         writer.write_u32_be(this.id).unwrap()
         writer.write_u32_be(this.payload.len() as U32).unwrap()
@@ -775,17 +775,17 @@ extend Message {
         return buf.into_inner()
     }
 
-    func decode(data: &[U8]) -> Result[This, IoError] {
+    func decode(data: ref [U8]) -> Outcome[This, IoError] {
         var buf = Buffer.from_bytes(data)
-        var reader = ByteReader.new(&mut buf)
+        var reader = ByteReader.new(mut ref buf)
 
-        let id = reader.read_u32_be()?
-        let len = reader.read_u32_be()? as U64
+        let id = reader.read_u32_be()!
+        let len = reader.read_u32_be()! as U64
         var payload = List.with_capacity(len)
         payload.resize(len, 0)
-        reader.read_exact(payload.as_mut_slice())?
+        reader.read_exact(payload.as_mut_slice())!
 
-        return Ok(This { id: id, payload: payload })
+        return Success(This { id: id, payload: payload })
     }
 }
 ```
@@ -799,22 +799,22 @@ caps: [io.file]
 import std.fs.File
 import std.buffer.{BufReader, BufWriter}
 
-func process_file(input: &Path, output: &Path) -> Result[Unit, Error] {
-    let file_in = File.open(input)?
-    let file_out = File.create(output)?
+func process_file(input: &Path, output: &Path) -> Outcome[Unit, Error] {
+    let file_in = File.open(input)!
+    let file_out = File.create(output)!
 
     var reader = BufReader.new(file_in)
     var writer = BufWriter.new(file_out)
 
     loop line in reader.lines() {
-        let line = line?
+        let line = line!
         let processed = line.to_uppercase()
-        writer.write_all(processed.as_bytes())?
-        writer.write_all(b"\n")?
+        writer.write_all(processed.as_bytes())!
+        writer.write_all(b"\n")!
     }
 
-    writer.flush()?
-    return Ok(unit)
+    writer.flush()!
+    return Success(unit)
 }
 ```
 

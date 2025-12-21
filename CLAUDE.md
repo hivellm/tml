@@ -20,7 +20,7 @@ This is a **language specification project**, not an implementation. The `/docs/
 
 ## Key Design Decisions
 
-TML differs from Rust to avoid LLM parsing ambiguities:
+TML has its own identity, optimized for LLM comprehension with self-documenting syntax:
 
 | Rust | TML | Reason |
 |------|-----|--------|
@@ -28,8 +28,21 @@ TML differs from Rust to avoid LLM parsing ambiguities:
 | `\|x\| expr` | `do(x) expr` | `\|` conflicts with OR |
 | `&&` `\|\|` `!` | `and` `or` `not` | Keywords are clearer |
 | `fn` | `func` | More explicit |
-| `match` | `when` | No conflict |
+| `match` | `when` | More intuitive |
 | `for`/`while`/`loop` | `loop` unified | Single keyword |
+| `&T` / `&mut T` | `ref T` / `mut ref T` | Words over symbols |
+| `trait` | `behavior` | Self-documenting |
+| `#[...]` | `@...` | Cleaner directives |
+| `Option[T]` | `Maybe[T]` | Intent is clear |
+| `Some(x)` / `None` | `Just(x)` / `Nothing` | Self-documenting |
+| `Result[T,E]` | `Outcome[T,E]` | Describes what it is |
+| `Ok(x)` / `Err(e)` | `Success(x)` / `Failure(e)` | Unambiguous meaning |
+| `..` / `..=` | `to` / `through` | Readable ranges |
+| `Box[T]` | `Heap[T]` | Describes storage |
+| `Rc[T]` / `Arc[T]` | `Shared[T]` / `Sync[T]` | Describes purpose |
+| `.clone()` | `.duplicate()` | No confusion with Git |
+| `Clone` trait | `Duplicate` behavior | Consistent naming |
+| `unsafe` | `lowlevel` | Less scary, accurate |
 | Lifetimes `'a` | Always inferred | No syntax noise |
 
 ## Documentation Structure
@@ -38,7 +51,7 @@ TML differs from Rust to avoid LLM parsing ambiguities:
 /docs/
 ├── INDEX.md           # Overview and quick start
 ├── 01-OVERVIEW.md     # Philosophy, TML vs Rust
-├── 02-LEXICAL.md      # Tokens, 28 keywords
+├── 02-LEXICAL.md      # Tokens, 32 keywords
 ├── 03-GRAMMAR.md      # EBNF grammar (LL(1))
 ├── 04-TYPES.md        # Type system
 ├── 05-SEMANTICS.md    # Caps, effects, contracts

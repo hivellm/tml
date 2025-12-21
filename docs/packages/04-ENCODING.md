@@ -23,21 +23,21 @@ import std.encoding.{base64, hex, utf8, utf16}
 module utf8
 
 /// Check if bytes are valid UTF-8
-public func is_valid(bytes: &[U8]) -> Bool
+public func is_valid(bytes: ref [U8]) -> Bool
 
 /// Decode bytes to string
-public func decode(bytes: &[U8]) -> Result[String, Utf8Error]
+public func decode(bytes: ref [U8]) -> Outcome[String, Utf8Error]
 
 /// Decode bytes, replacing invalid sequences with replacement char
-public func decode_lossy(bytes: &[U8]) -> String
+public func decode_lossy(bytes: ref [U8]) -> String
 
 /// Encode string to bytes (always succeeds - String is UTF-8)
-public func encode(s: &str) -> &[U8] {
+public func encode(s: ref str) -> ref [U8] {
     return s.as_bytes()
 }
 
 /// Count characters (not bytes)
-public func char_count(s: &str) -> U64
+public func char_count(s: ref str) -> U64
 
 /// Get byte length of char at position
 public func char_len(byte: U8) -> U64 {
@@ -50,12 +50,12 @@ public func char_len(byte: U8) -> U64 {
 
 public type Utf8Error {
     valid_up_to: U64,
-    error_len: Option[U64],
+    error_len: Maybe[U64],
 }
 
 extend Utf8Error {
     public func valid_up_to(this) -> U64 { this.valid_up_to }
-    public func error_len(this) -> Option[U64] { this.error_len }
+    public func error_len(this) -> Maybe[U64] { this.error_len }
 }
 ```
 
@@ -65,22 +65,22 @@ extend Utf8Error {
 module utf16
 
 /// Decode UTF-16 LE bytes to string
-public func decode_le(bytes: &[U8]) -> Result[String, DecodeError]
+public func decode_le(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Decode UTF-16 BE bytes to string
-public func decode_be(bytes: &[U8]) -> Result[String, DecodeError]
+public func decode_be(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Decode with BOM detection
-public func decode(bytes: &[U8]) -> Result[String, DecodeError]
+public func decode(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Encode string to UTF-16 LE
-public func encode_le(s: &str) -> List[U8]
+public func encode_le(s: ref str) -> List[U8]
 
 /// Encode string to UTF-16 BE
-public func encode_be(s: &str) -> List[U8]
+public func encode_be(s: ref str) -> List[U8]
 
 /// Encode with BOM
-public func encode_with_bom(s: &str, endian: Endian) -> List[U8]
+public func encode_with_bom(s: ref str, endian: Endian) -> List[U8]
 
 public type Endian = Little | Big
 
@@ -101,25 +101,25 @@ public type DecodeErrorKind =
 module ascii
 
 /// Check if all bytes are ASCII (< 128)
-public func is_ascii(bytes: &[U8]) -> Bool
+public func is_ascii(bytes: ref [U8]) -> Bool
 
 /// Check if string is ASCII
-public func is_ascii_str(s: &str) -> Bool
+public func is_ascii_str(s: ref str) -> Bool
 
 /// Decode ASCII bytes to string
-public func decode(bytes: &[U8]) -> Result[String, AsciiError]
+public func decode(bytes: ref [U8]) -> Outcome[String, AsciiError]
 
 /// Decode, replacing non-ASCII with '?'
-public func decode_lossy(bytes: &[U8]) -> String
+public func decode_lossy(bytes: ref [U8]) -> String
 
 /// Encode string to ASCII (fails if non-ASCII chars)
-public func encode(s: &str) -> Result[List[U8], AsciiError]
+public func encode(s: ref str) -> Outcome[List[U8], AsciiError]
 
 /// Convert to uppercase ASCII
-public func to_uppercase(bytes: &mut [U8])
+public func to_uppercase(bytes: mut ref [U8])
 
 /// Convert to lowercase ASCII
-public func to_lowercase(bytes: &mut [U8])
+public func to_lowercase(bytes: mut ref [U8])
 
 public type AsciiError {
     position: U64,
@@ -133,13 +133,13 @@ public type AsciiError {
 module latin1
 
 /// Decode Latin-1 bytes to string
-public func decode(bytes: &[U8]) -> String  // Always succeeds
+public func decode(bytes: ref [U8]) -> String  // Always succeeds
 
 /// Encode string to Latin-1
-public func encode(s: &str) -> Result[List[U8], EncodeError]
+public func encode(s: ref str) -> Outcome[List[U8], EncodeError]
 
 /// Encode, replacing unencodable chars
-public func encode_lossy(s: &str) -> List[U8]
+public func encode_lossy(s: ref str) -> List[U8]
 
 public type EncodeError {
     position: U64,
@@ -166,18 +166,18 @@ public const URL_SAFE: Config = Config { alphabet: UrlSafe, padding: false }
 public const URL_SAFE_PADDED: Config = Config { alphabet: UrlSafe, padding: true }
 
 /// Encode bytes to base64 string
-public func encode(bytes: &[U8]) -> String {
+public func encode(bytes: ref [U8]) -> String {
     return encode_config(bytes, STANDARD)
 }
 
 /// Encode with custom config
-public func encode_config(bytes: &[U8], config: Config) -> String
+public func encode_config(bytes: ref [U8], config: Config) -> String
 
 /// Decode base64 string to bytes
-public func decode(s: &str) -> Result[List[U8], DecodeError]
+public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
 
 /// Decode with custom config
-public func decode_config(s: &str, config: Config) -> Result[List[U8], DecodeError]
+public func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
 
 /// Calculate encoded length
 public func encoded_len(input_len: U64, padding: Bool) -> U64 {
@@ -220,10 +220,10 @@ public type Alphabet = Standard | Hex
 public const STANDARD: Config = Config { alphabet: Standard, padding: true }
 public const HEX: Config = Config { alphabet: Hex, padding: true }
 
-public func encode(bytes: &[U8]) -> String
-public func encode_config(bytes: &[U8], config: Config) -> String
-public func decode(s: &str) -> Result[List[U8], DecodeError]
-public func decode_config(s: &str, config: Config) -> Result[List[U8], DecodeError]
+public func encode(bytes: ref [U8]) -> String
+public func encode_config(bytes: ref [U8], config: Config) -> String
+public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
+public func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
 ```
 
 ### 4.3 Hexadecimal
@@ -232,19 +232,19 @@ public func decode_config(s: &str, config: Config) -> Result[List[U8], DecodeErr
 module hex
 
 /// Encode bytes to lowercase hex string
-public func encode(bytes: &[U8]) -> String
+public func encode(bytes: ref [U8]) -> String
 
 /// Encode bytes to uppercase hex string
-public func encode_upper(bytes: &[U8]) -> String
+public func encode_upper(bytes: ref [U8]) -> String
 
 /// Decode hex string to bytes
-public func decode(s: &str) -> Result[List[U8], DecodeError]
+public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
 
 /// Encode single byte to hex chars
 public func encode_byte(b: U8) -> (Char, Char)
 
 /// Decode two hex chars to byte
-public func decode_byte(high: Char, low: Char) -> Result[U8, DecodeError]
+public func decode_byte(high: Char, low: Char) -> Outcome[U8, DecodeError]
 
 public type DecodeError {
     kind: DecodeErrorKind,
@@ -270,26 +270,26 @@ public type EncodeSet =
     | Custom(func(U8) -> Bool)
 
 /// Percent-encode string
-public func encode(s: &str, set: EncodeSet) -> String
+public func encode(s: ref str, set: EncodeSet) -> String
 
 /// Percent-decode string
-public func decode(s: &str) -> Result[String, DecodeError]
+public func decode(s: ref str) -> Outcome[String, DecodeError]
 
 /// Encode for URL path
-public func encode_path(s: &str) -> String {
+public func encode_path(s: ref str) -> String {
     return encode(s, Path)
 }
 
 /// Encode for URL query
-public func encode_query(s: &str) -> String {
+public func encode_query(s: ref str) -> String {
     return encode(s, Query)
 }
 
 /// Encode for form data (space as +)
-public func encode_form(s: &str) -> String
+public func encode_form(s: ref str) -> String
 
 /// Decode form data
-public func decode_form(s: &str) -> Result[String, DecodeError]
+public func decode_form(s: ref str) -> Outcome[String, DecodeError]
 ```
 
 ## 6. Charset Detection
@@ -308,13 +308,13 @@ public type Encoding =
     | Unknown
 
 /// Detect encoding from BOM
-public func from_bom(bytes: &[U8]) -> Option[Encoding]
+public func from_bom(bytes: ref [U8]) -> Maybe[Encoding]
 
 /// Detect encoding heuristically
-public func detect(bytes: &[U8]) -> Encoding
+public func detect(bytes: ref [U8]) -> Encoding
 
 /// Confidence-based detection
-public func detect_with_confidence(bytes: &[U8]) -> (Encoding, F64)
+public func detect_with_confidence(bytes: ref [U8]) -> (Encoding, F64)
 ```
 
 ## 7. Streaming Encoder/Decoder
@@ -345,8 +345,8 @@ extend Encoder[W: Write] {
         }
     }
 
-    public func write(this, data: &[U8]) -> Result[Unit, IoError]
-    public func finish(this) -> Result[W, IoError]
+    public func write(this, data: ref [U8]) -> Outcome[Unit, IoError]
+    public func finish(this) -> Outcome[W, IoError]
 }
 
 extend Encoder[W: Write] with Write { ... }
@@ -378,22 +378,22 @@ public type NormalizationForm =
     | Nfkc  // Compatibility Decomposition + Composition
 
 /// Normalize string
-public func normalize(s: &str, form: NormalizationForm) -> String
+public func normalize(s: ref str, form: NormalizationForm) -> String
 
 /// Check if string is normalized
-public func is_normalized(s: &str, form: NormalizationForm) -> Bool
+public func is_normalized(s: ref str, form: NormalizationForm) -> Bool
 
 /// Iterator over grapheme clusters
-public func graphemes(s: &str) -> Graphemes
+public func graphemes(s: ref str) -> Graphemes
 
 /// Iterator over words
-public func words(s: &str) -> Words
+public func words(s: ref str) -> Words
 
 public type Graphemes { ... }
-extend Graphemes with Iterator { type Item = &str }
+extend Graphemes with Iterator { type Item = ref str }
 
 public type Words { ... }
-extend Words with Iterator { type Item = &str }
+extend Words with Iterator { type Item = ref str }
 ```
 
 ## 9. Character Properties
@@ -457,7 +457,7 @@ func main() {
 module url_example
 import std.encoding.percent
 
-func build_url(base: &str, params: Map[String, String]) -> String {
+func build_url(base: ref str, params: Map[String, String]) -> String {
     var url = String.from(base)
     url.push('?')
 
@@ -481,15 +481,15 @@ func build_url(base: &str, params: Map[String, String]) -> String {
 module charset
 import std.encoding.{utf8, utf16, latin1}
 
-func convert_to_utf8(data: &[U8], source_encoding: &str) -> Result[String, Error] {
+func convert_to_utf8(data: ref [U8], source_encoding: ref str) -> Outcome[String, Error] {
     when source_encoding {
         "utf-8" -> utf8.decode(data).map_err(Error.from),
         "utf-16" -> utf16.decode(data).map_err(Error.from),
         "utf-16le" -> utf16.decode_le(data).map_err(Error.from),
         "utf-16be" -> utf16.decode_be(data).map_err(Error.from),
-        "iso-8859-1" -> Ok(latin1.decode(data)),
-        "latin1" -> Ok(latin1.decode(data)),
-        _ -> Err(Error.new("unsupported encoding: " + source_encoding)),
+        "iso-8859-1" -> Success(latin1.decode(data)),
+        "latin1" -> Success(latin1.decode(data)),
+        _ -> Failure(Error.new("unsupported encoding: " + source_encoding)),
     }
 }
 ```

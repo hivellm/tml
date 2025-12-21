@@ -27,7 +27,7 @@ caps: [io.network.listen]    // Accept incoming connections
 public type IpAddr = V4(Ipv4Addr) | V6(Ipv6Addr)
 
 extend IpAddr {
-    public func parse(s: &str) -> Result[This, AddrParseError]
+    public func parse(s: ref str) -> Outcome[This, AddrParseError]
     public func is_loopback(this) -> Bool
     public func is_multicast(this) -> Bool
     public func is_unspecified(this) -> Bool
@@ -49,7 +49,7 @@ extend Ipv4Addr {
     public const BROADCAST: This = This { octets: [255, 255, 255, 255] }
 
     public func new(a: U8, b: U8, c: U8, d: U8) -> This
-    public func parse(s: &str) -> Result[This, AddrParseError]
+    public func parse(s: ref str) -> Outcome[This, AddrParseError]
     public func octets(this) -> [U8; 4]
     public func is_loopback(this) -> Bool
     public func is_private(this) -> Bool
@@ -73,12 +73,12 @@ extend Ipv6Addr {
     public const UNSPECIFIED: This = This { segments: [0, 0, 0, 0, 0, 0, 0, 0] }
 
     public func new(a: U16, b: U16, c: U16, d: U16, e: U16, f: U16, g: U16, h: U16) -> This
-    public func parse(s: &str) -> Result[This, AddrParseError]
+    public func parse(s: ref str) -> Outcome[This, AddrParseError]
     public func segments(this) -> [U16; 8]
     public func is_loopback(this) -> Bool
     public func is_multicast(this) -> Bool
     public func is_unspecified(this) -> Bool
-    public func to_ipv4(this) -> Option[Ipv4Addr]
+    public func to_ipv4(this) -> Maybe[Ipv4Addr]
 }
 ```
 
@@ -89,7 +89,7 @@ public type SocketAddr = V4(SocketAddrV4) | V6(SocketAddrV6)
 
 extend SocketAddr {
     public func new(ip: IpAddr, port: U16) -> This
-    public func parse(s: &str) -> Result[This, AddrParseError]
+    public func parse(s: ref str) -> Outcome[This, AddrParseError]
     public func ip(this) -> IpAddr
     public func port(this) -> U16
     public func set_ip(this, ip: IpAddr)
@@ -120,70 +120,70 @@ public type TcpStream {
 
 extend TcpStream {
     /// Connect to remote address
-    public func connect(addr: impl ToSocketAddrs) -> Result[This, IoError]
+    public func connect(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
     effects: [io.network.tcp, io.network.connect]
 
     /// Connect with timeout
-    public func connect_timeout(addr: &SocketAddr, timeout: Duration) -> Result[This, IoError]
+    public func connect_timeout(addr: ref SocketAddr, timeout: Duration) -> Outcome[This, IoError]
     effects: [io.network.tcp, io.network.connect]
 
     /// Get local address
-    public func local_addr(this) -> Result[SocketAddr, IoError]
+    public func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Get peer address
-    public func peer_addr(this) -> Result[SocketAddr, IoError]
+    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Shutdown read, write, or both
-    public func shutdown(this, how: Shutdown) -> Result[Unit, IoError]
+    public func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
 
     /// Set read timeout
-    public func set_read_timeout(this, dur: Option[Duration]) -> Result[Unit, IoError]
+    public func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set write timeout
-    public func set_write_timeout(this, dur: Option[Duration]) -> Result[Unit, IoError]
+    public func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Get read timeout
-    public func read_timeout(this) -> Result[Option[Duration], IoError]
+    public func read_timeout(this) -> Outcome[Maybe[Duration], IoError]
 
     /// Get write timeout
-    public func write_timeout(this) -> Result[Option[Duration], IoError]
+    public func write_timeout(this) -> Outcome[Maybe[Duration], IoError]
 
     /// Set TCP_NODELAY (disable Nagle's algorithm)
-    public func set_nodelay(this, nodelay: Bool) -> Result[Unit, IoError]
+    public func set_nodelay(this, nodelay: Bool) -> Outcome[Unit, IoError]
 
     /// Get TCP_NODELAY
-    public func nodelay(this) -> Result[Bool, IoError]
+    public func nodelay(this) -> Outcome[Bool, IoError]
 
     /// Set TTL
-    public func set_ttl(this, ttl: U32) -> Result[Unit, IoError]
+    public func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Get TTL
-    public func ttl(this) -> Result[U32, IoError]
+    public func ttl(this) -> Outcome[U32, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Result[This, IoError]
+    public func try_clone(this) -> Outcome[This, IoError]
 
     /// Take read half
-    public func take_read(this) -> Result[ReadHalf, IoError]
+    public func take_read(this) -> Outcome[ReadHalf, IoError]
 
     /// Take write half
-    public func take_write(this) -> Result[WriteHalf, IoError]
+    public func take_write(this) -> Outcome[WriteHalf, IoError]
 
     /// Peek at incoming data without consuming
-    public func peek(this, buf: &mut [U8]) -> Result[U64, IoError]
+    public func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.tcp]
 }
 
 extend TcpStream with Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.tcp]
 }
 
 extend TcpStream with Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError]
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.tcp]
 
-    func flush(this) -> Result[Unit, IoError]
+    func flush(this) -> Outcome[Unit, IoError]
 }
 
 public type Shutdown = Read | Write | Both
@@ -198,34 +198,34 @@ public type TcpListener {
 
 extend TcpListener {
     /// Bind to address and listen
-    public func bind(addr: impl ToSocketAddrs) -> Result[This, IoError]
+    public func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
     effects: [io.network.tcp, io.network.listen]
 
     /// Accept incoming connection
-    public func accept(this) -> Result[(TcpStream, SocketAddr), IoError]
+    public func accept(this) -> Outcome[(TcpStream, SocketAddr), IoError]
     effects: [io.network.tcp, io.network.listen]
 
     /// Get local address
-    public func local_addr(this) -> Result[SocketAddr, IoError]
+    public func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Set non-blocking mode
-    public func set_nonblocking(this, nonblocking: Bool) -> Result[Unit, IoError]
+    public func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Result[This, IoError]
+    public func try_clone(this) -> Outcome[This, IoError]
 
     /// Iterator over incoming connections
     public func incoming(this) -> Incoming
 }
 
 public type Incoming {
-    listener: &TcpListener,
+    listener: ref TcpListener,
 }
 
 extend Incoming with Iterator {
-    type Item = Result[TcpStream, IoError]
+    type Item = Outcome[TcpStream, IoError]
 
-    func next(this) -> Option[Result[TcpStream, IoError]]
+    func next(this) -> Maybe[Outcome[TcpStream, IoError]]
     effects: [io.network.tcp]
 }
 ```
@@ -241,75 +241,75 @@ public type UdpSocket {
 
 extend UdpSocket {
     /// Bind to local address
-    public func bind(addr: impl ToSocketAddrs) -> Result[This, IoError]
+    public func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
     effects: [io.network.udp]
 
     /// Connect to remote (for send/recv instead of send_to/recv_from)
-    public func connect(this, addr: impl ToSocketAddrs) -> Result[Unit, IoError]
+    public func connect(this, addr: impl ToSocketAddrs) -> Outcome[Unit, IoError]
     effects: [io.network.udp]
 
     /// Send data to connected peer
-    public func send(this, buf: &[U8]) -> Result[U64, IoError]
+    public func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.udp]
 
     /// Receive data from connected peer
-    public func recv(this, buf: &mut [U8]) -> Result[U64, IoError]
+    public func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.udp]
 
     /// Send data to specific address
-    public func send_to(this, buf: &[U8], addr: impl ToSocketAddrs) -> Result[U64, IoError]
+    public func send_to(this, buf: ref [U8], addr: impl ToSocketAddrs) -> Outcome[U64, IoError]
     effects: [io.network.udp]
 
     /// Receive data and sender address
-    public func recv_from(this, buf: &mut [U8]) -> Result[(U64, SocketAddr), IoError]
+    public func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
     effects: [io.network.udp]
 
     /// Peek at incoming data
-    public func peek(this, buf: &mut [U8]) -> Result[U64, IoError]
+    public func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.udp]
 
     /// Peek with sender address
-    public func peek_from(this, buf: &mut [U8]) -> Result[(U64, SocketAddr), IoError]
+    public func peek_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
     effects: [io.network.udp]
 
     /// Get local address
-    public func local_addr(this) -> Result[SocketAddr, IoError]
+    public func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Get peer address (if connected)
-    public func peer_addr(this) -> Result[SocketAddr, IoError]
+    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Set read timeout
-    public func set_read_timeout(this, dur: Option[Duration]) -> Result[Unit, IoError]
+    public func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set write timeout
-    public func set_write_timeout(this, dur: Option[Duration]) -> Result[Unit, IoError]
+    public func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set broadcast permission
-    public func set_broadcast(this, broadcast: Bool) -> Result[Unit, IoError]
+    public func set_broadcast(this, broadcast: Bool) -> Outcome[Unit, IoError]
 
     /// Get broadcast permission
-    public func broadcast(this) -> Result[Bool, IoError]
+    public func broadcast(this) -> Outcome[Bool, IoError]
 
     /// Set TTL
-    public func set_ttl(this, ttl: U32) -> Result[Unit, IoError]
+    public func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Get TTL
-    public func ttl(this) -> Result[U32, IoError]
+    public func ttl(this) -> Outcome[U32, IoError]
 
     /// Set multicast TTL
-    public func set_multicast_ttl_v4(this, ttl: U32) -> Result[Unit, IoError]
+    public func set_multicast_ttl_v4(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Join multicast group
-    public func join_multicast_v4(this, multiaddr: &Ipv4Addr, interface: &Ipv4Addr) -> Result[Unit, IoError]
+    public func join_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
 
     /// Leave multicast group
-    public func leave_multicast_v4(this, multiaddr: &Ipv4Addr, interface: &Ipv4Addr) -> Result[Unit, IoError]
+    public func leave_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
 
     /// Set non-blocking mode
-    public func set_nonblocking(this, nonblocking: Bool) -> Result[Unit, IoError]
+    public func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Result[This, IoError]
+    public func try_clone(this) -> Outcome[This, IoError]
 }
 ```
 
@@ -318,18 +318,18 @@ extend UdpSocket {
 ### 6.1 ToSocketAddrs Trait
 
 ```tml
-public trait ToSocketAddrs {
+public behaviorToSocketAddrs {
     type Iter: Iterator[Item = SocketAddr]
 
-    func to_socket_addrs(this) -> Result[This.Iter, IoError]
+    func to_socket_addrs(this) -> Outcome[This.Iter, IoError]
     effects: [io.network]
 }
 
 // Implementations
 extend SocketAddr with ToSocketAddrs { ... }
 extend (IpAddr, U16) with ToSocketAddrs { ... }
-extend (&str, U16) with ToSocketAddrs { ... }  // DNS lookup
-extend &str with ToSocketAddrs { ... }         // "host:port" format
+extend (ref str, U16) with ToSocketAddrs { ... }  // DNS lookup
+extend ref str with ToSocketAddrs { ... }         // "host:port" format
 extend String with ToSocketAddrs { ... }
 ```
 
@@ -337,7 +337,7 @@ extend String with ToSocketAddrs { ... }
 
 ```tml
 /// Resolve hostname to IP addresses
-public func lookup_host(host: &str) -> Result[LookupHost, IoError]
+public func lookup_host(host: ref str) -> Outcome[LookupHost, IoError]
 effects: [io.network]
 
 public type LookupHost {
@@ -350,7 +350,7 @@ extend LookupHost with Iterator {
 }
 
 // Example
-let addrs = lookup_host("example.com")?
+let addrs = lookup_host("example.com")!
 loop addr in addrs {
     println(addr.to_string())
 }
@@ -359,7 +359,7 @@ loop addr in addrs {
 ## 7. Unix Domain Sockets
 
 ```tml
-#[cfg(unix)]
+@cfg(unix)
 module unix
 
 public type UnixStream {
@@ -367,15 +367,15 @@ public type UnixStream {
 }
 
 extend UnixStream {
-    public func connect(path: impl AsRef[Path]) -> Result[This, IoError]
+    public func connect(path: impl AsRef[Path]) -> Outcome[This, IoError]
     effects: [io.network]
 
-    public func pair() -> Result[(This, This), IoError]
+    public func pair() -> Outcome[(This, This), IoError]
     effects: [io.network]
 
-    public func local_addr(this) -> Result[SocketAddr, IoError]
-    public func peer_addr(this) -> Result[SocketAddr, IoError]
-    public func shutdown(this, how: Shutdown) -> Result[Unit, IoError]
+    public func local_addr(this) -> Outcome[SocketAddr, IoError]
+    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
+    public func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
 }
 
 extend UnixStream with Read { ... }
@@ -386,10 +386,10 @@ public type UnixListener {
 }
 
 extend UnixListener {
-    public func bind(path: impl AsRef[Path]) -> Result[This, IoError]
+    public func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
     effects: [io.network]
 
-    public func accept(this) -> Result[(UnixStream, SocketAddr), IoError]
+    public func accept(this) -> Outcome[(UnixStream, SocketAddr), IoError]
     effects: [io.network]
 
     public func incoming(this) -> Incoming
@@ -400,13 +400,13 @@ public type UnixDatagram {
 }
 
 extend UnixDatagram {
-    public func bind(path: impl AsRef[Path]) -> Result[This, IoError]
-    public func connect(this, path: impl AsRef[Path]) -> Result[Unit, IoError]
-    public func send(this, buf: &[U8]) -> Result[U64, IoError]
-    public func recv(this, buf: &mut [U8]) -> Result[U64, IoError]
-    public func send_to(this, buf: &[U8], path: impl AsRef[Path]) -> Result[U64, IoError]
-    public func recv_from(this, buf: &mut [U8]) -> Result[(U64, SocketAddr), IoError]
-    public func pair() -> Result[(This, This), IoError]
+    public func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
+    public func connect(this, path: impl AsRef[Path]) -> Outcome[Unit, IoError]
+    public func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
+    public func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
+    public func send_to(this, buf: ref [U8], path: impl AsRef[Path]) -> Outcome[U64, IoError]
+    public func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
+    public func pair() -> Outcome[(This, This), IoError]
 }
 ```
 
@@ -422,16 +422,16 @@ public type AsyncTcpStream {
 }
 
 extend AsyncTcpStream {
-    public async func connect(addr: impl ToSocketAddrs) -> Result[This, IoError]
+    public async func connect(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
     effects: [io.network.tcp]
 
-    public async func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+    public async func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.tcp]
 
-    public async func write(this, buf: &[U8]) -> Result[U64, IoError]
+    public async func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
     effects: [io.network.tcp]
 
-    public async func write_all(this, buf: &[U8]) -> Result[Unit, IoError]
+    public async func write_all(this, buf: ref [U8]) -> Outcome[Unit, IoError]
     effects: [io.network.tcp]
 }
 
@@ -440,10 +440,10 @@ public type AsyncTcpListener {
 }
 
 extend AsyncTcpListener {
-    public async func bind(addr: impl ToSocketAddrs) -> Result[This, IoError]
+    public async func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
     effects: [io.network.tcp]
 
-    public async func accept(this) -> Result[(AsyncTcpStream, SocketAddr), IoError]
+    public async func accept(this) -> Outcome[(AsyncTcpStream, SocketAddr), IoError]
     effects: [io.network.tcp]
 }
 ```
@@ -474,24 +474,24 @@ caps: [io.network.tcp]
 import std.net.TcpStream
 import std.io.{BufReader, BufWriter, BufRead, Write}
 
-public func main() -> Result[Unit, Error] {
+public func main() -> Outcome[Unit, Error] {
     // Connect to server
-    let stream = TcpStream.connect("127.0.0.1:8080")?
+    let stream = TcpStream.connect("127.0.0.1:8080")!
 
     // Create buffered reader/writer
-    let reader = BufReader.new(stream.try_clone()?)
+    let reader = BufReader.new(stream.try_clone()!)
     var writer = BufWriter.new(stream)
 
     // Send request
-    writer.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")?
-    writer.flush()?
+    writer.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")!
+    writer.flush()!
 
     // Read response
     var line = String.new()
-    reader.read_line(&mut line)?
+    reader.read_line(mut ref line)!
     println("Response: " + line)
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 
@@ -504,12 +504,12 @@ caps: [io.network.tcp]
 import std.net.{TcpListener, TcpStream}
 import std.thread
 
-public func main() -> Result[Unit, Error] {
-    let listener = TcpListener.bind("127.0.0.1:8080")?
+public func main() -> Outcome[Unit, Error] {
+    let listener = TcpListener.bind("127.0.0.1:8080")!
     println("Listening on port 8080")
 
     loop (stream, addr) in listener.incoming() {
-        let stream = stream?
+        let stream = stream!
         println("Connection from: " + addr.to_string())
 
         thread.spawn(do() {
@@ -517,17 +517,17 @@ public func main() -> Result[Unit, Error] {
         })
     }
 
-    return Ok(unit)
+    return Success(unit)
 }
 
-func handle_client(stream: TcpStream) -> Result[Unit, IoError] {
+func handle_client(stream: TcpStream) -> Outcome[Unit, IoError] {
     var buf: [U8; 1024] = [0; 1024]
-    let n = stream.read(&mut buf)?
+    let n = stream.read(mut ref buf)!
 
     let response = b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello World!"
-    stream.write_all(response)?
+    stream.write_all(response)!
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 
@@ -539,18 +539,18 @@ caps: [io.network.udp]
 
 import std.net.UdpSocket
 
-public func main() -> Result[Unit, Error] {
-    let socket = UdpSocket.bind("127.0.0.1:9000")?
+public func main() -> Outcome[Unit, Error] {
+    let socket = UdpSocket.bind("127.0.0.1:9000")!
     println("UDP server on port 9000")
 
     var buf: [U8; 1024] = [0; 1024]
 
     loop {
-        let (n, src) = socket.recv_from(&mut buf)?
+        let (n, src) = socket.recv_from(mut ref buf)!
         println("Received " + n.to_string() + " bytes from " + src.to_string())
 
         // Echo back
-        socket.send_to(&buf[0..n], src)?
+        socket.send_to(ref buf[0 to n], src)!
     }
 }
 ```

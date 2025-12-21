@@ -48,18 +48,18 @@ public func main() {
     }
 
     // Match with binding
-    let opt: Option[I32] = Some(100)
+    let opt: Maybe[I32] = Just(100)
 
     when opt {
-        Some(n) -> println("got: " + n.to_string()),
-        None -> println("nothing"),
+        Just(n) -> println("got: " + n.to_string()),
+        Nothing -> println("nothing"),
     }
 
     // Match as expression
     let description = when value {
         0 -> "zero",
-        1..10 -> "small",
-        10..100 -> "medium",
+        1 to 10 -> "small",
+        10 to 100 -> "medium",
         _ -> "large",
     }
 
@@ -77,8 +77,8 @@ public func main() {
 
     // No guards - use inline if instead
     when opt {
-        Some(n) -> if n > 50 then println("big") else println("small"),
-        None -> println("none"),
+        Just(n) -> if n > 50 then println("big") else println("small"),
+        Nothing -> println("none"),
     }
 
     // ============================================
@@ -86,7 +86,7 @@ public func main() {
     // ============================================
 
     // Loop with iterator (replaces 'for')
-    loop i in 0..5 {
+    loop i in 0 to 5 {
         println("i = " + i.to_string())
     }
 
@@ -118,7 +118,7 @@ public func main() {
     }
 
     // Loop with inclusive range
-    loop i in 1..=5 {
+    loop i in 1 through 5 {
         println(i.to_string())  // 1, 2, 3, 4, 5
     }
 }

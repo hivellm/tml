@@ -8,13 +8,13 @@ module error_handling
 // ============================================
 
 // Every ! marks a potential exit point - highly visible
-func read_config(path: String) -> Result[Config, Error] {
+func read_config(path: String) -> Outcome[Config, Error] {
     let content = File.read(path)!       // propagate on error
     let config = parse_json(content)!    // propagate on error
-    return Ok(config)
+    return Success(config)
 }
 
-// In non-Result function, ! panics on error
+// In non-Outcome function, ! panics on error
 func must_have_config() -> Config {
     let content = File.read("config.json")!  // panic if fails
     return parse_json(content)!               // panic if fails
@@ -32,11 +32,11 @@ func get_port() -> U16 {
     return port
 }
 
-func load_user_data(id: U64) -> Result[UserData, Error] {
+func load_user_data(id: U64) -> Outcome[UserData, Error] {
     // Recovery with block
     let user = db.find_user(id)! else {
         log.warn("User not found, using guest")
-        return Ok(UserData.guest())
+        return Success(UserData.guest())
     }
 
     // Recovery with error binding
@@ -45,46 +45,46 @@ func load_user_data(id: U64) -> Result[UserData, Error] {
         Preferences.default()
     }
 
-    return Ok(UserData { user, preferences })
+    return Success(UserData { user, preferences })
 }
 
 // ============================================
-// OPTION TYPE WITH !
+// MAYBE TYPE WITH !
 // ============================================
 
-func find_user(id: U64) -> Option[User] {
-    if id == 1 then Some(User { name: "Alice", email: "alice@example.com" })
-    else None
+func find_user(id: U64) -> Maybe[User] {
+    if id == 1 then Just(User { name: "Alice", email: "alice@example.com" })
+    else Nothing
 }
 
-func get_user_email(id: U64) -> Result[String, Error] {
-    // None becomes Err automatically
+func get_user_email(id: U64) -> Outcome[String, Error] {
+    // Nothing becomes Failure automatically
     let user = find_user(id)!
-    return Ok(user.email)
+    return Success(user.email)
 }
 
-func get_user_email_custom(id: U64) -> Result[String, Error] {
-    // Custom error for None
+func get_user_email_custom(id: U64) -> Outcome[String, Error] {
+    // Custom error for Nothing
     let user = find_user(id)! else {
-        return Err(Error.NotFound("User " + id.to_string()))
+        return Failure(Error.NotFound("User " + id.to_string()))
     }
-    return Ok(user.email)
+    return Success(user.email)
 }
 
 // ============================================
 // BLOCK-LEVEL ERROR HANDLING (CATCH)
 // ============================================
 
-func sync_data() -> Result[Unit, SyncError] {
+func sync_data() -> Outcome[Unit, SyncError] {
     catch {
         let local = load_local()!
         let remote = fetch_remote()!
         let merged = merge(local, remote)!
         save(merged)!
-        return Ok(())
+        return Success(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())
-        return Err(SyncError.from(err))
+        return Failure(SyncError.from(err))
     }
 }
 
@@ -105,30 +105,30 @@ func robust_load() -> Data {
 }
 
 // ============================================
-// RESULT METHODS
+// OUTCOME METHODS
 // ============================================
 
-func demo_result_methods() {
-    let result: Result[I32, String] = Ok(42)
+func demo_outcome_methods() {
+    let result: Outcome[I32, String] = Success(42)
 
     // Check state
-    if result.is_ok() then println("Success!")
+    if result.is_success() then println("Success!")
 
     // Transform values
-    let doubled = result.map(do(n) n * 2)              // Ok(84)
-    let as_string = result.map(do(n) n.to_string())    // Ok("42")
+    let doubled = result.map(do(n) n * 2)              // Success(84)
+    let as_string = result.map(do(n) n.to_string())    // Success("42")
 
     // Chain operations
     let chained = result
-        .and_then(do(n) if n > 0 then Ok(n * 2) else Err("negative"))
+        .and_then(do(n) if n > 0 then Success(n * 2) else Failure("negative"))
         .map(do(n) n + 1)
 
     // Extract with defaults
     let value = result.unwrap_or(0)
     let lazy_value = result.unwrap_or_else(do() compute_default())
 
-    // Convert to Option
-    let maybe: Option[I32] = result.ok()
+    // Convert to Maybe
+    let maybe: Maybe[I32] = result.to_maybe()
 }
 
 // ============================================
@@ -145,7 +145,7 @@ type ParseError =
 type AppError {
     kind: ErrorKind,
     message: String,
-    source: Option[Box[dyn Error]],
+    source: Maybe[Heap[dyn Error]],
 }
 
 type ErrorKind =
@@ -174,11 +174,11 @@ extend ServiceError with From[ParseError] {
 }
 
 // Now ! automatically converts error types
-func process_request(path: String) -> Result[Response, ServiceError] {
+func process_request(path: String) -> Outcome[Response, ServiceError] {
     let content = File.read(path)!       // IoError -> ServiceError
     let data = parse_json(content)!      // ParseError -> ServiceError
     let result = http.post(API_URL, data)!  // HttpError -> ServiceError
-    return Ok(result)
+    return Success(result)
 }
 
 // ============================================
@@ -237,21 +237,21 @@ func handle_state(state: State) -> Action {
 // PRACTICAL EXAMPLE: API HANDLER
 // ============================================
 
-func handle_create_user(request: Request) -> Result[Response, ApiError] {
+func handle_create_user(request: Request) -> Outcome[Response, ApiError] {
     // Parse request body
     let body = request.json[CreateUserRequest]()! else |e| {
-        return Err(ApiError.BadRequest(e.to_string()))
+        return Failure(ApiError.BadRequest(e.to_string()))
     }
 
     // Validate
     validate_email(body.email)! else |e| {
-        return Err(ApiError.Validation(e))
+        return Failure(ApiError.Validation(e))
     }
 
     // Check if user exists
     let existing = db.find_by_email(body.email)!
-    if existing.is_some() then {
-        return Err(ApiError.Conflict("Email already registered"))
+    if existing.is_just() then {
+        return Failure(ApiError.Conflict("Email already registered"))
     }
 
     // Create user
@@ -265,10 +265,10 @@ func handle_create_user(request: Request) -> Result[Response, ApiError] {
         db.insert(user)!
     } else |e| {
         log.error("Failed to create user: " + e.to_string())
-        return Err(ApiError.Internal)
+        return Failure(ApiError.Internal)
     }
 
-    return Ok(Response.created(user))
+    return Success(Response.created(user))
 }
 
 // ============================================
@@ -318,18 +318,18 @@ extend Response {
     func created(user: User) -> Response { Response {} }
 }
 
-func parse_json[T](s: String) -> Result[T, ParseError] { Ok(default()) }
-func load_local() -> Result[Data, Error] { Ok(Data {}) }
-func fetch_remote() -> Result[Data, Error] { Ok(Data {}) }
-func fetch_from_api() -> Result[Data, Error] { Ok(Data {}) }
-func load_from_cache() -> Result[Data, Error] { Ok(Data {}) }
-func fetch_preferences(id: U64) -> Result[Preferences, Error] { Ok(Preferences {}) }
-func merge(a: Data, b: Data) -> Result[Data, Error] { Ok(Data {}) }
-func save(d: Data) -> Result[Unit, Error] { Ok(()) }
+func parse_json[T](s: String) -> Outcome[T, ParseError] { Success(default()) }
+func load_local() -> Outcome[Data, Error] { Success(Data {}) }
+func fetch_remote() -> Outcome[Data, Error] { Success(Data {}) }
+func fetch_from_api() -> Outcome[Data, Error] { Success(Data {}) }
+func load_from_cache() -> Outcome[Data, Error] { Success(Data {}) }
+func fetch_preferences(id: U64) -> Outcome[Preferences, Error] { Success(Preferences {}) }
+func merge(a: Data, b: Data) -> Outcome[Data, Error] { Success(Data {}) }
+func save(d: Data) -> Outcome[Unit, Error] { Success(()) }
 func compute_default() -> I32 { 0 }
 func expensive_check() -> Bool { true }
-func validate_email(e: String) -> Result[Unit, String] { Ok(()) }
-func hash_password(p: String) -> Result[String, Error] { Ok("hashed") }
+func validate_email(e: String) -> Outcome[Unit, String] { Success(()) }
+func hash_password(p: String) -> Outcome[String, Error] { Success("hashed") }
 func now() -> U64 { 0 }
 func default[T]() -> T { panic("not implemented") }
 

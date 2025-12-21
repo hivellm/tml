@@ -38,12 +38,12 @@ extend Vec[T] {
     public func with_capacity(capacity: U64) -> Vec[T]
 
     /// Creates a Vec from a slice
-    public func from_slice(slice: &[T]) -> Vec[T]
-        where T: Clone
+    public func from_slice(slice: ref [T]) -> Vec[T]
+        where T: Duplicate
 
     /// Creates a Vec with n copies of value
     public func repeat(value: T, n: U64) -> Vec[T]
-        where T: Clone
+        where T: Duplicate
 }
 ```
 
@@ -64,7 +64,7 @@ extend Vec[T] {
     public func push(mut this, value: T)
 
     /// Removes and returns the last element
-    public func pop(mut this) -> Option[T]
+    public func pop(mut this) -> Maybe[T]
 
     /// Inserts an element at index
     public func insert(mut this, index: U64, value: T)
@@ -88,35 +88,35 @@ extend Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns a reference to the element at index
-    public func get(this, index: U64) -> Option[&T]
+    public func get(this, index: U64) -> Maybe[ref T]
 
     /// Returns a mutable reference to the element at index
-    public func get_mut(mut this, index: U64) -> Option[&mut T]
+    public func get_mut(mut this, index: U64) -> Maybe[mut ref T]
 
     /// Returns a reference to the first element
-    public func first(this) -> Option[&T]
+    public func first(this) -> Maybe[ref T]
 
     /// Returns a reference to the last element
-    public func last(this) -> Option[&T]
+    public func last(this) -> Maybe[ref T]
 
     /// Returns a slice of the entire vector
-    public func as_slice(this) -> &[T]
+    public func as_slice(this) -> ref [T]
 
     /// Returns a mutable slice of the entire vector
-    public func as_mut_slice(mut this) -> &mut [T]
+    public func as_mut_slice(mut this) -> mut ref [T]
 }
 
 /// Index operator
 implement Index[U64] for Vec[T] {
     type Output = T
 
-    func index(this, idx: U64) -> &T {
+    func index(this, idx: U64) -> ref T {
         this.get(idx).expect("index out of bounds")
     }
 }
 
 implement IndexMut[U64] for Vec[T] {
-    func index_mut(mut this, idx: U64) -> &mut T {
+    func index_mut(mut this, idx: U64) -> mut ref T {
         this.get_mut(idx).expect("index out of bounds")
     }
 }
@@ -149,7 +149,7 @@ implement IntoIterator for Vec[T] {
 ```tml
 extend Vec[T] {
     /// Retains only elements matching the predicate
-    public func retain(mut this, predicate: func(&T) -> Bool)
+    public func retain(mut this, predicate: func(ref T) -> Bool)
 
     /// Removes consecutive duplicates
     public func dedup(mut this)
@@ -160,7 +160,7 @@ extend Vec[T] {
         where T: Ord
 
     /// Sorts with a custom comparator
-    public func sort_by(mut this, compare: func(&T, &T) -> Ordering)
+    public func sort_by(mut this, compare: func(ref T, ref T) -> Ordering)
 
     /// Reverses the order of elements
     public func reverse(mut this)
@@ -173,7 +173,7 @@ extend Vec[T] {
 
     /// Resizes the Vec to new_len, filling with value if growing
     public func resize(mut this, new_len: U64, value: T)
-        where T: Clone
+        where T: Duplicate
 }
 ```
 
@@ -182,15 +182,15 @@ extend Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns true if the Vec contains the value
-    public func contains(this, value: &T) -> Bool
+    public func contains(this, value: ref T) -> Bool
         where T: Eq
 
     /// Binary search for a value
-    public func binary_search(this, value: &T) -> Result[U64, U64]
+    public func binary_search(this, value: ref T) -> Outcome[U64, U64]
         where T: Ord
 
     /// Finds the first index of a value
-    public func position(this, predicate: func(&T) -> Bool) -> Option[U64]
+    public func position(this, predicate: func(ref T) -> Bool) -> Maybe[U64]
 }
 ```
 
@@ -242,16 +242,16 @@ extend HashMap[K, V] where K: Hash + Eq {
     public func is_empty(this) -> Bool
 
     /// Inserts a key-value pair, returning the old value if present
-    public func insert(mut this, key: K, value: V) -> Option[V]
+    public func insert(mut this, key: K, value: V) -> Maybe[V]
 
     /// Removes a key, returning the value if present
-    public func remove(mut this, key: &K) -> Option[V]
+    public func remove(mut this, key: ref K) -> Maybe[V]
 
     /// Clears all entries
     public func clear(mut this)
 
     /// Returns true if the key is present
-    public func contains_key(this, key: &K) -> Bool
+    public func contains_key(this, key: ref K) -> Bool
 }
 ```
 
@@ -260,16 +260,16 @@ extend HashMap[K, V] where K: Hash + Eq {
 ```tml
 extend HashMap[K, V] where K: Hash + Eq {
     /// Returns a reference to the value for the key
-    public func get(this, key: &K) -> Option[&V]
+    public func get(this, key: ref K) -> Maybe[ref V]
 
     /// Returns a mutable reference to the value for the key
-    public func get_mut(mut this, key: &K) -> Option[&mut V]
+    public func get_mut(mut this, key: ref K) -> Maybe[mut ref V]
 
     /// Returns the value for the key, or inserts a default
-    public func get_or_insert(mut this, key: K, default: V) -> &mut V
+    public func get_or_insert(mut this, key: K, default: V) -> mut ref V
 
     /// Returns the value for the key, or inserts using a function
-    public func get_or_insert_with(mut this, key: K, f: func() -> V) -> &mut V
+    public func get_or_insert_with(mut this, key: K, f: func() -> V) -> mut ref V
 
     /// Gets a mutable reference or inserts a default
     public func entry(mut this, key: K) -> Entry[K, V]
@@ -280,13 +280,13 @@ public type Entry[K, V] = Occupied[K, V] | Vacant[K, V]
 
 extend Entry[K, V] {
     /// Returns a mutable reference to the value, inserting if vacant
-    public func or_insert(this, default: V) -> &mut V
+    public func or_insert(this, default: V) -> mut ref V
 
     /// Returns a mutable reference, inserting using function if vacant
-    public func or_insert_with(this, f: func() -> V) -> &mut V
+    public func or_insert_with(this, f: func() -> V) -> mut ref V
 
     /// Modifies the value if occupied
-    public func and_modify(this, f: func(&mut V)) -> Entry[K, V]
+    public func and_modify(this, f: func(mut ref V)) -> Entry[K, V]
 }
 ```
 
@@ -350,10 +350,10 @@ extend HashSet[T] where T: Hash + Eq {
     public func insert(mut this, value: T) -> Bool
 
     /// Removes a value, returning true if it was present
-    public func remove(mut this, value: &T) -> Bool
+    public func remove(mut this, value: ref T) -> Bool
 
     /// Returns true if the value is present
-    public func contains(this, value: &T) -> Bool
+    public func contains(this, value: ref T) -> Bool
 
     /// Clears all elements
     public func clear(mut this)
@@ -363,27 +363,27 @@ extend HashSet[T] where T: Hash + Eq {
 ### Set Operations
 
 ```tml
-extend HashSet[T] where T: Hash + Eq + Clone {
+extend HashSet[T] where T: Hash + Eq + Duplicate {
     /// Returns the union of two sets
-    public func union(this, other: &HashSet[T]) -> HashSet[T]
+    public func union(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the intersection of two sets
-    public func intersection(this, other: &HashSet[T]) -> HashSet[T]
+    public func intersection(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the difference (self - other)
-    public func difference(this, other: &HashSet[T]) -> HashSet[T]
+    public func difference(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the symmetric difference
-    public func symmetric_difference(this, other: &HashSet[T]) -> HashSet[T]
+    public func symmetric_difference(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns true if self is a subset of other
-    public func is_subset(this, other: &HashSet[T]) -> Bool
+    public func is_subset(this, other: ref HashSet[T]) -> Bool
 
     /// Returns true if self is a superset of other
-    public func is_superset(this, other: &HashSet[T]) -> Bool
+    public func is_superset(this, other: ref HashSet[T]) -> Bool
 
     /// Returns true if sets have no common elements
-    public func is_disjoint(this, other: &HashSet[T]) -> Bool
+    public func is_disjoint(this, other: ref HashSet[T]) -> Bool
 }
 ```
 
@@ -395,14 +395,14 @@ A map based on a B-tree, providing O(log n) operations with sorted keys.
 
 ```tml
 public type BTreeMap[K, V] {
-    root: Option[Box[Node[K, V]]],
+    root: Maybe[Heap[Node[K, V]]],
     len: U64,
 }
 
 type Node[K, V] {
     keys: Vec[K],
     values: Vec[V],
-    children: Vec[Box[Node[K, V]]],
+    children: Vec[Heap[Node[K, V]]],
 }
 ```
 
@@ -427,22 +427,22 @@ extend BTreeMap[K, V] where K: Ord {
     public func len(this) -> U64
 
     /// Inserts a key-value pair
-    public func insert(mut this, key: K, value: V) -> Option[V]
+    public func insert(mut this, key: K, value: V) -> Maybe[V]
 
     /// Removes a key
-    public func remove(mut this, key: &K) -> Option[V]
+    public func remove(mut this, key: ref K) -> Maybe[V]
 
     /// Returns a reference to the value
-    public func get(this, key: &K) -> Option[&V]
+    public func get(this, key: ref K) -> Maybe[ref V]
 
     /// Returns true if the key exists
-    public func contains_key(this, key: &K) -> Bool
+    public func contains_key(this, key: ref K) -> Bool
 
     /// Returns the first (minimum) key-value pair
-    public func first(this) -> Option[(&K, &V)]
+    public func first(this) -> Maybe[(ref K, ref V)]
 
     /// Returns the last (maximum) key-value pair
-    public func last(this) -> Option[(&K, &V)]
+    public func last(this) -> Maybe[(ref K, ref V)]
 
     /// Returns a range iterator
     public func range(this, range: Range[K]) -> BTreeMapRange[K, V]
@@ -472,16 +472,16 @@ extend BTreeSet[T] where T: Ord {
     public func insert(mut this, value: T) -> Bool
 
     /// Removes a value
-    public func remove(mut this, value: &T) -> Bool
+    public func remove(mut this, value: ref T) -> Bool
 
     /// Returns true if the value exists
-    public func contains(this, value: &T) -> Bool
+    public func contains(this, value: ref T) -> Bool
 
     /// Returns the first (minimum) element
-    public func first(this) -> Option[&T]
+    public func first(this) -> Maybe[ref T]
 
     /// Returns the last (maximum) element
-    public func last(this) -> Option[&T]
+    public func last(this) -> Maybe[ref T]
 
     /// Returns a range iterator
     public func range(this, range: Range[T]) -> BTreeSetRange[T]
@@ -496,14 +496,14 @@ A doubly-linked list with O(1) insertion at both ends.
 
 ```tml
 public type LinkedList[T] {
-    head: Option[Box[Node[T]]],
+    head: Maybe[Heap[Node[T]]],
     tail: *mut Node[T],
     len: U64,
 }
 
 type Node[T] {
     value: T,
-    next: Option[Box[Node[T]]],
+    next: Maybe[Heap[Node[T]]],
     prev: *mut Node[T],
 }
 ```
@@ -525,16 +525,16 @@ extend LinkedList[T] {
     public func push_back(mut this, value: T)
 
     /// Removes and returns the front element
-    public func pop_front(mut this) -> Option[T]
+    public func pop_front(mut this) -> Maybe[T]
 
     /// Removes and returns the back element
-    public func pop_back(mut this) -> Option[T]
+    public func pop_back(mut this) -> Maybe[T]
 
     /// Returns a reference to the front element
-    public func front(this) -> Option[&T]
+    public func front(this) -> Maybe[ref T]
 
     /// Returns a reference to the back element
-    public func back(this) -> Option[&T]
+    public func back(this) -> Maybe[ref T]
 
     /// Appends another list to the back
     public func append(mut this, other: mut LinkedList[T])
@@ -578,13 +578,13 @@ extend VecDeque[T] {
     public func push_back(mut this, value: T)
 
     /// Removes and returns the front element
-    public func pop_front(mut this) -> Option[T]
+    public func pop_front(mut this) -> Maybe[T]
 
     /// Removes and returns the back element
-    public func pop_back(mut this) -> Option[T]
+    public func pop_back(mut this) -> Maybe[T]
 
     /// Returns a reference to the element at index
-    public func get(this, index: U64) -> Option[&T]
+    public func get(this, index: U64) -> Maybe[ref T]
 
     /// Rotates elements left by n positions
     public func rotate_left(mut this, n: U64)
@@ -593,7 +593,7 @@ extend VecDeque[T] {
     public func rotate_right(mut this, n: U64)
 
     /// Makes the deque contiguous
-    public func make_contiguous(mut this) -> &mut [T]
+    public func make_contiguous(mut this) -> mut ref [T]
 }
 ```
 
@@ -626,16 +626,16 @@ extend BinaryHeap[T] where T: Ord {
     public func push(mut this, value: T)
 
     /// Removes and returns the maximum element
-    public func pop(mut this) -> Option[T]
+    public func pop(mut this) -> Maybe[T]
 
     /// Returns a reference to the maximum element
-    public func peek(this) -> Option[&T]
+    public func peek(this) -> Maybe[ref T]
 
     /// Pushes a value and pops the maximum
     public func push_pop(mut this, value: T) -> T
 
     /// Pops the maximum and pushes a value
-    public func replace(mut this, value: T) -> Option[T]
+    public func replace(mut this, value: T) -> Maybe[T]
 
     /// Consumes the heap and returns a sorted Vec
     public func into_sorted_vec(this) -> Vec[T]
@@ -650,13 +650,13 @@ extend BinaryHeap[T] where T: Ord {
 
 ```tml
 /// Trait for types that can be hashed
-public trait Hash {
-    func hash(this, hasher: &mut Hasher)
+public behaviorHash {
+    func hash(this, hasher: mut ref Hasher)
 }
 
 /// Standard hasher interface
-public trait Hasher {
-    func write(mut this, bytes: &[U8])
+public behaviorHasher {
+    func write(mut this, bytes: ref [U8])
     func finish(this) -> U64
 }
 
@@ -666,7 +666,7 @@ public type DefaultHasher {
 }
 
 implement Hasher for DefaultHasher {
-    func write(mut this, bytes: &[U8]) { ... }
+    func write(mut this, bytes: ref [U8]) { ... }
     func finish(this) -> U64 { ... }
 }
 ```
@@ -675,7 +675,7 @@ implement Hasher for DefaultHasher {
 
 ```tml
 /// Trait for creating a collection from an iterator
-public trait FromIterator[A] {
+public behaviorFromIterator[A] {
     func from_iter[I](iter: I) -> This
         where I: IntoIterator[Item = A]
 }
@@ -697,7 +697,7 @@ implement FromIterator[T] for Vec[T] {
 
 ```tml
 /// Trait for extending a collection with an iterator
-public trait Extend[A] {
+public behaviorExtend[A] {
     func extend[I](mut this, iter: I)
         where I: IntoIterator[Item = A]
 }
@@ -743,9 +743,9 @@ func example_vec() {
     numbers.sort()
 
     // Binary search
-    when numbers.binary_search(&2) {
-        Ok(index) -> print("Found at index: " + index.to_string()),
-        Err(index) -> print("Would insert at: " + index.to_string()),
+    when numbers.binary_search(ref 2) {
+        Success(index) -> print("Found at index: " + index.to_string()),
+        Failure(index) -> print("Would insert at: " + index.to_string()),
     }
 }
 ```
@@ -764,9 +764,9 @@ func example_hashmap() {
     scores.insert("Charlie", 92)
 
     // Access
-    when scores.get(&"Alice") {
-        Some(score) -> print("Alice: " + score.to_string()),
-        None -> print("Alice not found"),
+    when scores.get(ref "Alice") {
+        Just(score) -> print("Alice: " + score.to_string()),
+        Nothing -> print("Alice not found"),
     }
 
     // Entry API
@@ -797,7 +797,7 @@ func example_btreemap() {
     let start = DateTime.parse("2024-06-01")
     let end = DateTime.parse("2024-12-31")
 
-    loop (date, name) in events.range(start..end) {
+    loop (date, name) in events.range(start to end) {
         print(date.to_string() + ": " + name)
     }
 }
@@ -837,7 +837,7 @@ All collections use the global allocator by default. Custom allocators can be sp
 import std.alloc.Arena
 
 let arena = Arena.new(1024 * 1024)  // 1MB arena
-var vec: Vec[I32, Arena] = Vec.new_in(&arena)
+var vec: Vec[I32, Arena] = Vec.new_in(ref arena)
 ```
 
 ### Thread Safety

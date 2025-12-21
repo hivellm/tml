@@ -265,22 +265,31 @@ tml target add aarch64-unknown-linux-gnu
 ```tml
 module platform
 
-#[cfg(target_os = "linux")]
-public func get_home_dir() -> Option[PathBuf] {
-    env.var("HOME").ok().map(PathBuf.from)
+@cfg(target_os = "linux")
+public func get_home_dir() -> Maybe[PathBuf] {
+    when env.var("HOME") {
+        Success(val) -> Just(PathBuf.from(val)),
+        Failure(_) -> Nothing,
+    }
 }
 
-#[cfg(target_os = "windows")]
-public func get_home_dir() -> Option[PathBuf] {
-    env.var("USERPROFILE").ok().map(PathBuf.from)
+@cfg(target_os = "windows")
+public func get_home_dir() -> Maybe[PathBuf] {
+    when env.var("USERPROFILE") {
+        Success(val) -> Just(PathBuf.from(val)),
+        Failure(_) -> Nothing,
+    }
 }
 
-#[cfg(target_os = "macos")]
-public func get_home_dir() -> Option[PathBuf] {
-    env.var("HOME").ok().map(PathBuf.from)
+@cfg(target_os = "macos")
+public func get_home_dir() -> Maybe[PathBuf] {
+    when env.var("HOME") {
+        Success(val) -> Just(PathBuf.from(val)),
+        Failure(_) -> Nothing,
+    }
 }
 
-#[cfg(target_arch = "x86_64")]
+@cfg(target_arch = "x86_64")
 public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use AVX if available
     if cpu_has_avx() {
@@ -290,7 +299,7 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     }
 }
 
-#[cfg(target_arch = "aarch64")]
+@cfg(target_arch = "aarch64")
 public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use NEON
     neon_memcpy(dst, src, len)
@@ -303,48 +312,48 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
 
 ```tml
 // Operating system
-#[cfg(target_os = "linux")]
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "ios")]
-#[cfg(target_os = "android")]
-#[cfg(target_os = "freebsd")]
-#[cfg(target_os = "none")]  // bare metal / wasm
+@cfg(target_os = "linux")
+@cfg(target_os = "windows")
+@cfg(target_os = "macos")
+@cfg(target_os = "ios")
+@cfg(target_os = "android")
+@cfg(target_os = "freebsd")
+@cfg(target_os = "none")  // bare metal / wasm
 
 // CPU architecture
-#[cfg(target_arch = "x86_64")]
-#[cfg(target_arch = "aarch64")]
-#[cfg(target_arch = "i686")]
-#[cfg(target_arch = "arm")]
-#[cfg(target_arch = "wasm32")]
-#[cfg(target_arch = "riscv64")]
+@cfg(target_arch = "x86_64")
+@cfg(target_arch = "aarch64")
+@cfg(target_arch = "i686")
+@cfg(target_arch = "arm")
+@cfg(target_arch = "wasm32")
+@cfg(target_arch = "riscv64")
 
 // Pointer width
-#[cfg(target_pointer_width = "32")]
-#[cfg(target_pointer_width = "64")]
+@cfg(target_pointer_width = "32")
+@cfg(target_pointer_width = "64")
 
 // Endianness
-#[cfg(target_endian = "little")]
-#[cfg(target_endian = "big")]
+@cfg(target_endian = "little")
+@cfg(target_endian = "big")
 
 // Environment
-#[cfg(target_env = "gnu")]
-#[cfg(target_env = "msvc")]
-#[cfg(target_env = "musl")]
+@cfg(target_env = "gnu")
+@cfg(target_env = "msvc")
+@cfg(target_env = "musl")
 
 // Vendor
-#[cfg(target_vendor = "apple")]
-#[cfg(target_vendor = "pc")]
-#[cfg(target_vendor = "unknown")]
+@cfg(target_vendor = "apple")
+@cfg(target_vendor = "pc")
+@cfg(target_vendor = "unknown")
 
 // CPU features
-#[cfg(target_feature = "sse2")]
-#[cfg(target_feature = "avx")]
-#[cfg(target_feature = "neon")]
+@cfg(target_feature = "sse2")
+@cfg(target_feature = "avx")
+@cfg(target_feature = "neon")
 
 // Family
-#[cfg(unix)]     // linux, macos, bsd, etc.
-#[cfg(windows)]
+@cfg(unix)     // linux, macos, bsd, etc.
+@cfg(windows)
 ```
 
 ### 7.2 Runtime Detection
@@ -454,10 +463,10 @@ brew install aspect-build/basm/basm
 // Uses GCC-based toolchain, different runtime
 
 // Windows subsystem
-#[cfg(windows)]
-#[subsystem = "windows"]  // GUI app, no console
+@cfg(windows)
+@subsystem("windows")  // GUI app, no console
 // or
-#[subsystem = "console"]  // Console app (default)
+@subsystem("console")  // Console app (default)
 ```
 
 ### 10.3 macOS
@@ -468,8 +477,8 @@ brew install aspect-build/basm/basm
 // Creates binary for both x86_64 and aarch64
 
 // Minimum deployment target
-#[cfg(target_os = "macos")]
-#[macos_deployment_target = "11.0"]  // Big Sur minimum
+@cfg(target_os = "macos")
+@macos_deployment_target("11.0")  // Big Sur minimum
 
 // Code signing (required for distribution)
 // codesign --sign "Developer ID" target/release/myapp
@@ -480,9 +489,9 @@ brew install aspect-build/basm/basm
 ```tml
 // Standalone WASM (no_std)
 module wasm_app
-#[no_std]
+@no_std
 
-#[export_name = "add"]
+@export("add")
 public func add(a: I32, b: I32) -> I32 {
     return a + b
 }

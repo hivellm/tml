@@ -135,16 +135,16 @@ error[T003]: type annotation required
 
 ### T004: Generic constraint not satisfied
 ```
-error[T004]: trait bound not satisfied
+error[T004]: behavior bound not satisfied
   --> src/main.tml:10:5
    |
- 8 |     func sort[T: Ord](list: List[T])
-   |                  --- required by this bound
+ 8 |     func sort[T: Ordered](list: List[T])
+   |                  ------- required by this bound
 ...
 10 |     sort(my_list)
-   |     ^^^^ `MyType` does not implement `Ord`
+   |     ^^^^ `MyType` does not implement `Ordered`
    |
-   = help: implement `Ord` for `MyType`
+   = help: implement `Ordered` for `MyType`
 ```
 
 ### T005: Infinite type
@@ -168,15 +168,15 @@ error[T006]: return type mismatch
    |                ^ found I32
 ```
 
-### T007: Option/Result not unwrapped
+### T007: Maybe/Outcome not unwrapped
 ```
-error[T007]: cannot use Option[I32] as I32
+error[T007]: cannot use Maybe[I32] as I32
   --> src/main.tml:6:15
    |
  6 |     let y = x + 1
-   |             ^ expected I32, found Option[I32]
+   |             ^ expected I32, found Maybe[I32]
    |
-   = help: use `x.unwrap()` or handle None case with `when`
+   = help: use `x.unwrap()` or handle Nothing case with `when`
 ```
 
 ## 4. Semantic Errors (S)
@@ -192,7 +192,7 @@ error[S001]: use of moved value
  7 |     print(s)
    |           ^ value used after move
    |
-   = help: use `s.clone()` on line 6 if you need both
+   = help: use `s.duplicate()` on line 6 if you need both
 ```
 
 ### S002: Borrow conflict
@@ -200,10 +200,10 @@ error[S001]: use of moved value
 error[S002]: cannot borrow as mutable
   --> src/main.tml:7:15
    |
- 5 |     let r1 = &data
-   |              ----- immutable borrow here
- 6 |     let r2 = &mut data
-   |              ^^^^^^^^^ cannot borrow as mutable
+ 5 |     let r1 = ref data
+   |              -------- immutable borrow here
+ 6 |     let r2 = mut ref data
+   |              ^^^^^^^^^^^^ cannot borrow as mutable
  7 |     print(r1)
    |           -- immutable borrow used here
 ```
@@ -213,10 +213,10 @@ error[S002]: cannot borrow as mutable
 error[S003]: returns reference to local variable
   --> src/main.tml:6:12
    |
- 5 |     func bad() -> &String {
+ 5 |     func bad() -> ref String {
  6 |         let s = String.from("local")
- 7 |         return &s
-   |                ^^ returns reference to `s`
+ 7 |         return ref s
+   |                ^^^^^ returns reference to `s`
    |
    = note: `s` will be dropped at end of function
    = help: return owned `String` instead
@@ -335,40 +335,123 @@ error[S012]: private field
    |               ^^^^^^^^ cannot access private field
 ```
 
-## 5. JSON Format for LLMs
+## 5. Machine-Readable Diagnostic Format
+
+### 5.1 Overview
+
+TML tooling supports structured JSON output for machine consumption via the `--format=json` flag. This is **optional** - the default output is human-readable text format.
+
+```bash
+# Human-readable (default)
+tml check src/main.tml
+
+# Machine-readable JSON (optional)
+tml check src/main.tml --format=json
+
+# Also works with build, test, etc.
+tml build --format=json
+```
+
+### 5.2 JSON Diagnostic Schema
 
 ```json
 {
-  "errors": [
+  "version": "1.0",
+  "diagnostics": [
     {
+      "severity": "error",
       "code": "T001",
-      "level": "error",
-      "message": "type mismatch",
+      "message": "type mismatch: expected String, found I32",
       "file": "src/main.tml",
-      "line": 5,
-      "column": 15,
-      "stable_id": "@let_x",
-      "expected_type": "String",
-      "found_type": "I32",
+      "span": {
+        "start": { "line": 5, "column": 15 },
+        "end": { "line": 5, "column": 17 }
+      },
+      "stable_id": "@a1b2c3d4",
+      "context": {
+        "expected_type": "String",
+        "found_type": "I32"
+      },
       "suggestions": [
         {
           "message": "convert I32 to String",
-          "replacement": "42.to_string()",
-          "span": {
-            "start": {"line": 5, "column": 24},
-            "end": {"line": 5, "column": 26}
+          "replacement": {
+            "span": {
+              "start": { "line": 5, "column": 15 },
+              "end": { "line": 5, "column": 17 }
+            },
+            "text": "42.to_string()"
           }
+        }
+      ],
+      "related": [
+        {
+          "message": "expected type defined here",
+          "file": "src/main.tml",
+          "span": { "start": { "line": 5, "column": 9 }, "end": { "line": 5, "column": 15 } }
         }
       ]
     }
   ],
-  "warnings": [],
   "summary": {
     "errors": 1,
-    "warnings": 0
+    "warnings": 0,
+    "hints": 0
   }
 }
 ```
+
+### 5.3 Field Definitions
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `version` | Yes | String | Schema version (currently "1.0") |
+| `diagnostics` | Yes | Array | List of diagnostic objects |
+| `severity` | Yes | Enum | `error`, `warning`, `info`, `hint` |
+| `code` | Yes | String | Unique error code (e.g., "T001") |
+| `message` | Yes | String | Human-readable description |
+| `file` | Yes | String | Source file path |
+| `span` | Yes | Object | Source location with start/end positions |
+| `stable_id` | No | String | Associated stable ID (`@xxxxxxxx`) if applicable |
+| `context` | No | Object | Error-specific context (types, names, etc.) |
+| `suggestions` | No | Array | Machine-applicable fixes |
+| `related` | No | Array | Related diagnostic locations |
+| `summary` | Yes | Object | Counts by severity |
+
+### 5.4 Use Cases
+
+**LLM Integration**: AI models can parse JSON errors and generate fixes:
+```bash
+tml check src/lib.tml --format=json | ai-agent fix
+```
+
+**IDE Integration**: Rich error display with quickfixes:
+```bash
+tml check --format=json --watch | ide-plugin
+```
+
+**CI/CD Pipelines**: Programmatic error handling:
+```bash
+tml build --format=json | jq '.summary.errors'
+```
+
+### 5.5 Stable ID Linking
+
+When `stable_id` is present, errors reference code by stable ID rather than just line number:
+
+```json
+{
+  "code": "S001",
+  "message": "use of moved value",
+  "stable_id": "@func_process_a1b2",
+  "span": { "start": { "line": 15, "column": 5 }, "end": { "line": 15, "column": 10 } }
+}
+```
+
+This enables LLMs to:
+1. Reference the error location even after code reformatting
+2. Apply patches using stable IDs instead of line numbers
+3. Track errors across refactoring sessions
 
 ---
 

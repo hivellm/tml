@@ -1,24 +1,24 @@
-// TML Example 07: Traits and Extensions
-// Demonstrates trait definition and implementation with 'extend'
+// TML Example 07: Behaviors and Extensions
+// Demonstrates behavior definition and implementation with 'extend'
 
-module traits
+module behaviors
 
 // ============================================
-// TRAIT DEFINITION
+// BEHAVIOR DEFINITION
 // ============================================
 
-// Simple trait
-trait Printable {
+// Simple behavior
+behavior Printable {
     func print(this)
 }
 
-// Trait with return type
-trait Describable {
+// Behavior with return type
+behavior Describable {
     func describe(this) -> String
 }
 
-// Trait with default implementation
-trait Greetable {
+// Behavior with default implementation
+behavior Greetable {
     func name(this) -> String
 
     // Default implementation (can be overridden)
@@ -27,16 +27,16 @@ trait Greetable {
     }
 }
 
-// Trait with associated type
-trait Container {
+// Behavior with associated type
+behavior Container {
     type Item
 
-    func get(this, index: U64) -> Option[This.Item]
+    func get(this, index: U64) -> Maybe[This.Item]
     func len(this) -> U64
 }
 
-// Trait with generic method
-trait Mappable[T] {
+// Behavior with generic method
+behavior Mappable[T] {
     func map[U](this, f: func(T) -> U) -> Self[U]
 }
 
@@ -85,10 +85,10 @@ extend Person with Greetable {
 }
 
 // ============================================
-// SHAPE TRAIT EXAMPLE
+// SHAPE BEHAVIOR EXAMPLE
 // ============================================
 
-trait Shape {
+behavior Shape {
     func area(this) -> F64
     func perimeter(this) -> F64
 }
@@ -114,7 +114,7 @@ extend Rectangle with Shape {
 }
 
 // ============================================
-// GENERIC FUNCTIONS WITH TRAIT BOUNDS
+// GENERIC FUNCTIONS WITH BEHAVIOR BOUNDS
 // ============================================
 
 // Function that accepts any Printable
@@ -122,7 +122,7 @@ func print_item[T: Printable](item: T) {
     item.print()
 }
 
-// Multiple trait bounds
+// Multiple behavior bounds
 func describe_and_print[T: Printable + Describable](item: T) {
     println(item.describe())
     item.print()
@@ -149,7 +149,7 @@ extend String {
 
     func repeat(this, n: U32) -> String {
         var result = String.new()
-        loop _ in 0..n {
+        loop _ in 0 to n {
             result.push(this)
         }
         return result
@@ -168,7 +168,7 @@ extend I32 {
 }
 
 // ============================================
-// TRAIT OBJECTS (DYNAMIC DISPATCH)
+// BEHAVIOR OBJECTS (DYNAMIC DISPATCH)
 // ============================================
 
 func print_all_shapes(shapes: List[dyn Shape]) {

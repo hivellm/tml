@@ -42,22 +42,23 @@ All existing programming languages were designed for **humans**:
 ### 🏷️ Stable IDs
 Each definition has a unique ID that survives renames:
 ```tml
-func calculate@a1b2c3d4(x: I32) -> I32 {
+@id("a1b2c3d4")
+func calculate(x: I32) -> I32 {
     return x * 2
 }
 ```
-LLMs can reference `@a1b2c3d4` without depending on the name.
+LLMs can reference `@id("a1b2c3d4")` without depending on the name.
 
 ### 🎭 Effects & Capabilities
 Explicit declaration of what code can and does:
 ```tml
-module Database {
-    caps: [io.network, io.file]
+module database
+caps: [io.network, io.file]
 
-    func query(sql: String) -> Result[Rows, Error]
-    effects: [db.read] {
-        // ...
-    }
+func query(sql: String) -> Outcome[Rows, Error]
+effects: [db.read]
+{
+    // ...
 }
 ```
 
@@ -65,8 +66,9 @@ module Database {
 Pre and post-conditions:
 ```tml
 func sqrt(x: F64) -> F64
-pre: x >= 0.0
-post(result): result >= 0.0 and result * result == x {
+    requires x >= 0.0
+    ensures result >= 0.0 and result * result == x
+{
     // ...
 }
 ```
@@ -76,8 +78,8 @@ Learns from Rust but changes syntax for determinism:
 
 ```tml
 // TML (explicit, deterministic)
-func first[T: Clone](items: &List[T]) -> Option[T] {
-    return items.first().clone()
+func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
+    return items.first().duplicate()
 }
 
 // Rust (ambiguous parsing)
@@ -115,8 +117,8 @@ public func main() {
 ```tml
 module collections
 
-func first[T: Clone](items: &List[T]) -> Option[T] {
-    return items.first().clone()
+func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
+    return items.first().duplicate()
 }
 
 func map[T, U](items: List[T], f: do(T) -> U) -> List[U] {
@@ -130,20 +132,20 @@ func map[T, U](items: List[T], f: do(T) -> U) -> List[U] {
 
 ### Pattern Matching
 ```tml
-func process(value: Result[I32, String]) -> String {
+func process(value: Outcome[I32, String]) -> String {
     when value {
-        Ok(num) -> "Number: " + num.to_string(),
-        Err(msg) -> "Error: " + msg,
+        Success(num) -> "Number: " + num.to_string(),
+        Failure(msg) -> "Error: " + msg,
     }
 }
 ```
 
 ### Error Handling
 ```tml
-func read_file(path: String) -> Result[String, Error] {
+func read_file(path: String) -> Outcome[String, Error] {
     let file = File.open(path)!      // ! propagates errors
     let content = file.read_string()!
-    return Ok(content)
+    return Success(content)
 }
 ```
 

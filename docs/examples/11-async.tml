@@ -12,20 +12,20 @@ import std.time { Duration }
 // ============================================
 
 // Async function declaration
-async func fetch_user(id: U64) -> Result[User, HttpError] {
+async func fetch_user(id: U64) -> Outcome[User, HttpError] {
     let url = "https://api.example.com/users/" + id.to_string()
     let response = await get(url)
     return response.json()
 }
 
 // Await expressions
-async func get_user_data(id: U64) -> Result[UserData, Error] {
+async func get_user_data(id: U64) -> Outcome[UserData, Error] {
     // await pauses until the future completes
     let user = await fetch_user(id)
     let profile = await fetch_profile(user.id)
     let settings = await fetch_settings(user.id)
 
-    return Ok(UserData { user, profile, settings })
+    return Success(UserData { user, profile, settings })
 }
 
 // ============================================
@@ -47,8 +47,8 @@ async func fetch_all_parallel(ids: List[U64]) -> List[User] {
     var users = List.new()
     loop task in tasks {
         when await task {
-            Ok(user) -> users.push(user),
-            Err(_) -> {},  // Skip failed fetches
+            Success(user) -> users.push(user),
+            Failure(_) -> {},  // Skip failed fetches
         }
     }
 
@@ -56,7 +56,7 @@ async func fetch_all_parallel(ids: List[U64]) -> List[User] {
 }
 
 // Simpler parallel with join_all
-async func fetch_all_simple(ids: List[U64]) -> List[Result[User, HttpError]] {
+async func fetch_all_simple(ids: List[U64]) -> List[Outcome[User, HttpError]] {
     let futures = ids.map(do(id) fetch_user(id))
     return await join_all(futures)
 }
@@ -65,11 +65,11 @@ async func fetch_all_simple(ids: List[U64]) -> List[Result[User, HttpError]] {
 // SELECT (RACE MULTIPLE FUTURES)
 // ============================================
 
-async func fetch_with_timeout(id: U64) -> Result[User, Error] {
+async func fetch_with_timeout(id: U64) -> Outcome[User, Error] {
     // First one to complete wins
     select {
-        user = fetch_user(id) -> Ok(user),
-        _ = sleep(Duration.seconds(5)) -> Err(Error.Timeout),
+        user = fetch_user(id) -> Success(user),
+        _ = sleep(Duration.seconds(5)) -> Failure(Error.Timeout),
     }
 }
 
@@ -103,7 +103,7 @@ async func producer_consumer_example() {
 
     // Spawn producer
     spawn async {
-        loop i in 0..10 {
+        loop i in 0 to 10 {
             tx.send(i)
             await sleep(Duration.millis(100))
         }
@@ -113,8 +113,8 @@ async func producer_consumer_example() {
     // Consumer
     loop {
         when rx.recv() {
-            Some(value) -> println("Received: " + value.to_string()),
-            None -> break,  // Channel closed
+            Just(value) -> println("Received: " + value.to_string()),
+            Nothing -> break,  // Channel closed
         }
     }
 }
@@ -124,29 +124,29 @@ async func buffered_channel_example() {
     let (tx, rx) = channel.buffered(10)  // Buffer size 10
 
     // Can send up to 10 items without blocking
-    loop i in 0..10 {
+    loop i in 0 to 10 {
         tx.send(i)
     }
 }
 
 // ============================================
-// ASYNC TRAITS
+// ASYNC BEHAVIORS
 // ============================================
 
-trait AsyncReader {
-    async func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+behavior AsyncReader {
+    async func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
 }
 
-trait AsyncWriter {
-    async func write(this, data: &[U8]) -> Result[U64, IoError]
-    async func flush(this) -> Result[Unit, IoError]
+behavior AsyncWriter {
+    async func write(this, data: ref [U8]) -> Outcome[U64, IoError]
+    async func flush(this) -> Outcome[Unit, IoError]
 }
 
-// Implement async trait
+// Implement async behavior
 extend TcpStream with AsyncReader {
-    async func read(this, buf: &mut [U8]) -> Result[U64, IoError] {
+    async func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         // ... implementation
-        return Ok(buf.len())
+        return Success(buf.len())
     }
 }
 
@@ -167,7 +167,7 @@ async func process_stream() {
 // ERROR HANDLING IN ASYNC
 // ============================================
 
-async func robust_fetch(id: U64) -> Result[User, Error] {
+async func robust_fetch(id: U64) -> Outcome[User, Error] {
     // Retry with backoff
     var attempts = 0
     let max_attempts = 3
@@ -176,10 +176,10 @@ async func robust_fetch(id: U64) -> Result[User, Error] {
         attempts += 1
 
         when await fetch_user(id) {
-            Ok(user) -> return Ok(user),
-            Err(e) -> {
+            Success(user) -> return Success(user),
+            Failure(e) -> {
                 if attempts >= max_attempts then {
-                    return Err(Error.MaxRetries(e))
+                    return Failure(Error.MaxRetries(e))
                 }
                 let delay = Duration.seconds(attempts * 2)
                 await sleep(delay)
@@ -197,8 +197,8 @@ async func main() {
     let user = await fetch_user(1)
 
     when user {
-        Ok(u) -> println("Got user: " + u.name),
-        Err(e) -> println("Error: " + e.to_string()),
+        Success(u) -> println("Got user: " + u.name),
+        Failure(e) -> println("Error: " + e.to_string()),
     }
 
     // Parallel fetches
@@ -232,10 +232,10 @@ type UserData {
 type HttpError = Timeout | NetworkError | ParseError
 type Error = Timeout | MaxRetries(HttpError) | Other(String)
 
-async func fetch_profile(id: U64) -> Result[Profile, Error] {
-    return Ok(Profile { bio: "" })
+async func fetch_profile(id: U64) -> Outcome[Profile, Error] {
+    return Success(Profile { bio: "" })
 }
 
-async func fetch_settings(id: U64) -> Result[Settings, Error] {
-    return Ok(Settings { theme: "dark" })
+async func fetch_settings(id: U64) -> Outcome[Settings, Error] {
+    return Success(Settings { theme: "dark" })
 }

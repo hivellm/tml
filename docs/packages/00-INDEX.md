@@ -152,8 +152,8 @@ import std.fmt.{format, Display}
 | `Vec[T]` | std.collections | Dynamic array |
 | `HashMap[K, V]` | std.collections | Hash table |
 | `String` | builtin | UTF-8 string |
-| `Option[T]` | builtin | Optional value |
-| `Result[T, E]` | builtin | Success or error |
+| `Maybe[T]` | builtin | Optional value |
+| `Outcome[T, E]` | builtin | Success or error |
 | `Box[T]` | std.alloc | Heap allocation |
 | `Arc[T]` | std.sync | Atomic reference counted |
 | `Mutex[T]` | std.sync | Mutual exclusion lock |

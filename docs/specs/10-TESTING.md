@@ -2,15 +2,15 @@
 
 ## 1. Basic Tests
 
-### 1.1 #[test] Annotation
+### 1.1 @test Directive
 
 ```tml
-#[test]
+@test
 func test_addition() {
     assert_eq(2 + 2, 4)
 }
 
-#[test]
+@test
 func test_string_concat() {
     let result = "hello" + " world"
     assert_eq(result, "hello world")
@@ -32,7 +32,7 @@ assert_ge(a, b)                      // a >= b
 ### 1.3 Custom Messages
 
 ```tml
-#[test]
+@test
 func test_with_message() {
     let x = compute()
     assert(x > 0, "x should be positive, got: " + x.to_string())
@@ -40,19 +40,19 @@ func test_with_message() {
 }
 ```
 
-## 2. Result Tests
+## 2. Outcome Tests
 
 ### 2.1 Expect Panic
 
 ```tml
-#[test]
-#[should_panic]
+@test
+@should_panic
 func test_divide_by_zero() {
     divide(10, 0)
 }
 
-#[test]
-#[should_panic(message = "division by zero")]
+@test
+@should_panic(message = "division by zero")
 func test_panic_message() {
     divide(10, 0)
 }
@@ -61,18 +61,18 @@ func test_panic_message() {
 ### 2.2 Expect Error
 
 ```tml
-#[test]
-func test_file_not_found() -> Result[Unit, TestError] {
+@test
+func test_file_not_found() -> Outcome[Unit, TestError] {
     let result = File.open("nonexistent.txt")
-    assert(result.is_err())
-    return Ok(unit)
+    assert(result.is_failure())
+    return Success(unit)
 }
 
-#[test]
-#[should_error(IoError)]
-func test_expects_io_error() -> Result[Unit, IoError] {
+@test
+@should_error(IoError)
+func test_expects_io_error() -> Outcome[Unit, IoError] {
     let _ = File.open("nonexistent.txt")!
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 
@@ -82,31 +82,31 @@ func test_expects_io_error() -> Result[Unit, IoError] {
 
 ```tml
 module tests {
-    var test_db: Option[Database] = None
+    var test_db: Maybe[Database] = Nothing
 
-    #[before_all]
+    @before_all
     func setup_database() {
-        test_db = Some(Database.create_test())
+        test_db = Just(Database.create_test())
     }
 
-    #[after_all]
+    @after_all
     func cleanup_database() {
         when test_db {
-            Some(db) -> db.destroy(),
-            None -> unit,
+            Just(db) -> db.destroy(),
+            Nothing -> unit,
         }
     }
 
-    #[before_each]
+    @before_each
     func reset_tables() {
         test_db.unwrap().reset()
     }
 
-    #[test]
+    @test
     func test_insert() {
         let db = test_db.unwrap()
         db.insert("key", "value")
-        assert_eq(db.get("key"), Some("value"))
+        assert_eq(db.get("key"), Just("value"))
     }
 }
 ```
@@ -119,7 +119,7 @@ type TestContext {
     config: Config,
 }
 
-#[fixture]
+@fixture
 func create_context() -> TestContext {
     return TestContext {
         temp_dir: TempDir.create(),
@@ -127,7 +127,7 @@ func create_context() -> TestContext {
     }
 }
 
-#[test]
+@test
 func test_with_context(ctx: TestContext) {
     let file = ctx.temp_dir.join("test.txt")
     File.write(file, "data")
@@ -137,16 +137,16 @@ func test_with_context(ctx: TestContext) {
 
 ## 4. Property-Based Testing
 
-### 4.1 #[property] Annotation
+### 4.1 @property Directive
 
 ```tml
-#[property]
+@property
 func prop_addition_commutative(a: I32, b: I32) -> Bool {
     return a + b == b + a
 }
 
-#[property]
-func prop_list_reverse_twice[T: Eq](list: List[T]) -> Bool {
+@property
+func prop_list_reverse_twice[T: Equal](list: List[T]) -> Bool {
     return list.reverse().reverse() == list
 }
 ```
@@ -154,12 +154,12 @@ func prop_list_reverse_twice[T: Eq](list: List[T]) -> Bool {
 ### 4.2 Configuration
 
 ```tml
-#[property(samples = 1000)]
+@property(samples = 1000)
 func prop_with_more_samples(x: I32) -> Bool {
     return x * 0 == 0
 }
 
-#[property(seed = 12345)]
+@property(seed = 12345)
 func prop_reproducible(x: I32) -> Bool {
     return x + 0 == x
 }
@@ -168,13 +168,13 @@ func prop_reproducible(x: I32) -> Bool {
 ### 4.3 Custom Generators
 
 ```tml
-#[generator]
+@generator
 func gen_positive_int() -> I32 {
     return random_range(1, I32.MAX)
 }
 
-#[property]
-func prop_sqrt_positive(#[gen(gen_positive_int)] x: I32) -> Bool {
+@property
+func prop_sqrt_positive(@gen(gen_positive_int) x: I32) -> Bool {
     let sq = (x as F64).sqrt()
     return sq >= 0.0
 }
@@ -182,35 +182,35 @@ func prop_sqrt_positive(#[gen(gen_positive_int)] x: I32) -> Bool {
 
 ## 5. Mocking
 
-### 5.1 Mock Traits
+### 5.1 Mock Behaviors
 
 ```tml
-trait HttpClient {
-    func get(this, url: String) -> Result[Response, Error]
+behavior HttpClient {
+    func get(this, url: String) -> Outcome[Response, Error]
 }
 
-#[mock]
+@mock
 type MockHttpClient {}
 
 extend MockHttpClient with HttpClient {
-    func get(this, url: String) -> Result[Response, Error] {
-        return Ok(Response { status: 200, body: "mocked" })
+    func get(this, url: String) -> Outcome[Response, Error] {
+        return Success(Response { status: 200, body: "mocked" })
     }
 }
 
-#[test]
+@test
 func test_with_mock() {
     let client = MockHttpClient {}
     let service = Service.new(client)
     let result = service.fetch_data()
-    assert(result.is_ok())
+    assert(result.is_success())
 }
 ```
 
 ### 5.2 Spy and Verification
 
 ```tml
-#[test]
+@test
 func test_call_count() {
     let spy = Spy.new[func(String) -> Unit]()
 
@@ -225,15 +225,15 @@ func test_call_count() {
 
 ## 6. Benchmarks
 
-### 6.1 #[bench] Annotation
+### 6.1 @bench Directive
 
 ```tml
-#[bench]
+@bench
 func bench_sort(b: Bencher) {
     let data = random_list(1000)
 
     b.iter(do() {
-        data.clone().sort()
+        data.duplicate().sort()
     })
 }
 ```
@@ -241,7 +241,7 @@ func bench_sort(b: Bencher) {
 ### 6.2 Configuration
 
 ```tml
-#[bench(samples = 100, warmup = 10)]
+@bench(samples = 100, warmup = 10)
 func bench_with_config(b: Bencher) {
     b.iter(do() {
         expensive_operation()
@@ -288,12 +288,12 @@ public func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-// Inline tests (only in #[cfg(test)])
-#[cfg(test)]
+// Inline tests (only compiled with test flag)
+@when(test)
 module tests {
     import super.*
 
-    #[test]
+    @test
     func test_add() {
         assert_eq(add(2, 3), 5)
     }
@@ -315,7 +315,7 @@ module test_math
 
 import mylib.math.*
 
-#[test]
+@test
 func test_add_external() {
     assert_eq(add(10, 20), 30)
 }

@@ -4,7 +4,7 @@
 
 The TML runtime provides essential services for program execution:
 - Memory allocation and deallocation
-- Reference counting for Rc/Arc
+- Reference counting for Shared/Sync
 - Panic handling and unwinding
 - Thread management
 - Global initialization
@@ -139,15 +139,15 @@ void tml_set_oom_hook(void (*hook)(size_t, size_t));
 
 ```tml
 // TML interface for custom allocators
-public trait Allocator {
-    unsafe func alloc(this, size: U64, align: U64) -> *mut U8
-    unsafe func dealloc(this, ptr: *mut U8, size: U64, align: U64)
-    unsafe func realloc(this, ptr: *mut U8, old_size: U64, old_align: U64,
+public behavior Allocator {
+    lowlevel func alloc(this, size: U64, align: U64) -> *mut U8
+    lowlevel func dealloc(this, ptr: *mut U8, size: U64, align: U64)
+    lowlevel func realloc(this, ptr: *mut U8, old_size: U64, old_align: U64,
                         new_size: U64, new_align: U64) -> *mut U8
 }
 
 // Global allocator (can be overridden)
-#[global_allocator]
+@global_allocator
 var GLOBAL: SystemAllocator = SystemAllocator.new()
 
 // Arena allocator example
@@ -158,7 +158,7 @@ public type Arena {
 }
 
 extend Arena with Allocator {
-    unsafe func alloc(this, size: U64, align: U64) -> *mut U8 {
+    lowlevel func alloc(this, size: U64, align: U64) -> *mut U8 {
         let aligned_offset = align_up(this.offset, align)
         if aligned_offset + size > this.capacity {
             return null
@@ -168,7 +168,7 @@ extend Arena with Allocator {
         return ptr
     }
 
-    unsafe func dealloc(this, ptr: *mut U8, size: U64, align: U64) {
+    lowlevel func dealloc(this, ptr: *mut U8, size: U64, align: U64) {
         // Arena doesn't free individual allocations
     }
 }
@@ -176,7 +176,7 @@ extend Arena with Allocator {
 
 ## 4. Reference Counting
 
-### 4.1 Rc (Single-threaded)
+### 4.1 Shared (Single-threaded)
 
 ```cpp
 struct RcInner {
@@ -209,22 +209,22 @@ extern "C" bool tml_rc_dec(void* ptr, void (*drop_fn)(void*), size_t size, size_
 }
 ```
 
-### 4.2 Arc (Thread-safe)
+### 4.2 Sync (Thread-safe)
 
 ```cpp
-struct ArcInner {
+struct SyncInner {
     std::atomic<size_t> strong_count;
     std::atomic<size_t> weak_count;
     // value follows
 };
 
-extern "C" void tml_arc_inc(void* ptr) {
-    ArcInner* inner = (ArcInner*)ptr;
+extern "C" void tml_sync_inc(void* ptr) {
+    SyncInner* inner = (SyncInner*)ptr;
     inner->strong_count.fetch_add(1, std::memory_order_relaxed);
 }
 
-extern "C" bool tml_arc_dec(void* ptr, void (*drop_fn)(void*), size_t size, size_t align) {
-    ArcInner* inner = (ArcInner*)ptr;
+extern "C" bool tml_sync_dec(void* ptr, void (*drop_fn)(void*), size_t size, size_t align) {
+    SyncInner* inner = (SyncInner*)ptr;
 
     if (inner->strong_count.fetch_sub(1, std::memory_order_release) == 1) {
         std::atomic_thread_fence(std::memory_order_acquire);
@@ -246,7 +246,7 @@ extern "C" bool tml_arc_dec(void* ptr, void (*drop_fn)(void*), size_t size, size
 
 ```cpp
 extern "C" void* tml_weak_upgrade(void* weak_ptr) {
-    ArcInner* inner = (ArcInner*)weak_ptr;
+    SyncInner* inner = (SyncInner*)weak_ptr;
 
     while (true) {
         size_t strong = inner->strong_count.load(std::memory_order_relaxed);
@@ -668,7 +668,7 @@ Full-featured runtime:
 ```cpp
 // Full runtime (~200KB)
 - Complete allocator
-- Reference counting (Rc/Arc)
+- Reference counting (Shared/Sync)
 - Full panic + unwinding
 - Thread support
 - I/O runtime

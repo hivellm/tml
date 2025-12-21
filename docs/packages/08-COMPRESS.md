@@ -20,20 +20,20 @@ import std.compress.{gzip, zlib, zstd}
 ### 3.1 Compression Trait
 
 ```tml
-public trait Compressor {
+public behaviorCompressor {
     /// Compress data
-    func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 
     /// Compress to writer
-    func compress_to[W: Write](this, input: &[U8], output: &mut W) -> Result[U64, CompressError]
+    func compress_to[W: Write](this, input: ref [U8], output: mut ref W) -> Outcome[U64, CompressError]
 }
 
-public trait Decompressor {
+public behaviorDecompressor {
     /// Decompress data
-    func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
     /// Decompress to writer
-    func decompress_to[W: Write](this, input: &[U8], output: &mut W) -> Result[U64, DecompressError]
+    func decompress_to[W: Write](this, input: ref [U8], output: mut ref W) -> Outcome[U64, DecompressError]
 }
 ```
 
@@ -69,22 +69,22 @@ extend Encoder {
         this
     }
 
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot compression
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func compress_level(input: &[U8], level: CompressionLevel) -> Result[List[U8], CompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func compress_level(input: ref [U8], level: CompressionLevel) -> Outcome[List[U8], CompressError]
 
 /// One-shot decompression
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 ```
 
 ### 4.2 Zlib
@@ -99,19 +99,19 @@ public type Encoder {
 extend Encoder {
     public func new() -> This
     public func level(this, level: CompressionLevel) -> This
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 ```
 
 ### 4.3 Gzip
@@ -121,35 +121,35 @@ module gzip
 
 public type Encoder {
     level: CompressionLevel,
-    filename: Option[String],
-    comment: Option[String],
-    mtime: Option[U32],
+    filename: Maybe[String],
+    comment: Maybe[String],
+    mtime: Maybe[U32],
 }
 
 extend Encoder {
     public func new() -> This
     public func level(this, level: CompressionLevel) -> This
-    public func filename(this, name: &str) -> This
-    public func comment(this, comment: &str) -> This
+    public func filename(this, name: ref str) -> This
+    public func comment(this, comment: ref str) -> This
     public func mtime(this, time: U32) -> This
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
     /// Get gzip header info (after decompression)
-    public func filename(this) -> Option[&str]
-    public func comment(this) -> Option[&str]
-    public func mtime(this) -> Option[U32]
+    public func filename(this) -> Maybe[ref str]
+    public func comment(this) -> Maybe[ref str]
+    public func mtime(this) -> Maybe[U32]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 ```
 
 ### 4.4 Streaming Gzip
@@ -167,12 +167,12 @@ public type GzipWriter[W: Write] {
 extend GzipWriter[W: Write] {
     public func new(inner: W) -> This
     public func with_level(inner: W, level: CompressionLevel) -> This
-    public func finish(this) -> Result[W, IoError]
+    public func finish(this) -> Outcome[W, IoError]
 }
 
 extend GzipWriter[W: Write] with Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError]
-    func flush(this) -> Result[Unit, IoError]
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
+    func flush(this) -> Outcome[Unit, IoError]
 }
 
 /// Gzip decompression reader
@@ -183,12 +183,12 @@ public type GzipReader[R: Read] {
 }
 
 extend GzipReader[R: Read] {
-    public func new(inner: R) -> Result[This, DecompressError]
+    public func new(inner: R) -> Outcome[This, DecompressError]
     public func into_inner(this) -> R
 }
 
 extend GzipReader[R: Read] with Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
 }
 ```
 
@@ -204,19 +204,19 @@ public type Encoder {
 extend Encoder {
     public func new() -> This
     public func level(this, level: I32) -> This  // 1-9
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
 /// Streaming
 module stream
@@ -240,19 +240,19 @@ extend Encoder {
     public func new() -> This
     public func level(this, level: CompressionLevel) -> This
     public func block_size(this, size: BlockSize) -> This
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
 /// Frame format (with checksums, streaming)
 module frame
@@ -261,8 +261,8 @@ public type Lz4Reader[R: Read] { ... }
 
 /// Block format (no framing, raw blocks)
 module block
-public func compress_block(input: &[U8]) -> List[U8]
-public func decompress_block(input: &[U8], max_output: U64) -> Result[List[U8], DecompressError]
+public func compress_block(input: ref [U8]) -> List[U8]
+public func decompress_block(input: ref [U8], max_output: U64) -> Outcome[List[U8], DecompressError]
 ```
 
 ## 7. Zstandard (Zstd)
@@ -272,7 +272,7 @@ module zstd
 
 public type Encoder {
     level: I32,  // 1-22 (default 3)
-    dict: Option[Dictionary],
+    dict: Maybe[Dictionary],
 }
 
 public type Dictionary {
@@ -283,26 +283,26 @@ extend Encoder {
     public func new() -> This
     public func level(this, level: I32) -> This
     public func dict(this, dict: Dictionary) -> This
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder {
-    dict: Option[Dictionary],
+    dict: Maybe[Dictionary],
 }
 
 extend Decoder {
     public func new() -> This
     public func dict(this, dict: Dictionary) -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func compress_level(input: &[U8], level: I32) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func compress_level(input: ref [U8], level: I32) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
 /// Dictionary training
-public func train_dict(samples: &[&[U8]], dict_size: U64) -> Result[Dictionary, Error]
+public func train_dict(samples: ref [ref [U8]], dict_size: U64) -> Outcome[Dictionary, Error]
 
 /// Streaming
 module stream
@@ -324,19 +324,19 @@ extend Encoder {
     public func new() -> This
     public func quality(this, q: U32) -> This
     public func window_size(this, size: U32) -> This
-    public func compress(this, input: &[U8]) -> Result[List[U8], CompressError]
+    public func compress(this, input: ref [U8]) -> Outcome[List[U8], CompressError]
 }
 
 public type Decoder { }
 
 extend Decoder {
     public func new() -> This
-    public func decompress(this, input: &[U8]) -> Result[List[U8], DecompressError]
+    public func decompress(this, input: ref [U8]) -> Outcome[List[U8], DecompressError]
 }
 
 /// One-shot functions
-public func compress(input: &[U8]) -> Result[List[U8], CompressError]
-public func decompress(input: &[U8]) -> Result[List[U8], DecompressError]
+public func compress(input: ref [U8]) -> Outcome[List[U8], CompressError]
+public func decompress(input: ref [U8]) -> Outcome[List[U8], DecompressError]
 
 /// Streaming
 module stream
@@ -360,14 +360,14 @@ extend Archive[R: Read] {
     public func entries(this) -> Entries[R]
 
     /// Extract all to directory
-    public func extract_all(this, dst: &Path) -> Result[Unit, TarError]
+    public func extract_all(this, dst: ref Path) -> Outcome[Unit, TarError]
     effects: [io.file.write]
 }
 
 public type Entries[R: Read] { ... }
 
 extend Entries[R: Read] with Iterator {
-    type Item = Result[Entry[R], TarError]
+    type Item = Outcome[Entry[R], TarError]
 }
 
 public type Entry[R: Read] {
@@ -376,20 +376,20 @@ public type Entry[R: Read] {
 }
 
 extend Entry[R: Read] {
-    public func path(this) -> Result[PathBuf, TarError]
+    public func path(this) -> Outcome[PathBuf, TarError]
     public func size(this) -> U64
     public func mode(this) -> U32
     public func mtime(this) -> U64
     public func is_file(this) -> Bool
     public func is_dir(this) -> Bool
     public func is_symlink(this) -> Bool
-    public func link_name(this) -> Result[Option[PathBuf], TarError]
+    public func link_name(this) -> Outcome[Maybe[PathBuf], TarError]
 
     /// Read entry contents
-    public func read_all(this) -> Result[List[U8], IoError]
+    public func read_all(this) -> Outcome[List[U8], IoError]
 
     /// Extract to path
-    public func extract(this, dst: &Path) -> Result[Unit, TarError]
+    public func extract(this, dst: ref Path) -> Outcome[Unit, TarError]
     effects: [io.file.write]
 }
 
@@ -404,28 +404,28 @@ extend Builder[W: Write] {
     public func new(writer: W) -> This
 
     /// Add file from path
-    public func append_path(this, path: &Path) -> Result[Unit, TarError]
+    public func append_path(this, path: ref Path) -> Outcome[Unit, TarError]
     effects: [io.file.read]
 
     /// Add file with custom header
-    public func append_file(this, path: &str, file: &mut File) -> Result[Unit, TarError]
+    public func append_file(this, path: ref str, file: mut ref File) -> Outcome[Unit, TarError]
 
     /// Add directory
-    public func append_dir(this, path: &str, src: &Path) -> Result[Unit, TarError]
+    public func append_dir(this, path: ref str, src: ref Path) -> Outcome[Unit, TarError]
     effects: [io.file.read]
 
     /// Add data with custom header
-    public func append_data(this, header: &mut Header, path: &str, data: &[U8]) -> Result[Unit, TarError]
+    public func append_data(this, header: mut ref Header, path: ref str, data: ref [U8]) -> Outcome[Unit, TarError]
 
     /// Finish archive
-    public func finish(this) -> Result[W, TarError]
+    public func finish(this) -> Outcome[W, TarError]
 }
 
 public type Header { ... }
 
 extend Header {
     public func new() -> This
-    public func set_path(this, path: &str) -> Result[Unit, TarError]
+    public func set_path(this, path: ref str) -> Outcome[Unit, TarError]
     public func set_size(this, size: U64)
     public func set_mode(this, mode: U32)
     public func set_mtime(this, mtime: U64)
@@ -446,22 +446,22 @@ public type Archive[R: Read + Seek] {
 }
 
 extend Archive[R: Read + Seek] {
-    public func new(reader: R) -> Result[This, ZipError]
+    public func new(reader: R) -> Outcome[This, ZipError]
 
     /// Number of entries
     public func len(this) -> U64
 
     /// Get entry by index
-    public func by_index(this, index: U64) -> Result[ZipFile[R], ZipError]
+    public func by_index(this, index: U64) -> Outcome[ZipFile[R], ZipError]
 
     /// Get entry by name
-    public func by_name(this, name: &str) -> Result[ZipFile[R], ZipError]
+    public func by_name(this, name: ref str) -> Outcome[ZipFile[R], ZipError]
 
     /// Iterate over entries
     public func entries(this) -> ZipEntries[R]
 
     /// Extract all to directory
-    public func extract_all(this, dst: &Path) -> Result[Unit, ZipError]
+    public func extract_all(this, dst: ref Path) -> Outcome[Unit, ZipError]
     effects: [io.file.write]
 }
 
@@ -475,16 +475,16 @@ public type ZipFile[R] {
 }
 
 extend ZipFile[R: Read] {
-    public func name(this) -> &str
+    public func name(this) -> ref str
     public func size(this) -> U64
     public func is_dir(this) -> Bool
     public func compression(this) -> CompressionMethod
 
     /// Read entire file
-    public func read_all(this) -> Result[List[U8], ZipError]
+    public func read_all(this) -> Outcome[List[U8], ZipError]
 
     /// Extract to path
-    public func extract(this, dst: &Path) -> Result[Unit, ZipError]
+    public func extract(this, dst: ref Path) -> Outcome[Unit, ZipError]
     effects: [io.file.write]
 }
 
@@ -507,27 +507,27 @@ extend ZipWriter[W: Write + Seek] {
     public func new(writer: W) -> This
 
     /// Start new file entry
-    public func start_file(this, name: &str, options: FileOptions) -> Result[Unit, ZipError]
+    public func start_file(this, name: ref str, options: FileOptions) -> Outcome[Unit, ZipError]
 
     /// Write data to current file
-    public func write_all(this, data: &[U8]) -> Result[Unit, ZipError]
+    public func write_all(this, data: ref [U8]) -> Outcome[Unit, ZipError]
 
     /// Add file from path
-    public func add_file(this, path: &Path, name: &str) -> Result[Unit, ZipError]
+    public func add_file(this, path: ref Path, name: ref str) -> Outcome[Unit, ZipError]
     effects: [io.file.read]
 
     /// Add directory recursively
-    public func add_directory(this, path: &Path, prefix: &str) -> Result[Unit, ZipError]
+    public func add_directory(this, path: ref Path, prefix: ref str) -> Outcome[Unit, ZipError]
     effects: [io.file.read]
 
     /// Finish archive
-    public func finish(this) -> Result[W, ZipError]
+    public func finish(this) -> Outcome[W, ZipError]
 }
 
 public type FileOptions {
     compression: CompressionMethod,
     compression_level: CompressionLevel,
-    unix_permissions: Option[U32>,
+    unix_permissions: Maybe[U32>,
 }
 
 extend FileOptions {
@@ -576,18 +576,18 @@ caps: [io.file]
 import std.fs.File
 import std.compress.gzip
 
-func compress_file(src: &Path, dst: &Path) -> Result[Unit, Error] {
-    let data = fs.read(src)?
-    let compressed = gzip.compress(&data)?
-    fs.write(dst, &compressed)?
-    return Ok(unit)
+func compress_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
+    let data = fs.read(src)!
+    let compressed = gzip.compress(ref data)!
+    fs.write(dst, ref compressed)!
+    return Success(unit)
 }
 
-func decompress_file(src: &Path, dst: &Path) -> Result[Unit, Error] {
-    let compressed = fs.read(src)?
-    let data = gzip.decompress(&compressed)?
-    fs.write(dst, &data)?
-    return Ok(unit)
+func decompress_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
+    let compressed = fs.read(src)!
+    let data = gzip.decompress(ref compressed)!
+    fs.write(dst, ref data)!
+    return Success(unit)
 }
 ```
 
@@ -600,21 +600,21 @@ caps: [io.file]
 import std.fs.File
 import std.compress.gzip.stream.GzipWriter
 
-func compress_large_file(src: &Path, dst: &Path) -> Result[Unit, Error] {
-    let input = File.open(src)?
-    let output = File.create(dst)?
+func compress_large_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
+    let input = File.open(src)!
+    let output = File.create(dst)!
 
     var gz = GzipWriter.new(output)
 
     var buf: [U8; 8192] = [0; 8192]
     loop {
-        let n = input.read(&mut buf)?
+        let n = input.read(mut ref buf)!
         if n == 0 { break }
-        gz.write_all(&buf[0..n])?
+        gz.write_all(&buf[0 to n])!
     }
 
-    gz.finish()?
-    return Ok(unit)
+    gz.finish()!
+    return Success(unit)
 }
 ```
 
@@ -627,8 +627,8 @@ caps: [io.file]
 import std.fs.File
 import std.compress.zip.{ZipWriter, FileOptions, CompressionMethod}
 
-func create_archive(files: &[(&Path, &str)], output: &Path) -> Result[Unit, Error] {
-    let file = File.create(output)?
+func create_archive(files: ref [(ref Path, ref str)], output: ref Path) -> Outcome[Unit, Error] {
+    let file = File.create(output)!
     var zip = ZipWriter.new(file)
 
     let options = FileOptions.default()
@@ -636,13 +636,13 @@ func create_archive(files: &[(&Path, &str)], output: &Path) -> Result[Unit, Erro
         .compression_level(CompressionLevel.Best)
 
     loop (path, name) in files {
-        let data = fs.read(path)?
-        zip.start_file(name, options)?
-        zip.write_all(&data)?
+        let data = fs.read(path)!
+        zip.start_file(name, options)!
+        zip.write_all(ref data)!
     }
 
-    zip.finish()?
-    return Ok(unit)
+    zip.finish()!
+    return Success(unit)
 }
 ```
 
@@ -656,14 +656,14 @@ import std.fs.File
 import std.compress.gzip.stream.GzipReader
 import std.compress.tar.Archive
 
-func extract_tarball(src: &Path, dst: &Path) -> Result[Unit, Error] {
-    let file = File.open(src)?
-    let gz = GzipReader.new(file)?
+func extract_tarball(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
+    let file = File.open(src)!
+    let gz = GzipReader.new(file)!
     var tar = Archive.new(gz)
 
-    tar.extract_all(dst)?
+    tar.extract_all(dst)!
 
-    return Ok(unit)
+    return Success(unit)
 }
 ```
 

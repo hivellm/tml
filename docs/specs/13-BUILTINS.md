@@ -6,7 +6,7 @@
 ```tml
 true, false
 
-// Operations
+// Operations (keywords, not symbols)
 not b
 a and b
 a or b
@@ -26,7 +26,7 @@ x.signum()           // sign: -1, 0, or 1
 x.pow(n)             // power
 x.to_string()        // conversion
 x.to_i32()           // conversion between types
-x.checked_add(y)     // Option[T], None on overflow
+x.checked_add(y)     // Maybe[T], Nothing on overflow
 x.saturating_add(y)  // saturates at MAX/MIN
 x.wrapping_add(y)    // wraps on overflow
 
@@ -65,7 +65,7 @@ F64.NAN
 'a'.is_lowercase()
 'A'.to_lowercase()  // 'a'
 'a'.to_uppercase()  // 'A'
-'a'.to_digit(10)    // Option[U32]
+'a'.to_digit(10)    // Maybe[U32]
 ```
 
 ### 1.5 String
@@ -77,20 +77,20 @@ String.from("text")
 
 // Methods
 s.len()              // bytes
-s.chars()            // Iterator[Char]
+s.chars()            // Iterable[Char]
 s.is_empty()
 s.contains("sub")
 s.starts_with("pre")
 s.ends_with("suf")
-s.find("sub")        // Option[U64]
+s.find("sub")        // Maybe[U64]
 s.replace("old", "new")
 s.trim()
 s.trim_start()
 s.trim_end()
 s.to_lowercase()
 s.to_uppercase()
-s.split(",")         // Iterator[String]
-s.lines()            // Iterator[String]
+s.split(",")         // Iterable[String]
+s.lines()            // Iterable[String]
 s.slice(start, end)  // substring
 s + other            // concatenation
 ```
@@ -102,9 +102,9 @@ Bytes.new()
 b"literal"
 
 b.len()
-b.get(index)         // Option[U8]
+b.get(index)         // Maybe[U8]
 b.slice(start, end)
-b.to_string()        // Result[String, Utf8Error]
+b.to_string()        // Outcome[String, Utf8Error]
 ```
 
 ## 2. Collections
@@ -119,28 +119,28 @@ List.with_capacity(100)
 list.len()
 list.is_empty()
 list.push(item)
-list.pop()           // Option[T]
-list.get(index)      // Option[T]
-list.first()         // Option[T]
-list.last()          // Option[T]
+list.pop()           // Maybe[T]
+list.get(index)      // Maybe[T]
+list.first()         // Maybe[T]
+list.last()          // Maybe[T]
 list.insert(index, item)
 list.remove(index)   // T
 list.clear()
-list.contains(item)  // requires T: Eq
+list.contains(item)  // requires T: Equal
 list.reverse()
-list.sort()          // requires T: Ord
-list.clone()         // requires T: Clone
+list.sort()          // requires T: Ordered
+list.duplicate()     // requires T: Duplicate
 
 // Iteration
-list.iter()          // Iterator[&T]
-list.iter_mut()      // Iterator[&mut T]
-list.into_iter()     // Iterator[T]
+list.iter()          // Iterable[ref T]
+list.iter_mut()      // Iterable[mut ref T]
+list.into_iter()     // Iterable[T]
 
 // Functional
 list.map(func)
 list.filter(func)
 list.fold(init, func)
-list.find(func)      // Option[T]
+list.find(func)      // Maybe[T]
 list.any(func)       // Bool
 list.all(func)       // Bool
 ```
@@ -153,14 +153,14 @@ Map.with_capacity(100)
 
 map.len()
 map.is_empty()
-map.insert(key, value)  // Option[V] (old value)
-map.get(key)            // Option[&V]
-map.get_mut(key)        // Option[&mut V]
-map.remove(key)         // Option[V]
+map.insert(key, value)  // Maybe[V] (old value)
+map.get(key)            // Maybe[ref V]
+map.get_mut(key)        // Maybe[mut ref V]
+map.remove(key)         // Maybe[V]
 map.contains(key)       // Bool
-map.keys()              // Iterator[&K]
-map.values()            // Iterator[&V]
-map.entries()           // Iterator[(&K, &V)]
+map.keys()              // Iterable[ref K]
+map.values()            // Iterable[ref V]
+map.entries()           // Iterable[(ref K, ref V)]
 map.clear()
 ```
 
@@ -182,73 +182,74 @@ set.is_subset(other)
 set.is_superset(other)
 ```
 
-## 3. Option[T]
+## 3. Maybe[T]
 
 ```tml
-Some(value)
-None
+Just(value)
+Nothing
 
-opt.is_some()        // Bool
-opt.is_none()        // Bool
-opt.unwrap()         // T (panic if None)
+opt.is_just()        // Bool
+opt.is_nothing()     // Bool
+opt.unwrap()         // T (panic if Nothing)
 opt.unwrap_or(default)
 opt.unwrap_or_else(func)
-opt.expect(msg)      // T (panic with msg if None)
-opt.map(func)        // Option[U]
-opt.and_then(func)   // Option[U]
-opt.or(other)        // Option[T]
-opt.or_else(func)    // Option[T]
-opt.filter(func)     // Option[T]
-opt.ok_or(err)       // Result[T, E]
+opt.expect(msg)      // T (panic with msg if Nothing)
+opt.map(func)        // Maybe[U]
+opt.and_then(func)   // Maybe[U]
+opt.or(other)        // Maybe[T]
+opt.or_else(func)    // Maybe[T]
+opt.filter(func)     // Maybe[T]
+opt.to_outcome(err)  // Outcome[T, E]
 ```
 
-## 4. Result[T, E]
+## 4. Outcome[T, E]
 
 ```tml
-Ok(value)
-Err(error)
+Success(value)
+Failure(error)
 
-res.is_ok()          // Bool
-res.is_err()         // Bool
-res.unwrap()         // T (panic if Err)
-res.unwrap_err()     // E (panic if Ok)
+res.is_success()     // Bool
+res.is_failure()     // Bool
+res.unwrap()         // T (panic if Failure)
+res.unwrap_err()     // E (panic if Success)
 res.unwrap_or(default)
 res.expect(msg)
-res.map(func)        // Result[U, E]
-res.map_err(func)    // Result[T, F]
-res.and_then(func)   // Result[U, E]
-res.or(other)        // Result[T, E]
-res.or_else(func)    // Result[T, F]
-res.ok()             // Option[T]
-res.err()            // Option[E]
+res.map(func)        // Outcome[U, E]
+res.map_err(func)    // Outcome[T, F]
+res.and_then(func)   // Outcome[U, E]
+res.or(other)        // Outcome[T, E]
+res.or_else(func)    // Outcome[T, F]
+res.to_maybe()       // Maybe[T]
+res.err()            // Maybe[E]
 ```
 
 ## 5. Ranges
 
 ```tml
-0..10                // Range[I32] (0 to 9)
-0..=10               // RangeInclusive (0 to 10)
-..10                 // RangeTo
-10..                 // RangeFrom
-..                   // RangeFull
+0 to 10              // Range[I32] (0 to 9)
+0 through 10         // RangeInclusive (0 to 10)
 
 range.contains(5)    // Bool
 range.is_empty()     // Bool
 
-loop i in 0..10 {
+loop i in 0 to 10 {
     // i = 0, 1, 2, ..., 9
+}
+
+loop i in 1 through 5 {
+    // i = 1, 2, 3, 4, 5
 }
 ```
 
-## 6. Iterators
+## 6. Iterables
 
 ```tml
-trait Iterator {
+behavior Iterable {
     type Item
-    func next(this) -> Option[This.Item]
+    func next(this) -> Maybe[This.Item]
 }
 
-// Iterator methods
+// Iterable methods
 iter.count()
 iter.last()
 iter.nth(n)
@@ -257,7 +258,7 @@ iter.take(n)
 iter.step_by(n)
 iter.chain(other)
 iter.zip(other)
-iter.enumerate()     // Iterator[(U64, T)]
+iter.enumerate()     // Iterable[(U64, T)]
 iter.map(func)
 iter.filter(func)
 iter.filter_map(func)
@@ -269,10 +270,10 @@ iter.find(func)
 iter.position(func)
 iter.any(func)
 iter.all(func)
-iter.max()           // requires Ord
+iter.max()           // requires Ordered
 iter.min()
-iter.sum()           // requires Add
-iter.product()       // requires Mul
+iter.sum()           // requires Addable
+iter.product()       // requires Multipliable
 iter.collect()       // to List, Set, etc.
 ```
 
@@ -316,12 +317,12 @@ drop(value)          // explicitly destroys value
 forget(value)        // doesn't call destructor
 ```
 
-## 8. Fundamental Traits
+## 8. Fundamental Behaviors
 
-### 8.1 Eq
+### 8.1 Equal
 
 ```tml
-trait Eq {
+behavior Equal {
     func eq(this, other: This) -> Bool
     func ne(this, other: This) -> Bool {
         return not this.eq(other)
@@ -331,13 +332,13 @@ trait Eq {
 // Usage: a == b, a != b
 ```
 
-### 8.2 Ord
+### 8.2 Ordered
 
 ```tml
 type Ordering = Less | Equal | Greater
 
-trait Ord: Eq {
-    func cmp(this, other: This) -> Ordering
+behavior Ordered: Equal {
+    func compare(this, other: This) -> Ordering
 
     func lt(this, other: This) -> Bool
     func le(this, other: This) -> Bool
@@ -350,20 +351,20 @@ trait Ord: Eq {
 // Usage: a < b, a <= b, a > b, a >= b
 ```
 
-### 8.3 Clone
+### 8.3 Duplicate
 
 ```tml
-trait Clone {
-    func clone(this) -> This
+behavior Duplicate {
+    func duplicate(this) -> This
 }
 
-let copy = original.clone()
+let copy = original.duplicate()
 ```
 
 ### 8.4 Default
 
 ```tml
-trait Default {
+behavior Default {
     func default() -> This
 }
 
@@ -375,42 +376,42 @@ let l = List.default()   // []
 ### 8.5 Debug
 
 ```tml
-trait Debug {
+behavior Debug {
     func debug(this) -> String
 }
 
 print(value.debug())
 ```
 
-### 8.6 Hash
+### 8.6 Hashable
 
 ```tml
-trait Hash {
-    func hash(this, hasher: &mut Hasher)
+behavior Hashable {
+    func hash(this, hasher: mut ref Hasher)
 }
 
 // Required to use as key in Map/Set
 ```
 
-### 8.7 Add, Sub, Mul, Div
+### 8.7 Addable, Subtractable, Multipliable, Divisible
 
 ```tml
-trait Add[Rhs = This] {
+behavior Addable[Rhs = This] {
     type Output
     func add(this, rhs: Rhs) -> This.Output
 }
 
-// Similar for Sub, Mul, Div, Rem
+// Similar for Subtractable, Multipliable, Divisible, Remainder
 ```
 
 ### 8.8 From / Into
 
 ```tml
-trait From[T] {
+behavior From[T] {
     func from(value: T) -> This
 }
 
-trait Into[T] {
+behavior Into[T] {
     func into(this) -> T
 }
 

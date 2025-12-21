@@ -23,12 +23,12 @@ The fundamental trait for asynchronous computation.
 
 ```tml
 /// An asynchronous computation that may not have completed yet
-public trait Future {
+public behaviorFuture {
     /// The type of value produced on completion
     type Output
 
     /// Attempt to resolve the future to a value
-    func poll(mut this, cx: &mut Context) -> Poll[This.Output]
+    func poll(mut this, cx: mut ref Context) -> Poll[This.Output]
 }
 
 /// The result of polling a future
@@ -71,8 +71,8 @@ public type Context {
 
 extend Context {
     /// Returns a reference to the waker
-    public func waker(this) -> &Waker {
-        return &this.waker
+    public func waker(this) -> ref Waker {
+        return ref this.waker
     }
 
     /// Creates a new context from a waker
@@ -106,13 +106,13 @@ extend Waker {
     }
 }
 
-implement Clone for Waker {
+implement Duplicate for Waker {
     func clone(this) -> Waker {
         (this.vtable.clone)(this.data)
     }
 }
 
-implement Drop for Waker {
+implement Disposable for Waker {
     func drop(mut this) {
         (this.vtable.drop)(this.data)
     }
@@ -127,10 +127,10 @@ implement Drop for Waker {
 
 ```tml
 /// Async function declaration
-public async func fetch_data(url: String) -> Result[Data, Error] {
+public async func fetch_data(url: String) -> Outcome[Data, Error] {
     let response = http.get(url).await!
     let body = response.body().await!
-    return Ok(parse(body)!)
+    return Success(parse(body)!)
 }
 
 /// Async blocks
@@ -163,10 +163,10 @@ let data = fetch_data(url).await else default_data()
 ```tml
 /// Async runtime builder
 public type RuntimeBuilder {
-    worker_threads: Option[U64],
-    thread_name: Option[String],
-    on_thread_start: Option[func()],
-    on_thread_stop: Option[func()],
+    worker_threads: Maybe[U64],
+    thread_name: Maybe[String],
+    on_thread_start: Maybe[func()],
+    on_thread_stop: Maybe[func()],
     enable_io: Bool,
     enable_time: Bool,
 }
@@ -186,29 +186,29 @@ extend RuntimeBuilder {
 
     /// Sets the number of worker threads
     public func worker_threads(mut this, count: U64) -> RuntimeBuilder {
-        this.worker_threads = Some(count)
+        this.worker_threads = Just(count)
         return this
     }
 
     /// Sets the thread name prefix
     public func thread_name(mut this, name: String) -> RuntimeBuilder {
-        this.thread_name = Some(name)
+        this.thread_name = Just(name)
         return this
     }
 
     /// Sets callback for thread start
     public func on_thread_start(mut this, f: func()) -> RuntimeBuilder {
-        this.on_thread_start = Some(f)
+        this.on_thread_start = Just(f)
         return this
     }
 
     /// Builds a multi-threaded runtime
-    public func build(this) -> Result[Runtime, RuntimeError] {
+    public func build(this) -> Outcome[Runtime, RuntimeError] {
         Runtime.new(this)
     }
 
     /// Builds a single-threaded runtime
-    public func build_current_thread(this) -> Result[Runtime, RuntimeError] {
+    public func build_current_thread(this) -> Outcome[Runtime, RuntimeError] {
         Runtime.new_current_thread(this)
     }
 }
@@ -220,10 +220,10 @@ public type Runtime {
 
 extend Runtime {
     /// Creates a new multi-threaded runtime
-    public func new(config: RuntimeBuilder) -> Result[Runtime, RuntimeError]
+    public func new(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
 
     /// Creates a new single-threaded runtime
-    public func new_current_thread(config: RuntimeBuilder) -> Result[Runtime, RuntimeError]
+    public func new_current_thread(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
 
     /// Blocks on a future
     public func block_on[F: Future](this, future: F) -> F.Output {
@@ -262,7 +262,7 @@ extend RuntimeHandle {
     public func current() -> RuntimeHandle
 
     /// Tries to get the current runtime handle
-    public func try_current() -> Option[RuntimeHandle]
+    public func try_current() -> Maybe[RuntimeHandle]
 
     /// Spawns a task
     public func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
@@ -306,7 +306,7 @@ public type JoinHandle[T] {
 
 extend JoinHandle[T] {
     /// Awaits the task completion
-    public async func await(this) -> Result[T, JoinError]
+    public async func await(this) -> Outcome[T, JoinError]
 
     /// Aborts the task
     public func abort(this)
@@ -333,13 +333,13 @@ public func spawn_blocking[F, R](f: F) -> JoinHandle[R]
 }
 
 // Example:
-async func process_file(path: String) -> Result[Data, Error] {
+async func process_file(path: String) -> Outcome[Data, Error] {
     // Run blocking I/O on thread pool
     let content = spawn_blocking(do() {
         std.fs.read_to_string(path)
     }).await!!
 
-    return Ok(parse(content)!)
+    return Success(parse(content)!)
 }
 ```
 
@@ -412,13 +412,13 @@ public macro select! {
 
 ```tml
 /// Joins futures that return Results, short-circuiting on first error
-public async func try_join[A, B, E](a: A, b: B) -> Result[(A.Output.Ok, B.Output.Ok), E]
+public async func try_join[A, B, E](a: A, b: B) -> Outcome[(A.Output.Ok, B.Output.Ok), E]
     where
-        A: Future[Output = Result[_, E]],
-        B: Future[Output = Result[_, E]]
+        A: Future[Output = Outcome[_, E]],
+        B: Future[Output = Outcome[_, E]]
 
-public async func try_join_all[F, T, E](futures: Vec[F]) -> Result[Vec[T], E]
-    where F: Future[Output = Result[T, E]]
+public async func try_join_all[F, T, E](futures: Vec[F]) -> Outcome[Vec[T], E]
+    where F: Future[Output = Outcome[T, E]]
 ```
 
 ### race
@@ -457,7 +457,7 @@ public type Sleep {
 implement Future for Sleep {
     type Output = Unit
 
-    func poll(mut this, cx: &mut Context) -> Poll[Unit] {
+    func poll(mut this, cx: mut ref Context) -> Poll[Unit] {
         if Instant.now() >= this.deadline then {
             return Ready(())
         }
@@ -472,10 +472,10 @@ implement Future for Sleep {
 
 ```tml
 /// Wraps a future with a timeout
-public async func timeout[F: Future](duration: Duration, future: F) -> Result[F.Output, TimeoutError] {
+public async func timeout[F: Future](duration: Duration, future: F) -> Outcome[F.Output, TimeoutError] {
     select! {
-        result = future => Ok(result),
-        _ = sleep(duration) => Err(TimeoutError),
+        result = future => Success(result),
+        _ = sleep(duration) => Failure(TimeoutError),
     }
 }
 
@@ -495,18 +495,18 @@ public type Timeout[F: Future] {
 }
 
 implement Future for Timeout[F] where F: Future {
-    type Output = Result[F.Output, TimeoutError]
+    type Output = Outcome[F.Output, TimeoutError]
 
-    func poll(mut this, cx: &mut Context) -> Poll[Result[F.Output, TimeoutError]] {
+    func poll(mut this, cx: mut ref Context) -> Poll[Outcome[F.Output, TimeoutError]] {
         // First check if inner future is ready
         when this.future.poll(cx) {
-            Ready(value) -> return Ready(Ok(value)),
+            Ready(value) -> return Ready(Success(value)),
             Pending -> {},
         }
 
         // Check timeout
         if Instant.now() >= this.deadline then {
-            return Ready(Err(TimeoutError))
+            return Ready(Failure(TimeoutError))
         }
 
         // Register timer
@@ -559,37 +559,37 @@ extend Interval {
 
 ```tml
 /// Async reading from a source
-public trait AsyncRead {
+public behaviorAsyncRead {
     /// Attempts to read data into buf
     func poll_read(
         mut this,
-        cx: &mut Context,
-        buf: &mut [U8],
-    ) -> Poll[Result[U64, IoError]]
+        cx: mut ref Context,
+        buf: mut ref [U8],
+    ) -> Poll[Outcome[U64, IoError]]
 }
 
 /// Extension methods for AsyncRead
 extend AsyncRead {
     /// Reads some bytes
-    public async func read(mut this, buf: &mut [U8]) -> Result[U64, IoError] {
+    public async func read(mut this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         poll_fn(do(cx) this.poll_read(cx, buf)).await
     }
 
     /// Reads exactly n bytes
-    public async func read_exact(mut this, buf: &mut [U8]) -> Result[Unit, IoError] {
+    public async func read_exact(mut this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
         var filled: U64 = 0
         loop filled < buf.len() {
             let n = this.read(&mut buf[filled..]).await!
             if n == 0 then {
-                return Err(IoError.UnexpectedEof)
+                return Failure(IoError.UnexpectedEof)
             }
             filled = filled + n
         }
-        return Ok(())
+        return Success(())
     }
 
     /// Reads to end of stream
-    public async func read_to_end(mut this, buf: &mut Vec[U8]) -> Result[U64, IoError] {
+    public async func read_to_end(mut this, buf: mut ref Vec[U8]) -> Outcome[U64, IoError] {
         var read: U64 = 0
         var chunk = [0u8; 4096]
         loop {
@@ -598,16 +598,16 @@ extend AsyncRead {
             buf.extend_from_slice(&chunk[..n])
             read = read + n
         }
-        return Ok(read)
+        return Success(read)
     }
 
     /// Reads to string
-    public async func read_to_string(mut this, buf: &mut String) -> Result[U64, IoError] {
+    public async func read_to_string(mut this, buf: mut ref String) -> Outcome[U64, IoError] {
         var bytes = Vec.new()
         let n = this.read_to_end(&mut bytes).await!
         let s = String.from_utf8(bytes).map_err(|_| IoError.InvalidData)!
-        buf.push_str(&s)
-        return Ok(n)
+        buf.push_str(ref s)
+        return Success(n)
     }
 }
 ```
@@ -616,54 +616,54 @@ extend AsyncRead {
 
 ```tml
 /// Async writing to a sink
-public trait AsyncWrite {
+public behaviorAsyncWrite {
     /// Attempts to write data from buf
     func poll_write(
         mut this,
-        cx: &mut Context,
-        buf: &[U8],
-    ) -> Poll[Result[U64, IoError]]
+        cx: mut ref Context,
+        buf: ref [U8],
+    ) -> Poll[Outcome[U64, IoError]]
 
     /// Attempts to flush the output
     func poll_flush(
         mut this,
-        cx: &mut Context,
-    ) -> Poll[Result[Unit, IoError]]
+        cx: mut ref Context,
+    ) -> Poll[Outcome[Unit, IoError]]
 
     /// Attempts to close the writer
     func poll_shutdown(
         mut this,
-        cx: &mut Context,
-    ) -> Poll[Result[Unit, IoError]]
+        cx: mut ref Context,
+    ) -> Poll[Outcome[Unit, IoError]]
 }
 
 /// Extension methods for AsyncWrite
 extend AsyncWrite {
     /// Writes some bytes
-    public async func write(mut this, buf: &[U8]) -> Result[U64, IoError] {
+    public async func write(mut this, buf: ref [U8]) -> Outcome[U64, IoError] {
         poll_fn(do(cx) this.poll_write(cx, buf)).await
     }
 
     /// Writes all bytes
-    public async func write_all(mut this, buf: &[U8]) -> Result[Unit, IoError] {
+    public async func write_all(mut this, buf: ref [U8]) -> Outcome[Unit, IoError] {
         var written: U64 = 0
         loop written < buf.len() {
             let n = this.write(&buf[written..]).await!
             if n == 0 then {
-                return Err(IoError.WriteZero)
+                return Failure(IoError.WriteZero)
             }
             written = written + n
         }
-        return Ok(())
+        return Success(())
     }
 
     /// Flushes the output
-    public async func flush(mut this) -> Result[Unit, IoError] {
+    public async func flush(mut this) -> Outcome[Unit, IoError] {
         poll_fn(do(cx) this.poll_flush(cx)).await
     }
 
     /// Shuts down the writer
-    public async func shutdown(mut this) -> Result[Unit, IoError] {
+    public async func shutdown(mut this) -> Outcome[Unit, IoError] {
         poll_fn(do(cx) this.poll_shutdown(cx)).await
     }
 }
@@ -673,22 +673,22 @@ extend AsyncWrite {
 
 ```tml
 /// Async iterator (stream)
-public trait AsyncIterator {
+public behaviorAsyncIterator {
     type Item
 
     /// Polls for the next item
-    func poll_next(mut this, cx: &mut Context) -> Poll[Option[This.Item]]
+    func poll_next(mut this, cx: mut ref Context) -> Poll[Maybe[This.Item]]
 
     /// Size hint
-    func size_hint(this) -> (U64, Option[U64]) {
-        return (0, None)
+    func size_hint(this) -> (U64, Maybe[U64]) {
+        return (0, Nothing)
     }
 }
 
 /// Extension methods for AsyncIterator
 extend AsyncIterator {
     /// Gets the next item
-    public async func next(mut this) -> Option[This.Item] {
+    public async func next(mut this) -> Maybe[This.Item] {
         poll_fn(do(cx) this.poll_next(cx)).await
     }
 
@@ -707,7 +707,7 @@ extend AsyncIterator {
     }
 
     /// Filters items
-    public func filter(this, f: func(&This.Item) -> Bool) -> Filter[This] {
+    public func filter(this, f: func(ref This.Item) -> Bool) -> Filter[This] {
         Filter { stream: this, predicate: f }
     }
 
@@ -734,7 +734,7 @@ extend AsyncIterator {
 ```tml
 /// Creates a future from a poll function
 public func poll_fn[T, F](f: F) -> PollFn[F]
-    where F: FnMut(&mut Context) -> Poll[T]
+    where F: FnMut(mut ref Context) -> Poll[T]
 {
     return PollFn { f: f }
 }
@@ -744,11 +744,11 @@ public type PollFn[F] {
 }
 
 implement Future for PollFn[F]
-    where F: FnMut(&mut Context) -> Poll[T]
+    where F: FnMut(mut ref Context) -> Poll[T]
 {
     type Output = T
 
-    func poll(mut this, cx: &mut Context) -> Poll[T] {
+    func poll(mut this, cx: mut ref Context) -> Poll[T] {
         (this.f)(cx)
     }
 }
@@ -768,7 +768,7 @@ public macro ready! {
 }
 
 // Example:
-func poll_read(mut this, cx: &mut Context, buf: &mut [U8]) -> Poll[Result[U64, Error]] {
+func poll_read(mut this, cx: mut ref Context, buf: mut ref [U8]) -> Poll[Outcome[U64, Error]] {
     let data = ready!(this.inner.poll_read(cx))!
     // ...
 }
@@ -789,7 +789,7 @@ type YieldNow {
 implement Future for YieldNow {
     type Output = Unit
 
-    func poll(mut this, cx: &mut Context) -> Poll[Unit] {
+    func poll(mut this, cx: mut ref Context) -> Poll[Unit] {
         if this.yielded then {
             return Ready(())
         }
@@ -844,27 +844,27 @@ import std.async.{spawn, Runtime}
 import std.net.TcpListener
 import std.http.{Request, Response}
 
-async func handle_connection(stream: TcpStream) -> Result[Unit, Error] {
-    let request = Request.parse(&mut stream).await!
+async func handle_connection(stream: TcpStream) -> Outcome[Unit, Error] {
+    let request = Request.parse(mut ref stream).await!
 
     let response = when request.path() {
         "/" -> Response.ok().body("Hello, World!"),
-        "/api" -> Response.ok().json(&get_data().await!),
+        "/api" -> Response.ok().json(ref get_data().await!),
         _ -> Response.not_found(),
     }
 
-    response.write_to(&mut stream).await!
-    return Ok(())
+    response.write_to(mut ref stream).await!
+    return Success(())
 }
 
-async func server_main() -> Result[Unit, Error] {
+async func server_main() -> Outcome[Unit, Error] {
     let listener = TcpListener.bind("127.0.0.1:8080").await!
     print("Listening on :8080")
 
     loop {
         let (stream, addr) = listener.accept().await!
         spawn(async {
-            if let Err(e) = handle_connection(stream).await then {
+            if let Failure(e) = handle_connection(stream).await then {
                 print("Error handling " + addr.to_string() + ": " + e.to_string())
             }
         })
@@ -893,7 +893,7 @@ async func process_one(item: Item) -> Result {
     // Some async processing
     let data = fetch_data(item.id).await!
     let transformed = transform(data).await!
-    return Ok(transformed)
+    return Success(transformed)
 }
 ```
 
@@ -907,18 +907,18 @@ async func fetch_with_retry[T](
     url: String,
     max_retries: U64,
     timeout_duration: Duration,
-) -> Result[T, Error] {
+) -> Outcome[T, Error] {
     var attempts: U64 = 0
 
     loop attempts < max_retries {
         attempts = attempts + 1
 
         when timeout(timeout_duration, fetch(url)).await {
-            Ok(Ok(data)) -> return Ok(data),
-            Ok(Err(e)) -> {
+            Success(Success(data)) -> return Success(data),
+            Success(Failure(e)) -> {
                 print("Attempt " + attempts.to_string() + " failed: " + e.to_string())
             },
-            Err(_) -> {
+            Failure(_) -> {
                 print("Attempt " + attempts.to_string() + " timed out")
             },
         }
@@ -927,7 +927,7 @@ async func fetch_with_retry[T](
         sleep(Duration.from_millis(100 * (1 << attempts))).await
     }
 
-    return Err(Error.MaxRetriesExceeded)
+    return Failure(Error.MaxRetriesExceeded)
 }
 ```
 

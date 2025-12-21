@@ -9,12 +9,12 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (28 reserved words)
+## 2. Keywords (32 reserved words)
 
 ```
 // Declarations
 module    import    public    private
-func      type      trait     extend
+func      type      behavior  extend
 let       var       const
 
 // Control flow
@@ -22,27 +22,26 @@ if        then      else      when
 loop      in        while     break
 continue  return    catch
 
-// Logical operators
+// Logical operators (words, not symbols)
 and       or        not
 
 // Values and references
 true      false     this      This
+ref       lowlevel
+
+// Range keywords
+to        through
 ```
 
-### Differences from Rust
+### Why Words Over Symbols
 
-| Rust | TML | Reason |
-|------|-----|--------|
-| `fn` | `func` | More explicit |
-| `impl` | `extend` | Reads naturally |
-| `mod` | `module` | Unambiguous |
-| `use` | `import` | Universal |
-| `pub` | `public` | Complete |
-| `mut` | (via `var`) | Simplified |
-| `match` | `when` | No conflict |
-| `self`/`Self` | `this`/`This` | Universal |
-| `&&`/`\|\|`/`!` | `and`/`or`/`not` | Unambiguous |
-| `for` | `loop in` | Unified |
+| Symbol-based | TML (Word-based) | Reason |
+|--------------|------------------|--------|
+| `&&` `\|\|` `!` | `and` `or` `not` | Natural language, unambiguous |
+| `&T` `&mut T` | `ref T` `mut ref T` | Clear meaning, no symbol overload |
+| `..` `..=` | `to` `through` | Reads like English |
+| `unsafe` | `lowlevel` | Neutral, descriptive |
+| `trait` | `behavior` | Describes what it defines |
 
 ## 3. Identifiers
 
@@ -59,7 +58,7 @@ Digit  = '0'..'9'
 | Variables | snake_case | `my_value` |
 | Functions | snake_case | `calculate_total` |
 | Types | PascalCase | `HttpClient` |
-| Traits | PascalCase | `Comparable` |
+| Behaviors | PascalCase | `Comparable` |
 | Constants | SCREAMING_CASE | `MAX_SIZE` |
 | Modules | snake_case | `http_client` |
 
@@ -210,20 +209,20 @@ Char = "'" (EscapeSeq | [^'\\\n]) "'"
 | `<=` | Less or equal |
 | `>=` | Greater or equal |
 
-### 5.3 Logical (Keywords)
+### 5.3 Logical (Keywords Only)
 
 | Keyword | Meaning |
 |---------|---------|
-| `and` | Logical AND |
-| `or` | Logical OR |
-| `not` | Negation |
+| `and` | Logical AND (short-circuit) |
+| `or` | Logical OR (short-circuit) |
+| `not` | Logical negation |
 
 **Why keywords?**
 ```tml
-// TML - clear
+// TML - reads like English
 if a and b or not c then ...
 
-// Rust - && and || look like bitwise
+// Symbol-based languages - cryptic
 if a && b || !c { ... }
 ```
 
@@ -231,12 +230,14 @@ if a && b || !c { ... }
 
 | Operator | Meaning |
 |----------|---------|
-| `&` | AND |
-| `\|` | OR |
-| `^` | XOR |
-| `~` | NOT |
+| `&` | Bitwise AND |
+| `\|` | Bitwise OR |
+| `^` | Bitwise XOR |
+| `~` | Bitwise NOT |
 | `<<` | Shift left |
 | `>>` | Shift right |
+
+**Note:** `&` is **only** bitwise AND in TML. References use the `ref` keyword.
 
 ### 5.5 Assignment
 
@@ -248,9 +249,9 @@ if a && b || !c { ... }
 | `*=` | Mul-assign |
 | `/=` | Div-assign |
 | `%=` | Mod-assign |
-| `&=` | And-assign |
-| `\|=` | Or-assign |
-| `^=` | Xor-assign |
+| `&=` | Bitwise And-assign |
+| `\|=` | Bitwise Or-assign |
+| `^=` | Bitwise Xor-assign |
 | `<<=` | Shl-assign |
 | `>>=` | Shr-assign |
 
@@ -258,14 +259,72 @@ if a && b || !c { ... }
 
 | Operator | Meaning |
 |----------|---------|
-| `->` | Return type |
-| `=>` | (reserved) |
-| `..` | Exclusive range |
-| `..=` | Inclusive range |
+| `->` | Return type arrow |
 | `!` | Error propagation |
-| `&` | Reference |
+| `?` | Optional chaining (reserved) |
 
-## 6. Punctuation
+### 5.7 Range Keywords
+
+| Keyword | Meaning | Example |
+|---------|---------|---------|
+| `to` | Exclusive range | `0 to 10` = 0, 1, 2, ... 9 |
+| `through` | Inclusive range | `0 through 10` = 0, 1, 2, ... 10 |
+
+```tml
+// Ranges in loops
+loop i in 0 to 10 {
+    print(i)  // 0 through 9
+}
+
+loop i in 1 through 5 {
+    print(i)  // 1 through 5
+}
+
+// Ranges in slices
+let first_five = items[0 to 5]
+let all_from_three = items[3 to items.len()]
+```
+
+## 6. Type Modifiers
+
+### 6.1 Reference Types
+
+| Modifier | Meaning | Example |
+|----------|---------|---------|
+| `ref T` | Immutable reference | `ref String` |
+| `mut ref T` | Mutable reference | `mut ref String` |
+| `ptr T` | Raw pointer (lowlevel) | `ptr U8` |
+| `mut ptr T` | Mutable raw pointer | `mut ptr U8` |
+
+**Examples:**
+```tml
+// Immutable reference
+func length(s: ref String) -> U64 {
+    return s.len()
+}
+
+// Mutable reference
+func append(s: mut ref String, suffix: String) {
+    s.push(suffix)
+}
+
+// Raw pointers (lowlevel only)
+@lowlevel
+func read_byte(p: ptr U8) -> U8 {
+    return p.read()
+}
+```
+
+**Why `ref` instead of `&`?**
+```tml
+// TML - clear and unambiguous
+func process(data: ref String) -> ref String
+
+// Symbol-based - & has multiple meanings
+fn process(data: &String) -> &String
+```
+
+## 7. Punctuation
 
 | Symbol | Use |
 |--------|-----|
@@ -277,24 +336,23 @@ if a && b || !c { ... }
 | `:` | Type annotation |
 | `::` | Path separator |
 | `.` | Member access |
-| `@` | Stable ID |
-| `#[` | Annotation start |
+| `@` | Directive prefix / Stable ID |
 
 ### Why `[]` for Generics?
 
 ```tml
 // TML - no ambiguity
-List[Int]
+List[I32]
 Map[String, Value]
 a < b   // always comparison
 
-// Rust - ambiguous
+// Symbol-based - ambiguous
 Vec<i32>
 HashMap<String, Value>
 a < b   // comparison or generic?
 ```
 
-## 7. Stable IDs
+## 8. Stable IDs
 
 ```ebnf
 StableId = '@' HexDigit{8}
@@ -326,45 +384,97 @@ IDs are:
 - Immutable after creation
 - Used for references in patches/diffs
 
-## 8. Annotations
+## 9. Directives
+
+Directives use `@` prefix with natural language syntax.
 
 ```ebnf
-Annotation     = '#[' AnnotationBody ']'
-AnnotationBody = Ident AnnotationArgs?
-AnnotationArgs = '(' (AnnotationArg (',' AnnotationArg)*)? ')'
-AnnotationArg  = Ident ('=' Literal)?
+Directive     = '@' DirectiveName DirectiveArgs?
+DirectiveName = Ident
+DirectiveArgs = '(' (DirectiveArg (',' DirectiveArg)*)? ')'
+DirectiveArg  = Ident (':' Value)?
 ```
 
 **Examples:**
 ```tml
-#[test]
-#[inline]
-#[deprecated(reason = "use new_func")]
-#[cfg(target = "wasm")]
-#[derive(Eq, Hash)]
+@test
+@when(os: linux)
+@auto(debug, duplicate, equal)
+@deprecated("Use new_func instead")
+@hint(inline: always)
+@lowlevel
 ```
 
-**Builtin Annotations:**
+### 9.1 Builtin Directives
 
-| Annotation | Meaning |
-|------------|---------|
-| `#[test]` | Marks test function |
-| `#[bench]` | Marks benchmark |
-| `#[inline]` | Suggests inlining |
-| `#[cold]` | Unlikely path |
-| `#[deprecated]` | Marks as obsolete |
-| `#[cfg(...)]` | Conditional compilation |
-| `#[derive(...)]` | Derives traits |
-| `#[allow(...)]` | Suppresses warning |
-| `#[deny(...)]` | Turns warning into error |
+| Directive | Meaning |
+|-----------|---------|
+| `@test` | Marks test function |
+| `@test(should_fail)` | Test expected to fail |
+| `@benchmark` | Marks benchmark function |
+| `@when(...)` | Conditional compilation |
+| `@unless(...)` | Negative conditional |
+| `@auto(...)` | Auto-generate implementations |
+| `@hint(...)` | Compiler optimization hints |
+| `@deprecated(...)` | Marks as obsolete |
+| `@lowlevel` | Allows low-level operations |
+| `@export` | Public API marker |
+| `@doc(...)` | Documentation |
 
-## 9. Comments
+### 9.2 Conditional Directives
+
+```tml
+@when(os: linux)
+func linux_only() { ... }
+
+@when(os: windows)
+func windows_only() { ... }
+
+@when(arch: x86_64)
+func x64_optimized() { ... }
+
+@when(feature: async)
+func async_version() { ... }
+
+@when(debug)
+func debug_only() { ... }
+
+@unless(os: windows)
+func not_windows() { ... }
+```
+
+### 9.3 Auto-Generation Directives
+
+```tml
+@auto(debug)              // Generate debug representation
+@auto(duplicate)          // Generate .duplicate() method
+@auto(equal)              // Generate equality comparison
+@auto(order)              // Generate ordering
+@auto(hash)               // Generate hashing
+@auto(format)             // Generate string formatting
+
+@auto(debug, duplicate, equal)  // Multiple at once
+type Point { x: F64, y: F64 }
+```
+
+### 9.4 Optimization Hints
+
+```tml
+@hint(inline)             // Suggest inlining
+@hint(inline: always)     // Force inlining
+@hint(inline: never)      // Prevent inlining
+@hint(cold)               // Unlikely code path
+@hint(hot)                // Hot code path
+```
+
+## 10. Comments
 
 ```ebnf
 LineComment  = '//' [^\n]* '\n'
 BlockComment = '/*' .* '*/'
 DocComment   = '///' [^\n]* '\n'
 ModuleDoc    = '//!' [^\n]* '\n'
+AIComment    = '// @ai:' AIDirective
 ```
 
 **Examples:**
@@ -382,13 +492,52 @@ func example() { }
 module utils
 ```
 
-## 10. Whitespace
+### 10.1 AI Context Comments
+
+AI context comments provide hints to LLMs that are not captured in types or contracts.
+
+```ebnf
+AIComment = '// @ai:' Directive ':' Content
+Directive = 'context' | 'intent' | 'invariant' | 'warning' | 'example'
+Content   = [^\n]*
+```
+
+**Standard Directives:**
+
+| Directive | Purpose |
+|-----------|---------|
+| `@ai:context` | General context about usage |
+| `@ai:intent` | High-level purpose (security, performance) |
+| `@ai:invariant` | Assumptions callers must maintain |
+| `@ai:warning` | Caveats or deprecation notices |
+| `@ai:example` | Example usage for generation |
+
+**Examples:**
+
+```tml
+// @ai:context: Hot loop, optimize for speed
+func process_batch(items: List[Data]) -> List[Outcome[Data, Error]] {
+    // ...
+}
+
+// @ai:intent: User authentication - security critical
+func validate_token(token: String) -> Outcome[User, AuthError] {
+    // ...
+}
+
+// @ai:invariant: items is always sorted before this call
+func binary_search[T: Ordered](items: ref List[T], target: T) -> Maybe[U64] {
+    // ...
+}
+```
+
+## 11. Whitespace
 
 - Spaces and newlines ignored between tokens
 - No indentation significance (unlike Python)
 - Newlines significant only in strings
 
-## 11. Precedence Table
+## 12. Precedence Table
 
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
@@ -403,43 +552,47 @@ module utils
 | 9 | `+` `-` | Left |
 | 10 | `*` `/` `%` | Left |
 | 11 | `**` | Right |
-| 12 | Unary `-` `~` `&` | Unary |
+| 12 | Unary `-` `~` | Unary |
 | 13 (highest) | `.` `()` `[]` | Left |
 
-## 12. Tokenization Example
+## 13. Tokenization Example
 
 **Source:**
 ```tml
-func add[T: Numeric](a: T, b: T) -> T {
-    return a + b
+func first[T](items: ref List[T]) -> Maybe[T] {
+    return items.get(0)
 }
 ```
 
 **Tokens:**
 ```
 KEYWORD(func)
-IDENT(add)
+IDENT(first)
 LBRACKET
 IDENT(T)
-COLON
-IDENT(Numeric)
 RBRACKET
 LPAREN
-IDENT(a)
+IDENT(items)
 COLON
+KEYWORD(ref)
+IDENT(List)
+LBRACKET
 IDENT(T)
-COMMA
-IDENT(b)
-COLON
-IDENT(T)
+RBRACKET
 RPAREN
 ARROW
+IDENT(Maybe)
+LBRACKET
 IDENT(T)
+RBRACKET
 LBRACE
 KEYWORD(return)
-IDENT(a)
-PLUS
-IDENT(b)
+IDENT(items)
+DOT
+IDENT(get)
+LPAREN
+INT(0)
+RPAREN
 RBRACE
 ```
 

@@ -127,7 +127,7 @@ private func generate_password() -> String {
 // Public type, private fields
 public type Handle {
     private id: U64,
-    private data: *void,
+    private data: ptr Unit,
 }
 
 // Only module functions can create/access
@@ -239,8 +239,8 @@ clap = "4.0"
 std
 ├── prelude          # auto-imported
 ├── core             # fundamental types
-│   ├── option
-│   ├── result
+│   ├── maybe
+│   ├── outcome
 │   └── primitives
 ├── collections
 │   ├── list
@@ -272,45 +272,45 @@ Auto-imported in every module:
 import std.prelude.*
 
 // Includes:
-// - Option, Some, None
-// - Result, Ok, Err
+// - Maybe, Just, Nothing
+// - Outcome, Success, Failure
 // - Bool, true, false
 // - String, List, Map
 // - print, panic, assert
-// - Common traits: Eq, Ord, Clone, Debug
+// - Common behaviors: Equal, Ordered, Duplicate, Debug
 ```
 
 ## 7. Conditional Compilation
 
-### 7.1 cfg Attribute
+### 7.1 @when Directive
 
 ```tml
-#[cfg(target = "wasm32")]
+@when(target: wasm32)
 func wasm_specific() {
     // only compiled for wasm
 }
 
-#[cfg(feature = "async")]
+@when(feature: async)
 func async_version() {
     // only if feature "async" is active
 }
 
-#[cfg(debug)]
+@when(debug)
 func debug_only() {
     // only in debug builds
 }
 ```
 
-### 7.2 cfg in Module
+### 7.2 @when in Module
 
 ```tml
-#[cfg(target = "windows")]
+@when(target: windows)
 module platform {
     import win32.*
     // ...
 }
 
-#[cfg(target = "linux")]
+@when(target: linux)
 module platform {
     import posix.*
     // ...
@@ -400,14 +400,13 @@ public func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-#[test]
+@test
 func test_add() {
     assert_eq(add(2, 3), 5)
     assert_eq(add(-1, 1), 0)
 }
 
-#[test]
-#[should_panic]
+@test(should_fail)
 func test_overflow() {
     add(I32.MAX, 1)  // should panic in debug
 }
@@ -420,7 +419,7 @@ func test_overflow() {
 
 import mylib.math.*
 
-#[test]
+@test
 func test_complex_calculation() {
     let result = complex_math(42)
     assert(result > 0)

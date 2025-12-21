@@ -76,10 +76,10 @@ extend Duration {
     public func saturating_add(this, other: Duration) -> Duration
     public func saturating_sub(this, other: Duration) -> Duration
     public func saturating_mul(this, n: I64) -> Duration
-    public func checked_add(this, other: Duration) -> Option[Duration]
-    public func checked_sub(this, other: Duration) -> Option[Duration]
-    public func checked_mul(this, n: I64) -> Option[Duration]
-    public func checked_div(this, n: I64) -> Option[Duration]
+    public func checked_add(this, other: Duration) -> Maybe[Duration]
+    public func checked_sub(this, other: Duration) -> Maybe[Duration]
+    public func checked_mul(this, n: I64) -> Maybe[Duration]
+    public func checked_div(this, n: I64) -> Maybe[Duration]
 }
 
 implement Add for Duration {
@@ -144,10 +144,10 @@ extend Instant {
     }
 
     /// Adds a duration to this instant
-    public func checked_add(this, duration: Duration) -> Option[Instant]
+    public func checked_add(this, duration: Duration) -> Maybe[Instant]
 
     /// Subtracts a duration from this instant
-    public func checked_sub(this, duration: Duration) -> Option[Instant]
+    public func checked_sub(this, duration: Duration) -> Maybe[Instant]
 }
 
 implement Add[Duration] for Instant {
@@ -182,9 +182,9 @@ public type Date {
 
 extend Date {
     /// Creates a date from year, month, day
-    public func new(year: I32, month: U8, day: U8) -> Option[Date] {
-        if not Date.is_valid(year, month, day) then return None
-        return Some(Date { year, month, day })
+    public func new(year: I32, month: U8, day: U8) -> Maybe[Date] {
+        if not Date.is_valid(year, month, day) then return Nothing
+        return Just(Date { year, month, day })
     }
 
     /// Creates a date, panicking on invalid input
@@ -201,10 +201,10 @@ extend Date {
         caps: [io.time]
 
     /// Creates a date from ordinal day of year
-    public func from_ordinal(year: I32, day: U16) -> Option[Date]
+    public func from_ordinal(year: I32, day: U16) -> Maybe[Date]
 
     /// Creates a date from ISO week date
-    public func from_iso_week(year: I32, week: U8, weekday: Weekday) -> Option[Date]
+    public func from_iso_week(year: I32, week: U8, weekday: Weekday) -> Maybe[Date]
 
     /// Creates a date from Unix timestamp (days since 1970-01-01)
     public func from_unix_days(days: I64) -> Date
@@ -265,14 +265,14 @@ extend Date {
     }
 
     // Formatting
-    public func format(this, fmt: &String) -> String
+    public func format(this, fmt: ref String) -> String
     public func to_iso_string(this) -> String {
         this.format("%Y-%m-%d")
     }
 
     // Parsing
-    public func parse(s: &String, fmt: &String) -> Result[Date, ParseError]
-    public func parse_iso(s: &String) -> Result[Date, ParseError] {
+    public func parse(s: ref String, fmt: ref String) -> Outcome[Date, ParseError]
+    public func parse_iso(s: ref String) -> Outcome[Date, ParseError] {
         Date.parse(s, "%Y-%m-%d")
     }
 }
@@ -300,10 +300,10 @@ public type Weekday = Monday | Tuesday | Wednesday | Thursday | Friday | Saturda
 
 extend Weekday {
     /// Returns the weekday from ISO number (1 = Monday, 7 = Sunday)
-    public func from_iso(n: U8) -> Option[Weekday]
+    public func from_iso(n: U8) -> Maybe[Weekday]
 
     /// Returns the weekday from Sunday-based number (0 = Sunday, 6 = Saturday)
-    public func from_sunday_based(n: U8) -> Option[Weekday]
+    public func from_sunday_based(n: U8) -> Maybe[Weekday]
 
     /// Returns the ISO number (1..7)
     public func iso_number(this) -> U8
@@ -334,7 +334,7 @@ public type Month = January | February | March | April | May | June |
 
 extend Month {
     /// Returns the month from number (1..12)
-    public func from_number(n: U8) -> Option[Month]
+    public func from_number(n: U8) -> Maybe[Month]
 
     /// Returns the month number (1..12)
     public func number(this) -> U8
@@ -367,12 +367,12 @@ public type Time {
 
 extend Time {
     /// Creates a time from hours, minutes, seconds
-    public func new(hour: U8, minute: U8, second: U8) -> Option[Time] {
+    public func new(hour: U8, minute: U8, second: U8) -> Maybe[Time] {
         Time.new_nano(hour, minute, second, 0)
     }
 
     /// Creates a time with nanoseconds
-    public func new_nano(hour: U8, minute: U8, second: U8, nano: U32) -> Option[Time]
+    public func new_nano(hour: U8, minute: U8, second: U8, nano: U32) -> Maybe[Time]
 
     /// Creates a time, panicking on invalid input
     public func hms(hour: U8, minute: U8, second: U8) -> Time
@@ -392,10 +392,10 @@ extend Time {
         caps: [io.time]
 
     /// Creates a time from seconds since midnight
-    public func from_secs(secs: U32) -> Option[Time]
+    public func from_secs(secs: U32) -> Maybe[Time]
 
     /// Creates a time from nanoseconds since midnight
-    public func from_nanos(nanos: U64) -> Option[Time]
+    public func from_nanos(nanos: U64) -> Maybe[Time]
 
     // Accessors
     public func hour(this) -> U8 { this.hour }
@@ -421,13 +421,13 @@ extend Time {
     public func until(this, other: Time) -> Duration
 
     // Formatting
-    public func format(this, fmt: &String) -> String
+    public func format(this, fmt: ref String) -> String
     public func to_iso_string(this) -> String {
         this.format("%H:%M:%S")
     }
 
     // Parsing
-    public func parse(s: &String, fmt: &String) -> Result[Time, ParseError]
+    public func parse(s: ref String, fmt: ref String) -> Outcome[Time, ParseError]
 }
 ```
 
@@ -442,7 +442,7 @@ Combined date and time with optional timezone.
 public type DateTime {
     date: Date,
     time: Time,
-    offset: Option[UtcOffset],
+    offset: Maybe[UtcOffset],
 }
 
 extend DateTime {
@@ -453,7 +453,7 @@ extend DateTime {
 
     /// Creates a DateTime with UTC offset
     public func with_offset(date: Date, time: Time, offset: UtcOffset) -> DateTime {
-        DateTime { date, time, offset: Some(offset) }
+        DateTime { date, time, offset: Just(offset) }
     }
 
     /// Returns the current UTC datetime
@@ -476,7 +476,7 @@ extend DateTime {
     // Accessors
     public func date(this) -> Date { this.date }
     public func time(this) -> Time { this.time }
-    public func offset(this) -> Option[UtcOffset] { this.offset }
+    public func offset(this) -> Maybe[UtcOffset] { this.offset }
 
     public func year(this) -> I32 { this.date.year }
     public func month(this) -> U8 { this.date.month }
@@ -501,7 +501,7 @@ extend DateTime {
     public func to_utc(this) -> DateTime
 
     /// Converts to a specific timezone
-    public func to_timezone(this, tz: &Timezone) -> DateTime
+    public func to_timezone(this, tz: ref Timezone) -> DateTime
         caps: [io.time]
 
     /// Converts to local timezone
@@ -521,15 +521,15 @@ extend DateTime {
     public func add_years(this, years: I32) -> DateTime
 
     // Formatting
-    public func format(this, fmt: &String) -> String
+    public func format(this, fmt: ref String) -> String
     public func to_rfc2822(this) -> String
     public func to_rfc3339(this) -> String
     public func to_iso_string(this) -> String
 
     // Parsing
-    public func parse(s: &String, fmt: &String) -> Result[DateTime, ParseError]
-    public func parse_rfc2822(s: &String) -> Result[DateTime, ParseError]
-    public func parse_rfc3339(s: &String) -> Result[DateTime, ParseError]
+    public func parse(s: ref String, fmt: ref String) -> Outcome[DateTime, ParseError]
+    public func parse_rfc2822(s: ref String) -> Outcome[DateTime, ParseError]
+    public func parse_rfc3339(s: ref String) -> Outcome[DateTime, ParseError]
 }
 
 implement Add[Duration] for DateTime {
@@ -565,13 +565,13 @@ extend UtcOffset {
     public const UTC: UtcOffset = UtcOffset { seconds: 0 }
 
     /// Creates an offset from hours
-    public func from_hours(hours: I8) -> Option[UtcOffset]
+    public func from_hours(hours: I8) -> Maybe[UtcOffset]
 
     /// Creates an offset from hours and minutes
-    public func from_hms(hours: I8, minutes: I8, seconds: I8) -> Option[UtcOffset]
+    public func from_hms(hours: I8, minutes: I8, seconds: I8) -> Maybe[UtcOffset]
 
     /// Creates an offset from total seconds
-    public func from_whole_seconds(seconds: I32) -> Option[UtcOffset]
+    public func from_whole_seconds(seconds: I32) -> Maybe[UtcOffset]
 
     /// Returns the local system offset
     public func local() -> UtcOffset
@@ -619,13 +619,13 @@ extend Timezone {
         caps: [io.time]
 
     /// Creates a timezone from IANA name
-    public func from_str(name: &String) -> Result[Timezone, TimezoneError]
+    public func from_str(name: ref String) -> Outcome[Timezone, TimezoneError]
 
     /// Creates a timezone from fixed offset
     public func from_offset(offset: UtcOffset) -> Timezone
 
     /// Returns the timezone name
-    public func name(this) -> &String
+    public func name(this) -> ref String
 
     /// Returns the offset at a given UTC datetime
     public func offset_at(this, dt: DateTime) -> UtcOffset

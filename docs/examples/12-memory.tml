@@ -15,9 +15,9 @@ func ownership_demo() {
     let s2 = s1
     // println(s1)  // ERROR: s1 moved to s2
 
-    // Clone: create a deep copy (both valid)
+    // Duplicate: create a deep copy (both valid)
     let s3 = String.from("world")
-    let s4 = s3.clone()
+    let s4 = s3.duplicate()
     println(s3)  // OK: s3 still valid
     println(s4)  // OK: s4 is a copy
 
@@ -35,26 +35,26 @@ func ownership_demo() {
 func borrowing_demo() {
     let s = String.from("hello")
 
-    // Immutable borrow with &
-    let len = calculate_length(&s)
+    // Immutable borrow with ref
+    let len = calculate_length(ref s)
     println(s)  // OK: s still valid after borrow
 
     // Multiple immutable borrows allowed
-    let r1 = &s
-    let r2 = &s
+    let r1 = ref s
+    let r2 = ref s
     println(r1 + " " + r2)  // OK
 
-    // Mutable borrow with &mut
+    // Mutable borrow with mut ref
     var text = String.from("hello")
-    append_world(&mut text)
+    append_world(mut ref text)
     println(text)  // "hello world"
 }
 
-func calculate_length(s: &String) -> U64 {
+func calculate_length(s: ref String) -> U64 {
     return s.len()
 }
 
-func append_world(s: &mut String) {
+func append_world(s: mut ref String) {
     s.push(" world")
 }
 
@@ -66,19 +66,19 @@ func borrow_rules_demo() {
     var s = String.from("hello")
 
     // Rule 1: Only ONE mutable borrow at a time
-    let r1 = &mut s
-    // let r2 = &mut s  // ERROR: second mutable borrow
+    let r1 = mut ref s
+    // let r2 = mut ref s  // ERROR: second mutable borrow
     r1.push("!")
 
     // Rule 2: Cannot mix mutable and immutable borrows
-    let r3 = &s
-    let r4 = &s
-    // let r5 = &mut s  // ERROR: can't borrow as mutable
+    let r3 = ref s
+    let r4 = ref s
+    // let r5 = mut ref s  // ERROR: can't borrow as mutable
 
     println(r3 + " " + r4)
 
     // After immutable borrows are done, can borrow mutably again
-    let r6 = &mut s
+    let r6 = mut ref s
     r6.push("!")
 }
 
@@ -89,7 +89,7 @@ func borrow_rules_demo() {
 // TML infers lifetimes - no explicit annotations needed
 
 // Returns a reference to the longer string
-func longest(a: &String, b: &String) -> &String {
+func longest(a: ref String, b: ref String) -> ref String {
     if a.len() > b.len() then a else b
 }
 
@@ -97,7 +97,7 @@ func lifetime_demo() {
     let s1 = String.from("hello")
     let s2 = String.from("world!")
 
-    let result = longest(&s1, &s2)
+    let result = longest(ref s1, ref s2)
     println("Longest: " + result)
 }
 
@@ -108,20 +108,20 @@ func lifetime_demo() {
 // SMART POINTERS
 // ============================================
 
-import std.rc { Rc }
+import std.shared { Shared }
 import std.cell { RefCell }
-import std.sync { Arc, Mutex }
+import std.sync { Sync, Mutex }
 
 func smart_pointer_demo() {
-    // Box: heap allocation with single owner
-    let boxed: Box[I32] = Box.new(42)
+    // Heap: heap allocation with single owner
+    let boxed: Heap[I32] = Heap.new(42)
     println(boxed.to_string())
 
-    // Rc: reference counting (single-threaded)
-    let shared: Rc[String] = Rc.new("shared data")
-    let clone1 = shared.clone()  // Increments reference count
-    let clone2 = shared.clone()
-    println("Ref count: " + Rc.strong_count(&shared).to_string())
+    // Shared: reference counting (single-threaded)
+    let shared: Shared[String] = Shared.new("shared data")
+    let copy1 = shared.duplicate()  // Increments reference count
+    let copy2 = shared.duplicate()
+    println("Ref count: " + Shared.strong_count(ref shared).to_string())
 
     // RefCell: interior mutability
     let cell: RefCell[I32] = RefCell.new(0)
@@ -131,8 +131,8 @@ func smart_pointer_demo() {
     }
     println("Cell value: " + cell.borrow().to_string())
 
-    // Rc<RefCell<T>>: shared mutable data
-    let shared_mut: Rc[RefCell[List[I32]]] = Rc.new(RefCell.new(List.new()))
+    // Shared[RefCell[T]]: shared mutable data
+    let shared_mut: Shared[RefCell[List[I32]]] = Shared.new(RefCell.new(List.new()))
     shared_mut.borrow_mut().push(1)
     shared_mut.borrow_mut().push(2)
 }
@@ -142,14 +142,14 @@ func smart_pointer_demo() {
 // ============================================
 
 async func thread_safe_demo() {
-    // Arc: atomic reference counting (thread-safe Rc)
-    let data: Arc[String] = Arc.new("shared across threads")
+    // Sync: atomic reference counting (thread-safe Shared)
+    let data: Sync[String] = Sync.new("shared across threads")
 
     let handles = List.new()
-    loop i in 0..5 {
-        let data_clone = data.clone()
+    loop i in 0 to 5 {
+        let data_copy = data.duplicate()
         let handle = spawn async {
-            println("Thread " + i.to_string() + ": " + data_clone)
+            println("Thread " + i.to_string() + ": " + data_copy)
         }
         handles.push(handle)
     }
@@ -159,14 +159,14 @@ async func thread_safe_demo() {
         await h
     }
 
-    // Arc<Mutex<T>>: thread-safe mutable data
-    let counter: Arc[Mutex[I32]] = Arc.new(Mutex.new(0))
+    // Sync[Mutex[T]]: thread-safe mutable data
+    let counter: Sync[Mutex[I32]] = Sync.new(Mutex.new(0))
 
     let handles2 = List.new()
-    loop _ in 0..10 {
-        let counter_clone = counter.clone()
+    loop _ in 0 to 10 {
+        let counter_copy = counter.duplicate()
         let handle = spawn async {
-            var guard = counter_clone.lock()
+            var guard = counter_copy.lock()
             guard += 1
         }
         handles2.push(handle)
@@ -188,8 +188,8 @@ type FileHandle {
     handle: RawHandle,
 }
 
-// Implement Drop for automatic cleanup
-extend FileHandle with Drop {
+// Implement Disposable for automatic cleanup
+extend FileHandle with Disposable {
     func drop(this) {
         println("Closing file: " + this.path)
         close_raw_handle(this.handle)

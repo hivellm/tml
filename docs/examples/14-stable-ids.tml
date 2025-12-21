@@ -21,7 +21,7 @@ type User {
 }
 
 @id("greet-user")
-func greet(user: &User) -> String {
+func greet(user: ref User) -> String {
     return "Hello, " + user.name + "!"
 }
 
@@ -66,12 +66,12 @@ type Order {
 // ============================================
 
 @id("process-order")
-func process_order(order: &mut Order) -> Result[Unit, OrderError] {
+func process_order(order: mut ref Order) -> Outcome[Unit, OrderError] {
     @id("validate-items")
     {
         loop item in order.items {
             if item.quantity == 0 then {
-                return Err(OrderError.InvalidQuantity)
+                return Failure(OrderError.InvalidQuantity)
             }
         }
     }
@@ -88,15 +88,15 @@ func process_order(order: &mut Order) -> Result[Unit, OrderError] {
     @id("update-status")
     order.status = OrderStatus.Processing
 
-    return Ok(())
+    return Success(())
 }
 
 // ============================================
-// IDS ON TRAIT IMPLEMENTATIONS
+// IDS ON BEHAVIOR IMPLEMENTATIONS
 // ============================================
 
-@id("printable-trait")
-trait Printable {
+@id("printable-behavior")
+behavior Printable {
     @id("print-method")
     func print(this)
 }
@@ -146,24 +146,24 @@ module api {
     @id("api.handlers")
     module handlers {
         @id("api.handlers.user-create")
-        func create_user(data: UserData) -> Result[User, ApiError] {
+        func create_user(data: UserData) -> Outcome[User, ApiError] {
             // Implementation
-            return Ok(User { name: data.name, email: data.email, age: 0 })
+            return Success(User { name: data.name, email: data.email, age: 0 })
         }
 
         @id("api.handlers.user-update")
-        func update_user(id: U64, data: UserData) -> Result[User, ApiError] {
+        func update_user(id: U64, data: UserData) -> Outcome[User, ApiError] {
             // Implementation
-            return Ok(User { name: data.name, email: data.email, age: 0 })
+            return Success(User { name: data.name, email: data.email, age: 0 })
         }
     }
 
     @id("api.middleware")
     module middleware {
         @id("api.middleware.auth")
-        func authenticate(request: &Request) -> Result[UserId, AuthError] {
+        func authenticate(request: ref Request) -> Outcome[UserId, AuthError] {
             // Check token
-            return Ok(UserId(1))
+            return Success(UserId(1))
         }
     }
 }
@@ -173,7 +173,7 @@ module api {
 // ============================================
 
 @id("test-user-creation")
-#[test]
+@test
 func test_create_user() {
     @id("test-setup")
     let user = User {
@@ -227,7 +227,7 @@ type AuthError = InvalidToken | Expired
 type Request {}
 type UserId(U64)
 
-func calculate_discount(item: &OrderItem) -> F64 {
+func calculate_discount(item: ref OrderItem) -> F64 {
     return 0.0
 }
 
@@ -238,6 +238,6 @@ public func main() {
         age: 30,
     }
 
-    println(greet(&user))
+    println(greet(ref user))
     user.print()
 }

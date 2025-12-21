@@ -26,7 +26,7 @@ Single-producer, single-consumer channel.
 public func channel[T](capacity: U64) -> (Sender[T], Receiver[T]) {
     let inner = Arc.new(ChannelInner[T].new(capacity))
     return (
-        Sender { inner: inner.clone() },
+        Sender { inner: inner.duplicate() },
         Receiver { inner: inner },
     )
 }
@@ -35,7 +35,7 @@ public func channel[T](capacity: U64) -> (Sender[T], Receiver[T]) {
 public func unbounded[T]() -> (Sender[T], Receiver[T]) {
     let inner = Arc.new(ChannelInner[T].unbounded())
     return (
-        Sender { inner: inner.clone() },
+        Sender { inner: inner.duplicate() },
         Receiver { inner: inner },
     )
 }
@@ -51,23 +51,23 @@ public type Sender[T] {
 
 extend Sender[T] {
     /// Sends a value, blocking if the channel is full
-    public func send(this, value: T) -> Result[Unit, SendError[T]] {
+    public func send(this, value: T) -> Outcome[Unit, SendError[T]] {
         this.inner.send(value)
     }
 
     /// Tries to send without blocking
-    public func try_send(this, value: T) -> Result[Unit, TrySendError[T]] {
+    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]] {
         this.inner.try_send(value)
     }
 
     /// Sends with timeout
-    public func send_timeout(this, value: T, timeout: Duration) -> Result[Unit, SendTimeoutError[T]] {
+    public func send_timeout(this, value: T, timeout: Duration) -> Outcome[Unit, SendTimeoutError[T]] {
         this.inner.send_timeout(value, timeout)
     }
 
     /// Returns true if the receiver is still connected
     public func is_connected(this) -> Bool {
-        Arc.strong_count(&this.inner) > 1
+        Arc.strong_count(ref this.inner) > 1
     }
 
     /// Returns the number of messages in the channel
@@ -86,9 +86,9 @@ extend Sender[T] {
     }
 }
 
-implement Clone for Sender[T] {
+implement Duplicate for Sender[T] {
     func clone(this) -> Sender[T] {
-        return Sender { inner: this.inner.clone() }
+        return Sender { inner: this.inner.duplicate() }
     }
 }
 ```
@@ -103,17 +103,17 @@ public type Receiver[T] {
 
 extend Receiver[T] {
     /// Receives a value, blocking if the channel is empty
-    public func recv(this) -> Result[T, RecvError] {
+    public func recv(this) -> Outcome[T, RecvError] {
         this.inner.recv()
     }
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Result[T, TryRecvError] {
+    public func try_recv(this) -> Outcome[T, TryRecvError] {
         this.inner.try_recv()
     }
 
     /// Receives with timeout
-    public func recv_timeout(this, timeout: Duration) -> Result[T, RecvTimeoutError] {
+    public func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError] {
         this.inner.recv_timeout(timeout)
     }
 
@@ -127,8 +127,8 @@ extend Receiver[T] {
         var result = Vec.new()
         loop {
             when this.try_recv() {
-                Ok(value) -> result.push(value),
-                Err(_) -> break,
+                Success(value) -> result.push(value),
+                Failure(_) -> break,
             }
         }
         return result
@@ -152,7 +152,7 @@ public type RecvIter[T] {
 implement Iterator for RecvIter[T] {
     type Item = T
 
-    func next(mut this) -> Option[T] {
+    func next(mut this) -> Maybe[T] {
         this.receiver.recv().ok()
     }
 }
@@ -191,7 +191,7 @@ public type RecvTimeoutError = Timeout | Disconnected
 public func mpsc[T](capacity: U64) -> (MpscSender[T], MpscReceiver[T]) {
     let inner = Arc.new(MpscInner[T].new(capacity))
     return (
-        MpscSender { inner: inner.clone() },
+        MpscSender { inner: inner.duplicate() },
         MpscReceiver { inner: inner },
     )
 }
@@ -200,7 +200,7 @@ public func mpsc[T](capacity: U64) -> (MpscSender[T], MpscReceiver[T]) {
 public func mpsc_unbounded[T]() -> (MpscSender[T], MpscReceiver[T]) {
     let inner = Arc.new(MpscInner[T].unbounded())
     return (
-        MpscSender { inner: inner.clone() },
+        MpscSender { inner: inner.duplicate() },
         MpscReceiver { inner: inner },
     )
 }
@@ -209,23 +209,23 @@ public func mpsc_unbounded[T]() -> (MpscSender[T], MpscReceiver[T]) {
 ### MpscSender
 
 ```tml
-/// Cloneable sender for MPSC channel
+/// Duplicateable sender for MPSC channel
 public type MpscSender[T] {
     inner: Arc[MpscInner[T]],
 }
 
 extend MpscSender[T] {
     /// Sends a value
-    public func send(this, value: T) -> Result[Unit, SendError[T]]
+    public func send(this, value: T) -> Outcome[Unit, SendError[T]]
 
     /// Tries to send without blocking
-    public func try_send(this, value: T) -> Result[Unit, TrySendError[T]]
+    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 
     /// Creates a permit to send
-    public async func reserve(this) -> Result[Permit[T], SendError[Unit]]
+    public async func reserve(this) -> Outcome[Permit[T], SendError[Unit]]
 
     /// Blocks until there's capacity
-    public func blocking_send(this, value: T) -> Result[Unit, SendError[T]]
+    public func blocking_send(this, value: T) -> Outcome[Unit, SendError[T]]
 }
 
 /// A permit to send one value
@@ -238,14 +238,14 @@ extend Permit[T] {
     public func send(this, value: T)
 }
 
-implement Clone for MpscSender[T] {
+implement Duplicate for MpscSender[T] {
     func clone(this) -> MpscSender[T] {
         this.inner.sender_count.fetch_add(1, Ordering.Relaxed)
-        return MpscSender { inner: this.inner.clone() }
+        return MpscSender { inner: this.inner.duplicate() }
     }
 }
 
-implement Drop for MpscSender[T] {
+implement Disposable for MpscSender[T] {
     func drop(mut this) {
         if this.inner.sender_count.fetch_sub(1, Ordering.AcqRel) == 1 then {
             // Last sender, notify receiver
@@ -265,16 +265,16 @@ public type MpscReceiver[T] {
 
 extend MpscReceiver[T] {
     /// Receives a value
-    public func recv(this) -> Option[T]
+    public func recv(this) -> Maybe[T]
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Result[T, TryRecvError]
+    public func try_recv(this) -> Outcome[T, TryRecvError]
 
     /// Receives with timeout
-    public func recv_timeout(this, timeout: Duration) -> Result[T, RecvTimeoutError]
+    public func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError]
 
     /// Async receive
-    public async func recv_async(this) -> Option[T]
+    public async func recv_async(this) -> Maybe[T]
 
     /// Closes the channel
     public func close(this)
@@ -290,7 +290,7 @@ extend MpscReceiver[T] {
 public func mpmc[T](capacity: U64) -> (MpmcSender[T], MpmcReceiver[T]) {
     let inner = Arc.new(MpmcInner[T].new(capacity))
     return (
-        MpmcSender { inner: inner.clone() },
+        MpmcSender { inner: inner.duplicate() },
         MpmcReceiver { inner: inner },
     )
 }
@@ -301,13 +301,13 @@ public type MpmcSender[T] {
 }
 
 extend MpmcSender[T] {
-    public func send(this, value: T) -> Result[Unit, SendError[T]]
-    public func try_send(this, value: T) -> Result[Unit, TrySendError[T]]
+    public func send(this, value: T) -> Outcome[Unit, SendError[T]]
+    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 }
 
-implement Clone for MpmcSender[T] {
+implement Duplicate for MpmcSender[T] {
     func clone(this) -> MpmcSender[T] {
-        return MpmcSender { inner: this.inner.clone() }
+        return MpmcSender { inner: this.inner.duplicate() }
     }
 }
 
@@ -317,13 +317,13 @@ public type MpmcReceiver[T] {
 }
 
 extend MpmcReceiver[T] {
-    public func recv(this) -> Result[T, RecvError]
-    public func try_recv(this) -> Result[T, TryRecvError]
+    public func recv(this) -> Outcome[T, RecvError]
+    public func try_recv(this) -> Outcome[T, TryRecvError]
 }
 
-implement Clone for MpmcReceiver[T] {
+implement Duplicate for MpmcReceiver[T] {
     func clone(this) -> MpmcReceiver[T] {
-        return MpmcReceiver { inner: this.inner.clone() }
+        return MpmcReceiver { inner: this.inner.duplicate() }
     }
 }
 ```
@@ -337,11 +337,11 @@ Sends to multiple receivers, each receiving all messages.
 ```tml
 /// Creates a broadcast channel
 public func broadcast[T](capacity: U64) -> (BroadcastSender[T], BroadcastReceiver[T])
-    where T: Clone
+    where T: Duplicate
 {
     let inner = Arc.new(BroadcastInner[T].new(capacity))
     return (
-        BroadcastSender { inner: inner.clone() },
+        BroadcastSender { inner: inner.duplicate() },
         BroadcastReceiver { inner: inner, pos: 0 },
     )
 }
@@ -351,9 +351,9 @@ public type BroadcastSender[T] {
     inner: Arc[BroadcastInner[T]],
 }
 
-extend BroadcastSender[T] where T: Clone {
+extend BroadcastSender[T] where T: Duplicate {
     /// Sends a value to all receivers
-    public func send(this, value: T) -> Result[U64, SendError[T]] {
+    public func send(this, value: T) -> Outcome[U64, SendError[T]] {
         this.inner.send(value)
     }
 
@@ -366,7 +366,7 @@ extend BroadcastSender[T] where T: Clone {
     public func subscribe(this) -> BroadcastReceiver[T] {
         let pos = this.inner.tail.load(Ordering.Relaxed)
         this.inner.receiver_count.fetch_add(1, Ordering.Relaxed)
-        return BroadcastReceiver { inner: this.inner.clone(), pos: pos }
+        return BroadcastReceiver { inner: this.inner.duplicate(), pos: pos }
     }
 }
 
@@ -376,15 +376,15 @@ public type BroadcastReceiver[T] {
     pos: U64,
 }
 
-extend BroadcastReceiver[T] where T: Clone {
+extend BroadcastReceiver[T] where T: Duplicate {
     /// Receives the next value
-    public func recv(mut this) -> Result[T, RecvError] {
-        this.inner.recv(&mut this.pos)
+    public func recv(mut this) -> Outcome[T, RecvError] {
+        this.inner.recv(mut ref this.pos)
     }
 
     /// Tries to receive without blocking
-    public func try_recv(mut this) -> Result[T, TryRecvError] {
-        this.inner.try_recv(&mut this.pos)
+    public func try_recv(mut this) -> Outcome[T, TryRecvError] {
+        this.inner.try_recv(mut ref this.pos)
     }
 
     /// Returns the number of messages lagging behind
@@ -394,14 +394,14 @@ extend BroadcastReceiver[T] where T: Clone {
     }
 }
 
-implement Clone for BroadcastReceiver[T] {
+implement Duplicate for BroadcastReceiver[T] {
     func clone(this) -> BroadcastReceiver[T] {
         this.inner.receiver_count.fetch_add(1, Ordering.Relaxed)
-        return BroadcastReceiver { inner: this.inner.clone(), pos: this.pos }
+        return BroadcastReceiver { inner: this.inner.duplicate(), pos: this.pos }
     }
 }
 
-implement Drop for BroadcastReceiver[T] {
+implement Disposable for BroadcastReceiver[T] {
     func drop(mut this) {
         this.inner.receiver_count.fetch_sub(1, Ordering.Relaxed)
     }
@@ -417,11 +417,11 @@ Single value that notifies receivers on change.
 ```tml
 /// Creates a watch channel
 public func watch[T](initial: T) -> (WatchSender[T], WatchReceiver[T])
-    where T: Clone
+    where T: Duplicate
 {
     let inner = Arc.new(WatchInner[T].new(initial))
     return (
-        WatchSender { inner: inner.clone() },
+        WatchSender { inner: inner.duplicate() },
         WatchReceiver { inner: inner, version: 0 },
     )
 }
@@ -431,14 +431,14 @@ public type WatchSender[T] {
     inner: Arc[WatchInner[T]],
 }
 
-extend WatchSender[T] where T: Clone {
+extend WatchSender[T] where T: Duplicate {
     /// Sends a new value
-    public func send(this, value: T) -> Result[Unit, SendError[T]] {
+    public func send(this, value: T) -> Outcome[Unit, SendError[T]] {
         this.inner.send(value)
     }
 
     /// Modifies the value in place
-    public func send_modify(this, f: func(&mut T)) {
+    public func send_modify(this, f: func(mut ref T)) {
         this.inner.send_modify(f)
     }
 
@@ -450,12 +450,12 @@ extend WatchSender[T] where T: Clone {
     /// Creates a new receiver
     public func subscribe(this) -> WatchReceiver[T] {
         let version = this.inner.version.load(Ordering.Relaxed)
-        return WatchReceiver { inner: this.inner.clone(), version: version }
+        return WatchReceiver { inner: this.inner.duplicate(), version: version }
     }
 
     /// Returns the number of receivers
     public func receiver_count(this) -> U64 {
-        Arc.strong_count(&this.inner) - 1
+        Arc.strong_count(ref this.inner) - 1
     }
 }
 
@@ -465,15 +465,15 @@ public type WatchReceiver[T] {
     version: U64,
 }
 
-extend WatchReceiver[T] where T: Clone {
+extend WatchReceiver[T] where T: Duplicate {
     /// Returns a reference to the current value
     public func borrow(this) -> WatchRef[T] {
         this.inner.borrow()
     }
 
     /// Waits for a new value
-    public async func changed(mut this) -> Result[Unit, RecvError] {
-        this.inner.changed(&mut this.version).await
+    public async func changed(mut this) -> Outcome[Unit, RecvError] {
+        this.inner.changed(mut ref this.version).await
     }
 
     /// Marks the current value as seen
@@ -487,9 +487,9 @@ extend WatchReceiver[T] where T: Clone {
     }
 }
 
-implement Clone for WatchReceiver[T] {
+implement Duplicate for WatchReceiver[T] {
     func clone(this) -> WatchReceiver[T] {
-        return WatchReceiver { inner: this.inner.clone(), version: this.version }
+        return WatchReceiver { inner: this.inner.duplicate(), version: this.version }
     }
 }
 ```
@@ -505,22 +505,22 @@ Single-use channel for one value.
 public func oneshot[T]() -> (OneshotSender[T], OneshotReceiver[T]) {
     let inner = Arc.new(OneshotInner[T].new())
     return (
-        OneshotSender { inner: Some(inner.clone()) },
+        OneshotSender { inner: Just(inner.duplicate()) },
         OneshotReceiver { inner: inner },
     )
 }
 
 /// Oneshot sender
 public type OneshotSender[T] {
-    inner: Option[Arc[OneshotInner[T]]],
+    inner: Maybe[Arc[OneshotInner[T]]],
 }
 
 extend OneshotSender[T] {
     /// Sends a value, consuming the sender
-    public func send(mut this, value: T) -> Result[Unit, T] {
+    public func send(mut this, value: T) -> Outcome[Unit, T] {
         when this.inner.take() {
-            Some(inner) -> inner.send(value),
-            None -> Err(value),
+            Just(inner) -> inner.send(value),
+            Nothing -> Failure(value),
         }
     }
 
@@ -537,17 +537,17 @@ public type OneshotReceiver[T] {
 
 extend OneshotReceiver[T] {
     /// Waits for the value
-    public async func await(this) -> Result[T, RecvError] {
+    public async func await(this) -> Outcome[T, RecvError] {
         this.inner.recv().await
     }
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Result[T, TryRecvError] {
+    public func try_recv(this) -> Outcome[T, TryRecvError] {
         this.inner.try_recv()
     }
 
     /// Blocks waiting for the value
-    public func blocking_recv(this) -> Result[T, RecvError] {
+    public func blocking_recv(this) -> Outcome[T, RecvError] {
         this.inner.blocking_recv()
     }
 }
@@ -637,7 +637,7 @@ extend Barrier {
 
         // Wait for others
         loop this.generation.load(Ordering.Relaxed) == gen {
-            this.cond.wait(&guard)
+            this.cond.wait(ref guard)
         }
 
         return BarrierWaitResult { is_leader: false }
@@ -689,17 +689,17 @@ extend Once {
 
     func call_once_slow(this, f: func()) {
         when this.state.compare_exchange(INCOMPLETE, RUNNING, Ordering.Acquire, Ordering.Relaxed) {
-            Ok(_) -> {
+            Success(_) -> {
                 f()
                 this.state.store(COMPLETE, Ordering.Release)
             },
-            Err(RUNNING) -> {
+            Failure(RUNNING) -> {
                 // Spin until complete
                 loop this.state.load(Ordering.Acquire) == RUNNING {
                     thread.yield_now()
                 }
             },
-            Err(_) -> {},  // Already complete
+            Failure(_) -> {},  // Already complete
         }
     }
 
@@ -718,7 +718,7 @@ Lazy initialization container.
 /// A cell that can be written to once
 public type OnceCell[T] {
     once: Once,
-    value: UnsafeCell[Option[T]],
+    value: UnsafeCell[Maybe[T]],
 }
 
 extend OnceCell[T] {
@@ -726,22 +726,22 @@ extend OnceCell[T] {
     public const func new() -> OnceCell[T] {
         return OnceCell {
             once: Once.new(),
-            value: UnsafeCell.new(None),
+            value: UnsafeCell.new(Nothing),
         }
     }
 
     /// Gets or initializes the value
-    public func get_or_init(this, f: func() -> T) -> &T {
+    public func get_or_init(this, f: func() -> T) -> ref T {
         this.once.call_once(do() {
             unsafe {
-                *this.value.get() = Some(f())
+                *this.value.get() = Just(f())
             }
         })
         return unsafe { (*this.value.get()).as_ref().unwrap() }
     }
 
     /// Gets the value if initialized
-    public func get(this) -> Option[&T] {
+    public func get(this) -> Maybe[ref T] {
         if this.once.is_completed() then {
             return unsafe { (*this.value.get()).as_ref() }
         }
@@ -749,15 +749,15 @@ extend OnceCell[T] {
     }
 
     /// Sets the value if not initialized
-    public func set(this, value: T) -> Result[Unit, T] {
+    public func set(this, value: T) -> Outcome[Unit, T] {
         var stored = false
         this.once.call_once(do() {
             unsafe {
-                *this.value.get() = Some(value)
+                *this.value.get() = Just(value)
             }
             stored = true
         })
-        if stored then Ok(()) else Err(value)
+        if stored then Success(()) else Failure(value)
     }
 }
 
@@ -773,7 +773,7 @@ Lazy evaluation with memoization.
 /// Lazy value computed on first access
 public type Lazy[T] {
     cell: OnceCell[T],
-    init: Cell[Option[func() -> T]],
+    init: Cell[Maybe[func() -> T]],
 }
 
 extend Lazy[T] {
@@ -781,12 +781,12 @@ extend Lazy[T] {
     public const func new(f: func() -> T) -> Lazy[T] {
         return Lazy {
             cell: OnceCell.new(),
-            init: Cell.new(Some(f)),
+            init: Cell.new(Just(f)),
         }
     }
 
     /// Forces evaluation and returns a reference
-    public func force(this) -> &T {
+    public func force(this) -> ref T {
         this.cell.get_or_init(do() {
             let f = this.init.take().expect("Lazy already initialized")
             f()
@@ -797,7 +797,7 @@ extend Lazy[T] {
 implement Deref for Lazy[T] {
     type Target = T
 
-    func deref(this) -> &T {
+    func deref(this) -> ref T {
         this.force()
     }
 }
@@ -820,21 +820,21 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     public func new() -> ConcurrentHashMap[K, V]
 
     /// Inserts a key-value pair
-    public func insert(this, key: K, value: V) -> Option[V] {
-        let shard = this.get_shard(&key)
+    public func insert(this, key: K, value: V) -> Maybe[V] {
+        let shard = this.get_shard(ref key)
         shard.write().insert(key, value)
     }
 
     /// Gets a value by key
-    public func get[Q](this, key: &Q) -> Option[V]
-        where K: Borrow[Q], Q: Hash + Eq, V: Clone
+    public func get[Q](this, key: ref Q) -> Maybe[V]
+        where K: Borrow[Q], Q: Hash + Eq, V: Duplicate
     {
         let shard = this.get_shard(key)
-        shard.read().get(key).cloned()
+        shard.read().get(key).duplicated()
     }
 
     /// Removes a key
-    public func remove[Q](this, key: &Q) -> Option[V]
+    public func remove[Q](this, key: ref Q) -> Maybe[V]
         where K: Borrow[Q], Q: Hash + Eq
     {
         let shard = this.get_shard(key)
@@ -842,7 +842,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     }
 
     /// Returns true if the key exists
-    public func contains_key[Q](this, key: &Q) -> Bool
+    public func contains_key[Q](this, key: ref Q) -> Bool
         where K: Borrow[Q], Q: Hash + Eq
     {
         let shard = this.get_shard(key)
@@ -851,19 +851,19 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
 
     /// Gets or inserts a value
     public func get_or_insert(this, key: K, value: V) -> V
-        where V: Clone
+        where V: Duplicate
     {
-        let shard = this.get_shard(&key)
+        let shard = this.get_shard(ref key)
         let mut guard = shard.write()
-        guard.entry(key).or_insert(value).clone()
+        guard.entry(key).or_insert(value).duplicate()
     }
 
-    func get_shard[Q](this, key: &Q) -> &RwLock[HashMap[K, V]]
+    func get_shard[Q](this, key: ref Q) -> &RwLock[HashMap[K, V]]
         where Q: Hash
     {
         let hash = hash(key)
         let index = (hash as U64) % 16
-        return &this.shards[index]
+        return ref this.shards[index]
     }
 }
 ```
@@ -878,7 +878,7 @@ public type ConcurrentQueue[T] {
 }
 
 type Node[T] {
-    value: Option[T],
+    value: Maybe[T],
     next: AtomicPtr[Node[T]],
 }
 
@@ -890,7 +890,7 @@ extend ConcurrentQueue[T] {
     public func push(this, value: T)
 
     /// Pops a value from the front
-    public func pop(this) -> Option[T]
+    public func pop(this) -> Maybe[T]
 
     /// Returns true if the queue is empty
     public func is_empty(this) -> Bool
@@ -914,8 +914,8 @@ func worker_pool(num_workers: U64) {
 
     // Spawn workers
     var handles = Vec.new()
-    loop i in 0..num_workers {
-        let rx = rx.clone()
+    loop i in 0 to num_workers {
+        let rx = rx.duplicate()
         let handle = thread.spawn(do() {
             loop task in rx {
                 let result = task()
@@ -926,7 +926,7 @@ func worker_pool(num_workers: U64) {
     }
 
     // Send tasks
-    loop i in 0..10 {
+    loop i in 0 to 10 {
         tx.send(do() i * i).unwrap()
     }
 
@@ -951,14 +951,14 @@ func broadcast_example() {
     let (tx, rx) = broadcast[Update](16)
 
     // Spawn subscribers
-    loop i in 0..3 {
+    loop i in 0 to 3 {
         let mut rx = tx.subscribe()
         thread.spawn(do() {
             loop {
                 when rx.recv() {
-                    Ok(DataUpdate { data }) -> print("Subscriber " + i.to_string() + ": " + data),
-                    Ok(Shutdown) -> break,
-                    Err(_) -> break,
+                    Success(DataUpdate { data }) -> print("Subscriber " + i.to_string() + ": " + data),
+                    Success(Shutdown) -> break,
+                    Failure(_) -> break,
                 }
             }
         })
@@ -980,8 +980,8 @@ func parallel_compute() {
     let barrier = Arc.new(Barrier.new(4))
     var handles = Vec.new()
 
-    loop i in 0..4 {
-        let barrier = barrier.clone()
+    loop i in 0 to 4 {
+        let barrier = barrier.duplicate()
         let handle = thread.spawn(do() {
             // Phase 1
             compute_phase1(i)

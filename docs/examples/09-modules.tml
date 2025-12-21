@@ -52,8 +52,8 @@ public type Config {
     public max_size: U64,
 }
 
-// Public trait
-public trait Processor {
+// Public behavior
+public behavior Processor {
     func process(this, data: String) -> String
 }
 
@@ -109,23 +109,23 @@ public func format_number(n: I32) -> String {
 // ============================================
 
 // Platform-specific code
-#[cfg(platform = "windows")]
+@cfg(platform = "windows")
 func get_home() -> String {
     return env("USERPROFILE")
 }
 
-#[cfg(platform = "linux")]
+@cfg(platform = "linux")
 func get_home() -> String {
     return env("HOME")
 }
 
 // Feature flags
-#[cfg(feature = "logging")]
+@cfg(feature = "logging")
 func log(msg: String) {
     println("[LOG] " + msg)
 }
 
-#[cfg(not(feature = "logging"))]
+@cfg(not(feature = "logging"))
 func log(msg: String) {
     // No-op when logging disabled
 }
@@ -142,17 +142,17 @@ public type Connection {
     port: U16,
 }
 
-public func connect(host: String, port: U16) -> Result[Connection, String] {
-    return Ok(Connection { host, port })
+public func connect(host: String, port: U16) -> Outcome[Connection, String] {
+    return Success(Connection { host, port })
 }
 
 module my_app.database.queries
 
 import ..Connection
 
-public func execute(conn: &Connection, sql: String) -> Result[List[Row], String] {
+public func execute(conn: ref Connection, sql: String) -> Outcome[List[Row], String] {
     // ...
-    return Ok([])
+    return Success([])
 }
 
 public type Row {
@@ -173,11 +173,11 @@ public func main() {
     let conn = connect("localhost", 5432)
 
     when conn {
-        Ok(c) -> {
-            let result = execute(&c, "SELECT * FROM users")
+        Success(c) -> {
+            let result = execute(ref c, "SELECT * FROM users")
             println("Query executed")
         },
-        Err(e) -> println("Connection failed: " + e),
+        Failure(e) -> println("Connection failed: " + e),
     }
 
     // Fully qualified access

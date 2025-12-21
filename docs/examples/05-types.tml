@@ -51,8 +51,8 @@ type Message =
     | Image { url: String, width: U32, height: U32 }
     | File { path: String, size: U64 }
 
-// Generic enum (Option and Result are built-in)
-type MyResult[T, E] = Ok(T) | Err(E)
+// Generic enum (Maybe and Outcome are built-in)
+type MyOutcome[T, E] = Success(T) | Failure(E)
 
 // ============================================
 // TYPE ALIASES

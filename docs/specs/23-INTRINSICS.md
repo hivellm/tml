@@ -73,25 +73,25 @@ let x = wrapping_add(255_u8, 1_u8)  // Returns 0
 
 ```tml
 /// Unchecked add (undefined behavior on overflow)
-public unsafe func unchecked_add[T: Integer](a: T, b: T) -> T
+public lowlevel func unchecked_add[T: Integer](a: T, b: T) -> T
 
 /// Unchecked subtract
-public unsafe func unchecked_sub[T: Integer](a: T, b: T) -> T
+public lowlevel func unchecked_sub[T: Integer](a: T, b: T) -> T
 
 /// Unchecked multiply
-public unsafe func unchecked_mul[T: Integer](a: T, b: T) -> T
+public lowlevel func unchecked_mul[T: Integer](a: T, b: T) -> T
 
 /// Unchecked divide (UB if divisor is zero)
-public unsafe func unchecked_div[T: Integer](a: T, b: T) -> T
+public lowlevel func unchecked_div[T: Integer](a: T, b: T) -> T
 
 /// Unchecked remainder
-public unsafe func unchecked_rem[T: Integer](a: T, b: T) -> T
+public lowlevel func unchecked_rem[T: Integer](a: T, b: T) -> T
 
 /// Unchecked shift left
-public unsafe func unchecked_shl[T: Integer](a: T, b: U32) -> T
+public lowlevel func unchecked_shl[T: Integer](a: T, b: U32) -> T
 
 /// Unchecked shift right
-public unsafe func unchecked_shr[T: Integer](a: T, b: U32) -> T
+public lowlevel func unchecked_shr[T: Integer](a: T, b: U32) -> T
 ```
 
 ### 2.5 Extended Arithmetic
@@ -173,28 +173,28 @@ public func bzhi_u64(x: U64, n: U32) -> U64
 
 ```tml
 /// Copy memory (non-overlapping, like memcpy)
-public unsafe func copy_nonoverlapping[T](
+public lowlevel func copy_nonoverlapping[T](
     src: *const T,
     dst: *mut T,
     count: U64
 )
 
 /// Copy memory (may overlap, like memmove)
-public unsafe func copy[T](
+public lowlevel func copy[T](
     src: *const T,
     dst: *mut T,
     count: U64
 )
 
 /// Set memory to value (like memset)
-public unsafe func write_bytes[T](
+public lowlevel func write_bytes[T](
     dst: *mut T,
     value: U8,
     count: U64
 )
 
 /// Compare memory (like memcmp)
-public unsafe func compare_bytes(
+public lowlevel func compare_bytes(
     a: *const U8,
     b: *const U8,
     count: U64
@@ -221,7 +221,7 @@ public type PrefetchLocality =
 
 ```tml
 /// Flush cache line
-public unsafe func cache_flush(ptr: *const Void)
+public lowlevel func cache_flush(ptr: *const Void)
 
 /// Memory barrier (full fence)
 public func memory_barrier()
@@ -237,16 +237,16 @@ public func write_barrier()
 
 ```tml
 /// Volatile read (never optimized away)
-public unsafe func volatile_read[T](ptr: *const T) -> T
+public lowlevel func volatile_read[T](ptr: *const T) -> T
 
 /// Volatile write
-public unsafe func volatile_write[T](ptr: *mut T, value: T)
+public lowlevel func volatile_write[T](ptr: *mut T, value: T)
 
 /// Volatile set bytes
-public unsafe func volatile_set_bytes[T](dst: *mut T, value: U8, count: U64)
+public lowlevel func volatile_set_bytes[T](dst: *mut T, value: U8, count: U64)
 
 /// Volatile copy
-public unsafe func volatile_copy[T](src: *const T, dst: *mut T, count: U64)
+public lowlevel func volatile_copy[T](src: *const T, dst: *mut T, count: U64)
 ```
 
 ## 5. Atomic Intrinsics
@@ -255,11 +255,11 @@ public unsafe func volatile_copy[T](src: *const T, dst: *mut T, count: U64)
 
 ```tml
 /// Atomic load
-public func atomic_load[T](ptr: *const T, order: Ordering) -> T
+public func atomic_load[T](ptr: *const T, order: MemoryOrdering) -> T
     where T: AtomicType
 
 /// Atomic store
-public func atomic_store[T](ptr: *mut T, value: T, order: Ordering)
+public func atomic_store[T](ptr: *mut T, value: T, order: MemoryOrdering)
     where T: AtomicType
 ```
 
@@ -267,15 +267,15 @@ public func atomic_store[T](ptr: *mut T, value: T, order: Ordering)
 
 ```tml
 /// Atomic exchange
-public func atomic_xchg[T](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_xchg[T](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic compare-exchange (strong)
 public func atomic_cxchg[T](
     ptr: *mut T,
     old: T,
     new: T,
-    success_order: Ordering,
-    failure_order: Ordering
+    success_order: MemoryOrdering,
+    failure_order: MemoryOrdering
 ) -> (T, Bool)
 
 /// Atomic compare-exchange (weak)
@@ -283,49 +283,49 @@ public func atomic_cxchg_weak[T](
     ptr: *mut T,
     old: T,
     new: T,
-    success_order: Ordering,
-    failure_order: Ordering
+    success_order: MemoryOrdering,
+    failure_order: MemoryOrdering
 ) -> (T, Bool)
 
 /// Atomic add
-public func atomic_add[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_add[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic subtract
-public func atomic_sub[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_sub[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic AND
-public func atomic_and[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_and[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic OR
-public func atomic_or[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_or[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic XOR
-public func atomic_xor[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_xor[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic NAND
-public func atomic_nand[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_nand[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic max
-public func atomic_max[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_max[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic min
-public func atomic_min[T: Integer](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_min[T: Integer](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic unsigned max
-public func atomic_umax[T: UnsignedInteger](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_umax[T: UnsignedInteger](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 
 /// Atomic unsigned min
-public func atomic_umin[T: UnsignedInteger](ptr: *mut T, value: T, order: Ordering) -> T
+public func atomic_umin[T: UnsignedInteger](ptr: *mut T, value: T, order: MemoryOrdering) -> T
 ```
 
 ### 5.3 Fence
 
 ```tml
 /// Memory fence
-public func atomic_fence(order: Ordering)
+public func atomic_fence(order: MemoryOrdering)
 
 /// Single-thread fence (compiler barrier)
-public func atomic_singlethread_fence(order: Ordering)
+public func atomic_singlethread_fence(order: MemoryOrdering)
 ```
 
 ## 6. Float Intrinsics
@@ -468,7 +468,7 @@ public func pref_align_of[T]() -> U64
 
 ```tml
 /// Type name as string
-public func type_name[T]() -> &'static str
+public func type_name[T]() -> ref static str
 
 /// Type ID (unique per type)
 public func type_id[T]() -> TypeId
@@ -487,11 +487,11 @@ public func is_zst[T]() -> Bool
 
 ```tml
 /// Reinterpret bits as different type
-public unsafe func transmute[T, U](value: T) -> U
+public lowlevel func transmute[T, U](value: T) -> U
     where size_of[T]() == size_of[U]()
 
 /// Transmute with unchecked alignment
-public unsafe func transmute_unchecked[T, U](value: T) -> U
+public lowlevel func transmute_unchecked[T, U](value: T) -> U
 ```
 
 ## 8. Control Flow Intrinsics
@@ -500,10 +500,10 @@ public unsafe func transmute_unchecked[T, U](value: T) -> U
 
 ```tml
 /// Unreachable code (undefined behavior if reached)
-public unsafe func unreachable() -> !
+public lowlevel func unreachable() -> !
 
 /// Assume condition is true (optimizer hint)
-public unsafe func assume(cond: Bool)
+public lowlevel func assume(cond: Bool)
 
 /// Likely branch hint
 public func likely(cond: Bool) -> Bool
@@ -533,7 +533,7 @@ public func abort() -> !
 ### 9.1 x86/x86_64
 
 ```tml
-#[cfg(target_arch = "x86_64")]
+@cfg(target_arch = "x86_64")
 module intrinsics.x86
 
 /// CPUID
@@ -567,26 +567,26 @@ public func tzcnt_u32(x: U32) -> U32
 public func tzcnt_u64(x: U64) -> U64
 
 /// AES
-#[cfg(target_feature = "aes")]
+@cfg(target_feature = "aes")
 public func aesenc(data: U8x16, key: U8x16) -> U8x16
 public func aesdec(data: U8x16, key: U8x16) -> U8x16
 public func aeskeygenassist(key: U8x16, imm: U8) -> U8x16
 
 /// RDRAND (hardware random)
-pub func rdrand_u16() -> Option[U16]
-pub func rdrand_u32() -> Option[U32]
-pub func rdrand_u64() -> Option[U64]
+public func rdrand_u16() -> Maybe[U16]
+public func rdrand_u32() -> Maybe[U32]
+public func rdrand_u64() -> Maybe[U64]
 
 /// RDSEED
-pub func rdseed_u16() -> Option[U16]
-pub func rdseed_u32() -> Option[U32]
-pub func rdseed_u64() -> Option[U64]
+public func rdseed_u16() -> Maybe[U16]
+public func rdseed_u32() -> Maybe[U32]
+public func rdseed_u64() -> Maybe[U64]
 ```
 
 ### 9.2 ARM/AArch64
 
 ```tml
-#[cfg(target_arch = "aarch64")]
+@cfg(target_arch = "aarch64")
 module intrinsics.aarch64
 
 /// DMB (Data Memory Barrier)
@@ -611,10 +611,10 @@ public func sev()
 public func yield_cpu()
 
 /// Read system register
-public unsafe func read_sysreg(reg: &str) -> U64
+public lowlevel func read_sysreg(reg: ref str) -> U64
 
 /// Write system register
-public unsafe func write_sysreg(reg: &str, value: U64)
+public lowlevel func write_sysreg(reg: ref str, value: U64)
 
 /// CRC32
 public func crc32b(crc: U32, data: U8) -> U32
@@ -623,7 +623,7 @@ public func crc32w(crc: U32, data: U32) -> U32
 public func crc32x(crc: U32, data: U64) -> U32
 
 /// AES
-#[cfg(target_feature = "aes")]
+@cfg(target_feature = "aes")
 public func aese(data: U8x16, key: U8x16) -> U8x16
 public func aesd(data: U8x16, key: U8x16) -> U8x16
 ```
@@ -634,10 +634,10 @@ public func aesd(data: U8x16, key: U8x16) -> U8x16
 
 ```tml
 /// Compile-time assertion
-public func static_assert(cond: Bool, msg: &str)
+public func static_assert(cond: Bool, msg: ref str)
 
 /// Compile-time assert equal
-public func static_assert_eq[T: Eq](a: T, b: T, msg: &str)
+public func static_assert_eq[T: Eq](a: T, b: T, msg: ref str)
 
 /// Compile-time type size check
 public func static_assert_size[T](expected: U64)
@@ -647,7 +647,7 @@ public func static_assert_size[T](expected: U64)
 
 ```tml
 /// Current file
-public func file() -> &'static str
+public func file() -> ref static str
 
 /// Current line
 public func line() -> U32
@@ -656,10 +656,10 @@ public func line() -> U32
 public func column() -> U32
 
 /// Current function name
-public func function() -> &'static str
+public func function() -> ref static str
 
 /// Current module path
-public func module_path() -> &'static str
+public func module_path() -> ref static str
 ```
 
 ## 11. Usage Examples
@@ -668,12 +668,12 @@ public func module_path() -> &'static str
 
 ```tml
 func count_bits(x: U64) -> U32 {
-    #[cfg(target_feature = "popcnt")]
+    @cfg(target_feature = "popcnt")
     {
         return intrinsics.x86.popcnt_u64(x) as U32
     }
 
-    #[cfg(not(target_feature = "popcnt"))]
+    @cfg(not(target_feature = "popcnt"))
     {
         // Software fallback
         var n = x
@@ -707,14 +707,14 @@ func branchless_max(a: I32, b: I32) -> I32 {
 ### 11.3 Fast CRC32
 
 ```tml
-#[cfg(target_feature = "sse4.2")]
-func crc32_fast(data: &[U8]) -> U32 {
+@cfg(target_feature = "sse4.2")
+func crc32_fast(data: ref [U8]) -> U32 {
     var crc: U32 = 0xFFFFFFFF
     var i: U64 = 0
 
     // Process 8 bytes at a time
     loop while i + 8 <= data.len() {
-        unsafe {
+        lowlevel {
             let chunk = (data.as_ptr().add(i) as *const U64).read_unaligned()
             crc = intrinsics.x86.crc32_u64(crc as U64, chunk) as U32
         }

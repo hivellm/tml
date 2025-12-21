@@ -56,14 +56,14 @@ extend Level {
     }
 
     /// Creates from string
-    public func from_str(s: &String) -> Option[Level] {
+    public func from_str(s: ref String) -> Maybe[Level] {
         when s.to_lowercase().as_str() {
-            "trace" -> Some(Trace),
-            "debug" -> Some(Debug),
-            "info" -> Some(Info),
-            "warn" | "warning" -> Some(Warn),
-            "error" -> Some(Error),
-            _ -> None,
+            "trace" -> Just(Trace),
+            "debug" -> Just(Debug),
+            "info" -> Just(Info),
+            "warn" | "warning" -> Just(Warn),
+            "error" -> Just(Error),
+            _ -> Nothing,
         }
     }
 }
@@ -158,7 +158,7 @@ public func init()
 {
     let level = env.var("TML_LOG")
         .ok()
-        .and_then(|s| Level.from_str(&s))
+        .and_then(|s| Level.from_str(ref s))
         .unwrap_or(Level.Info)
 
     set_level(level)
@@ -171,7 +171,7 @@ public func init()
 /// Logger configuration
 public type Logger {
     level: AtomicU8,
-    outputs: Vec[Box[dyn Output]],
+    outputs: Vec[Heap[dyn Output]],
     format: Format,
 }
 
@@ -212,7 +212,7 @@ extend Logger {
         let formatted = this.format.format(&record)
 
         loop output in this.outputs.iter() {
-            output.write(&formatted, record.level)
+            output.write(ref formatted, record.level)
         }
     }
 
@@ -231,7 +231,7 @@ extend Logger {
 /// Builder for configuring a logger
 public type LoggerBuilder {
     level: Level,
-    outputs: Vec[Box[dyn Output]],
+    outputs: Vec[Heap[dyn Output]],
     format: Format,
 }
 
@@ -270,7 +270,7 @@ extend LoggerBuilder {
     }
 
     /// Adds file output
-    public func file(mut this, path: &String) -> LoggerBuilder
+    public func file(mut this, path: ref String) -> LoggerBuilder
         caps: [io.file]
     {
         this.outputs.push(Box.new(FileOutput.new(path).unwrap()))
@@ -280,7 +280,7 @@ extend LoggerBuilder {
     /// Adds rotating file output
     public func rotating_file(
         mut this,
-        path: &String,
+        path: ref String,
         max_size: U64,
         max_files: U64,
     ) -> LoggerBuilder
@@ -291,7 +291,7 @@ extend LoggerBuilder {
     }
 
     /// Adds a custom output
-    public func output(mut this, output: Box[dyn Output]) -> LoggerBuilder {
+    public func output(mut this, output: Heap[dyn Output]) -> LoggerBuilder {
         this.outputs.push(output)
         return this
     }
@@ -329,7 +329,7 @@ public type Record {
 
 extend Record {
     /// Returns a field value by key
-    public func field(this, key: &String) -> Option[&String] {
+    public func field(this, key: ref String) -> Maybe[ref String] {
         this.fields.iter()
             .find(do((k, _)) k == key)
             .map(do((_, v)) v)
@@ -347,7 +347,7 @@ public type Format = Text | Json | Pretty | Compact
 
 extend Format {
     /// Formats a record
-    public func format(this, record: &Record) -> String {
+    public func format(this, record: ref Record) -> String {
         when this {
             Text -> this.format_text(record),
             Json -> this.format_json(record),
@@ -356,7 +356,7 @@ extend Format {
         }
     }
 
-    func format_text(this, record: &Record) -> String {
+    func format_text(this, record: ref Record) -> String {
         // 2024-03-15T10:30:00Z INFO [module::path] Message key=value
         var line = DateTime.now_utc().to_rfc3339()
         line = line + " " + record.level.to_string().to_uppercase()
@@ -370,7 +370,7 @@ extend Format {
         return line + "\n"
     }
 
-    func format_json(this, record: &Record) -> String {
+    func format_json(this, record: ref Record) -> String {
         var obj = JsonObject.new()
         obj.insert("timestamp", DateTime.now_utc().to_rfc3339())
         obj.insert("level", record.level.to_string())
@@ -386,7 +386,7 @@ extend Format {
         return obj.to_string() + "\n"
     }
 
-    func format_pretty(this, record: &Record) -> String {
+    func format_pretty(this, record: ref Record) -> String {
         let color = when record.level {
             Trace -> "\x1b[37m",    // Gray
             Debug -> "\x1b[36m",    // Cyan
@@ -411,7 +411,7 @@ extend Format {
         return line
     }
 
-    func format_compact(this, record: &Record) -> String {
+    func format_compact(this, record: ref Record) -> String {
         let prefix = when record.level {
             Trace -> "T",
             Debug -> "D",
@@ -433,9 +433,9 @@ extend Format {
 
 ```tml
 /// Log output destination
-public trait Output {
+public behavior Output {
     /// Writes a formatted log line
-    func write(this, line: &String, level: Level)
+    func write(this, line: ref String, level: Level)
 
     /// Flushes any buffered data
     func flush(this)
@@ -449,7 +449,7 @@ public trait Output {
 public type StderrOutput {}
 
 implement Output for StderrOutput {
-    func write(this, line: &String, level: Level) {
+    func write(this, line: ref String, level: Level) {
         io.stderr().write_all(line.as_bytes()).ok()
     }
 
@@ -462,7 +462,7 @@ implement Output for StderrOutput {
 public type StdoutOutput {}
 
 implement Output for StdoutOutput {
-    func write(this, line: &String, level: Level) {
+    func write(this, line: ref String, level: Level) {
         io.stdout().write_all(line.as_bytes()).ok()
     }
 
@@ -481,16 +481,16 @@ public type FileOutput {
 }
 
 extend FileOutput {
-    public func new(path: &String) -> Result[FileOutput, IoError]
+    public func new(path: ref String) -> Outcome[FileOutput, IoError]
         caps: [io.file]
     {
         let file = File.create(path)?
-        return Ok(FileOutput { file: Mutex.new(file) })
+        return Success(FileOutput { file: Mutex.new(file) })
     }
 }
 
 implement Output for FileOutput {
-    func write(this, line: &String, level: Level) {
+    func write(this, line: ref String, level: Level) {
         let guard = this.file.lock()
         guard.write_all(line.as_bytes()).ok()
     }
@@ -511,7 +511,7 @@ public type RotatingFileOutput {
 }
 
 extend RotatingFileOutput {
-    public func new(path: &String, max_size: U64, max_files: U64) -> Result[RotatingFileOutput, IoError]
+    public func new(path: ref String, max_size: U64, max_files: U64) -> Outcome[RotatingFileOutput, IoError]
         caps: [io.file]
 
     func rotate(mut this)
@@ -519,7 +519,7 @@ extend RotatingFileOutput {
 }
 
 implement Output for RotatingFileOutput {
-    func write(this, line: &String, level: Level) {
+    func write(this, line: ref String, level: Level) {
         let size = this.current_size.fetch_add(line.len() as U64, Ordering.Relaxed)
         if size > this.max_size then {
             this.rotate()
@@ -563,13 +563,13 @@ extend Filter {
     }
 
     /// Sets level for a specific target
-    public func target(mut this, target: &String, level: Level) -> Filter {
-        this.targets.insert(target.clone(), level)
+    public func target(mut this, target: ref String, level: Level) -> Filter {
+        this.targets.insert(target.duplicate(), level)
         return this
     }
 
     /// Returns true if the record should be logged
-    public func is_enabled(this, record: &Record) -> Bool {
+    public func is_enabled(this, record: ref Record) -> Bool {
         // Check specific target
         loop (prefix, level) in this.targets.iter() {
             if record.target.starts_with(prefix) then {
@@ -595,19 +595,19 @@ public type Span {
 
 extend Span {
     /// Enters a new span
-    public func enter(name: &String) -> Span
+    public func enter(name: ref String) -> Span
         caps: [io.time]
     {
         Span {
-            name: name.clone(),
+            name: name.duplicate(),
             fields: Vec.new(),
             start: Instant.now(),
         }
     }
 
     /// Adds a field to the span
-    public func field(mut this, key: &String, value: impl ToString) -> Span {
-        this.fields.push((key.clone(), value.to_string()))
+    public func field(mut this, key: ref String, value: impl ToString) -> Span {
+        this.fields.push((key.duplicate(), value.to_string()))
         return this
     }
 
@@ -625,14 +625,14 @@ extend Span {
 
 /// Guard that exits span on drop
 public type SpanGuard {
-    span: Option[Span],
+    span: Maybe[Span],
 }
 
-implement Drop for SpanGuard {
+implement Disposable for SpanGuard {
     func drop(mut this) {
         when this.span.take() {
-            Some(span) -> span.exit(),
-            None -> {},
+            Just(span) -> span.exit(),
+            Nothing -> {},
         }
     }
 }
@@ -641,7 +641,7 @@ implement Drop for SpanGuard {
 public macro span! {
     ($name:expr $(, $key:ident = $value:expr)*) => {
         let _span_guard = SpanGuard {
-            span: Some(Span.enter($name)$(.field($key.to_string(), $value))*)
+            span: Just(Span.enter($name)$(.field($key.to_string(), $value))*)
         }
     }
 }
@@ -679,7 +679,7 @@ func main() {
 ```tml
 import std.log.{info, warn, error}
 
-func process_request(request: &Request)
+func process_request(request: ref Request)
     caps: [io.time]
 {
     span!("process_request", request_id = request.id, method = request.method)
@@ -690,13 +690,13 @@ func process_request(request: &Request)
     )
 
     when handle_request(request) {
-        Ok(response) -> {
+        Success(response) -> {
             info!("Request completed",
                 status = response.status,
                 bytes = response.body.len()
             )
         },
-        Err(e) -> {
+        Failure(e) -> {
             error!("Request failed",
                 error = e.to_string(),
                 path = request.path

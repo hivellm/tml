@@ -23,15 +23,15 @@ The fundamental trait for all iterators.
 
 ```tml
 /// An iterator over a sequence of values
-public trait Iterator {
+public behaviorIterator {
     /// The type of elements being iterated
     type Item
 
     /// Advances the iterator and returns the next value
-    func next(mut this) -> Option[This.Item]
+    func next(mut this) -> Maybe[This.Item]
 
     /// Returns a size hint (lower, upper)
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         return (0, None)
     }
 
@@ -52,7 +52,7 @@ Trait for types that can be converted into an iterator.
 
 ```tml
 /// Conversion into an iterator
-public trait IntoIterator {
+public behaviorIntoIterator {
     /// The type of elements being iterated
     type Item
 
@@ -80,7 +80,7 @@ Iterator with known exact size.
 
 ```tml
 /// Iterator with exact size known
-public trait ExactSizeIterator: Iterator {
+public behaviorExactSizeIterator: Iterator {
     /// Returns the exact number of remaining elements
     func len(this) -> U64
 
@@ -97,9 +97,9 @@ Iterator that can iterate from both ends.
 
 ```tml
 /// Iterator that can be reversed
-public trait DoubleEndedIterator: Iterator {
+public behaviorDoubleEndedIterator: Iterator {
     /// Advances the iterator from the back
-    func next_back(mut this) -> Option[This.Item]
+    func next_back(mut this) -> Maybe[This.Item]
 }
 ```
 
@@ -109,7 +109,7 @@ Iterator that always returns None after returning None once.
 
 ```tml
 /// Iterator that is fused (None stays None)
-public trait FusedIterator: Iterator {}
+public behaviorFusedIterator: Iterator {}
 ```
 
 ---
@@ -142,7 +142,7 @@ extend Iterator {
     }
 
     /// Calls a function on each element, passing through the element
-    public func inspect(this, f: func(&This.Item)) -> Inspect[This] {
+    public func inspect(this, f: func(ref This.Item)) -> Inspect[This] {
         return Inspect { iter: this, f: f }
     }
 }
@@ -153,22 +153,22 @@ extend Iterator {
 ```tml
 extend Iterator {
     /// Filters elements based on a predicate
-    public func filter(this, predicate: func(&This.Item) -> Bool) -> Filter[This] {
+    public func filter(this, predicate: func(ref This.Item) -> Bool) -> Filter[This] {
         return Filter { iter: this, predicate: predicate }
     }
 
     /// Filters and maps in one step
-    public func filter_map[B](this, f: func(This.Item) -> Option[B]) -> FilterMap[This, B] {
+    public func filter_map[B](this, f: func(This.Item) -> Maybe[B]) -> FilterMap[This, B] {
         return FilterMap { iter: this, f: f }
     }
 
     /// Takes elements while predicate is true
-    public func take_while(this, predicate: func(&This.Item) -> Bool) -> TakeWhile[This] {
+    public func take_while(this, predicate: func(ref This.Item) -> Bool) -> TakeWhile[This] {
         return TakeWhile { iter: this, predicate: predicate, done: false }
     }
 
     /// Skips elements while predicate is true
-    public func skip_while(this, predicate: func(&This.Item) -> Bool) -> SkipWhile[This] {
+    public func skip_while(this, predicate: func(ref This.Item) -> Bool) -> SkipWhile[This] {
         return SkipWhile { iter: this, predicate: predicate, done: false }
     }
 }
@@ -204,7 +204,7 @@ extend Iterator {
     public func chain[U](this, other: U) -> Chain[This, U.Iter]
         where U: IntoIterator[Item = This.Item]
     {
-        return Chain { first: Some(this), second: other.into_iter() }
+        return Chain { first: Just(this), second: other.into_iter() }
     }
 
     /// Zips two iterators into pairs
@@ -241,30 +241,30 @@ extend Iterator {
 /// An iterator that can look at the next element without consuming it
 public type Peekable[I: Iterator] {
     iter: I,
-    peeked: Option[Option[I.Item]],
+    peeked: Maybe[Maybe[I.Item]],
 }
 
 extend Peekable[I] where I: Iterator {
     /// Returns a reference to the next element without consuming it
-    public func peek(mut this) -> Option[&I.Item] {
+    public func peek(mut this) -> Maybe[ref I.Item] {
         if this.peeked.is_none() then {
-            this.peeked = Some(this.iter.next())
+            this.peeked = Just(this.iter.next())
         }
         return this.peeked.as_ref().unwrap().as_ref()
     }
 
     /// Returns a mutable reference to the next element
-    public func peek_mut(mut this) -> Option[&mut I.Item] {
+    public func peek_mut(mut this) -> Maybe[mut ref I.Item] {
         if this.peeked.is_none() then {
-            this.peeked = Some(this.iter.next())
+            this.peeked = Just(this.iter.next())
         }
         return this.peeked.as_mut().unwrap().as_mut()
     }
 
     /// Consumes the next element if it matches the predicate
-    public func next_if(mut this, predicate: func(&I.Item) -> Bool) -> Option[I.Item] {
+    public func next_if(mut this, predicate: func(ref I.Item) -> Bool) -> Maybe[I.Item] {
         when this.peek() {
-            Some(item) if predicate(item) -> return this.next(),
+            Just(item) if predicate(item) -> return this.next(),
             _ -> return None,
         }
     }
@@ -281,10 +281,10 @@ extend DoubleEndedIterator {
     }
 }
 
-extend Iterator where This.Item: Clone {
+extend Iterator where This.Item: Duplicate {
     /// Cycles through the iterator infinitely
     public func cycle(this) -> Cycle[This] {
-        return Cycle { original: this.clone(), current: this }
+        return Cycle { original: this.duplicate(), current: this }
     }
 }
 ```
@@ -327,18 +327,18 @@ extend Iterator {
     }
 
     /// Reduces elements using a binary operation
-    public func reduce(mut this, f: func(This.Item, This.Item) -> This.Item) -> Option[This.Item] {
-        let first = this.next()?
-        return Some(this.fold(first, f))
+    public func reduce(mut this, f: func(This.Item, This.Item) -> This.Item) -> Maybe[This.Item] {
+        let first = this.next()!
+        return Just(this.fold(first, f))
     }
 
     /// Applies a function producing a Result, collecting results
-    public func try_fold[B, E](mut this, init: B, f: func(B, This.Item) -> Result[B, E]) -> Result[B, E] {
+    public func try_fold[B, E](mut this, init: B, f: func(B, This.Item) -> Outcome[B, E]) -> Outcome[B, E] {
         var acc = init
         loop item in this {
             acc = f(acc, item)!
         }
-        return Ok(acc)
+        return Success(acc)
     }
 }
 ```
@@ -348,29 +348,29 @@ extend Iterator {
 ```tml
 extend Iterator {
     /// Finds the first element matching a predicate
-    public func find(mut this, predicate: func(&This.Item) -> Bool) -> Option[This.Item] {
+    public func find(mut this, predicate: func(ref This.Item) -> Bool) -> Maybe[This.Item] {
         loop item in this {
-            if predicate(&item) then return Some(item)
+            if predicate(ref item) then return Just(item)
         }
         return None
     }
 
     /// Finds and transforms in one step
-    public func find_map[B](mut this, f: func(This.Item) -> Option[B]) -> Option[B] {
+    public func find_map[B](mut this, f: func(This.Item) -> Maybe[B]) -> Maybe[B] {
         loop item in this {
             when f(item) {
-                Some(b) -> return Some(b),
-                None -> continue,
+                Just(b) -> return Just(b),
+                Nothing -> continue,
             }
         }
         return None
     }
 
     /// Returns the position of the first matching element
-    public func position(mut this, predicate: func(This.Item) -> Bool) -> Option[U64] {
+    public func position(mut this, predicate: func(This.Item) -> Bool) -> Maybe[U64] {
         var i: U64 = 0
         loop item in this {
-            if predicate(item) then return Some(i)
+            if predicate(item) then return Just(i)
             i = i + 1
         }
         return None
@@ -392,19 +392,19 @@ extend Iterator {
     }
 
     /// Returns the last element
-    public func last(mut this) -> Option[This.Item] {
-        var result: Option[This.Item] = None
+    public func last(mut this) -> Maybe[This.Item] {
+        var result: Maybe[This.Item] = None
         loop item in this {
-            result = Some(item)
+            result = Just(item)
         }
         return result
     }
 
     /// Returns the nth element
-    public func nth(mut this, n: U64) -> Option[This.Item] {
+    public func nth(mut this, n: U64) -> Maybe[This.Item] {
         var i: U64 = 0
         loop item in this {
-            if i == n then return Some(item)
+            if i == n then return Just(item)
             i = i + 1
         }
         return None
@@ -413,29 +413,29 @@ extend Iterator {
 
 extend Iterator where This.Item: Ord {
     /// Returns the minimum element
-    public func min(mut this) -> Option[This.Item] {
+    public func min(mut this) -> Maybe[This.Item] {
         this.reduce(do(a, b) if a < b then a else b)
     }
 
     /// Returns the maximum element
-    public func max(mut this) -> Option[This.Item] {
+    public func max(mut this) -> Maybe[This.Item] {
         this.reduce(do(a, b) if a > b then a else b)
     }
 
     /// Returns both min and max
-    public func min_max(mut this) -> Option[(This.Item, This.Item)]
-        where This.Item: Clone
+    public func min_max(mut this) -> Maybe[(This.Item, This.Item)]
+        where This.Item: Duplicate
     {
-        let first = this.next()?
-        var min = first.clone()
+        let first = this.next()!
+        var min = first.duplicate()
         var max = first
 
         loop item in this {
-            if item < min then min = item.clone()
-            if item > max then max = item.clone()
+            if item < min then min = item.duplicate()
+            if item > max then max = item.duplicate()
         }
 
-        return Some((min, max))
+        return Just((min, max))
     }
 }
 
@@ -484,7 +484,7 @@ extend Iterator where This.Item: Eq {
     {
         loop {
             when (this.next(), other.next()) {
-                (Some(a), Some(b)) -> {
+                (Just(a), Just(b)) -> {
                     if a != b then return false
                 },
                 (None, None) -> return true,
@@ -501,12 +501,12 @@ extend Iterator where This.Item: Ord {
     {
         loop {
             when (this.next(), other.next()) {
-                (Some(a), Some(b)) -> {
-                    let ord = a.cmp(&b)
+                (Just(a), Just(b)) -> {
+                    let ord = a.cmp(ref b)
                     if ord != Ordering.Equal then return ord
                 },
-                (Some(_), None) -> return Ordering.Greater,
-                (None, Some(_)) -> return Ordering.Less,
+                (Just(_), None) -> return Ordering.Greater,
+                (None, Just(_)) -> return Ordering.Less,
                 (None, None) -> return Ordering.Equal,
             }
         }
@@ -519,14 +519,14 @@ extend Iterator where This.Item: Ord {
 ```tml
 extend Iterator {
     /// Partitions elements into two collections based on predicate
-    public func partition[C](mut this, predicate: func(&This.Item) -> Bool) -> (C, C)
+    public func partition[C](mut this, predicate: func(ref This.Item) -> Bool) -> (C, C)
         where C: Default + Extend[This.Item]
     {
         var left = C.default()
         var right = C.default()
 
         loop item in this {
-            if predicate(&item) then {
+            if predicate(ref item) then {
                 left.extend(once(item))
             } else {
                 right.extend(once(item))
@@ -570,30 +570,30 @@ public func empty[T]() -> Empty[T] {
 
 /// Creates an iterator that yields one element
 public func once[T](value: T) -> Once[T] {
-    return Once { value: Some(value) }
+    return Once { value: Just(value) }
 }
 
 /// Creates an iterator that repeats a value forever
 public func repeat[T](value: T) -> Repeat[T]
-    where T: Clone
+    where T: Duplicate
 {
     return Repeat { value: value }
 }
 
 /// Creates an iterator that repeats a value n times
 public func repeat_n[T](value: T, n: U64) -> RepeatN[T]
-    where T: Clone
+    where T: Duplicate
 {
     return RepeatN { value: value, remaining: n }
 }
 
 /// Creates an iterator from a function
-public func from_fn[T](f: func() -> Option[T]) -> FromFn[T] {
+public func from_fn[T](f: func() -> Maybe[T]) -> FromFn[T] {
     return FromFn { f: f }
 }
 
 /// Creates an iterator by repeatedly applying a function
-public func successors[T](first: Option[T], succ: func(&T) -> Option[T]) -> Successors[T] {
+public func successors[T](first: Maybe[T], succ: func(ref T) -> Maybe[T]) -> Successors[T] {
     return Successors { next: first, succ: succ }
 }
 ```
@@ -610,28 +610,28 @@ public type Range[T: Numeric] {
 implement Iterator for Range[T] where T: Numeric {
     type Item = T
 
-    func next(mut this) -> Option[T] {
+    func next(mut this) -> Maybe[T] {
         if this.start >= this.end then return None
         let value = this.start
         this.start = this.start + T.one()
-        return Some(value)
+        return Just(value)
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         let len = if this.end > this.start then {
             (this.end - this.start).to_u64()
         } else {
             0
         }
-        return (len, Some(len))
+        return (len, Just(len))
     }
 }
 
 implement DoubleEndedIterator for Range[T] where T: Numeric {
-    func next_back(mut this) -> Option[T] {
+    func next_back(mut this) -> Maybe[T] {
         if this.start >= this.end then return None
         this.end = this.end - T.one()
-        return Some(this.end)
+        return Just(this.end)
     }
 }
 
@@ -645,7 +645,7 @@ public type RangeInclusive[T: Numeric] {
 implement Iterator for RangeInclusive[T] where T: Numeric {
     type Item = T
 
-    func next(mut this) -> Option[T] {
+    func next(mut this) -> Maybe[T] {
         if this.exhausted then return None
         if this.start > this.end then return None
 
@@ -655,7 +655,7 @@ implement Iterator for RangeInclusive[T] where T: Numeric {
         } else {
             this.start = this.start + T.one()
         }
-        return Some(value)
+        return Just(value)
     }
 }
 ```
@@ -675,11 +675,11 @@ public type Map[I: Iterator, B] {
 implement Iterator for Map[I, B] where I: Iterator {
     type Item = B
 
-    func next(mut this) -> Option[B] {
+    func next(mut this) -> Maybe[B] {
         this.iter.next().map(this.f)
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         this.iter.size_hint()
     }
 }
@@ -689,7 +689,7 @@ implement ExactSizeIterator for Map[I, B] where I: ExactSizeIterator {
 }
 
 implement DoubleEndedIterator for Map[I, B] where I: DoubleEndedIterator {
-    func next_back(mut this) -> Option[B] {
+    func next_back(mut this) -> Maybe[B] {
         this.iter.next_back().map(this.f)
     }
 }
@@ -700,23 +700,23 @@ implement DoubleEndedIterator for Map[I, B] where I: DoubleEndedIterator {
 ```tml
 public type Filter[I: Iterator] {
     iter: I,
-    predicate: func(&I.Item) -> Bool,
+    predicate: func(ref I.Item) -> Bool,
 }
 
 implement Iterator for Filter[I] where I: Iterator {
     type Item = I.Item
 
-    func next(mut this) -> Option[I.Item] {
+    func next(mut this) -> Maybe[I.Item] {
         loop {
             when this.iter.next() {
-                Some(item) if (this.predicate)(&item) -> return Some(item),
-                Some(_) -> continue,
-                None -> return None,
+                Just(item) if (this.predicate)(ref item) -> return Just(item),
+                Just(_) -> continue,
+                Nothing -> return None,
             }
         }
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         let (_, upper) = this.iter.size_hint()
         return (0, upper)
     }
@@ -734,14 +734,14 @@ public type Enumerate[I: Iterator] {
 implement Iterator for Enumerate[I] where I: Iterator {
     type Item = (U64, I.Item)
 
-    func next(mut this) -> Option[(U64, I.Item)] {
-        let item = this.iter.next()?
+    func next(mut this) -> Maybe[(U64, I.Item)] {
+        let item = this.iter.next()!
         let index = this.count
         this.count = this.count + 1
-        return Some((index, item))
+        return Just((index, item))
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         this.iter.size_hint()
     }
 }
@@ -758,22 +758,22 @@ public type Zip[A: Iterator, B: Iterator] {
 implement Iterator for Zip[A, B] where A: Iterator, B: Iterator {
     type Item = (A.Item, B.Item)
 
-    func next(mut this) -> Option[(A.Item, B.Item)] {
-        let a = this.a.next()?
-        let b = this.b.next()?
-        return Some((a, b))
+    func next(mut this) -> Maybe[(A.Item, B.Item)] {
+        let a = this.a.next()!
+        let b = this.b.next()!
+        return Just((a, b))
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         let (a_lower, a_upper) = this.a.size_hint()
         let (b_lower, b_upper) = this.b.size_hint()
 
         let lower = a_lower.min(b_lower)
         let upper = when (a_upper, b_upper) {
-            (Some(a), Some(b)) -> Some(a.min(b)),
-            (Some(a), None) -> Some(a),
-            (None, Some(b)) -> Some(b),
-            (None, None) -> None,
+            (Just(a), Just(b)) -> Just(a.min(b)),
+            (Just(a), None) -> Just(a),
+            (None, Just(b)) -> Just(b),
+            (None, None) -> Nothing,
         }
 
         return (lower, upper)
@@ -785,7 +785,7 @@ implement Iterator for Zip[A, B] where A: Iterator, B: Iterator {
 
 ```tml
 public type Chain[A: Iterator, B: Iterator] {
-    first: Option[A],
+    first: Maybe[A],
     second: B,
 }
 
@@ -794,15 +794,15 @@ implement Iterator for Chain[A, B]
 {
     type Item = A.Item
 
-    func next(mut this) -> Option[A.Item] {
+    func next(mut this) -> Maybe[A.Item] {
         when this.first.as_mut() {
-            Some(first) -> {
+            Just(first) -> {
                 when first.next() {
-                    Some(item) -> return Some(item),
-                    None -> this.first = None,
+                    Just(item) -> return Just(item),
+                    Nothing -> this.first = None,
                 }
             },
-            None -> {},
+            Nothing -> {},
         }
         return this.second.next()
     }
@@ -820,16 +820,16 @@ public type Take[I: Iterator] {
 implement Iterator for Take[I] where I: Iterator {
     type Item = I.Item
 
-    func next(mut this) -> Option[I.Item] {
+    func next(mut this) -> Maybe[I.Item] {
         if this.remaining == 0 then return None
         this.remaining = this.remaining - 1
         return this.iter.next()
     }
 
-    func size_hint(this) -> (U64, Option[U64]) {
+    func size_hint(this) -> (U64, Maybe[U64]) {
         let (lower, upper) = this.iter.size_hint()
         let lower = lower.min(this.remaining)
-        let upper = upper.map(do(u) u.min(this.remaining)).or(Some(this.remaining))
+        let upper = upper.map(do(u) u.min(this.remaining)).or(Just(this.remaining))
         return (lower, upper)
     }
 }
@@ -842,7 +842,7 @@ public type Skip[I: Iterator] {
 implement Iterator for Skip[I] where I: Iterator {
     type Item = I.Item
 
-    func next(mut this) -> Option[I.Item] {
+    func next(mut this) -> Maybe[I.Item] {
         loop this.remaining > 0 {
             this.remaining = this.remaining - 1
             this.iter.next()
@@ -863,7 +863,7 @@ import std.iter.{Iterator, IntoIterator}
 import std.collections.Vec
 
 func basic_examples() {
-    let numbers = Vec.from_slice(&[1, 2, 3, 4, 5])
+    let numbers = Vec.from_slice(ref [1, 2, 3, 4, 5])
 
     // Map and filter
     let result: Vec[I32] = numbers.iter()
@@ -875,7 +875,7 @@ func basic_examples() {
     // Find
     let first_even = numbers.iter()
         .find(do(n) n % 2 == 0)
-    // first_even: Some(2)
+    // first_even: Just(2)
 
     // Fold
     let sum = numbers.iter().fold(0, do(acc, n) acc + n)
@@ -887,8 +887,8 @@ func basic_examples() {
 
 ```tml
 func chaining_examples() {
-    let a = Vec.from_slice(&[1, 2, 3])
-    let b = Vec.from_slice(&[4, 5, 6])
+    let a = Vec.from_slice(ref [1, 2, 3])
+    let b = Vec.from_slice(ref [4, 5, 6])
 
     // Chain
     let chained: Vec[I32] = a.iter().chain(b.iter()).collect()
@@ -910,7 +910,7 @@ func chaining_examples() {
 ```tml
 func lazy_examples() {
     // Nothing happens until collect()
-    let iter = (0..1000000)
+    let iter = (0 to 1000000)
         .map(do(n) n * 2)
         .filter(do(n) n % 3 == 0)
         .take(10)
@@ -936,11 +936,11 @@ func fibonacci() -> Fibonacci {
 implement Iterator for Fibonacci {
     type Item = U64
 
-    func next(mut this) -> Option[U64] {
+    func next(mut this) -> Maybe[U64] {
         let result = this.curr
         this.curr = this.next
         this.next = result + this.next
-        return Some(result)
+        return Just(result)
     }
 }
 

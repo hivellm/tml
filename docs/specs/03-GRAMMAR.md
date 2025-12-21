@@ -43,7 +43,7 @@ public import types.*
 ```ebnf
 Item = Function
      | TypeDecl
-     | TraitDecl
+     | BehaviorDecl
      | ExtendDecl
      | ConstDecl
 
@@ -53,7 +53,7 @@ Visibility = 'public' | 'private'
 ### 3.1 Functions
 
 ```ebnf
-Function = Annotation* Visibility? 'func' Ident StableId?
+Function = Directive* Visibility? 'func' Ident StableId?
            GenericParams? '(' Params? ')' ('->' Type)?
            Contract? EffectDecl? Block
 
@@ -78,7 +78,7 @@ func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-public func first[T](list: List[T]) -> Option[T] {
+public func first[T](list: List[T]) -> Maybe[T] {
     return list.get(0)
 }
 
@@ -89,7 +89,7 @@ post(r): r >= 0.0
     return x.sqrt_impl()
 }
 
-func read_file(path: String) -> Result[String, IoError]
+func read_file(path: String) -> Outcome[String, IoError]
 effects: [io.file.read]
 {
     // ...
@@ -99,7 +99,7 @@ effects: [io.file.read]
 ### 3.2 Types
 
 ```ebnf
-TypeDecl = Annotation* Visibility? 'type' Ident StableId?
+TypeDecl = Directive* Visibility? 'type' Ident StableId?
            GenericParams? TypeBody
 
 TypeBody = StructBody | EnumBody | AliasBody
@@ -126,13 +126,13 @@ type Point {
 // Enum
 type Color = Red | Green | Blue | Rgb(U8, U8, U8)
 
-type Result[T, E] = Ok(T) | Err(E)
+type Outcome[T, E] = Success(T) | Failure(E)
 
 type JsonValue =
     | Null
     | Bool(Bool)
     | Number(F64)
-    | String(String)
+    | Text(String)
     | Array(List[JsonValue])
     | Object(Map[String, JsonValue])
 
@@ -141,38 +141,38 @@ type UserId = U64
 type Handler = func(Request) -> Response
 ```
 
-### 3.3 Traits
+### 3.3 Behaviors
 
 ```ebnf
-TraitDecl = Annotation* Visibility? 'trait' Ident GenericParams?
-            (':' TypeBound)? '{' TraitItem* '}'
+BehaviorDecl = Directive* Visibility? 'behavior' Ident GenericParams?
+               (':' TypeBound)? '{' BehaviorItem* '}'
 
-TraitItem = TraitFunc | TraitType
+BehaviorItem = BehaviorFunc | BehaviorType
 
-TraitFunc = 'func' Ident GenericParams? '(' Params? ')' ('->' Type)?
-            (Block | ';')
+BehaviorFunc = 'func' Ident GenericParams? '(' Params? ')' ('->' Type)?
+               (Block | ';')
 
-TraitType = 'type' Ident (':' TypeBound)? ('=' Type)? ';'
+BehaviorType = 'type' Ident (':' TypeBound)? ('=' Type)? ';'
 ```
 
 **Examples:**
 ```tml
-trait Eq {
+behavior Equal {
     func eq(this, other: This) -> Bool;
 }
 
-trait Ord: Eq {
-    func cmp(this, other: This) -> Ordering;
+behavior Ordered: Equal {
+    func compare(this, other: This) -> Ordering;
 
     // Default implementation
-    func lt(this, other: This) -> Bool {
-        return this.cmp(other) == Less
+    func less_than(this, other: This) -> Bool {
+        return this.compare(other) == Less
     }
 }
 
-trait Iterator {
+behavior Iterable {
     type Item;
-    func next(this) -> Option[This.Item];
+    func next(this) -> Maybe[This.Item];
 }
 ```
 
@@ -196,16 +196,16 @@ extend Point {
     }
 }
 
-extend Point with Eq {
+extend Point with Equal {
     func eq(this, other: This) -> Bool {
         return this.x == other.x and this.y == other.y
     }
 }
 
-extend List[T] with Iterator {
+extend List[T] with Iterable {
     type Item = T;
 
-    func next(this) -> Option[T] {
+    func next(this) -> Maybe[T] {
         // ...
     }
 }
@@ -281,7 +281,7 @@ AddExpr     = MulExpr (('+' | '-') MulExpr)*
 MulExpr     = PowExpr (('*' | '/' | '%') PowExpr)*
 PowExpr     = UnaryExpr ('**' UnaryExpr)*
 
-UnaryExpr   = ('-' | '~' | '&' | '*') UnaryExpr
+UnaryExpr   = ('-' | '~') UnaryExpr
             | PostfixExpr
 
 PostfixExpr = PrimaryExpr Postfix*
@@ -299,6 +299,7 @@ PrimaryExpr = Literal
             | Ident
             | 'this'
             | 'This'
+            | 'ref' Expr
             | GroupExpr
             | BlockExpr
             | IfExpr
@@ -372,8 +373,8 @@ when value {
 }
 
 when result {
-    Ok(value) -> use(value),
-    Err(e) -> log(e),
+    Success(value) -> use(value),
+    Failure(e) -> log(e),
 }
 
 when point {
@@ -383,8 +384,8 @@ when point {
 
 // No guards - use inline if
 when opt {
-    Some(x) -> if x > 0 then x else 0,
-    None -> -1,
+    Just(x) -> if x > 0 then x else 0,
+    Nothing -> -1,
 }
 ```
 
@@ -393,9 +394,10 @@ when opt {
 ```ebnf
 LoopExpr = 'loop' LoopKind Block
 
-LoopKind = 'in' Expr           // for-each
-         | 'while' Expr        // while
-         | ε                   // infinite
+LoopKind = Ident 'in' Expr       // for-each with binding
+         | 'in' Expr             // for-each anonymous
+         | 'while' Expr          // while
+         | ε                     // infinite
 ```
 
 **Examples:**
@@ -405,8 +407,12 @@ loop item in items {
     process(item)
 }
 
-loop i in 0..10 {
+loop i in 0 to 10 {
     print(i)
+}
+
+loop i in 1 through 5 {
+    print(i)  // 1, 2, 3, 4, 5
 }
 
 // While
@@ -456,10 +462,10 @@ CatchExpr = 'catch' Block 'else' ('|' Ident '|')? Block
 catch {
     let local = load_local()!
     let remote = fetch_remote()!
-    return Ok(merge(local, remote)!)
+    return Success(merge(local, remote)!)
 } else |err| {
     log.error(err.to_string())
-    return Err(err)
+    return Failure(err)
 }
 ```
 
@@ -536,7 +542,7 @@ Type = PrimitiveType
      | FuncType
      | ArrayType
      | TupleType
-     | OptionType
+     | MaybeType
 
 PrimitiveType = 'Bool' | 'I8' | 'I16' | 'I32' | 'I64' | 'I128'
               | 'U8' | 'U16' | 'U32' | 'U64' | 'U128'
@@ -544,11 +550,11 @@ PrimitiveType = 'Bool' | 'I8' | 'I16' | 'I32' | 'I64' | 'I128'
 
 NamedType    = TypePath
 GenericType  = TypePath '[' Type (',' Type)* ']'
-RefType      = '&' 'mut'? Type
+RefType      = 'ref' Type | 'mut' 'ref' Type
 FuncType     = 'func' '(' (Type (',' Type)*)? ')' '->' Type
 ArrayType    = '[' Type ';' Expr ']'
 TupleType    = '(' Type (',' Type)+ ')'
-OptionType   = Type '?'
+MaybeType    = Type '?'
 
 TypePath = Ident ('::' Ident)*
 ```
@@ -562,11 +568,11 @@ Bool, I32, U64, F64, String, Char
 Point
 List[I32]
 Map[String, Value]
-Result[Data, Error]
+Outcome[Data, Error]
 
 // References
-&String
-&mut List[T]
+ref String
+mut ref List[T]
 
 // Functions
 func(I32, I32) -> I32
@@ -580,14 +586,33 @@ func(String) -> Bool
 (I32, String)
 (F64, F64, F64)
 
-// Optional (sugar for Option[T])
+// Maybe (sugar for Maybe[T])
 String?
 User?
 ```
 
-## 7. LL(1) Verification
+## 7. Directives
 
-### 7.1 First Token Determines Production
+```ebnf
+Directive     = '@' DirectiveName DirectiveArgs?
+DirectiveName = Ident
+DirectiveArgs = '(' (DirectiveArg (',' DirectiveArg)*)? ')'
+DirectiveArg  = Ident (':' Value)?
+```
+
+**Examples:**
+```tml
+@test
+@when(os: linux)
+@auto(debug, duplicate, equal)
+@deprecated("Use new_func instead")
+@hint(inline: always)
+@lowlevel
+```
+
+## 8. LL(1) Verification
+
+### 8.1 First Token Determines Production
 
 | Token | Production |
 |-------|------------|
@@ -597,7 +622,7 @@ User?
 | `private` | Visibility + Item |
 | `func` | Function |
 | `type` | TypeDecl |
-| `trait` | TraitDecl |
+| `behavior` | BehaviorDecl |
 | `extend` | ExtendDecl |
 | `const` | ConstDecl |
 | `let` | LetStmt |
@@ -612,13 +637,15 @@ User?
 | `do` | DoExpr |
 | `this` | ThisExpr |
 | `This` | ThisType or Constructor |
+| `ref` | RefExpr or RefType |
 | `{` | BlockExpr |
 | `(` | GroupExpr or TupleExpr |
 | `[` | ArrayExpr |
+| `@` | Directive |
 | Ident | VarRef or FuncCall or TypeRef |
 | Literal | LiteralExpr |
 
-### 7.2 No Ambiguities
+### 8.2 No Ambiguities
 
 **Generics vs Comparison:**
 ```tml
@@ -638,7 +665,13 @@ do(x) x + 1     // do starts closure
 a | b           // | always bitwise OR
 ```
 
-## 8. Complete Example
+**Reference vs Bitwise AND:**
+```tml
+ref data        // ref keyword for references
+a & b           // & always bitwise AND
+```
+
+## 9. Complete Example
 
 ```tml
 module math.geometry
@@ -687,7 +720,7 @@ extend Circle {
     }
 }
 
-#[test]
+@test
 func test_distance() {
     let p1 = Point.new(0.0, 0.0)
     let p2 = Point.new(3.0, 4.0)

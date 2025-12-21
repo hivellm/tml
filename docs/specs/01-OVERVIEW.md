@@ -6,13 +6,14 @@ All existing programming languages were designed for **humans**:
 - Syntax optimized for manual reading and writing
 - Ambiguities resolved by context (which humans understand)
 - Syntactic sugar for typing convenience
-- Error messages for human developers
+- Cryptic symbols and abbreviations
 
 LLMs are not humans. They need:
 - **Deterministic parsing** — no ambiguities
 - **Unique tokens** — each symbol with one meaning
 - **Explicit structure** — no contextual inferences
 - **Stable IDs** — references that survive refactoring
+- **Self-documenting syntax** — words over symbols
 
 ## 2. The Solution: TML
 
@@ -20,75 +21,47 @@ LLMs are not humans. They need:
 
 | Principle | Implementation |
 |-----------|----------------|
+| Words over symbols | `and`, `or`, `not`, `ref`, `to` instead of `&&`, `\|\|`, `!`, `&`, `..` |
 | One token = one meaning | `<` is always comparison, `[` is always generic/array |
 | LL(1) parsing | Lookahead of 1 token determines the production |
 | Explicit > implicit | `return` mandatory, `then` mandatory |
 | Stable IDs | Functions and types have immutable `@id` |
+| Self-documenting types | `Maybe[T]`, `Outcome[T, E]`, `Shared[T]` |
+| Natural language directives | `@when(os: linux)`, `@auto(debug)` |
 | No macros | Code is code, no meta-programming |
 
-## 3. Comparison with Rust
+## 3. TML Design Principles
 
-TML learns from Rust but doesn't copy its syntax.
+### 3.1 What Makes TML Different
 
-### 3.1 What TML Keeps from Rust
-- Ownership and borrowing (concept)
-- Result/Option for errors
-- Pattern matching
-- Traits (called traits)
-- Expressions as values
-- No null/nil
-
-### 3.2 What TML Changes
-
-| Aspect | Rust | TML | Reason |
-|--------|------|-----|--------|
+| Aspect | Other Languages | TML | Reason |
+|--------|-----------------|-----|--------|
 | Generics | `Vec<T>` | `List[T]` | `<>` conflicts with comparison |
+| References | `&T`, `&mut T` | `ref T`, `mut ref T` | Words, not symbols |
 | Closures | `\|x\| x+1` | `do(x) x+1` | `\|` is bitwise OR |
-| Logical | `&&` `\|\|` `!` | `and` `or` `not` | Clearer |
-| Functions | `fn` | `func` | More explicit |
-| Self | `self` | `this` | Universal |
-| Modules | `mod`/`use` | `module`/`import` | Clearer |
-| Impl | `impl T for X` | `extend X with T` | Reads naturally |
-| Mutable | `let mut` | `var` | Shorter |
-| Lifetimes | `'a` | (inferred) | Not exposed to user |
-| Match | `match x {}` | `when x {}` | No conflict with English "match" |
-| Loops | `for`/`while`/`loop` | unified `loop` | One keyword |
+| Logical | `&&` `\|\|` `!` | `and` `or` `not` | Natural language |
+| Ranges | `0..10`, `0..=10` | `0 to 10`, `0 through 10` | Reads like English |
+| Optional | `Option<T>`, `Some/None` | `Maybe[T]`, `Just/Nothing` | Self-documenting |
+| Errors | `Result<T,E>`, `Ok/Err` | `Outcome[T,E]`, `Success/Failure` | Self-documenting |
+| Heap alloc | `Box<T>` | `Heap[T]` | Describes where it lives |
+| Ref counted | `Rc<T>`, `Arc<T>` | `Shared[T]`, `Sync[T]` | Describes behavior |
+| Unsafe | `unsafe { }` | `lowlevel { }` | Neutral term |
+| Annotations | `#[cfg(...)]` | `@when(...)` | Universal, readable |
+| Derive | `#[derive(...)]` | `@auto(...)` | Clear purpose |
+| Interfaces | `trait` | `behavior` | Describes what it defines |
+| Clone | `.clone()` | `.duplicate()` | Clear action |
 
-### 3.3 Side-by-Side Examples
+### 3.2 Side-by-Side Examples
 
 **Generic function:**
-```rust
-// Rust
-fn first<T: Clone>(items: &[T]) -> Option<T> {
-    items.first().cloned()
-}
-```
 ```tml
-// TML
-func first[T: Clone](items: &List[T]) -> Option[T] {
-    return items.first().clone()
+func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
+    return items.first().duplicate()
 }
 ```
 
 **Struct with methods:**
-```rust
-// Rust
-struct Point { x: f64, y: f64 }
-
-impl Point {
-    fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-
-    fn distance(&self, other: &Point) -> f64 {
-        let dx = self.x - other.x;
-        let dy = self.y - other.y;
-        (dx*dx + dy*dy).sqrt()
-    }
-}
-```
 ```tml
-// TML
 type Point { x: F64, y: F64 }
 
 extend Point {
@@ -96,7 +69,7 @@ extend Point {
         return This { x: x, y: y }
     }
 
-    func distance(this, other: &Point) -> F64 {
+    func distance(this, other: ref Point) -> F64 {
         let dx = this.x - other.x
         let dy = this.y - other.y
         return (dx**2 + dy**2).sqrt()
@@ -105,51 +78,69 @@ extend Point {
 ```
 
 **Pattern matching:**
-```rust
-// Rust
-match value {
-    Some(x) if x > 0 => x * 2,
-    Some(x) => x,
-    None => 0,
-}
-```
 ```tml
-// TML - no guards, inline logic
 when value {
-    Some(x) -> if x > 0 then x * 2 else x,
-    None -> 0,
+    Just(x) -> if x > 0 then x * 2 else x,
+    Nothing -> 0,
 }
 ```
 
 **Error handling:**
-```rust
-// Rust
-let file = File::open("data.txt")?;
-let content = std::fs::read_to_string(&file)?;
-let parsed = content.parse::<i32>().unwrap_or(0);
-```
 ```tml
-// TML
 let file = File.open("data.txt")!
 let content = file.read_string()!
 let parsed = content.parse[I32]()! else 0
 ```
 
 **Closures:**
-```rust
-// Rust
-let nums: Vec<i32> = items
-    .iter()
-    .filter(|x| x > &0)
-    .map(|x| x * 2)
-    .collect();
-```
 ```tml
-// TML
 let nums: List[I32] = items
     .filter(do(x) x > 0)
     .map(do(x) x * 2)
     .collect()
+```
+
+**References:**
+```tml
+// Immutable reference
+func length(s: ref String) -> U64 {
+    return s.len()
+}
+
+// Mutable reference
+func append(s: mut ref String, suffix: String) {
+    s.push(suffix)
+}
+```
+
+**Behaviors (interfaces):**
+```tml
+behavior Printable {
+    func to_text(this) -> String
+}
+
+extend Point with Printable {
+    func to_text(this) -> String {
+        return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+    }
+}
+```
+
+**Directives:**
+```tml
+@when(os: linux)
+func linux_specific() { ... }
+
+@auto(debug, duplicate, equal)
+type Config { name: String, value: I32 }
+
+@test
+func test_example() { assert(true) }
+
+@lowlevel
+func raw_access(p: ptr U8) -> U8 {
+    return p.read()
+}
 ```
 
 ## 4. Unique Features
@@ -174,7 +165,7 @@ Explicit declaration of what code can and does:
 module Database {
     caps: [io.network, io.file]
 
-    func query(sql: String) -> Result[Rows, Error]
+    func query(sql: String) -> Outcome[Rows, Error]
     effects: [db.read]
     {
         // ...
@@ -217,7 +208,7 @@ Each token uniquely determines the production:
 | `import` | Import |
 | `func` | Function |
 | `type` | Type (struct or enum) |
-| `trait` | Trait |
+| `behavior` | Behavior (interface) |
 | `extend` | Type extension |
 | `let` | Immutable binding |
 | `var` | Mutable binding |
@@ -226,26 +217,22 @@ Each token uniquely determines the production:
 | `when` | Pattern match |
 | `loop` | Iteration |
 | `return` | Return |
+| `@` | Directive |
 
 ## 6. No Macros
 
-Macros break deterministic parsing. TML doesn't have:
-
-```rust
-// Rust - macro changes syntax
-println!("x = {}", x);
-vec![1, 2, 3];
-#[derive(Debug)]
-```
+Macros break deterministic parsing. TML uses directives instead:
 
 ```tml
-// TML - normal functions
+// TML - normal functions and directives
 print("x = " + x.to_string())
 List.of(1, 2, 3)
-#[derive(Debug)]  // annotation, not macro
+
+@auto(debug)     // compiler processes this
+type MyType { value: I32 }
 ```
 
-Annotations like `#[derive(Debug)]` are processed by the compiler, not arbitrary macros.
+Directives like `@auto(debug)` are processed by the compiler, not arbitrary code transformations.
 
 ## 7. Design Philosophy
 
@@ -269,6 +256,7 @@ func greet(name: String)  // not: func greet(name)
 ```tml
 // One form of loop
 loop item in items { }
+loop i in 0 to 10 { }
 loop while condition { }
 loop { }
 
@@ -287,7 +275,23 @@ let x: I64 = 42i32          // error: needs .to_i64()
 let x: I64 = 42i32.to_i64() // ok
 
 // No magical operator overloading
-// + is defined via trait Add explicitly
+// + is defined via behavior Addable explicitly
+```
+
+### 7.4 Self-Documenting
+
+```tml
+// Types explain themselves
+Maybe[User]           // Maybe there's a user
+Outcome[Data, Error]  // Outcome is success or failure
+Shared[Cache]         // Shared reference-counted data
+Heap[LargeData]       // Data allocated on heap
+
+// Constructors explain themselves
+Just(user)            // Just this user
+Nothing               // Nothing here
+Success(data)         // Successful outcome
+Failure(error)        // Failed outcome
 ```
 
 ## 8. Use Cases
@@ -296,11 +300,13 @@ let x: I64 = 42i32.to_i64() // ok
 - Deterministic parsing allows immediate validation
 - Stable IDs allow surgical patches
 - No ambiguity reduces generation errors
+- Self-documenting syntax reduces hallucinations
 
 ### 8.2 Code Analysis by LLM
 - Explicit caps/effects allow reasoning about behavior
 - Formalizable contracts
 - Canonical IR allows semantic diff
+- Natural language keywords improve comprehension
 
 ### 8.3 Automatic Refactoring
 - IDs survive renames

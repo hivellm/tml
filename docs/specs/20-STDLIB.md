@@ -14,17 +14,17 @@ The TML standard library is organized in layers:
 ```
 std
 ├── core           # Always available (no_std compatible)
-│   ├── types      # Primitive types, Option, Result
-│   ├── ops        # Operators and traits
+│   ├── types      # Primitive types, Maybe, Outcome
+│   ├── ops        # Operators and behaviors
 │   ├── mem        # Memory operations
 │   ├── ptr        # Raw pointers
 │   ├── slice      # Slice operations
-│   └── iter       # Iterator trait
+│   └── iter       # Iterator behavior
 ├── alloc          # Requires allocator
 │   ├── string     # String type
-│   ├── boxed      # Box[T]
-│   ├── rc         # Rc[T], Weak[T]
-│   ├── arc        # Arc[T], Weak[T]
+│   ├── heap       # Heap[T]
+│   ├── shared     # Shared[T], Weak[T]
+│   ├── sync       # Sync[T], Weak[T]
 │   └── vec        # List[T] (growable array)
 ├── collections    # Data structures
 │   ├── map        # Map[K, V] (HashMap)
@@ -33,8 +33,8 @@ std
 │   ├── deque      # Deque[T]
 │   └── heap       # BinaryHeap[T]
 ├── io             # I/O operations
-│   ├── read       # Read trait
-│   ├── write      # Write trait
+│   ├── read       # Read behavior
+│   ├── write      # Write behavior
 │   ├── buf        # Buffered I/O
 │   ├── file       # File operations
 │   └── net        # Networking
@@ -56,11 +56,11 @@ std
 │   ├── duration   # Duration
 │   └── system     # SystemTime
 ├── fmt            # Formatting
-│   ├── display    # Display trait
-│   ├── debug      # Debug trait
+│   ├── display    # Display behavior
+│   ├── debug      # Debug behavior
 │   └── write      # Format writing
 ├── hash           # Hashing
-│   ├── hasher     # Hasher trait
+│   ├── hasher     # Hasher behavior
 │   └── sip        # SipHash (default)
 ├── num            # Numeric utilities
 │   ├── int        # Integer extensions
@@ -80,23 +80,23 @@ std
 │   ├── hook       # Panic hooks
 │   └── catch      # Catch unwind
 ├── error          # Error types
-│   └── error      # Error trait
+│   └── error      # Error behavior
 ├── convert        # Type conversions
-│   ├── from       # From/Into traits
-│   └── try        # TryFrom/TryInto
+│   ├── from       # From/Into behaviors
+│   └── try        # TryFrom/TryInto behaviors
 ├── cmp            # Comparison
 │   ├── ord        # Ordering
 │   └── eq         # Equality
-├── clone          # Cloning
-│   └── clone      # Clone trait
+├── duplicate      # Duplicating
+│   └── duplicate  # Duplicate behavior
 ├── default        # Default values
-│   └── default    # Default trait
+│   └── default    # Default behavior
 ├── json           # JSON support
 │   ├── value      # JsonValue type
 │   ├── parse      # JSON parser
 │   └── serialize  # Serialization
 ├── log            # Logging
-│   ├── logger     # Logger trait
+│   ├── logger     # Logger behavior
 │   └── macros     # log_*, println
 └── test           # Testing framework
     ├── assert     # Assertions
@@ -111,8 +111,8 @@ std
 // std.core.types
 
 // Already built-in but defined here for completeness
-public type Option[T] = Some(T) | None
-public type Result[T, E] = Ok(T) | Err(E)
+public type Maybe[T] = Just(T) | Nothing
+public type Outcome[T, E] = Success(T) | Failure(E)
 public type Ordering = Less | Equal | Greater
 
 // Unit type
@@ -122,78 +122,78 @@ public type Unit = unit
 public type Never = !
 ```
 
-### 3.2 Traits
+### 3.2 Behaviors
 
 ```tml
 // std.core.ops
 
-public trait Eq {
-    func eq(this, other: &This) -> Bool
-    func ne(this, other: &This) -> Bool {
+public behavior Equal {
+    func eq(this, other: ref This) -> Bool
+    func ne(this, other: ref This) -> Bool {
         return not this.eq(other)
     }
 }
 
-public trait Ord: Eq {
-    func cmp(this, other: &This) -> Ordering
+public behavior Ordered: Equal {
+    func cmp(this, other: ref This) -> Ordering
 
-    func lt(this, other: &This) -> Bool
-    func le(this, other: &This) -> Bool
-    func gt(this, other: &This) -> Bool
-    func ge(this, other: &This) -> Bool
+    func lt(this, other: ref This) -> Bool
+    func le(this, other: ref This) -> Bool
+    func gt(this, other: ref This) -> Bool
+    func ge(this, other: ref This) -> Bool
     func max(this, other: This) -> This
     func min(this, other: This) -> This
 }
 
-public trait Clone {
-    func clone(this) -> This
+public behavior Duplicate {
+    func duplicate(this) -> This
 }
 
-public trait Default {
+public behavior Default {
     func default() -> This
 }
 
-public trait Drop {
+public behavior Disposable {
     func drop(this)
 }
 
-public trait Hash {
-    func hash(this, hasher: &mut Hasher)
+public behavior Hash {
+    func hash(this, hasher: mut ref Hasher)
 }
 
-// Operator traits
-public trait Add[Rhs = This] {
+// Operator behaviors
+public behavior Add[Rhs = This] {
     type Output
     func add(this, rhs: Rhs) -> This.Output
 }
 
-public trait Sub[Rhs = This] {
+public behavior Sub[Rhs = This] {
     type Output
     func sub(this, rhs: Rhs) -> This.Output
 }
 
-public trait Mul[Rhs = This] {
+public behavior Mul[Rhs = This] {
     type Output
     func mul(this, rhs: Rhs) -> This.Output
 }
 
-public trait Div[Rhs = This] {
+public behavior Div[Rhs = This] {
     type Output
     func div(this, rhs: Rhs) -> This.Output
 }
 
-public trait Neg {
+public behavior Neg {
     type Output
     func neg(this) -> This.Output
 }
 
-public trait Index[Idx] {
+public behavior Index[Idx] {
     type Output
-    func index(this, idx: Idx) -> &This.Output
+    func index(this, idx: Idx) -> ref This.Output
 }
 
-public trait IndexMut[Idx]: Index[Idx] {
-    func index_mut(this, idx: Idx) -> &mut This.Output
+public behavior IndexMut[Idx]: Index[Idx] {
+    func index_mut(this, idx: Idx) -> mut ref This.Output
 }
 ```
 
@@ -202,10 +202,10 @@ public trait IndexMut[Idx]: Index[Idx] {
 ```tml
 // std.core.iter
 
-public trait Iterator {
+public behavior Iterator {
     type Item
 
-    func next(this) -> Option[This.Item]
+    func next(this) -> Maybe[This.Item]
 
     // Provided methods (can be overridden for efficiency)
     func count(this) -> U64 {
@@ -214,16 +214,16 @@ public trait Iterator {
         return n
     }
 
-    func last(this) -> Option[This.Item] {
-        var last: Option[This.Item] = None
-        loop item in this { last = Some(item) }
+    func last(this) -> Maybe[This.Item] {
+        var last: Maybe[This.Item] = Nothing
+        loop item in this { last = Just(item) }
         return last
     }
 
-    func nth(this, n: U64) -> Option[This.Item] {
-        loop _ in 0..n {
-            if this.next().is_none() {
-                return None
+    func nth(this, n: U64) -> Maybe[This.Item] {
+        loop _ in 0 to n {
+            if this.next().is_nothing() {
+                return Nothing
             }
         }
         return this.next()
@@ -237,15 +237,15 @@ public trait Iterator {
         return Take { iter: this, n: n }
     }
 
-    func map[B, F: Fn(This.Item) -> B](this, f: F) -> Map[This, F] {
+    func map[B, F: Callable[(This.Item), B]](this, f: F) -> Map[This, F] {
         return Map { iter: this, f: f }
     }
 
-    func filter[F: Fn(&This.Item) -> Bool](this, f: F) -> Filter[This, F] {
+    func filter[F: Callable[(ref This.Item), Bool]](this, f: F) -> Filter[This, F] {
         return Filter { iter: this, f: f }
     }
 
-    func fold[B, F: Fn(B, This.Item) -> B](this, init: B, f: F) -> B {
+    func fold[B, F: Callable[(B, This.Item), B]](this, init: B, f: F) -> B {
         var acc = init
         loop item in this {
             acc = f(acc, item)
@@ -257,54 +257,54 @@ public trait Iterator {
         return C.from_iter(this)
     }
 
-    func any[F: Fn(&This.Item) -> Bool](this, f: F) -> Bool {
+    func any[F: Callable[(ref This.Item), Bool]](this, f: F) -> Bool {
         loop item in this {
-            if f(&item) { return true }
+            if f(ref item) { return true }
         }
         return false
     }
 
-    func all[F: Fn(&This.Item) -> Bool](this, f: F) -> Bool {
+    func all[F: Callable[(ref This.Item), Bool]](this, f: F) -> Bool {
         loop item in this {
-            if not f(&item) { return false }
+            if not f(ref item) { return false }
         }
         return true
     }
 
-    func find[F: Fn(&This.Item) -> Bool](this, f: F) -> Option[This.Item] {
+    func find[F: Callable[(ref This.Item), Bool]](this, f: F) -> Maybe[This.Item] {
         loop item in this {
-            if f(&item) { return Some(item) }
+            if f(ref item) { return Just(item) }
         }
-        return None
+        return Nothing
     }
 }
 
-public trait IntoIterator {
+public behavior IntoIterator {
     type Item
     type IntoIter: Iterator[Item = This.Item]
 
     func into_iter(this) -> This.IntoIter
 }
 
-public trait FromIterator[A] {
+public behavior FromIterator[A] {
     func from_iter[I: Iterator[Item = A]](iter: I) -> This
 }
 ```
 
 ## 4. Alloc Module
 
-### 4.1 Box
+### 4.1 Heap
 
 ```tml
-// std.alloc.boxed
+// std.alloc.heap
 
-public type Box[T] {
+public type Heap[T] {
     ptr: *mut T,
 }
 
-extend Box[T] {
+extend Heap[T] {
     public func new(value: T) -> This {
-        unsafe {
+        lowlevel {
             let ptr = tml_alloc(size_of[T](), align_of[T]()) as *mut T
             ptr.write(value)
             return This { ptr: ptr }
@@ -312,7 +312,7 @@ extend Box[T] {
     }
 
     public func into_inner(this) -> T {
-        unsafe {
+        lowlevel {
             let value = this.ptr.read()
             tml_dealloc(this.ptr as *mut U8, size_of[T](), align_of[T]())
             forget(this)
@@ -321,9 +321,9 @@ extend Box[T] {
     }
 }
 
-extend Box[T] with Drop {
+extend Heap[T] with Disposable {
     func drop(this) {
-        unsafe {
+        lowlevel {
             drop_in_place(this.ptr)
             tml_dealloc(this.ptr as *mut U8, size_of[T](), align_of[T]())
         }
@@ -345,7 +345,7 @@ extend String {
         return This { buf: List.new() }
     }
 
-    public func from(s: &str) -> This {
+    public func from(s: ref str) -> This {
         var buf = List.with_capacity(s.len())
         buf.extend_from_slice(s.as_bytes())
         return This { buf: buf }
@@ -360,17 +360,17 @@ extend String {
     }
 
     public func push(this, c: Char) {
-        let mut buf: [U8; 4] = [0, 0, 0, 0]
-        let len = c.encode_utf8(&mut buf)
-        this.buf.extend_from_slice(&buf[0..len])
+        var buf: [U8; 4] = [0, 0, 0, 0]
+        let len = c.encode_utf8(mut ref buf)
+        this.buf.extend_from_slice(ref buf[0 to len])
     }
 
-    public func push_str(this, s: &str) {
+    public func push_str(this, s: ref str) {
         this.buf.extend_from_slice(s.as_bytes())
     }
 
-    public func as_str(this) -> &str {
-        unsafe {
+    public func as_str(this) -> ref str {
+        lowlevel {
             str.from_utf8_unchecked(this.buf.as_slice())
         }
     }
@@ -380,11 +380,11 @@ extend String {
     }
 }
 
-extend String with Add[&str] {
+extend String with Add[ref str] {
     type Output = String
 
-    func add(this, other: &str) -> String {
-        var result = this.clone()
+    func add(this, other: ref str) -> String {
+        var result = this.duplicate()
         result.push_str(other)
         return result
     }
@@ -411,7 +411,7 @@ extend List[T] {
         if cap == 0 {
             return This.new()
         }
-        unsafe {
+        lowlevel {
             let ptr = tml_alloc(cap * size_of[T](), align_of[T]()) as *mut T
             return This { ptr: ptr, len: 0, cap: cap }
         }
@@ -425,34 +425,34 @@ extend List[T] {
         if this.len == this.cap {
             this.grow()
         }
-        unsafe {
+        lowlevel {
             this.ptr.add(this.len).write(value)
         }
         this.len += 1
     }
 
-    public func pop(this) -> Option[T] {
+    public func pop(this) -> Maybe[T] {
         if this.len == 0 {
-            return None
+            return Nothing
         }
         this.len -= 1
-        unsafe {
-            return Some(this.ptr.add(this.len).read())
+        lowlevel {
+            return Just(this.ptr.add(this.len).read())
         }
     }
 
-    public func get(this, index: U64) -> Option[&T] {
+    public func get(this, index: U64) -> Maybe[ref T] {
         if index >= this.len {
-            return None
+            return Nothing
         }
-        unsafe {
-            return Some(&*this.ptr.add(index))
+        lowlevel {
+            return Just(ref *this.ptr.add(index))
         }
     }
 
     func grow(this) {
         let new_cap = if this.cap == 0 { 4 } else { this.cap * 2 }
-        unsafe {
+        lowlevel {
             let new_ptr = tml_alloc(new_cap * size_of[T](), align_of[T]()) as *mut T
             if this.ptr != null {
                 tml_memcpy(new_ptr as *mut U8, this.ptr as *const U8, this.len * size_of[T]())
@@ -467,19 +467,19 @@ extend List[T] {
 extend List[T] with Index[U64] {
     type Output = T
 
-    func index(this, idx: U64) -> &T {
+    func index(this, idx: U64) -> ref T {
         when this.get(idx) {
-            Some(v) -> v,
-            None -> panic("index out of bounds"),
+            Just(v) -> v,
+            Nothing -> panic("index out of bounds"),
         }
     }
 }
 
-extend List[T] with Drop {
+extend List[T] with Disposable {
     func drop(this) {
-        unsafe {
+        lowlevel {
             // Drop all elements
-            loop i in 0..this.len {
+            loop i in 0 to this.len {
                 drop_in_place(this.ptr.add(i))
             }
             // Free buffer
@@ -498,58 +498,58 @@ extend List[T] with Drop {
 ```tml
 // std.io
 
-public trait Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+public behavior Read {
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
 
-    func read_exact(this, buf: &mut [U8]) -> Result[Unit, IoError] {
+    func read_exact(this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
         var filled: U64 = 0
         loop while filled < buf.len() {
-            let n = this.read(&mut buf[filled..])!
+            let n = this.read(mut ref buf[filled to buf.len()])!
             if n == 0 {
-                return Err(IoError.UnexpectedEof)
+                return Failure(IoError.UnexpectedEof)
             }
             filled += n
         }
-        return Ok(unit)
+        return Success(unit)
     }
 
-    func read_to_end(this, buf: &mut List[U8]) -> Result[U64, IoError] {
+    func read_to_end(this, buf: mut ref List[U8]) -> Outcome[U64, IoError] {
         var read_total: U64 = 0
         var chunk: [U8; 1024] = [0; 1024]
         loop {
-            let n = this.read(&mut chunk)!
+            let n = this.read(mut ref chunk)!
             if n == 0 {
                 break
             }
-            buf.extend_from_slice(&chunk[0..n])
+            buf.extend_from_slice(ref chunk[0 to n])
             read_total += n
         }
-        return Ok(read_total)
+        return Success(read_total)
     }
 
-    func read_to_string(this, buf: &mut String) -> Result[U64, IoError] {
+    func read_to_string(this, buf: mut ref String) -> Outcome[U64, IoError] {
         var bytes = List.new()
-        let n = this.read_to_end(&mut bytes)!
-        let s = String.from_utf8(bytes)?
-        buf.push_str(&s)
-        return Ok(n)
+        let n = this.read_to_end(mut ref bytes)!
+        let s = String.from_utf8(bytes)!
+        buf.push_str(ref s)
+        return Success(n)
     }
 }
 
-public trait Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError]
-    func flush(this) -> Result[Unit, IoError]
+public behavior Write {
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
+    func flush(this) -> Outcome[Unit, IoError]
 
-    func write_all(this, buf: &[U8]) -> Result[Unit, IoError] {
+    func write_all(this, buf: ref [U8]) -> Outcome[Unit, IoError] {
         var written: U64 = 0
         loop while written < buf.len() {
-            let n = this.write(&buf[written..])!
+            let n = this.write(ref buf[written to buf.len()])!
             if n == 0 {
-                return Err(IoError.WriteZero)
+                return Failure(IoError.WriteZero)
             }
             written += n
         }
-        return Ok(unit)
+        return Success(unit)
     }
 }
 ```
@@ -564,28 +564,28 @@ public type File {
 }
 
 extend File {
-    public func open(path: &Path) -> Result[This, IoError]
+    public func open(path: ref Path) -> Outcome[This, IoError]
     effects: [io.file.read]
     {
         return This.open_options(path, OpenOptions.read())
     }
 
-    public func create(path: &Path) -> Result[This, IoError]
+    public func create(path: ref Path) -> Outcome[This, IoError]
     effects: [io.file.write]
     {
         return This.open_options(path, OpenOptions.write().create(true).truncate(true))
     }
 
-    public func open_options(path: &Path, opts: OpenOptions) -> Result[This, IoError]
+    public func open_options(path: ref Path, opts: OpenOptions) -> Outcome[This, IoError]
     effects: [io.file]
     {
-        let handle = platform_open(path, opts)?
-        return Ok(This { handle: handle })
+        let handle = platform_open(path, opts)!
+        return Success(This { handle: handle })
     }
 }
 
 extend File with Read {
-    func read(this, buf: &mut [U8]) -> Result[U64, IoError]
+    func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
     effects: [io.file.read]
     {
         return platform_read(this.handle, buf)
@@ -593,20 +593,20 @@ extend File with Read {
 }
 
 extend File with Write {
-    func write(this, buf: &[U8]) -> Result[U64, IoError]
+    func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
     effects: [io.file.write]
     {
         return platform_write(this.handle, buf)
     }
 
-    func flush(this) -> Result[Unit, IoError]
+    func flush(this) -> Outcome[Unit, IoError]
     effects: [io.file.write]
     {
         return platform_flush(this.handle)
     }
 }
 
-extend File with Drop {
+extend File with Disposable {
     func drop(this) {
         platform_close(this.handle)
     }
@@ -622,18 +622,18 @@ extend File with Drop {
 
 public type Mutex[T] {
     inner: RawMutex,
-    data: UnsafeCell[T],
+    data: LowlevelCell[T],
 }
 
 public type MutexGuard[T] {
-    lock: &Mutex[T],
+    lock: ref Mutex[T],
 }
 
 extend Mutex[T] {
     public func new(value: T) -> This {
         return This {
             inner: RawMutex.new(),
-            data: UnsafeCell.new(value),
+            data: LowlevelCell.new(value),
         }
     }
 
@@ -642,29 +642,25 @@ extend Mutex[T] {
         return MutexGuard { lock: this }
     }
 
-    public func try_lock(this) -> Option[MutexGuard[T]] {
+    public func try_lock(this) -> Maybe[MutexGuard[T]] {
         if this.inner.try_lock() {
-            return Some(MutexGuard { lock: this })
+            return Just(MutexGuard { lock: this })
         }
-        return None
+        return Nothing
     }
 }
 
-extend MutexGuard[T] with Deref {
-    type Target = T
+extend MutexGuard[T] {
+    public func get(this) -> ref T {
+        lowlevel { ref *this.lock.data.get() }
+    }
 
-    func deref(this) -> &T {
-        unsafe { &*this.lock.data.get() }
+    public func get_mut(this) -> mut ref T {
+        lowlevel { mut ref *this.lock.data.get() }
     }
 }
 
-extend MutexGuard[T] with DerefMut {
-    func deref_mut(this) -> &mut T {
-        unsafe { &mut *this.lock.data.get() }
-    }
-}
-
-extend MutexGuard[T] with Drop {
+extend MutexGuard[T] with Disposable {
     func drop(this) {
         this.lock.inner.unlock()
     }
@@ -683,41 +679,41 @@ public type AtomicU32 { inner: U32 }
 public type AtomicU64 { inner: U64 }
 public type AtomicPtr[T] { inner: *mut T }
 
-public type Ordering = Relaxed | Acquire | Release | AcqRel | SeqCst
+public type MemoryOrdering = Relaxed | Acquire | Release | AcqRel | SeqCst
 
 extend AtomicI64 {
     public func new(value: I64) -> This {
         return This { inner: value }
     }
 
-    public func load(this, order: Ordering) -> I64 {
-        intrinsic_atomic_load(&this.inner, order)
+    public func load(this, order: MemoryOrdering) -> I64 {
+        intrinsic_atomic_load(ref this.inner, order)
     }
 
-    public func store(this, value: I64, order: Ordering) {
-        intrinsic_atomic_store(&this.inner, value, order)
+    public func store(this, value: I64, order: MemoryOrdering) {
+        intrinsic_atomic_store(ref this.inner, value, order)
     }
 
-    public func swap(this, value: I64, order: Ordering) -> I64 {
-        intrinsic_atomic_swap(&this.inner, value, order)
+    public func swap(this, value: I64, order: MemoryOrdering) -> I64 {
+        intrinsic_atomic_swap(ref this.inner, value, order)
     }
 
     public func compare_exchange(
         this,
         current: I64,
         new: I64,
-        success: Ordering,
-        failure: Ordering
-    ) -> Result[I64, I64] {
-        intrinsic_atomic_cmpxchg(&this.inner, current, new, success, failure)
+        success: MemoryOrdering,
+        failure: MemoryOrdering
+    ) -> Outcome[I64, I64] {
+        intrinsic_atomic_cmpxchg(ref this.inner, current, new, success, failure)
     }
 
-    public func fetch_add(this, value: I64, order: Ordering) -> I64 {
-        intrinsic_atomic_fetch_add(&this.inner, value, order)
+    public func fetch_add(this, value: I64, order: MemoryOrdering) -> I64 {
+        intrinsic_atomic_fetch_add(ref this.inner, value, order)
     }
 
-    public func fetch_sub(this, value: I64, order: Ordering) -> I64 {
-        intrinsic_atomic_fetch_sub(&this.inner, value, order)
+    public func fetch_sub(this, value: I64, order: MemoryOrdering) -> I64 {
+        intrinsic_atomic_fetch_sub(ref this.inner, value, order)
     }
 }
 ```
@@ -729,33 +725,35 @@ extend AtomicI64 {
 
 public type JoinHandle[T] {
     handle: RawThread,
-    result: Arc[Mutex[Option[T]]],
+    result: Sync[Mutex[Maybe[T]]],
 }
 
-public func spawn[F: FnOnce() -> T + Send, T: Send](f: F) -> JoinHandle[T]
+public func spawn[F, T](f: F) -> JoinHandle[T]
+where F: Callable[(), T] + Sendable,
+      T: Sendable
 effects: [io.sync]
 {
-    let result = Arc.new(Mutex.new(None))
-    let result_clone = result.clone()
+    let result = Sync.new(Mutex.new(Nothing))
+    let result_copy = result.duplicate()
 
     let handle = platform_spawn(do() {
         let value = f()
-        *result_clone.lock() = Some(value)
+        *result_copy.lock().get_mut() = Just(value)
     })
 
     return JoinHandle { handle: handle, result: result }
 }
 
 extend JoinHandle[T] {
-    public func join(this) -> Result[T, JoinError]
+    public func join(this) -> Outcome[T, JoinError]
     effects: [io.sync]
     {
-        platform_join(this.handle)?
+        platform_join(this.handle)!
 
         let guard = this.result.lock()
-        when guard.take() {
-            Some(value) -> Ok(value),
-            None -> Err(JoinError.Panicked),
+        when guard.get_mut().take() {
+            Just(value) -> Success(value),
+            Nothing -> Failure(JoinError.Panicked),
         }
     }
 
@@ -767,36 +765,36 @@ extend JoinHandle[T] {
 
 ## 8. Extension Points
 
-### 8.1 Plugin Traits
+### 8.1 Plugin Behaviors
 
 ```tml
 // Libraries can implement these to extend functionality
 
 // Custom allocator
-public trait GlobalAlloc {
-    unsafe func alloc(this, layout: Layout) -> *mut U8
-    unsafe func dealloc(this, ptr: *mut U8, layout: Layout)
-    unsafe func realloc(this, ptr: *mut U8, old: Layout, new: Layout) -> *mut U8
+public behavior GlobalAlloc {
+    lowlevel func alloc(this, layout: Layout) -> *mut U8
+    lowlevel func dealloc(this, ptr: *mut U8, layout: Layout)
+    lowlevel func realloc(this, ptr: *mut U8, old: Layout, new: Layout) -> *mut U8
 }
 
 // Custom hasher
-public trait BuildHasher {
+public behavior BuildHasher {
     type Hasher: Hasher
     func build_hasher(this) -> This.Hasher
 }
 
 // Custom error
-public trait Error: Debug + Display {
-    func source(this) -> Option[&dyn Error] { None }
+public behavior Error: Debug + Display {
+    func source(this) -> Maybe[ref any Error] { Nothing }
 }
 
 // Custom serialization
-public trait Serialize {
-    func serialize[S: Serializer](this, serializer: &mut S) -> Result[Unit, S.Error]
+public behavior Serialize {
+    func serialize[S: Serializer](this, serializer: mut ref S) -> Outcome[Unit, S.Error]
 }
 
-public trait Deserialize {
-    func deserialize[D: Deserializer](deserializer: &mut D) -> Result[This, D.Error]
+public behavior Deserialize {
+    func deserialize[D: Deserializer](deserializer: mut ref D) -> Outcome[This, D.Error]
 }
 ```
 
@@ -809,11 +807,11 @@ import std.collections.Map
 
 // Third-party library can extend Map
 extend Map[K, V] with custom_lib.Serialize where K: Serialize, V: Serialize {
-    func serialize[S: Serializer](this, s: &mut S) -> Result[Unit, S.Error] {
-        s.serialize_map_start(this.len())?
+    func serialize[S: Serializer](this, s: mut ref S) -> Outcome[Unit, S.Error] {
+        s.serialize_map_start(this.len())!
         loop (k, v) in this.entries() {
-            k.serialize(s)?
-            v.serialize(s)?
+            k.serialize(s)!
+            v.serialize(s)!
         }
         s.serialize_map_end()
     }

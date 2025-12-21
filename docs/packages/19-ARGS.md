@@ -65,31 +65,31 @@ func main()
 /// Argument configuration attribute
 public type Arg {
     /// Short flag (-v)
-    short: Option[Char],
+    short: Maybe[Char],
 
     /// Long flag (--verbose)
-    long: Option[String],
+    long: Maybe[String],
 
     /// Help text
-    help: Option[String],
+    help: Maybe[String],
 
     /// Whether the argument is required
     required: Bool,
 
     /// Default value
-    default: Option[String],
+    default: Maybe[String],
 
     /// Environment variable to read from
-    env: Option[String],
+    env: Maybe[String],
 
     /// Value name in help (e.g., <FILE>)
-    value_name: Option[String],
+    value_name: Maybe[String],
 
     /// Hide from help
     hidden: Bool,
 
     /// Possible values
-    possible_values: Option[Vec[String]],
+    possible_values: Maybe[Vec[String]],
 
     /// Allow multiple occurrences
     multiple: Bool,
@@ -117,7 +117,7 @@ type Args {
 
     /// Read from environment
     @Arg(long = "api-key", env = "API_KEY", help = "API key")
-    api_key: Option[String],
+    api_key: Maybe[String],
 
     /// Multiple values
     @Arg(short = 'f', long = "file", multiple = true, help = "Input files")
@@ -141,22 +141,22 @@ type Args {
 /// Command configuration attribute
 public type Command {
     /// Command name
-    name: Option[String],
+    name: Maybe[String],
 
     /// Version string
-    version: Option[String],
+    version: Maybe[String],
 
     /// Author information
-    author: Option[String],
+    author: Maybe[String],
 
     /// About/description
-    about: Option[String],
+    about: Maybe[String],
 
     /// Long about (detailed description)
-    long_about: Option[String],
+    long_about: Maybe[String],
 
     /// After help text
-    after_help: Option[String],
+    after_help: Maybe[String],
 
     /// Disable automatic help flag
     disable_help: Bool,
@@ -201,13 +201,13 @@ type BuildArgs {
     jobs: U32,
 
     @Arg(long = "target")
-    target: Option[String],
+    target: Maybe[String],
 }
 
 @Command(about = "Run tests")
 type TestArgs {
     @Arg(long = "filter", help = "Test name filter")
-    filter: Option[String],
+    filter: Maybe[String],
 
     @Arg(long = "no-capture", help = "Don't capture stdout")
     no_capture: Bool,
@@ -220,7 +220,7 @@ type TestArgs {
 
 ```tml
 /// Parses command-line arguments into a type
-public func parse[T: FromArgs]() -> Result[T, ParseError]
+public func parse[T: FromArgs]() -> Outcome[T, ParseError]
     caps: [io.process.env]
 {
     let args = env.args().collect()
@@ -228,15 +228,15 @@ public func parse[T: FromArgs]() -> Result[T, ParseError]
 }
 
 /// Parses from a custom argument list
-public func parse_from[T: FromArgs](args: Vec[String]) -> Result[T, ParseError]
+public func parse_from[T: FromArgs](args: Vec[String]) -> Outcome[T, ParseError]
 
 /// Tries to parse, returns None on error
-public func try_parse[T: FromArgs]() -> Option[T]
+public func try_parse[T: FromArgs]() -> Maybe[T]
     caps: [io.process.env]
 
 /// Trait for types that can be parsed from arguments
-public trait FromArgs {
-    func from_args(args: &ArgMatches) -> Result[This, ParseError]
+public behavior FromArgs {
+    func from_args(args: ref ArgMatches) -> Outcome[This, ParseError]
 }
 ```
 
@@ -249,27 +249,27 @@ public trait FromArgs {
 public type ArgMatches {
     values: HashMap[String, Vec[String]],
     flags: HashSet[String],
-    subcommand: Option[(String, Box[ArgMatches])],
+    subcommand: Maybe[(String, Box[ArgMatches])],
 }
 
 extend ArgMatches {
     /// Gets a single value
-    public func get_one[T: FromStr](this, id: &String) -> Option[T]
+    public func get_one[T: FromStr](this, id: ref String) -> Maybe[T]
 
     /// Gets multiple values
-    public func get_many[T: FromStr](this, id: &String) -> Option[Vec[T]]
+    public func get_many[T: FromStr](this, id: ref String) -> Maybe[Vec[T]]
 
     /// Returns true if flag is present
-    public func get_flag(this, id: &String) -> Bool
+    public func get_flag(this, id: ref String) -> Bool
 
     /// Returns the number of occurrences
-    public func get_count(this, id: &String) -> U64
+    public func get_count(this, id: ref String) -> U64
 
     /// Gets the subcommand name and matches
-    public func subcommand(this) -> Option[(&String, &ArgMatches)]
+    public func subcommand(this) -> Maybe[(ref String, ref ArgMatches)]
 
     /// Returns true if a subcommand was used
-    public func subcommand_name(this) -> Option[&String]
+    public func subcommand_name(this) -> Maybe[ref String]
 }
 ```
 
@@ -419,14 +419,14 @@ type LogLevel = Trace | Debug | Info | Warn | Error
 implement FromStr for LogLevel {
     type Err = String
 
-    func from_str(s: &String) -> Result[LogLevel, String] {
+    func from_str(s: ref String) -> Outcome[LogLevel, String] {
         when s.to_lowercase().as_str() {
-            "trace" -> Ok(Trace),
-            "debug" -> Ok(Debug),
-            "info" -> Ok(Info),
-            "warn" -> Ok(Warn),
-            "error" -> Ok(Error),
-            _ -> Err("invalid log level: " + s),
+            "trace" -> Success(Trace),
+            "debug" -> Success(Debug),
+            "info" -> Success(Info),
+            "warn" -> Success(Warn),
+            "error" -> Success(Error),
+            _ -> Failure("invalid log level: " + s),
         }
     }
 }
@@ -443,19 +443,19 @@ type Args {
 
 ```tml
 /// Validator trait
-public trait Validator {
-    func validate(value: &String) -> Result[Unit, String]
+public behavior Validator {
+    func validate(value: ref String) -> Outcome[Unit, String]
 }
 
 /// File exists validator
 public type FileExists {}
 
 implement Validator for FileExists {
-    func validate(value: &String) -> Result[Unit, String] {
+    func validate(value: ref String) -> Outcome[Unit, String] {
         if Path.new(value).exists() then {
-            Ok(())
+            Success(())
         } else {
-            Err("file not found: " + value)
+            Failure("file not found: " + value)
         }
     }
 }
@@ -467,12 +467,12 @@ public type InRange[T: Ord] {
 }
 
 implement Validator for InRange[T] where T: Ord + FromStr {
-    func validate(value: &String) -> Result[Unit, String] {
+    func validate(value: ref String) -> Outcome[Unit, String] {
         let v: T = value.parse().map_err(|e| e.to_string())?
         if v >= this.min and v <= this.max then {
-            Ok(())
+            Success(())
         } else {
-            Err("value must be between " + this.min.to_string() + " and " + this.max.to_string())
+            Failure("value must be between " + this.min.to_string() + " and " + this.max.to_string())
         }
     }
 }
@@ -497,7 +497,7 @@ type Args {
 @Command(name = "git", about = "Version control system")
 type GitCli {
     @Arg(short = 'C', long = "dir", global = true, help = "Run as if started in <path>")
-    dir: Option[String],
+    dir: Maybe[String],
 
     command: GitCommand,
 }
@@ -515,13 +515,13 @@ type CloneArgs {
     url: String,
 
     @Arg(value_name = "DIR")]
-    directory: Option[String],
+    directory: Maybe[String],
 
     @Arg(long = "depth", help = "Create a shallow clone")
-    depth: Option[U32],
+    depth: Maybe[U32],
 
     @Arg(short = 'b', long = "branch", help = "Checkout <branch>")
-    branch: Option[String],
+    branch: Maybe[String],
 }
 
 @Command(about = "Add files to staging")
@@ -582,7 +582,7 @@ type ServerArgs {
     log_level: String,
 
     @Arg(long = "config", short = 'c', help = "Config file path")
-    config: Option[String],
+    config: Maybe[String],
 
     @Arg(long = "daemon", short = 'd', help = "Run as daemon")
     daemon: Bool,
@@ -594,8 +594,8 @@ func main()
     let args: ServerArgs = parse().unwrap_or_else(|e| e.exit())
 
     let config = when args.config {
-        Some(path) -> Config.load(&path).unwrap(),
-        None -> Config.default(),
+        Just(path) -> Config.load(ref path).unwrap(),
+        Nothing -> Config.default(),
     }
 
     let server = Server.new()

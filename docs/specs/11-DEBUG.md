@@ -244,9 +244,9 @@ func benchmark_operation() {
     log_info("operation took: " + elapsed.to_string())
 }
 
-// Or with macro-like helper
+// Or with directive helper
 func with_timing() {
-    #[profile("my_operation")]
+    @profile("my_operation")
     {
         expensive_operation()
     }
@@ -300,7 +300,7 @@ func main() {
 }
 ```
 
-### 7.3 Catch Panic (Unsafe)
+### 7.3 Catch Panic (Low-Level)
 
 ```tml
 import std.panic
@@ -310,8 +310,8 @@ let result = panic.catch(do() {
 })
 
 when result {
-    Ok(value) -> use(value),
-    Err(panic_info) -> recover(panic_info),
+    Success(value) -> use(value),
+    Failure(panic_info) -> recover(panic_info),
 }
 ```
 
@@ -344,18 +344,18 @@ stack backtrace:
 import std.debug
 
 let x = get_value()
-print(debug.type_name(x))  // "Option[I32]"
+print(debug.type_name(x))  // "Maybe[I32]"
 print(debug.size_of(x))    // 8
 ```
 
-### 9.2 Debug Trait
+### 9.2 Debug Behavior
 
 ```tml
-trait Debug {
+behavior Debug {
     func debug(this) -> String
 }
 
-#[derive(Debug)]
+@auto(debug)
 type Point { x: F64, y: F64 }
 
 let p = Point { x: 1.0, y: 2.0 }

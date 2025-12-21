@@ -23,25 +23,25 @@ import std.env.{var, args, current_dir}
 
 ```tml
 /// Gets an environment variable
-public func var(key: &String) -> Result[String, VarError]
+public func var(key: ref String) -> Outcome[String, VarError]
     caps: [io.process.env]
 
 /// Gets an environment variable or returns a default
-public func var_or(key: &String, default: &String) -> String
+public func var_or(key: ref String, default: ref String) -> String
     caps: [io.process.env]
 {
-    var(key).unwrap_or_else(|_| default.clone())
+    var(key).unwrap_or_else(|_| default.duplicate())
 }
 
 /// Gets an environment variable as Option
-public func var_opt(key: &String) -> Option[String]
+public func var_opt(key: ref String) -> Maybe[String]
     caps: [io.process.env]
 {
     var(key).ok()
 }
 
 /// Returns true if the variable is set
-public func var_exists(key: &String) -> Bool
+public func var_exists(key: ref String) -> Bool
     caps: [io.process.env]
 {
     var(key).is_ok()
@@ -55,11 +55,11 @@ public type VarError = NotPresent | NotUnicode(String)
 
 ```tml
 /// Sets an environment variable
-public func set_var(key: &String, value: &String)
+public func set_var(key: ref String, value: ref String)
     caps: [io.process.env]
 
 /// Removes an environment variable
-public func remove_var(key: &String)
+public func remove_var(key: ref String)
     caps: [io.process.env]
 ```
 
@@ -78,7 +78,7 @@ public type Vars {
 implement Iterator for Vars {
     type Item = (String, String)
 
-    func next(mut this) -> Option[(String, String)]
+    func next(mut this) -> Maybe[(String, String)]
 }
 
 // Usage
@@ -111,7 +111,7 @@ public type Args {
 implement Iterator for Args {
     type Item = String
 
-    func next(mut this) -> Option[String]
+    func next(mut this) -> Maybe[String]
 }
 
 implement ExactSizeIterator for Args {
@@ -120,8 +120,8 @@ implement ExactSizeIterator for Args {
 
 // Usage
 let args: Vec[String] = env.args().collect()
-let program_name = args[0].clone()
-let arguments = args[1..].to_vec()
+let program_name = args[0].duplicate()
+let arguments = args[1 to args.len()].to_vec()
 ```
 
 ### OS-Specific Arguments
@@ -139,7 +139,7 @@ public type ArgsOs {
 implement Iterator for ArgsOs {
     type Item = OsString
 
-    func next(mut this) -> Option[OsString]
+    func next(mut this) -> Maybe[OsString]
 }
 ```
 
@@ -151,11 +151,11 @@ implement Iterator for ArgsOs {
 
 ```tml
 /// Returns the current working directory
-public func current_dir() -> Result[PathBuf, IoError]
+public func current_dir() -> Outcome[PathBuf, IoError]
     caps: [io.process.env]
 
 /// Sets the current working directory
-public func set_current_dir(path: &Path) -> Result[Unit, IoError]
+public func set_current_dir(path: ref Path) -> Outcome[Unit, IoError]
     caps: [io.process.env]
 ```
 
@@ -163,7 +163,7 @@ public func set_current_dir(path: &Path) -> Result[Unit, IoError]
 
 ```tml
 /// Returns the home directory
-public func home_dir() -> Option[PathBuf]
+public func home_dir() -> Maybe[PathBuf]
     caps: [io.process.env]
 
 /// Returns the temporary directory
@@ -171,7 +171,7 @@ public func temp_dir() -> PathBuf
     caps: [io.process.env]
 
 /// Returns the executable path
-public func current_exe() -> Result[PathBuf, IoError]
+public func current_exe() -> Outcome[PathBuf, IoError]
     caps: [io.process.env]
 ```
 
@@ -181,66 +181,66 @@ public func current_exe() -> Result[PathBuf, IoError]
 /// Standard directories for the platform
 public module dirs {
     /// User's home directory
-    public func home() -> Option[PathBuf]
+    public func home() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's config directory
     /// - Linux: $XDG_CONFIG_HOME or ~/.config
     /// - macOS: ~/Library/Application Support
     /// - Windows: %APPDATA%
-    public func config() -> Option[PathBuf]
+    public func config() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's data directory
     /// - Linux: $XDG_DATA_HOME or ~/.local/share
     /// - macOS: ~/Library/Application Support
     /// - Windows: %APPDATA%
-    public func data() -> Option[PathBuf]
+    public func data() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's local data directory
     /// - Linux: $XDG_DATA_HOME or ~/.local/share
     /// - macOS: ~/Library/Application Support
     /// - Windows: %LOCALAPPDATA%
-    public func data_local() -> Option[PathBuf]
+    public func data_local() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's cache directory
     /// - Linux: $XDG_CACHE_HOME or ~/.cache
     /// - macOS: ~/Library/Caches
     /// - Windows: %LOCALAPPDATA%
-    public func cache() -> Option[PathBuf]
+    public func cache() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's downloads directory
-    public func downloads() -> Option[PathBuf]
+    public func downloads() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's documents directory
-    public func documents() -> Option[PathBuf]
+    public func documents() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's desktop directory
-    public func desktop() -> Option[PathBuf]
+    public func desktop() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's pictures directory
-    public func pictures() -> Option[PathBuf]
+    public func pictures() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's music directory
-    public func music() -> Option[PathBuf]
+    public func music() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's videos directory
-    public func videos() -> Option[PathBuf]
+    public func videos() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// System's runtime directory
     /// - Linux: $XDG_RUNTIME_DIR
     /// - macOS: None
     /// - Windows: None
-    public func runtime() -> Option[PathBuf]
+    public func runtime() -> Maybe[PathBuf]
         caps: [io.process.env]
 }
 ```
@@ -278,7 +278,7 @@ public func page_size() -> U64
     caps: [io.process.env]
 
 /// Returns the hostname
-public func hostname() -> Result[String, IoError]
+public func hostname() -> Outcome[String, IoError]
     caps: [io.process.env]
 
 /// Returns the OS type
@@ -287,7 +287,7 @@ public func os_type() -> String
 // "Linux", "Darwin", "Windows", etc.
 
 /// Returns the OS release version
-public func os_release() -> Result[String, IoError]
+public func os_release() -> Outcome[String, IoError]
     caps: [io.process.env]
 ```
 
@@ -299,11 +299,11 @@ public func os_release() -> Result[String, IoError]
 
 ```tml
 /// Joins paths with the platform path separator
-public func join_paths[I](paths: I) -> Result[OsString, JoinPathsError]
+public func join_paths[I](paths: I) -> Outcome[OsString, JoinPathsError]
     where I: Iterator[Item = impl AsRef[Path]]
 
 /// Splits the PATH variable into paths
-public func split_paths(path: &OsStr) -> SplitPaths
+public func split_paths(path: ref OsStr) -> SplitPaths
 
 /// Iterator over PATH components
 public type SplitPaths {
@@ -313,12 +313,12 @@ public type SplitPaths {
 implement Iterator for SplitPaths {
     type Item = PathBuf
 
-    func next(mut this) -> Option[PathBuf]
+    func next(mut this) -> Maybe[PathBuf]
 }
 
 // Usage
 let path = env.var("PATH").unwrap()
-loop dir in env.split_paths(&path) {
+loop dir in env.split_paths(ref path) {
     println!("{}", dir.display())
 }
 ```
@@ -329,21 +329,21 @@ loop dir in env.split_paths(&path) {
 
 ```tml
 /// Finds an executable in PATH
-public func which(name: &String) -> Option[PathBuf]
+public func which(name: ref String) -> Maybe[PathBuf]
     caps: [io.process.env]
 {
     let path = var("PATH").ok()?
-    loop dir in split_paths(&path) {
+    loop dir in split_paths(ref path) {
         let candidate = dir.join(name)
         if candidate.exists() and candidate.is_executable() then {
-            return Some(candidate)
+            return Just(candidate)
         }
     }
-    return None
+    return Nothing
 }
 
 /// Finds all matching executables in PATH
-public func which_all(name: &String) -> Vec[PathBuf]
+public func which_all(name: ref String) -> Vec[PathBuf]
     caps: [io.process.env]
 ```
 
@@ -363,10 +363,10 @@ type Config {
     log_level: String,
 }
 
-func load_config() -> Result[Config, ConfigError]
+func load_config() -> Outcome[Config, ConfigError]
     caps: [io.process.env]
 {
-    Ok(Config {
+    Success(Config {
         database_url: env.var("DATABASE_URL")?,
         port: env.var("PORT")
             .unwrap_or("8080")
@@ -392,7 +392,7 @@ type AppDirs {
     cache: PathBuf,
 }
 
-func get_app_dirs(app_name: &String) -> Result[AppDirs, IoError]
+func get_app_dirs(app_name: ref String) -> Outcome[AppDirs, IoError]
     caps: [io.process.env, io.file]
 {
     let config = dirs.config()
@@ -408,11 +408,11 @@ func get_app_dirs(app_name: &String) -> Result[AppDirs, IoError]
         .join(app_name)
 
     // Ensure directories exist
-    fs.create_dir_all(&config)?
-    fs.create_dir_all(&data)?
-    fs.create_dir_all(&cache)?
+    fs.create_dir_all(ref config)?
+    fs.create_dir_all(ref data)?
+    fs.create_dir_all(ref cache)?
 
-    Ok(AppDirs { config, data, cache })
+    Success(AppDirs { config, data, cache })
 }
 ```
 
@@ -450,13 +450,13 @@ func get_config_path() -> PathBuf
 ```tml
 import std.env
 
-func with_env[T](vars: &[(String, String)], f: func() -> T) -> T
+func with_env[T](vars: ref [(String, String)], f: func() -> T) -> T
     caps: [io.process.env]
 {
     // Save original values
-    var original: Vec[(String, Option[String])] = Vec.new()
+    var original: Vec[(String, Maybe[String])] = Vec.new()
     loop (key, value) in vars.iter() {
-        original.push((key.clone(), env.var_opt(key)))
+        original.push((key.duplicate(), env.var_opt(key)))
         env.set_var(key, value)
     }
 
@@ -466,8 +466,8 @@ func with_env[T](vars: &[(String, String)], f: func() -> T) -> T
     // Restore original values
     loop (key, original_value) in original.iter() {
         when original_value {
-            Some(v) -> env.set_var(key, v),
-            None -> env.remove_var(key),
+            Just(v) -> env.set_var(key, v),
+            Nothing -> env.remove_var(key),
         }
     }
 
