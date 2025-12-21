@@ -471,9 +471,9 @@ extend String with Deserialize {
 extend Maybe[T: Deserialize] with Deserialize {
     func deserialize(json: ref Json) -> Outcome[This, DeserializeError> {
         if json.is_null() {
-            return Success(None)
+            return Ok(None)
         }
-        return Success(Just(T.deserialize(json)!))
+        return Ok(Just(T.deserialize(json)!))
     }
 }
 
@@ -484,7 +484,7 @@ extend List[T: Deserialize] with Deserialize {
         loop (i, item) in arr.iter().enumerate() {
             result.push(T.deserialize(item).map_err(|e| e.with_path(i.to_string()))!)
         }
-        return Success(result)
+        return Ok(result)
     }
 }
 ```
@@ -668,7 +668,7 @@ func main() -> Outcome[Unit, Error] {
 
     println(stringify_pretty(ref user))
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -705,7 +705,7 @@ func main() -> Outcome[Unit, Error] {
 
     println("Loaded user: " + user.name)
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -732,7 +732,7 @@ func main() -> Outcome[Unit, Error] {
 
     println("First user's city: " + city)
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 

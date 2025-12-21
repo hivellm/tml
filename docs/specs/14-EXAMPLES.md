@@ -221,13 +221,13 @@ extend ApiClient {
         let response = this.client.get(url)!
 
         if response.status != 200 {
-            return Failure(Error.new("HTTP " + response.status.to_string()))
+            return Err(Error.new("HTTP " + response.status.to_string()))
         }
 
         let json = Json.parse(response.body)!
         let user = User.from_json(json)!
 
-        return Success(user)
+        return Ok(user)
     }
 
     public func create_user(this, name: String, email: String) -> Outcome[User, Error]
@@ -242,7 +242,7 @@ extend ApiClient {
         let response = this.client.post(url, body)!
 
         if response.status != 201 {
-            return Failure(Error.new("Failed to create user"))
+            return Err(Error.new("Failed to create user"))
         }
 
         let json = Json.parse(response.body)!
@@ -252,7 +252,7 @@ extend ApiClient {
 
 extend User {
     func from_json(json: Json) -> Outcome[This, Error] {
-        return Success(This {
+        return Ok(This {
             id: json.get("id").as_u64()!,
             name: json.get("name").as_string()!,
             email: json.get("email").as_string()!,
@@ -357,13 +357,13 @@ extend Parser {
         this.skip_whitespace()
 
         if this.pos < this.input.len() {
-            return Failure(ParseError {
+            return Err(ParseError {
                 message: "unexpected characters after value",
                 position: this.pos,
             })
         }
 
-        return Success(value)
+        return Ok(value)
     }
 
     func parse_value(this) -> Outcome[JsonValue, ParseError] {
@@ -380,25 +380,25 @@ extend Parser {
                 if c == '-' or c.is_digit() {
                     return this.parse_number()
                 }
-                return Failure(this.error("unexpected character"))
+                return Err(this.error("unexpected character"))
             },
-            Nothing -> return Failure(this.error("unexpected end of input")),
+            Nothing -> return Err(this.error("unexpected end of input")),
         }
     }
 
     func parse_null(this) -> Outcome[JsonValue, ParseError] {
         this.expect("null")!
-        return Success(Null)
+        return Ok(Null)
     }
 
     func parse_true(this) -> Outcome[JsonValue, ParseError] {
         this.expect("true")!
-        return Success(Bool(true))
+        return Ok(Bool(true))
     }
 
     func parse_false(this) -> Outcome[JsonValue, ParseError] {
         this.expect("false")!
-        return Success(Bool(false))
+        return Ok(Bool(false))
     }
 
     func parse_string(this) -> Outcome[JsonValue, ParseError] {
@@ -407,13 +407,13 @@ extend Parser {
 
         loop {
             when this.next() {
-                Just('"') -> return Success(Str(result)),
+                Just('"') -> return Ok(Str(result)),
                 Just('\\') -> {
                     let escaped = this.parse_escape()!
                     result.push(escaped)
                 },
                 Just(c) -> result.push(c),
-                Nothing -> return Failure(this.error("unterminated string")),
+                Nothing -> return Err(this.error("unterminated string")),
             }
         }
     }
@@ -438,8 +438,8 @@ extend Parser {
 
         let num_str = this.input.slice(start, this.pos)
         when num_str.parse[F64]() {
-            Success(n) -> return Success(Number(n)),
-            Failure(_) -> return Failure(this.error("invalid number")),
+            Ok(n) -> return Ok(Number(n)),
+            Err(_) -> return Err(this.error("invalid number")),
         }
     }
 
@@ -451,7 +451,7 @@ extend Parser {
 
         if this.peek() == Just(']') {
             this.pos += 1
-            return Success(Array(items))
+            return Ok(Array(items))
         }
 
         loop {
@@ -467,9 +467,9 @@ extend Parser {
                 },
                 Just(']') -> {
                     this.pos += 1
-                    return Success(Array(items))
+                    return Ok(Array(items))
                 },
-                _ -> return Failure(this.error("expected ',' or ']'")),
+                _ -> return Err(this.error("expected ',' or ']'")),
             }
         }
     }
@@ -482,13 +482,13 @@ extend Parser {
 
         if this.peek() == Just('}') {
             this.pos += 1
-            return Success(Object(entries))
+            return Ok(Object(entries))
         }
 
         loop {
             let key = when this.parse_string()! {
                 Str(s) -> s,
-                _ -> return Failure(this.error("expected string key")),
+                _ -> return Err(this.error("expected string key")),
             }
 
             this.skip_whitespace()
@@ -507,9 +507,9 @@ extend Parser {
                 },
                 Just('}') -> {
                     this.pos += 1
-                    return Success(Object(entries))
+                    return Ok(Object(entries))
                 },
-                _ -> return Failure(this.error("expected ',' or '}'")),
+                _ -> return Err(this.error("expected ',' or '}'")),
             }
         }
     }
@@ -536,10 +536,10 @@ extend Parser {
     func expect(this, s: String) -> Outcome[Unit, ParseError] {
         loop c in s.chars() {
             if this.next() != Just(c) {
-                return Failure(this.error("expected '" + s + "'"))
+                return Err(this.error("expected '" + s + "'"))
             }
         }
-        return Success(unit)
+        return Ok(unit)
     }
 
     func error(this, message: String) -> ParseError {
@@ -554,22 +554,22 @@ public func parse(input: String) -> Outcome[JsonValue, ParseError] {
 
 @test
 func test_parse_primitives() {
-    assert_eq(parse("null"), Success(Null))
-    assert_eq(parse("true"), Success(Bool(true)))
-    assert_eq(parse("42"), Success(Number(42.0)))
-    assert_eq(parse("\"hello\""), Success(Str("hello")))
+    assert_eq(parse("null"), Ok(Null))
+    assert_eq(parse("true"), Ok(Bool(true)))
+    assert_eq(parse("42"), Ok(Number(42.0)))
+    assert_eq(parse("\"hello\""), Ok(Str("hello")))
 }
 
 @test
 func test_parse_array() {
     let result = parse("[1, 2, 3]")
-    assert(result.is_success())
+    assert(result.is_ok())
 }
 
 @test
 func test_parse_object() {
     let result = parse("{\"name\": \"Alice\", \"age\": 30}")
-    assert(result.is_success())
+    assert(result.is_ok())
 }
 ```
 
@@ -611,14 +611,14 @@ effects: [io.file, io.process.env]
         Nothing -> println(processed),
     }
 
-    return Success(unit)
+    return Ok(unit)
 }
 
 func parse_args() -> Outcome[Args, Error] {
     let argv = env.args()
 
     if argv.len() < 2 {
-        return Failure(Error.new("Usage: program <input> [-o output] [-v]"))
+        return Err(Error.new("Usage: program <input> [-o output] [-v]"))
     }
 
     var input: Maybe[String] = Nothing
@@ -633,7 +633,7 @@ func parse_args() -> Outcome[Args, Error] {
             "-o" -> {
                 i += 1
                 if i >= argv.len() {
-                    return Failure(Error.new("-o requires argument"))
+                    return Err(Error.new("-o requires argument"))
                 }
                 output = Just(argv[i])
             },
@@ -642,7 +642,7 @@ func parse_args() -> Outcome[Args, Error] {
                 if input.is_nothing() {
                     input = Just(arg)
                 } else {
-                    return Failure(Error.new("unexpected argument: " + arg))
+                    return Err(Error.new("unexpected argument: " + arg))
                 }
             },
         }
@@ -650,8 +650,8 @@ func parse_args() -> Outcome[Args, Error] {
     }
 
     when input {
-        Just(i) -> return Success(Args { input: i, output: output, verbose: verbose }),
-        Nothing -> return Failure(Error.new("input file required")),
+        Just(i) -> return Ok(Args { input: i, output: output, verbose: verbose }),
+        Nothing -> return Err(Error.new("input file required")),
     }
 }
 

@@ -267,8 +267,8 @@ lowlevel func process_c_string(ptr: *const U8) {
 
     // Try to convert to string (may fail if not UTF-8)
     when c_str.to_str() {
-        Success(s) -> println(s),
-        Failure(_) -> println("invalid UTF-8"),
+        Ok(s) -> println(s),
+        Err(_) -> println("invalid UTF-8"),
     }
 }
 ```
@@ -627,15 +627,15 @@ extern "C" func dangerous_alloc(size: U64) -> *mut U8
 // Safe wrapper
 public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
     if size == 0 {
-        return Failure(AllocError.ZeroSize)
+        return Err(AllocError.ZeroSize)
     }
 
     lowlevel {
         let ptr = dangerous_alloc(size)
         if ptr.is_null() {
-            return Failure(AllocError.OutOfMemory)
+            return Err(AllocError.OutOfMemory)
         }
-        return Success(Heap.from_raw(ptr))
+        return Ok(Heap.from_raw(ptr))
     }
 }
 ```
@@ -660,9 +660,9 @@ extend SafeFile {
         lowlevel {
             let handle = fopen(c_path.as_ptr(), c_mode.as_ptr())
             if handle.is_null() {
-                return Failure(IoError.from_errno())
+                return Err(IoError.from_errno())
             }
-            return Success(This { handle: handle })
+            return Ok(This { handle: handle })
         }
     }
 }

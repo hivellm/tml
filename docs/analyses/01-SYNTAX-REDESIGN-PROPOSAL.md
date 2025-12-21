@@ -225,8 +225,8 @@ Pin[T]                        Pinned[T]
 | `Some(x)` | `Just(x)` | Pairs with Maybe |
 | `None` | `Nothing` | Pairs with Maybe |
 | `Result[T, E]` | `Outcome[T, E]` | Describes what it is |
-| `Ok(x)` | `Success(x)` | Clear meaning |
-| `Err(e)` | `Failure(e)` | Clear meaning |
+| `Ok(x)` | `Ok(x)` | Clear meaning |
+| `Err(e)` | `Err(e)` | Clear meaning |
 | `Box[T]` | `Heap[T]` | Describes where it lives |
 | `Rc[T]` | `Shared[T]` | Describes behavior |
 | `Arc[T]` | `Sync[T]` | Thread-safe shared |
@@ -270,8 +270,8 @@ when result {
 }
 
 when outcome {
-    Success(config) -> load(config),
-    Failure(e) -> log_error(e),
+    Ok(config) -> load(config),
+    Err(e) -> log_error(e),
 }
 ```
 
@@ -576,9 +576,9 @@ module platform {
             lowlevel {
                 let result = libc_read(this.fd, buf.as_ptr(), buf.len())
                 if result < 0 then {
-                    return Failure(IoError.from_errno())
+                    return Err(IoError.from_errno())
                 }
-                return Success(result as U64)
+                return Ok(result as U64)
             }
         }
     }
@@ -586,9 +586,9 @@ module platform {
     func open(path: ref String) -> Outcome[FileHandle, IoError] {
         let fd = lowlevel { libc_open(path.as_ptr()) }!
         if fd < 0 then {
-            return Failure(IoError.from_errno())
+            return Err(IoError.from_errno())
         }
-        return Success(FileHandle { fd: fd, path: path.duplicate() })
+        return Ok(FileHandle { fd: fd, path: path.duplicate() })
     }
 }
 ```
@@ -623,8 +623,8 @@ module platform {
 | `Some(x)` | `Just(x)` |
 | `None` | `Nothing` |
 | `Result[T, E]` | `Outcome[T, E]` |
-| `Ok(x)` | `Success(x)` |
-| `Err(e)` | `Failure(e)` |
+| `Ok(x)` | `Ok(x)` |
+| `Err(e)` | `Err(e)` |
 | `Box[T]` | `Heap[T]` |
 | `Rc[T]` | `Shared[T]` |
 | `Arc[T]` | `Sync[T]` |

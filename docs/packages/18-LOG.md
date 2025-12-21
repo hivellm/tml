@@ -485,7 +485,7 @@ extend FileOutput {
         caps: [io.file]
     {
         let file = File.create(path)?
-        return Success(FileOutput { file: Mutex.new(file) })
+        return Ok(FileOutput { file: Mutex.new(file) })
     }
 }
 
@@ -690,13 +690,13 @@ func process_request(request: ref Request)
     )
 
     when handle_request(request) {
-        Success(response) -> {
+        Ok(response) -> {
             info!("Request completed",
                 status = response.status,
                 bytes = response.body.len()
             )
         },
-        Failure(e) -> {
+        Err(e) -> {
             error!("Request failed",
                 error = e.to_string(),
                 path = request.path

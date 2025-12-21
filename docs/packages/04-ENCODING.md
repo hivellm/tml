@@ -487,9 +487,9 @@ func convert_to_utf8(data: ref [U8], source_encoding: ref str) -> Outcome[String
         "utf-16" -> utf16.decode(data).map_err(Error.from),
         "utf-16le" -> utf16.decode_le(data).map_err(Error.from),
         "utf-16be" -> utf16.decode_be(data).map_err(Error.from),
-        "iso-8859-1" -> Success(latin1.decode(data)),
-        "latin1" -> Success(latin1.decode(data)),
-        _ -> Failure(Error.new("unsupported encoding: " + source_encoding)),
+        "iso-8859-1" -> Ok(latin1.decode(data)),
+        "latin1" -> Ok(latin1.decode(data)),
+        _ -> Err(Error.new("unsupported encoding: " + source_encoding)),
     }
 }
 ```

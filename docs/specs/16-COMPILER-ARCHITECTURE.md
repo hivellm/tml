@@ -363,14 +363,14 @@ func check_borrow(place: Place, kind: BorrowKind) -> Outcome[(), BorrowError] {
 
     for borrow in existing {
         if conflicts(borrow.kind, kind) {
-            return Failure(BorrowError::Conflict {
+            return Err(BorrowError::Conflict {
                 existing: borrow,
                 new_kind: kind,
             });
         }
     }
 
-    Success(())
+    Ok(())
 }
 
 // Conflict rules:
@@ -442,12 +442,12 @@ func check_capabilities(module: ref Module) -> Outcome[(), CapError] {
     let required_caps = infer_required_caps(module);
 
     if not declared_caps.covers(required_caps) {
-        return Failure(CapError::Missing {
+        return Err(CapError::Missing {
             required: required_caps.difference(declared_caps),
         });
     }
 
-    Success(())
+    Ok(())
 }
 ```
 

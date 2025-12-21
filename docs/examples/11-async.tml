@@ -25,7 +25,7 @@ async func get_user_data(id: U64) -> Outcome[UserData, Error] {
     let profile = await fetch_profile(user.id)
     let settings = await fetch_settings(user.id)
 
-    return Success(UserData { user, profile, settings })
+    return Ok(UserData { user, profile, settings })
 }
 
 // ============================================
@@ -47,8 +47,8 @@ async func fetch_all_parallel(ids: List[U64]) -> List[User] {
     var users = List.new()
     loop task in tasks {
         when await task {
-            Success(user) -> users.push(user),
-            Failure(_) -> {},  // Skip failed fetches
+            Ok(user) -> users.push(user),
+            Err(_) -> {},  // Skip failed fetches
         }
     }
 
@@ -68,8 +68,8 @@ async func fetch_all_simple(ids: List[U64]) -> List[Outcome[User, HttpError]] {
 async func fetch_with_timeout(id: U64) -> Outcome[User, Error] {
     // First one to complete wins
     select {
-        user = fetch_user(id) -> Success(user),
-        _ = sleep(Duration.seconds(5)) -> Failure(Error.Timeout),
+        user = fetch_user(id) -> Ok(user),
+        _ = sleep(Duration.seconds(5)) -> Err(Error.Timeout),
     }
 }
 
@@ -146,7 +146,7 @@ behavior AsyncWriter {
 extend TcpStream with AsyncReader {
     async func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError] {
         // ... implementation
-        return Success(buf.len())
+        return Ok(buf.len())
     }
 }
 
@@ -176,10 +176,10 @@ async func robust_fetch(id: U64) -> Outcome[User, Error] {
         attempts += 1
 
         when await fetch_user(id) {
-            Success(user) -> return Success(user),
-            Failure(e) -> {
+            Ok(user) -> return Ok(user),
+            Err(e) -> {
                 if attempts >= max_attempts then {
-                    return Failure(Error.MaxRetries(e))
+                    return Err(Error.MaxRetries(e))
                 }
                 let delay = Duration.seconds(attempts * 2)
                 await sleep(delay)
@@ -197,8 +197,8 @@ async func main() {
     let user = await fetch_user(1)
 
     when user {
-        Success(u) -> println("Got user: " + u.name),
-        Failure(e) -> println("Error: " + e.to_string()),
+        Ok(u) -> println("Got user: " + u.name),
+        Err(e) -> println("Error: " + e.to_string()),
     }
 
     // Parallel fetches
@@ -233,9 +233,9 @@ type HttpError = Timeout | NetworkError | ParseError
 type Error = Timeout | MaxRetries(HttpError) | Other(String)
 
 async func fetch_profile(id: U64) -> Outcome[Profile, Error] {
-    return Success(Profile { bio: "" })
+    return Ok(Profile { bio: "" })
 }
 
 async func fetch_settings(id: U64) -> Outcome[Settings, Error] {
-    return Success(Settings { theme: "dark" })
+    return Ok(Settings { theme: "dark" })
 }

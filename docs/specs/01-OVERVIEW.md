@@ -42,7 +42,7 @@ LLMs are not humans. They need:
 | Logical | `&&` `\|\|` `!` | `and` `or` `not` | Natural language |
 | Ranges | `0..10`, `0..=10` | `0 to 10`, `0 through 10` | Reads like English |
 | Optional | `Option<T>`, `Some/None` | `Maybe[T]`, `Just/Nothing` | Self-documenting |
-| Errors | `Result<T,E>`, `Ok/Err` | `Outcome[T,E]`, `Success/Failure` | Self-documenting |
+| Errors | `Result<T,E>`, `Ok/Err` | `Outcome[T,E]`, `Ok/Err` | Self-documenting type name |
 | Heap alloc | `Box<T>` | `Heap[T]` | Describes where it lives |
 | Ref counted | `Rc<T>`, `Arc<T>` | `Shared[T]`, `Sync[T]` | Describes behavior |
 | Unsafe | `unsafe { }` | `lowlevel { }` | Neutral term |
@@ -290,8 +290,8 @@ Heap[LargeData]       // Data allocated on heap
 // Constructors explain themselves
 Just(user)            // Just this user
 Nothing               // Nothing here
-Success(data)         // Successful outcome
-Failure(error)        // Failed outcome
+Ok(data)              // Successful outcome
+Err(error)            // Failed outcome
 ```
 
 ## 8. Use Cases

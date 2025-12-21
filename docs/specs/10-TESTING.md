@@ -64,15 +64,15 @@ func test_panic_message() {
 @test
 func test_file_not_found() -> Outcome[Unit, TestError] {
     let result = File.open("nonexistent.txt")
-    assert(result.is_failure())
-    return Success(unit)
+    assert(result.is_err())
+    return Ok(unit)
 }
 
 @test
 @should_error(IoError)
 func test_expects_io_error() -> Outcome[Unit, IoError] {
     let _ = File.open("nonexistent.txt")!
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -194,7 +194,7 @@ type MockHttpClient {}
 
 extend MockHttpClient with HttpClient {
     func get(this, url: String) -> Outcome[Response, Error] {
-        return Success(Response { status: 200, body: "mocked" })
+        return Ok(Response { status: 200, body: "mocked" })
     }
 }
 
@@ -203,7 +203,7 @@ func test_with_mock() {
     let client = MockHttpClient {}
     let service = Service.new(client)
     let result = service.fetch_data()
-    assert(result.is_success())
+    assert(result.is_ok())
 }
 ```
 

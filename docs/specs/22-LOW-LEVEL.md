@@ -831,7 +831,7 @@ asm! {
 ### 8.3 Platform-Specific Examples
 
 ```tml
-@cfg(target_arch = "x86_64")
+@when(target_arch = "x86_64")
 lowlevel func cpuid(leaf: U32) -> (U32, U32, U32, U32) {
     var eax: U32 = 0
     var ebx: U32 = 0
@@ -849,7 +849,7 @@ lowlevel func cpuid(leaf: U32) -> (U32, U32, U32, U32) {
     return (eax, ebx, ecx, edx)
 }
 
-@cfg(target_arch = "aarch64")
+@when(target_arch = "aarch64")
 lowlevel func read_cycle_counter() -> U64 {
     var count: U64 = 0
 
@@ -868,7 +868,7 @@ lowlevel func read_cycle_counter() -> U64 {
 ### 9.1 Vector Types
 
 ```tml
-@cfg(target_feature = "sse2")
+@when(target_feature = "sse2")
 module simd.x86
 
 // 128-bit vectors
@@ -880,13 +880,13 @@ public type F32x4 = [F32; 4]
 public type F64x2 = [F64; 2]
 
 // 256-bit vectors (AVX)
-@cfg(target_feature = "avx")
+@when(target_feature = "avx")
 public type I8x32 = [I8; 32]
 public type F32x8 = [F32; 8]
 public type F64x4 = [F64; 4]
 
 // 512-bit vectors (AVX-512)
-@cfg(target_feature = "avx512f")
+@when(target_feature = "avx512f")
 public type F32x16 = [F32; 16]
 public type F64x8 = [F64; 8]
 ```
@@ -894,7 +894,7 @@ public type F64x8 = [F64; 8]
 ### 9.2 SIMD Operations
 
 ```tml
-@cfg(target_feature = "sse2")
+@when(target_feature = "sse2")
 module simd.x86.sse2
 
 /// Add packed 32-bit integers
@@ -1047,8 +1047,8 @@ extend Stack[T] {
                 when this.head.compare_exchange_weak(
                     head, node, MemoryOrdering.Release, MemoryOrdering.Relaxed
                 ) {
-                    Success(_) -> break,
-                    Failure(_) -> continue,
+                    Ok(_) -> break,
+                    Err(_) -> continue,
                 }
             }
         }
@@ -1067,12 +1067,12 @@ extend Stack[T] {
                 when this.head.compare_exchange_weak(
                     head, next, MemoryOrdering.Release, MemoryOrdering.Relaxed
                 ) {
-                    Success(_) -> {
+                    Ok(_) -> {
                         let value = head.read().value
                         dealloc(head)
                         return Just(value)
                     },
-                    Failure(_) -> continue,
+                    Err(_) -> continue,
                 }
             }
         }
@@ -1083,7 +1083,7 @@ extend Stack[T] {
 ### 10.3 SIMD String Search
 
 ```tml
-@cfg(target_feature = "sse4.2")
+@when(target_feature = "sse4.2")
 module fast_search
 
 import simd.x86.sse42.*

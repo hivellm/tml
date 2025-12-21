@@ -127,8 +127,8 @@ extend Receiver[T] {
         var result = Vec.new()
         loop {
             when this.try_recv() {
-                Success(value) -> result.push(value),
-                Failure(_) -> break,
+                Ok(value) -> result.push(value),
+                Err(_) -> break,
             }
         }
         return result
@@ -520,7 +520,7 @@ extend OneshotSender[T] {
     public func send(mut this, value: T) -> Outcome[Unit, T] {
         when this.inner.take() {
             Just(inner) -> inner.send(value),
-            Nothing -> Failure(value),
+            Nothing -> Err(value),
         }
     }
 
@@ -689,17 +689,17 @@ extend Once {
 
     func call_once_slow(this, f: func()) {
         when this.state.compare_exchange(INCOMPLETE, RUNNING, Ordering.Acquire, Ordering.Relaxed) {
-            Success(_) -> {
+            Ok(_) -> {
                 f()
                 this.state.store(COMPLETE, Ordering.Release)
             },
-            Failure(RUNNING) -> {
+            Err(RUNNING) -> {
                 // Spin until complete
                 loop this.state.load(Ordering.Acquire) == RUNNING {
                     thread.yield_now()
                 }
             },
-            Failure(_) -> {},  // Already complete
+            Err(_) -> {},  // Already complete
         }
     }
 
@@ -757,7 +757,7 @@ extend OnceCell[T] {
             }
             stored = true
         })
-        if stored then Success(()) else Failure(value)
+        if stored then Ok(()) else Err(value)
     }
 }
 
@@ -956,9 +956,9 @@ func broadcast_example() {
         thread.spawn(do() {
             loop {
                 when rx.recv() {
-                    Success(DataUpdate { data }) -> print("Subscriber " + i.to_string() + ": " + data),
-                    Success(Shutdown) -> break,
-                    Failure(_) -> break,
+                    Ok(DataUpdate { data }) -> print("Subscriber " + i.to_string() + ": " + data),
+                    Ok(Shutdown) -> break,
+                    Err(_) -> break,
                 }
             }
         })

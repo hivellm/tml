@@ -44,7 +44,7 @@ public behaviorAllocator {
             intrinsics.copy_nonoverlapping(ptr, new_ptr, old_layout.size.min(new_layout.size))
             this.deallocate(ptr, old_layout)
         }
-        return Success(new_ptr)
+        return Ok(new_ptr)
     }
 
     /// Allocates zeroed memory
@@ -53,7 +53,7 @@ public behaviorAllocator {
         unsafe {
             intrinsics.write_bytes(ptr, 0, layout.size)
         }
-        return Success(ptr)
+        return Ok(ptr)
     }
 }
 ```
@@ -82,20 +82,20 @@ extend Layout {
     public func from_size_align(size: U64, align: U64) -> Outcome[Layout, LayoutError] {
         // Alignment must be a power of 2
         if align == 0 or (align & (align - 1)) != 0 then {
-            return Failure(LayoutError.InvalidAlignment)
+            return Err(LayoutError.InvalidAlignment)
         }
         // Size must be a multiple of alignment
         if size % align != 0 then {
-            return Failure(LayoutError.SizeNotAligned)
+            return Err(LayoutError.SizeNotAligned)
         }
-        return Success(Layout { size: size, align: align })
+        return Ok(Layout { size: size, align: align })
     }
 
     /// Creates a layout for an array
     public func array[T](n: U64) -> Outcome[Layout, LayoutError] {
         let elem_layout = Layout.of[T]()
         let size = elem_layout.size.checked_mul(n)!
-        return Success(Layout { size: size, align: elem_layout.align })
+        return Ok(Layout { size: size, align: elem_layout.align })
     }
 
     /// Extends this layout with another, returning combined layout and offset
@@ -103,7 +103,7 @@ extend Layout {
         let padding = this.padding_needed_for(next.align)
         let offset = this.size + padding
         let new_size = offset + next.size
-        return Success((Layout { size: new_size, align: this.align.max(next.align) }, offset))
+        return Ok((Layout { size: new_size, align: this.align.max(next.align) }, offset))
     }
 
     /// Returns padding needed to align to the given alignment
@@ -148,9 +148,9 @@ implement Allocator for GlobalAlloc {
         unsafe {
             let ptr = libc.aligned_alloc(layout.align, layout.size)
             if ptr.is_null() then {
-                return Failure(AllocError.OutOfMemory)
+                return Err(AllocError.OutOfMemory)
             }
-            return Success(ptr as *mut U8)
+            return Ok(ptr as *mut U8)
         }
     }
 
@@ -169,9 +169,9 @@ implement Allocator for GlobalAlloc {
             unsafe {
                 let new_ptr = libc.realloc(ptr as *mut Void, new_layout.size)
                 if new_ptr.is_null() then {
-                    return Failure(AllocError.OutOfMemory)
+                    return Err(AllocError.OutOfMemory)
                 }
-                return Success(new_ptr as *mut U8)
+                return Ok(new_ptr as *mut U8)
             }
         }
         // Otherwise fall back to default implementation
@@ -324,7 +324,7 @@ implement Disposable for Arena {
 
 implement Allocator for Arena {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
-        return Success(this.alloc_layout(layout))
+        return Ok(this.alloc_layout(layout))
     }
 
     unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
@@ -465,11 +465,11 @@ extend StackAlloc {
     public func alloc(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         let aligned = this.align_offset(layout.align)
         if aligned + layout.size > this.size then {
-            return Failure(AllocError.OutOfMemory)
+            return Err(AllocError.OutOfMemory)
         }
         let ptr = unsafe { this.buffer.add(aligned) }
         this.offset = aligned + layout.size
-        return Success(ptr)
+        return Ok(ptr)
     }
 
     /// Pushes a marker for later rollback
@@ -570,15 +570,15 @@ implement Allocator for Slab {
         let size = layout.size.max(layout.align)
 
         if size <= 64 then {
-            return Success(this.small.alloc() as *mut U8)
+            return Ok(this.small.alloc() as *mut U8)
         } else if size <= 256 then {
-            return Success(this.medium.alloc() as *mut U8)
+            return Ok(this.medium.alloc() as *mut U8)
         } else if size <= 1024 then {
-            return Success(this.large.alloc() as *mut U8)
+            return Ok(this.large.alloc() as *mut U8)
         } else {
             let ptr = alloc(layout)!
             this.huge.push(HugeAlloc { ptr: ptr, layout: layout })
-            return Success(ptr)
+            return Ok(ptr)
         }
     }
 
@@ -627,8 +627,8 @@ extend Fallback[P, S] where P: Allocator, S: Allocator {
 implement Allocator for Fallback[P, S] where P: Allocator, S: Allocator {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         when this.primary.allocate(layout) {
-            Success(ptr) -> return Success(ptr),
-            Failure(_) -> return this.secondary.allocate(layout),
+            Ok(ptr) -> return Ok(ptr),
+            Err(_) -> return this.secondary.allocate(layout),
         }
     }
 
@@ -699,12 +699,12 @@ implement Allocator for Stats[A] where A: Allocator {
         let current = new_alloc - this.deallocated.load(Ordering.Relaxed)
         loop current > peak {
             when this.peak.compare_exchange_weak(peak, current, Ordering.Relaxed, Ordering.Relaxed) {
-                Success(_) -> break,
-                Failure(p) -> peak = p,
+                Ok(_) -> break,
+                Err(p) -> peak = p,
             }
         }
 
-        return Success(ptr)
+        return Ok(ptr)
     }
 
     unsafe func deallocate(mut this, ptr: *mut U8, layout: Layout) {
@@ -815,7 +815,7 @@ func process_data(data: ref [U8]) -> Outcome[Output, Error] {
     let result = finalize(buffer, temp)!
 
     // Arena automatically freed when it goes out of scope
-    return Success(result)
+    return Ok(result)
 }
 ```
 

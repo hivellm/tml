@@ -205,13 +205,13 @@ opt.to_outcome(err)  // Outcome[T, E]
 ## 4. Outcome[T, E]
 
 ```tml
-Success(value)
-Failure(error)
+Ok(value)
+Err(error)
 
-res.is_success()     // Bool
-res.is_failure()     // Bool
-res.unwrap()         // T (panic if Failure)
-res.unwrap_err()     // E (panic if Success)
+res.is_ok()          // Bool
+res.is_err()         // Bool
+res.unwrap()         // T (panic if Err)
+res.unwrap_err()     // E (panic if Ok)
 res.unwrap_or(default)
 res.expect(msg)
 res.map(func)        // Outcome[U, E]

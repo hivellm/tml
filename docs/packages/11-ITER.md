@@ -338,7 +338,7 @@ extend Iterator {
         loop item in this {
             acc = f(acc, item)!
         }
-        return Success(acc)
+        return Ok(acc)
     }
 }
 ```

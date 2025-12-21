@@ -52,7 +52,7 @@ type Message =
     | File { path: String, size: U64 }
 
 // Generic enum (Maybe and Outcome are built-in)
-type MyOutcome[T, E] = Success(T) | Failure(E)
+type MyOutcome[T, E] = Ok(T) | Err(E)
 
 // ============================================
 // TYPE ALIASES

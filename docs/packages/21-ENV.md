@@ -366,7 +366,7 @@ type Config {
 func load_config() -> Outcome[Config, ConfigError]
     caps: [io.process.env]
 {
-    Success(Config {
+    Ok(Config {
         database_url: env.var("DATABASE_URL")?,
         port: env.var("PORT")
             .unwrap_or("8080")
@@ -412,7 +412,7 @@ func get_app_dirs(app_name: ref String) -> Outcome[AppDirs, IoError]
     fs.create_dir_all(ref data)?
     fs.create_dir_all(ref cache)?
 
-    Success(AppDirs { config, data, cache })
+    Ok(AppDirs { config, data, cache })
 }
 ```
 

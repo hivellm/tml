@@ -134,8 +134,8 @@ func map[T, U](items: List[T], f: do(T) -> U) -> List[U] {
 ```tml
 func process(value: Outcome[I32, String]) -> String {
     when value {
-        Success(num) -> "Number: " + num.to_string(),
-        Failure(msg) -> "Error: " + msg,
+        Ok(num) -> "Number: " + num.to_string(),
+        Err(msg) -> "Error: " + msg,
     }
 }
 ```
@@ -145,7 +145,7 @@ func process(value: Outcome[I32, String]) -> String {
 func read_file(path: String) -> Outcome[String, Error] {
     let file = File.open(path)!      // ! propagates errors
     let content = file.read_string()!
-    return Success(content)
+    return Ok(content)
 }
 ```
 

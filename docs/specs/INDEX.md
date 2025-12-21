@@ -56,6 +56,7 @@
 | [13-BUILTINS.md](./13-BUILTINS.md) | Builtin types and functions |
 | [14-EXAMPLES.md](./14-EXAMPLES.md) | Complete examples |
 | [15-ERROR-HANDLING.md](./15-ERROR-HANDLING.md) | Error handling system |
+| [25-DECORATORS.md](./25-DECORATORS.md) | Custom decorators system |
 
 ## Quick Start
 
@@ -170,10 +171,10 @@ let config = parse(data)! else default_config()
 catch {
     let file = open(path)!
     let data = file.read()!
-    return Success(parse(data)!)
+    return Ok(parse(data)!)
 } else |err| {
     log.error(err)
-    return Failure(err)
+    return Err(err)
 }
 ```
 
@@ -321,7 +322,7 @@ tml fmt                # format code
 |----------|-------|
 | **Primitives** | `Bool`, `I8`-`I128`, `U8`-`U128`, `F32`, `F64`, `Char`, `String` |
 | **Maybe** | `Maybe[T]` = `Just(T)` \| `Nothing` |
-| **Outcome** | `Outcome[T, E]` = `Success(T)` \| `Failure(E)` |
+| **Outcome** | `Outcome[T, E]` = `Ok(T)` \| `Err(E)` |
 | **Collections** | `List[T]`, `Map[K, V]`, `Set[T]` |
 | **Memory** | `Heap[T]`, `Shared[T]`, `Sync[T]` |
 | **References** | `ref T`, `mut ref T` |

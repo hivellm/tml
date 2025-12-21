@@ -217,8 +217,8 @@ extend Response {
     public func status(this) -> StatusCode
 
     /// Check if successful (2xx)
-    public func is_success(this) -> Bool {
-        return this.status.is_success()
+    public func is_Ok(this) -> Bool {
+        return this.status.is_Ok()
     }
 
     /// Check if redirect (3xx)
@@ -304,7 +304,7 @@ extend StatusCode {
     public func as_u16(this) -> U16
     public func reason_phrase(this) -> ref str
     public func is_informational(this) -> Bool { this.code >= 100 and this.code < 200 }
-    public func is_success(this) -> Bool { this.code >= 200 and this.code < 300 }
+    public func is_Ok(this) -> Bool { this.code >= 200 and this.code < 300 }
     public func is_redirect(this) -> Bool { this.code >= 300 and this.code < 400 }
     public func is_client_error(this) -> Bool { this.code >= 400 and this.code < 500 }
     public func is_server_error(this) -> Bool { this.code >= 500 and this.code < 600 }
@@ -677,12 +677,12 @@ public func main() -> Outcome[Unit, Error] {
             .build()
     )!
 
-    if response.is_success() {
+    if response.is_Ok() {
         let created: User = response.json()!
         println("Created user: " + created.name)
     }
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -710,7 +710,7 @@ public func main() -> Outcome[Unit, Error] {
     Server.bind("0.0.0.0:8080")!
         .router(router)!
 
-    return Success(unit)
+    return Ok(unit)
 }
 
 func home(req: Request) -> Response {
@@ -737,13 +737,13 @@ func get_user(req: Request) -> Response {
 
 func create_user(req: Request) -> Response {
     when req.json[CreateUserRequest]() {
-        Success(data) -> {
+        Ok(data) -> {
             let user = save_user(data)
             Response.status(StatusCode.CREATED)
                 .json(ref user)
                 .unwrap()
         },
-        Failure(_) -> Response.status(StatusCode.BAD_REQUEST)
+        Err(_) -> Response.status(StatusCode.BAD_REQUEST)
             .body("Invalid JSON"),
     }
 }
@@ -773,7 +773,7 @@ import std.fs
 
 func upload_handler(req: Request) -> Response {
     when Multipart.from_request(&req) {
-        Success(form) -> {
+        Ok(form) -> {
             loop part in form.parts {
                 when part.filename {
                     Just(filename) -> {
@@ -786,7 +786,7 @@ func upload_handler(req: Request) -> Response {
             }
             Response.ok().body("Upload complete")
         },
-        Failure(e) -> Response.status(StatusCode.BAD_REQUEST)
+        Err(e) -> Response.status(StatusCode.BAD_REQUEST)
             .body("Invalid multipart form"),
     }
 }

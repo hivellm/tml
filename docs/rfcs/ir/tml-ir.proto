@@ -1,0 +1,587 @@
+// TML IR Protobuf Schema
+// Version: 1.0.0
+// Binary serialization for TML Intermediate Representation
+
+syntax = "proto3";
+
+package tml.ir.v1;
+
+option java_package = "org.tml.ir.v1";
+option java_multiple_files = true;
+option go_package = "github.com/tml-lang/tml/ir/v1";
+
+// ============================================================================
+// Top-Level
+// ============================================================================
+
+message Module {
+  string name = 1;
+  string path = 2;
+  string version = 3;
+  repeated Import imports = 4;
+  repeated Item items = 5;
+}
+
+message Import {
+  repeated string path = 1;
+  optional string alias = 2;
+  bool glob = 3;
+}
+
+// ============================================================================
+// Items
+// ============================================================================
+
+message Item {
+  string id = 1;
+  Span span = 2;
+
+  oneof kind {
+    FuncDef func_def = 10;
+    TypeDef type_def = 11;
+    ConstDef const_def = 12;
+    BehaviorDef behavior_def = 13;
+    ImplBlock impl_block = 14;
+    ModDef mod_def = 15;
+    DecoratorDef decorator_def = 16;
+  }
+}
+
+message FuncDef {
+  string name = 1;
+  Visibility visibility = 2;
+  repeated GenericParam type_params = 3;
+  repeated Param params = 4;
+  Type return_type = 5;
+  repeated string effects = 6;
+  repeated Contract contracts = 7;
+  repeated Decorator decorators = 8;
+  Expr body = 9;
+}
+
+message TypeDef {
+  string name = 1;
+  Visibility visibility = 2;
+  repeated GenericParam type_params = 3;
+  repeated Contract contracts = 4;
+
+  oneof body {
+    StructBody struct_body = 10;
+    SumBody sum_body = 11;
+    AliasBody alias_body = 12;
+  }
+}
+
+message StructBody {
+  repeated Field fields = 1;
+}
+
+message SumBody {
+  repeated Variant variants = 1;
+}
+
+message AliasBody {
+  Type target = 1;
+}
+
+message Field {
+  string name = 1;
+  Type type = 2;
+  Visibility visibility = 3;
+}
+
+message Variant {
+  string name = 1;
+  repeated Type fields = 2;  // Tuple variant
+  // For struct variants, use StructBody instead
+}
+
+message ConstDef {
+  string name = 1;
+  Visibility visibility = 2;
+  Type type = 3;
+  Expr value = 4;
+}
+
+message BehaviorDef {
+  string name = 1;
+  Visibility visibility = 2;
+  repeated GenericParam type_params = 3;
+  repeated BehaviorItem items = 4;
+}
+
+message BehaviorItem {
+  string name = 1;
+  repeated Param params = 2;
+  Type return_type = 3;
+  optional Expr default_body = 4;
+  repeated Contract contracts = 5;
+}
+
+message ImplBlock {
+  repeated GenericParam type_params = 1;
+  Type self_type = 2;
+  optional Type behavior = 3;  // None for inherent impl
+  repeated Item items = 4;
+}
+
+message ModDef {
+  string name = 1;
+  Visibility visibility = 2;
+  repeated Item items = 3;
+}
+
+message DecoratorDef {
+  string name = 1;
+  Visibility visibility = 2;
+  repeated DecoratorParam params = 3;
+  DecoratorExecution execution = 4;
+  repeated DecoratorTarget allowed_targets = 5;
+  FuncDef apply_func = 6;
+}
+
+message DecoratorParam {
+  string name = 1;
+  Type type = 2;
+  optional Expr default_value = 3;
+}
+
+enum DecoratorExecution {
+  DECORATOR_EXECUTION_UNSPECIFIED = 0;
+  COMPILE_TIME = 1;
+  RUNTIME = 2;
+}
+
+enum DecoratorTarget {
+  DECORATOR_TARGET_UNSPECIFIED = 0;
+  TARGET_FUNC = 1;
+  TARGET_TYPE = 2;
+  TARGET_FIELD = 3;
+  TARGET_VARIANT = 4;
+  TARGET_PARAM = 5;
+  TARGET_IMPL = 6;
+  TARGET_MOD = 7;
+}
+
+// ============================================================================
+// Types
+// ============================================================================
+
+message Type {
+  oneof kind {
+    PrimitiveType primitive = 1;
+    NamedType named = 2;
+    TupleType tuple = 3;
+    FunctionType function = 4;
+    ReferenceType reference = 5;
+    PointerType pointer = 6;
+    ArrayType array = 7;
+    SliceType slice = 8;
+    TypeParam param = 9;
+  }
+}
+
+message PrimitiveType {
+  PrimitiveKind kind = 1;
+}
+
+enum PrimitiveKind {
+  PRIMITIVE_UNSPECIFIED = 0;
+  UNIT = 1;
+  BOOL = 2;
+  CHAR = 3;
+  NEVER = 4;
+  I8 = 10;
+  I16 = 11;
+  I32 = 12;
+  I64 = 13;
+  I128 = 14;
+  U8 = 20;
+  U16 = 21;
+  U32 = 22;
+  U64 = 23;
+  U128 = 24;
+  F32 = 30;
+  F64 = 31;
+  STRING = 40;
+}
+
+message NamedType {
+  repeated string path = 1;
+  repeated Type args = 2;
+}
+
+message TupleType {
+  repeated Type elements = 1;
+}
+
+message FunctionType {
+  repeated Type params = 1;
+  Type return_type = 2;
+  repeated string effects = 3;
+}
+
+message ReferenceType {
+  bool mutable = 1;
+  Type inner = 2;
+}
+
+message PointerType {
+  bool mutable = 1;
+  Type inner = 2;
+}
+
+message ArrayType {
+  Type element = 1;
+  uint64 size = 2;
+}
+
+message SliceType {
+  Type element = 1;
+}
+
+message TypeParam {
+  string name = 1;
+}
+
+// ============================================================================
+// Expressions
+// ============================================================================
+
+message Expr {
+  optional string id = 1;
+  optional Span span = 2;
+
+  oneof kind {
+    LiteralExpr literal = 10;
+    IdentExpr ident = 11;
+    BinaryOpExpr binary_op = 12;
+    UnaryOpExpr unary_op = 13;
+    CallExpr call = 14;
+    FieldAccessExpr field_access = 15;
+    IndexExpr index = 16;
+    IfExpr if_expr = 17;
+    MatchExpr match_expr = 18;
+    LoopExpr loop_expr = 19;
+    BlockExpr block = 20;
+    ReturnExpr return_expr = 21;
+    BreakExpr break_expr = 22;
+    ContinueExpr continue_expr = 23;
+    LetExpr let_expr = 24;
+    AssignExpr assign = 25;
+    RefExpr ref_expr = 26;
+    DerefExpr deref = 27;
+    CastExpr cast = 28;
+    StructInitExpr struct_init = 29;
+    TupleExpr tuple = 30;
+    ArrayExpr array = 31;
+    ClosureExpr closure = 32;
+    PropagateExpr propagate = 33;
+    AwaitExpr await_expr = 34;
+  }
+}
+
+message LiteralExpr {
+  oneof value {
+    bool bool_value = 1;
+    int64 int_value = 2;
+    uint64 uint_value = 3;
+    double float_value = 4;
+    string string_value = 5;
+    uint32 char_value = 6;
+  }
+  Type type = 10;
+}
+
+message IdentExpr {
+  string name = 1;
+  repeated string path = 2;
+}
+
+message BinaryOpExpr {
+  BinaryOp op = 1;
+  Expr left = 2;
+  Expr right = 3;
+}
+
+enum BinaryOp {
+  BINARY_OP_UNSPECIFIED = 0;
+  // Arithmetic
+  ADD = 1;
+  SUB = 2;
+  MUL = 3;
+  DIV = 4;
+  MOD = 5;
+  POW = 6;
+  // Comparison
+  EQ = 10;
+  NE = 11;
+  LT = 12;
+  GT = 13;
+  LE = 14;
+  GE = 15;
+  // Logical
+  AND = 20;
+  OR = 21;
+  // Bitwise
+  BIT_AND = 30;
+  BIT_OR = 31;
+  BIT_XOR = 32;
+  SHL = 33;
+  SHR = 34;
+}
+
+message UnaryOpExpr {
+  UnaryOp op = 1;
+  Expr expr = 2;
+}
+
+enum UnaryOp {
+  UNARY_OP_UNSPECIFIED = 0;
+  NEG = 1;
+  NOT = 2;
+  BIT_NOT = 3;
+}
+
+message CallExpr {
+  Expr func = 1;
+  repeated Type type_args = 2;
+  repeated Expr args = 3;
+}
+
+message FieldAccessExpr {
+  Expr expr = 1;
+  string field = 2;
+}
+
+message IndexExpr {
+  Expr expr = 1;
+  Expr index = 2;
+}
+
+message IfExpr {
+  Expr condition = 1;
+  Expr then_branch = 2;
+  optional Expr else_branch = 3;
+}
+
+message MatchExpr {
+  Expr scrutinee = 1;
+  repeated MatchArm arms = 2;
+}
+
+message MatchArm {
+  Pattern pattern = 1;
+  optional Expr guard = 2;
+  Expr body = 3;
+}
+
+message LoopExpr {
+  optional string label = 1;
+  Expr body = 2;
+}
+
+message BlockExpr {
+  repeated Expr stmts = 1;
+  optional Expr result = 2;
+}
+
+message ReturnExpr {
+  optional Expr value = 1;
+}
+
+message BreakExpr {
+  optional string label = 1;
+  optional Expr value = 2;
+}
+
+message ContinueExpr {
+  optional string label = 1;
+}
+
+message LetExpr {
+  Pattern pattern = 1;
+  optional Type type = 2;
+  Expr value = 3;
+}
+
+message AssignExpr {
+  Expr target = 1;
+  Expr value = 2;
+  optional AssignOp op = 3;
+}
+
+enum AssignOp {
+  ASSIGN_OP_UNSPECIFIED = 0;
+  ASSIGN = 1;
+  ADD_ASSIGN = 2;
+  SUB_ASSIGN = 3;
+  MUL_ASSIGN = 4;
+  DIV_ASSIGN = 5;
+  MOD_ASSIGN = 6;
+  BIT_AND_ASSIGN = 10;
+  BIT_OR_ASSIGN = 11;
+  BIT_XOR_ASSIGN = 12;
+  SHL_ASSIGN = 13;
+  SHR_ASSIGN = 14;
+}
+
+message RefExpr {
+  bool mutable = 1;
+  Expr expr = 2;
+}
+
+message DerefExpr {
+  Expr expr = 1;
+}
+
+message CastExpr {
+  Expr expr = 1;
+  Type target_type = 2;
+}
+
+message StructInitExpr {
+  Type type = 1;
+  repeated FieldInit fields = 2;
+  optional Expr spread = 3;
+}
+
+message FieldInit {
+  string name = 1;
+  Expr value = 2;
+}
+
+message TupleExpr {
+  repeated Expr elements = 1;
+}
+
+message ArrayExpr {
+  repeated Expr elements = 1;
+}
+
+message ClosureExpr {
+  repeated Param params = 1;
+  optional Type return_type = 2;
+  Expr body = 3;
+  repeated string captures = 4;
+}
+
+message PropagateExpr {
+  Expr expr = 1;
+}
+
+message AwaitExpr {
+  Expr expr = 1;
+}
+
+// ============================================================================
+// Patterns
+// ============================================================================
+
+message Pattern {
+  oneof kind {
+    WildcardPattern wildcard = 1;
+    IdentPattern ident = 2;
+    LiteralPattern literal = 3;
+    TuplePattern tuple = 4;
+    StructPattern struct_pattern = 5;
+    VariantPattern variant = 6;
+    OrPattern or_pattern = 7;
+    RangePattern range = 8;
+  }
+}
+
+message WildcardPattern {}
+
+message IdentPattern {
+  string name = 1;
+  bool mutable = 2;
+  optional Pattern binding = 3;
+}
+
+message LiteralPattern {
+  LiteralExpr value = 1;
+}
+
+message TuplePattern {
+  repeated Pattern elements = 1;
+}
+
+message StructPattern {
+  NamedType type = 1;
+  repeated FieldPattern fields = 2;
+  bool rest = 3;
+}
+
+message FieldPattern {
+  string name = 1;
+  Pattern pattern = 2;
+}
+
+message VariantPattern {
+  NamedType type = 1;
+  string variant = 2;
+  repeated Pattern bindings = 3;
+}
+
+message OrPattern {
+  repeated Pattern patterns = 1;
+}
+
+message RangePattern {
+  optional LiteralExpr start = 1;
+  optional LiteralExpr end = 2;
+  bool inclusive = 3;
+}
+
+// ============================================================================
+// Common
+// ============================================================================
+
+message Param {
+  string name = 1;
+  Type type = 2;
+  bool mutable = 3;
+}
+
+message GenericParam {
+  string name = 1;
+  repeated string constraints = 2;
+}
+
+message Contract {
+  ContractKind kind = 1;
+  Expr expr = 2;
+  optional string message = 3;
+}
+
+enum ContractKind {
+  CONTRACT_KIND_UNSPECIFIED = 0;
+  PRE = 1;
+  POST = 2;
+  INVARIANT = 3;
+  ASSERT = 4;
+}
+
+message Decorator {
+  string name = 1;
+  repeated Expr args = 2;
+}
+
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  PRIVATE = 1;
+  PUBLIC = 2;
+  PUB_CRATE = 3;
+  PUB_SUPER = 4;
+}
+
+message Span {
+  string file = 1;
+  uint32 start = 2;
+  uint32 end = 3;
+  uint32 start_line = 4;
+  uint32 start_column = 5;
+  uint32 end_line = 6;
+  uint32 end_column = 7;
+}

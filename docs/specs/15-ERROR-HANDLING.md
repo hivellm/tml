@@ -11,8 +11,8 @@ TML's error handling is designed for:
 ## 1. The `!` Operator (Propagate or Panic)
 
 Every fallible function call ends with `!` which means:
-- **If Success**: unwrap and continue
-- **If Failure**: propagate to caller (if caller returns Outcome) OR panic (if caller returns value)
+- **If Ok**: unwrap and continue
+- **If Err**: propagate to caller (if caller returns Outcome) OR panic (if caller returns value)
 
 ```tml
 // Simple and clear - every ! is a potential exit point
@@ -20,7 +20,7 @@ func process_file(path: String) -> Outcome[Data, Error] {
     let file = File.open(path)!        // propagate on error
     let content = file.read_all()!     // propagate on error
     let data = parse(content)!         // propagate on error
-    return Success(data)
+    return Ok(data)
 }
 
 // In a non-Outcome function, ! panics on error
@@ -51,7 +51,7 @@ let port = env.get("PORT")!
 
 let user = db.find_user(id)! else {
     log.warn("User not found: " + id.to_string())
-    return Failure(Error.NotFound)
+    return Err(Error.NotFound)
 }
 ```
 
@@ -77,10 +77,10 @@ func sync_data() -> Outcome[Unit, SyncError] {
         let remote = fetch_remote()!
         let merged = merge(local, remote)!
         save(merged)!
-        return Success(())
+        return Ok(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())
-        return Failure(SyncError.from(err))
+        return Err(SyncError.from(err))
     }
 }
 ```
@@ -107,24 +107,24 @@ func robust_process() -> Data {
 ## 4. Outcome Type
 
 ```tml
-type Outcome[T, E] = Success(T) | Failure(E)
+type Outcome[T, E] = Ok(T) | Err(E)
 ```
 
 ### Methods
 
 ```tml
 // Check state
-outcome.is_success() -> Bool
-outcome.is_failure() -> Bool
+outcome.is_ok() -> Bool
+outcome.is_err() -> Bool
 
 // Transform
-outcome.map(do(t) ...)         // Map Success value
-outcome.map_err(do(e) ...)     // Map Failure value
+outcome.map(do(t) ...)         // Map Ok value
+outcome.map_err(do(e) ...)     // Map Err value
 outcome.and_then(do(t) ...)    // Chain fallible operations
 
 // Extract
-outcome.unwrap() -> T          // Panic if Failure
-outcome.unwrap_or(default)     // Default if Failure
+outcome.unwrap() -> T          // Panic if Err
+outcome.unwrap_or(default)     // Default if Err
 outcome.unwrap_or_else(do() default)  // Lazy default
 
 // Convert
@@ -143,16 +143,16 @@ type Maybe[T] = Just(T) | Nothing
 ```tml
 func find_user(id: U64) -> Maybe[User] { ... }
 
-// In Outcome-returning function: converts Nothing to Failure
+// In Outcome-returning function: converts Nothing to Err
 func get_user_email(id: U64) -> Outcome[String, Error] {
-    let user = find_user(id)!  // Nothing becomes Failure(Error.NothingValue)
-    return Success(user.email)
+    let user = find_user(id)!  // Nothing becomes Err(Error.NothingValue)
+    return Ok(user.email)
 }
 
 // With custom error via else
 func get_user_email(id: U64) -> Outcome[String, Error] {
-    let user = find_user(id)! else return Failure(Error.UserNotFound(id))
-    return Success(user.email)
+    let user = find_user(id)! else return Err(Error.UserNotFound(id))
+    return Ok(user.email)
 }
 ```
 
@@ -228,7 +228,7 @@ extend AppError with From[ParseError] {
 func load_and_parse() -> Outcome[Data, AppError] {
     let content = File.read("data.txt")!  // IoError -> AppError
     let data = parse(content)!             // ParseError -> AppError
-    return Success(data)
+    return Ok(data)
 }
 ```
 
@@ -304,7 +304,7 @@ func process() -> Outcome[Output, Error] {
     let b = try step_b(a)
     let c = try step_c(b)
     let d = try step_d(c)
-    return Success(d)
+    return Ok(d)
 }
 ```
 
@@ -316,7 +316,7 @@ func process() -> Outcome[Output, Error] {
     let b = step_b(a)!
     let c = step_c(b)!
     let d = step_d(c)!
-    return Success(d)
+    return Ok(d)
 }
 ```
 
@@ -326,10 +326,10 @@ func process() -> Outcome[Output, Error] {
 // We explicitly DON'T do this
 func process() -> Outcome[Output, Error] {
     let a, err1 = step_a()
-    if err1 then return Failure(err1)
+    if err1 then return Err(err1)
 
     let b, err2 = step_b(a)
-    if err2 then return Failure(err2)
+    if err2 then return Err(err2)
 
     // ... repetitive and noisy
 }
@@ -344,15 +344,15 @@ func process() -> Outcome[Output, Error] {
 func fetch_data(url: String) -> Outcome[Data, FetchError] {
     @id("http-get")
     let response = http.get(url)! else |e| {
-        return Failure(FetchError.Network(e))
+        return Err(FetchError.Network(e))
     }
 
     @id("parse-json")
     let data = response.json[Data]()! else |e| {
-        return Failure(FetchError.Parse(e))
+        return Err(FetchError.Parse(e))
     }
 
-    return Success(data)
+    return Ok(data)
 }
 ```
 

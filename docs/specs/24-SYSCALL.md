@@ -13,7 +13,7 @@ TML provides direct access to operating system system calls for:
 ### 2.1 Linux System Calls
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module sys.linux
 
 /// Raw syscall with variable arguments
@@ -108,7 +108,7 @@ public const SYS_EXIT_GROUP: U64 = 231
 ### 2.2 Typed Linux Wrappers
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module sys.linux.io
 
 /// Read from file descriptor
@@ -156,7 +156,7 @@ public const SEEK_END: I32 = 2
 ### 2.3 Linux Memory Management
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module sys.linux.mem
 
 /// Memory map
@@ -215,7 +215,7 @@ public const MAP_FAILED: *mut Void = -1 as *mut Void
 ### 2.4 Linux Process Management
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module sys.linux.process
 
 /// Exit process
@@ -294,7 +294,7 @@ public const CLONE_CHILD_CLEARTID: U64 = 0x00200000
 ### 2.5 Linux Futex
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module sys.linux.futex
 
 public lowlevel func futex(
@@ -347,7 +347,7 @@ public type Timespec {
 ### 3.1 Windows NT Syscalls
 
 ```tml
-@cfg(target_os = "windows")
+@when(target_os = "windows")
 module sys.windows
 
 /// NT system call
@@ -360,7 +360,7 @@ public lowlevel func syscall(nr: U32, ...) -> I32
 ### 3.2 Windows Kernel32 Functions
 
 ```tml
-@cfg(target_os = "windows")
+@when(target_os = "windows")
 module sys.windows.kernel32
 
 // These are FFI declarations, not raw syscalls
@@ -519,7 +519,7 @@ public const WAIT_FAILED: U32 = 0xFFFFFFFF
 ### 4.1 macOS/Darwin Syscalls
 
 ```tml
-@cfg(target_os = "macos")
+@when(target_os = "macos")
 module sys.macos
 
 // macOS syscall interface (similar to Linux)
@@ -548,7 +548,7 @@ public const SYS_LISTEN: I32 = 106
 ### 4.2 macOS libSystem Functions
 
 ```tml
-@cfg(target_os = "macos")
+@when(target_os = "macos")
 module sys.macos.libsystem
 
 extern "C" from "libSystem" {
@@ -592,7 +592,7 @@ public type mach_timebase_info_t {
 ### 5.1 Unix Errno
 
 ```tml
-@cfg(unix)
+@when(unix)
 module sys.errno
 
 /// Get errno value
@@ -656,23 +656,23 @@ public const ETIMEDOUT: I32 = 110
 ### 5.2 Result Conversion
 
 ```tml
-@cfg(unix)
+@when(unix)
 module sys.result
 
 /// Check syscall result and convert to Outcome
 public func check(result: I64) -> Outcome[U64, Errno] {
     if result < 0 {
-        return Failure(Errno(-result as I32))
+        return Err(Errno(-result as I32))
     }
-    return Success(result as U64)
+    return Ok(result as U64)
 }
 
 /// Check syscall result for I32 return
 public func check_i32(result: I32) -> Outcome[I32, Errno] {
     if result < 0 {
-        return Failure(Errno(errno.errno()))
+        return Err(Errno(errno.errno()))
     }
-    return Success(result)
+    return Ok(result)
 }
 
 public type Errno(I32)
@@ -699,7 +699,7 @@ extend Errno {
 ### 6.1 Simple File I/O (Linux)
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module example.file
 
 use sys.linux.io.*
@@ -729,7 +729,7 @@ public func read_file(path: ref str) -> Outcome[List[U8], Errno] {
         // Close file
         close(fd)
 
-        return Success(buffer)
+        return Ok(buffer)
     }
 }
 ```
@@ -737,7 +737,7 @@ public func read_file(path: ref str) -> Outcome[List[U8], Errno] {
 ### 6.2 Memory Allocator (Linux)
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module example.alloc
 
 use sys.linux.mem.*
@@ -761,10 +761,10 @@ extend BumpAllocator {
         )
 
         if ptr == MAP_FAILED {
-            return Failure(Errno(errno.errno()))
+            return Err(Errno(errno.errno()))
         }
 
-        return Success(This {
+        return Ok(This {
             base: ptr as *mut U8,
             size: size,
             offset: 0,
@@ -796,7 +796,7 @@ extend BumpAllocator {
 ### 6.3 Thread Creation (Linux)
 
 ```tml
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 module example.thread
 
 use sys.linux.process.*
@@ -817,7 +817,7 @@ public lowlevel func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut
     )
 
     if stack == MAP_FAILED {
-        return Failure(Errno(errno.errno()))
+        return Err(Errno(errno.errno()))
     }
 
     // Stack grows down, so start at top
@@ -837,10 +837,10 @@ public lowlevel func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut
 
     if tid < 0 {
         munmap(stack, STACK_SIZE)
-        return Failure(Errno(-tid as I32))
+        return Err(Errno(-tid as I32))
     }
 
-    return Success(tid as I32)
+    return Ok(tid as I32)
 }
 ```
 

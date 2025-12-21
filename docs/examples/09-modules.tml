@@ -109,23 +109,23 @@ public func format_number(n: I32) -> String {
 // ============================================
 
 // Platform-specific code
-@cfg(platform = "windows")
+@when(platform = "windows")
 func get_home() -> String {
     return env("USERPROFILE")
 }
 
-@cfg(platform = "linux")
+@when(platform = "linux")
 func get_home() -> String {
     return env("HOME")
 }
 
 // Feature flags
-@cfg(feature = "logging")
+@when(feature = "logging")
 func log(msg: String) {
     println("[LOG] " + msg)
 }
 
-@cfg(not(feature = "logging"))
+@when(not(feature = "logging"))
 func log(msg: String) {
     // No-op when logging disabled
 }
@@ -143,7 +143,7 @@ public type Connection {
 }
 
 public func connect(host: String, port: U16) -> Outcome[Connection, String] {
-    return Success(Connection { host, port })
+    return Ok(Connection { host, port })
 }
 
 module my_app.database.queries
@@ -152,7 +152,7 @@ import ..Connection
 
 public func execute(conn: ref Connection, sql: String) -> Outcome[List[Row], String] {
     // ...
-    return Success([])
+    return Ok([])
 }
 
 public type Row {
@@ -173,11 +173,11 @@ public func main() {
     let conn = connect("localhost", 5432)
 
     when conn {
-        Success(c) -> {
+        Ok(c) -> {
             let result = execute(ref c, "SELECT * FROM users")
             println("Query executed")
         },
-        Failure(e) -> println("Connection failed: " + e),
+        Err(e) -> println("Connection failed: " + e),
     }
 
     // Fully qualified access

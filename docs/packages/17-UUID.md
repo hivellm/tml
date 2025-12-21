@@ -72,11 +72,11 @@ extend Uuid {
     /// Creates from byte slice
     public func from_slice(slice: ref [U8]) -> Outcome[Uuid, UuidError] {
         if slice.len() != 16 then {
-            return Failure(UuidError.InvalidLength)
+            return Err(UuidError.InvalidLength)
         }
         var bytes = [0u8; 16]
         bytes.copy_from_slice(slice)
-        return Success(Uuid { bytes })
+        return Ok(Uuid { bytes })
     }
 
     /// Parses from string

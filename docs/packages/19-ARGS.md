@@ -421,12 +421,12 @@ implement FromStr for LogLevel {
 
     func from_str(s: ref String) -> Outcome[LogLevel, String] {
         when s.to_lowercase().as_str() {
-            "trace" -> Success(Trace),
-            "debug" -> Success(Debug),
-            "info" -> Success(Info),
-            "warn" -> Success(Warn),
-            "error" -> Success(Error),
-            _ -> Failure("invalid log level: " + s),
+            "trace" -> Ok(Trace),
+            "debug" -> Ok(Debug),
+            "info" -> Ok(Info),
+            "warn" -> Ok(Warn),
+            "error" -> Ok(Error),
+            _ -> Err("invalid log level: " + s),
         }
     }
 }
@@ -453,9 +453,9 @@ public type FileExists {}
 implement Validator for FileExists {
     func validate(value: ref String) -> Outcome[Unit, String] {
         if Path.new(value).exists() then {
-            Success(())
+            Ok(())
         } else {
-            Failure("file not found: " + value)
+            Err("file not found: " + value)
         }
     }
 }
@@ -470,9 +470,9 @@ implement Validator for InRange[T] where T: Ord + FromStr {
     func validate(value: ref String) -> Outcome[Unit, String] {
         let v: T = value.parse().map_err(|e| e.to_string())?
         if v >= this.min and v <= this.max then {
-            Success(())
+            Ok(())
         } else {
-            Failure("value must be between " + this.min.to_string() + " and " + this.max.to_string())
+            Err("value must be between " + this.min.to_string() + " and " + this.max.to_string())
         }
     }
 }

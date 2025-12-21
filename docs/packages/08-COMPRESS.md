@@ -580,14 +580,14 @@ func compress_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
     let data = fs.read(src)!
     let compressed = gzip.compress(ref data)!
     fs.write(dst, ref compressed)!
-    return Success(unit)
+    return Ok(unit)
 }
 
 func decompress_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
     let compressed = fs.read(src)!
     let data = gzip.decompress(ref compressed)!
     fs.write(dst, ref data)!
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -614,7 +614,7 @@ func compress_large_file(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
     }
 
     gz.finish()!
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -642,7 +642,7 @@ func create_archive(files: ref [(ref Path, ref str)], output: ref Path) -> Outco
     }
 
     zip.finish()!
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -663,7 +663,7 @@ func extract_tarball(src: ref Path, dst: ref Path) -> Outcome[Unit, Error] {
 
     tar.extract_all(dst)!
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 

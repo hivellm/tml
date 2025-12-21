@@ -126,7 +126,7 @@ type Point {
 // Enum
 type Color = Red | Green | Blue | Rgb(U8, U8, U8)
 
-type Outcome[T, E] = Success(T) | Failure(E)
+type Outcome[T, E] = Ok(T) | Err(E)
 
 type JsonValue =
     | Null
@@ -373,8 +373,8 @@ when value {
 }
 
 when result {
-    Success(value) -> use(value),
-    Failure(e) -> log(e),
+    Ok(value) -> use(value),
+    Err(e) -> log(e),
 }
 
 when point {
@@ -462,10 +462,10 @@ CatchExpr = 'catch' Block 'else' ('|' Ident '|')? Block
 catch {
     let local = load_local()!
     let remote = fetch_remote()!
-    return Success(merge(local, remote)!)
+    return Ok(merge(local, remote)!)
 } else |err| {
     log.error(err.to_string())
-    return Failure(err)
+    return Err(err)
 }
 ```
 

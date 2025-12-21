@@ -310,8 +310,8 @@ let result = panic.catch(do() {
 })
 
 when result {
-    Success(value) -> use(value),
-    Failure(panic_info) -> recover(panic_info),
+    Ok(value) -> use(value),
+    Err(panic_info) -> recover(panic_info),
 }
 ```
 

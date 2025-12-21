@@ -265,31 +265,31 @@ tml target add aarch64-unknown-linux-gnu
 ```tml
 module platform
 
-@cfg(target_os = "linux")
+@when(target_os = "linux")
 public func get_home_dir() -> Maybe[PathBuf] {
     when env.var("HOME") {
-        Success(val) -> Just(PathBuf.from(val)),
-        Failure(_) -> Nothing,
+        Ok(val) -> Just(PathBuf.from(val)),
+        Err(_) -> Nothing,
     }
 }
 
-@cfg(target_os = "windows")
+@when(target_os = "windows")
 public func get_home_dir() -> Maybe[PathBuf] {
     when env.var("USERPROFILE") {
-        Success(val) -> Just(PathBuf.from(val)),
-        Failure(_) -> Nothing,
+        Ok(val) -> Just(PathBuf.from(val)),
+        Err(_) -> Nothing,
     }
 }
 
-@cfg(target_os = "macos")
+@when(target_os = "macos")
 public func get_home_dir() -> Maybe[PathBuf] {
     when env.var("HOME") {
-        Success(val) -> Just(PathBuf.from(val)),
-        Failure(_) -> Nothing,
+        Ok(val) -> Just(PathBuf.from(val)),
+        Err(_) -> Nothing,
     }
 }
 
-@cfg(target_arch = "x86_64")
+@when(target_arch = "x86_64")
 public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use AVX if available
     if cpu_has_avx() {
@@ -299,7 +299,7 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     }
 }
 
-@cfg(target_arch = "aarch64")
+@when(target_arch = "aarch64")
 public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
     // Use NEON
     neon_memcpy(dst, src, len)
@@ -308,52 +308,52 @@ public func fast_memcpy(dst: *mut U8, src: *const U8, len: U64) {
 
 ## 7. Platform Detection
 
-### 7.1 Available cfg Predicates
+### 7.1 Available @when Predicates
 
 ```tml
 // Operating system
-@cfg(target_os = "linux")
-@cfg(target_os = "windows")
-@cfg(target_os = "macos")
-@cfg(target_os = "ios")
-@cfg(target_os = "android")
-@cfg(target_os = "freebsd")
-@cfg(target_os = "none")  // bare metal / wasm
+@when(target_os = "linux")
+@when(target_os = "windows")
+@when(target_os = "macos")
+@when(target_os = "ios")
+@when(target_os = "android")
+@when(target_os = "freebsd")
+@when(target_os = "none")  // bare metal / wasm
 
 // CPU architecture
-@cfg(target_arch = "x86_64")
-@cfg(target_arch = "aarch64")
-@cfg(target_arch = "i686")
-@cfg(target_arch = "arm")
-@cfg(target_arch = "wasm32")
-@cfg(target_arch = "riscv64")
+@when(target_arch = "x86_64")
+@when(target_arch = "aarch64")
+@when(target_arch = "i686")
+@when(target_arch = "arm")
+@when(target_arch = "wasm32")
+@when(target_arch = "riscv64")
 
 // Pointer width
-@cfg(target_pointer_width = "32")
-@cfg(target_pointer_width = "64")
+@when(target_pointer_width = "32")
+@when(target_pointer_width = "64")
 
 // Endianness
-@cfg(target_endian = "little")
-@cfg(target_endian = "big")
+@when(target_endian = "little")
+@when(target_endian = "big")
 
 // Environment
-@cfg(target_env = "gnu")
-@cfg(target_env = "msvc")
-@cfg(target_env = "musl")
+@when(target_env = "gnu")
+@when(target_env = "msvc")
+@when(target_env = "musl")
 
 // Vendor
-@cfg(target_vendor = "apple")
-@cfg(target_vendor = "pc")
-@cfg(target_vendor = "unknown")
+@when(target_vendor = "apple")
+@when(target_vendor = "pc")
+@when(target_vendor = "unknown")
 
 // CPU features
-@cfg(target_feature = "sse2")
-@cfg(target_feature = "avx")
-@cfg(target_feature = "neon")
+@when(target_feature = "sse2")
+@when(target_feature = "avx")
+@when(target_feature = "neon")
 
 // Family
-@cfg(unix)     // linux, macos, bsd, etc.
-@cfg(windows)
+@when(unix)     // linux, macos, bsd, etc.
+@when(windows)
 ```
 
 ### 7.2 Runtime Detection
@@ -463,7 +463,7 @@ brew install aspect-build/basm/basm
 // Uses GCC-based toolchain, different runtime
 
 // Windows subsystem
-@cfg(windows)
+@when(windows)
 @subsystem("windows")  // GUI app, no console
 // or
 @subsystem("console")  // Console app (default)
@@ -477,7 +477,7 @@ brew install aspect-build/basm/basm
 // Creates binary for both x86_64 and aarch64
 
 // Minimum deployment target
-@cfg(target_os = "macos")
+@when(target_os = "macos")
 @macos_deployment_target("11.0")  // Big Sur minimum
 
 // Code signing (required for distribution)

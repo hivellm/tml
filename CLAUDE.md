@@ -36,7 +36,7 @@ TML has its own identity, optimized for LLM comprehension with self-documenting 
 | `Option[T]` | `Maybe[T]` | Intent is clear |
 | `Some(x)` / `None` | `Just(x)` / `Nothing` | Self-documenting |
 | `Result[T,E]` | `Outcome[T,E]` | Describes what it is |
-| `Ok(x)` / `Err(e)` | `Success(x)` / `Failure(e)` | Unambiguous meaning |
+| `Ok(x)` / `Err(e)` | `Ok(x)` / `Err(e)` | Same as Rust (concise) |
 | `..` / `..=` | `to` / `through` | Readable ranges |
 | `Box[T]` | `Heap[T]` | Describes storage |
 | `Rc[T]` / `Arc[T]` | `Shared[T]` / `Sync[T]` | Describes purpose |

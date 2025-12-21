@@ -130,7 +130,7 @@ implement Disposable for Waker {
 public async func fetch_data(url: String) -> Outcome[Data, Error] {
     let response = http.get(url).await!
     let body = response.body().await!
-    return Success(parse(body)!)
+    return Ok(parse(body)!)
 }
 
 /// Async blocks
@@ -339,7 +339,7 @@ async func process_file(path: String) -> Outcome[Data, Error] {
         std.fs.read_to_string(path)
     }).await!!
 
-    return Success(parse(content)!)
+    return Ok(parse(content)!)
 }
 ```
 
@@ -474,8 +474,8 @@ implement Future for Sleep {
 /// Wraps a future with a timeout
 public async func timeout[F: Future](duration: Duration, future: F) -> Outcome[F.Output, TimeoutError] {
     select! {
-        result = future => Success(result),
-        _ = sleep(duration) => Failure(TimeoutError),
+        result = future => Ok(result),
+        _ = sleep(duration) => Err(TimeoutError),
     }
 }
 
@@ -500,13 +500,13 @@ implement Future for Timeout[F] where F: Future {
     func poll(mut this, cx: mut ref Context) -> Poll[Outcome[F.Output, TimeoutError]] {
         // First check if inner future is ready
         when this.future.poll(cx) {
-            Ready(value) -> return Ready(Success(value)),
+            Ready(value) -> return Ready(Ok(value)),
             Pending -> {},
         }
 
         // Check timeout
         if Instant.now() >= this.deadline then {
-            return Ready(Failure(TimeoutError))
+            return Ready(Err(TimeoutError))
         }
 
         // Register timer
@@ -581,11 +581,11 @@ extend AsyncRead {
         loop filled < buf.len() {
             let n = this.read(&mut buf[filled..]).await!
             if n == 0 then {
-                return Failure(IoError.UnexpectedEof)
+                return Err(IoError.UnexpectedEof)
             }
             filled = filled + n
         }
-        return Success(())
+        return Ok(())
     }
 
     /// Reads to end of stream
@@ -598,7 +598,7 @@ extend AsyncRead {
             buf.extend_from_slice(&chunk[..n])
             read = read + n
         }
-        return Success(read)
+        return Ok(read)
     }
 
     /// Reads to string
@@ -607,7 +607,7 @@ extend AsyncRead {
         let n = this.read_to_end(&mut bytes).await!
         let s = String.from_utf8(bytes).map_err(|_| IoError.InvalidData)!
         buf.push_str(ref s)
-        return Success(n)
+        return Ok(n)
     }
 }
 ```
@@ -650,11 +650,11 @@ extend AsyncWrite {
         loop written < buf.len() {
             let n = this.write(&buf[written..]).await!
             if n == 0 then {
-                return Failure(IoError.WriteZero)
+                return Err(IoError.WriteZero)
             }
             written = written + n
         }
-        return Success(())
+        return Ok(())
     }
 
     /// Flushes the output
@@ -854,7 +854,7 @@ async func handle_connection(stream: TcpStream) -> Outcome[Unit, Error] {
     }
 
     response.write_to(mut ref stream).await!
-    return Success(())
+    return Ok(())
 }
 
 async func server_main() -> Outcome[Unit, Error] {
@@ -864,7 +864,7 @@ async func server_main() -> Outcome[Unit, Error] {
     loop {
         let (stream, addr) = listener.accept().await!
         spawn(async {
-            if let Failure(e) = handle_connection(stream).await then {
+            if let Err(e) = handle_connection(stream).await then {
                 print("Error handling " + addr.to_string() + ": " + e.to_string())
             }
         })
@@ -893,7 +893,7 @@ async func process_one(item: Item) -> Result {
     // Some async processing
     let data = fetch_data(item.id).await!
     let transformed = transform(data).await!
-    return Success(transformed)
+    return Ok(transformed)
 }
 ```
 
@@ -914,11 +914,11 @@ async func fetch_with_retry[T](
         attempts = attempts + 1
 
         when timeout(timeout_duration, fetch(url)).await {
-            Success(Success(data)) -> return Success(data),
-            Success(Failure(e)) -> {
+            Ok(Ok(data)) -> return Ok(data),
+            Ok(Err(e)) -> {
                 print("Attempt " + attempts.to_string() + " failed: " + e.to_string())
             },
-            Failure(_) -> {
+            Err(_) -> {
                 print("Attempt " + attempts.to_string() + " timed out")
             },
         }
@@ -927,7 +927,7 @@ async func fetch_with_retry[T](
         sleep(Duration.from_millis(100 * (1 << attempts))).await
     }
 
-    return Failure(Error.MaxRetriesExceeded)
+    return Err(Error.MaxRetriesExceeded)
 }
 ```
 

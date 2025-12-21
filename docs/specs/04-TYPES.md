@@ -147,7 +147,7 @@ type Color = Red | Green | Blue
 // With data
 type Maybe[T] = Just(T) | Nothing
 
-type Outcome[T, E] = Success(T) | Failure(E)
+type Outcome[T, E] = Ok(T) | Err(E)
 
 type JsonValue =
     | Null
@@ -291,24 +291,24 @@ let name: String? = get_name()
 ### 5.2 Outcome[T, E]
 
 ```tml
-type Outcome[T, E] = Success(T) | Failure(E)
+type Outcome[T, E] = Ok(T) | Err(E)
 
 func divide(a: F64, b: F64) -> Outcome[F64, String] {
-    if b == 0.0 then return Failure("division by zero")
-    return Success(a / b)
+    if b == 0.0 then return Err("division by zero")
+    return Ok(a / b)
 }
 
 // Pattern matching
 when divide(10.0, 2.0) {
-    Success(result) -> print(result),
-    Failure(msg) -> print("Error: " + msg),
+    Ok(result) -> print(result),
+    Err(msg) -> print("Error: " + msg),
 }
 
 // ! propagates errors
 func calculate() -> Outcome[F64, String] {
     let x = divide(10.0, 2.0)!
     let y = divide(x, 3.0)!
-    return Success(y)
+    return Ok(y)
 }
 
 // else for fallback

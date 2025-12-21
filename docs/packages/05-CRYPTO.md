@@ -626,7 +626,7 @@ func encrypt_data(key: ref [U8; 32], plaintext: ref [U8]) -> Outcome[(List[U8], 
     random.bytes(mut ref nonce)
 
     let (ciphertext, tag) = cipher.encrypt(ref nonce, plaintext, b"")
-    return Success((ciphertext, nonce, tag))
+    return Ok((ciphertext, nonce, tag))
 }
 
 func decrypt_data(

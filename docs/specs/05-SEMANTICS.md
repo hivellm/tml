@@ -546,7 +546,7 @@ when x {
 ### 7.1 Outcome[T, E]
 
 ```tml
-type Outcome[T, E] = Success(T) | Failure(E)
+type Outcome[T, E] = Ok(T) | Err(E)
 
 func parse_int(s: String) -> Outcome[I32, ParseError] {
     // ...
@@ -562,7 +562,7 @@ func process() -> Outcome[Data, Error] {
     let file = File.open("data.txt")!   // propagate on error
     let content = file.read()!           // propagate on error
     let parsed = parse(content)!         // propagate on error
-    return Success(parsed)
+    return Ok(parsed)
 }
 
 // In non-Outcome function, ! panics on error
@@ -586,7 +586,7 @@ let data = fetch(url)! else |err| {
 
 // Early return
 let user = find_user(id)! else {
-    return Failure(Error.NotFound)
+    return Err(Error.NotFound)
 }
 ```
 
@@ -598,10 +598,10 @@ func sync_data() -> Outcome[Unit, SyncError] {
         let local = load_local()!
         let remote = fetch_remote()!
         save(merge(local, remote)!)!
-        return Success(())
+        return Ok(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())
-        return Failure(SyncError.from(err))
+        return Err(SyncError.from(err))
     }
 }
 ```

@@ -22,7 +22,7 @@ func fetch_url(url: String) -> Outcome[String, HttpError] with net {
 func download_and_save(url: String, path: String) -> Outcome[Unit, Error] with net, io {
     let content = fetch_url(url)!
     write_file(path, content)!
-    return Success(())
+    return Ok(())
 }
 
 // ============================================
@@ -89,12 +89,12 @@ func retry[T, E, C](
 
     loop _ in 0 to attempts {
         when f() {
-            Success(value) -> return Success(value),
-            Failure(e) -> last_error = Just(e),
+            Ok(value) -> return Ok(value),
+            Err(e) -> last_error = Just(e),
         }
     }
 
-    return Failure(last_error.unwrap())
+    return Err(last_error.unwrap())
 }
 
 // ============================================
@@ -158,7 +158,7 @@ func process_with_logger[L: Logger](data: Data, logger: L) -> Outcome[Output, Er
     logger.log("Processing started")
     let result = transform(data)
     logger.log("Processing complete")
-    return Success(result)
+    return Ok(result)
 }
 
 // ============================================
@@ -234,9 +234,9 @@ extend SafeFile {
     // Constructor requires io capability
     func open(path: String) -> Outcome[SafeFile, IoError] with io {
         if std.fs.exists(path) then {
-            Success(SafeFile { path })
+            Ok(SafeFile { path })
         } else {
-            Failure(IoError.NotFound)
+            Err(IoError.NotFound)
         }
     }
 
@@ -265,8 +265,8 @@ type Data {}
 type Output {}
 type Duration {}
 
-func parse_config(s: String) -> Outcome[Config, Error] { Success(Config {}) }
-func write_file(path: String, content: String) -> Outcome[Unit, Error] with io { Success(()) }
+func parse_config(s: String) -> Outcome[Config, Error] { Ok(Config {}) }
+func write_file(path: String, content: String) -> Outcome[Unit, Error] with io { Ok(()) }
 func do_work(i: I32) {}
 func transform(d: Data) -> Output { Output {} }
 

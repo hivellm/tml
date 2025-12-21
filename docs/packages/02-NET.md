@@ -359,7 +359,7 @@ loop addr in addrs {
 ## 7. Unix Domain Sockets
 
 ```tml
-@cfg(unix)
+@when(unix)
 module unix
 
 public type UnixStream {
@@ -491,7 +491,7 @@ public func main() -> Outcome[Unit, Error] {
     reader.read_line(mut ref line)!
     println("Response: " + line)
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
@@ -517,7 +517,7 @@ public func main() -> Outcome[Unit, Error] {
         })
     }
 
-    return Success(unit)
+    return Ok(unit)
 }
 
 func handle_client(stream: TcpStream) -> Outcome[Unit, IoError] {
@@ -527,7 +527,7 @@ func handle_client(stream: TcpStream) -> Outcome[Unit, IoError] {
     let response = b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello World!"
     stream.write_all(response)!
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 

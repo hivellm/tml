@@ -112,7 +112,7 @@ std
 
 // Already built-in but defined here for completeness
 public type Maybe[T] = Just(T) | Nothing
-public type Outcome[T, E] = Success(T) | Failure(E)
+public type Outcome[T, E] = Ok(T) | Err(E)
 public type Ordering = Less | Equal | Greater
 
 // Unit type
@@ -506,11 +506,11 @@ public behavior Read {
         loop while filled < buf.len() {
             let n = this.read(mut ref buf[filled to buf.len()])!
             if n == 0 {
-                return Failure(IoError.UnexpectedEof)
+                return Err(IoError.UnexpectedEof)
             }
             filled += n
         }
-        return Success(unit)
+        return Ok(unit)
     }
 
     func read_to_end(this, buf: mut ref List[U8]) -> Outcome[U64, IoError] {
@@ -524,7 +524,7 @@ public behavior Read {
             buf.extend_from_slice(ref chunk[0 to n])
             read_total += n
         }
-        return Success(read_total)
+        return Ok(read_total)
     }
 
     func read_to_string(this, buf: mut ref String) -> Outcome[U64, IoError] {
@@ -532,7 +532,7 @@ public behavior Read {
         let n = this.read_to_end(mut ref bytes)!
         let s = String.from_utf8(bytes)!
         buf.push_str(ref s)
-        return Success(n)
+        return Ok(n)
     }
 }
 
@@ -545,11 +545,11 @@ public behavior Write {
         loop while written < buf.len() {
             let n = this.write(ref buf[written to buf.len()])!
             if n == 0 {
-                return Failure(IoError.WriteZero)
+                return Err(IoError.WriteZero)
             }
             written += n
         }
-        return Success(unit)
+        return Ok(unit)
     }
 }
 ```
@@ -580,7 +580,7 @@ extend File {
     effects: [io.file]
     {
         let handle = platform_open(path, opts)!
-        return Success(This { handle: handle })
+        return Ok(This { handle: handle })
     }
 }
 
@@ -752,8 +752,8 @@ extend JoinHandle[T] {
 
         let guard = this.result.lock()
         when guard.get_mut().take() {
-            Just(value) -> Success(value),
-            Nothing -> Failure(JoinError.Panicked),
+            Just(value) -> Ok(value),
+            Nothing -> Err(JoinError.Panicked),
         }
     }
 

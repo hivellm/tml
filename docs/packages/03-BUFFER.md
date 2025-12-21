@@ -138,23 +138,23 @@ extend Buffer with Read {
         let to_read = buf.len().min(available)
 
         if to_read == 0 {
-            return Success(0)
+            return Ok(0)
         }
 
         buf[..to_read].copy_from_slice(&this.data[this.position..this.position + to_read])
         this.position += to_read
-        return Success(to_read)
+        return Ok(to_read)
     }
 }
 
 extend Buffer with Write {
     func write(this, buf: ref [U8]) -> Outcome[U64, IoError] {
         this.data.extend_from_slice(buf)
-        return Success(buf.len())
+        return Ok(buf.len())
     }
 
     func flush(this) -> Outcome[Unit, IoError] {
-        return Success(unit)
+        return Ok(unit)
     }
 }
 
@@ -167,11 +167,11 @@ extend Buffer with Seek {
         }
 
         if new_pos > this.data.len() {
-            return Failure(IoError.new(InvalidInput, "seek beyond end"))
+            return Err(IoError.new(InvalidInput, "seek beyond end"))
         }
 
         this.position = new_pos
-        return Success(new_pos)
+        return Ok(new_pos)
     }
 }
 ```
@@ -197,64 +197,64 @@ extend ByteReader[R: Read] {
     /// Read single byte
     public func read_u8(this) -> Outcome[U8, IoError] {
         this.inner.read_exact(mut ref this.buf[0 to 1])!
-        return Success(this.buf[0])
+        return Ok(this.buf[0])
     }
 
     /// Read signed byte
     public func read_i8(this) -> Outcome[I8, IoError] {
-        return Success(this.read_u8()! as I8)
+        return Ok(this.read_u8()! as I8)
     }
 
     // Little-endian reads
     public func read_u16_le(this) -> Outcome[U16, IoError] {
         this.inner.read_exact(mut ref this.buf[0 to 2])!
-        return Success(U16.from_le_bytes([this.buf[0], this.buf[1]]))
+        return Ok(U16.from_le_bytes([this.buf[0], this.buf[1]]))
     }
 
     public func read_u32_le(this) -> Outcome[U32, IoError] {
         this.inner.read_exact(mut ref this.buf[0 to 4])!
-        return Success(U32.from_le_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
+        return Ok(U32.from_le_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
     }
 
     public func read_u64_le(this) -> Outcome[U64, IoError] {
         this.inner.read_exact(mut ref this.buf)!
-        return Success(U64.from_le_bytes(this.buf))
+        return Ok(U64.from_le_bytes(this.buf))
     }
 
     public func read_i16_le(this) -> Outcome[I16, IoError] {
-        return Success(this.read_u16_le()! as I16)
+        return Ok(this.read_u16_le()! as I16)
     }
 
     public func read_i32_le(this) -> Outcome[I32, IoError] {
-        return Success(this.read_u32_le()! as I32)
+        return Ok(this.read_u32_le()! as I32)
     }
 
     public func read_i64_le(this) -> Outcome[I64, IoError] {
-        return Success(this.read_u64_le()! as I64)
+        return Ok(this.read_u64_le()! as I64)
     }
 
     public func read_f32_le(this) -> Outcome[F32, IoError] {
-        return Success(F32.from_bits(this.read_u32_le()!))
+        return Ok(F32.from_bits(this.read_u32_le()!))
     }
 
     public func read_f64_le(this) -> Outcome[F64, IoError] {
-        return Success(F64.from_bits(this.read_u64_le()!))
+        return Ok(F64.from_bits(this.read_u64_le()!))
     }
 
     // Big-endian reads
     public func read_u16_be(this) -> Outcome[U16, IoError] {
         this.inner.read_exact(mut ref this.buf[0 to 2])!
-        return Success(U16.from_be_bytes([this.buf[0], this.buf[1]]))
+        return Ok(U16.from_be_bytes([this.buf[0], this.buf[1]]))
     }
 
     public func read_u32_be(this) -> Outcome[U32, IoError] {
         this.inner.read_exact(mut ref this.buf[0 to 4])!
-        return Success(U32.from_be_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
+        return Ok(U32.from_be_bytes([this.buf[0], this.buf[1], this.buf[2], this.buf[3]]))
     }
 
     public func read_u64_be(this) -> Outcome[U64, IoError] {
         this.inner.read_exact(mut ref this.buf)!
-        return Success(U64.from_be_bytes(this.buf))
+        return Ok(U64.from_be_bytes(this.buf))
     }
 
     public func read_i16_be(this) -> Outcome[I16, IoError]
@@ -282,11 +282,11 @@ extend ByteReader[R: Read] {
 
             shift += 7
             if shift >= 64 {
-                return Failure(IoError.new(InvalidData, "varint too long"))
+                return Err(IoError.new(InvalidData, "varint too long"))
             }
         }
 
-        return Success(result)
+        return Ok(result)
     }
 
     public func read_uvarint(this) -> Outcome[U64, IoError] {
@@ -303,11 +303,11 @@ extend ByteReader[R: Read] {
 
             shift += 7
             if shift >= 64 {
-                return Failure(IoError.new(InvalidData, "uvarint too long"))
+                return Err(IoError.new(InvalidData, "uvarint too long"))
             }
         }
 
-        return Success(result)
+        return Ok(result)
     }
 
     // Strings
@@ -415,7 +415,7 @@ extend ByteWriter[W: Write] {
                 this.write_u8(byte | 0x80)!
             }
         }
-        return Success(unit)
+        return Ok(unit)
     }
 
     public func write_uvarint(this, v: U64) -> Outcome[Unit, IoError] {
@@ -431,7 +431,7 @@ extend ByteWriter[W: Write] {
                 this.write_u8(byte | 0x80)!
             }
         }
-        return Success(unit)
+        return Ok(unit)
     }
 
     // Strings
@@ -490,7 +490,7 @@ extend BufReader[R: Read] {
             this.cap = this.inner.read(this.buf.as_mut_slice())!
             this.pos = 0
         }
-        return Success(&this.buf[this.pos..this.cap])
+        return Ok(&this.buf[this.pos..this.cap])
     }
 
     /// Consume n bytes from buffer
@@ -511,7 +511,7 @@ extend BufReader[R: Read] {
                 Just(i) -> {
                     buf.extend_from_slice(&available[through i])
                     this.consume(i + 1)
-                    return Success(read + i + 1)
+                    return Ok(read + i + 1)
                 },
                 None -> {
                     buf.extend_from_slice(available)
@@ -521,7 +521,7 @@ extend BufReader[R: Read] {
                 },
             }
         }
-        return Success(read)
+        return Ok(read)
     }
 
     /// Read line (until \n)
@@ -530,7 +530,7 @@ extend BufReader[R: Read] {
         let n = this.read_until(b'\n', mut ref bytes)!
         let s = String.from_utf8(bytes).map_err(do(_) IoError.new(InvalidData, "invalid UTF-8"))!
         buf.push_str(&s)
-        return Success(n)
+        return Ok(n)
     }
 
     /// Iterator over lines
@@ -554,7 +554,7 @@ extend BufReader[R: Read] with Read {
         let n = buf.len().min(available.len())
         buf[..n].copy_from_slice(&available[..n])
         this.consume(n)
-        return Success(n)
+        return Ok(n)
     }
 }
 
@@ -568,9 +568,9 @@ extend Lines[R: Read] with Iterator {
     func next(this) -> Maybe[Outcome[String, IoError]] {
         var line = String.new()
         when this.reader.read_line(mut ref line) {
-            Success(0) -> Nothing,
-            Success(_) -> Just(Success(line)),
-            Failure(e) -> Just(Failure(e)),
+            Ok(0) -> Nothing,
+            Ok(_) -> Just(Ok(line)),
+            Err(e) -> Just(Err(e)),
         }
     }
 }
@@ -599,7 +599,7 @@ extend BufWriter[W: Write] {
             this.inner.write_all(this.buf.as_slice())!
             this.buf.clear()
         }
-        return Success(unit)
+        return Ok(unit)
     }
 
     /// Get reference to inner writer
@@ -615,7 +615,7 @@ extend BufWriter[W: Write] {
     /// Into inner writer (flushes first)
     public func into_inner(this) -> Outcome[W, IoError] {
         this.flush()!
-        return Success(this.inner)
+        return Ok(this.inner)
     }
 }
 
@@ -630,7 +630,7 @@ extend BufWriter[W: Write] with Write {
         }
 
         this.buf.extend_from_slice(buf)
-        return Success(buf.len())
+        return Ok(buf.len())
     }
 
     func flush(this) -> Outcome[Unit, IoError] {
@@ -785,7 +785,7 @@ extend Message {
         payload.resize(len, 0)
         reader.read_exact(payload.as_mut_slice())!
 
-        return Success(This { id: id, payload: payload })
+        return Ok(This { id: id, payload: payload })
     }
 }
 ```
@@ -814,7 +814,7 @@ func process_file(input: &Path, output: &Path) -> Outcome[Unit, Error] {
     }
 
     writer.flush()!
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 

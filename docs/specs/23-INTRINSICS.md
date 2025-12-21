@@ -533,7 +533,7 @@ public func abort() -> !
 ### 9.1 x86/x86_64
 
 ```tml
-@cfg(target_arch = "x86_64")
+@when(target_arch = "x86_64")
 module intrinsics.x86
 
 /// CPUID
@@ -567,7 +567,7 @@ public func tzcnt_u32(x: U32) -> U32
 public func tzcnt_u64(x: U64) -> U64
 
 /// AES
-@cfg(target_feature = "aes")
+@when(target_feature = "aes")
 public func aesenc(data: U8x16, key: U8x16) -> U8x16
 public func aesdec(data: U8x16, key: U8x16) -> U8x16
 public func aeskeygenassist(key: U8x16, imm: U8) -> U8x16
@@ -586,7 +586,7 @@ public func rdseed_u64() -> Maybe[U64]
 ### 9.2 ARM/AArch64
 
 ```tml
-@cfg(target_arch = "aarch64")
+@when(target_arch = "aarch64")
 module intrinsics.aarch64
 
 /// DMB (Data Memory Barrier)
@@ -623,7 +623,7 @@ public func crc32w(crc: U32, data: U32) -> U32
 public func crc32x(crc: U32, data: U64) -> U32
 
 /// AES
-@cfg(target_feature = "aes")
+@when(target_feature = "aes")
 public func aese(data: U8x16, key: U8x16) -> U8x16
 public func aesd(data: U8x16, key: U8x16) -> U8x16
 ```
@@ -668,12 +668,12 @@ public func module_path() -> ref static str
 
 ```tml
 func count_bits(x: U64) -> U32 {
-    @cfg(target_feature = "popcnt")
+    @when(target_feature = "popcnt")
     {
         return intrinsics.x86.popcnt_u64(x) as U32
     }
 
-    @cfg(not(target_feature = "popcnt"))
+    @when(not(target_feature = "popcnt"))
     {
         // Software fallback
         var n = x
@@ -707,7 +707,7 @@ func branchless_max(a: I32, b: I32) -> I32 {
 ### 11.3 Fast CRC32
 
 ```tml
-@cfg(target_feature = "sse4.2")
+@when(target_feature = "sse4.2")
 func crc32_fast(data: ref [U8]) -> U32 {
     var crc: U32 = 0xFFFFFFFF
     var i: U64 = 0

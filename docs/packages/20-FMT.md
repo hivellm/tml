@@ -569,7 +569,7 @@ public behavior Write {
 implement Write for String {
     func write_str(mut this, s: ref String) -> FmtResult {
         this.push_str(s)
-        return Success(())
+        return Ok(())
     }
 }
 ```

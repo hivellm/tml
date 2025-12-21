@@ -744,8 +744,8 @@ func example_vec() {
 
     // Binary search
     when numbers.binary_search(ref 2) {
-        Success(index) -> print("Found at index: " + index.to_string()),
-        Failure(index) -> print("Would insert at: " + index.to_string()),
+        Ok(index) -> print("Found at index: " + index.to_string()),
+        Err(index) -> print("Would insert at: " + index.to_string()),
     }
 }
 ```

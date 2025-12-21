@@ -71,7 +71,7 @@ func process_order(order: mut ref Order) -> Outcome[Unit, OrderError] {
     {
         loop item in order.items {
             if item.quantity == 0 then {
-                return Failure(OrderError.InvalidQuantity)
+                return Err(OrderError.InvalidQuantity)
             }
         }
     }
@@ -88,7 +88,7 @@ func process_order(order: mut ref Order) -> Outcome[Unit, OrderError] {
     @id("update-status")
     order.status = OrderStatus.Processing
 
-    return Success(())
+    return Ok(())
 }
 
 // ============================================
@@ -148,13 +148,13 @@ module api {
         @id("api.handlers.user-create")
         func create_user(data: UserData) -> Outcome[User, ApiError] {
             // Implementation
-            return Success(User { name: data.name, email: data.email, age: 0 })
+            return Ok(User { name: data.name, email: data.email, age: 0 })
         }
 
         @id("api.handlers.user-update")
         func update_user(id: U64, data: UserData) -> Outcome[User, ApiError] {
             // Implementation
-            return Success(User { name: data.name, email: data.email, age: 0 })
+            return Ok(User { name: data.name, email: data.email, age: 0 })
         }
     }
 
@@ -163,7 +163,7 @@ module api {
         @id("api.middleware.auth")
         func authenticate(request: ref Request) -> Outcome[UserId, AuthError] {
             // Check token
-            return Success(UserId(1))
+            return Ok(UserId(1))
         }
     }
 }

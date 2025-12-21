@@ -1,0 +1,465 @@
+// TML PEG Grammar v0.1.0
+// For compiler parsing - generates AST with spans
+//
+// Usage: This grammar is for PEG parser generators like:
+//   - pest (Rust)
+//   - peggy/peg.js (JavaScript)
+//   - go-peg (Go)
+//
+// Every rule produces an AST node with source span.
+
+// =============================================================================
+// TOP LEVEL
+// =============================================================================
+
+Module = SOI ~ ModuleHeader? ~ Item* ~ EOI
+
+ModuleHeader = "module" ~ Ident ~ ";"?
+
+Item = Decorator* ~ Visibility? ~ ItemKind
+
+ItemKind = FuncDef
+         / TypeDef
+         / ConstDef
+         / BehaviorDef
+         / ImplBlock
+         / ModDef
+         / DecoratorDef
+         / Use
+
+// =============================================================================
+// DECLARATIONS
+// =============================================================================
+
+FuncDef = "func" ~ Ident ~ GenericParams? ~ "(" ~ Params? ~ ")"
+        ~ ("->" ~ Type)? ~ Effects? ~ (Block / ";")
+
+TypeDef = "type" ~ Ident ~ GenericParams? ~ "=" ~ TypeBody
+
+ConstDef = "const" ~ Ident ~ ":" ~ Type ~ "=" ~ Expr ~ ";"?
+
+BehaviorDef = "behavior" ~ Ident ~ GenericParams? ~ "{" ~ BehaviorItem* ~ "}"
+
+BehaviorItem = Decorator* ~ "func" ~ Ident ~ GenericParams?
+             ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)? ~ Effects?
+             ~ (Block / ";")
+
+ImplBlock = "impl" ~ GenericParams? ~ Type ~ ("for" ~ Type)?
+          ~ "{" ~ ImplItem* ~ "}"
+
+ImplItem = Decorator* ~ Visibility? ~ FuncDef
+
+ModDef = "mod" ~ Ident ~ ("{" ~ Item* ~ "}" / ";")
+
+DecoratorDef = "decorator" ~ Ident ~ DecoratorParams? ~ "{" ~ DecoratorBody ~ "}"
+
+DecoratorParams = "(" ~ (DecoratorParam ~ ("," ~ DecoratorParam)*)? ~ ")"
+
+DecoratorParam = Ident ~ ":" ~ Type ~ ("=" ~ Expr)?
+
+DecoratorBody = FuncDef+
+
+Use = "use" ~ UsePath ~ ("as" ~ Ident)? ~ ";"?
+
+UsePath = PathSegment ~ ("::" ~ (UseTree / PathSegment))*
+
+UseTree = "{" ~ (UsePath ~ ("," ~ UsePath)*)? ~ "}"
+        / "*"
+
+// =============================================================================
+// VISIBILITY
+// =============================================================================
+
+Visibility = "pub" ~ ("(" ~ VisScope ~ ")")?
+
+VisScope = "crate" / "super" / "self" / Path
+
+// =============================================================================
+// GENERICS & PARAMS
+// =============================================================================
+
+GenericParams = "[" ~ (GenericParam ~ ("," ~ GenericParam)*)? ~ "]"
+
+GenericParam = Ident ~ (":" ~ TypeBound)?
+
+TypeBound = Path ~ ("+" ~ Path)*
+
+Params = Param ~ ("," ~ Param)* ~ ","?
+
+Param = "mut"? ~ Ident ~ ":" ~ Type
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+Type = FuncType / ReferenceType / BaseType
+
+FuncType = "func" ~ "(" ~ TypeList? ~ ")" ~ "->" ~ Type ~ Effects?
+
+ReferenceType = "mut"? ~ "ref" ~ Type
+
+BaseType = PointerType / ArrayType / TupleType / PathType / NeverType
+
+PointerType = "*" ~ "mut"? ~ Type
+
+ArrayType = "[" ~ Type ~ ";" ~ Expr ~ "]"
+
+TupleType = "(" ~ TypeList? ~ ")"
+
+PathType = Path ~ GenericArgs?
+
+NeverType = "Never"
+
+GenericArgs = "[" ~ TypeList ~ "]"
+
+TypeList = Type ~ ("," ~ Type)* ~ ","?
+
+TypeBody = SumType / StructType / Type
+
+SumType = "|"? ~ Variant ~ ("|" ~ Variant)+
+
+Variant = Ident ~ VariantFields?
+
+VariantFields = "(" ~ TypeList ~ ")"
+              / "{" ~ StructFields ~ "}"
+
+StructType = "{" ~ StructFields ~ "}"
+
+StructFields = (StructField ~ ("," ~ StructField)*)? ~ ","?
+
+StructField = Decorator* ~ Visibility? ~ Ident ~ ":" ~ Type ~ ("=" ~ Expr)?
+
+// =============================================================================
+// EFFECTS
+// =============================================================================
+
+Effects = "with" ~ EffectList
+
+EffectList = Ident ~ ("," ~ Ident)*
+
+// =============================================================================
+// DECORATORS
+// =============================================================================
+
+Decorator = "@" ~ DecoratorExpr
+
+DecoratorExpr = Path ~ DecoratorArgs?
+
+DecoratorArgs = "(" ~ (DecoratorArg ~ ("," ~ DecoratorArg)*)? ~ ")"
+
+DecoratorArg = (Ident ~ ":")? ~ Expr
+
+// =============================================================================
+// EXPRESSIONS
+// =============================================================================
+
+Expr = Assignment
+
+Assignment = LogicalOr ~ (AssignOp ~ Assignment)?
+
+AssignOp = "=" / "+=" / "-=" / "*=" / "/=" / "%="
+         / "&=" / "|=" / "^=" / "<<=" / ">>="
+
+LogicalOr = LogicalAnd ~ ("or" ~ LogicalAnd)*
+
+LogicalAnd = Comparison ~ ("and" ~ Comparison)*
+
+Comparison = BitwiseOr ~ (CompareOp ~ BitwiseOr)?
+
+CompareOp = "==" / "!=" / "<=" / ">=" / "<" / ">"
+
+BitwiseOr = BitwiseXor ~ ("|" ~ BitwiseXor)*
+
+BitwiseXor = BitwiseAnd ~ ("^" ~ BitwiseAnd)*
+
+BitwiseAnd = Shift ~ ("&" ~ Shift)*
+
+Shift = Additive ~ (ShiftOp ~ Additive)*
+
+ShiftOp = "<<" / ">>"
+
+Additive = Multiplicative ~ (AddOp ~ Multiplicative)*
+
+AddOp = "+" / "-"
+
+Multiplicative = Power ~ (MulOp ~ Power)*
+
+MulOp = "*" / "/" / "%"
+
+Power = Unary ~ ("**" ~ Power)?
+
+Unary = UnaryOp* ~ Postfix
+
+UnaryOp = "-" / "not" / "~" / "ref" / "mut" ~ "ref" / "*"
+
+Postfix = Primary ~ PostfixOp*
+
+PostfixOp = Call / Index / FieldAccess / MethodCall / Propagate / Await / Cast
+
+Call = "(" ~ ArgList? ~ ")"
+
+ArgList = Arg ~ ("," ~ Arg)* ~ ","?
+
+Arg = (Ident ~ ":")? ~ Expr
+
+Index = "[" ~ Expr ~ "]"
+
+FieldAccess = "." ~ Ident
+
+MethodCall = "." ~ Ident ~ GenericArgs? ~ "(" ~ ArgList? ~ ")"
+
+Propagate = "!"
+
+Await = "." ~ "await"
+
+Cast = "as" ~ Type
+
+// =============================================================================
+// PRIMARY EXPRESSIONS
+// =============================================================================
+
+Primary = Literal
+        / "this"
+        / "(" ~ Expr ~ ")"          // Parenthesized / Tuple
+        / Block
+        / IfExpr
+        / WhenExpr
+        / LoopExpr
+        / ForExpr
+        / ReturnExpr
+        / BreakExpr
+        / ContinueExpr
+        / Closure
+        / StructInit
+        / ArrayInit
+        / Quote
+        / Path
+
+// =============================================================================
+// CONTROL FLOW
+// =============================================================================
+
+IfExpr = "if" ~ Expr ~ "then" ~ Expr ~ ("else" ~ Expr)?
+       / "if" ~ "let" ~ Pattern ~ "=" ~ Expr ~ "then" ~ Expr ~ ("else" ~ Expr)?
+
+WhenExpr = "when" ~ Expr ~ "{" ~ MatchArm* ~ "}"
+
+MatchArm = Pattern ~ ("->" ~ Expr)? ~ ","?
+
+LoopExpr = "loop" ~ Expr? ~ Block
+         / "loop" ~ Block
+
+ForExpr = "for" ~ Pattern ~ "in" ~ Expr ~ Block
+
+ReturnExpr = "return" ~ Expr?
+
+BreakExpr = "break" ~ Ident? ~ Expr?
+
+ContinueExpr = "continue" ~ Ident?
+
+// =============================================================================
+// BLOCKS & STATEMENTS
+// =============================================================================
+
+Block = "{" ~ Statement* ~ Expr? ~ "}"
+
+Statement = LetStmt / ExprStmt / Item / ";"
+
+LetStmt = "let" ~ "mut"? ~ Pattern ~ (":" ~ Type)? ~ "=" ~ Expr ~ ";"?
+
+ExprStmt = Expr ~ ";"
+
+// =============================================================================
+// PATTERNS
+// =============================================================================
+
+Pattern = OrPattern
+
+OrPattern = PatternNoOr ~ ("|" ~ PatternNoOr)*
+
+PatternNoOr = GuardPattern
+
+GuardPattern = PrimaryPattern ~ ("if" ~ Expr)?
+
+PrimaryPattern = LiteralPattern
+               / WildcardPattern
+               / RangePattern
+               / IdentPattern
+               / TuplePattern
+               / StructPattern
+               / VariantPattern
+               / RefPattern
+
+LiteralPattern = Literal
+
+WildcardPattern = "_"
+
+RangePattern = Literal ~ ("to" / "through") ~ Literal
+
+IdentPattern = "mut"? ~ Ident ~ ("@" ~ Pattern)?
+
+TuplePattern = "(" ~ (Pattern ~ ("," ~ Pattern)*)? ~ ")"
+
+StructPattern = Path ~ "{" ~ FieldPatterns? ~ ".."? ~ "}"
+
+FieldPatterns = FieldPattern ~ ("," ~ FieldPattern)* ~ ","?
+
+FieldPattern = Ident ~ (":" ~ Pattern)?
+
+VariantPattern = Path ~ ("(" ~ (Pattern ~ ("," ~ Pattern)*)? ~ ")")?
+
+RefPattern = "ref" ~ "mut"? ~ Pattern
+
+// =============================================================================
+// CLOSURES
+// =============================================================================
+
+Closure = "do" ~ ClosureParams? ~ ("->" ~ Type)? ~ ClosureBody
+
+ClosureParams = "(" ~ Params? ~ ")" / Ident
+
+ClosureBody = Block / Expr
+
+// =============================================================================
+// STRUCT & ARRAY INIT
+// =============================================================================
+
+StructInit = Path ~ "{" ~ FieldInits? ~ (".." ~ Expr)? ~ "}"
+
+FieldInits = FieldInit ~ ("," ~ FieldInit)* ~ ","?
+
+FieldInit = Ident ~ (":" ~ Expr)?
+
+ArrayInit = "[" ~ ArrayElements? ~ "]"
+
+ArrayElements = Expr ~ ("," ~ Expr)* ~ ","?
+              / Expr ~ ";" ~ Expr  // [value; count]
+
+// =============================================================================
+// QUOTE (METAPROGRAMMING)
+// =============================================================================
+
+Quote = "quote" ~ "{" ~ QuoteContent* ~ "}"
+
+QuoteContent = Splice / QuoteToken
+
+Splice = "${" ~ Expr ~ "}" / "$" ~ Ident
+
+QuoteToken = ~(!("${" / "$" ~ Ident / "}") ~ ANY)+
+
+// =============================================================================
+// LITERALS
+// =============================================================================
+
+Literal = StringLiteral
+        / CharLiteral
+        / NumberLiteral
+        / BoolLiteral
+        / UnitLiteral
+
+StringLiteral = RawString / BasicString
+
+BasicString = "\"" ~ StringChar* ~ "\""
+
+StringChar = !("\"" / "\\") ~ ANY
+           / "\\" ~ EscapeSeq
+
+RawString = "\"\"\"" ~ (!("\"\"\"") ~ ANY)* ~ "\"\"\""
+
+EscapeSeq = "n" / "r" / "t" / "\\" / "\"" / "0"
+          / "x" ~ HexDigit ~ HexDigit
+          / "u" ~ "{" ~ HexDigit+ ~ "}"
+
+CharLiteral = "'" ~ CharContent ~ "'"
+
+CharContent = !("'" / "\\") ~ ANY
+            / "\\" ~ EscapeSeq
+
+NumberLiteral = FloatLiteral / IntLiteral
+
+FloatLiteral = Digits ~ "." ~ Digits ~ Exponent? ~ FloatSuffix?
+             / Digits ~ Exponent ~ FloatSuffix?
+
+FloatSuffix = "_"? ~ ("f32" / "f64")
+
+IntLiteral = HexInt / OctalInt / BinaryInt / DecimalInt
+
+DecimalInt = Digits ~ IntSuffix?
+
+HexInt = "0x" ~ HexDigits ~ IntSuffix?
+
+OctalInt = "0o" ~ OctalDigits ~ IntSuffix?
+
+BinaryInt = "0b" ~ BinaryDigits ~ IntSuffix?
+
+IntSuffix = "_"? ~ ("i8" / "i16" / "i32" / "i64" / "i128"
+                  / "u8" / "u16" / "u32" / "u64" / "u128")
+
+Digits = Digit ~ ("_"? ~ Digit)*
+
+HexDigits = HexDigit ~ ("_"? ~ HexDigit)*
+
+OctalDigits = OctalDigit ~ ("_"? ~ OctalDigit)*
+
+BinaryDigits = BinaryDigit ~ ("_"? ~ BinaryDigit)*
+
+Digit = '0'..'9'
+
+HexDigit = '0'..'9' / 'a'..'f' / 'A'..'F'
+
+OctalDigit = '0'..'7'
+
+BinaryDigit = '0' / '1'
+
+Exponent = ("e" / "E") ~ ("+" / "-")? ~ Digits
+
+BoolLiteral = "true" / "false"
+
+UnitLiteral = "(" ~ ")"
+
+// =============================================================================
+// IDENTIFIERS & PATHS
+// =============================================================================
+
+Path = PathSegment ~ ("::" ~ PathSegment)*
+
+PathSegment = Ident / "crate" / "super" / "self" / "This"
+
+Ident = !Keyword ~ IdentStart ~ IdentContinue*
+
+IdentStart = 'a'..'z' / 'A'..'Z' / '_'
+
+IdentContinue = IdentStart / '0'..'9'
+
+// =============================================================================
+// KEYWORDS
+// =============================================================================
+
+Keyword = "and" / "as" / "async" / "await" / "behavior"
+        / "break" / "const" / "continue" / "crate" / "decorator"
+        / "do" / "else" / "false" / "for" / "func"
+        / "if" / "impl" / "in" / "let" / "loop"
+        / "mod" / "mut" / "not" / "or" / "pub"
+        / "quote" / "ref" / "return" / "self" / "super"
+        / "then" / "this" / "This" / "through" / "to"
+        / "true" / "type" / "use" / "when" / "with"
+
+// =============================================================================
+// WHITESPACE & COMMENTS
+// =============================================================================
+
+WHITESPACE = " " / "\t" / "\r" / "\n"
+
+COMMENT = LineComment / BlockComment
+
+LineComment = "//" ~ (!"\n" ~ ANY)*
+
+BlockComment = "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+
+// =============================================================================
+// SOI/EOI (Start/End of Input)
+// =============================================================================
+
+SOI = &ANY / !ANY  // Start of input
+EOI = !ANY          // End of input
+ANY = '\x00'..'\xFF' // Any byte (adjust for Unicode)

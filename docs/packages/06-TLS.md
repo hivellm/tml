@@ -495,7 +495,7 @@ public func https_get(host: ref str, path: ref str) -> Outcome[String, Error] {
     var response = String.new()
     tls.read_to_string(&mut response)!
 
-    return Success(response)
+    return Ok(response)
 }
 ```
 
@@ -527,20 +527,20 @@ public func main() -> Outcome[Unit, Error] {
 
         thread.spawn(do() {
             when acceptor.accept(tcp) {
-                Success(tls) -> {
+                Ok(tls) -> {
                     println("TLS connection from: " + addr.to_string())
                     println("  Version: " + tls.tls_version().to_string())
                     println("  Cipher: " + tls.cipher_suite().name)
                     handle_connection(tls).ok()
                 },
-                Failure(e) -> {
+                Err(e) -> {
                     eprintln("TLS error: " + e.to_string())
                 },
             }
         })
     }
 
-    return Success(unit)
+    return Ok(unit)
 }
 
 func handle_connection[S: Read + Write](stream: TlsStream[S]) -> Outcome[Unit, Error] {
@@ -550,7 +550,7 @@ func handle_connection[S: Read + Write](stream: TlsStream[S]) -> Outcome[Unit, E
     let response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello"
     stream.write_all(response)!
 
-    return Success(unit)
+    return Ok(unit)
 }
 ```
 
