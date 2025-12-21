@@ -1,0 +1,37 @@
+// TML Example 02: Variables and Types
+// Demonstrates variable declarations and basic types
+
+module variables
+
+public func main() {
+    // Immutable with type inference
+    let x = 42
+    let name = "Alice"
+    let pi = 3.14159
+
+    // Immutable with explicit type
+    let count: I32 = 100
+    let ratio: F64 = 0.75
+    let flag: Bool = true
+
+    // Mutable (uses 'var' instead of 'let mut')
+    var counter = 0
+    counter = counter + 1
+    counter += 1
+
+    // Compile-time constants
+    const MAX_SIZE: U64 = 1024
+    const APP_NAME = "MyApp"
+
+    // Numeric types with suffix
+    let byte: U8 = 255u8
+    let short: I16 = -1000i16
+    let long: I64 = 9_000_000_000i64
+    let float: F32 = 2.5f32
+
+    // Inference works in expressions
+    let sum = x + count    // I32
+    let msg = name + "!"   // String
+
+    println("counter = " + counter.to_string())
+}

@@ -1,0 +1,162 @@
+// TML Example 08: Closures
+// Demonstrates the do() closure syntax
+
+module closures
+
+public func main() {
+    // ============================================
+    // BASIC CLOSURE SYNTAX
+    // ============================================
+
+    // Single parameter, single expression
+    let double = do(x) x * 2
+
+    // Multiple parameters
+    let add = do(a, b) a + b
+
+    // With type annotations
+    let multiply: func(I32, I32) -> I32 = do(a: I32, b: I32) a * b
+
+    // No parameters
+    let get_value = do() 42
+
+    // Call closures
+    println(double(5).to_string())      // 10
+    println(add(3, 4).to_string())      // 7
+    println(get_value().to_string())    // 42
+
+    // ============================================
+    // MULTI-LINE CLOSURES
+    // ============================================
+
+    let complex = do(x) {
+        let squared = x * x
+        let cubed = squared * x
+        cubed + squared + x
+    }
+
+    println(complex(3).to_string())  // 27 + 9 + 3 = 39
+
+    // ============================================
+    // CLOSURES WITH COLLECTIONS
+    // ============================================
+
+    let numbers = [1, 2, 3, 4, 5]
+
+    // Map - transform each element
+    let doubled = numbers.map(do(n) n * 2)
+    println(doubled.to_string())  // [2, 4, 6, 8, 10]
+
+    // Filter - keep elements matching predicate
+    let evens = numbers.filter(do(n) n % 2 == 0)
+    println(evens.to_string())  // [2, 4]
+
+    // Reduce/fold - accumulate to single value
+    let sum = numbers.reduce(0, do(acc, n) acc + n)
+    println("Sum: " + sum.to_string())  // 15
+
+    // Find - first matching element
+    let first_even = numbers.find(do(n) n % 2 == 0)
+    when first_even {
+        Some(n) -> println("First even: " + n.to_string()),
+        None -> println("No even found"),
+    }
+
+    // Any/All predicates
+    let has_negative = numbers.any(do(n) n < 0)
+    let all_positive = numbers.all(do(n) n > 0)
+
+    // ============================================
+    // CHAINING OPERATIONS
+    // ============================================
+
+    let result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        .filter(do(n) n % 2 == 0)      // [2, 4, 6, 8, 10]
+        .map(do(n) n * n)               // [4, 16, 36, 64, 100]
+        .filter(do(n) n > 20)           // [36, 64, 100]
+        .reduce(0, do(acc, n) acc + n)  // 200
+
+    println("Chained result: " + result.to_string())
+
+    // ============================================
+    // CAPTURING VARIABLES
+    // ============================================
+
+    let multiplier = 10
+
+    // Closure captures 'multiplier' from environment
+    let scale = do(x) x * multiplier
+
+    println(scale(5).to_string())  // 50
+
+    // Mutable capture
+    var counter = 0
+    let increment = do() {
+        counter += 1
+        counter
+    }
+
+    println(increment().to_string())  // 1
+    println(increment().to_string())  // 2
+    println(increment().to_string())  // 3
+
+    // ============================================
+    // CLOSURES AS PARAMETERS
+    // ============================================
+
+    func apply_twice[T](value: T, f: func(T) -> T) -> T {
+        return f(f(value))
+    }
+
+    let result2 = apply_twice(5, do(x) x + 1)
+    println(result2.to_string())  // 7
+
+    // ============================================
+    // RETURNING CLOSURES
+    // ============================================
+
+    func make_adder(n: I32) -> func(I32) -> I32 {
+        return do(x) x + n
+    }
+
+    let add_five = make_adder(5)
+    let add_ten = make_adder(10)
+
+    println(add_five(3).to_string())   // 8
+    println(add_ten(3).to_string())    // 13
+
+    // ============================================
+    // CLOSURE WITH OPTION/RESULT
+    // ============================================
+
+    let maybe_value: Option[I32] = Some(42)
+
+    // Map over Option
+    let doubled_opt = maybe_value.map(do(n) n * 2)
+
+    // Flat map (and_then)
+    let processed = maybe_value
+        .and_then(do(n) if n > 0 then Some(n * 2) else None)
+
+    // Unwrap with default using closure
+    let value = maybe_value.unwrap_or_else(do() compute_default())
+
+    // ============================================
+    // SORTING WITH CLOSURES
+    // ============================================
+
+    var items = ["banana", "apple", "cherry"]
+
+    // Sort by length
+    items.sort_by(do(a, b) a.len().cmp(b.len()))
+
+    // Sort descending
+    var nums = [3, 1, 4, 1, 5, 9, 2, 6]
+    nums.sort_by(do(a, b) b.cmp(a))
+
+    println(nums.to_string())  // [9, 6, 5, 4, 3, 2, 1, 1]
+}
+
+func compute_default() -> I32 {
+    return 0
+}

@@ -1,0 +1,348 @@
+// TML Example 06: Error Handling
+// Demonstrates the ! operator, else recovery, and catch blocks
+
+module error_handling
+
+// ============================================
+// THE ! OPERATOR (PROPAGATE OR PANIC)
+// ============================================
+
+// Every ! marks a potential exit point - highly visible
+func read_config(path: String) -> Result[Config, Error] {
+    let content = File.read(path)!       // propagate on error
+    let config = parse_json(content)!    // propagate on error
+    return Ok(config)
+}
+
+// In non-Result function, ! panics on error
+func must_have_config() -> Config {
+    let content = File.read("config.json")!  // panic if fails
+    return parse_json(content)!               // panic if fails
+}
+
+// ============================================
+// INLINE RECOVERY WITH ELSE
+// ============================================
+
+func get_port() -> U16 {
+    // Simple default
+    let port = env.get("PORT")!
+        .parse[U16]()! else 8080
+
+    return port
+}
+
+func load_user_data(id: U64) -> Result[UserData, Error] {
+    // Recovery with block
+    let user = db.find_user(id)! else {
+        log.warn("User not found, using guest")
+        return Ok(UserData.guest())
+    }
+
+    // Recovery with error binding
+    let preferences = fetch_preferences(id)! else |err| {
+        log.debug("No preferences: " + err.to_string())
+        Preferences.default()
+    }
+
+    return Ok(UserData { user, preferences })
+}
+
+// ============================================
+// OPTION TYPE WITH !
+// ============================================
+
+func find_user(id: U64) -> Option[User] {
+    if id == 1 then Some(User { name: "Alice", email: "alice@example.com" })
+    else None
+}
+
+func get_user_email(id: U64) -> Result[String, Error] {
+    // None becomes Err automatically
+    let user = find_user(id)!
+    return Ok(user.email)
+}
+
+func get_user_email_custom(id: U64) -> Result[String, Error] {
+    // Custom error for None
+    let user = find_user(id)! else {
+        return Err(Error.NotFound("User " + id.to_string()))
+    }
+    return Ok(user.email)
+}
+
+// ============================================
+// BLOCK-LEVEL ERROR HANDLING (CATCH)
+// ============================================
+
+func sync_data() -> Result[Unit, SyncError] {
+    catch {
+        let local = load_local()!
+        let remote = fetch_remote()!
+        let merged = merge(local, remote)!
+        save(merged)!
+        return Ok(())
+    } else |err| {
+        log.error("Sync failed: " + err.to_string())
+        return Err(SyncError.from(err))
+    }
+}
+
+// Nested catch for fallback strategies
+func robust_load() -> Data {
+    // Try primary source
+    catch {
+        return fetch_from_api()!
+    } else {
+        // Try cache
+        catch {
+            return load_from_cache()!
+        } else {
+            // Final fallback
+            return Data.default()
+        }
+    }
+}
+
+// ============================================
+// RESULT METHODS
+// ============================================
+
+func demo_result_methods() {
+    let result: Result[I32, String] = Ok(42)
+
+    // Check state
+    if result.is_ok() then println("Success!")
+
+    // Transform values
+    let doubled = result.map(do(n) n * 2)              // Ok(84)
+    let as_string = result.map(do(n) n.to_string())    // Ok("42")
+
+    // Chain operations
+    let chained = result
+        .and_then(do(n) if n > 0 then Ok(n * 2) else Err("negative"))
+        .map(do(n) n + 1)
+
+    // Extract with defaults
+    let value = result.unwrap_or(0)
+    let lazy_value = result.unwrap_or_else(do() compute_default())
+
+    // Convert to Option
+    let maybe: Option[I32] = result.ok()
+}
+
+// ============================================
+// ERROR TYPE DESIGN
+// ============================================
+
+// Simple enum errors
+type ParseError =
+    | InvalidFormat
+    | UnexpectedToken { found: String, expected: String }
+    | EndOfInput
+
+// Rich error with context
+type AppError {
+    kind: ErrorKind,
+    message: String,
+    source: Option[Box[dyn Error]],
+}
+
+type ErrorKind =
+    | Io
+    | Parse
+    | Network
+    | Validation
+    | NotFound
+
+// ============================================
+// ERROR CONVERSION WITH FROM
+// ============================================
+
+type ServiceError = Io(IoError) | Parse(ParseError) | Http(HttpError)
+
+extend ServiceError with From[IoError] {
+    func from(e: IoError) -> ServiceError {
+        ServiceError.Io(e)
+    }
+}
+
+extend ServiceError with From[ParseError] {
+    func from(e: ParseError) -> ServiceError {
+        ServiceError.Parse(e)
+    }
+}
+
+// Now ! automatically converts error types
+func process_request(path: String) -> Result[Response, ServiceError] {
+    let content = File.read(path)!       // IoError -> ServiceError
+    let data = parse_json(content)!      // ParseError -> ServiceError
+    let result = http.post(API_URL, data)!  // HttpError -> ServiceError
+    return Ok(result)
+}
+
+// ============================================
+// ASSERTIONS AND CONTRACTS
+// ============================================
+
+func divide(a: I32, b: I32) -> I32
+    requires b != 0
+{
+    return a / b
+}
+
+func process_items(items: List[Item]) -> Summary
+    requires items.len() > 0
+    ensures result.count == items.len()
+{
+    // Implementation
+    var total = 0.0
+    loop item in items {
+        total += item.value
+    }
+    return Summary { count: items.len(), total }
+}
+
+func demo_assertions() {
+    let x = 10
+
+    // Runtime assertions
+    assert(x > 0, "x must be positive")
+    assert_eq(x, 10, "x should be 10")
+
+    // Debug-only assertions (removed in release)
+    debug_assert(expensive_check())
+}
+
+// ============================================
+// PANIC FOR UNRECOVERABLE ERRORS
+// ============================================
+
+func get_required_env(name: String) -> String {
+    env.get(name)! else {
+        panic("Required environment variable not set: " + name)
+    }
+}
+
+func handle_state(state: State) -> Action {
+    when state {
+        State.Ready -> Action.Start,
+        State.Running -> Action.Continue,
+        State.Done -> Action.Finish,
+        _ -> unreachable("Invalid state"),
+    }
+}
+
+// ============================================
+// PRACTICAL EXAMPLE: API HANDLER
+// ============================================
+
+func handle_create_user(request: Request) -> Result[Response, ApiError] {
+    // Parse request body
+    let body = request.json[CreateUserRequest]()! else |e| {
+        return Err(ApiError.BadRequest(e.to_string()))
+    }
+
+    // Validate
+    validate_email(body.email)! else |e| {
+        return Err(ApiError.Validation(e))
+    }
+
+    // Check if user exists
+    let existing = db.find_by_email(body.email)!
+    if existing.is_some() then {
+        return Err(ApiError.Conflict("Email already registered"))
+    }
+
+    // Create user
+    let user = catch {
+        let hashed = hash_password(body.password)!
+        let user = User {
+            email: body.email,
+            password_hash: hashed,
+            created_at: now(),
+        }
+        db.insert(user)!
+    } else |e| {
+        log.error("Failed to create user: " + e.to_string())
+        return Err(ApiError.Internal)
+    }
+
+    return Ok(Response.created(user))
+}
+
+// ============================================
+// TYPES FOR EXAMPLES
+// ============================================
+
+type User { name: String, email: String }
+type UserData { user: User, preferences: Preferences }
+type Preferences {}
+type Config {}
+type Data {}
+type Summary { count: U64, total: F64 }
+type Item { value: F64 }
+type State = Ready | Running | Done | Invalid
+type Action = Start | Continue | Finish
+type Request {}
+type Response {}
+type CreateUserRequest { email: String, password: String }
+type ApiError = BadRequest(String) | Validation(String) | Conflict(String) | Internal
+type IoError = NotFound | PermissionDenied
+type HttpError = Timeout | NetworkError
+type Error = NotFound(String) | Io(IoError) | Parse(ParseError)
+type SyncError {}
+
+extend UserData {
+    func guest() -> UserData {
+        UserData {
+            user: User { name: "Guest", email: "" },
+            preferences: Preferences {},
+        }
+    }
+}
+
+extend Preferences {
+    func default() -> Preferences { Preferences {} }
+}
+
+extend Data {
+    func default() -> Data { Data {} }
+}
+
+extend SyncError {
+    func from(e: dyn Error) -> SyncError { SyncError {} }
+}
+
+extend Response {
+    func created(user: User) -> Response { Response {} }
+}
+
+func parse_json[T](s: String) -> Result[T, ParseError] { Ok(default()) }
+func load_local() -> Result[Data, Error] { Ok(Data {}) }
+func fetch_remote() -> Result[Data, Error] { Ok(Data {}) }
+func fetch_from_api() -> Result[Data, Error] { Ok(Data {}) }
+func load_from_cache() -> Result[Data, Error] { Ok(Data {}) }
+func fetch_preferences(id: U64) -> Result[Preferences, Error] { Ok(Preferences {}) }
+func merge(a: Data, b: Data) -> Result[Data, Error] { Ok(Data {}) }
+func save(d: Data) -> Result[Unit, Error] { Ok(()) }
+func compute_default() -> I32 { 0 }
+func expensive_check() -> Bool { true }
+func validate_email(e: String) -> Result[Unit, String] { Ok(()) }
+func hash_password(p: String) -> Result[String, Error] { Ok("hashed") }
+func now() -> U64 { 0 }
+func default[T]() -> T { panic("not implemented") }
+
+const API_URL = "https://api.example.com"
+
+public func main() {
+    // Simple usage
+    let config = read_config("app.json")! else {
+        println("Using default config")
+        Config {}
+    }
+
+    // With error details
+    let port = get_port()
+    println("Starting on port " + port.to_string())
+}

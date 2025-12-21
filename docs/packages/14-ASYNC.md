@@ -1,0 +1,941 @@
+# TML Standard Library: Async Runtime
+
+> `std.async` — Asynchronous programming with futures and async/await.
+
+## Overview
+
+The async package provides an asynchronous runtime for concurrent programming. It includes the Future trait, async/await syntax support, and runtime implementations for executing async tasks.
+
+## Import
+
+```tml
+import std.async
+import std.async.{spawn, block_on, timeout, sleep}
+```
+
+---
+
+## Core Traits
+
+### Future
+
+The fundamental trait for asynchronous computation.
+
+```tml
+/// An asynchronous computation that may not have completed yet
+public trait Future {
+    /// The type of value produced on completion
+    type Output
+
+    /// Attempt to resolve the future to a value
+    func poll(mut this, cx: &mut Context) -> Poll[This.Output]
+}
+
+/// The result of polling a future
+public type Poll[T] = Ready(T) | Pending
+
+extend Poll[T] {
+    /// Returns true if the future is ready
+    public func is_ready(this) -> Bool {
+        when this {
+            Ready(_) -> true,
+            Pending -> false,
+        }
+    }
+
+    /// Returns true if the future is pending
+    public func is_pending(this) -> Bool {
+        when this {
+            Pending -> true,
+            Ready(_) -> false,
+        }
+    }
+
+    /// Maps the ready value
+    public func map[U](this, f: func(T) -> U) -> Poll[U] {
+        when this {
+            Ready(t) -> Ready(f(t)),
+            Pending -> Pending,
+        }
+    }
+}
+```
+
+### Context and Waker
+
+```tml
+/// Context for polling a future
+public type Context {
+    waker: Waker,
+}
+
+extend Context {
+    /// Returns a reference to the waker
+    public func waker(this) -> &Waker {
+        return &this.waker
+    }
+
+    /// Creates a new context from a waker
+    public func from_waker(waker: Waker) -> Context {
+        return Context { waker: waker }
+    }
+}
+
+/// Handle to wake up a task
+public type Waker {
+    data: *const Unit,
+    vtable: &'static WakerVTable,
+}
+
+type WakerVTable {
+    clone: func(*const Unit) -> Waker,
+    wake: func(*const Unit),
+    wake_by_ref: func(*const Unit),
+    drop: func(*const Unit),
+}
+
+extend Waker {
+    /// Wakes up the task associated with this waker
+    public func wake(this) {
+        (this.vtable.wake)(this.data)
+    }
+
+    /// Wakes up without consuming the waker
+    public func wake_by_ref(this) {
+        (this.vtable.wake_by_ref)(this.data)
+    }
+}
+
+implement Clone for Waker {
+    func clone(this) -> Waker {
+        (this.vtable.clone)(this.data)
+    }
+}
+
+implement Drop for Waker {
+    func drop(mut this) {
+        (this.vtable.drop)(this.data)
+    }
+}
+```
+
+---
+
+## Async/Await Syntax
+
+### Async Functions
+
+```tml
+/// Async function declaration
+public async func fetch_data(url: String) -> Result[Data, Error] {
+    let response = http.get(url).await!
+    let body = response.body().await!
+    return Ok(parse(body)!)
+}
+
+/// Async blocks
+let future = async {
+    let a = compute_a().await
+    let b = compute_b().await
+    return a + b
+}
+```
+
+### Await
+
+```tml
+/// The .await syntax suspends until the future completes
+let result = some_future.await
+
+/// With error propagation
+let data = fetch_data(url).await!
+
+/// With inline fallback
+let data = fetch_data(url).await else default_data()
+```
+
+---
+
+## Runtime
+
+### Runtime Configuration
+
+```tml
+/// Async runtime builder
+public type RuntimeBuilder {
+    worker_threads: Option[U64],
+    thread_name: Option[String],
+    on_thread_start: Option[func()],
+    on_thread_stop: Option[func()],
+    enable_io: Bool,
+    enable_time: Bool,
+}
+
+extend RuntimeBuilder {
+    /// Creates a new runtime builder
+    public func new() -> RuntimeBuilder {
+        return RuntimeBuilder {
+            worker_threads: None,
+            thread_name: None,
+            on_thread_start: None,
+            on_thread_stop: None,
+            enable_io: true,
+            enable_time: true,
+        }
+    }
+
+    /// Sets the number of worker threads
+    public func worker_threads(mut this, count: U64) -> RuntimeBuilder {
+        this.worker_threads = Some(count)
+        return this
+    }
+
+    /// Sets the thread name prefix
+    public func thread_name(mut this, name: String) -> RuntimeBuilder {
+        this.thread_name = Some(name)
+        return this
+    }
+
+    /// Sets callback for thread start
+    public func on_thread_start(mut this, f: func()) -> RuntimeBuilder {
+        this.on_thread_start = Some(f)
+        return this
+    }
+
+    /// Builds a multi-threaded runtime
+    public func build(this) -> Result[Runtime, RuntimeError] {
+        Runtime.new(this)
+    }
+
+    /// Builds a single-threaded runtime
+    public func build_current_thread(this) -> Result[Runtime, RuntimeError] {
+        Runtime.new_current_thread(this)
+    }
+}
+
+/// The async runtime
+public type Runtime {
+    // Internal state
+}
+
+extend Runtime {
+    /// Creates a new multi-threaded runtime
+    public func new(config: RuntimeBuilder) -> Result[Runtime, RuntimeError]
+
+    /// Creates a new single-threaded runtime
+    public func new_current_thread(config: RuntimeBuilder) -> Result[Runtime, RuntimeError]
+
+    /// Blocks on a future
+    public func block_on[F: Future](this, future: F) -> F.Output {
+        // Enter runtime context and poll until complete
+    }
+
+    /// Spawns a task on the runtime
+    public func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
+        where F: Send + 'static, F.Output: Send + 'static
+
+    /// Spawns a blocking task
+    public func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
+        where F: FnOnce() -> F.Output + Send + 'static, F.Output: Send + 'static
+
+    /// Returns a handle to the runtime
+    public func handle(this) -> RuntimeHandle
+
+    /// Shuts down the runtime
+    public func shutdown_timeout(this, timeout: Duration)
+
+    /// Shuts down the runtime, waiting for all tasks
+    public func shutdown_background(this)
+}
+```
+
+### Runtime Handle
+
+```tml
+/// Handle to the runtime for spawning tasks
+public type RuntimeHandle {
+    // Internal
+}
+
+extend RuntimeHandle {
+    /// Returns the current runtime handle
+    public func current() -> RuntimeHandle
+
+    /// Tries to get the current runtime handle
+    public func try_current() -> Option[RuntimeHandle]
+
+    /// Spawns a task
+    public func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
+        where F: Send + 'static, F.Output: Send + 'static
+
+    /// Spawns a blocking task
+    public func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
+        where F: FnOnce() -> F.Output + Send + 'static, F.Output: Send + 'static
+
+    /// Blocks on a future within the runtime
+    public func block_on[F: Future](this, future: F) -> F.Output
+}
+```
+
+---
+
+## Task Spawning
+
+### spawn
+
+```tml
+/// Spawns a task on the current runtime
+public func spawn[F: Future](future: F) -> JoinHandle[F.Output]
+    where F: Send + 'static, F.Output: Send + 'static
+{
+    RuntimeHandle.current().spawn(future)
+}
+
+/// Spawns a task with a name
+public func spawn_named[F: Future](name: String, future: F) -> JoinHandle[F.Output]
+    where F: Send + 'static, F.Output: Send + 'static
+```
+
+### JoinHandle
+
+```tml
+/// Handle to a spawned task
+public type JoinHandle[T] {
+    // Internal
+}
+
+extend JoinHandle[T] {
+    /// Awaits the task completion
+    public async func await(this) -> Result[T, JoinError]
+
+    /// Aborts the task
+    public func abort(this)
+
+    /// Returns true if the task is finished
+    public func is_finished(this) -> Bool
+
+    /// Returns the task ID
+    public func id(this) -> TaskId
+}
+
+/// Error when joining a task
+public type JoinError = Cancelled | Panicked
+```
+
+### spawn_blocking
+
+```tml
+/// Spawns a blocking operation on a dedicated thread pool
+public func spawn_blocking[F, R](f: F) -> JoinHandle[R]
+    where F: FnOnce() -> R + Send + 'static, R: Send + 'static
+{
+    RuntimeHandle.current().spawn_blocking(f)
+}
+
+// Example:
+async func process_file(path: String) -> Result[Data, Error] {
+    // Run blocking I/O on thread pool
+    let content = spawn_blocking(do() {
+        std.fs.read_to_string(path)
+    }).await!!
+
+    return Ok(parse(content)!)
+}
+```
+
+### spawn_local
+
+```tml
+/// Spawns a !Send task on the local task set
+public func spawn_local[F: Future](future: F) -> JoinHandle[F.Output]
+    where F: 'static, F.Output: 'static
+
+/// Local task set for !Send futures
+public type LocalSet {
+    // Internal
+}
+
+extend LocalSet {
+    public func new() -> LocalSet
+
+    /// Runs the local set until all tasks complete
+    public async func run_until[F: Future](this, future: F) -> F.Output
+
+    /// Spawns a local task
+    public func spawn_local[F: Future](this, future: F) -> JoinHandle[F.Output]
+        where F: 'static, F.Output: 'static
+}
+```
+
+---
+
+## Combinators
+
+### join
+
+```tml
+/// Waits for all futures concurrently
+public async func join[A, B](a: A, b: B) -> (A.Output, B.Output)
+    where A: Future, B: Future
+{
+    // Polls both futures until both complete
+}
+
+/// Join for tuples
+public async func join3[A, B, C](a: A, b: B, c: C) -> (A.Output, B.Output, C.Output)
+    where A: Future, B: Future, C: Future
+
+public async func join4[A, B, C, D](a: A, b: B, c: C, d: D) -> (A.Output, B.Output, C.Output, D.Output)
+    where A: Future, B: Future, C: Future, D: Future
+
+/// Join for a vector of futures
+public async func join_all[F: Future](futures: Vec[F]) -> Vec[F.Output]
+```
+
+### select
+
+```tml
+/// Waits for the first future to complete
+public async func select[A, B](a: A, b: B) -> Either[A.Output, B.Output]
+    where A: Future, B: Future
+
+/// Either type for select results
+public type Either[L, R] = Left(L) | Right(R)
+
+/// Select from multiple futures, returning the first result and remaining futures
+public macro select! {
+    // See std.sync for usage
+}
+```
+
+### try_join
+
+```tml
+/// Joins futures that return Results, short-circuiting on first error
+public async func try_join[A, B, E](a: A, b: B) -> Result[(A.Output.Ok, B.Output.Ok), E]
+    where
+        A: Future[Output = Result[_, E]],
+        B: Future[Output = Result[_, E]]
+
+public async func try_join_all[F, T, E](futures: Vec[F]) -> Result[Vec[T], E]
+    where F: Future[Output = Result[T, E]]
+```
+
+### race
+
+```tml
+/// Returns the first future to complete, cancelling the other
+public async func race[A, B](a: A, b: B) -> A.Output
+    where A: Future, B: Future[Output = A.Output]
+
+/// Race all futures, returning first to complete
+public async func race_all[F: Future](futures: Vec[F]) -> F.Output
+```
+
+---
+
+## Time
+
+### sleep
+
+```tml
+/// Sleeps for the given duration
+public async func sleep(duration: Duration) {
+    Sleep.new(duration).await
+}
+
+/// Sleeps until the given instant
+public async func sleep_until(deadline: Instant) {
+    Sleep.until(deadline).await
+}
+
+/// Sleep future
+public type Sleep {
+    deadline: Instant,
+}
+
+implement Future for Sleep {
+    type Output = Unit
+
+    func poll(mut this, cx: &mut Context) -> Poll[Unit] {
+        if Instant.now() >= this.deadline then {
+            return Ready(())
+        }
+        // Register waker with timer
+        RUNTIME.timer().register(this.deadline, cx.waker().clone())
+        return Pending
+    }
+}
+```
+
+### timeout
+
+```tml
+/// Wraps a future with a timeout
+public async func timeout[F: Future](duration: Duration, future: F) -> Result[F.Output, TimeoutError] {
+    select! {
+        result = future => Ok(result),
+        _ = sleep(duration) => Err(TimeoutError),
+    }
+}
+
+/// Timeout error
+public type TimeoutError
+
+extend TimeoutError {
+    public func elapsed() -> TimeoutError {
+        return TimeoutError
+    }
+}
+
+/// Timeout wrapper type
+public type Timeout[F: Future] {
+    future: F,
+    deadline: Instant,
+}
+
+implement Future for Timeout[F] where F: Future {
+    type Output = Result[F.Output, TimeoutError]
+
+    func poll(mut this, cx: &mut Context) -> Poll[Result[F.Output, TimeoutError]] {
+        // First check if inner future is ready
+        when this.future.poll(cx) {
+            Ready(value) -> return Ready(Ok(value)),
+            Pending -> {},
+        }
+
+        // Check timeout
+        if Instant.now() >= this.deadline then {
+            return Ready(Err(TimeoutError))
+        }
+
+        // Register timer
+        RUNTIME.timer().register(this.deadline, cx.waker().clone())
+        return Pending
+    }
+}
+```
+
+### interval
+
+```tml
+/// Creates an interval that yields at a fixed rate
+public func interval(period: Duration) -> Interval {
+    Interval.new(period)
+}
+
+/// Creates an interval starting at a specific time
+public func interval_at(start: Instant, period: Duration) -> Interval {
+    Interval.at(start, period)
+}
+
+/// Interval stream
+public type Interval {
+    period: Duration,
+    next: Instant,
+}
+
+extend Interval {
+    /// Waits for the next tick
+    public async func tick(mut this) -> Instant {
+        sleep_until(this.next).await
+        let now = Instant.now()
+        this.next = this.next + this.period
+        return now
+    }
+
+    /// Resets the interval
+    public func reset(mut this) {
+        this.next = Instant.now() + this.period
+    }
+}
+```
+
+---
+
+## Async Traits
+
+### AsyncRead
+
+```tml
+/// Async reading from a source
+public trait AsyncRead {
+    /// Attempts to read data into buf
+    func poll_read(
+        mut this,
+        cx: &mut Context,
+        buf: &mut [U8],
+    ) -> Poll[Result[U64, IoError]]
+}
+
+/// Extension methods for AsyncRead
+extend AsyncRead {
+    /// Reads some bytes
+    public async func read(mut this, buf: &mut [U8]) -> Result[U64, IoError] {
+        poll_fn(do(cx) this.poll_read(cx, buf)).await
+    }
+
+    /// Reads exactly n bytes
+    public async func read_exact(mut this, buf: &mut [U8]) -> Result[Unit, IoError] {
+        var filled: U64 = 0
+        loop filled < buf.len() {
+            let n = this.read(&mut buf[filled..]).await!
+            if n == 0 then {
+                return Err(IoError.UnexpectedEof)
+            }
+            filled = filled + n
+        }
+        return Ok(())
+    }
+
+    /// Reads to end of stream
+    public async func read_to_end(mut this, buf: &mut Vec[U8]) -> Result[U64, IoError] {
+        var read: U64 = 0
+        var chunk = [0u8; 4096]
+        loop {
+            let n = this.read(&mut chunk).await!
+            if n == 0 then break
+            buf.extend_from_slice(&chunk[..n])
+            read = read + n
+        }
+        return Ok(read)
+    }
+
+    /// Reads to string
+    public async func read_to_string(mut this, buf: &mut String) -> Result[U64, IoError] {
+        var bytes = Vec.new()
+        let n = this.read_to_end(&mut bytes).await!
+        let s = String.from_utf8(bytes).map_err(|_| IoError.InvalidData)!
+        buf.push_str(&s)
+        return Ok(n)
+    }
+}
+```
+
+### AsyncWrite
+
+```tml
+/// Async writing to a sink
+public trait AsyncWrite {
+    /// Attempts to write data from buf
+    func poll_write(
+        mut this,
+        cx: &mut Context,
+        buf: &[U8],
+    ) -> Poll[Result[U64, IoError]]
+
+    /// Attempts to flush the output
+    func poll_flush(
+        mut this,
+        cx: &mut Context,
+    ) -> Poll[Result[Unit, IoError]]
+
+    /// Attempts to close the writer
+    func poll_shutdown(
+        mut this,
+        cx: &mut Context,
+    ) -> Poll[Result[Unit, IoError]]
+}
+
+/// Extension methods for AsyncWrite
+extend AsyncWrite {
+    /// Writes some bytes
+    public async func write(mut this, buf: &[U8]) -> Result[U64, IoError] {
+        poll_fn(do(cx) this.poll_write(cx, buf)).await
+    }
+
+    /// Writes all bytes
+    public async func write_all(mut this, buf: &[U8]) -> Result[Unit, IoError] {
+        var written: U64 = 0
+        loop written < buf.len() {
+            let n = this.write(&buf[written..]).await!
+            if n == 0 then {
+                return Err(IoError.WriteZero)
+            }
+            written = written + n
+        }
+        return Ok(())
+    }
+
+    /// Flushes the output
+    public async func flush(mut this) -> Result[Unit, IoError] {
+        poll_fn(do(cx) this.poll_flush(cx)).await
+    }
+
+    /// Shuts down the writer
+    public async func shutdown(mut this) -> Result[Unit, IoError] {
+        poll_fn(do(cx) this.poll_shutdown(cx)).await
+    }
+}
+```
+
+### AsyncIterator
+
+```tml
+/// Async iterator (stream)
+public trait AsyncIterator {
+    type Item
+
+    /// Polls for the next item
+    func poll_next(mut this, cx: &mut Context) -> Poll[Option[This.Item]]
+
+    /// Size hint
+    func size_hint(this) -> (U64, Option[U64]) {
+        return (0, None)
+    }
+}
+
+/// Extension methods for AsyncIterator
+extend AsyncIterator {
+    /// Gets the next item
+    public async func next(mut this) -> Option[This.Item] {
+        poll_fn(do(cx) this.poll_next(cx)).await
+    }
+
+    /// Collects all items
+    public async func collect[C: FromIterator[This.Item]](mut this) -> C {
+        var items = Vec.new()
+        loop item in this {
+            items.push(item)
+        }
+        return C.from_iter(items)
+    }
+
+    /// Maps each item
+    public func map[B](this, f: func(This.Item) -> B) -> Map[This, B] {
+        Map { stream: this, f: f }
+    }
+
+    /// Filters items
+    public func filter(this, f: func(&This.Item) -> Bool) -> Filter[This] {
+        Filter { stream: this, predicate: f }
+    }
+
+    /// Takes n items
+    public func take(this, n: U64) -> Take[This] {
+        Take { stream: this, remaining: n }
+    }
+
+    /// Buffers items
+    public func buffered(this, n: U64) -> Buffered[This]
+        where This.Item: Future
+    {
+        Buffered { stream: this, buffer_size: n, pending: Vec.new() }
+    }
+}
+```
+
+---
+
+## Utilities
+
+### poll_fn
+
+```tml
+/// Creates a future from a poll function
+public func poll_fn[T, F](f: F) -> PollFn[F]
+    where F: FnMut(&mut Context) -> Poll[T]
+{
+    return PollFn { f: f }
+}
+
+public type PollFn[F] {
+    f: F,
+}
+
+implement Future for PollFn[F]
+    where F: FnMut(&mut Context) -> Poll[T]
+{
+    type Output = T
+
+    func poll(mut this, cx: &mut Context) -> Poll[T] {
+        (this.f)(cx)
+    }
+}
+```
+
+### ready!
+
+```tml
+/// Macro to propagate Pending in poll functions
+public macro ready! {
+    ($e:expr) => {
+        when $e {
+            Poll.Ready(value) -> value,
+            Poll.Pending -> return Poll.Pending,
+        }
+    }
+}
+
+// Example:
+func poll_read(mut this, cx: &mut Context, buf: &mut [U8]) -> Poll[Result[U64, Error]] {
+    let data = ready!(this.inner.poll_read(cx))!
+    // ...
+}
+```
+
+### yield_now
+
+```tml
+/// Yields execution to other tasks
+public async func yield_now() {
+    YieldNow { yielded: false }.await
+}
+
+type YieldNow {
+    yielded: Bool,
+}
+
+implement Future for YieldNow {
+    type Output = Unit
+
+    func poll(mut this, cx: &mut Context) -> Poll[Unit] {
+        if this.yielded then {
+            return Ready(())
+        }
+        this.yielded = true
+        cx.waker().wake_by_ref()
+        return Pending
+    }
+}
+```
+
+---
+
+## Examples
+
+### Basic Async/Await
+
+```tml
+import std.async.{spawn, block_on, sleep}
+import std.time.Duration
+
+async func async_main() {
+    print("Starting...")
+
+    // Spawn concurrent tasks
+    let handle1 = spawn(async {
+        sleep(Duration.from_secs(1)).await
+        print("Task 1 done")
+        return 1
+    })
+
+    let handle2 = spawn(async {
+        sleep(Duration.from_secs(2)).await
+        print("Task 2 done")
+        return 2
+    })
+
+    // Wait for both
+    let (r1, r2) = (handle1.await.unwrap(), handle2.await.unwrap())
+    print("Results: " + r1.to_string() + ", " + r2.to_string())
+}
+
+func main() {
+    let runtime = Runtime.new(RuntimeBuilder.new()).unwrap()
+    runtime.block_on(async_main())
+}
+```
+
+### HTTP Server
+
+```tml
+import std.async.{spawn, Runtime}
+import std.net.TcpListener
+import std.http.{Request, Response}
+
+async func handle_connection(stream: TcpStream) -> Result[Unit, Error] {
+    let request = Request.parse(&mut stream).await!
+
+    let response = when request.path() {
+        "/" -> Response.ok().body("Hello, World!"),
+        "/api" -> Response.ok().json(&get_data().await!),
+        _ -> Response.not_found(),
+    }
+
+    response.write_to(&mut stream).await!
+    return Ok(())
+}
+
+async func server_main() -> Result[Unit, Error] {
+    let listener = TcpListener.bind("127.0.0.1:8080").await!
+    print("Listening on :8080")
+
+    loop {
+        let (stream, addr) = listener.accept().await!
+        spawn(async {
+            if let Err(e) = handle_connection(stream).await then {
+                print("Error handling " + addr.to_string() + ": " + e.to_string())
+            }
+        })
+    }
+}
+```
+
+### Parallel Processing
+
+```tml
+import std.async.{spawn, join_all}
+
+async func process_items(items: Vec[Item]) -> Vec[Result] {
+    // Process all items concurrently
+    let futures: Vec[_] = items.into_iter()
+        .map(do(item) spawn(process_one(item)))
+        .collect()
+
+    let results = join_all(futures).await
+    return results.into_iter()
+        .map(do(r) r.unwrap())
+        .collect()
+}
+
+async func process_one(item: Item) -> Result {
+    // Some async processing
+    let data = fetch_data(item.id).await!
+    let transformed = transform(data).await!
+    return Ok(transformed)
+}
+```
+
+### Timeout and Retry
+
+```tml
+import std.async.{timeout, sleep}
+import std.time.Duration
+
+async func fetch_with_retry[T](
+    url: String,
+    max_retries: U64,
+    timeout_duration: Duration,
+) -> Result[T, Error] {
+    var attempts: U64 = 0
+
+    loop attempts < max_retries {
+        attempts = attempts + 1
+
+        when timeout(timeout_duration, fetch(url)).await {
+            Ok(Ok(data)) -> return Ok(data),
+            Ok(Err(e)) -> {
+                print("Attempt " + attempts.to_string() + " failed: " + e.to_string())
+            },
+            Err(_) -> {
+                print("Attempt " + attempts.to_string() + " timed out")
+            },
+        }
+
+        // Exponential backoff
+        sleep(Duration.from_millis(100 * (1 << attempts))).await
+    }
+
+    return Err(Error.MaxRetriesExceeded)
+}
+```
+
+---
+
+## See Also
+
+- [std.sync](./13-SYNC.md) — Synchronization primitives
+- [std.net](./02-NET.md) — Networking
+- [std.http](./07-HTTP.md) — HTTP client/server
+- [22-LOW-LEVEL.md](../specs/22-LOW-LEVEL.md) — Threading primitives

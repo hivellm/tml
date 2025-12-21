@@ -1,0 +1,112 @@
+// TML Example 05: Custom Types
+// Demonstrates structs, enums, and type aliases
+
+module types
+
+// ============================================
+// STRUCTS
+// ============================================
+
+// Simple struct
+type Point {
+    x: F64,
+    y: F64,
+}
+
+// Struct with visibility
+type User {
+    public name: String,
+    public email: String,
+    private password_hash: String,
+}
+
+// Struct with generic
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+// Struct with multiple generics
+type Entry[K, V] {
+    key: K,
+    value: V,
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+// Simple enum (no data)
+type Direction = North | South | East | West
+
+// Enum with data (like Rust)
+type Shape =
+    | Circle(F64)                    // radius
+    | Rectangle(F64, F64)            // width, height
+    | Triangle(F64, F64, F64)        // sides
+
+// Enum with named fields
+type Message =
+    | Text { content: String, sender: String }
+    | Image { url: String, width: U32, height: U32 }
+    | File { path: String, size: U64 }
+
+// Generic enum (Option and Result are built-in)
+type MyResult[T, E] = Ok(T) | Err(E)
+
+// ============================================
+// TYPE ALIASES
+// ============================================
+
+type UserId = U64
+type Email = String
+type Callback = func(I32) -> Bool
+type StringMap[V] = Map[String, V]
+
+// ============================================
+// USAGE
+// ============================================
+
+public func main() {
+    // Struct construction
+    let origin = Point { x: 0.0, y: 0.0 }
+    let p = Point { x: 3.0, y: 4.0 }
+
+    // Field access
+    println("x = " + p.x.to_string())
+
+    // Shorthand (when variable matches field name)
+    let x = 1.0
+    let y = 2.0
+    let point = Point { x, y }
+
+    // Update syntax (create new with some fields changed)
+    let moved = Point { x: 10.0, ..p }
+
+    // Enum construction
+    let dir = Direction.North
+    let circle = Shape.Circle(5.0)
+    let rect = Shape.Rectangle(10.0, 20.0)
+    let msg = Message.Text { content: "Hello", sender: "Alice" }
+
+    // Pattern matching on enums
+    let area = when circle {
+        Shape.Circle(r) -> 3.14159 * r * r,
+        Shape.Rectangle(w, h) -> w * h,
+        Shape.Triangle(a, b, c) -> {
+            // Heron's formula
+            let s = (a + b + c) / 2.0
+            (s * (s - a) * (s - b) * (s - c)).sqrt()
+        },
+    }
+
+    println("Area: " + area.to_string())
+
+    // Generics
+    let pair = Pair { first: 1, second: 2 }
+    let entry = Entry { key: "name", value: "Bob" }
+
+    // Type alias usage
+    let user_id: UserId = 12345
+    let contacts: StringMap[Email] = Map.new()
+}

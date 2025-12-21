@@ -1,0 +1,211 @@
+// TML Example 07: Traits and Extensions
+// Demonstrates trait definition and implementation with 'extend'
+
+module traits
+
+// ============================================
+// TRAIT DEFINITION
+// ============================================
+
+// Simple trait
+trait Printable {
+    func print(this)
+}
+
+// Trait with return type
+trait Describable {
+    func describe(this) -> String
+}
+
+// Trait with default implementation
+trait Greetable {
+    func name(this) -> String
+
+    // Default implementation (can be overridden)
+    func greet(this) -> String {
+        return "Hello, " + this.name() + "!"
+    }
+}
+
+// Trait with associated type
+trait Container {
+    type Item
+
+    func get(this, index: U64) -> Option[This.Item]
+    func len(this) -> U64
+}
+
+// Trait with generic method
+trait Mappable[T] {
+    func map[U](this, f: func(T) -> U) -> Self[U]
+}
+
+// ============================================
+// STRUCT DEFINITIONS
+// ============================================
+
+type Person {
+    name: String,
+    age: U32,
+}
+
+type Circle {
+    radius: F64,
+}
+
+type Rectangle {
+    width: F64,
+    height: F64,
+}
+
+// ============================================
+// EXTENDING TYPES WITH TRAITS
+// ============================================
+
+// Extend Person with Printable
+extend Person with Printable {
+    func print(this) {
+        println("Person: " + this.name + ", age " + this.age.to_string())
+    }
+}
+
+// Extend Person with Describable
+extend Person with Describable {
+    func describe(this) -> String {
+        return this.name + " is " + this.age.to_string() + " years old"
+    }
+}
+
+// Extend Person with Greetable
+extend Person with Greetable {
+    func name(this) -> String {
+        return this.name
+    }
+    // greet() uses default implementation
+}
+
+// ============================================
+// SHAPE TRAIT EXAMPLE
+// ============================================
+
+trait Shape {
+    func area(this) -> F64
+    func perimeter(this) -> F64
+}
+
+extend Circle with Shape {
+    func area(this) -> F64 {
+        return 3.14159 * this.radius * this.radius
+    }
+
+    func perimeter(this) -> F64 {
+        return 2.0 * 3.14159 * this.radius
+    }
+}
+
+extend Rectangle with Shape {
+    func area(this) -> F64 {
+        return this.width * this.height
+    }
+
+    func perimeter(this) -> F64 {
+        return 2.0 * (this.width + this.height)
+    }
+}
+
+// ============================================
+// GENERIC FUNCTIONS WITH TRAIT BOUNDS
+// ============================================
+
+// Function that accepts any Printable
+func print_item[T: Printable](item: T) {
+    item.print()
+}
+
+// Multiple trait bounds
+func describe_and_print[T: Printable + Describable](item: T) {
+    println(item.describe())
+    item.print()
+}
+
+// Generic function with Shape bound
+func total_area[S: Shape](shapes: List[S]) -> F64 {
+    var total = 0.0
+    loop shape in shapes {
+        total += shape.area()
+    }
+    return total
+}
+
+// ============================================
+// EXTENDING BUILT-IN TYPES
+// ============================================
+
+// Add custom methods to String
+extend String {
+    func is_blank(this) -> Bool {
+        return this.trim().is_empty()
+    }
+
+    func repeat(this, n: U32) -> String {
+        var result = String.new()
+        loop _ in 0..n {
+            result.push(this)
+        }
+        return result
+    }
+}
+
+// Add methods to I32
+extend I32 {
+    func is_even(this) -> Bool {
+        return this % 2 == 0
+    }
+
+    func abs(this) -> I32 {
+        if this < 0 then -this else this
+    }
+}
+
+// ============================================
+// TRAIT OBJECTS (DYNAMIC DISPATCH)
+// ============================================
+
+func print_all_shapes(shapes: List[dyn Shape]) {
+    loop shape in shapes {
+        println("Area: " + shape.area().to_string())
+    }
+}
+
+public func main() {
+    // Create instances
+    let alice = Person { name: "Alice", age: 30 }
+    let circle = Circle { radius: 5.0 }
+    let rect = Rectangle { width: 10.0, height: 5.0 }
+
+    // Use trait methods
+    alice.print()
+    println(alice.describe())
+    println(alice.greet())
+
+    // Shape calculations
+    println("Circle area: " + circle.area().to_string())
+    println("Rectangle perimeter: " + rect.perimeter().to_string())
+
+    // Generic function
+    print_item(alice)
+
+    // Extended built-in methods
+    let text = "  "
+    println("Is blank: " + text.is_blank().to_string())
+
+    let stars = "*".repeat(5)
+    println(stars)  // *****
+
+    let num = -42
+    println("Absolute: " + num.abs().to_string())
+
+    // Dynamic dispatch with trait objects
+    let shapes: List[dyn Shape] = [circle, rect]
+    print_all_shapes(shapes)
+}

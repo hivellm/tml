@@ -1,0 +1,81 @@
+// TML Example 03: Functions
+// Demonstrates function definition and calling
+
+module functions
+
+// Simple function
+func greet(name: String) -> String {
+    return "Hello, " + name + "!"
+}
+
+// Function without return (implicit Unit)
+func log(message: String) {
+    println("[LOG] " + message)
+}
+
+// Multiple parameters
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// Function with loop
+func power(base: I32, exp: I32) -> I32 {
+    var result = 1
+    loop _ in 0..exp {
+        result *= base
+    }
+    return result
+}
+
+// Generic function - uses [] instead of <>
+func identity[T](value: T) -> T {
+    return value
+}
+
+// Generics with constraints (bounds)
+func max[T: Ord](a: T, b: T) -> T {
+    if a > b then return a
+    return b
+}
+
+// Multiple generics
+func swap[T, U](pair: (T, U)) -> (U, T) {
+    return (pair.1, pair.0)
+}
+
+// Function with immutable reference
+func length(s: &String) -> U64 {
+    return s.len()
+}
+
+// Function with mutable reference
+func append(s: &mut String, suffix: String) {
+    s.push(suffix)
+}
+
+public func main() {
+    // Simple calls
+    let msg = greet("World")
+    println(msg)
+
+    log("Application started")
+
+    let sum = add(10, 20)
+    println("10 + 20 = " + sum.to_string())
+
+    // Generics - type inferred
+    let x = identity(42)
+    let s = identity("hello")
+
+    // Generics - explicit type
+    let y = identity[F64](3.14)
+
+    // References
+    let text = "Hello"
+    let len = length(&text)
+
+    var buffer = String.new()
+    append(&mut buffer, "Hello")
+    append(&mut buffer, " World")
+    println(buffer)
+}

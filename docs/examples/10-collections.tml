@@ -1,0 +1,244 @@
+// TML Example 10: Collections
+// Demonstrates List, Map, Set, and other collection types
+
+module collections
+
+import std.collections { HashMap, HashSet, VecDeque }
+
+public func main() {
+    // ============================================
+    // ARRAYS (FIXED SIZE)
+    // ============================================
+
+    // Array literal (size inferred)
+    let nums: [I32; 5] = [1, 2, 3, 4, 5]
+
+    // Access by index
+    let first = nums[0]
+    let last = nums[4]
+
+    // Array of zeros
+    let zeros: [I32; 10] = [0; 10]
+
+    // Iterate
+    loop n in nums {
+        println(n.to_string())
+    }
+
+    // ============================================
+    // LIST (DYNAMIC ARRAY)
+    // ============================================
+
+    // Create empty list
+    var list: List[String] = List.new()
+
+    // Create with initial values
+    var numbers = List.from([1, 2, 3])
+
+    // Add elements
+    list.push("hello")
+    list.push("world")
+    numbers.push(4)
+
+    // Access
+    let item = list[0]                    // "hello"
+    let maybe = list.get(10)              // Option[String] -> None
+
+    // Length
+    let len = list.len()
+
+    // Remove
+    let removed = list.pop()              // Option[String]
+    list.remove(0)                        // Remove at index
+
+    // Check contents
+    let has_hello = list.contains("hello")
+    let is_empty = list.is_empty()
+
+    // Iterate with index
+    loop (idx, item) in list.enumerate() {
+        println(idx.to_string() + ": " + item)
+    }
+
+    // Functional operations
+    let doubled = numbers
+        .map(do(n) n * 2)
+        .filter(do(n) n > 4)
+        .collect()
+
+    // Sort
+    var to_sort = List.from([3, 1, 4, 1, 5])
+    to_sort.sort()                        // [1, 1, 3, 4, 5]
+    to_sort.sort_by(do(a, b) b.cmp(a))    // Descending
+
+    // Slice
+    let slice = numbers[1..3]             // Elements 1 and 2
+
+    // ============================================
+    // MAP (HASH MAP)
+    // ============================================
+
+    // Create empty map
+    var scores: Map[String, I32] = Map.new()
+
+    // Create with initial pairs
+    var ages = Map.from([
+        ("Alice", 30),
+        ("Bob", 25),
+        ("Carol", 35),
+    ])
+
+    // Insert
+    scores.insert("Alice", 100)
+    scores.insert("Bob", 85)
+
+    // Access
+    let alice_score = scores["Alice"]              // I32 (panics if missing)
+    let maybe_score = scores.get("Charlie")        // Option[I32]
+
+    // Update
+    scores["Alice"] = 105
+
+    // Insert or update
+    scores.entry("Dave").or_insert(0)
+
+    // Check key
+    let has_alice = scores.contains_key("Alice")
+
+    // Remove
+    let removed_score = scores.remove("Bob")       // Option[I32]
+
+    // Iterate
+    loop (name, score) in scores {
+        println(name + ": " + score.to_string())
+    }
+
+    // Keys and values
+    let names = scores.keys().collect()
+    let all_scores = scores.values().collect()
+
+    // Length
+    let count = scores.len()
+
+    // ============================================
+    // SET (HASH SET)
+    // ============================================
+
+    // Create empty set
+    var tags: Set[String] = Set.new()
+
+    // Create with initial values
+    var primes = Set.from([2, 3, 5, 7, 11])
+
+    // Add
+    tags.insert("rust")
+    tags.insert("tml")
+
+    // Check membership
+    let is_prime = primes.contains(7)      // true
+    let has_tag = tags.contains("go")      // false
+
+    // Remove
+    tags.remove("rust")
+
+    // Set operations
+    let a = Set.from([1, 2, 3, 4])
+    let b = Set.from([3, 4, 5, 6])
+
+    let union = a.union(b)                 // {1, 2, 3, 4, 5, 6}
+    let intersection = a.intersection(b)  // {3, 4}
+    let difference = a.difference(b)       // {1, 2}
+    let symmetric = a.symmetric_diff(b)    // {1, 2, 5, 6}
+
+    // Subset/superset
+    let is_subset = a.is_subset(Set.from([1, 2, 3, 4, 5]))
+
+    // Iterate
+    loop tag in tags {
+        println(tag)
+    }
+
+    // ============================================
+    // DEQUE (DOUBLE-ENDED QUEUE)
+    // ============================================
+
+    var queue: VecDeque[I32] = VecDeque.new()
+
+    // Add to back and front
+    queue.push_back(1)
+    queue.push_back(2)
+    queue.push_front(0)      // [0, 1, 2]
+
+    // Remove from back and front
+    let front = queue.pop_front()    // Some(0)
+    let back = queue.pop_back()      // Some(2)
+
+    // Peek
+    let peek_front = queue.front()   // Option[&I32]
+    let peek_back = queue.back()
+
+    // ============================================
+    // TUPLE
+    // ============================================
+
+    // Fixed-size heterogeneous collection
+    let point = (10, 20)
+    let person = ("Alice", 30, true)
+
+    // Access by index
+    let x = point.0
+    let y = point.1
+    let name = person.0
+
+    // Destructuring
+    let (a_val, b_val) = point
+    let (n, age, active) = person
+
+    // ============================================
+    // RANGE
+    // ============================================
+
+    // Exclusive range
+    let range1 = 0..10         // 0 to 9
+
+    // Inclusive range
+    let range2 = 0..=10        // 0 to 10
+
+    // Collect to list
+    let nums_list = (0..5).collect()   // [0, 1, 2, 3, 4]
+
+    // Step
+    let evens = (0..10).step_by(2).collect()  // [0, 2, 4, 6, 8]
+
+    // Reverse
+    let reversed = (0..5).rev().collect()  // [4, 3, 2, 1, 0]
+
+    // ============================================
+    // ITERATOR METHODS
+    // ============================================
+
+    let data = [1, 2, 3, 4, 5]
+
+    // Common iterator methods
+    let sum = data.iter().sum()                    // 15
+    let product = data.iter().product()            // 120
+    let max = data.iter().max()                    // Some(5)
+    let min = data.iter().min()                    // Some(1)
+
+    // Take and skip
+    let first_three = data.iter().take(3).collect()    // [1, 2, 3]
+    let after_two = data.iter().skip(2).collect()      // [3, 4, 5]
+
+    // Zip
+    let letters = ["a", "b", "c"]
+    let pairs = data.iter().zip(letters).collect()     // [(1,"a"), (2,"b"), (3,"c")]
+
+    // Flatten
+    let nested = [[1, 2], [3, 4], [5, 6]]
+    let flat = nested.iter().flatten().collect()       // [1, 2, 3, 4, 5, 6]
+
+    // Chain
+    let first = [1, 2, 3]
+    let second = [4, 5, 6]
+    let combined = first.iter().chain(second).collect()  // [1, 2, 3, 4, 5, 6]
+}

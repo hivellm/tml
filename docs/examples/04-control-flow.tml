@@ -1,0 +1,127 @@
+// TML Example 04: Control Flow
+// Demonstrates if/then/else, when (match), loop
+
+module control_flow
+
+public func main() {
+    // ============================================
+    // IF-THEN-ELSE (note: 'then' is required!)
+    // ============================================
+
+    let x = 10
+
+    // Basic form - 'then' always present
+    if x > 0 then println("positive")
+
+    // With else
+    if x > 0 then println("positive") else println("non-positive")
+
+    // As expression (returns value)
+    let sign = if x > 0 then "+" else "-"
+
+    // Multiple lines
+    if x > 100 then {
+        println("large number")
+        println("very large indeed")
+    } else {
+        println("small number")
+    }
+
+    // Chained (else if)
+    let category = if x < 0 then "negative"
+        else if x == 0 then "zero"
+        else if x < 10 then "small"
+        else "large"
+
+    // ============================================
+    // WHEN (pattern matching) - replaces 'match'
+    // ============================================
+
+    let value = 42
+
+    // Match on values
+    when value {
+        0 -> println("zero"),
+        1 -> println("one"),
+        42 -> println("the answer"),
+        _ -> println("something else"),
+    }
+
+    // Match with binding
+    let opt: Option[I32] = Some(100)
+
+    when opt {
+        Some(n) -> println("got: " + n.to_string()),
+        None -> println("nothing"),
+    }
+
+    // Match as expression
+    let description = when value {
+        0 -> "zero",
+        1..10 -> "small",
+        10..100 -> "medium",
+        _ -> "large",
+    }
+
+    // Match on enums
+    let color = Color.Red
+
+    when color {
+        Color.Red -> println("red"),
+        Color.Green -> println("green"),
+        Color.Blue -> println("blue"),
+        Color.Rgb(r, g, b) -> {
+            println("rgb: " + r.to_string())
+        },
+    }
+
+    // No guards - use inline if instead
+    when opt {
+        Some(n) -> if n > 50 then println("big") else println("small"),
+        None -> println("none"),
+    }
+
+    // ============================================
+    // LOOP (unified - replaces for/while/loop)
+    // ============================================
+
+    // Loop with iterator (replaces 'for')
+    loop i in 0..5 {
+        println("i = " + i.to_string())
+    }
+
+    // Loop over collection
+    let items = ["a", "b", "c"]
+    loop item in items {
+        println(item)
+    }
+
+    // Loop with index (enumerate)
+    loop (idx, item) in items.enumerate() {
+        println(idx.to_string() + ": " + item)
+    }
+
+    // While loop
+    var count = 0
+    loop while count < 5 {
+        println("count = " + count.to_string())
+        count += 1
+    }
+
+    // Infinite loop (with break)
+    var n = 0
+    loop {
+        n += 1
+        if n >= 10 then break
+        if n % 2 == 0 then continue
+        println("odd: " + n.to_string())
+    }
+
+    // Loop with inclusive range
+    loop i in 1..=5 {
+        println(i.to_string())  // 1, 2, 3, 4, 5
+    }
+}
+
+// Enum for example
+type Color = Red | Green | Blue | Rgb(U8, U8, U8)

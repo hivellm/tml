@@ -1,0 +1,275 @@
+// TML Example 13: Capabilities and Effects
+// Demonstrates the caps system for explicit side effects
+
+module caps_effects
+
+// ============================================
+// CAPABILITY DECLARATIONS
+// ============================================
+
+// Functions that perform I/O must declare it
+func read_file(path: String) -> Result[String, IoError] with io {
+    // io capability required to do filesystem operations
+    return std.fs.read_to_string(path)
+}
+
+// Network operations require network capability
+func fetch_url(url: String) -> Result[String, HttpError] with net {
+    return std.net.http.get(url).body()
+}
+
+// Multiple capabilities
+func download_and_save(url: String, path: String) -> Result[Unit, Error] with net, io {
+    let content = try fetch_url(url)
+    try write_file(path, content)
+    return Ok(())
+}
+
+// ============================================
+// PURE FUNCTIONS (NO CAPS)
+// ============================================
+
+// No 'with' clause = pure function (no side effects)
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+func calculate_total(items: List[Item]) -> F64 {
+    var total = 0.0
+    loop item in items {
+        total += item.price * item.quantity as F64
+    }
+    return total
+}
+
+// Pure functions can only call other pure functions
+func process_data(data: List[I32]) -> List[I32] {
+    return data
+        .filter(do(n) n > 0)
+        .map(do(n) n * 2)
+        .collect()
+    // Cannot call read_file() here - no io capability
+}
+
+// ============================================
+// CAPABILITY PROPAGATION
+// ============================================
+
+// Capabilities propagate up the call chain
+func process_config() -> Result[Config, Error] with io {
+    // Can call read_file because we have 'io'
+    let content = try read_file("config.json")
+    return parse_config(content)
+}
+
+func main_with_caps() with io, net {
+    // Main can have all capabilities
+    let config = process_config()
+    let data = fetch_url("https://api.example.com/data")
+}
+
+// ============================================
+// CAPABILITY REQUIREMENTS
+// ============================================
+
+// Generic function with capability bounds
+func with_logging[T](f: func() -> T) -> T with io {
+    println("Starting...")
+    let result = f()
+    println("Done")
+    return result
+}
+
+// Higher-order function preserving capabilities
+func retry[T, E, C](
+    attempts: U32,
+    f: func() -> Result[T, E] with C
+) -> Result[T, E] with C {
+    var last_error: Option[E] = None
+
+    loop _ in 0..attempts {
+        when f() {
+            Ok(value) -> return Ok(value),
+            Err(e) -> last_error = Some(e),
+        }
+    }
+
+    return Err(last_error.unwrap())
+}
+
+// ============================================
+// CAPABILITY SUBSETS
+// ============================================
+
+// Read-only io
+func read_only_operation(path: String) -> String with io.read {
+    return std.fs.read_to_string(path).unwrap()
+    // Cannot write - only have read capability
+}
+
+// Write-only
+func log_message(msg: String) with io.write {
+    std.fs.append("log.txt", msg + "\n")
+    // Cannot read files
+}
+
+// ============================================
+// CUSTOM CAPABILITIES
+// ============================================
+
+// Define custom capability
+cap database {
+    func query(sql: String) -> Result[Rows, DbError]
+    func execute(sql: String) -> Result[U64, DbError]
+}
+
+// Use custom capability
+func get_users() -> List[User] with database {
+    let rows = try database.query("SELECT * FROM users")
+    return rows.map(do(r) User.from_row(r)).collect()
+}
+
+// ============================================
+// CAPABILITY INJECTION
+// ============================================
+
+// Pass capability as parameter for testing
+trait Logger {
+    func log(this, msg: String)
+}
+
+type ConsoleLogger {}
+type TestLogger { messages: List[String] }
+
+extend ConsoleLogger with Logger {
+    func log(this, msg: String) {
+        println(msg)
+    }
+}
+
+extend TestLogger with Logger {
+    func log(this, msg: String) {
+        this.messages.push(msg)
+    }
+}
+
+// Function accepts any logger
+func process_with_logger[L: Logger](data: Data, logger: L) -> Result[Output, Error] {
+    logger.log("Processing started")
+    let result = transform(data)
+    logger.log("Processing complete")
+    return Ok(result)
+}
+
+// ============================================
+// EFFECT HANDLERS
+// ============================================
+
+// Define an effect
+effect Async {
+    suspend func yield()
+    suspend func sleep(duration: Duration)
+}
+
+// Function using effect
+func long_operation() with Async {
+    loop i in 0..100 {
+        do_work(i)
+        Async.yield()  // Allow other tasks to run
+    }
+}
+
+// Handler for the effect
+handler AsyncHandler for Async {
+    func yield() {
+        scheduler.yield_current()
+        resume()
+    }
+
+    func sleep(duration: Duration) {
+        scheduler.sleep(duration)
+        resume()
+    }
+}
+
+// ============================================
+// CONTRACTS (PRE/POST CONDITIONS)
+// ============================================
+
+// Function with contracts
+func divide(a: I32, b: I32) -> I32
+    requires b != 0          // Precondition
+    ensures result * b == a  // Postcondition
+{
+    return a / b
+}
+
+// Contract on type
+type NonEmptyList[T] {
+    items: List[T],
+}
+    invariant this.items.len() > 0
+
+extend NonEmptyList[T] {
+    func new(first: T) -> NonEmptyList[T] {
+        return NonEmptyList { items: [first] }
+    }
+
+    func push(this, item: T) {
+        this.items.push(item)
+    }
+
+    // Cannot implement pop() that might empty the list
+}
+
+// ============================================
+// EXAMPLE: SAFE FILE OPERATIONS
+// ============================================
+
+type SafeFile {
+    path: String,
+}
+
+extend SafeFile {
+    // Constructor requires io capability
+    func open(path: String) -> Result[SafeFile, IoError] with io {
+        if std.fs.exists(path) then {
+            Ok(SafeFile { path })
+        } else {
+            Err(IoError.NotFound)
+        }
+    }
+
+    // Read requires io
+    func read(this) -> Result[String, IoError] with io {
+        std.fs.read_to_string(this.path)
+    }
+
+    // Pure method - no capability needed
+    func path(this) -> String {
+        this.path
+    }
+}
+
+// Placeholder types
+type Item { price: F64, quantity: U32 }
+type Config {}
+type Error = Io(IoError) | Http(HttpError) | Parse(String)
+type IoError = NotFound | PermissionDenied
+type HttpError = Timeout | NetworkError
+type DbError = ConnectionFailed | QueryError
+type Rows = List[Row]
+type Row {}
+type User {}
+type Data {}
+type Output {}
+type Duration {}
+
+func parse_config(s: String) -> Result[Config, Error] { Ok(Config {}) }
+func write_file(path: String, content: String) -> Result[Unit, Error] with io { Ok(()) }
+func do_work(i: I32) {}
+func transform(d: Data) -> Output { Output {} }
+
+extend User {
+    func from_row(r: Row) -> User { User {} }
+}

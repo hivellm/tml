@@ -1,0 +1,190 @@
+// TML Example 09: Modules and Imports
+// Demonstrates the module system
+
+// ============================================
+// MODULE DECLARATION
+// ============================================
+
+// Every file starts with a module declaration
+module my_app
+
+// ============================================
+// IMPORTS
+// ============================================
+
+// Import entire module
+import std.io
+import std.collections
+
+// Import specific items
+import std.fs { read_file, write_file }
+import std.math { sin, cos, PI }
+
+// Import with alias
+import std.collections.HashMap as Map
+import std.time as t
+
+// Import all public items (use sparingly)
+import std.string.*
+
+// Relative imports (within same package)
+import .utils           // sibling module
+import ..common.types   // parent's sibling
+
+// ============================================
+// VISIBILITY
+// ============================================
+
+// Private by default (only accessible within module)
+func helper() -> I32 {
+    return 42
+}
+
+// Public - accessible from other modules
+public func process() -> String {
+    return "processed"
+}
+
+// Public type
+public type Config {
+    public name: String,        // public field
+    private secret: String,     // private field
+    public max_size: U64,
+}
+
+// Public trait
+public trait Processor {
+    func process(this, data: String) -> String
+}
+
+// ============================================
+// MODULE STRUCTURE EXAMPLE
+// ============================================
+
+// File: src/lib.tml (root module)
+module mylib
+
+public import .math      // re-export submodule
+public import .utils
+
+// File: src/math.tml
+module mylib.math
+
+public func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+public func multiply(a: I32, b: I32) -> I32 {
+    return a * b
+}
+
+// Private helper
+func validate(n: I32) -> Bool {
+    return n >= 0
+}
+
+// File: src/utils.tml
+module mylib.utils
+
+public func format_number(n: I32) -> String {
+    return n.to_string()
+}
+
+// ============================================
+// PACKAGE STRUCTURE
+// ============================================
+
+// Package manifest: tml.toml
+// [package]
+// name = "my_app"
+// version = "1.0.0"
+//
+// [dependencies]
+// std = "1.0"
+// json = "2.3"
+// http = { version = "1.5", features = ["tls"] }
+
+// ============================================
+// CONDITIONAL COMPILATION
+// ============================================
+
+// Platform-specific code
+#[cfg(platform = "windows")]
+func get_home() -> String {
+    return env("USERPROFILE")
+}
+
+#[cfg(platform = "linux")]
+func get_home() -> String {
+    return env("HOME")
+}
+
+// Feature flags
+#[cfg(feature = "logging")]
+func log(msg: String) {
+    println("[LOG] " + msg)
+}
+
+#[cfg(not(feature = "logging"))]
+func log(msg: String) {
+    // No-op when logging disabled
+}
+
+// ============================================
+// NAMESPACING
+// ============================================
+
+// Nested modules for organization
+module my_app.database
+
+public type Connection {
+    host: String,
+    port: U16,
+}
+
+public func connect(host: String, port: U16) -> Result[Connection, String] {
+    return Ok(Connection { host, port })
+}
+
+module my_app.database.queries
+
+import ..Connection
+
+public func execute(conn: &Connection, sql: String) -> Result[List[Row], String] {
+    // ...
+    return Ok([])
+}
+
+public type Row {
+    data: Map[String, String],
+}
+
+// ============================================
+// MAIN MODULE EXAMPLE
+// ============================================
+
+module main
+
+import my_app.database { connect }
+import my_app.database.queries { execute }
+
+public func main() {
+    // Using imported items
+    let conn = connect("localhost", 5432)
+
+    when conn {
+        Ok(c) -> {
+            let result = execute(&c, "SELECT * FROM users")
+            println("Query executed")
+        },
+        Err(e) -> println("Connection failed: " + e),
+    }
+
+    // Fully qualified access
+    let pi = std.math.PI
+    let map = std.collections.HashMap.new()
+
+    // Using aliased imports
+    let now = t.now()
+    let cache: Map[String, I32] = Map.new()
+}
