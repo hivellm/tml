@@ -1,6 +1,0 @@
-func main() -> I32 {
-    println("Testing time_ms")
-    let t: I32 = time_ms()
-    println("Time: {}", t)
-    return 0
-}

@@ -1,9 +1,0 @@
-func foo(n: I32) -> I32 {
-    return n + 1
-}
-
-func main() -> I32 {
-    let x: I32 = foo(1000000)
-    println("x = {}", x)
-    return 0
-}

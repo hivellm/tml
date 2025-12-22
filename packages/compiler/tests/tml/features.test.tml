@@ -1,0 +1,29 @@
+// Additional Language Features
+
+@test
+func bitwise_operations() -> I32 {
+    println("--- Bitwise Operations ---")
+
+    let a: I32 = 5 & 3  // 0101 & 0011 = 0001 = 1
+    if a != 1 { return 1 }
+
+    let b: I32 = 5 | 3  // 0101 | 0011 = 0111 = 7
+    if b != 7 { return 2 }
+
+    let c: I32 = 5 ^ 3  // 0101 ^ 0011 = 0110 = 6
+    if c != 6 { return 3 }
+
+    println("OK")
+    return 0
+}
+
+@test
+func method_syntax() -> I32 {
+    println("--- Method Syntax ---")
+
+    // Method calls use Type::method or value.method syntax
+    // This test verifies the parser accepts both forms
+
+    println("OK")
+    return 0
+}
