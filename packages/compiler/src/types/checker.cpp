@@ -33,6 +33,13 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
     // Allow float literal (F64) to be assigned to any float type
     if (is_float_type(expected) && is_float_type(actual)) return true;
 
+    // Allow array [T; N] to be assigned to slice [T]
+    if (expected->is<SliceType>() && actual->is<ArrayType>()) {
+        const auto& slice_elem = expected->as<SliceType>().element;
+        const auto& array_elem = actual->as<ArrayType>().element;
+        return types_compatible(slice_elem, array_elem);
+    }
+
     return false;
 }
 } // anonymous namespace
@@ -826,7 +833,17 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
     env_.push_scope();
 
     auto iter_type = check_expr(*for_expr.iter);
-    bind_pattern(*for_expr.pattern, iter_type);
+
+    // Extract element type from slice for pattern binding
+    TypePtr element_type = make_unit();
+    if (iter_type->is<SliceType>()) {
+        element_type = iter_type->as<SliceType>().element;
+    } else {
+        error("For loop requires slice type, found: " + type_to_string(iter_type), for_expr.span);
+        element_type = make_unit();
+    }
+
+    bind_pattern(*for_expr.pattern, element_type);
 
     check_expr(*for_expr.body);
 
