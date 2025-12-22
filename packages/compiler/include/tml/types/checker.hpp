@@ -1,0 +1,87 @@
+#ifndef TML_TYPES_CHECKER_HPP
+#define TML_TYPES_CHECKER_HPP
+
+#include "tml/common.hpp"
+#include "tml/parser/ast.hpp"
+#include "tml/types/env.hpp"
+#include "tml/types/type.hpp"
+#include <vector>
+
+namespace tml::types {
+
+struct TypeError {
+    std::string message;
+    SourceSpan span;
+    std::vector<std::string> notes;
+};
+
+class TypeChecker {
+public:
+    TypeChecker();
+
+    [[nodiscard]] auto check_module(const parser::Module& module)
+        -> Result<TypeEnv, std::vector<TypeError>>;
+
+    [[nodiscard]] auto errors() const -> const std::vector<TypeError>& { return errors_; }
+    [[nodiscard]] auto has_errors() const -> bool { return !errors_.empty(); }
+
+private:
+    TypeEnv env_;
+    std::vector<TypeError> errors_;
+    TypePtr current_return_type_ = nullptr;
+    int loop_depth_ = 0;
+
+    // Declaration registration (first pass)
+    void register_struct_decl(const parser::StructDecl& decl);
+    void register_enum_decl(const parser::EnumDecl& decl);
+    void register_trait_decl(const parser::TraitDecl& decl);
+    void register_type_alias(const parser::TypeAliasDecl& decl);
+
+    // Function checking
+    void check_func_decl(const parser::FuncDecl& func);
+    void check_func_body(const parser::FuncDecl& func);
+    void check_impl_decl(const parser::ImplDecl& impl);
+    void check_impl_body(const parser::ImplDecl& impl);
+
+    // Expression checking
+    auto check_expr(const parser::Expr& expr) -> TypePtr;
+    auto check_literal(const parser::LiteralExpr& lit) -> TypePtr;
+    auto check_ident(const parser::IdentExpr& ident, SourceSpan span) -> TypePtr;
+    auto check_binary(const parser::BinaryExpr& binary) -> TypePtr;
+    auto check_unary(const parser::UnaryExpr& unary) -> TypePtr;
+    auto check_call(const parser::CallExpr& call) -> TypePtr;
+    auto check_method_call(const parser::MethodCallExpr& call) -> TypePtr;
+    auto check_field_access(const parser::FieldExpr& field) -> TypePtr;
+    auto check_index(const parser::IndexExpr& idx) -> TypePtr;
+    auto check_block(const parser::BlockExpr& block) -> TypePtr;
+    auto check_if(const parser::IfExpr& if_expr) -> TypePtr;
+    auto check_when(const parser::WhenExpr& when) -> TypePtr;
+    auto check_loop(const parser::LoopExpr& loop) -> TypePtr;
+    auto check_for(const parser::ForExpr& for_expr) -> TypePtr;
+    auto check_return(const parser::ReturnExpr& ret) -> TypePtr;
+    auto check_break(const parser::BreakExpr& brk) -> TypePtr;
+    auto check_tuple(const parser::TupleExpr& tuple) -> TypePtr;
+    auto check_array(const parser::ArrayExpr& array) -> TypePtr;
+    auto check_struct_expr(const parser::StructExpr& struct_expr) -> TypePtr;
+    auto check_closure(const parser::ClosureExpr& closure) -> TypePtr;
+    auto check_try(const parser::TryExpr& try_expr) -> TypePtr;
+    auto check_path(const parser::PathExpr& path, SourceSpan span) -> TypePtr;
+
+    // Statement checking
+    auto check_stmt(const parser::Stmt& stmt) -> TypePtr;
+    auto check_let(const parser::LetStmt& let) -> TypePtr;
+    auto check_var(const parser::VarStmt& var) -> TypePtr;
+
+    // Pattern binding
+    void bind_pattern(const parser::Pattern& pattern, TypePtr type);
+
+    // Type resolution
+    auto resolve_type(const parser::Type& type) -> TypePtr;
+    auto resolve_type_path(const parser::TypePath& path) -> TypePtr;
+
+    void error(const std::string& message, SourceSpan span);
+};
+
+} // namespace tml::types
+
+#endif // TML_TYPES_CHECKER_HPP

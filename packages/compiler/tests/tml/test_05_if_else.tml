@@ -1,0 +1,29 @@
+// Test 05: If-else expressions
+func main() {
+    let x = 10
+
+    // Simple if
+    if x > 5 {
+        println("x is greater than 5")
+    }
+
+    // If-else
+    if x > 15 {
+        println("x is greater than 15")
+    } else {
+        println("x is not greater than 15")
+    }
+
+    // If as expression
+    let result = if x > 5 { 1 } else { 0 }
+    println(result)
+
+    // Nested if-else
+    if x < 5 {
+        println("small")
+    } else if x < 15 {
+        println("medium")
+    } else {
+        println("large")
+    }
+}

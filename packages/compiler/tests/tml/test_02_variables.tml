@@ -1,0 +1,15 @@
+// Test 02: Variables - let bindings and mutability
+func main() {
+    // Immutable binding
+    let x: I32 = 42
+    println(x)
+
+    // Mutable binding
+    let mut y: I32 = 10
+    y = 20
+    println(y)
+
+    // Type inference
+    let z = 100
+    println(z)
+}

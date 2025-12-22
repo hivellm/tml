@@ -21,47 +21,56 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         // Keywords - declarations
         case TokenKind::KwFunc: return "func";
         case TokenKind::KwType: return "type";
-        case TokenKind::KwTrait: return "trait";
+        case TokenKind::KwBehavior: return "behavior";
         case TokenKind::KwImpl: return "impl";
         case TokenKind::KwMod: return "mod";
         case TokenKind::KwUse: return "use";
         case TokenKind::KwPub: return "pub";
+        case TokenKind::KwDecorator: return "decorator";
+        case TokenKind::KwCrate: return "crate";
+        case TokenKind::KwSuper: return "super";
 
         // Keywords - variables
         case TokenKind::KwLet: return "let";
-        case TokenKind::KwVar: return "var";
         case TokenKind::KwConst: return "const";
 
         // Keywords - control flow
         case TokenKind::KwIf: return "if";
+        case TokenKind::KwThen: return "then";
         case TokenKind::KwElse: return "else";
         case TokenKind::KwWhen: return "when";
         case TokenKind::KwLoop: return "loop";
-        case TokenKind::KwWhile: return "while";
         case TokenKind::KwFor: return "for";
         case TokenKind::KwIn: return "in";
+        case TokenKind::KwTo: return "to";
+        case TokenKind::KwThrough: return "through";
         case TokenKind::KwBreak: return "break";
         case TokenKind::KwContinue: return "continue";
         case TokenKind::KwReturn: return "return";
 
+        // Keywords - logical operators
+        case TokenKind::KwAnd: return "and";
+        case TokenKind::KwOr: return "or";
+        case TokenKind::KwNot: return "not";
+
         // Keywords - types
-        case TokenKind::KwSelf: return "self";
-        case TokenKind::KwSelfType: return "Self";
+        case TokenKind::KwThis: return "this";
+        case TokenKind::KwThisType: return "This";
         case TokenKind::KwAs: return "as";
-        case TokenKind::KwWhere: return "where";
 
         // Keywords - memory
         case TokenKind::KwMut: return "mut";
         case TokenKind::KwRef: return "ref";
-        case TokenKind::KwMove: return "move";
-        case TokenKind::KwCopy: return "copy";
+
+        // Keywords - closures
+        case TokenKind::KwDo: return "do";
 
         // Keywords - other
         case TokenKind::KwAsync: return "async";
         case TokenKind::KwAwait: return "await";
-        case TokenKind::KwCaps: return "caps";
-        case TokenKind::KwUnsafe: return "unsafe";
-        case TokenKind::KwExtern: return "extern";
+        case TokenKind::KwWith: return "with";
+        case TokenKind::KwLowlevel: return "lowlevel";
+        case TokenKind::KwQuote: return "quote";
 
         // Operators - arithmetic
         case TokenKind::Plus: return "+";
@@ -69,6 +78,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::Star: return "*";
         case TokenKind::Slash: return "/";
         case TokenKind::Percent: return "%";
+        case TokenKind::StarStar: return "**";
 
         // Operators - comparison
         case TokenKind::Eq: return "==";
@@ -77,11 +87,6 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::Gt: return ">";
         case TokenKind::Le: return "<=";
         case TokenKind::Ge: return ">=";
-
-        // Operators - logical
-        case TokenKind::And: return "&&";
-        case TokenKind::Or: return "||";
-        case TokenKind::Not: return "!";
 
         // Operators - bitwise
         case TokenKind::BitAnd: return "&";
@@ -109,12 +114,13 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::FatArrow: return "=>";
         case TokenKind::Dot: return ".";
         case TokenKind::DotDot: return "..";
-        case TokenKind::DotDotEq: return "..=";
         case TokenKind::Colon: return ":";
         case TokenKind::ColonColon: return "::";
-        case TokenKind::Question: return "?";
+        case TokenKind::Bang: return "!";
         case TokenKind::At: return "@";
-        case TokenKind::Hash: return "#";
+        case TokenKind::Pipe: return "|";
+        case TokenKind::Dollar: return "$";
+        case TokenKind::DollarBrace: return "${";
 
         // Delimiters
         case TokenKind::LParen: return "(";
@@ -134,7 +140,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
 }
 
 auto is_keyword(TokenKind kind) -> bool {
-    return kind >= TokenKind::KwFunc && kind <= TokenKind::KwExtern;
+    return kind >= TokenKind::KwFunc && kind <= TokenKind::KwQuote;
 }
 
 auto is_literal(TokenKind kind) -> bool {
@@ -142,7 +148,7 @@ auto is_literal(TokenKind kind) -> bool {
 }
 
 auto is_operator(TokenKind kind) -> bool {
-    return kind >= TokenKind::Plus && kind <= TokenKind::Hash;
+    return kind >= TokenKind::Plus && kind <= TokenKind::DollarBrace;
 }
 
 auto Token::int_value() const -> const IntValue& {

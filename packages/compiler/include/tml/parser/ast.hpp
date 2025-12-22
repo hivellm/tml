@@ -549,6 +549,13 @@ struct GenericParam {
     SourceSpan span;
 };
 
+// Decorator/Attribute: @derive(Clone, Debug), @test, @inline
+struct Decorator {
+    std::string name;
+    std::vector<ExprPtr> args;  // Optional arguments
+    SourceSpan span;
+};
+
 // Where clause: where T: Clone, U: Hash
 struct WhereClause {
     std::vector<std::pair<TypePtr, std::vector<TypePath>>> constraints;
@@ -564,6 +571,7 @@ struct FuncParam {
 
 // Function declaration
 struct FuncDecl {
+    std::vector<Decorator> decorators;
     Visibility vis;
     std::string name;
     std::vector<GenericParam> generics;
@@ -586,6 +594,7 @@ struct StructField {
 
 // Struct declaration
 struct StructDecl {
+    std::vector<Decorator> decorators;
     Visibility vis;
     std::string name;
     std::vector<GenericParam> generics;
@@ -604,6 +613,7 @@ struct EnumVariant {
 
 // Enum declaration
 struct EnumDecl {
+    std::vector<Decorator> decorators;
     Visibility vis;
     std::string name;
     std::vector<GenericParam> generics;
@@ -614,6 +624,7 @@ struct EnumDecl {
 
 // Trait declaration
 struct TraitDecl {
+    std::vector<Decorator> decorators;
     Visibility vis;
     std::string name;
     std::vector<GenericParam> generics;

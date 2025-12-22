@@ -60,6 +60,10 @@ auto Parser::check(lexer::TokenKind kind) const -> bool {
     return peek().kind == kind;
 }
 
+auto Parser::check_next(lexer::TokenKind kind) const -> bool {
+    return peek_next().kind == kind;
+}
+
 auto Parser::match(lexer::TokenKind kind) -> bool {
     if (check(kind)) {
         advance();
@@ -112,10 +116,9 @@ void Parser::synchronize() {
         switch (peek().kind) {
             case lexer::TokenKind::KwFunc:
             case lexer::TokenKind::KwType:
-            case lexer::TokenKind::KwTrait:
+            case lexer::TokenKind::KwBehavior:
             case lexer::TokenKind::KwImpl:
             case lexer::TokenKind::KwLet:
-            case lexer::TokenKind::KwVar:
             case lexer::TokenKind::KwConst:
             case lexer::TokenKind::KwMod:
             case lexer::TokenKind::KwUse:
@@ -171,47 +174,140 @@ auto Parser::parse_visibility() -> Visibility {
     return Visibility::Private;
 }
 
+auto Parser::parse_decorators() -> Result<std::vector<Decorator>, ParseError> {
+    std::vector<Decorator> decorators;
+    
+    while (check(lexer::TokenKind::At)) {
+        auto start_span = peek().span;
+        advance(); // consume '@'
+        
+        // Parse decorator name
+        auto name_result = expect(lexer::TokenKind::Identifier, "Expected decorator name after '@'");
+        if (is_err(name_result)) return unwrap_err(name_result);
+        auto name = std::string(unwrap(name_result).lexeme);
+        
+        // Optional arguments in parentheses
+        std::vector<ExprPtr> args;
+        if (match(lexer::TokenKind::LParen)) {
+            skip_newlines();
+            while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+                auto arg = parse_expr();
+                if (is_err(arg)) return unwrap_err(arg);
+                args.push_back(std::move(unwrap(arg)));
+                
+                skip_newlines();
+                if (!check(lexer::TokenKind::RParen)) {
+                    auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between decorator arguments");
+                    if (is_err(comma)) return unwrap_err(comma);
+                    skip_newlines();
+                }
+            }
+            auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after decorator arguments");
+            if (is_err(rparen)) return unwrap_err(rparen);
+        }
+        
+        auto end_span = previous().span;
+        decorators.push_back(Decorator{
+            .name = std::move(name),
+            .args = std::move(args),
+            .span = SourceSpan::merge(start_span, end_span)
+        });
+        
+        skip_newlines();
+    }
+    
+    return decorators;
+}
+
 auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     skip_newlines();
+    
+    // Parse decorators first
+    auto decorators_result = parse_decorators();
+    if (is_err(decorators_result)) return unwrap_err(decorators_result);
+    auto decorators = std::move(unwrap(decorators_result));
 
     auto vis = parse_visibility();
 
     switch (peek().kind) {
+        case lexer::TokenKind::KwAsync:  // async func
+        case lexer::TokenKind::KwLowlevel:  // lowlevel func (unsafe)
         case lexer::TokenKind::KwFunc:
-            return parse_func_decl(vis);
-        case lexer::TokenKind::KwType:
+            return parse_func_decl(vis, std::move(decorators));
+        case lexer::TokenKind::KwType: {
             // Could be struct, enum, or type alias - look ahead
+            auto type_pos = pos_;
             advance(); // consume 'type'
-            if (peek().kind == lexer::TokenKind::Identifier) {
-                auto name_token = advance();
-                skip_newlines();
-                if (check(lexer::TokenKind::LBrace)) {
-                    // It's a struct
-                    // Put back and parse as struct
-                    pos_ -= 2; // Go back to 'type'
-                    return parse_struct_decl(vis);
-                } else if (check(lexer::TokenKind::Assign)) {
-                    // It's a type alias
-                    pos_ -= 2;
-                    return parse_type_alias_decl(vis);
-                } else if (check(lexer::TokenKind::LBracket)) {
-                    // Generic struct or alias
-                    // For now, assume struct
-                    pos_ -= 2;
-                    return parse_struct_decl(vis);
-                } else {
-                    // Try struct by default
-                    pos_ -= 2;
-                    return parse_struct_decl(vis);
+            
+            if (peek().kind != lexer::TokenKind::Identifier) {
+                return ParseError{
+                    .message = "Expected identifier after 'type'",
+                    .span = peek().span,
+                    .notes = {}
+                };
+            }
+            
+            advance(); // consume name
+            
+            // Skip generic params if present
+            if (check(lexer::TokenKind::LBracket)) {
+                int bracket_depth = 1;
+                advance();
+                while (bracket_depth > 0 && !is_at_end()) {
+                    if (check(lexer::TokenKind::LBracket)) bracket_depth++;
+                    else if (check(lexer::TokenKind::RBracket)) bracket_depth--;
+                    advance();
                 }
             }
-            return ParseError{
-                .message = "Expected identifier after 'type'",
-                .span = peek().span,
-                .notes = {}
-            };
-        case lexer::TokenKind::KwTrait:
-            return parse_trait_decl(vis);
+            
+            skip_newlines();
+            
+            if (check(lexer::TokenKind::Assign)) {
+                // Type alias: type Foo = Bar
+                pos_ = type_pos;
+                return parse_type_alias_decl(vis);
+            }
+            
+            if (!check(lexer::TokenKind::LBrace)) {
+                pos_ = type_pos;
+                return parse_struct_decl(vis, std::move(decorators));
+            }
+            
+            // Look inside braces to determine struct vs enum
+            // Struct: { field: Type }
+            // Enum: { Variant | Variant(...) | Variant { } }
+            advance(); // consume '{'
+            skip_newlines();
+            
+            bool is_enum = false;
+            if (check(lexer::TokenKind::Identifier)) {
+                advance(); // consume first identifier
+                // If followed by '(' or '{' or ',' or '}' or newline, it's an enum
+                // If followed by ':', it's a struct
+                if (check(lexer::TokenKind::LParen) || 
+                    check(lexer::TokenKind::LBrace) ||
+                    check(lexer::TokenKind::Comma) ||
+                    check(lexer::TokenKind::RBrace) ||
+                    check(lexer::TokenKind::Newline)) {
+                    is_enum = true;
+                }
+            } else if (check(lexer::TokenKind::RBrace)) {
+                // Empty braces - could be either, default to struct
+                is_enum = false;
+            }
+            
+            // Reset and parse properly
+            pos_ = type_pos;
+            
+            if (is_enum) {
+                advance(); // consume 'type'
+                return parse_enum_decl(vis, std::move(decorators));
+            } else {
+                return parse_struct_decl(vis, std::move(decorators));
+            }
+        }
+        case lexer::TokenKind::KwBehavior:
+            return parse_trait_decl(vis, std::move(decorators));
         case lexer::TokenKind::KwImpl:
             return parse_impl_decl();
         case lexer::TokenKind::KwConst:
@@ -229,7 +325,7 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     }
 }
 
-auto Parser::parse_func_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Check for async/unsafe modifiers
@@ -239,7 +335,7 @@ auto Parser::parse_func_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     while (true) {
         if (match(lexer::TokenKind::KwAsync)) {
             is_async = true;
-        } else if (match(lexer::TokenKind::KwUnsafe)) {
+        } else if (match(lexer::TokenKind::KwLowlevel)) {
             is_unsafe = true;
         } else {
             break;
@@ -299,6 +395,7 @@ auto Parser::parse_func_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     auto end_span = previous().span;
 
     auto func = FuncDecl{
+        .decorators = std::move(decorators),
         .vis = vis,
         .name = std::move(name),
         .generics = std::move(generics),
@@ -317,7 +414,7 @@ auto Parser::parse_func_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     });
 }
 
-auto Parser::parse_struct_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
@@ -382,6 +479,7 @@ auto Parser::parse_struct_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     auto end_span = previous().span;
 
     auto struct_decl = StructDecl{
+        .decorators = std::move(decorators),
         .vis = vis,
         .name = std::move(name),
         .generics = std::move(generics),
@@ -396,31 +494,289 @@ auto Parser::parse_struct_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     });
 }
 
-auto Parser::parse_enum_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    // TODO: Implement enum parsing
-    return ParseError{
-        .message = "Enum parsing not yet implemented",
-        .span = peek().span,
-        .notes = {}
+auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+    auto start_span = peek().span;
+    
+    // 'type' keyword already consumed by parse_decl
+    // We're called when parse_decl determines this is an enum
+    
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected enum name");
+    if (is_err(name_result)) return unwrap_err(name_result);
+    auto name = std::string(unwrap(name_result).lexeme);
+    
+    // Generic parameters
+    std::vector<GenericParam> generics;
+    if (check(lexer::TokenKind::LBracket)) {
+        auto gen_result = parse_generic_params();
+        if (is_err(gen_result)) return unwrap_err(gen_result);
+        generics = std::move(unwrap(gen_result));
+    }
+    
+    skip_newlines();
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for enum body");
+    if (is_err(lbrace)) return unwrap_err(lbrace);
+    
+    std::vector<EnumVariant> variants;
+    skip_newlines();
+    
+    while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        auto variant_name_result = expect(lexer::TokenKind::Identifier, "Expected variant name");
+        if (is_err(variant_name_result)) return unwrap_err(variant_name_result);
+        auto variant_name = std::string(unwrap(variant_name_result).lexeme);
+        auto variant_start = unwrap(variant_name_result).span;
+        
+        std::optional<std::vector<TypePtr>> tuple_fields;
+        std::optional<std::vector<StructField>> struct_fields;
+        
+        // Check for tuple variant: Variant(T1, T2)
+        if (match(lexer::TokenKind::LParen)) {
+            std::vector<TypePtr> fields;
+            skip_newlines();
+            
+            while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+                auto field_type = parse_type();
+                if (is_err(field_type)) return unwrap_err(field_type);
+                fields.push_back(std::move(unwrap(field_type)));
+                
+                skip_newlines();
+                if (!check(lexer::TokenKind::RParen)) {
+                    auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between tuple fields");
+                    if (is_err(comma)) return unwrap_err(comma);
+                    skip_newlines();
+                }
+            }
+            
+            auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after tuple fields");
+            if (is_err(rparen)) return unwrap_err(rparen);
+            
+            tuple_fields = std::move(fields);
+        }
+        // Check for struct variant: Variant { field: Type }
+        else if (match(lexer::TokenKind::LBrace)) {
+            std::vector<StructField> fields;
+            skip_newlines();
+            
+            while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+                auto field_vis = parse_visibility();
+                
+                auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
+                if (is_err(field_name_result)) return unwrap_err(field_name_result);
+                auto field_name = std::string(unwrap(field_name_result).lexeme);
+                
+                auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after field name");
+                if (is_err(colon)) return unwrap_err(colon);
+                
+                auto field_type = parse_type();
+                if (is_err(field_type)) return unwrap_err(field_type);
+                
+                fields.push_back(StructField{
+                    .vis = field_vis,
+                    .name = std::move(field_name),
+                    .type = std::move(unwrap(field_type)),
+                    .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)
+                });
+                
+                skip_newlines();
+                if (!check(lexer::TokenKind::RBrace)) {
+                    match(lexer::TokenKind::Comma);
+                    skip_newlines();
+                }
+            }
+            
+            auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after struct fields");
+            if (is_err(rbrace)) return unwrap_err(rbrace);
+            
+            struct_fields = std::move(fields);
+        }
+        
+        auto variant_end = previous().span;
+        variants.push_back(EnumVariant{
+            .name = std::move(variant_name),
+            .tuple_fields = std::move(tuple_fields),
+            .struct_fields = std::move(struct_fields),
+            .span = SourceSpan::merge(variant_start, variant_end)
+        });
+        
+        skip_newlines();
+        match(lexer::TokenKind::Comma);
+        skip_newlines();
+    }
+    
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after enum variants");
+    if (is_err(rbrace)) return unwrap_err(rbrace);
+    
+    auto end_span = previous().span;
+    
+    auto enum_decl = EnumDecl{
+        .decorators = std::move(decorators),
+        .vis = vis,
+        .name = std::move(name),
+        .generics = std::move(generics),
+        .variants = std::move(variants),
+        .where_clause = std::nullopt,
+        .span = SourceSpan::merge(start_span, end_span)
     };
+    
+    return make_box<Decl>(Decl{
+        .kind = std::move(enum_decl),
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
-auto Parser::parse_trait_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    // TODO: Implement trait parsing
-    return ParseError{
-        .message = "Trait parsing not yet implemented",
-        .span = peek().span,
-        .notes = {}
+auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+    auto start_span = peek().span;
+    
+    // Consume 'behavior' keyword
+    auto behavior_tok = expect(lexer::TokenKind::KwBehavior, "Expected 'behavior'");
+    if (is_err(behavior_tok)) return unwrap_err(behavior_tok);
+    
+    // Parse name
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected behavior name");
+    if (is_err(name_result)) return unwrap_err(name_result);
+    auto name = std::string(unwrap(name_result).lexeme);
+    
+    // Generic parameters
+    std::vector<GenericParam> generics;
+    if (check(lexer::TokenKind::LBracket)) {
+        auto gen_result = parse_generic_params();
+        if (is_err(gen_result)) return unwrap_err(gen_result);
+        generics = std::move(unwrap(gen_result));
+    }
+    
+    // Super traits (behavior Foo: Bar + Baz)
+    std::vector<TypePath> super_traits;
+    if (match(lexer::TokenKind::Colon)) {
+        do {
+            skip_newlines();
+            auto trait_path = parse_type_path();
+            if (is_err(trait_path)) return unwrap_err(trait_path);
+            super_traits.push_back(std::move(unwrap(trait_path)));
+            skip_newlines();
+        } while (match(lexer::TokenKind::Plus));
+    }
+    
+    // Parse body
+    skip_newlines();
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for behavior body");
+    if (is_err(lbrace)) return unwrap_err(lbrace);
+    
+    std::vector<FuncDecl> methods;
+    skip_newlines();
+    
+    while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Parse method signature or default implementation
+        auto method_vis = parse_visibility();
+        
+        auto func_result = parse_func_decl(method_vis);
+        if (is_err(func_result)) return func_result;
+        
+        auto& func = unwrap(func_result)->as<FuncDecl>();
+        methods.push_back(std::move(func));
+        
+        skip_newlines();
+    }
+    
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after behavior body");
+    if (is_err(rbrace)) return unwrap_err(rbrace);
+    
+    auto end_span = previous().span;
+    
+    auto trait_decl = TraitDecl{
+        .decorators = std::move(decorators),
+        .vis = vis,
+        .name = std::move(name),
+        .generics = std::move(generics),
+        .super_traits = std::move(super_traits),
+        .methods = std::move(methods),
+        .where_clause = std::nullopt,
+        .span = SourceSpan::merge(start_span, end_span)
     };
+    
+    return make_box<Decl>(Decl{
+        .kind = std::move(trait_decl),
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
 auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
-    // TODO: Implement impl parsing
-    return ParseError{
-        .message = "Impl parsing not yet implemented",
-        .span = peek().span,
-        .notes = {}
+    auto start_span = peek().span;
+    
+    // Consume 'impl' keyword
+    auto impl_tok = expect(lexer::TokenKind::KwImpl, "Expected 'impl'");
+    if (is_err(impl_tok)) return unwrap_err(impl_tok);
+    
+    // Generic parameters
+    std::vector<GenericParam> generics;
+    if (check(lexer::TokenKind::LBracket)) {
+        auto gen_result = parse_generic_params();
+        if (is_err(gen_result)) return unwrap_err(gen_result);
+        generics = std::move(unwrap(gen_result));
+    }
+    
+    // Parse first type (could be trait or self type)
+    auto first_type = parse_type();
+    if (is_err(first_type)) return unwrap_err(first_type);
+    
+    std::optional<TypePath> trait_path;
+    TypePtr self_type;
+    
+    skip_newlines();
+    
+    // Check for 'for' keyword (impl Trait for Type)
+    if (match(lexer::TokenKind::KwFor)) {
+        // First type was the trait, now parse self type
+        // Extract TypePath from the first type if it's a named type
+        auto& first = unwrap(first_type);
+        if (first->is<NamedType>()) {
+            trait_path = std::move(first->as<NamedType>().path);
+        }
+        
+        auto st = parse_type();
+        if (is_err(st)) return unwrap_err(st);
+        self_type = std::move(unwrap(st));
+    } else {
+        // No trait, just impl Type
+        self_type = std::move(unwrap(first_type));
+    }
+    
+    // Parse body
+    skip_newlines();
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for impl body");
+    if (is_err(lbrace)) return unwrap_err(lbrace);
+    
+    std::vector<FuncDecl> methods;
+    skip_newlines();
+    
+    while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        auto method_vis = parse_visibility();
+        
+        auto func_result = parse_func_decl(method_vis);
+        if (is_err(func_result)) return func_result;
+        
+        auto& func = unwrap(func_result)->as<FuncDecl>();
+        methods.push_back(std::move(func));
+        
+        skip_newlines();
+    }
+    
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after impl body");
+    if (is_err(rbrace)) return unwrap_err(rbrace);
+    
+    auto end_span = previous().span;
+    
+    auto impl_decl = ImplDecl{
+        .generics = std::move(generics),
+        .trait_path = std::move(trait_path),
+        .self_type = std::move(self_type),
+        .methods = std::move(methods),
+        .where_clause = std::nullopt,
+        .span = SourceSpan::merge(start_span, end_span)
     };
+    
+    return make_box<Decl>(Decl{
+        .kind = std::move(impl_decl),
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
 auto Parser::parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
@@ -464,7 +820,7 @@ auto Parser::parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError
 }
 
 auto Parser::parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    // TODO: Implement const parsing
+    (void)vis; // TODO: Will be used when implementing const parsing
     return ParseError{
         .message = "Const parsing not yet implemented",
         .span = peek().span,
@@ -473,7 +829,7 @@ auto Parser::parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 }
 
 auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    // TODO: Implement use parsing
+    (void)vis; // TODO: Will be used when implementing use parsing
     return ParseError{
         .message = "Use parsing not yet implemented",
         .span = peek().span,
@@ -482,7 +838,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 }
 
 auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    // TODO: Implement mod parsing
+    (void)vis; // TODO: Will be used when implementing mod parsing
     return ParseError{
         .message = "Mod parsing not yet implemented",
         .span = peek().span,
@@ -535,12 +891,7 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
 }
 
 auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseError> {
-    if (!match(lexer::TokenKind::KwWhere)) {
-        return std::nullopt;
-    }
-
-    // TODO: Implement where clause parsing
-    // For now, return empty
+    // TML doesn't use where clauses - bounds are specified inline with generics
     return std::nullopt;
 }
 
@@ -569,20 +920,40 @@ auto Parser::parse_func_params() -> Result<std::vector<FuncParam>, ParseError> {
 }
 
 auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
-    auto pattern = parse_pattern();
-    if (is_err(pattern)) return unwrap_err(pattern);
+    auto pattern_result = parse_pattern();
+    if (is_err(pattern_result)) return unwrap_err(pattern_result);
+    auto pattern = std::move(unwrap(pattern_result));
+
+    // Special case: 'this' parameter doesn't require a type annotation
+    bool is_this_param = pattern->is<IdentPattern>() &&
+                         pattern->as<IdentPattern>().name == "this";
+
+    if (is_this_param && !check(lexer::TokenKind::Colon)) {
+        // 'this' without type - use This type implicitly
+        auto span = pattern->span;
+        auto this_type = make_box<Type>(Type{
+            .kind = NamedType{TypePath{{"This"}, span}, {}},
+            .span = span
+        });
+        return FuncParam{
+            .pattern = std::move(pattern),
+            .type = std::move(this_type),
+            .span = span
+        };
+    }
 
     auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after parameter name");
     if (is_err(colon)) return unwrap_err(colon);
 
-    auto type = parse_type();
-    if (is_err(type)) return unwrap_err(type);
+    auto type_result = parse_type();
+    if (is_err(type_result)) return unwrap_err(type_result);
+    auto type = std::move(unwrap(type_result));
 
-    auto span = SourceSpan::merge(unwrap(pattern)->span, unwrap(type)->span);
+    auto span = SourceSpan::merge(pattern->span, type->span);
 
     return FuncParam{
-        .pattern = std::move(unwrap(pattern)),
-        .type = std::move(unwrap(type)),
+        .pattern = std::move(pattern),
+        .type = std::move(type),
         .span = span
     };
 }
@@ -597,15 +968,12 @@ auto Parser::parse_stmt() -> Result<StmtPtr, ParseError> {
     if (check(lexer::TokenKind::KwLet)) {
         return parse_let_stmt();
     }
-    if (check(lexer::TokenKind::KwVar)) {
-        return parse_var_stmt();
-    }
 
     // Check if it's a declaration
     if (check(lexer::TokenKind::KwPub) ||
         check(lexer::TokenKind::KwFunc) ||
         check(lexer::TokenKind::KwType) ||
-        check(lexer::TokenKind::KwTrait) ||
+        check(lexer::TokenKind::KwBehavior) ||
         check(lexer::TokenKind::KwImpl)) {
         auto decl = parse_decl();
         if (is_err(decl)) return unwrap_err(decl);
@@ -658,41 +1026,12 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
 }
 
 auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
-    auto start_span = peek().span;
-
-    auto var_tok = expect(lexer::TokenKind::KwVar, "Expected 'var'");
-    if (is_err(var_tok)) return unwrap_err(var_tok);
-
-    auto name_result = expect(lexer::TokenKind::Identifier, "Expected variable name");
-    if (is_err(name_result)) return unwrap_err(name_result);
-    auto name = std::string(unwrap(name_result).lexeme);
-
-    std::optional<TypePtr> type_annotation;
-    if (match(lexer::TokenKind::Colon)) {
-        auto type = parse_type();
-        if (is_err(type)) return unwrap_err(type);
-        type_annotation = std::move(unwrap(type));
-    }
-
-    auto eq = expect(lexer::TokenKind::Assign, "Expected '=' in var declaration");
-    if (is_err(eq)) return unwrap_err(eq);
-
-    auto init = parse_expr();
-    if (is_err(init)) return unwrap_err(init);
-
-    auto end_span = previous().span;
-
-    auto var_stmt = VarStmt{
-        .name = std::move(name),
-        .type_annotation = std::move(type_annotation),
-        .init = std::move(unwrap(init)),
-        .span = SourceSpan::merge(start_span, end_span)
+    // TML doesn't have 'var' keyword - use 'let mut' for mutable bindings
+    return ParseError{
+        .message = "TML doesn't have 'var' keyword - use 'let mut' for mutable bindings",
+        .span = peek().span,
+        .notes = {}
     };
-
-    return make_box<Stmt>(Stmt{
-        .kind = std::move(var_stmt),
-        .span = SourceSpan::merge(start_span, end_span)
-    });
 }
 
 auto Parser::parse_expr_stmt() -> Result<StmtPtr, ParseError> {
@@ -732,7 +1071,7 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         if (check(lexer::TokenKind::LParen) ||
             check(lexer::TokenKind::LBracket) ||
             check(lexer::TokenKind::Dot) ||
-            check(lexer::TokenKind::Question)) {
+            check(lexer::TokenKind::Bang)) {
             left = parse_postfix_expr(std::move(unwrap(left)));
             if (is_err(left)) return left;
             continue;
@@ -753,12 +1092,25 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
 }
 
 auto Parser::parse_prefix_expr() -> Result<ExprPtr, ParseError> {
+    // TML syntax: 'mut ref x' for mutable reference
+    if (check(lexer::TokenKind::KwMut) && check_next(lexer::TokenKind::KwRef)) {
+        auto start_span = peek().span;
+        advance(); // consume 'mut'
+        advance(); // consume 'ref'
+
+        auto operand = parse_prefix_expr();
+        if (is_err(operand)) return operand;
+
+        auto span = SourceSpan::merge(start_span, unwrap(operand)->span);
+        return make_unary_expr(UnaryOp::RefMut, std::move(unwrap(operand)), span);
+    }
+
     auto op = token_to_unary_op(peek().kind);
     if (op) {
         auto start_span = peek().span;
         advance();
 
-        // Special case: &mut
+        // Special case: &mut (also support for backwards compatibility)
         if (*op == UnaryOp::Ref && match(lexer::TokenKind::KwMut)) {
             op = UnaryOp::RefMut;
         }
@@ -858,7 +1210,7 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
     }
 
     // Try operator (?)
-    if (match(lexer::TokenKind::Question)) {
+    if (match(lexer::TokenKind::Bang)) {
         auto span = SourceSpan::merge(start_span, previous().span);
         return make_box<Expr>(Expr{
             .kind = TryExpr{
@@ -905,6 +1257,13 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_ident_or_path_expr();
     }
 
+    // 'this' expression (self reference in methods)
+    if (check(lexer::TokenKind::KwThis)) {
+        auto span = peek().span;
+        advance();
+        return make_ident_expr("this", span);
+    }
+
     // Parenthesized expression or tuple
     if (check(lexer::TokenKind::LParen)) {
         return parse_paren_or_tuple_expr();
@@ -935,11 +1294,6 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_loop_expr();
     }
 
-    // While
-    if (check(lexer::TokenKind::KwWhile)) {
-        return parse_while_expr();
-    }
-
     // For
     if (check(lexer::TokenKind::KwFor)) {
         return parse_for_expr();
@@ -960,8 +1314,8 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_continue_expr();
     }
 
-    // Closure
-    if (check(lexer::TokenKind::BitOr) || check(lexer::TokenKind::Or)) {
+    // Closure: do(x) expr
+    if (check(lexer::TokenKind::KwDo)) {
         return parse_closure_expr();
     }
 
@@ -982,12 +1336,38 @@ auto Parser::parse_ident_or_path_expr() -> Result<ExprPtr, ParseError> {
     if (is_err(path)) return unwrap_err(path);
 
     // Check if it's a struct literal
-    skip_newlines();
+    // Need to distinguish from block expressions: Point { x: 1 } vs { let x = 1 }
     if (check(lexer::TokenKind::LBrace)) {
-        // Look ahead to see if it's a struct literal or a block
-        // Struct literal: Ident { field: value }
-        // For now, try to parse as struct
-        return parse_struct_expr(std::move(unwrap(path)));
+        // Look ahead to see if this is a struct literal
+        // Struct literal starts with: { ident: or { ident, or { .. or { }
+        // Block starts with: { let, { for, { if, { expr, etc.
+        auto saved_pos = pos_;
+        advance(); // consume '{'
+        skip_newlines();
+
+        bool is_struct = false;
+        if (check(lexer::TokenKind::RBrace)) {
+            // Empty braces - could be empty struct
+            is_struct = true;
+        } else if (check(lexer::TokenKind::DotDot)) {
+            // { ..base } is struct update syntax
+            is_struct = true;
+        } else if (check(lexer::TokenKind::Identifier)) {
+            auto saved_inner = pos_;
+            advance(); // consume identifier
+            // If followed by : or , or }, it's a struct literal
+            is_struct = check(lexer::TokenKind::Colon) ||
+                       check(lexer::TokenKind::Comma) ||
+                       check(lexer::TokenKind::RBrace);
+            pos_ = saved_inner; // restore to before identifier
+        }
+
+        pos_ = saved_pos; // restore to before '{'
+
+        if (is_struct) {
+            return parse_struct_expr(std::move(unwrap(path)));
+        }
+        // Otherwise, it's not a struct literal - just return the identifier
     }
 
     auto span = unwrap(path).span;
@@ -1402,12 +1782,78 @@ auto Parser::parse_continue_expr() -> Result<ExprPtr, ParseError> {
 }
 
 auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
-    // TODO: Implement closure parsing
-    return ParseError{
-        .message = "Closure parsing not yet implemented",
-        .span = peek().span,
-        .notes = {}
-    };
+    auto start_span = peek().span;
+    
+    // Consume 'do' keyword
+    auto do_tok = expect(lexer::TokenKind::KwDo, "Expected 'do'");
+    if (is_err(do_tok)) return unwrap_err(do_tok);
+    
+    // Parse parameters in parentheses
+    auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'do'");
+    if (is_err(lparen)) return unwrap_err(lparen);
+    
+    std::vector<std::pair<PatternPtr, std::optional<TypePtr>>> params;
+    skip_newlines();
+    
+    while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+        // Parse pattern
+        auto pattern = parse_pattern();
+        if (is_err(pattern)) return unwrap_err(pattern);
+        
+        // Optional type annotation
+        std::optional<TypePtr> type;
+        if (match(lexer::TokenKind::Colon)) {
+            auto t = parse_type();
+            if (is_err(t)) return unwrap_err(t);
+            type = std::move(unwrap(t));
+        }
+        
+        params.emplace_back(std::move(unwrap(pattern)), std::move(type));
+        
+        skip_newlines();
+        if (!check(lexer::TokenKind::RParen)) {
+            auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between closure parameters");
+            if (is_err(comma)) return unwrap_err(comma);
+            skip_newlines();
+        }
+    }
+    
+    auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after closure parameters");
+    if (is_err(rparen)) return unwrap_err(rparen);
+    
+    // Optional return type
+    std::optional<TypePtr> return_type;
+    if (match(lexer::TokenKind::Arrow)) {
+        auto t = parse_type();
+        if (is_err(t)) return unwrap_err(t);
+        return_type = std::move(unwrap(t));
+    }
+    
+    // Parse body (either block or expression)
+    skip_newlines();
+    ExprPtr body;
+    if (check(lexer::TokenKind::LBrace)) {
+        auto b = parse_block_expr();
+        if (is_err(b)) return b;
+        body = std::move(unwrap(b));
+    } else {
+        auto b = parse_expr();
+        if (is_err(b)) return b;
+        body = std::move(unwrap(b));
+    }
+    
+    auto end_span = previous().span;
+    
+    return make_box<Expr>(Expr{
+        .kind = ClosureExpr{
+            .params = std::move(params),
+            .return_type = std::move(return_type),
+            .body = std::move(body),
+            .is_move = false,  // TML doesn't have move closures in this syntax
+            .span = SourceSpan::merge(start_span, end_span)
+        },
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
 auto Parser::parse_struct_expr(TypePath path) -> Result<ExprPtr, ParseError> {
@@ -1495,7 +1941,25 @@ auto Parser::parse_call_args() -> Result<std::vector<ExprPtr>, ParseError> {
 auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     auto start_span = peek().span;
 
-    // Reference: &T, &mut T
+    // TML Reference: ref T, mut ref T
+    if (match(lexer::TokenKind::KwMut)) {
+        // Must be followed by 'ref'
+        if (!match(lexer::TokenKind::KwRef)) {
+            return ParseError{"Expected 'ref' after 'mut' in type", peek().span};
+        }
+        auto inner = parse_type();
+        if (is_err(inner)) return inner;
+        return make_ref_type(true, std::move(unwrap(inner)),
+                            SourceSpan::merge(start_span, unwrap(inner)->span));
+    }
+    if (match(lexer::TokenKind::KwRef)) {
+        auto inner = parse_type();
+        if (is_err(inner)) return inner;
+        return make_ref_type(false, std::move(unwrap(inner)),
+                            SourceSpan::merge(start_span, unwrap(inner)->span));
+    }
+
+    // Legacy Reference: &T, &mut T
     if (match(lexer::TokenKind::BitAnd)) {
         bool is_mut = match(lexer::TokenKind::KwMut);
         auto inner = parse_type();
@@ -1694,6 +2158,11 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
         return make_ident_pattern(std::string(unwrap(name_result).lexeme), true, span);
     }
 
+    // this pattern (for method receivers)
+    if (match(lexer::TokenKind::KwThis)) {
+        return make_ident_pattern("this", false, start_span);
+    }
+
     // Literal pattern
     if (check(lexer::TokenKind::IntLiteral) ||
         check(lexer::TokenKind::FloatLiteral) ||
@@ -1826,10 +2295,10 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         case lexer::TokenKind::ShrAssign:
             return precedence::ASSIGN;
 
-        case lexer::TokenKind::Or:
+        case lexer::TokenKind::KwOr:
             return precedence::OR;
 
-        case lexer::TokenKind::And:
+        case lexer::TokenKind::KwAnd:
             return precedence::AND;
 
         case lexer::TokenKind::Eq:
@@ -1865,11 +2334,11 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         case lexer::TokenKind::LParen:
         case lexer::TokenKind::LBracket:
         case lexer::TokenKind::Dot:
-        case lexer::TokenKind::Question:
+        case lexer::TokenKind::Bang:
             return precedence::CALL;
 
         case lexer::TokenKind::DotDot:
-        case lexer::TokenKind::DotDotEq:
+        case lexer::TokenKind::KwThrough:
             return precedence::RANGE;
 
         default:
@@ -1912,8 +2381,8 @@ auto Parser::token_to_binary_op(lexer::TokenKind kind) -> std::optional<BinaryOp
         case lexer::TokenKind::Le: return BinaryOp::Le;
         case lexer::TokenKind::Ge: return BinaryOp::Ge;
 
-        case lexer::TokenKind::And: return BinaryOp::And;
-        case lexer::TokenKind::Or: return BinaryOp::Or;
+        case lexer::TokenKind::KwAnd: return BinaryOp::And;
+        case lexer::TokenKind::KwOr: return BinaryOp::Or;
 
         case lexer::TokenKind::BitAnd: return BinaryOp::BitAnd;
         case lexer::TokenKind::BitOr: return BinaryOp::BitOr;
@@ -1940,9 +2409,10 @@ auto Parser::token_to_binary_op(lexer::TokenKind kind) -> std::optional<BinaryOp
 auto Parser::token_to_unary_op(lexer::TokenKind kind) -> std::optional<UnaryOp> {
     switch (kind) {
         case lexer::TokenKind::Minus: return UnaryOp::Neg;
-        case lexer::TokenKind::Not: return UnaryOp::Not;
+        case lexer::TokenKind::KwNot: return UnaryOp::Not;
         case lexer::TokenKind::BitNot: return UnaryOp::BitNot;
         case lexer::TokenKind::BitAnd: return UnaryOp::Ref;
+        case lexer::TokenKind::KwRef: return UnaryOp::Ref;  // TML uses 'ref x' syntax
         case lexer::TokenKind::Star: return UnaryOp::Deref;
         default: return std::nullopt;
     }

@@ -1,0 +1,26 @@
+// Test 15: Pointers and references
+func main() {
+    // Basic pointer: take address and dereference
+    let x = 42
+    let ptr = ref x    // Get pointer to x
+    println(*ptr)      // Dereference: 42
+
+    // Modify through pointer
+    let mut y = 10
+    let yptr = ref y
+    *yptr = 100        // Modify y through pointer
+    println(y)         // 100
+
+    // Pointer arithmetic concept (read value, add, store)
+    let mut z = 5
+    let zptr = ref z
+    *zptr = *zptr + 10
+    println(z)         // 15
+
+    // Multiple pointers to same value
+    let mut val = 1
+    let p1 = ref val
+    let p2 = ref val
+    *p1 = 50
+    println(*p2)       // 50 (both point to same value)
+}

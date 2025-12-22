@@ -1,0 +1,42 @@
+// Test 11: More expressions
+func main() {
+    // Compound expressions
+    let a = 2 + 3 * 4
+    println(a)  // 14
+
+    let b = (2 + 3) * 4
+    println(b)  // 20
+
+    // Negative numbers
+    let c = -5
+    println(c)  // -5
+
+    let d = 10 + c
+    println(d)  // 5
+
+    // Modulo
+    let e = 17 % 5
+    println(e)  // 2
+
+    // Boolean expressions
+    let x = 5
+    println(x > 3)  // true
+    println(x < 3)  // false
+
+    // Storing comparison results
+    let gt3 = x > 3
+    let lt10 = x < 10
+    println(gt3)  // true
+    println(lt10)  // true
+
+    // Complex boolean with stored values
+    let both = gt3 and lt10
+    println(both)  // true
+
+    // Boolean literals
+    let p = true
+    let q = false
+    println(p or q)  // true
+    println(p and q)  // false
+    println(not q)  // true
+}

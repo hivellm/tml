@@ -1,0 +1,28 @@
+// Test 10: For loops with ranges
+func main() {
+    // Simple for loop (0 to 5, exclusive)
+    let sum1 = 0
+    for i in 5 {
+        sum1 = sum1 + i
+    }
+    println(sum1)  // 0+1+2+3+4 = 10
+
+    // For with break
+    let count = 0
+    for i in 100 {
+        if i >= 5 {
+            break
+        }
+        count = count + 1
+    }
+    println(count)  // 5
+
+    // Nested for loops
+    let total = 0
+    for i in 3 {
+        for j in 3 {
+            total = total + 1
+        }
+    }
+    println(total)  // 9
+}

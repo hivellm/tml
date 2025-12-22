@@ -76,28 +76,21 @@ add_library(tml_ir STATIC
 target_link_libraries(tml_ir PUBLIC tml_borrow)
 target_include_directories(tml_ir PUBLIC include src)
 
-# Codegen library (LLVM backend)
-find_package(LLVM 17 CONFIG)
-if(LLVM_FOUND)
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-    add_library(tml_codegen STATIC
-        src/codegen/llvm_context.cpp
-        src/codegen/llvm_types.cpp
-        src/codegen/llvm_gen.cpp
-        src/codegen/emitter.cpp
-    )
-    target_link_libraries(tml_codegen PUBLIC tml_ir ${LLVM_LIBRARIES})
-    target_include_directories(tml_codegen PUBLIC include src ${LLVM_INCLUDE_DIRS})
-    target_compile_definitions(tml_codegen PUBLIC TML_HAS_LLVM=1)
-else()
-    message(WARNING "LLVM not found - codegen disabled")
-    add_library(tml_codegen STATIC
-        src/codegen/stub.cpp
-    )
-    target_link_libraries(tml_codegen PUBLIC tml_ir)
-    target_include_directories(tml_codegen PUBLIC include src)
-    target_compile_definitions(tml_codegen PUBLIC TML_HAS_LLVM=0)
-endif()
+# Codegen library (LLVM IR text generator + clang backend)
+add_library(tml_codegen STATIC
+    src/codegen/llvm_ir_gen.cpp
+    src/codegen/c_gen.cpp
+    src/codegen/stub.cpp
+)
+target_link_libraries(tml_codegen PUBLIC tml_ir)
+target_include_directories(tml_codegen PUBLIC include src)
+
+# Format library
+add_library(tml_format STATIC
+    src/format/formatter.cpp
+)
+target_link_libraries(tml_format PUBLIC tml_parser)
+target_include_directories(tml_format PUBLIC include src)
 
 # CLI library
 add_library(tml_cli STATIC
@@ -105,7 +98,7 @@ add_library(tml_cli STATIC
     src/cli/driver.cpp
     src/cli/reporter.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen)
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)
 
 # Main executable
@@ -132,6 +125,7 @@ if(TML_BUILD_TESTS)
         tests/types_test.cpp
         tests/borrow_test.cpp
         tests/ir_test.cpp
+        tests/format_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

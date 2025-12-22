@@ -22,52 +22,61 @@ enum class TokenKind : uint8_t {
     BoolLiteral,     // true, false
 
     // Identifiers
-    Identifier,      // foo, _bar, café
+    Identifier,      // foo, _bar, cafe
 
     // Keywords - declarations
     KwFunc,          // func
     KwType,          // type
-    KwTrait,         // trait
+    KwBehavior,      // behavior (trait in Rust)
     KwImpl,          // impl
     KwMod,           // mod
     KwUse,           // use
     KwPub,           // pub
+    KwDecorator,     // decorator
+    KwCrate,         // crate
+    KwSuper,         // super
 
     // Keywords - variables
     KwLet,           // let
-    KwVar,           // var
     KwConst,         // const
 
     // Keywords - control flow
     KwIf,            // if
+    KwThen,          // then
     KwElse,          // else
     KwWhen,          // when (match)
     KwLoop,          // loop
-    KwWhile,         // while
     KwFor,           // for
     KwIn,            // in
+    KwTo,            // to (range exclusive)
+    KwThrough,       // through (range inclusive)
     KwBreak,         // break
     KwContinue,      // continue
     KwReturn,        // return
 
+    // Keywords - logical operators (TML uses words, not symbols)
+    KwAnd,           // and
+    KwOr,            // or
+    KwNot,           // not
+
     // Keywords - types
-    KwSelf,          // self
-    KwSelfType,      // Self
+    KwThis,          // this (self value)
+    KwThisType,      // This (Self type)
     KwAs,            // as
-    KwWhere,         // where
 
     // Keywords - memory
     KwMut,           // mut
     KwRef,           // ref
-    KwMove,          // move
-    KwCopy,          // copy
+
+    // Keywords - closures
+    KwDo,            // do (closure)
 
     // Keywords - other
     KwAsync,         // async
     KwAwait,         // await
-    KwCaps,          // caps
-    KwUnsafe,        // unsafe
-    KwExtern,        // extern
+    KwWith,          // with (effects)
+    KwLowlevel,      // lowlevel (unsafe in Rust)
+    KwQuote,         // quote (metaprogramming)
 
     // Operators - arithmetic
     Plus,            // +
@@ -75,6 +84,7 @@ enum class TokenKind : uint8_t {
     Star,            // *
     Slash,           // /
     Percent,         // %
+    StarStar,        // ** (power)
 
     // Operators - comparison
     Eq,              // ==
@@ -83,11 +93,6 @@ enum class TokenKind : uint8_t {
     Gt,              // >
     Le,              // <=
     Ge,              // >=
-
-    // Operators - logical
-    And,             // &&
-    Or,              // ||
-    Not,             // !
 
     // Operators - bitwise
     BitAnd,          // &
@@ -114,13 +119,14 @@ enum class TokenKind : uint8_t {
     Arrow,           // ->
     FatArrow,        // =>
     Dot,             // .
-    DotDot,          // ..
-    DotDotEq,        // ..=
+    DotDot,          // .. (also via 'to' keyword)
     Colon,           // :
     ColonColon,      // ::
-    Question,        // ?
+    Bang,            // ! (error propagation)
     At,              // @
-    Hash,            // #
+    Pipe,            // | (in patterns)
+    Dollar,          // $ (splice in quote)
+    DollarBrace,     // ${ (splice block)
 
     // Delimiters
     LParen,          // (

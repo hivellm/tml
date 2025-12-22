@@ -1,8 +1,9 @@
-// IR implementation - stub for compilation
-// TODO: Implement IR types
+// IR implementation - placeholder for additional IR utilities
+#include "tml/ir/ir.hpp"
 
 namespace tml::ir {
 
-// Placeholder for IR implementation
+// Additional IR utilities can be added here
+// Core implementation is in builder.cpp and generator.cpp
 
 } // namespace tml::ir

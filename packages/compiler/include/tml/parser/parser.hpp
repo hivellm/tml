@@ -51,6 +51,7 @@ private:
     auto advance() -> const lexer::Token&;
     [[nodiscard]] auto is_at_end() const -> bool;
     [[nodiscard]] auto check(lexer::TokenKind kind) const -> bool;
+    [[nodiscard]] auto check_next(lexer::TokenKind kind) const -> bool;
     auto match(lexer::TokenKind kind) -> bool;
     auto expect(lexer::TokenKind kind, const std::string& message) -> Result<lexer::Token, ParseError>;
 
@@ -64,10 +65,11 @@ private:
 
     // Declaration parsing
     auto parse_visibility() -> Visibility;
-    auto parse_func_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
-    auto parse_struct_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
-    auto parse_enum_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
-    auto parse_trait_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
+    auto parse_decorators() -> Result<std::vector<Decorator>, ParseError>;
+    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
     auto parse_impl_decl() -> Result<DeclPtr, ParseError>;
     auto parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
     auto parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError>;

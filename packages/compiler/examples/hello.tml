@@ -1,0 +1,25 @@
+// Hello World in TML
+
+func main() {
+    let message = "Hello, World!"
+    print(message)
+}
+
+func add(x: I32, y: I32) -> I32 {
+    x + y
+}
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+behavior Display {
+    func display(this) -> Str
+}
+
+impl Display for Point {
+    func display(this) -> Str {
+        "Point"
+    }
+}

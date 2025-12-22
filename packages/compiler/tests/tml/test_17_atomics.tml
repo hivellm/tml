@@ -1,0 +1,81 @@
+// Test 17: Atomic operations and thread-safe primitives
+func main() {
+    // Allocate shared counter
+    let counter = alloc(4)
+    write_i32(counter, 0)
+
+    // Test atomic_store and atomic_load
+    atomic_store(counter, 42)
+    println(atomic_load(counter))  // 42
+
+    // Test atomic_add (returns old value)
+    let old1 = atomic_add(counter, 10)
+    println(old1)                   // 42 (old value)
+    println(atomic_load(counter))   // 52 (new value)
+
+    // Test atomic_sub
+    let old2 = atomic_sub(counter, 2)
+    println(old2)                   // 52 (old value)
+    println(atomic_load(counter))   // 50 (new value)
+
+    // Test atomic_exchange
+    let old3 = atomic_exchange(counter, 100)
+    println(old3)                   // 50 (old value)
+    println(atomic_load(counter))   // 100 (new value)
+
+    // Test atomic_cas (compare-and-swap)
+    // Try to swap 100 -> 200, should succeed
+    let success1 = atomic_cas(counter, 100, 200)
+    println(success1)               // true
+    println(atomic_load(counter))   // 200
+
+    // Try to swap 100 -> 300, should fail (current is 200)
+    let success2 = atomic_cas(counter, 100, 300)
+    println(success2)               // false
+    println(atomic_load(counter))   // 200 (unchanged)
+
+    // Test atomic_cas_val (returns old value)
+    let old4 = atomic_cas_val(counter, 200, 999)
+    println(old4)                   // 200 (was successful)
+    println(atomic_load(counter))   // 999
+
+    // Test atomic bitwise operations
+    atomic_store(counter, 0xFF)     // 255
+    let old5 = atomic_and(counter, 0x0F)
+    println(old5)                   // 255 (old)
+    println(atomic_load(counter))   // 15 (255 & 0x0F)
+
+    let old6 = atomic_or(counter, 0xF0)
+    println(old6)                   // 15 (old)
+    println(atomic_load(counter))   // 255 (15 | 0xF0)
+
+    dealloc(counter)
+
+    // Test spinlock
+    let lock = alloc(4)
+    write_i32(lock, 0)  // 0 = unlocked
+
+    // Try to acquire lock
+    let got_lock = spin_trylock(lock)
+    println(got_lock)  // true
+
+    // Try again - should fail since we hold it
+    let got_lock2 = spin_trylock(lock)
+    println(got_lock2)  // false
+
+    // Release lock
+    spin_unlock(lock)
+
+    // Now can acquire again
+    let got_lock3 = spin_trylock(lock)
+    println(got_lock3)  // true
+
+    spin_unlock(lock)
+    dealloc(lock)
+
+    // Memory fence test (just verifies it compiles)
+    fence()
+    fence_acquire()
+    fence_release()
+    println("atomics ok")
+}

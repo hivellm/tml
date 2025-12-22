@@ -1,0 +1,28 @@
+// Test 08: Structs
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Rectangle {
+    origin: Point,
+    width: I32,
+    height: I32,
+}
+
+func main() {
+    // Create a struct with explicit type
+    let p: Point = Point { x: 10, y: 20 }
+    println(p.x)
+    println(p.y)
+
+    // Nested struct
+    let rect: Rectangle = Rectangle {
+        origin: Point { x: 0, y: 0 },
+        width: 100,
+        height: 50,
+    }
+    println(rect.width)
+    println(rect.height)
+    println(rect.origin.x)
+}

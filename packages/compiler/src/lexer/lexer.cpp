@@ -8,52 +8,61 @@ namespace tml::lexer {
 
 namespace {
 
-// Keyword lookup table
+// Keyword lookup table - TML keywords
 const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     // Declarations
     {"func", TokenKind::KwFunc},
     {"type", TokenKind::KwType},
-    {"trait", TokenKind::KwTrait},
+    {"behavior", TokenKind::KwBehavior},
     {"impl", TokenKind::KwImpl},
     {"mod", TokenKind::KwMod},
     {"use", TokenKind::KwUse},
     {"pub", TokenKind::KwPub},
+    {"decorator", TokenKind::KwDecorator},
+    {"crate", TokenKind::KwCrate},
+    {"super", TokenKind::KwSuper},
 
     // Variables
     {"let", TokenKind::KwLet},
-    {"var", TokenKind::KwVar},
     {"const", TokenKind::KwConst},
 
     // Control flow
     {"if", TokenKind::KwIf},
+    {"then", TokenKind::KwThen},
     {"else", TokenKind::KwElse},
     {"when", TokenKind::KwWhen},
     {"loop", TokenKind::KwLoop},
-    {"while", TokenKind::KwWhile},
     {"for", TokenKind::KwFor},
     {"in", TokenKind::KwIn},
+    {"to", TokenKind::KwTo},
+    {"through", TokenKind::KwThrough},
     {"break", TokenKind::KwBreak},
     {"continue", TokenKind::KwContinue},
     {"return", TokenKind::KwReturn},
 
+    // Logical operators (TML uses words)
+    {"and", TokenKind::KwAnd},
+    {"or", TokenKind::KwOr},
+    {"not", TokenKind::KwNot},
+
     // Types
-    {"self", TokenKind::KwSelf},
-    {"Self", TokenKind::KwSelfType},
+    {"this", TokenKind::KwThis},
+    {"This", TokenKind::KwThisType},
     {"as", TokenKind::KwAs},
-    {"where", TokenKind::KwWhere},
 
     // Memory
     {"mut", TokenKind::KwMut},
     {"ref", TokenKind::KwRef},
-    {"move", TokenKind::KwMove},
-    {"copy", TokenKind::KwCopy},
+
+    // Closures
+    {"do", TokenKind::KwDo},
 
     // Other
     {"async", TokenKind::KwAsync},
     {"await", TokenKind::KwAwait},
-    {"caps", TokenKind::KwCaps},
-    {"unsafe", TokenKind::KwUnsafe},
-    {"extern", TokenKind::KwExtern},
+    {"with", TokenKind::KwWith},
+    {"lowlevel", TokenKind::KwLowlevel},
+    {"quote", TokenKind::KwQuote},
 
     // Booleans (special - become BoolLiteral)
     {"true", TokenKind::BoolLiteral},
@@ -201,6 +210,11 @@ auto Lexer::next_token() -> Token {
         return make_token(TokenKind::Newline);
     }
 
+    // Raw strings (check before identifiers, since 'r' is a valid identifier start)
+    if (c == 'r' && peek_next() == '"') {
+        return lex_raw_string();
+    }
+
     // Identifiers and keywords
     if (is_identifier_start(static_cast<char32_t>(c))) {
         return lex_identifier();
@@ -214,11 +228,6 @@ auto Lexer::next_token() -> Token {
     // Strings
     if (c == '"') {
         return lex_string();
-    }
-
-    // Raw strings
-    if (c == 'r' && peek_next() == '"') {
-        return lex_raw_string();
     }
 
     // Characters
@@ -705,8 +714,10 @@ auto Lexer::lex_operator() -> Token {
         case ';': return make_token(TokenKind::Semi);
         case '~': return make_token(TokenKind::BitNot);
         case '@': return make_token(TokenKind::At);
-        case '#': return make_token(TokenKind::Hash);
-        case '?': return make_token(TokenKind::Question);
+        
+        case '$':
+            if (peek() == '{') { advance(); return make_token(TokenKind::DollarBrace); }
+            return make_token(TokenKind::Dollar);
 
         // Potentially multi-character tokens
         case '+':
@@ -719,6 +730,7 @@ auto Lexer::lex_operator() -> Token {
             return make_token(TokenKind::Minus);
 
         case '*':
+            if (peek() == '*') { advance(); return make_token(TokenKind::StarStar); }
             if (peek() == '=') { advance(); return make_token(TokenKind::StarAssign); }
             return make_token(TokenKind::Star);
 
@@ -737,7 +749,7 @@ auto Lexer::lex_operator() -> Token {
 
         case '!':
             if (peek() == '=') { advance(); return make_token(TokenKind::Ne); }
-            return make_token(TokenKind::Not);
+            return make_token(TokenKind::Bang);
 
         case '<':
             if (peek() == '=') { advance(); return make_token(TokenKind::Le); }
@@ -758,12 +770,10 @@ auto Lexer::lex_operator() -> Token {
             return make_token(TokenKind::Gt);
 
         case '&':
-            if (peek() == '&') { advance(); return make_token(TokenKind::And); }
             if (peek() == '=') { advance(); return make_token(TokenKind::BitAndAssign); }
             return make_token(TokenKind::BitAnd);
 
         case '|':
-            if (peek() == '|') { advance(); return make_token(TokenKind::Or); }
             if (peek() == '=') { advance(); return make_token(TokenKind::BitOrAssign); }
             return make_token(TokenKind::BitOr);
 
@@ -774,7 +784,6 @@ auto Lexer::lex_operator() -> Token {
         case '.':
             if (peek() == '.') {
                 advance();
-                if (peek() == '=') { advance(); return make_token(TokenKind::DotDotEq); }
                 return make_token(TokenKind::DotDot);
             }
             return make_token(TokenKind::Dot);

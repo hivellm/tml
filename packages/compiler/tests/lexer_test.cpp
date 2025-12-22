@@ -1,15 +1,19 @@
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include <gtest/gtest.h>
+#include <memory>
 
 using namespace tml;
 using namespace tml::lexer;
 
 class LexerTest : public ::testing::Test {
 protected:
+    // Keep source alive so Token.lexeme (string_view) remains valid
+    std::unique_ptr<Source> source_;
+
     auto lex(const std::string& code) -> std::vector<Token> {
-        auto source = Source::from_string(code);
-        Lexer lexer(source);
+        source_ = std::make_unique<Source>(Source::from_string(code));
+        Lexer lexer(*source_);
         return lexer.tokenize();
     }
 
@@ -24,19 +28,24 @@ protected:
 TEST_F(LexerTest, Keywords) {
     EXPECT_EQ(lex_one("func").kind, TokenKind::KwFunc);
     EXPECT_EQ(lex_one("type").kind, TokenKind::KwType);
-    EXPECT_EQ(lex_one("trait").kind, TokenKind::KwTrait);
+    EXPECT_EQ(lex_one("behavior").kind, TokenKind::KwBehavior);
     EXPECT_EQ(lex_one("impl").kind, TokenKind::KwImpl);
     EXPECT_EQ(lex_one("let").kind, TokenKind::KwLet);
-    EXPECT_EQ(lex_one("var").kind, TokenKind::KwVar);
     EXPECT_EQ(lex_one("if").kind, TokenKind::KwIf);
+    EXPECT_EQ(lex_one("then").kind, TokenKind::KwThen);
     EXPECT_EQ(lex_one("else").kind, TokenKind::KwElse);
     EXPECT_EQ(lex_one("when").kind, TokenKind::KwWhen);
     EXPECT_EQ(lex_one("loop").kind, TokenKind::KwLoop);
-    EXPECT_EQ(lex_one("while").kind, TokenKind::KwWhile);
     EXPECT_EQ(lex_one("for").kind, TokenKind::KwFor);
     EXPECT_EQ(lex_one("return").kind, TokenKind::KwReturn);
     EXPECT_EQ(lex_one("mut").kind, TokenKind::KwMut);
     EXPECT_EQ(lex_one("pub").kind, TokenKind::KwPub);
+    EXPECT_EQ(lex_one("do").kind, TokenKind::KwDo);
+    EXPECT_EQ(lex_one("this").kind, TokenKind::KwThis);
+    EXPECT_EQ(lex_one("This").kind, TokenKind::KwThisType);
+    EXPECT_EQ(lex_one("to").kind, TokenKind::KwTo);
+    EXPECT_EQ(lex_one("through").kind, TokenKind::KwThrough);
+    EXPECT_EQ(lex_one("lowlevel").kind, TokenKind::KwLowlevel);
 }
 
 // Identifiers
@@ -185,9 +194,10 @@ TEST_F(LexerTest, ComparisonOperators) {
 }
 
 TEST_F(LexerTest, LogicalOperators) {
-    EXPECT_EQ(lex_one("&&").kind, TokenKind::And);
-    EXPECT_EQ(lex_one("||").kind, TokenKind::Or);
-    EXPECT_EQ(lex_one("!").kind, TokenKind::Not);
+    // TML uses keyword operators instead of symbols
+    EXPECT_EQ(lex_one("and").kind, TokenKind::KwAnd);
+    EXPECT_EQ(lex_one("or").kind, TokenKind::KwOr);
+    EXPECT_EQ(lex_one("not").kind, TokenKind::KwNot);
 }
 
 TEST_F(LexerTest, BitwiseOperators) {
@@ -212,10 +222,12 @@ TEST_F(LexerTest, OtherOperators) {
     EXPECT_EQ(lex_one("=>").kind, TokenKind::FatArrow);
     EXPECT_EQ(lex_one(".").kind, TokenKind::Dot);
     EXPECT_EQ(lex_one("..").kind, TokenKind::DotDot);
-    EXPECT_EQ(lex_one("..=").kind, TokenKind::DotDotEq);
     EXPECT_EQ(lex_one(":").kind, TokenKind::Colon);
     EXPECT_EQ(lex_one("::").kind, TokenKind::ColonColon);
-    EXPECT_EQ(lex_one("?").kind, TokenKind::Question);
+    EXPECT_EQ(lex_one("!").kind, TokenKind::Bang);
+    EXPECT_EQ(lex_one("**").kind, TokenKind::StarStar);
+    EXPECT_EQ(lex_one("$").kind, TokenKind::Dollar);
+    EXPECT_EQ(lex_one("${").kind, TokenKind::DollarBrace);
 }
 
 // Delimiters
@@ -314,12 +326,12 @@ TEST_F(LexerTest, MultilineSourceLocation) {
     auto foo = lexer.next_token();
     EXPECT_EQ(foo.span.start.line, 1);
 
-    lexer.next_token(); // newline
+    (void)lexer.next_token(); // newline
 
     auto bar = lexer.next_token();
     EXPECT_EQ(bar.span.start.line, 2);
 
-    lexer.next_token(); // newline
+    (void)lexer.next_token(); // newline
 
     auto baz = lexer.next_token();
     EXPECT_EQ(baz.span.start.line, 3);
@@ -336,7 +348,8 @@ TEST_F(LexerTest, UnterminatedString) {
 }
 
 TEST_F(LexerTest, InvalidCharacter) {
-    auto source = Source::from_string("$");
+    // Use a character that's actually invalid in TML
+    auto source = Source::from_string("");
     Lexer lexer(source);
     auto token = lexer.next_token();
 

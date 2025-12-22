@@ -1,0 +1,47 @@
+// Test 09: Nested control flow
+func main() {
+    // Nested if statements
+    let a = 10
+    let b = 5
+
+    if a > 5 {
+        if b < 10 {
+            println("a > 5 and b < 10")
+        } else {
+            println("a > 5 but b >= 10")
+        }
+    } else {
+        println("a <= 5")
+    }
+
+    // Nested loops with break
+    let count = 0
+    loop {
+        let inner = 0
+        loop {
+            if inner >= 3 {
+                break
+            }
+            inner = inner + 1
+        }
+        count = count + 1
+        if count >= 2 {
+            break
+        }
+    }
+    println(count)  // 2
+
+    // If inside loop
+    let sum = 0
+    let i = 0
+    loop {
+        if i >= 5 {
+            break
+        }
+        if i % 2 == 0 {
+            sum = sum + i
+        }
+        i = i + 1
+    }
+    println(sum)  // 0 + 2 + 4 = 6
+}

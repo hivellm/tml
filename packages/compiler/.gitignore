@@ -36,3 +36,7 @@ CTestTestfile.cmake
 *.gcda
 *.gcov
 coverage/
+
+# Generated C files (temporary backend)
+tests/tml/*.c
+tmp/

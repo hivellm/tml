@@ -1,0 +1,21 @@
+// Test 04: Comparison and logical operators
+func main() {
+    let a = 10
+    let b = 20
+
+    // Comparison operators
+    println(a == b)   // false
+    println(a != b)   // true
+    println(a < b)    // true
+    println(a > b)    // false
+    println(a <= b)   // true
+    println(a >= b)   // false
+
+    // Logical operators (TML uses words)
+    let x = true
+    let y = false
+
+    println(x and y)  // false
+    println(x or y)   // true
+    println(not x)    // false
+}
