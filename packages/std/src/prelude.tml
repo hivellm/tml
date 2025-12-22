@@ -1,0 +1,54 @@
+// Standard library prelude
+// Automatically imported into every TML module
+
+// Core types
+pub use option::{Maybe, Just, Nothing}
+pub use result::{Outcome, Ok, Err}
+pub use error::Error
+
+// Common traits
+pub use traits::{
+    Eq,
+    Ord,
+    Hash,
+    Display,
+    Debug,
+    Default,
+    Duplicate,
+    Drop,
+}
+
+// Operators
+pub use ops::{
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Neg,
+    Not,
+    BitAnd,
+    BitOr,
+    BitXor,
+}
+
+// Iteration
+pub use iter::{
+    Iterator,
+    IntoIterator,
+}
+
+// Conversion
+pub use convert::{
+    From,
+    Into,
+    TryFrom,
+    TryInto,
+}
+
+// Common functions
+pub use io::{print, println}
+pub use mem::{drop, size_of}
+
+// Macros (when macro system is implemented)
+// pub use macros::{vec, format, panic}

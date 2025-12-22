@@ -1,0 +1,83 @@
+// String type and operations
+
+/// String type (UTF-8 encoded)
+pub type Str {
+    // Internal representation
+    data: [U8],
+    len: I32,
+}
+
+impl Str {
+    /// Create a new empty string
+    pub func new() -> Str {
+        Str {
+            data: [],
+            len: 0,
+        }
+    }
+
+    /// Get the length in bytes
+    pub func len(this) -> I32 {
+        this.len
+    }
+
+    /// Check if string is empty
+    pub func is_empty(this) -> Bool {
+        this.len == 0
+    }
+
+    /// Convert to uppercase
+    pub func to_upper(this) -> Str {
+        // TODO: Implement
+        this
+    }
+
+    /// Convert to lowercase
+    pub func to_lower(this) -> Str {
+        // TODO: Implement
+        this
+    }
+
+    /// Trim whitespace
+    pub func trim(this) -> Str {
+        // TODO: Implement
+        this
+    }
+
+    /// Split by delimiter
+    pub func split(this, delimiter: Str) -> Vec[Str] {
+        // TODO: Implement
+        Vec::new()
+    }
+
+    /// Check if contains substring
+    pub func contains(this, needle: Str) -> Bool {
+        // TODO: Implement
+        false
+    }
+
+    /// Replace all occurrences
+    pub func replace(this, from: Str, to: Str) -> Str {
+        // TODO: Implement
+        this
+    }
+
+    /// Concatenate strings
+    pub func concat(this, other: Str) -> Str {
+        // TODO: Implement
+        this
+    }
+}
+
+@test
+func test_str_new() {
+    let s: Str = Str::new()
+    assert!(s.is_empty())
+    assert_eq!(s.len(), 0)
+}
+
+@test
+func test_str_len() {
+    let s: Str = "hello"
+    assert_eq!(s.len(), 5)
+}

@@ -29,6 +29,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_for(expr.as<parser::ForExpr>());
     } else if (expr.is<parser::ReturnExpr>()) {
         return gen_return(expr.as<parser::ReturnExpr>());
+    } else if (expr.is<parser::WhenExpr>()) {
+        return gen_when(expr.as<parser::WhenExpr>());
     } else if (expr.is<parser::StructExpr>()) {
         return gen_struct_expr(expr.as<parser::StructExpr>());
     } else if (expr.is<parser::FieldExpr>()) {
@@ -86,6 +88,13 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
 }
 
 auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
+    // Check global constants first
+    auto const_it = global_constants_.find(ident.name);
+    if (const_it != global_constants_.end()) {
+        last_expr_type_ = "i64";  // Constants are i64 for now
+        return const_it->second;
+    }
+
     auto it = locals_.find(ident.name);
     if (it != locals_.end()) {
         const VarInfo& var = it->second;
@@ -106,6 +115,35 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         const FuncInfo& func = func_it->second;
         last_expr_type_ = "ptr";  // Function pointers are ptr type in LLVM
         return func.llvm_name;    // Return @tml_funcname
+    }
+
+    // Check if it's an enum unit variant (variant without payload)
+    for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+        for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
+            const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
+
+            if (variant_name == ident.name && payload_types.empty()) {
+                // Found unit variant - create enum value with just the tag
+                std::string enum_type = "%struct." + enum_name;
+                std::string result = fresh_reg();
+                std::string enum_val = fresh_reg();
+
+                // Create enum value on stack
+                emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                // Set tag
+                std::string tag_ptr = fresh_reg();
+                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                // No payload to set
+
+                // Load the complete enum value
+                emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                last_expr_type_ = enum_type;
+                return result;
+            }
+        }
     }
 
     report_error("Unknown variable: " + ident.name, ident.span);

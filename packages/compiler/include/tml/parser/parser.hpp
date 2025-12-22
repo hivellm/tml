@@ -9,6 +9,24 @@
 
 namespace tml::parser {
 
+// Operator precedence levels (higher = tighter binding)
+namespace precedence {
+    constexpr int NONE = 0;
+    constexpr int ASSIGN = 1;      // =, +=, etc.
+    constexpr int OR = 2;          // ||
+    constexpr int AND = 3;         // &&
+    constexpr int COMPARISON = 4;  // ==, !=, <, >, <=, >=
+    constexpr int BITOR = 5;       // |
+    constexpr int BITXOR = 6;      // ^
+    constexpr int BITAND = 7;      // &
+    constexpr int SHIFT = 8;       // <<, >>
+    constexpr int TERM = 9;        // +, -
+    constexpr int FACTOR = 10;     // *, /, %
+    constexpr int UNARY = 11;      // -, !, ~, &, *
+    constexpr int CALL = 12;       // (), [], .
+    constexpr int RANGE = 13;      // .., ..=
+}
+
 // Parser error
 struct ParseError {
     std::string message;

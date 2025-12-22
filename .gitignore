@@ -29,6 +29,11 @@ logs/
 temp/
 tmp/
 
+# Task management - use rulebook only
+TODO.md
+TODO.txt
+TASKS.md
+
 # Build outputs
 build/
 **/build/

@@ -1,0 +1,7 @@
+// Test panic builtin
+
+func main() {
+    println("About to panic")
+    panic("This is a test panic")
+    println("This should not print")
+}

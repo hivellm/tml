@@ -55,8 +55,8 @@ protected:
 TEST_F(BorrowCheckerTest, SimpleVariable) {
     check_ok(R"(
         func test() {
-            let x = 42
-            let y = x
+            let x: I32 = 42
+            let y: I32 = x
         }
     )");
 }
@@ -64,7 +64,7 @@ TEST_F(BorrowCheckerTest, SimpleVariable) {
 TEST_F(BorrowCheckerTest, MutableVariable) {
     check_ok(R"(
         func test() {
-            let mut x = 42
+            let mut x: I32 = 42
             x = 10
         }
     )");
@@ -73,7 +73,7 @@ TEST_F(BorrowCheckerTest, MutableVariable) {
 TEST_F(BorrowCheckerTest, ImmutableAssignmentError) {
     check_error(R"(
         func test() {
-            let x = 42
+            let x: I32 = 42
             x = 10
         }
     )", "not mutable");
@@ -86,8 +86,8 @@ TEST_F(BorrowCheckerTest, ImmutableAssignmentError) {
 TEST_F(BorrowCheckerTest, SharedBorrow) {
     check_ok(R"(
         func test() {
-            let x = 42
-            let r = ref x
+            let x: I32 = 42
+            let r: ref I32 = ref x
         }
     )");
 }
@@ -95,9 +95,9 @@ TEST_F(BorrowCheckerTest, SharedBorrow) {
 TEST_F(BorrowCheckerTest, MultipleSharedBorrows) {
     check_ok(R"(
         func test() {
-            let x = 42
-            let r1 = ref x
-            let r2 = ref x
+            let x: I32 = 42
+            let r1: ref I32 = ref x
+            let r2: ref I32 = ref x
         }
     )");
 }
@@ -105,8 +105,8 @@ TEST_F(BorrowCheckerTest, MultipleSharedBorrows) {
 TEST_F(BorrowCheckerTest, MutableBorrow) {
     check_ok(R"(
         func test() {
-            let mut x = 42
-            let r = mut ref x
+            let mut x: I32 = 42
+            let r: mut ref I32 = mut ref x
         }
     )");
 }
@@ -114,8 +114,8 @@ TEST_F(BorrowCheckerTest, MutableBorrow) {
 TEST_F(BorrowCheckerTest, MutableBorrowOfImmutableError) {
     check_error(R"(
         func test() {
-            let x = 42
-            let r = mut ref x
+            let x: I32 = 42
+            let r: mut ref I32 = mut ref x
         }
     )", "not declared as mutable");
 }
@@ -123,9 +123,9 @@ TEST_F(BorrowCheckerTest, MutableBorrowOfImmutableError) {
 TEST_F(BorrowCheckerTest, DoubleMutableBorrowError) {
     check_error(R"(
         func test() {
-            let mut x = 42
-            let r1 = mut ref x
-            let r2 = mut ref x
+            let mut x: I32 = 42
+            let r1: mut ref I32 = mut ref x
+            let r2: mut ref I32 = mut ref x
         }
     )", "more than once");
 }
@@ -133,9 +133,9 @@ TEST_F(BorrowCheckerTest, DoubleMutableBorrowError) {
 TEST_F(BorrowCheckerTest, MixedBorrowError) {
     check_error(R"(
         func test() {
-            let mut x = 42
-            let r1 = ref x
-            let r2 = mut ref x
+            let mut x: I32 = 42
+            let r1: ref I32 = ref x
+            let r2: mut ref I32 = mut ref x
         }
     )", "also borrowed as immutable");
 }
@@ -143,9 +143,9 @@ TEST_F(BorrowCheckerTest, MixedBorrowError) {
 TEST_F(BorrowCheckerTest, MixedBorrowErrorReverse) {
     check_error(R"(
         func test() {
-            let mut x = 42
-            let r1 = mut ref x
-            let r2 = ref x
+            let mut x: I32 = 42
+            let r1: mut ref I32 = mut ref x
+            let r2: ref I32 = ref x
         }
     )", "also borrowed as mutable");
 }
@@ -157,11 +157,11 @@ TEST_F(BorrowCheckerTest, MixedBorrowErrorReverse) {
 TEST_F(BorrowCheckerTest, BorrowInNestedScope) {
     check_ok(R"(
         func test() {
-            let mut x = 42
+            let mut x: I32 = 42
             {
-                let r = mut ref x
+                let r: mut ref I32 = mut ref x
             }
-            let r2 = mut ref x
+            let r2: mut ref I32 = mut ref x
         }
     )");
 }
@@ -169,11 +169,11 @@ TEST_F(BorrowCheckerTest, BorrowInNestedScope) {
 TEST_F(BorrowCheckerTest, VariableShadowing) {
     check_ok(R"(
         func test() {
-            let x = 1
+            let x: I32 = 1
             {
-                let x = 2
+                let x: I32 = 2
             }
-            let y = x
+            let y: I32 = x
         }
     )");
 }
@@ -185,11 +185,11 @@ TEST_F(BorrowCheckerTest, VariableShadowing) {
 TEST_F(BorrowCheckerTest, IfExpression) {
     check_ok(R"(
         func test(cond: Bool) {
-            let x = 42
+            let x: I32 = 42
             if cond {
-                let r = ref x
+                let r: ref I32 = ref x
             }
-            let y = x
+            let y: I32 = x
         }
     )");
 }

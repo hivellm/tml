@@ -1,0 +1,12 @@
+// Collections module - data structures
+
+pub mod vec
+pub mod map
+pub mod set
+pub mod list
+
+// Re-exports
+pub use vec::Vec
+pub use map::HashMap
+pub use set::HashSet
+pub use list::LinkedList

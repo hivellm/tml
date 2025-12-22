@@ -188,6 +188,19 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
+    // panic(msg: Str) -> Never
+    // Prints error message to stderr and exits
+    if (fn_name == "panic") {
+        if (!call.args.empty()) {
+            std::string msg = gen_expr(*call.args[0]);
+            emit_line("  call void @tml_panic(ptr " + msg + ")");
+            emit_line("  unreachable");
+            block_terminated_ = true;
+            return "0";
+        }
+        return "0";
+    }
+
     // Memory allocation: alloc(size) -> ptr
     if (fn_name == "alloc") {
         if (!call.args.empty()) {
@@ -1315,6 +1328,54 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             return bool_result;
         }
         return "0";
+    }
+
+    // ============ ENUM CONSTRUCTORS ============
+
+    // Check if this is an enum constructor
+    if (call.callee->is<parser::IdentExpr>()) {
+        const auto& ident = call.callee->as<parser::IdentExpr>();
+
+        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+            for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
+                const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
+
+                if (variant_name == ident.name) {
+                    // Found enum constructor
+                    std::string enum_type = "%struct." + enum_name;
+                    std::string result = fresh_reg();
+                    std::string enum_val = fresh_reg();
+
+                    // Create enum value on stack
+                    emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                    // Set tag (field 0)
+                    std::string tag_ptr = fresh_reg();
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                    // Set payload if present (stored in field 1, the [N x i8] array)
+                    if (!payload_types.empty() && !call.args.empty()) {
+                        std::string payload = gen_expr(*call.args[0]);
+
+                        // Get pointer to payload field ([N x i8])
+                        std::string payload_ptr = fresh_reg();
+                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                        // Cast payload to bytes and store
+                        // For simplicity, bitcast the i8 array pointer to the payload type pointer
+                        std::string payload_typed_ptr = fresh_reg();
+                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr + " to ptr");
+                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " + payload_typed_ptr);
+                    }
+
+                    // Load the complete enum value
+                    emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                    last_expr_type_ = enum_type;
+                    return result;
+                }
+            }
+        }
     }
 
     // Check if this is an indirect call through a function pointer variable

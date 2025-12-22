@@ -1,0 +1,12 @@
+// TML Standard Library
+// Provides core functionality for all TML programs
+
+// TODO: Full module system with `pub mod` declarations not yet implemented
+// For now, individual files are used directly
+
+// Note: In a full implementation, this would re-export all standard library modules
+// Currently the compiler doesn't support:
+// - pub mod declarations
+// - Re-exporting from submodules with paths (option::{Maybe, Just, Nothing})
+
+// Once module system is complete, restore full re-exports

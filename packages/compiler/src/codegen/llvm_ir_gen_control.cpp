@@ -60,10 +60,14 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
     std::string result = "0";
 
     for (const auto& stmt : block.stmts) {
+        if (block_terminated_) {
+            // Block already terminated, skip remaining statements
+            break;
+        }
         gen_stmt(*stmt);
     }
 
-    if (block.expr.has_value()) {
+    if (block.expr.has_value() && !block_terminated_) {
         result = gen_expr(*block.expr.value());
     }
 
@@ -252,6 +256,126 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     }
     block_terminated_ = true;
     return "void";
+}
+
+auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
+    // Evaluate scrutinee
+    std::string scrutinee = gen_expr(*when.scrutinee);
+    std::string scrutinee_type = last_expr_type_;
+
+    // Allocate space for scrutinee if needed
+    std::string scrutinee_ptr = fresh_reg();
+    emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+    emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+
+    // Extract tag (assumes enum is { i32, i64 })
+    std::string tag_ptr = fresh_reg();
+    emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 0");
+    std::string tag = fresh_reg();
+    emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+
+    // Generate labels for each arm + end
+    std::vector<std::string> arm_labels;
+    for (size_t i = 0; i < when.arms.size(); ++i) {
+        arm_labels.push_back(fresh_label("when.arm" + std::to_string(i)));
+    }
+    std::string label_end = fresh_label("when.end");
+
+    // Generate switch based on pattern
+    // For now, simplified: each arm is checked sequentially
+    for (size_t arm_idx = 0; arm_idx < when.arms.size(); ++arm_idx) {
+        const auto& arm = when.arms[arm_idx];
+        std::string next_label = (arm_idx + 1 < when.arms.size())
+            ? fresh_label("when.check" + std::to_string(arm_idx + 1))
+            : label_end;
+
+        // Check if pattern matches
+        if (arm.pattern->is<parser::EnumPattern>()) {
+            const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
+            std::string variant_name = enum_pat.path.segments.back();
+
+            // Find variant index in enum definition
+            int variant_tag = -1;
+            for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+                for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                    if (enum_def.variants[v_idx].first == variant_name) {
+                        variant_tag = static_cast<int>(v_idx);
+                        break;
+                    }
+                }
+                if (variant_tag >= 0) break;
+            }
+
+            if (variant_tag >= 0) {
+                // Compare tag
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" + next_label);
+            } else {
+                // Unknown variant, skip to next
+                emit_line("  br label %" + next_label);
+            }
+        } else {
+            // Wildcard or other pattern - always matches
+            emit_line("  br label %" + arm_labels[arm_idx]);
+        }
+
+        // Generate arm body
+        emit_line(arm_labels[arm_idx] + ":");
+        block_terminated_ = false;
+
+        // Bind pattern variables
+        if (arm.pattern->is<parser::EnumPattern>()) {
+            const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
+
+            if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+                // Extract payload value
+                std::string payload_ptr = fresh_reg();
+                emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+                std::string payload = fresh_reg();
+                emit_line("  " + payload + " = load i64, ptr " + payload_ptr);
+
+                // Bind to first pattern variable (simplified - only handles single payload)
+                if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                    const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
+
+                    // Convert i64 back to i32 if needed
+                    std::string bound_val = payload;
+                    std::string bound_type = "i64";
+
+                    // For now, assume payloads are i32 and convert
+                    std::string converted = fresh_reg();
+                    emit_line("  " + converted + " = trunc i64 " + payload + " to i32");
+                    bound_val = converted;
+                    bound_type = "i32";
+
+                    // Allocate and store bound variable
+                    std::string var_alloca = fresh_reg();
+                    emit_line("  " + var_alloca + " = alloca " + bound_type);
+                    emit_line("  store " + bound_type + " " + bound_val + ", ptr " + var_alloca);
+                    locals_[ident.name] = VarInfo{var_alloca, bound_type};
+                }
+            }
+        }
+
+        // Execute arm body
+        gen_expr(*arm.body);
+        if (!block_terminated_) {
+            emit_line("  br label %" + label_end);
+        }
+
+        // Next check label (if not last arm)
+        if (arm_idx + 1 < when.arms.size()) {
+            emit_line(next_label + ":");
+            block_terminated_ = false;
+        }
+    }
+
+    // End label
+    emit_line(label_end + ":");
+    block_terminated_ = false;
+
+    return "0";
 }
 
 } // namespace tml::codegen

@@ -1,0 +1,147 @@
+TML Stability Annotations - Implementation Summary
+===================================================
+
+FILES CREATED:
+--------------
+1. docs/STABILITY_GUIDE.md (4.4KB)
+   - User-facing documentation
+   - Stability levels explanation
+   - Migration guides
+   - Current stability status
+
+2. docs/STABILITY_IMPLEMENTATION.md (5.0KB)
+   - Developer implementation guide
+   - Step-by-step integration
+   - Code examples
+   - Testing procedures
+   - Migration timeline
+
+3. add_stability.cpp (785 bytes)
+   - Reference implementation of StabilityLevel enum
+   - Updated FuncSig structure
+
+INFRASTRUCTURE DESIGNED:
+------------------------
+
+1. StabilityLevel Enum
+   - Stable: Production-ready, won't change
+   - Unstable: May change in future versions (default)
+   - Deprecated: Will be removed in next major version
+
+2. Enhanced FuncSig Structure
+   struct FuncSig {
+       // ... existing fields ...
+       StabilityLevel stability = StabilityLevel::Unstable;
+       std::string deprecated_message;  // Migration guide
+       std::string since_version;        // Version tracking
+   };
+
+3. Compiler Flags
+   --forbid-deprecated    : Treat deprecation warnings as errors
+   --allow-unstable       : Suppress unstable API warnings
+   --stability-report     : Generate stability usage report
+
+STABILITY CLASSIFICATION:
+-------------------------
+
+STABLE (v1.0):
+- print(s: Str)
+- println(s: Str)
+- black_box(value: I32)
+- black_box_i64(value: I64)
+
+STABLE (v1.1):
+- Instant::now()
+- Instant::elapsed(start: I64)
+- Duration::as_secs_f64(us: I64)
+- Duration::as_millis_f64(us: I64)
+
+DEPRECATED:
+- print_i32() → Use toString() + print()
+- print_bool() → Use toString() + print()
+- time_ms() → Use Instant::now()
+- time_us() → Use Instant::now()
+- time_ns() → Use Instant::now()
+
+UNSTABLE (default):
+- All threading primitives
+- Channel operations
+- Mutex/WaitGroup APIs
+- List/HashMap operations
+- Most memory and string utilities
+
+IMPLEMENTATION ROADMAP:
+-----------------------
+
+Phase 1: Infrastructure (COMPLETED)
+✅ Design stability system
+✅ Create comprehensive documentation
+✅ Provide code examples and guides
+
+Phase 2: Integration (TODO)
+⏳ Add StabilityLevel enum to env.hpp
+⏳ Update FuncSig struct with stability fields
+⏳ Annotate all builtin functions in env_builtins.cpp
+
+Phase 3: Enforcement (TODO)
+⏳ Implement deprecation warnings in type checker
+⏳ Add compiler flags (--forbid-deprecated, etc.)
+⏳ Generate stability reports
+
+Phase 4: Testing (TODO)
+⏳ Write tests for deprecated function warnings
+⏳ Test --forbid-deprecated flag
+⏳ Test stability report generation
+
+BENEFITS:
+---------
+1. Clear API stability guarantees
+2. Smooth migration paths for users
+3. Controlled API evolution
+4. Better tooling support
+5. Production-ready confidence
+
+USAGE EXAMPLES:
+---------------
+
+TML Code with Deprecation:
+```tml
+func main() {
+    print_i32(42)  // Warning: deprecated since v1.2
+}
+```
+
+Compiler Output:
+```
+warning: function 'print_i32' is deprecated since v1.2
+  --> main.tml:2:5
+   |
+ 2 |     print_i32(42)
+   |     ^^^^^^^^^^^^ deprecated function call
+   |
+   = note: Use toString(value) + print() instead for better type safety
+   = help: This function will be removed in v2.0
+```
+
+Migration:
+```tml
+func main() {
+    print(toString(42))  // No warning
+}
+```
+
+NEXT STEPS:
+-----------
+1. Review and approve stability design
+2. Integrate StabilityLevel into codebase
+3. Annotate builtin functions
+4. Implement type checker warnings
+5. Add compiler flags
+6. Write comprehensive tests
+
+REFERENCES:
+-----------
+- docs/STABILITY_GUIDE.md - User documentation
+- docs/STABILITY_IMPLEMENTATION.md - Implementation guide
+- add_stability.cpp - Reference structures
+

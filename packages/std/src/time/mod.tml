@@ -1,0 +1,88 @@
+// Time and duration utilities
+
+/// Duration in microseconds
+pub type Duration {
+    micros: I64,
+}
+
+impl Duration {
+    /// Create from seconds
+    pub func from_secs(secs: I64) -> Duration {
+        Duration { micros: secs * 1_000_000 }
+    }
+
+    /// Create from milliseconds
+    pub func from_millis(millis: I64) -> Duration {
+        Duration { micros: millis * 1_000 }
+    }
+
+    /// Create from microseconds
+    pub func from_micros(micros: I64) -> Duration {
+        Duration { micros: micros }
+    }
+
+    /// Get as seconds (float)
+    pub func as_secs_f64(this) -> F64 {
+        this.micros.to_f64() / 1_000_000.0
+    }
+
+    /// Get as milliseconds (float)
+    pub func as_millis_f64(this) -> F64 {
+        this.micros.to_f64() / 1_000.0
+    }
+
+    /// Get as microseconds
+    pub func as_micros(this) -> I64 {
+        this.micros
+    }
+
+    /// Format as string
+    pub func format(this) -> Str {
+        let secs: F64 = this.as_secs_f64()
+        secs.to_string() + "s"
+    }
+}
+
+/// Instant for measuring time
+pub type Instant {
+    micros: I64,
+}
+
+impl Instant {
+    /// Get current instant
+    pub func now() -> Instant {
+        // TODO: Call builtin time function
+        Instant { micros: 0 }
+    }
+
+    /// Calculate elapsed time
+    pub func elapsed(this) -> Duration {
+        let now: Instant = Instant::now()
+        Duration::from_micros(now.micros - this.micros)
+    }
+
+    /// Duration since another instant
+    pub func duration_since(this, earlier: Instant) -> Duration {
+        Duration::from_micros(this.micros - earlier.micros)
+    }
+}
+
+@test
+func test_duration_from_secs() {
+    let d: Duration = Duration::from_secs(5)
+    assert_eq!(d.as_micros(), 5_000_000)
+}
+
+@test
+func test_duration_from_millis() {
+    let d: Duration = Duration::from_millis(1000)
+    assert_eq!(d.as_micros(), 1_000_000)
+}
+
+@test
+func test_instant_now() {
+    let start: Instant = Instant::now()
+    // Do some work
+    let elapsed: Duration = start.elapsed()
+    assert!(elapsed.as_micros() >= 0)
+}

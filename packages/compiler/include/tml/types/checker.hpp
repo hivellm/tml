@@ -37,9 +37,10 @@ private:
     void register_trait_decl(const parser::TraitDecl& decl);
     void register_type_alias(const parser::TypeAliasDecl& decl);
 
-    // Function checking
+    // Function and declaration checking
     void check_func_decl(const parser::FuncDecl& func);
     void check_func_body(const parser::FuncDecl& func);
+    void check_const_decl(const parser::ConstDecl& const_decl);
     void check_impl_decl(const parser::ImplDecl& impl);
     void check_impl_body(const parser::ImplDecl& impl);
 

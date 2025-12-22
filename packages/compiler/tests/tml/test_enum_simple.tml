@@ -1,0 +1,12 @@
+// Test simple enum without pattern binding
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func main() {
+    println("Testing enums...")
+    let x: Maybe[I64] = Just(42)
+    println("Created Just(42)")
+}

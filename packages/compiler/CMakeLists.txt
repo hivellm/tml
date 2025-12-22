@@ -36,15 +36,26 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 # Lexer library
 add_library(tml_lexer STATIC
     src/lexer/token.cpp
-    src/lexer/lexer.cpp
     src/lexer/source.cpp
+    src/lexer/lexer_core.cpp
+    src/lexer/lexer_token.cpp
+    src/lexer/lexer_ident.cpp
+    src/lexer/lexer_number.cpp
+    src/lexer/lexer_string.cpp
+    src/lexer/lexer_operator.cpp
+    src/lexer/lexer_utils.cpp
 )
 target_include_directories(tml_lexer PUBLIC include src)
 
 # Parser library
 add_library(tml_parser STATIC
     src/parser/ast.cpp
-    src/parser/parser.cpp
+    src/parser/parser_core.cpp
+    src/parser/parser_decl.cpp
+    src/parser/parser_expr.cpp
+    src/parser/parser_stmt.cpp
+    src/parser/parser_type.cpp
+    src/parser/parser_pattern.cpp
 )
 target_link_libraries(tml_parser PUBLIC tml_lexer)
 target_include_directories(tml_parser PUBLIC include src)
@@ -53,25 +64,38 @@ target_include_directories(tml_parser PUBLIC include src)
 add_library(tml_types STATIC
     src/types/type.cpp
     src/types/checker.cpp
-    src/types/env.cpp
+    src/types/env_scope.cpp
+    src/types/env_core.cpp
+    src/types/env_builtins.cpp
+    src/types/env_definitions.cpp
+    src/types/env_lookups.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)
 
 # Borrow checker library
 add_library(tml_borrow STATIC
-    src/borrow/ownership.cpp
-    src/borrow/tracker.cpp
-    src/borrow/checker.cpp
+    src/borrow/checker_env.cpp
+    src/borrow/checker_core.cpp
+    src/borrow/checker_stmt.cpp
+    src/borrow/checker_expr.cpp
+    src/borrow/checker_ops.cpp
 )
 target_link_libraries(tml_borrow PUBLIC tml_types)
 target_include_directories(tml_borrow PUBLIC include src)
 
 # IR library
 add_library(tml_ir STATIC
-    src/ir/ir.cpp
-    src/ir/builder.cpp
-    src/ir/generator.cpp
+    src/ir/builder_utils.cpp
+    src/ir/builder_module.cpp
+    src/ir/builder_decls.cpp
+    src/ir/builder_expr.cpp
+    src/ir/builder_stmt.cpp
+    src/ir/builder_type.cpp
+    src/ir/emitter_core.cpp
+    src/ir/emitter_decls.cpp
+    src/ir/emitter_expr.cpp
+    src/ir/emitter_stmt.cpp
 )
 target_link_libraries(tml_ir PUBLIC tml_borrow)
 target_include_directories(tml_ir PUBLIC include src)
@@ -85,24 +109,33 @@ add_library(tml_codegen STATIC
     src/codegen/llvm_ir_gen_builtins.cpp
     src/codegen/llvm_ir_gen_control.cpp
     src/codegen/llvm_ir_gen_types.cpp
-    src/codegen/c_gen.cpp
-    src/codegen/stub.cpp
+    # src/codegen/c_gen.cpp  # Removed - using LLVM backend only
 )
 target_link_libraries(tml_codegen PUBLIC tml_ir)
 target_include_directories(tml_codegen PUBLIC include src)
 
 # Format library
 add_library(tml_format STATIC
-    src/format/formatter.cpp
+    src/format/format_core.cpp
+    src/format/format_decl.cpp
+    src/format/format_stmt.cpp
+    src/format/format_expr.cpp
+    src/format/format_type.cpp
+    src/format/format_pattern.cpp
 )
 target_link_libraries(tml_format PUBLIC tml_parser)
 target_include_directories(tml_format PUBLIC include src)
 
 # CLI library
 add_library(tml_cli STATIC
-    src/cli/args.cpp
-    src/cli/driver.cpp
-    src/cli/reporter.cpp
+    src/cli/cli.cpp
+    src/cli/utils.cpp
+    src/cli/compiler_setup.cpp
+    src/cli/cmd_debug.cpp
+    src/cli/cmd_build.cpp
+    src/cli/cmd_format.cpp
+    src/cli/cmd_test.cpp
+    src/cli/dispatcher.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)
@@ -132,6 +165,7 @@ if(TML_BUILD_TESTS)
         tests/borrow_test.cpp
         tests/ir_test.cpp
         tests/format_test.cpp
+        tests/codegen_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

@@ -1,0 +1,100 @@
+// File system operations
+
+use io::{Read, Write}
+use error::IoError
+use result::Outcome
+use path::Path
+
+/// File handle
+pub type File {
+    // Internal file descriptor
+    fd: I32,
+}
+
+impl File {
+    /// Open a file for reading
+    pub func open(path: Path) -> Outcome[File, IoError] {
+        // TODO: Implement with OS bindings
+        Err(IoError::Other("not yet implemented"))
+    }
+
+    /// Create a file for writing
+    pub func create(path: Path) -> Outcome[File, IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+
+    /// Open with options
+    pub func open_with_options(path: Path, options: OpenOptions) -> Outcome[File, IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+}
+
+impl Read for File {
+    func read(mut this, buf: mut [U8]) -> Outcome[I32, IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+
+    func read_to_end(mut this, buf: mut Vec[U8]) -> Outcome[I32, IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+}
+
+impl Write for File {
+    func write(mut this, buf: [U8]) -> Outcome[I32, IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+
+    func flush(mut this) -> Outcome[(), IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+
+    func write_all(mut this, buf: [U8]) -> Outcome[(), IoError] {
+        // TODO: Implement
+        Err(IoError::Other("not yet implemented"))
+    }
+}
+
+/// File open options
+pub type OpenOptions {
+    read: Bool,
+    write: Bool,
+    append: Bool,
+    create: Bool,
+    truncate: Bool,
+}
+
+/// Read entire file to string
+pub func read_to_string(path: Path) -> Outcome[Str, IoError] {
+    // TODO: Implement
+    Err(IoError::Other("not yet implemented"))
+}
+
+/// Write string to file
+pub func write_string(path: Path, contents: Str) -> Outcome[(), IoError] {
+    // TODO: Implement
+    Err(IoError::Other("not yet implemented"))
+}
+
+/// Check if path exists
+pub func exists(path: Path) -> Bool {
+    // TODO: Implement
+    false
+}
+
+/// Remove a file
+pub func remove_file(path: Path) -> Outcome[(), IoError] {
+    // TODO: Implement
+    Err(IoError::Other("not yet implemented"))
+}
+
+/// Copy a file
+pub func copy(from: Path, to: Path) -> Outcome[I64, IoError] {
+    // TODO: Implement
+    Err(IoError::Other("not yet implemented"))
+}

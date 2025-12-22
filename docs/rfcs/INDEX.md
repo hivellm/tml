@@ -13,8 +13,9 @@ TML uses a **layered architecture**:
 ├─────────────────────────────────────────┤
 │          Desugaring Pass                │  RFC-0002
 ├─────────────────────────────────────────┤
-│        Core Language (IR)               │  RFC-0001
+│        Core Language (IR)               │  RFC-0001, RFC-0007
 │     types, effects, ownership           │
+│     SSA form, stable IDs                │
 ├─────────────────────────────────────────┤
 │      Target Backends (LLVM/WASM)        │
 └─────────────────────────────────────────┘
@@ -30,15 +31,16 @@ TML uses a **layered architecture**:
 | [RFC-0004](./RFC-0004-ERRORS.md) | Error Handling | Draft | Outcome, ! operator, error propagation |
 | [RFC-0005](./RFC-0005-MODULES.md) | Modules & Caps | Draft | Module system, capabilities, imports |
 | [RFC-0006](./RFC-0006-OO.md) | OO Sugar | Draft | class/state/self syntactic sugar |
+| [RFC-0007](./RFC-0007-IR.md) | Intermediate Representation | Active | IR format, normalization, stable IDs, serialization |
 
 ## Tooling Specifications
 
-| Spec | Purpose | Format |
-|------|---------|--------|
-| `grammar/tml.peg` | Compiler parser | PEG grammar |
-| `grammar/tree-sitter-tml/` | Editor support | Tree-sitter |
-| `ir/tml-ir.schema.json` | IR interchange | JSON Schema |
-| `ir/tml-ir.proto` | IR binary format | Protobuf |
+| Spec | Purpose | Format | RFC |
+|------|---------|--------|-----|
+| `grammar/tml.peg` | Compiler parser | PEG grammar | RFC-0002 |
+| `grammar/tree-sitter-tml/` | Editor support | Tree-sitter | RFC-0002 |
+| `ir/tml-ir.schema.json` | IR interchange | JSON Schema | RFC-0007 |
+| `ir/tml-ir.proto` | IR binary format | Protobuf | RFC-0007 |
 
 ## RFC Structure
 
@@ -85,8 +87,9 @@ Related work, inspiration, prior art.
 ## Implementation Priority
 
 1. **RFC-0001** (Core) - Foundation, must be solid first
-2. **RFC-0004** (Errors) - Critical for any real code
-3. **RFC-0005** (Modules) - Needed for stdlib
-4. **RFC-0002** (Syntax) - Can evolve as sugar
-5. **RFC-0003** (Contracts) - Can be added incrementally
-6. **RFC-0006** (OO) - Pure sugar, lowest priority
+2. **RFC-0007** (IR) - ✅ Implemented in v0.1.0 - Canonical format for analysis and compilation
+3. **RFC-0004** (Errors) - Critical for any real code
+4. **RFC-0005** (Modules) - Needed for stdlib
+5. **RFC-0002** (Syntax) - Can evolve as sugar
+6. **RFC-0003** (Contracts) - Can be added incrementally
+7. **RFC-0006** (OO) - Pure sugar, lowest priority

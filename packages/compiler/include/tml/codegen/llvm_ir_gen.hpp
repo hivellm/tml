@@ -77,6 +77,9 @@ private:
     };
     std::unordered_map<std::string, FuncInfo> functions_;
 
+    // Global constants (name -> value as string)
+    std::unordered_map<std::string, std::string> global_constants_;
+
     // Helper methods
     auto fresh_reg() -> std::string;
     auto fresh_label(const std::string& prefix = "L") -> std::string;
@@ -118,6 +121,7 @@ private:
     auto gen_while(const parser::WhileExpr& while_expr) -> std::string;
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
+    auto gen_when(const parser::WhenExpr& when) -> std::string;
     auto gen_struct_expr(const parser::StructExpr& s) -> std::string;
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;

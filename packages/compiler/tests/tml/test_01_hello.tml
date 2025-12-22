@@ -1,4 +1,3 @@
-// Test 01: Hello World - Basic output
 func main() {
     println("Hello, TML!")
 }

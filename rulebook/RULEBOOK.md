@@ -1870,4 +1870,44 @@ If your project previously used OpenSpec:
 
 See `/rulebook/tasks/` directory for examples of correctly formatted tasks.
 
+## ⚠️ CRITICAL: TML Compiler Documentation Requirements
+
+**MANDATORY FOR ALL COMPILER WORK** - See [DOCUMENTATION.md](./DOCUMENTATION.md)
+
+If working on the TML compiler (`packages/compiler/`):
+
+**YOU MUST update documentation for EVERY code change.**
+
+### Required Documentation Updates
+
+Every compiler feature/change REQUIRES documentation in:
+
+1. **Grammar** (`docs/02-LEXICAL.md`, `docs/03-GRAMMAR.md`)
+   - New keywords, tokens, syntax rules
+
+2. **RFCs** (`docs/rfcs/`)
+   - Mark implemented RFCs
+   - Document deviations
+
+3. **User Docs** (`docs/user/appendix-03-builtins.md`)
+   - New builtins, features
+   - Examples and usage
+
+4. **Specs** (`docs/specs/`)
+   - Semantics, types, IR changes
+
+### Rule of Gold
+
+**If not documented, it's not implemented.**
+
+### Complete Guidelines
+
+See [DOCUMENTATION.md](./DOCUMENTATION.md) for:
+- Complete documentation checklist
+- When to update each doc
+- Commit workflow
+- Examples of correct documentation
+
+**This is NON-NEGOTIABLE for compiler consistency.**
+
 <!-- RULEBOOK:END -->

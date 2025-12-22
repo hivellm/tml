@@ -317,6 +317,38 @@ drop(value)          // explicitly destroys value
 forget(value)        // doesn't call destructor
 ```
 
+### 7.5 Time and Benchmarking
+
+```tml
+// ⚠️ DEPRECATED: Use Instant API instead
+@deprecated(since: "v1.2", use: "Instant::now()")
+time_ms() -> I32     // Current time in milliseconds
+
+@deprecated(since: "v1.2", use: "Instant::now()")
+time_us() -> I64     // Current time in microseconds
+
+@deprecated(since: "v1.2", use: "Instant::now()")
+time_ns() -> I64     // Current time in nanoseconds
+
+// ✅ STABLE: Preferred API (like Rust's std::time::Instant)
+Instant::now() -> I64                    // High-resolution timestamp (μs)
+Instant::elapsed(start: I64) -> I64      // Duration since start (μs)
+Duration::as_secs_f64(us: I64) -> Str    // Format as "X.XXXXXX" seconds
+Duration::as_millis_f64(us: I64) -> Str  // Format as "X.XXX" milliseconds
+
+// Example: Benchmarking
+let start: I64 = Instant::now()
+expensive_computation()
+let elapsed: I64 = Instant::elapsed(start)
+println("Time: " + Duration::as_millis_f64(elapsed) + " ms")
+```
+
+**Stability Notes:**
+- `time_ms()`, `time_us()`, `time_ns()` are deprecated in favor of the `Instant` API
+- The `Instant` API provides better ergonomics and is consistent with Rust's time API
+- Compiler will emit warnings when using deprecated time functions
+- Use `--allow-unstable` flag to suppress stability warnings during migration
+
 ## 8. Fundamental Behaviors
 
 ### 8.1 Equal

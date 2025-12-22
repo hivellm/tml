@@ -55,12 +55,14 @@ auto TypeChecker::check_module(const parser::Module& module)
         }
     }
 
-    // Second pass: register function signatures
+    // Second pass: register function signatures and constants
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             check_func_decl(decl->as<parser::FuncDecl>());
         } else if (decl->is<parser::ImplDecl>()) {
             check_impl_decl(decl->as<parser::ImplDecl>());
+        } else if (decl->is<parser::ConstDecl>()) {
+            check_const_decl(decl->as<parser::ConstDecl>());
         }
     }
 
@@ -202,6 +204,26 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     current_return_type_ = nullptr;
 }
 
+void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
+    // Resolve the declared type
+    TypePtr declared_type = resolve_type(*const_decl.type);
+
+    // Type-check the initializer expression
+    TypePtr init_type = check_expr(*const_decl.value);
+
+    // Verify the types match
+    if (!types_equal(init_type, declared_type)) {
+        error("Type mismatch in const initializer: expected " +
+              type_to_string(declared_type) + ", found " +
+              type_to_string(init_type),
+              const_decl.value->span);
+        return;
+    }
+
+    // Define the const in the global scope (as a variable that's immutable)
+    env_.current_scope()->define(const_decl.name, declared_type, false, const_decl.span);
+}
+
 void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     // Get the type name from self_type
     std::string type_name = type_to_string(resolve_type(*impl.self_type));
@@ -333,6 +355,28 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
         if (func) {
             return make_func(func->params, func->return_type);
         }
+
+        // Check if it's an enum constructor (unit variant or will be called)
+        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+            for (const auto& [variant_name, payload_types] : enum_def.variants) {
+                if (variant_name == ident.name) {
+                    // Found matching variant
+                    if (payload_types.empty()) {
+                        // Unit variant - return enum type directly
+                        auto enum_type = std::make_shared<Type>();
+                        enum_type->kind = NamedType{enum_name, "", {}};
+                        return enum_type;
+                    } else {
+                        // Variant with payload - will be used as constructor function
+                        // Return a function type for this constructor
+                        auto enum_type = std::make_shared<Type>();
+                        enum_type->kind = NamedType{enum_name, "", {}};
+                        return make_func(payload_types, enum_type);
+                    }
+                }
+            }
+        }
+
         error("Undefined variable: " + ident.name, span);
         return make_unit();
     }
@@ -474,9 +518,38 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
     // Try to look up as a constructor or function
     if (call.callee->is<parser::IdentExpr>()) {
         auto& ident = call.callee->as<parser::IdentExpr>();
+
+        // First try function lookup
         auto func = env_.lookup_func(ident.name);
         if (func) {
             return func->return_type;
+        }
+
+        // Then try enum constructor lookup
+        // Search all enums for a variant with this name
+        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+            for (const auto& [variant_name, payload_types] : enum_def.variants) {
+                if (variant_name == ident.name) {
+                    // Found matching variant - verify argument count
+                    if (call.args.size() != payload_types.size()) {
+                        error("Enum variant '" + variant_name + "' expects " +
+                              std::to_string(payload_types.size()) + " arguments, but got " +
+                              std::to_string(call.args.size()), call.callee->span);
+                        return make_unit();
+                    }
+
+                    // Type check arguments
+                    for (size_t i = 0; i < call.args.size(); ++i) {
+                        auto arg_type = check_expr(*call.args[i]);
+                        (void)arg_type; // Would check against payload_types[i]
+                    }
+
+                    // Return the enum type
+                    auto enum_type = std::make_shared<Type>();
+                    enum_type->kind = NamedType{enum_name, "", {}};
+                    return enum_type;
+                }
+            }
         }
     }
 
@@ -642,6 +715,61 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 for (size_t i = 0; i < std::min(p.elements.size(), tuple.elements.size()); ++i) {
                     bind_pattern(*p.elements[i], tuple.elements[i]);
                 }
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
+            // Extract enum name from type
+            if (!type->is<NamedType>()) {
+                error("Pattern expects enum type, but got different type", pattern.span);
+                return;
+            }
+
+            auto& named = type->as<NamedType>();
+            std::string enum_name = named.name;
+
+            // Lookup enum definition
+            auto enum_def = env_.lookup_enum(enum_name);
+            if (!enum_def) {
+                error("Unknown enum type '" + enum_name + "' in pattern", pattern.span);
+                return;
+            }
+
+            // Find matching variant
+            std::string variant_name = p.path.segments.back();
+            auto variant_it = std::find_if(
+                enum_def->variants.begin(),
+                enum_def->variants.end(),
+                [&variant_name](const auto& v) { return v.first == variant_name; }
+            );
+
+            if (variant_it == enum_def->variants.end()) {
+                error("Unknown variant '" + variant_name + "' in enum '" + enum_name + "'", pattern.span);
+                return;
+            }
+
+            auto& variant_payload_types = variant_it->second;
+
+            // Bind payload patterns if present
+            if (p.payload) {
+                if (variant_payload_types.empty()) {
+                    error("Variant '" + variant_name + "' has no payload, but pattern expects one", pattern.span);
+                    return;
+                }
+
+                if (p.payload->size() != variant_payload_types.size()) {
+                    error("Variant '" + variant_name + "' expects " +
+                          std::to_string(variant_payload_types.size()) + " arguments, but pattern has " +
+                          std::to_string(p.payload->size()), pattern.span);
+                    return;
+                }
+
+                // Recursively bind each payload element
+                for (size_t i = 0; i < p.payload->size(); ++i) {
+                    bind_pattern(*(*p.payload)[i], variant_payload_types[i]);
+                }
+            } else if (!variant_payload_types.empty()) {
+                error("Variant '" + variant_name + "' has payload, but pattern doesn't bind it", pattern.span);
+                return;
             }
         }
     }, pattern.kind);

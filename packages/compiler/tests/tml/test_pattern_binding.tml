@@ -1,0 +1,19 @@
+// Test pattern binding in when expressions
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func test_binding() {
+    let x: Maybe[I64] = Just(42)
+
+    when x {
+        Just(v) => println(v),
+        Nothing => println("nothing"),
+    }
+}
+
+func main() {
+    test_binding()
+}

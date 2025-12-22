@@ -163,11 +163,15 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Generate function body
     if (func.body) {
         for (const auto& stmt : func.body->stmts) {
+            if (block_terminated_) {
+                // Block already terminated, skip remaining statements
+                break;
+            }
             gen_stmt(*stmt);
         }
 
         // Handle trailing expression (return value)
-        if (func.body->expr.has_value()) {
+        if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
                 emit_line("  ret " + ret_type + " " + result);

@@ -1,6 +1,7 @@
 #ifndef TML_TYPES_ENV_HPP
 #define TML_TYPES_ENV_HPP
 
+#include "tml/types/env_stability.hpp"
 #include "tml/types/type.hpp"
 #include <unordered_map>
 #include <string>
@@ -17,7 +18,7 @@ struct Symbol {
     SourceSpan span;
 };
 
-// Function signature
+// Function signature with stability tracking
 struct FuncSig {
     std::string name;
     std::vector<TypePtr> params;
@@ -25,6 +26,14 @@ struct FuncSig {
     std::vector<std::string> type_params;
     bool is_async;
     SourceSpan span;
+    StabilityLevel stability = StabilityLevel::Unstable;
+    std::string deprecated_message;  // Migration guide for deprecated functions
+    std::string since_version;        // Version when this status was assigned
+
+    // Helper methods
+    [[nodiscard]] bool is_stable() const { return stability == StabilityLevel::Stable; }
+    [[nodiscard]] bool is_deprecated() const { return stability == StabilityLevel::Deprecated; }
+    [[nodiscard]] bool is_unstable() const { return stability == StabilityLevel::Unstable; }
 };
 
 // Struct definition
@@ -84,6 +93,9 @@ public:
     [[nodiscard]] auto lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef>;
     [[nodiscard]] auto lookup_func(const std::string& name) const -> std::optional<FuncSig>;
     [[nodiscard]] auto lookup_type_alias(const std::string& name) const -> std::optional<TypePtr>;
+
+    // Get all enums (for enum constructor lookup)
+    [[nodiscard]] auto all_enums() const -> const std::unordered_map<std::string, EnumDef>&;
 
     // Scopes
     void push_scope();

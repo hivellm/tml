@@ -1,0 +1,35 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2025"
+authors = ["TML Team"]
+description = "Built-in testing framework for TML"
+license = "MIT"
+repository = "https://github.com/hivellm/tml"
+homepage = "https://tml-lang.org"
+readme = "README.md"
+keywords = ["testing", "test", "framework", "assertion"]
+categories = ["testing", "development-tools"]
+
+[lib]
+name = "test"
+path = "src/mod.tml"
+
+[dependencies]
+# No external dependencies - uses only std
+
+[dev-dependencies]
+# Self-testing dependencies
+
+[features]
+default = ["std"]
+std = []
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true

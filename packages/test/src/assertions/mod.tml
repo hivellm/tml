@@ -1,0 +1,119 @@
+// Test Framework Assertions
+// Assertion functions for writing tests
+
+/// Assert that a condition is true
+/// Panics if condition is false
+pub func assert(condition: Bool) {
+    if not condition {
+        panic("assertion failed")
+    }
+}
+
+/// Assert with custom message
+pub func assert_msg(condition: Bool, message: Str) {
+    if not condition {
+        panic("assertion failed: " + message)
+    }
+}
+
+/// Assert two values are equal
+pub func assert_eq[T](left: T, right: T){
+    if left != right {
+        // TODO: Include left and right values in message when Display is available
+        panic("assertion failed: left != right")
+    }
+}
+
+/// Assert two values are equal with custom message
+pub func assert_eq_msg[T](left: T, right: T, message: Str){
+    if left != right {
+        panic("assertion failed: " + message)
+    }
+}
+
+/// Assert two values are not equal
+pub func assert_ne[T](left: T, right: T){
+    if left == right {
+        panic("assertion failed: left == right (expected inequality)")
+    }
+}
+
+/// Assert two values are not equal with custom message
+pub func assert_ne_msg[T](left: T, right: T, message: Str){
+    if left == right {
+        panic("assertion failed: " + message)
+    }
+}
+
+/// Assert value is greater than another
+pub func assert_gt[T](left: T, right: T){
+    if left <= right {
+        panic("assertion failed: left <= right (expected left > right)")
+    }
+}
+
+/// Assert value is greater than or equal
+pub func assert_ge[T](left: T, right: T){
+    if left < right {
+        panic("assertion failed: left < right (expected left >= right)")
+    }
+}
+
+/// Assert value is less than another
+pub func assert_lt[T](left: T, right: T){
+    if left >= right {
+        panic("assertion failed: left >= right (expected left < right)")
+    }
+}
+
+/// Assert value is less than or equal
+pub func assert_le[T](left: T, right: T){
+    if left > right {
+        panic("assertion failed: left > right (expected left <= right)")
+    }
+}
+
+/// Assert that code panics
+/// Used internally by @should_panic decorator
+pub func assert_panic[F](f: F){
+    let panicked: Bool = false
+    // TODO: Implement panic catching when exception handling is ready
+    // For now, this is a placeholder
+    f()
+    if not panicked {
+        panic("expected panic but code executed successfully")
+    }
+}
+
+// TODO: Pattern binding not yet supported in compiler
+// /// Assert value is Some
+// pub func assert_some[T](value: Maybe[T]) -> T {
+//     when value {
+//         Just(v) => v,
+//         Nothing => panic("assertion failed: expected Some, got Nothing"),
+//     }
+// }
+
+// /// Assert value is Nothing
+// pub func assert_none[T](value: Maybe[T]) {
+//     when value {
+//         Just(_) => panic("assertion failed: expected Nothing, got Some"),
+//         Nothing => {},
+//     }
+// }
+
+// /// Assert Outcome is Ok
+// pub func assert_ok[T, E](result: Outcome[T, E]) -> T {
+//     when result {
+//         Ok(v) => v,
+//         Err(_) => panic("assertion failed: expected Ok, got Err"),
+//     }
+// }
+
+// /// Assert Outcome is Err
+// pub func assert_err[T, E](result: Outcome[T, E]) -> E {
+//     when result {
+//         Ok(_) => panic("assertion failed: expected Err, got Ok"),
+//         Err(e) => e,
+//     }
+// }

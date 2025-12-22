@@ -1,0 +1,37 @@
+[package]
+name = "std"
+version = "0.1.0"
+edition = "2025"
+authors = ["TML Team"]
+description = "TML standard library - core functionality for all TML programs"
+license = "MIT"
+repository = "https://github.com/hivellm/tml"
+homepage = "https://tml-lang.org"
+readme = "README.md"
+keywords = ["std", "stdlib", "standard-library", "core"]
+categories = ["standard-library"]
+
+[lib]
+name = "std"
+path = "src/mod.tml"
+
+[dependencies]
+# No external dependencies - this is the foundation
+
+[features]
+default = ["std"]
+std = []
+alloc = []
+io = ["std"]
+fs = ["std", "io"]
+net = ["std", "io"]
+sync = ["std"]
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true

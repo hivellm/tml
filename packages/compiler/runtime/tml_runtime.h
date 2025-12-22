@@ -19,6 +19,9 @@
 #include <stdio.h>
 #include <stdatomic.h>
 
+// ============ PANIC ============
+void tml_panic(const char* msg);
+
 // ============ BLACK BOX ============
 int32_t tml_black_box_i32(int32_t value);
 int64_t tml_black_box_i64(int64_t value);

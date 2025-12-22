@@ -1,0 +1,49 @@
+// Formatting utilities
+
+/// Format trait for types that can be formatted
+pub behavior Format {
+    func format(this) -> Str
+}
+
+/// Debug trait for types that can be debug-formatted
+pub behavior Debug {
+    func debug(this) -> Str
+}
+
+/// Display trait for types that can be displayed
+pub behavior Display {
+    func display(this) -> Str
+}
+
+// Implement Display for primitives
+impl Display for I32 {
+    pub func display(this) -> Str {
+        this.to_string()
+    }
+}
+
+impl Display for Str {
+    pub func display(this) -> Str {
+        this
+    }
+}
+
+impl Display for Bool {
+    pub func display(this) -> Str {
+        when this {
+            true => "true",
+            false => "false",
+        }
+    }
+}
+
+/// Format a string with arguments (placeholder for future implementation)
+pub func format(template: Str) -> Str {
+    template
+}
+
+@test
+func test_display_i32() {
+    let x: I32 = 42
+    assert_eq!(x.display(), "42")
+}

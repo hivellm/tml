@@ -1,0 +1,12 @@
+// Benchmark Module
+// Simplified version for current compiler capabilities
+
+// TODO: Full benchmarking requires:
+// - Named tuple fields
+// - Function types
+// - Closures
+// - High precision timing
+
+pub func bench() {
+    println("Benchmarking not yet fully implemented")
+}

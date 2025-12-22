@@ -1,0 +1,64 @@
+// Test Framework Core Types
+// Shared types used across the test framework
+
+/// Result of a test execution
+pub type TestResult {
+    Passed,
+    Failed(Str),
+    Panicked(Str),
+    Ignored,
+}
+
+/// Current test execution status
+pub type TestStatus {
+    Running,
+    Completed(TestResult),
+}
+
+/// Test execution metadata
+pub type TestMetadata {
+    pub name: Str,
+    pub module: Str,
+    pub file: Str,
+    pub line: I32,
+    pub should_panic: Bool,
+    pub panic_message: Maybe[Str],
+    pub ignored: Bool,
+}
+
+/// Test execution context
+pub type TestContext {
+    pub metadata: TestMetadata,
+    pub start_time: I64,
+    pub captured_output: Str,
+}
+
+// TODO: Implement function types in compiler
+// /// Function signature for test functions
+// pub type TestFn = func() -> ()
+
+/// Registered test entry
+pub type TestEntry {
+    pub metadata: TestMetadata,
+    // TODO: Add function field when function types are supported
+    // pub function: TestFn,
+}
+
+/// Test suite configuration
+pub type TestConfig {
+    pub parallel: Bool,
+    pub threads: I32,
+    pub nocapture: Bool,
+    pub verbose: Bool,
+    pub quiet: Bool,
+    pub filter: Maybe[Str],
+}
+
+/// Test suite statistics
+pub type TestStats {
+    pub total: I32,
+    pub passed: I32,
+    pub failed: I32,
+    pub ignored: I32,
+    pub duration: I64,
+}

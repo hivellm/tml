@@ -1,0 +1,110 @@
+// Dynamic array (vector) implementation
+
+/// Dynamic array type
+pub type Vec[T] {
+    data: [T],
+    len: I32,
+    capacity: I32,
+}
+
+impl[T] Vec[T] {
+    /// Create a new empty vector
+    pub func new() -> Vec[T] {
+        Vec {
+            data: [],
+            len: 0,
+            capacity: 0,
+        }
+    }
+
+    /// Create a vector with initial capacity
+    pub func with_capacity(capacity: I32) -> Vec[T] {
+        Vec {
+            data: [],
+            len: 0,
+            capacity: capacity,
+        }
+    }
+
+    /// Get the length of the vector
+    pub func len(this) -> I32 {
+        this.len
+    }
+
+    /// Check if the vector is empty
+    pub func is_empty(this) -> Bool {
+        this.len == 0
+    }
+
+    /// Get the capacity
+    pub func capacity(this) -> I32 {
+        this.capacity
+    }
+
+    /// Push a value to the end
+    pub func push(mut this, value: T) {
+        // TODO: Implement dynamic resizing
+        this.len = this.len + 1
+    }
+
+    /// Pop a value from the end
+    pub func pop(mut this) -> Maybe[T] {
+        if this.len == 0 then {
+            Nothing
+        } else {
+            this.len = this.len - 1
+            // TODO: Return the actual value
+            Nothing
+        }
+    }
+
+    /// Get a value at index
+    pub func get(this, index: I32) -> Maybe[T] {
+        if index < 0 or index >= this.len then {
+            Nothing
+        } else {
+            // TODO: Return actual value
+            Nothing
+        }
+    }
+
+    /// Clear the vector
+    pub func clear(mut this) {
+        this.len = 0
+    }
+
+    /// Reserve additional capacity
+    pub func reserve(mut this, additional: I32) {
+        let new_capacity: I32 = this.capacity + additional
+        this.capacity = new_capacity
+    }
+
+    /// Truncate to a length
+    pub func truncate(mut this, len: I32) {
+        if len < this.len then {
+            this.len = len
+        }
+    }
+
+    /// Check if vector contains a value
+    pub func contains(this, value: T) -> Bool where T: Eq {
+        // TODO: Implement search
+        false
+    }
+}
+
+@test
+func test_vec_new() {
+    let v: Vec[I32] = Vec::new()
+    assert!(v.is_empty())
+    assert_eq!(v.len(), 0)
+}
+
+@test
+func test_vec_push() {
+    let mut v: Vec[I32] = Vec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    assert_eq!(v.len(), 3)
+}

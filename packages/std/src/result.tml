@@ -1,0 +1,135 @@
+// Result/Outcome type for error handling
+
+/// Type representing success or failure
+pub type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+impl[T, E] Outcome[T, E] {
+    /// Returns true if the result is Ok
+    pub func is_ok(this) -> Bool {
+        when this {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
+    /// Returns true if the result is Err
+    pub func is_err(this) -> Bool {
+        when this {
+            Ok(_) => false,
+            Err(_) => true,
+        }
+    }
+
+    /// Unwraps the value, panicking if Err
+    pub func unwrap(this) -> T {
+        when this {
+            Ok(value) => value,
+            Err(_) => panic("called unwrap on Err"),
+        }
+    }
+
+    /// Unwraps the error, panicking if Ok
+    pub func unwrap_err(this) -> E {
+        when this {
+            Ok(_) => panic("called unwrap_err on Ok"),
+            Err(err) => err,
+        }
+    }
+
+    /// Unwraps or returns default
+    pub func unwrap_or(this, default: T) -> T {
+        when this {
+            Ok(value) => value,
+            Err(_) => default,
+        }
+    }
+
+    /// Unwraps or computes from closure
+    pub func unwrap_or_else[F](this, f: F) -> T where F: Fn(E) -> T {
+        when this {
+            Ok(value) => value,
+            Err(err) => f(err),
+        }
+    }
+
+    /// Maps Outcome[T, E] to Outcome[U, E]
+    pub func map[U, F](this, f: F) -> Outcome[U, E] where F: Fn(T) -> U {
+        when this {
+            Ok(value) => Ok(f(value)),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Maps the error value
+    pub func map_err[F, F2](this, f: F2) -> Outcome[T, F] where F2: Fn(E) -> F {
+        when this {
+            Ok(value) => Ok(value),
+            Err(err) => Err(f(err)),
+        }
+    }
+
+    /// Applies a function that returns Outcome
+    pub func and_then[U, F](this, f: F) -> Outcome[U, E] where F: Fn(T) -> Outcome[U, E] {
+        when this {
+            Ok(value) => f(value),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns this if Ok, otherwise returns other
+    pub func or(this, other: Outcome[T, E]) -> Outcome[T, E] {
+        when this {
+            Ok(_) => this,
+            Err(_) => other,
+        }
+    }
+
+    /// Converts to Maybe, discarding error
+    pub func ok(this) -> Maybe[T] {
+        when this {
+            Ok(value) => Just(value),
+            Err(_) => Nothing,
+        }
+    }
+
+    /// Converts to Maybe of error
+    pub func err(this) -> Maybe[E] {
+        when this {
+            Ok(_) => Nothing,
+            Err(err) => Just(err),
+        }
+    }
+}
+
+// Tests
+@test
+func test_result_is_ok() {
+    let ok: Outcome[I32, Str] = Ok(42)
+    let err: Outcome[I32, Str] = Err("error")
+
+    assert!(ok.is_ok())
+    assert!(not err.is_ok())
+}
+
+@test
+func test_result_unwrap() {
+    let ok: Outcome[I32, Str] = Ok(42)
+    assert_eq!(ok.unwrap(), 42)
+}
+
+@test
+@should_panic
+func test_result_unwrap_err_panics() {
+    let err: Outcome[I32, Str] = Err("error")
+    let _: I32 = err.unwrap()
+}
+
+@test
+func test_result_map() {
+    let ok: Outcome[I32, Str] = Ok(42)
+    let mapped: Outcome[I32, Str] = ok.map(do(x: I32) x * 2)
+    assert_eq!(mapped.unwrap(), 84)
+}

@@ -106,3 +106,33 @@ dealloc(mem)
 | `thread_yield()` | `() -> Unit` | Yield CPU |
 | `thread_sleep(ms)` | `(I32) -> Unit` | Sleep milliseconds |
 | `thread_id()` | `() -> I32` | Get current thread ID |
+
+## Time and Benchmarking
+
+### Deprecated Time Functions
+
+⚠️ **These functions are deprecated. Use the `Instant` API instead.**
+
+| Function | Signature | Status |
+|----------|-----------|--------|
+| `time_ms()` | `() -> I32` | ⚠️ Deprecated (use `Instant::now()`) |
+| `time_us()` | `() -> I64` | ⚠️ Deprecated (use `Instant::now()`) |
+| `time_ns()` | `() -> I64` | ⚠️ Deprecated (use `Instant::now()`) |
+
+### Instant API (Recommended)
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `Instant::now()` | `() -> I64` | High-resolution timestamp (μs) |
+| `Instant::elapsed(start)` | `(I64) -> I64` | Duration since start (μs) |
+| `Duration::as_secs_f64(us)` | `(I64) -> Str` | Format as "X.XXXXXX" seconds |
+| `Duration::as_millis_f64(us)` | `(I64) -> Str` | Format as "X.XXX" milliseconds |
+
+**Example:**
+```tml
+// Measure execution time
+let start: I64 = Instant::now()
+expensive_computation()
+let elapsed: I64 = Instant::elapsed(start)
+println("Time: " + Duration::as_millis_f64(elapsed) + " ms")
+```

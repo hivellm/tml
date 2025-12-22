@@ -1,0 +1,11 @@
+// Report Module
+// Simplified version for current compiler capabilities
+
+// TODO: Full reporting requires:
+// - String interpolation
+// - Format strings
+// - Struct field access
+
+pub func print_stats() {
+    println("Reporting not yet fully implemented")
+}

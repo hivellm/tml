@@ -1,0 +1,69 @@
+// Synchronization primitives
+
+/// Mutex for mutual exclusion
+pub type Mutex[T] {
+    locked: Bool,
+    value: T,
+}
+
+/// Mutex guard for scoped locking
+pub type MutexGuard[T] {
+    value: mut ref T,
+}
+
+impl[T] Mutex[T] {
+    /// Create a new mutex
+    pub func new(value: T) -> Mutex[T] {
+        Mutex { locked: false, value: value }
+    }
+
+    /// Lock the mutex
+    pub func lock(mut this) -> Outcome[MutexGuard[T], Str] {
+        // TODO: Call builtin mutex_lock
+        Err("not implemented")
+    }
+
+    /// Try to lock the mutex
+    pub func try_lock(mut this) -> Outcome[MutexGuard[T], Str] {
+        // TODO: Call builtin mutex_try_lock
+        Err("not implemented")
+    }
+}
+
+/// Atomic counter
+pub type AtomicI32 {
+    value: I32,
+}
+
+impl AtomicI32 {
+    /// Create a new atomic
+    pub func new(value: I32) -> AtomicI32 {
+        AtomicI32 { value: value }
+    }
+
+    /// Load the value
+    pub func load(this) -> I32 {
+        // TODO: Call builtin atomic_load
+        this.value
+    }
+
+    /// Store a value
+    pub func store(mut this, value: I32) {
+        // TODO: Call builtin atomic_store
+        this.value = value
+    }
+
+    /// Fetch and add
+    pub func fetch_add(mut this, delta: I32) -> I32 {
+        // TODO: Call builtin atomic_fetch_add
+        let old: I32 = this.value
+        this.value = this.value + delta
+        old
+    }
+}
+
+@test
+func test_atomic_i32() {
+    let counter: AtomicI32 = AtomicI32::new(0)
+    assert_eq!(counter.load(), 0)
+}

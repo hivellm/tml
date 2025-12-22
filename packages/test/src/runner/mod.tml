@@ -1,0 +1,12 @@
+// Test Runner Module
+// Simplified version for current compiler capabilities
+
+// TODO: Full test runner requires:
+// - if let pattern matching
+// - Pattern binding in when expressions
+// - Function types
+// - const/static arrays
+
+pub func default_config() {
+    println("Test runner not yet fully implemented")
+}

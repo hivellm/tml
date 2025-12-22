@@ -290,6 +290,9 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@inline(never)` | Func | Never inline |
 | `@cold` | Func | Hint: rarely called |
 | `@hot` | Func | Hint: frequently called |
+| `@stable` | Any | Mark API as stable (stable guarantee) |
+| `@stable(since)` | Any | Stable with version info |
+| `@unstable` | Any | Mark API as unstable (may change) |
 | `@deprecated` | Any | Emit deprecation warning |
 | `@deprecated(msg)` | Any | Custom deprecation message |
 | `@deprecated(since, removal)` | Any | With version info |
@@ -303,6 +306,46 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@pre(...)` | Func | Precondition contract |
 | `@post(...)` | Func | Postcondition contract |
 | `@invariant(...)` | Type | Type invariant |
+
+### 8.1 Stability System
+
+TML provides a comprehensive stability system inspired by Rust's API stability guarantees:
+
+**Stability Levels:**
+- **`@stable`** - API is guaranteed stable (breaking changes require major version bump)
+- **`@unstable`** - API may change without warning (experimental features)
+- **`@deprecated`** - API will be removed in future version (use alternative)
+
+**Usage Example:**
+
+```tml
+// Mark functions with stability annotations
+@stable(since: "v1.0")
+func print(msg: Str) -> () {
+    // Stable API - guaranteed backwards compatible
+}
+
+@deprecated(since: "v1.2", use: "Instant::now()")
+func time_ms() -> I32 {
+    // Deprecated - compiler emits warning
+}
+
+@unstable
+func experimental_feature() -> () {
+    // Unstable - may change in any release
+}
+```
+
+**Compiler Flags:**
+- `--forbid-deprecated` - Treat deprecation warnings as errors
+- `--allow-unstable` - Suppress unstable API warnings
+- `--stability-report` - Generate usage report of deprecated/unstable APIs
+
+**Stability Guarantees:**
+- `@stable` APIs follow semantic versioning
+- Breaking changes to `@stable` APIs require major version increment
+- `@deprecated` APIs have migration period (minimum 1 minor version)
+- Compiler warns about unstable/deprecated API usage by default
 
 ## 9. Derive Decorator
 

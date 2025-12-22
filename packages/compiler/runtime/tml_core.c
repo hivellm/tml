@@ -3,6 +3,13 @@
 
 #include "tml_runtime.h"
 
+// ============ PANIC (error handling) ============
+
+void tml_panic(const char* msg) {
+    fprintf(stderr, "panic: %s\n", msg);
+    exit(1);
+}
+
 // ============ BLACK BOX (prevent optimization) ============
 
 int32_t tml_black_box_i32(int32_t value) {

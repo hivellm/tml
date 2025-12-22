@@ -1,0 +1,15 @@
+// TML Test Framework
+// Standard testing library for TML programs
+//
+// This module provides a complete testing framework including:
+// - Assertion functions (@test decorator support)
+// - Test discovery and execution
+// - Benchmarking (@bench decorator)
+// - Result reporting
+
+// Re-export core modules
+pub use types
+pub use assertions
+pub use runner
+pub use bench
+pub use report

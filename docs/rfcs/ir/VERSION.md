@@ -82,6 +82,56 @@ Initial frozen release. Includes:
 - `effects` - Effect annotations
 - `visibility` - pub, pub(crate), etc.
 
+## Implementation Status (v0.1.0)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| **IR Builder** | ✅ Implemented | 10 modules, full AST → IR conversion |
+| **IR Emitter** | ✅ Implemented | Emits SSA-form IR |
+| **Stable IDs** | ⚠️ Partial | Uses temp IDs, content-addressing TODO |
+| **JSON Schema** | ✅ Complete | `tml-ir.schema.json` (909 lines) validates all IR nodes |
+| **Protobuf Schema** | ✅ Complete | `tml-ir.proto` (587 lines) for binary serialization |
+| **S-Expression** | ⚠️ Partial | Debug output only, no parser yet |
+
+### IR Builder Modules
+
+Located in `packages/compiler/src/ir/`:
+
+1. `builder_core.cpp` - Core builder infrastructure
+2. `builder_module.cpp` - Module conversion
+3. `builder_decls.cpp` - Function/type/const declarations
+4. `builder_stmt.cpp` - Statement conversion
+5. `builder_expr.cpp` - Expression conversion (Pratt-based)
+6. `builder_type.cpp` - Type conversion
+7. `builder_utils.cpp` - Helper utilities
+
+### IR Emitter Modules
+
+Located in `packages/compiler/src/ir/`:
+
+1. `emitter_core.cpp` - Core emission infrastructure
+2. `emitter_decls.cpp` - Declaration emission
+3. `emitter_stmt.cpp` - Statement emission
+4. `emitter_expr.cpp` - Expression emission (SSA form)
+
+### IR Generation Pipeline
+
+```
+Source Code (.tml)
+    ↓
+Lexer → Tokens
+    ↓
+Parser → AST (Abstract Syntax Tree)
+    ↓
+Type Checker → TAST (Typed AST)
+    ↓
+Borrow Checker → Valid TAST
+    ↓
+IR Builder → IR Nodes (SSA form)
+    ↓
+IR Emitter → JSON/Protobuf/S-Expr
+```
+
 ## Migration Guide
 
 ### From pre-v0.1.0

@@ -192,7 +192,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     }
 
     // For structs, we just track the alloca pointer
-    if (is_struct && let.init.has_value()) {
+    if (is_struct && let.init.has_value() && let.init.value()->is<parser::StructExpr>()) {
         // gen_struct_expr allocates and initializes, returns the pointer
         std::string init_ptr = gen_struct_expr_ptr(let.init.value()->as<parser::StructExpr>());
         locals_[var_name] = VarInfo{init_ptr, var_type};

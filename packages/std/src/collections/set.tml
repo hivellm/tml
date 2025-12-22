@@ -1,0 +1,81 @@
+// HashSet implementation
+
+/// Hash set type for unique values
+pub type HashSet[T] {
+    size: I32,
+}
+
+impl[T] HashSet[T] {
+    /// Create a new empty hash set
+    pub func new() -> HashSet[T] {
+        HashSet { size: 0 }
+    }
+
+    /// Create with initial capacity
+    pub func with_capacity(capacity: I32) -> HashSet[T] {
+        HashSet { size: 0 }
+    }
+
+    /// Insert a value
+    pub func insert(mut this, value: T) -> Bool {
+        // TODO: Implement hash set insertion
+        // Returns true if value was newly inserted
+        this.size = this.size + 1
+        true
+    }
+
+    /// Remove a value
+    pub func remove(mut this, value: ref T) -> Bool {
+        // TODO: Implement hash set removal
+        // Returns true if value was present
+        false
+    }
+
+    /// Check if set contains a value
+    pub func contains(this, value: ref T) -> Bool {
+        // TODO: Implement contains check
+        false
+    }
+
+    /// Get the number of elements
+    pub func len(this) -> I32 {
+        this.size
+    }
+
+    /// Check if set is empty
+    pub func is_empty(this) -> Bool {
+        this.size == 0
+    }
+
+    /// Clear the set
+    pub func clear(mut this) {
+        this.size = 0
+    }
+
+    /// Check if this is a subset of another set
+    pub func is_subset(this, other: ref HashSet[T]) -> Bool {
+        // TODO: Implement subset check
+        false
+    }
+
+    /// Check if this is a superset of another set
+    pub func is_superset(this, other: ref HashSet[T]) -> Bool {
+        // TODO: Implement superset check
+        false
+    }
+}
+
+@test
+func test_hashset_new() {
+    let set: HashSet[I32] = HashSet::new()
+    assert!(set.is_empty())
+    assert_eq!(set.len(), 0)
+}
+
+@test
+func test_hashset_insert() {
+    let mut set: HashSet[I32] = HashSet::new()
+    let inserted: Bool = set.insert(42)
+    assert!(inserted)
+    assert_eq!(set.len(), 1)
+}

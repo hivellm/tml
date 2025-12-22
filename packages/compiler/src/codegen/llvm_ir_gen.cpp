@@ -160,6 +160,12 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @putchar(i32)");
     emit_line("declare ptr @malloc(i64)");
     emit_line("declare void @free(ptr)");
+    emit_line("declare void @exit(i32) noreturn");
+    emit_line("");
+
+    // TML runtime functions
+    emit_line("; TML runtime functions");
+    emit_line("declare void @tml_panic(ptr) noreturn");
     emit_line("");
 
     // Threading runtime declarations
@@ -355,9 +361,22 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     emit_header();
     emit_runtime_decls();
 
-    // First pass: collect struct and enum declarations
+    // First pass: collect const declarations and struct/enum declarations
     for (const auto& decl : module.decls) {
-        if (decl->is<parser::StructDecl>()) {
+        if (decl->is<parser::ConstDecl>()) {
+            const auto& const_decl = decl->as<parser::ConstDecl>();
+            // For now, only support literal constants
+            if (const_decl.value->is<parser::LiteralExpr>()) {
+                const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                std::string value;
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    value = std::to_string(lit.token.int_value().value);
+                } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                    value = (lit.token.lexeme == "true") ? "1" : "0";
+                }
+                global_constants_[const_decl.name] = value;
+            }
+        } else if (decl->is<parser::StructDecl>()) {
             gen_struct_decl(decl->as<parser::StructDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             gen_enum_decl(decl->as<parser::EnumDecl>());
