@@ -3,6 +3,7 @@
 
 #include "tml/codegen/llvm_ir_gen.hpp"
 #include "tml/lexer/lexer.hpp"
+#include <iostream>
 
 namespace tml::codegen {
 
@@ -516,17 +517,35 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 }
 
 auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
-    // For now, generate a simple lambda function as an inline helper
-    // Full closure support would require capturing environment variables
+    // TODO: Closures with captured variables need proper environment structs
+    // For now, we only support closures without captures
+    if (!closure.captured_vars.empty()) {
+        report_error("Closures with captured variables are not yet fully supported", closure.span);
+        return "0";
+    }
 
     // Generate a unique function name
     std::string closure_name = "tml_closure_" + std::to_string(closure_counter_++);
 
-    // Build parameter types string
+    // Build parameter types string, including captured variables as first parameters
     std::string param_types_str;
     std::vector<std::string> param_names;
+
+    // Add captured variables as parameters
+    for (const auto& captured_name : closure.captured_vars) {
+        if (!param_types_str.empty()) param_types_str += ", ";
+
+        // Look up the type from locals
+        auto it = locals_.find(captured_name);
+        std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
+
+        param_types_str += captured_type + " %" + captured_name + "_captured";
+        param_names.push_back(captured_name);
+    }
+
+    // Add closure parameters
     for (size_t i = 0; i < closure.params.size(); ++i) {
-        if (i > 0) param_types_str += ", ";
+        if (!param_types_str.empty()) param_types_str += ", ";
 
         // For now, assume i32 parameters (simplified)
         param_types_str += "i32";
@@ -545,6 +564,14 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Determine return type (simplified to i32 for now)
     std::string ret_type = "i32";
 
+    // Save information about captured variables before clearing locals
+    std::vector<std::pair<std::string, std::string>> captured_info;  // (name, type)
+    for (const auto& captured_name : closure.captured_vars) {
+        auto it = locals_.find(captured_name);
+        std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
+        captured_info.push_back({captured_name, captured_type});
+    }
+
     // Save current function state
     std::stringstream saved_output;
     saved_output << output_.str();
@@ -562,8 +589,18 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     emit_line("define internal " + ret_type + " @" + closure_name + "(" + param_types_str + ") #0 {");
     emit_line("entry:");
 
-    // Bind parameters to local scope
-    for (size_t i = 0; i < param_names.size(); ++i) {
+    // Bind captured variables to local scope
+    for (size_t i = 0; i < captured_info.size(); ++i) {
+        const auto& [captured_name, captured_type] = captured_info[i];
+
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + captured_type);
+        emit_line("  store " + captured_type + " %" + captured_name + "_captured, ptr " + alloca_reg);
+        locals_[captured_name] = VarInfo{alloca_reg, captured_type};
+    }
+
+    // Bind closure parameters to local scope
+    for (size_t i = closure.captured_vars.size(); i < param_names.size(); ++i) {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca i32");
         emit_line("  store i32 %" + param_names[i] + ", ptr " + alloca_reg);

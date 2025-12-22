@@ -1,0 +1,50 @@
+// Basic Language Features Test Suite
+
+@test
+func arithmetic() -> I32 {
+    println("--- Arithmetic ---")
+
+    let a: I32 = 10 + 5
+    if a != 15 { return 1 }
+
+    let b: I32 = 20 - 5
+    if b != 15 { return 2 }
+
+    let c: I32 = 5 * 4
+    if c != 20 { return 3 }
+
+    let d: I32 = 20 / 4
+    if d != 5 { return 4 }
+
+    println("Arithmetic: OK")
+    return 0
+}
+
+@test
+func variables() -> I32 {
+    println("--- Variables ---")
+
+    let x: I32 = 42
+    if x != 42 { return 10 }
+
+    let mut y: I32 = 10
+    y = 20
+    if y != 20 { return 11 }
+
+    println("Variables: OK")
+    return 0
+}
+
+@test
+func conditionals() -> I32 {
+    println("--- Conditionals ---")
+
+    let result: I32 = if 5 > 3 then 1 else 0
+    if result != 1 { return 20 }
+
+    let result2: I32 = if 2 > 10 then 1 else 0
+    if result2 != 0 { return 21 }
+
+    println("Conditionals: OK")
+    return 0
+}

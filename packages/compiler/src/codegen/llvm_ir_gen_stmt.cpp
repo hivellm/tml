@@ -199,6 +199,18 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
+    // For function/closure types, store the function pointer directly
+    if (let.type_annotation) {
+        if (let.type_annotation.value()->is<parser::FuncType>()) {
+            if (let.init.has_value()) {
+                std::string closure_fn = gen_expr(*let.init.value());
+                // closure_fn is like "@tml_closure_0", store it as a function pointer
+                locals_[var_name] = VarInfo{closure_fn, "ptr"};
+                return;
+            }
+        }
+    }
+
     // For pointer variables, store the pointer value
     if (is_ptr && let.init.has_value()) {
         std::string ptr_val = gen_expr(*let.init.value());

@@ -56,6 +56,13 @@ auto make_func(std::vector<TypePtr> params, TypePtr ret) -> TypePtr {
     return type;
 }
 
+auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<CapturedVar> captures) -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = ClosureType{std::move(params), std::move(ret), std::move(captures)};
+    type->id = next_type_id++;
+    return type;
+}
+
 auto make_ref(TypePtr inner, bool is_mut) -> TypePtr {
     auto type = std::make_shared<Type>();
     type->kind = RefType{is_mut, std::move(inner)};
@@ -155,6 +162,25 @@ auto type_to_string(const TypePtr& type) -> std::string {
             ss << ") -> " << type_to_string(t.return_type);
             return ss.str();
         }
+        else if constexpr (std::is_same_v<T, ClosureType>) {
+            std::ostringstream ss;
+            ss << "Closure[(";
+            for (size_t i = 0; i < t.params.size(); ++i) {
+                if (i > 0) ss << ", ";
+                ss << type_to_string(t.params[i]);
+            }
+            ss << ") -> " << type_to_string(t.return_type);
+            if (!t.captures.empty()) {
+                ss << " captures: {";
+                for (size_t i = 0; i < t.captures.size(); ++i) {
+                    if (i > 0) ss << ", ";
+                    ss << t.captures[i].name << ": " << type_to_string(t.captures[i].type);
+                }
+                ss << "}";
+            }
+            ss << "]";
+            return ss.str();
+        }
         else if constexpr (std::is_same_v<T, TypeVar>) {
             return "?" + std::to_string(t.id);
         }
@@ -214,6 +240,20 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
             if (ta.params.size() != tb.params.size()) return false;
             for (size_t i = 0; i < ta.params.size(); ++i) {
                 if (!types_equal(ta.params[i], tb.params[i])) return false;
+            }
+            return true;
+        }
+        else if constexpr (std::is_same_v<T, ClosureType>) {
+            if (!types_equal(ta.return_type, tb.return_type)) return false;
+            if (ta.params.size() != tb.params.size()) return false;
+            for (size_t i = 0; i < ta.params.size(); ++i) {
+                if (!types_equal(ta.params[i], tb.params[i])) return false;
+            }
+            if (ta.captures.size() != tb.captures.size()) return false;
+            for (size_t i = 0; i < ta.captures.size(); ++i) {
+                if (ta.captures[i].name != tb.captures[i].name) return false;
+                if (!types_equal(ta.captures[i].type, tb.captures[i].type)) return false;
+                if (ta.captures[i].is_mut != tb.captures[i].is_mut) return false;
             }
             return true;
         }

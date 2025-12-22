@@ -20,6 +20,14 @@ auto Scope::lookup(const std::string& name) const -> std::optional<Symbol> {
     return std::nullopt;
 }
 
+auto Scope::lookup_local(const std::string& name) const -> std::optional<Symbol> {
+    auto it = symbols_.find(name);
+    if (it != symbols_.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 auto Scope::parent() const -> std::shared_ptr<Scope> {
     return parent_;
 }

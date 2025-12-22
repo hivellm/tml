@@ -398,16 +398,67 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 
-    // Generate main entry point if there's a main function
-    bool has_main = false;
+    // Collect test functions (decorated with @test)
+    std::vector<std::string> test_functions;
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::FuncDecl>()) {
+            const auto& func = decl->as<parser::FuncDecl>();
+            for (const auto& decorator : func.decorators) {
+                if (decorator.name == "test") {
+                    test_functions.push_back(func.name);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Generate main entry point
+    bool has_user_main = false;
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>() && decl->as<parser::FuncDecl>().name == "main") {
-            has_main = true;
+            has_user_main = true;
             break;
         }
     }
 
-    if (has_main) {
+    if (!test_functions.empty()) {
+        // Generate test runner main
+        emit_line("; Auto-generated test runner");
+        emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+        emit_line("entry:");
+
+        int test_num = 0;
+        for (const auto& test_name : test_functions) {
+            std::string result_var = "%test_result_" + std::to_string(test_num);
+            std::string test_fn = "@tml_" + test_name;
+
+            // Call test function
+            emit_line("  " + result_var + " = call i32 " + test_fn + "()");
+
+            // Check if test failed (non-zero return)
+            std::string cmp_var = "%test_cmp_" + std::to_string(test_num);
+            emit_line("  " + cmp_var + " = icmp ne i32 " + result_var + ", 0");
+
+            // If failed, return the error code
+            std::string fail_label = "test_fail_" + std::to_string(test_num);
+            std::string next_label = "test_next_" + std::to_string(test_num);
+            emit_line("  br i1 " + cmp_var + ", label %" + fail_label + ", label %" + next_label);
+
+            // Failure path
+            emit_line(fail_label + ":");
+            emit_line("  ret i32 " + result_var);
+
+            // Success path - continue to next test
+            emit_line(next_label + ":");
+
+            test_num++;
+        }
+
+        // All tests passed
+        emit_line("  ret i32 0");
+        emit_line("}");
+    } else if (has_user_main) {
+        // Standard main wrapper for user-defined main
         emit_line("; Entry point");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");

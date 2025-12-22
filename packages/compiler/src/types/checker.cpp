@@ -1,5 +1,6 @@
 #include "tml/types/checker.hpp"
 #include "tml/lexer/token.hpp"
+#include <iostream>
 
 namespace tml::types {
 
@@ -38,6 +39,18 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
         const auto& slice_elem = expected->as<SliceType>().element;
         const auto& array_elem = actual->as<ArrayType>().element;
         return types_compatible(slice_elem, array_elem);
+    }
+
+    // Allow closure to be assigned to function type if signatures match
+    if (expected->is<FuncType>() && actual->is<ClosureType>()) {
+        const auto& func = expected->as<FuncType>();
+        const auto& closure = actual->as<ClosureType>();
+
+        if (func.params.size() != closure.params.size()) return false;
+        for (size_t i = 0; i < func.params.size(); ++i) {
+            if (!types_equal(func.params[i], closure.params[i])) return false;
+        }
+        return types_equal(func.return_type, closure.return_type);
     }
 
     return false;
@@ -174,13 +187,48 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         params.push_back(resolve_type(*p.type));
     }
     TypePtr ret = func.return_type ? resolve_type(**func.return_type) : make_unit();
+
+    // Process where clause constraints
+    std::vector<WhereConstraint> where_constraints;
+    if (func.where_clause) {
+        for (const auto& [type_ptr, behaviors] : func.where_clause->constraints) {
+            // Extract type parameter name from type
+            std::string type_param_name;
+            if (type_ptr->is<parser::NamedType>()) {
+                const auto& named = type_ptr->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    type_param_name = named.path.segments[0];
+                }
+            }
+
+            // Extract behavior names
+            std::vector<std::string> behavior_names;
+            for (const auto& behavior_path : behaviors) {
+                if (!behavior_path.segments.empty()) {
+                    behavior_names.push_back(behavior_path.segments.back());
+                }
+            }
+
+            if (!type_param_name.empty() && !behavior_names.empty()) {
+                where_constraints.push_back(WhereConstraint{
+                    type_param_name,
+                    behavior_names
+                });
+            }
+        }
+    }
+
     env_.define_func(FuncSig{
         .name = func.name,
         .params = std::move(params),
         .return_type = std::move(ret),
         .type_params = {},
         .is_async = func.is_async,
-        .span = func.span
+        .span = func.span,
+        .stability = StabilityLevel::Unstable,
+        .deprecated_message = "",
+        .since_version = "",
+        .where_constraints = std::move(where_constraints)
     });
 }
 
@@ -982,16 +1030,33 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
 }
 
 auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
-    env_.push_scope();
+    // Save parent scope to detect captures
+    auto parent_scope = env_.current_scope();
 
+    // Create a temporary empty scope for capture analysis
+    env_.push_scope();
+    auto temp_scope = env_.current_scope();
+
+    // Collect captures BEFORE adding parameters to scope
+    std::vector<CapturedVar> captures;
+    collect_captures_from_expr(*closure.body, temp_scope, parent_scope, captures);
+
+    // Define parameters in closure scope (reuse the same scope)
+    auto closure_scope = temp_scope;
     std::vector<TypePtr> param_types;
     for (const auto& [pattern, type_opt] : closure.params) {
         TypePtr ptype = type_opt ? resolve_type(**type_opt) : env_.fresh_type_var();
         param_types.push_back(ptype);
         if (pattern->is<parser::IdentPattern>()) {
             auto& ident = pattern->as<parser::IdentPattern>();
-            env_.current_scope()->define(ident.name, ptype, ident.is_mut, pattern->span);
+            closure_scope->define(ident.name, ptype, ident.is_mut, pattern->span);
         }
+    }
+
+    // Store captured variable names in AST for codegen
+    closure.captured_vars.clear();
+    for (const auto& cap : captures) {
+        closure.captured_vars.push_back(cap.name);
     }
 
     auto body_type = check_expr(*closure.body);
@@ -999,11 +1064,83 @@ auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
 
     env_.pop_scope();
 
-    return make_func(std::move(param_types), return_type);
+    return make_closure(std::move(param_types), return_type, std::move(captures));
 }
 
 auto TypeChecker::check_try(const parser::TryExpr& try_expr) -> TypePtr {
     return check_expr(*try_expr.expr);
+}
+
+void TypeChecker::collect_captures_from_expr(const parser::Expr& expr,
+                                               std::shared_ptr<Scope> closure_scope,
+                                               std::shared_ptr<Scope> parent_scope,
+                                               std::vector<CapturedVar>& captures) {
+    std::visit([&](const auto& e) {
+        using T = std::decay_t<decltype(e)>;
+
+        if constexpr (std::is_same_v<T, parser::IdentExpr>) {
+            // Check if this identifier is local to closure (parameter)
+            auto local_sym = closure_scope->lookup_local(e.name);
+            if (!local_sym.has_value() && parent_scope) {
+                // Not a closure parameter, check if it's in parent scope (captured)
+                auto parent_sym = parent_scope->lookup(e.name);
+                if (parent_sym.has_value()) {
+                    // This is a captured variable - add it if not already captured
+                    bool already_captured = false;
+                    for (const auto& cap : captures) {
+                        if (cap.name == e.name) {
+                            already_captured = true;
+                            break;
+                        }
+                    }
+                    if (!already_captured) {
+                        captures.push_back(CapturedVar{
+                            e.name,
+                            parent_sym->type,
+                            parent_sym->is_mutable
+                        });
+                    }
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
+            collect_captures_from_expr(*e.left, closure_scope, parent_scope, captures);
+            collect_captures_from_expr(*e.right, closure_scope, parent_scope, captures);
+        }
+        else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
+            collect_captures_from_expr(*e.operand, closure_scope, parent_scope, captures);
+        }
+        else if constexpr (std::is_same_v<T, parser::CallExpr>) {
+            collect_captures_from_expr(*e.callee, closure_scope, parent_scope, captures);
+            for (const auto& arg : e.args) {
+                collect_captures_from_expr(*arg, closure_scope, parent_scope, captures);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
+            for (const auto& stmt : e.stmts) {
+                if (stmt->kind.index() == 3) { // ExprStmt
+                    auto& expr_stmt = std::get<parser::ExprStmt>(stmt->kind);
+                    collect_captures_from_expr(*expr_stmt.expr, closure_scope, parent_scope, captures);
+                }
+            }
+            if (e.expr) {
+                collect_captures_from_expr(**e.expr, closure_scope, parent_scope, captures);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::IfExpr>) {
+            collect_captures_from_expr(*e.condition, closure_scope, parent_scope, captures);
+            collect_captures_from_expr(*e.then_branch, closure_scope, parent_scope, captures);
+            if (e.else_branch) {
+                collect_captures_from_expr(**e.else_branch, closure_scope, parent_scope, captures);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
+            if (e.value) {
+                collect_captures_from_expr(**e.value, closure_scope, parent_scope, captures);
+            }
+        }
+        // Add more cases as needed for other expression types
+    }, expr.kind);
 }
 
 auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span) -> TypePtr {

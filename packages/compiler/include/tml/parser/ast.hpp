@@ -408,6 +408,9 @@ struct ClosureExpr {
     ExprPtr body;
     bool is_move;
     SourceSpan span;
+
+    // Captured variables (filled by type checker)
+    mutable std::vector<std::string> captured_vars;
 };
 
 // Range expression: a..b, a..=b, ..b, a..

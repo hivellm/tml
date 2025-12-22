@@ -1382,9 +1382,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     auto local_it = locals_.find(fn_name);
     if (local_it != locals_.end() && local_it->second.type == "ptr") {
         // This is a function pointer variable - generate indirect call
-        // Load the function pointer from the alloca
-        std::string fn_ptr = fresh_reg();
-        emit_line("  " + fn_ptr + " = load ptr, ptr " + local_it->second.reg);
+        std::string fn_ptr;
+        if (local_it->second.reg[0] == '@') {
+            // Direct function reference (closure stored as @tml_closure_0)
+            fn_ptr = local_it->second.reg;
+        } else {
+            // Load the function pointer from the alloca
+            fn_ptr = fresh_reg();
+            emit_line("  " + fn_ptr + " = load ptr, ptr " + local_it->second.reg);
+        }
 
         // Generate arguments
         std::vector<std::pair<std::string, std::string>> arg_vals;

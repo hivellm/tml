@@ -18,6 +18,12 @@ struct Symbol {
     SourceSpan span;
 };
 
+// Where clause constraint: type parameter -> required behaviors
+struct WhereConstraint {
+    std::string type_param;
+    std::vector<std::string> required_behaviors;
+};
+
 // Function signature with stability tracking
 struct FuncSig {
     std::string name;
@@ -29,6 +35,7 @@ struct FuncSig {
     StabilityLevel stability = StabilityLevel::Unstable;
     std::string deprecated_message;  // Migration guide for deprecated functions
     std::string since_version;        // Version when this status was assigned
+    std::vector<WhereConstraint> where_constraints = {};  // At end to not break existing code
 
     // Helper methods
     [[nodiscard]] bool is_stable() const { return stability == StabilityLevel::Stable; }
@@ -69,6 +76,7 @@ public:
 
     void define(const std::string& name, TypePtr type, bool is_mutable, SourceSpan span);
     [[nodiscard]] auto lookup(const std::string& name) const -> std::optional<Symbol>;
+    [[nodiscard]] auto lookup_local(const std::string& name) const -> std::optional<Symbol>;
     [[nodiscard]] auto parent() const -> std::shared_ptr<Scope>;
 
 private:

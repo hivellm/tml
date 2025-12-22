@@ -82,6 +82,12 @@ private:
     auto resolve_type(const parser::Type& type) -> TypePtr;
     auto resolve_type_path(const parser::TypePath& path) -> TypePtr;
 
+    // Closure capture analysis
+    void collect_captures_from_expr(const parser::Expr& expr,
+                                     std::shared_ptr<Scope> closure_scope,
+                                     std::shared_ptr<Scope> parent_scope,
+                                     std::vector<CapturedVar>& captures);
+
     void error(const std::string& message, SourceSpan span);
 };
 

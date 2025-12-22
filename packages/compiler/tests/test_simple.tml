@@ -1,4 +1,0 @@
-func main() {
-    let x: I32 = 42
-    println(x)
-}

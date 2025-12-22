@@ -40,6 +40,11 @@
     - [Channels (Go-style)](ch07-02-channels.md)
     - [Mutex and Synchronization](ch07-03-mutex-and-sync.md)
 
+## Standard Library and Testing
+
+- [Standard Library](ch10-00-standard-library.md)
+- [Testing](ch11-00-testing.md)
+
 ## Appendix
 
 - [Appendix](appendix-00.md)

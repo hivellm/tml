@@ -76,6 +76,20 @@ struct FuncType {
     bool is_async;
 };
 
+// Captured variable in closure environment
+struct CapturedVar {
+    std::string name;
+    TypePtr type;
+    bool is_mut;
+};
+
+// Closure type: closure with environment capture
+struct ClosureType {
+    std::vector<TypePtr> params;
+    TypePtr return_type;
+    std::vector<CapturedVar> captures;
+};
+
 // Type variable (for inference)
 struct TypeVar {
     uint32_t id;
@@ -99,6 +113,7 @@ struct Type {
         SliceType,
         TupleType,
         FuncType,
+        ClosureType,
         TypeVar,
         GenericType
     > kind;
@@ -133,6 +148,7 @@ struct Type {
 [[nodiscard]] auto make_never() -> TypePtr;
 [[nodiscard]] auto make_tuple(std::vector<TypePtr> elements) -> TypePtr;
 [[nodiscard]] auto make_func(std::vector<TypePtr> params, TypePtr ret) -> TypePtr;
+[[nodiscard]] auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<CapturedVar> captures = {}) -> TypePtr;
 [[nodiscard]] auto make_ref(TypePtr inner, bool is_mut = false) -> TypePtr;
 [[nodiscard]] auto make_array(TypePtr element, size_t size) -> TypePtr;
 [[nodiscard]] auto make_slice(TypePtr element) -> TypePtr;

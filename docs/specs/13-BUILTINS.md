@@ -288,6 +288,46 @@ eprint(msg)          // stderr
 eprintln(msg)        // stderr with newline
 ```
 
+**Format Strings:**
+
+Both `print` and `println` support format strings with placeholders:
+
+```tml
+// Basic placeholder {}
+println("Hello, {}!", name)
+println("Values: {} and {}", x, y)
+
+// Precision format specifiers {:.N} for floats
+let pi: F64 = 3.14159265359
+println("Pi: {:.2}", pi)        // "Pi: 3.14"
+println("Pi: {:.5}", pi)        // "Pi: 3.14159"
+
+// Multiple values with mixed formats
+let name: Str = "benchmark"
+let time: F64 = 0.266
+let runs: I64 = 3
+println("{}: {:.3} ms (avg of {} runs)", name, time, runs)
+// Output: "benchmark: 0.266 ms (avg of 3 runs)"
+
+// Type conversion for precision
+let x: I32 = 42
+println("{:.2}", x)  // "42.00" (converts to double for display)
+```
+
+**Supported Format Specifiers:**
+- `{}` - Default formatting (works with any type)
+- `{:.N}` - Floating-point precision (N decimal places)
+  - Works with F32, F64
+  - Automatically converts integers to double when precision is specified
+  - Common values: `{:.0}`, `{:.1}`, `{:.2}`, `{:.3}`, `{:.6}`
+
+**Type Support:**
+- Str: Direct output
+- I8, I16, I32, I64, I128: Integer formatting
+- U8, U16, U32, U64, U128: Unsigned integer formatting
+- F32, F64: Float formatting (supports precision)
+- Bool: "true" or "false"
+
 ### 7.2 Control
 
 ```tml
@@ -331,16 +371,27 @@ time_us() -> I64     // Current time in microseconds
 time_ns() -> I64     // Current time in nanoseconds
 
 // ✅ STABLE: Preferred API (like Rust's std::time::Instant)
-Instant::now() -> I64                    // High-resolution timestamp (μs)
-Instant::elapsed(start: I64) -> I64      // Duration since start (μs)
-Duration::as_secs_f64(us: I64) -> Str    // Format as "X.XXXXXX" seconds
-Duration::as_millis_f64(us: I64) -> Str  // Format as "X.XXX" milliseconds
+Instant::now() -> I64                      // High-resolution timestamp (μs)
+Instant::elapsed(start: I64) -> I64        // Duration since start (μs)
+Duration::as_secs_f64(us: I64) -> F64      // Duration in seconds as float
+Duration::as_millis_f64(us: I64) -> F64    // Duration in milliseconds as float
 
-// Example: Benchmarking
+// Example: Benchmarking with format specifiers
 let start: I64 = Instant::now()
 expensive_computation()
 let elapsed: I64 = Instant::elapsed(start)
-println("Time: " + Duration::as_millis_f64(elapsed) + " ms")
+let ms: F64 = Duration::as_millis_f64(elapsed)
+println("Time: {:.3} ms", ms)  // e.g., "Time: 0.266 ms"
+
+// Example: Multiple runs averaging
+let mut total: I64 = 0
+for _ in 0 to 10 {
+    let start: I64 = Instant::now()
+    some_function()
+    total += Instant::elapsed(start)
+}
+let avg_ms: F64 = Duration::as_millis_f64(total / 10)
+println("Average: {:.3} ms (10 runs)", avg_ms)
 ```
 
 **Stability Notes:**

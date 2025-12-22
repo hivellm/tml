@@ -10,6 +10,88 @@ The TML compiler successfully compiles basic programs but lacks several advanced
 
 ## ✅ Recently Implemented (2025-12-22)
 
+### Range Expressions
+**Status**: ✅ Fully Implemented (2025-12-22)
+
+**Implementation**:
+- Parser: `parse_range_expr()` in `parser_expr.cpp` - already existed
+- Type Checker: `check_range()` in `checker.cpp` - newly added
+- Codegen LLVM: Range expressions generate I64 slices for iteration
+- AST: `RangeExpr` struct already defined
+
+**Example**:
+```tml
+// Exclusive range (0 to n-1)
+for i in 0 to 10 {
+    println("{}", i)  // prints 0..9
+}
+
+// Inclusive range (1 to n)
+for i in 1 through 10 {
+    println("{}", i)  // prints 1..10
+}
+```
+
+**Tests**: All for-loop tests ✅ PASSING
+
+**Features**:
+- ✅ Exclusive ranges with `to` keyword
+- ✅ Inclusive ranges with `through` keyword
+- ✅ Type checking for integer range bounds
+- ✅ Integration with for-loops
+- ✅ Returns `SliceType<I64>` for iteration
+
+### Path Expression Function Calls
+**Status**: ✅ Fully Implemented (2025-12-22)
+
+**Implementation**:
+- Type Checker: Added path function lookup in `check_path()` - `checker.cpp:1029`
+- Supports namespaced function calls like `Instant::now()`, `Duration::as_millis_f64()`
+- Works with builtin time API
+
+**Example**:
+```tml
+let start: I64 = Instant::now()
+// ... do work ...
+let elapsed: I64 = Instant::elapsed(start)
+let ms: F64 = Duration::as_millis_f64(elapsed)
+println("Took {:.3} ms", ms)
+```
+
+**Tests**: Benchmark tests ✅ PASSING
+
+**Features**:
+- ✅ Path expressions in call positions
+- ✅ Two-segment paths (Type::function)
+- ✅ Builtin time API (Instant, Duration)
+- ✅ Type checking for namespaced functions
+
+### Format Specifiers in println
+**Status**: ✅ Fully Implemented (pre-existing)
+
+**Implementation**:
+- Codegen: `gen_format_print()` in `llvm_ir_gen_types.cpp` - already existed
+- Supports `{:.N}` precision format for floating-point numbers
+- Automatically handles type conversion for precision formatting
+
+**Example**:
+```tml
+let pi: F64 = 3.14159265359
+println("Pi to 2 decimals: {:.2}", pi)  // "3.14"
+println("Pi to 5 decimals: {:.5}", pi)  // "3.14159"
+
+let ms: F64 = 0.266
+println("Time: {:.3} ms", ms)  // "0.266 ms"
+```
+
+**Tests**: Benchmark output ✅ PASSING
+
+**Features**:
+- ✅ Precision specifiers: `{:.1}`, `{:.2}`, `{:.3}`, etc.
+- ✅ Automatic float/double handling
+- ✅ Works with F32 and F64 types
+- ✅ Also works with integers (converts to double for display)
+
 ### Const Declarations
 **Status**: ✅ Fully Implemented
 
@@ -578,11 +660,14 @@ test_panic-ff2386.o : error LNK2019: unresolved external symbol tml_panic
 - ✅ Generics (without constraints)
 - ✅ Loops, conditionals
 - ✅ Const declarations
-- ❌ Pattern binding
-- ❌ If-let
-- ❌ Where clauses
-- ❌ Function types
-- ❌ Closures
+- ✅ Range expressions (to/through)
+- ✅ Path expression function calls
+- ✅ Format specifiers in println
+- ✅ Pattern binding in when/if-let
+- ✅ If-then-else syntax
+- ⚠️ Where clauses (syntax only)
+- ⚠️ Function types (syntax only)
+- ⚠️ Closures (syntax only, no capture)
 
 ### Standard Library Support
 - ✅ Basic types compile
