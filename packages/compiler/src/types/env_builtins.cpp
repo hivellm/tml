@@ -947,11 +947,11 @@ void TypeEnv::init_builtins() {
         builtin_span
     };
 
-    // Duration::as_millis_f64(us: I64) -> Str - Format as "X.XXX" milliseconds
+    // Duration::as_millis_f64(us: I64) -> F64 - Duration in milliseconds as float
     functions_["Duration::as_millis_f64"] = FuncSig{
         "Duration::as_millis_f64",
         {make_primitive(PrimitiveKind::I64)},
-        make_primitive(PrimitiveKind::Str),
+        make_primitive(PrimitiveKind::F64),
         {},
         false,
         builtin_span

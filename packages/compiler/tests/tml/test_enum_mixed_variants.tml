@@ -1,0 +1,21 @@
+// Test enum with mixed variants (with and without payload)
+
+type Status {
+    Idle,
+    Running(I64),
+}
+
+func main() {
+    let s1: Status = Idle
+    let s2: Status = Running(42)
+
+    when s1 {
+        Idle => println(0),
+        Running(x) => println(x),
+    }
+
+    when s2 {
+        Idle => println(0),
+        Running(x) => println(x),
+    }
+}

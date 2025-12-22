@@ -121,6 +121,7 @@ private:
     auto parse_array_expr() -> Result<ExprPtr, ParseError>;
     auto parse_block_expr() -> Result<ExprPtr, ParseError>;
     auto parse_if_expr() -> Result<ExprPtr, ParseError>;
+    auto parse_if_let_expr(SourceSpan start_span) -> Result<ExprPtr, ParseError>;
     auto parse_when_expr() -> Result<ExprPtr, ParseError>;
     auto parse_loop_expr() -> Result<ExprPtr, ParseError>;
     auto parse_while_expr() -> Result<ExprPtr, ParseError>;

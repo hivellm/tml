@@ -19,6 +19,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_call(expr.as<parser::CallExpr>());
     } else if (expr.is<parser::IfExpr>()) {
         return gen_if(expr.as<parser::IfExpr>());
+    } else if (expr.is<parser::IfLetExpr>()) {
+        return gen_if_let(expr.as<parser::IfLetExpr>());
     } else if (expr.is<parser::BlockExpr>()) {
         return gen_block(expr.as<parser::BlockExpr>());
     } else if (expr.is<parser::LoopExpr>()) {
@@ -57,6 +59,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_path(expr.as<parser::PathExpr>());
     } else if (expr.is<parser::MethodCallExpr>()) {
         return gen_method_call(expr.as<parser::MethodCallExpr>());
+    } else if (expr.is<parser::ClosureExpr>()) {
+        return gen_closure(expr.as<parser::ClosureExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);
@@ -509,6 +513,91 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     }
 
     return result;
+}
+
+auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
+    // For now, generate a simple lambda function as an inline helper
+    // Full closure support would require capturing environment variables
+
+    // Generate a unique function name
+    std::string closure_name = "tml_closure_" + std::to_string(closure_counter_++);
+
+    // Build parameter types string
+    std::string param_types_str;
+    std::vector<std::string> param_names;
+    for (size_t i = 0; i < closure.params.size(); ++i) {
+        if (i > 0) param_types_str += ", ";
+
+        // For now, assume i32 parameters (simplified)
+        param_types_str += "i32";
+
+        // Get parameter name from pattern
+        if (closure.params[i].first->is<parser::IdentPattern>()) {
+            const auto& ident = closure.params[i].first->as<parser::IdentPattern>();
+            param_names.push_back(ident.name);
+        } else {
+            param_names.push_back("_p" + std::to_string(i));
+        }
+
+        param_types_str += " %" + param_names.back();
+    }
+
+    // Determine return type (simplified to i32 for now)
+    std::string ret_type = "i32";
+
+    // Save current function state
+    std::stringstream saved_output;
+    saved_output << output_.str();
+    output_.str("");  // Clear for closure generation
+    auto saved_locals = locals_;
+    auto saved_ret_type = current_ret_type_;
+    bool saved_terminated = block_terminated_;
+
+    // Start new function
+    locals_.clear();
+    current_ret_type_ = ret_type;
+    block_terminated_ = false;
+
+    // Emit function header
+    emit_line("define internal " + ret_type + " @" + closure_name + "(" + param_types_str + ") #0 {");
+    emit_line("entry:");
+
+    // Bind parameters to local scope
+    for (size_t i = 0; i < param_names.size(); ++i) {
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca i32");
+        emit_line("  store i32 %" + param_names[i] + ", ptr " + alloca_reg);
+        locals_[param_names[i]] = VarInfo{alloca_reg, "i32"};
+    }
+
+    // Generate body
+    std::string body_val = gen_expr(*closure.body);
+
+    // Return the result
+    if (!block_terminated_) {
+        emit_line("  ret " + ret_type + " " + body_val);
+    }
+
+    emit_line("}");
+    emit_line("");
+
+    // Store generated closure function
+    std::string closure_code = output_.str();
+
+    // Restore original function state
+    output_.str(saved_output.str());
+    output_.seekp(0, std::ios_base::end);  // Restore position to end
+    locals_ = saved_locals;
+    current_ret_type_ = saved_ret_type;
+    block_terminated_ = saved_terminated;
+
+    // Add closure function to module-level code
+    module_functions_.push_back(closure_code);
+
+    // Return function pointer
+    // For now, return the function name as a "function pointer"
+    // This is simplified - full support would need actual function pointers
+    return "@" + closure_name;
 }
 
 } // namespace tml::codegen

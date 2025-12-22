@@ -19,7 +19,7 @@ LLMs process code as text. The surface syntax should:
 
 ## 1. Lexical Structure
 
-### 1.1 Keywords (32 total)
+### 1.1 Keywords (35 total)
 
 ```
 and         as          async       await       behavior
@@ -28,7 +28,7 @@ enum        false       for         func        if
 impl        in          let         loop        mod
 mut         not         or          pub         ref
 return      then        this        through     to
-true        type        when        with
+true        type        when        where       with
 ```
 
 ### 1.2 Additional Keywords
@@ -41,8 +41,8 @@ decorator   quote
 
 ```
 class       state       macro       yield       effect
-where       dyn         box         move        try
-catch       throw       virtual     override    super
+dyn         box         move        try         catch
+throw       virtual     override    super
 ```
 
 ### 1.4 Operators
@@ -113,7 +113,11 @@ Item        <- Visibility? (FuncDef / TypeDef / ConstDef / BehaviorDef / ImplBlo
 Visibility  <- 'pub' ('(' PubScope ')')?
 PubScope    <- 'crate' / 'super' / 'self' / Path
 
-FuncDef     <- Decorator* 'func' Ident GenericParams? '(' Params? ')' ('->' Type)? Effects? Block
+FuncDef     <- Decorator* 'func' Ident GenericParams? '(' Params? ')' ('->' Type)? WhereClause? Effects? Block
+
+WhereClause <- 'where' WhereConstraint (',' WhereConstraint)*
+WhereConstraint <- Type ':' TypeBound
+TypeBound   <- Type ('+' Type)*
 TypeDef     <- 'type' Ident GenericParams? '=' TypeBody
 ConstDef    <- 'const' Ident ':' Type '=' Expr
 BehaviorDef <- 'behavior' Ident GenericParams? '{' BehaviorItem* '}'
@@ -596,10 +600,21 @@ Decorated items include resolved decorator info:
 ### 5.1 Conditional Expressions
 
 ```tml
-// Surface: if-then-else
+// Surface: if-then-else (expression form)
 if condition then value1 else value2
 
 // Already core, no desugaring needed
+```
+
+```tml
+// Surface: if-else (block form)
+if condition {
+    value1
+} else {
+    value2
+}
+
+// Both syntaxes are equivalent
 ```
 
 ```tml
@@ -608,6 +623,54 @@ if condition then { side_effect() }
 
 // Desugars to
 if condition then { side_effect() } else { () }
+```
+
+### 5.2 If-Let Pattern Matching
+
+```tml
+// Surface: if-let for Maybe unwrapping
+if let Just(value) = maybe_value {
+    process(value)
+} else {
+    default_action()
+}
+
+// Desugars to
+when maybe_value {
+    Just(value) -> process(value),
+    Nothing -> default_action(),
+}
+```
+
+```tml
+// Surface: if-let for Outcome unwrapping
+if let Ok(data) = result {
+    use_data(data)
+}
+
+// Desugars to (with implicit Nothing case)
+when result {
+    Ok(data) -> use_data(data),
+    Err(_) -> (),
+}
+```
+
+**IR:**
+```json
+{
+  "kind": "match",
+  "scrutinee": { "kind": "ident", "name": "maybe_value" },
+  "arms": [
+    {
+      "pattern": { "kind": "variant", "name": "Just", "bindings": ["value"] },
+      "body": { "kind": "call", "func": "process", "args": [{ "kind": "ident", "name": "value" }] }
+    },
+    {
+      "pattern": { "kind": "variant", "name": "Nothing", "bindings": [] },
+      "body": { "kind": "call", "func": "default_action", "args": [] }
+    }
+  ]
+}
 ```
 
 ### 3.8 Closure Syntax

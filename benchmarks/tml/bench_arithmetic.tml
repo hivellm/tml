@@ -2,8 +2,6 @@
 // Category: arithmetic
 // Description: Tests pure computation speed
 
-use std::time::{Instant, Duration}
-
 // Benchmark 1: Integer addition loop
 func bench_int_add(iterations: I64) -> I64 {
     let mut sum: I64 = 0
@@ -78,57 +76,67 @@ func bench_count_primes(limit: I64) -> I64 {
 
 func run_benchmark_int_add(name: Str, arg: I64, runs: I64) {
     let _: I64 = black_box_i64(bench_int_add(arg))  // Warmup
-    let mut total_ms: F64 = 0.0
+    let mut total_us: I64 = 0
     for _ in 0 to runs {
-        let start: Instant = Instant::now()
+        let start: I64 = Instant::now()
         let _: I64 = black_box_i64(bench_int_add(arg))
-        total_ms += Duration::as_millis_f64(Instant::elapsed(start))
+        let elapsed: I64 = Instant::elapsed(start)
+        total_us += elapsed
     }
-    println("{}: {.3} ms (avg of {} runs)", name, total_ms / 3.0, runs)
+    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
+    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
 }
 
 func run_benchmark_int_mul(name: Str, arg: I64, runs: I64) {
     let _: I64 = black_box_i64(bench_int_mul(arg))  // Warmup
-    let mut total_ms: F64 = 0.0
+    let mut total_us: I64 = 0
     for _ in 0 to runs {
-        let start: Instant = Instant::now()
+        let start: I64 = Instant::now()
         let _: I64 = black_box_i64(bench_int_mul(arg))
-        total_ms += Duration::as_millis_f64(Instant::elapsed(start))
+        let elapsed: I64 = Instant::elapsed(start)
+        total_us += elapsed
     }
-    println("{}: {.3} ms (avg of {} runs)", name, total_ms / 3.0, runs)
+    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
+    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
 }
 
 func run_benchmark_mixed_ops(name: Str, arg: I64, runs: I64) {
     let _: I64 = black_box_i64(bench_mixed_ops(arg))  // Warmup
-    let mut total_ms: F64 = 0.0
+    let mut total_us: I64 = 0
     for _ in 0 to runs {
-        let start: Instant = Instant::now()
+        let start: I64 = Instant::now()
         let _: I64 = black_box_i64(bench_mixed_ops(arg))
-        total_ms += Duration::as_millis_f64(Instant::elapsed(start))
+        let elapsed: I64 = Instant::elapsed(start)
+        total_us += elapsed
     }
-    println("{}: {.3} ms (avg of {} runs)", name, total_ms / 3.0, runs)
+    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
+    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
 }
 
 func run_benchmark_fibonacci(name: Str, arg: I64, runs: I64) {
     let _: I64 = black_box_i64(bench_fibonacci(arg))  // Warmup
-    let mut total_ms: F64 = 0.0
+    let mut total_us: I64 = 0
     for _ in 0 to runs {
-        let start: Instant = Instant::now()
+        let start: I64 = Instant::now()
         let _: I64 = black_box_i64(bench_fibonacci(arg))
-        total_ms += Duration::as_millis_f64(Instant::elapsed(start))
+        let elapsed: I64 = Instant::elapsed(start)
+        total_us += elapsed
     }
-    println("{}: {.3} ms (avg of {} runs)", name, total_ms / 3.0, runs)
+    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
+    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
 }
 
 func run_benchmark_count_primes(name: Str, arg: I64, runs: I64) {
     let _: I64 = black_box_i64(bench_count_primes(arg))  // Warmup
-    let mut total_ms: F64 = 0.0
+    let mut total_us: I64 = 0
     for _ in 0 to runs {
-        let start: Instant = Instant::now()
+        let start: I64 = Instant::now()
         let _: I64 = black_box_i64(bench_count_primes(arg))
-        total_ms += Duration::as_millis_f64(Instant::elapsed(start))
+        let elapsed: I64 = Instant::elapsed(start)
+        total_us += elapsed
     }
-    println("{}: {.3} ms (avg of {} runs)", name, total_ms / 3.0, runs)
+    let avg_ms: F64 = Duration::as_millis_f64(total_us / runs)
+    println("{}: {:.3} ms (avg of {} runs)", name, avg_ms, runs)
 }
 
 func main() -> I32 {

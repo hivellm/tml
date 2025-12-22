@@ -573,7 +573,224 @@ func test_parse_object() {
 }
 ```
 
-## 8. CLI Application
+## 8. Modern Language Features
+
+This section demonstrates recently implemented TML features.
+
+### 8.1 If-Let Pattern Matching
+
+```tml
+module pattern_matching
+
+// If-let for Maybe unwrapping
+func get_user_name(user_id: U64) -> String {
+    let maybe_user: Maybe[User] = find_user(user_id)
+
+    if let Just(user) = maybe_user {
+        return user.name
+    } else {
+        return "Unknown"
+    }
+}
+
+// If-let for Outcome unwrapping
+func load_config() -> Config {
+    let result: Outcome[Config, Error] = Config.load()
+
+    if let Ok(config) = result {
+        return config
+    } else {
+        return Config.default()
+    }
+}
+
+// Nested if-let
+func process_nested(data: Maybe[Outcome[String, Error]]) -> String {
+    if let Just(result) = data {
+        if let Ok(value) = result {
+            return value
+        }
+    }
+    return "failed"
+}
+```
+
+### 8.2 If-Then-Else Expressions
+
+```tml
+module conditionals
+
+// Expression form with 'then' keyword
+func abs(x: I32) -> I32 {
+    return if x < 0 then -x else x
+}
+
+// Multi-line expression form
+func sign(x: I32) -> String {
+    return if x < 0 then
+        "negative"
+    else if x > 0 then
+        "positive"
+    else
+        "zero"
+}
+
+// Block form (both syntaxes work)
+func max(a: I32, b: I32) -> I32 {
+    // Block form
+    let result1: I32 = if a > b {
+        a
+    } else {
+        b
+    }
+
+    // Expression form
+    let result2: I32 = if a > b then a else b
+
+    return result1
+}
+```
+
+### 8.3 Generic Constraints with Where Clauses
+
+```tml
+module generic_constraints
+
+// Simple where clause
+public func find_max[T](items: List[T]) -> Maybe[T]
+where T: Ordered
+{
+    if items.is_empty() {
+        return Nothing
+    }
+
+    var max: T = items[0]
+    loop item in items {
+        if item > max {
+            max = item
+        }
+    }
+    return Just(max)
+}
+
+// Multiple trait bounds
+public func sort_and_display[T](items: mut ref List[T])
+where T: Ordered + Display
+{
+    items.sort()
+    loop item in items {
+        println(item.to_string())
+    }
+}
+
+// Multiple type parameters with constraints
+public func merge_sorted[T, U](left: List[T], right: List[U]) -> List[String]
+where T: Ordered + Display, U: Ordered + Display
+{
+    var result: List[String] = List.new()
+    // ... merge logic
+    return result
+}
+```
+
+### 8.4 Function Types
+
+```tml
+module function_types
+
+// Function type aliases
+public type Predicate[T] = func(T) -> Bool
+public type Mapper[T, U] = func(T) -> U
+public type Comparator[T] = func(T, T) -> I32
+
+// Using function types in structs
+public type EventHandler {
+    on_click: func(I32, I32) -> (),
+    on_hover: func(I32, I32) -> (),
+    on_exit: func() -> (),
+}
+
+// Functions accepting function types
+public func filter[T](items: List[T], pred: Predicate[T]) -> List[T] {
+    var result: List[T] = List.new()
+    loop item in items {
+        if pred(item) {
+            result.push(item)
+        }
+    }
+    return result
+}
+
+public func map[T, U](items: List[T], mapper: Mapper[T, U]) -> List[U] {
+    var result: List[U] = List.new()
+    loop item in items {
+        result.push(mapper(item))
+    }
+    return result
+}
+```
+
+### 8.5 Closures (Do Expressions)
+
+```tml
+module closures
+
+// Simple closure
+func apply_twice(x: I32) -> I32 {
+    let double: func(I32) -> I32 = do(n: I32) -> I32 n * 2
+    return double(double(x))
+}
+
+// Closure with block body
+func process_list(items: List[I32]) -> List[I32] {
+    let transform: func(I32) -> I32 = do(x: I32) -> I32 {
+        let doubled: I32 = x * 2
+        let incremented: I32 = doubled + 1
+        return incremented
+    }
+
+    var result: List[I32] = List.new()
+    loop item in items {
+        result.push(transform(item))
+    }
+    return result
+}
+
+// Inline closures in method calls
+func filter_and_map(numbers: List[I32]) -> List[I32] {
+    var filtered: List[I32] = List.new()
+
+    // Filter with inline closure
+    loop n in numbers {
+        let is_positive: func(I32) -> Bool = do(x: I32) -> Bool x > 0
+        if is_positive(n) {
+            filtered.push(n)
+        }
+    }
+
+    // Map with inline closure
+    var mapped: List[I32] = List.new()
+    loop n in filtered {
+        let double: func(I32) -> I32 = do(x: I32) -> I32 x * 2
+        mapped.push(double(n))
+    }
+
+    return mapped
+}
+
+// Closure type inference (when available)
+func simple_ops() -> I32 {
+    let add: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 a + b
+    let sub: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 a - b
+    let mul: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 a * b
+
+    let x: I32 = add(5, 3)
+    let y: I32 = sub(x, 2)
+    return mul(y, 2)
+}
+```
+
+## 9. CLI Application
 
 ```tml
 module cli

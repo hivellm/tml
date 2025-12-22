@@ -35,15 +35,28 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     emit_line(label_then + ":");
     block_terminated_ = false;
     std::string then_val = gen_expr(*if_expr.then_branch);
+    std::string then_type = last_expr_type_;
+    bool then_terminated = block_terminated_;
+    std::string then_block_label = label_then;
     if (!block_terminated_) {
         emit_line("  br label %" + label_end);
+        then_block_label = fresh_label("if.then.end");
+        // Track the actual block label where the then value was produced
+        then_block_label = label_then;
     }
 
     // Else block
+    std::string else_val = "0";
+    std::string else_type = "i32";
+    bool else_terminated = false;
+    std::string else_block_label = label_else;
     if (if_expr.else_branch.has_value()) {
         emit_line(label_else + ":");
         block_terminated_ = false;
-        std::string else_val = gen_expr(*if_expr.else_branch.value());
+        else_val = gen_expr(*if_expr.else_branch.value());
+        else_type = last_expr_type_;
+        else_terminated = block_terminated_;
+        else_block_label = label_else;
         if (!block_terminated_) {
             emit_line("  br label %" + label_end);
         }
@@ -53,7 +66,125 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     emit_line(label_end + ":");
     block_terminated_ = false;
 
-    return "0";  // TODO: phi node for if-expression value
+    // If both branches return values and neither is terminated, create phi node
+    if (if_expr.else_branch.has_value() && !then_terminated && !else_terminated) {
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" + label_then + " ], [ " + else_val + ", %" + label_else + " ]");
+        last_expr_type_ = then_type;
+        return result;
+    }
+
+    return "0";
+}
+
+auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
+    // Evaluate scrutinee
+    std::string scrutinee = gen_expr(*if_let.scrutinee);
+    std::string scrutinee_type = last_expr_type_;
+
+    std::string label_then = fresh_label("iflet.then");
+    std::string label_else = fresh_label("iflet.else");
+    std::string label_end = fresh_label("iflet.end");
+
+    // Check if pattern matches and bind variables
+    // For enum patterns, check the tag
+    if (if_let.pattern->is<parser::EnumPattern>()) {
+        const auto& enum_pat = if_let.pattern->as<parser::EnumPattern>();
+        std::string variant_name = enum_pat.path.segments.back();
+
+        // Allocate space for scrutinee
+        std::string scrutinee_ptr = fresh_reg();
+        emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+        emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+
+        // Extract tag
+        std::string tag_ptr = fresh_reg();
+        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 0");
+        std::string tag = fresh_reg();
+        emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+
+        // Find variant index
+        int variant_tag = -1;
+        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+            for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                if (enum_def.variants[v_idx].first == variant_name) {
+                    variant_tag = static_cast<int>(v_idx);
+                    break;
+                }
+            }
+            if (variant_tag >= 0) break;
+        }
+
+        // Compare tag
+        if (variant_tag >= 0) {
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            emit_line("  br i1 " + cmp + ", label %" + label_then + ", label %" + label_else);
+        } else {
+            // Unknown variant, go to else
+            emit_line("  br label %" + label_else);
+        }
+
+        // Then block - pattern matched
+        emit_line(label_then + ":");
+        block_terminated_ = false;
+
+        // Bind pattern variables
+        if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
+            // Extract payload value
+            std::string payload_ptr = fresh_reg();
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+            std::string payload = fresh_reg();
+            emit_line("  " + payload + " = load i64, ptr " + payload_ptr);
+
+            // Bind to first pattern variable
+            if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
+
+                // Convert i64 to i32 if needed
+                std::string bound_val = payload;
+                std::string bound_type = "i64";
+
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = trunc i64 " + payload + " to i32");
+                bound_val = converted;
+                bound_type = "i32";
+
+                // Allocate and store bound variable
+                std::string var_alloca = fresh_reg();
+                emit_line("  " + var_alloca + " = alloca " + bound_type);
+                emit_line("  store " + bound_type + " " + bound_val + ", ptr " + var_alloca);
+                locals_[ident.name] = VarInfo{var_alloca, bound_type};
+            }
+        }
+    } else {
+        // For other patterns (wildcard, ident), always match
+        emit_line("  br label %" + label_then);
+        emit_line(label_then + ":");
+        block_terminated_ = false;
+    }
+
+    // Execute then branch
+    std::string then_val = gen_expr(*if_let.then_branch);
+    if (!block_terminated_) {
+        emit_line("  br label %" + label_end);
+    }
+
+    // Else block
+    if (if_let.else_branch.has_value()) {
+        emit_line(label_else + ":");
+        block_terminated_ = false;
+        std::string else_val = gen_expr(*if_let.else_branch.value());
+        if (!block_terminated_) {
+            emit_line("  br label %" + label_end);
+        }
+    }
+
+    // End block
+    emit_line(label_end + ":");
+    block_terminated_ = false;
+
+    return "0";
 }
 
 auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {

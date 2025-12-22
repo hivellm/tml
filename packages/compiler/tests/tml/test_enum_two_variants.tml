@@ -1,0 +1,21 @@
+// Test enum with two variants
+
+type Status {
+    Running(I64),
+    Paused(I64),
+}
+
+func main() {
+    let s1: Status = Running(42)
+    let s2: Status = Paused(99)
+
+    when s1 {
+        Running(x) => println(x),
+        Paused(x) => println(x),
+    }
+
+    when s2 {
+        Running(x) => println(x),
+        Paused(x) => println(x),
+    }
+}

@@ -390,6 +390,11 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         }
     }
 
+    // Emit generated closure functions
+    for (const auto& closure_func : module_functions_) {
+        emit(closure_func);
+    }
+
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 

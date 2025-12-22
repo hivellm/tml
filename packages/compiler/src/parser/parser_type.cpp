@@ -109,7 +109,48 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         });
     }
 
-    // Function type: Fn(Params) -> RetType
+    // Function type: func(Params) -> RetType (TML syntax)
+    if (match(lexer::TokenKind::KwFunc)) {
+        auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'func'");
+        if (is_err(lparen)) return unwrap_err(lparen);
+
+        // Parse parameter types
+        std::vector<TypePtr> param_types;
+        while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+            auto param_type = parse_type();
+            if (is_err(param_type)) return param_type;
+            param_types.push_back(std::move(unwrap(param_type)));
+
+            if (!check(lexer::TokenKind::RParen)) {
+                auto comma = expect(lexer::TokenKind::Comma, "Expected ',' or ')' in function type");
+                if (is_err(comma)) return unwrap_err(comma);
+            }
+        }
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after function parameters");
+        if (is_err(rparen)) return unwrap_err(rparen);
+
+        // Parse return type (optional, defaults to Unit)
+        TypePtr return_type = nullptr;
+        if (match(lexer::TokenKind::Arrow)) {
+            auto ret = parse_type();
+            if (is_err(ret)) return ret;
+            return_type = std::move(unwrap(ret));
+        }
+
+        auto end_span = previous().span;
+        auto span = SourceSpan::merge(start_span, end_span);
+        return make_box<Type>(Type{
+            .kind = FuncType{
+                .params = std::move(param_types),
+                .return_type = std::move(return_type),
+                .span = span
+            },
+            .span = span
+        });
+    }
+
+    // Function type: Fn(Params) -> RetType (alternative syntax)
     if (check(lexer::TokenKind::Identifier) && peek().lexeme == "Fn") {
         advance(); // consume 'Fn'
 

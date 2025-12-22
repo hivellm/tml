@@ -327,6 +327,15 @@ struct IfExpr {
     SourceSpan span;
 };
 
+// If-let expression: if let pattern = expr { then } else { else }
+struct IfLetExpr {
+    PatternPtr pattern;
+    ExprPtr scrutinee;
+    ExprPtr then_branch;
+    std::optional<ExprPtr> else_branch;
+    SourceSpan span;
+};
+
 // When (match) expression arm
 struct WhenArm {
     PatternPtr pattern;
@@ -449,6 +458,7 @@ struct Expr {
         ArrayExpr,
         StructExpr,
         IfExpr,
+        IfLetExpr,
         WhenExpr,
         LoopExpr,
         WhileExpr,

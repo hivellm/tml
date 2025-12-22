@@ -56,6 +56,7 @@ private:
     auto check_index(const parser::IndexExpr& idx) -> TypePtr;
     auto check_block(const parser::BlockExpr& block) -> TypePtr;
     auto check_if(const parser::IfExpr& if_expr) -> TypePtr;
+    auto check_if_let(const parser::IfLetExpr& if_let) -> TypePtr;
     auto check_when(const parser::WhenExpr& when) -> TypePtr;
     auto check_loop(const parser::LoopExpr& loop) -> TypePtr;
     auto check_for(const parser::ForExpr& for_expr) -> TypePtr;
@@ -67,6 +68,7 @@ private:
     auto check_closure(const parser::ClosureExpr& closure) -> TypePtr;
     auto check_try(const parser::TryExpr& try_expr) -> TypePtr;
     auto check_path(const parser::PathExpr& path, SourceSpan span) -> TypePtr;
+    auto check_range(const parser::RangeExpr& range) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

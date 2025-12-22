@@ -80,6 +80,10 @@ private:
     // Global constants (name -> value as string)
     std::unordered_map<std::string, std::string> global_constants_;
 
+    // Closure support
+    std::vector<std::string> module_functions_;  // Generated closure functions
+    uint32_t closure_counter_ = 0;                // For unique closure names
+
     // Helper methods
     auto fresh_reg() -> std::string;
     auto fresh_label(const std::string& prefix = "L") -> std::string;
@@ -116,6 +120,7 @@ private:
     auto gen_unary(const parser::UnaryExpr& unary) -> std::string;
     auto gen_call(const parser::CallExpr& call) -> std::string;
     auto gen_if(const parser::IfExpr& if_expr) -> std::string;
+    auto gen_if_let(const parser::IfLetExpr& if_let) -> std::string;
     auto gen_block(const parser::BlockExpr& block) -> std::string;
     auto gen_loop(const parser::LoopExpr& loop) -> std::string;
     auto gen_while(const parser::WhileExpr& while_expr) -> std::string;
@@ -129,6 +134,7 @@ private:
     auto gen_index(const parser::IndexExpr& idx) -> std::string;
     auto gen_path(const parser::PathExpr& path) -> std::string;
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
+    auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format,

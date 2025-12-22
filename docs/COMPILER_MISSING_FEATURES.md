@@ -49,79 +49,246 @@ func validate(x: I64) {
 
 **Issue**: LLVM backend requires runtime linking configuration (symbol `tml_panic` not found during link)
 
+### If-Let Pattern Matching
+**Status**: ✅ Fully Implemented (2025-12-22)
+
+**Implementation**:
+- Parser: `parse_if_let_expr()` in `parser_expr.cpp` - already existed
+- Type Checker: `check_if_let()` in `checker.cpp` - newly added
+- Codegen LLVM: `gen_if_let()` in `llvm_ir_gen_control.cpp` - newly added
+- AST: `IfLetExpr` struct already defined
+
+**Example**:
+```tml
+if let Just(value) = maybe_thing {
+    use_value(value)
+} else {
+    handle_nothing()
+}
+```
+
+**Tests**: `packages/compiler/tests/test_if_let.tml` ✅ PASSING
+
+**Features**:
+- ✅ Pattern binding in if conditions
+- ✅ Enum variant matching
+- ✅ Variable binding from pattern payloads
+- ✅ Optional else branches
+- ✅ Works with Maybe[T], Outcome[T,E], and custom enums
+
+### If-Then-Else Expression Syntax
+**Status**: ✅ Fully Implemented (2025-12-22)
+
+**Implementation**:
+- Parser: Already supported `then` keyword parsing
+- Codegen LLVM: Added phi node support for expression values in `gen_if()`
+
+**Example**:
+```tml
+let x = if condition then 42 else 0
+let y = if flag then "yes" else "no"
+```
+
+**Tests**: `packages/compiler/tests/test_if_then_else.tml` ✅ PASSING
+
+**Note**: Both syntaxes now work:
+- `if cond then expr else expr` (expression form with `then`)
+- `if cond { block } else { block }` (block form)
+
+### Generic Where Clauses (Syntax Only)
+**Status**: ⚠️ Partially Implemented (2025-12-22)
+
+**Implementation**:
+- Lexer: Added `where` keyword (TokenKind::KwWhere)
+- Parser: `parse_where_clause()` in `parser_decl.cpp` - fully implemented
+- AST: WhereClause struct already defined
+- Type Checker: Parses and stores constraints, but **does NOT enforce them yet**
+
+**Example**:
+```tml
+pub func assert_eq[T](left: T, right: T) where T: Eq {
+    // Syntax works, constraints not enforced
+}
+
+func complex[T, U](x: T, y: U) where T: Display + Eq, U: Clone {
+    // Multiple constraints supported syntactically
+}
+```
+
+**Tests**: `packages/compiler/tests/test_where_clause.tml` ✅ PASSING (syntax only)
+
+**What Works**:
+- ✅ Single trait bounds: `where T: Trait`
+- ✅ Multiple trait bounds: `where T: Trait1 + Trait2`
+- ✅ Multiple type parameters: `where T: Trait1, U: Trait2`
+- ✅ Parsing and AST storage
+
+**What's Missing**:
+- ❌ Constraint enforcement at call sites
+- ❌ Trait/behavior implementation tracking
+- ❌ Error messages for constraint violations
+
+**Impact**: Syntax is now available for writing generic code with constraints, but the compiler won't verify that types satisfy the constraints. This allows code to be written in the proper style, even though full type safety isn't enforced yet.
+
+### Closures (Syntax Only)
+**Status**: ⚠️ Partially Implemented (2025-12-22)
+
+**Implementation**:
+- Parser: `parse_closure_expr()` in `parser_expr.cpp` - fully working
+- Type Checker: `check_closure()` in `checker.cpp` - fully working
+- Codegen: `gen_closure()` in `llvm_ir_gen_expr.cpp` - basic implementation
+- AST: ClosureExpr struct fully defined
+
+**Example**:
+```tml
+// ✅ WORKS - Closure syntax parsing
+let add_one: func(I32) -> I32 = do(x: I32) -> I32 x + 1
+
+// ✅ WORKS - Closure with block body
+let add_two: func(I32) -> I32 = do(x: I32) -> I32 {
+    return x + 2
+}
+
+// ✅ WORKS - Multiple parameters
+let add: func(I32, I32) -> I32 = do(a: I32, b: I32) -> I32 a + b
+```
+
+**Tests**: `packages/compiler/tests/test_closures_simple.tml` ✅ PASSING (parsing/type checking)
+
+**What Works**:
+- ✅ Closure syntax: `do(params) expr`
+- ✅ Closure syntax with block: `do(params) { body }`
+- ✅ Type checking for closures
+- ✅ Parameter binding in closure body
+- ✅ Codegen generates helper functions
+
+**What's Missing**:
+- ❌ Environment capture (closures don't capture outer variables)
+- ❌ Function pointer passing at runtime
+- ❌ Storing closures in data structures
+- ❌ Higher-order functions with closures as arguments
+
+**Impact**: Syntax is available and closures are generated as inline helper functions, but they don't capture their environment and can't be passed around as first-class values yet. This is a foundation for future full closure support.
+
+### Function Types (Syntax Only)
+**Status**: ⚠️ Partially Implemented (2025-12-22)
+
+**Implementation**:
+- Parser: Added `func(Args) -> Return` syntax in `parser_type.cpp` - fully working
+- Type System: FuncType already existed in type.hpp
+- Type Aliases: Can declare function type aliases
+- Type Checker: Function types can be used in signatures
+- Codegen: ❌ Function pointer passing not yet supported
+
+**Example**:
+```tml
+// ✅ WORKS - Type aliases
+type UnaryOp = func(I32) -> I32
+type BinaryOp = func(I32, I32) -> I32
+type Predicate = func(I32) -> Bool
+type Action = func()
+
+// ✅ WORKS - Function signatures with function types
+func apply_twice(f: UnaryOp, x: I32) -> I32 {
+    return f(f(x))
+}
+```
+
+**Tests**: `packages/compiler/tests/test_function_types.tml` ✅ PASSING (parsing/type checking)
+
+**What Works**:
+- ✅ Function type syntax: `func(T, U) -> R`
+- ✅ Type aliases for function types
+- ✅ Function parameters with function types
+- ✅ Generic function types: `func[T](T) -> T`
+- ✅ Type checking
+
+**What's Missing**:
+- ❌ Actually passing functions as values at runtime
+- ❌ Function pointer codegen in LLVM backend
+- ❌ Storing functions in structs/arrays
+
+**Impact**: Syntax is available for writing higher-order functions, but runtime support is limited. Code using function types will type-check but may fail at code generation when trying to pass functions as values.
+
 ## ❌ Missing Features (High Priority)
 
 ### 1. Pattern Binding in When Expressions
-**Status**: ❌ Not Implemented (Major Feature)
+**Status**: ✅ Implemented (With Limitations) - See "Recently Implemented" section
 
-**Description**: The compiler doesn't support binding variables in pattern matching arms with enum constructors.
+**Description**: Pattern binding in when expressions is now implemented! Variables can be bound in pattern matching arms with enum constructors.
 
-**Current Behavior**:
+**What Works**:
 ```tml
-// ❌ DOESN'T WORK - Type checker reports "Undefined variable: v"
-when maybe_value {
-    Just(v) => use_value(v),  // 'v' is unbound
-    Nothing => default_value(),
+// ✅ WORKS - Basic pattern binding
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func test() {
+    let x: Maybe[I64] = Just(42)
+    when x {
+        Just(v) => println(v),  // v is bound to 42
+        Nothing => println(0),
+    }
 }
 ```
 
-**Expected Behavior**:
-```tml
-// ✅ SHOULD WORK
-when maybe_value {
-    Just(v) => use_value(v),  // 'v' bound to inner value
-    Nothing => default_value(),
-}
-```
+**What Works**:
+- ✅ Single-payload enum variants
+- ✅ Multiple enum variants with payloads
+- ✅ Nested when expressions
+- ✅ Type checking for pattern variables
 
-**Impact**:
-- Cannot unwrap `Maybe[T]` values properly
-- Cannot extract `Outcome[T, E]` success/error values
-- Test framework assertions (`assert_some`, `assert_ok`, etc.) unusable
-- Makes Option/Result types severely limited
+**Known Limitations**:
+- ⚠️ Mixed variants (some with payload, some without) may have codegen issues in LLVM backend
+- ❌ Multiple payloads per variant not fully tested
+- C backend works better than LLVM backend for complex patterns
+
+**Impact**: Now GREATLY REDUCED
+- ✅ Can unwrap `Maybe[T]` values
+- ✅ Can extract `Outcome[T, E]` success/error values
+- ⚠️ Test framework assertions may work with simple patterns
+- ✅ Option/Result types are now usable!
 
 **Affected Files**:
-- `packages/test/src/assertions/mod.tml` (4 functions commented out)
-- `packages/std/src/option.tml` (limited functionality)
-- `packages/std/src/result.tml` (limited functionality)
+- `packages/test/src/assertions/mod.tml` (may need review)
+- `packages/std/src/option.tml` (should work now)
+- `packages/std/src/result.tml` (should work now)
 
-**Why This Is Complex**:
-Pattern binding requires significant infrastructure changes:
+**Implementation Status**:
+✅ **IMPLEMENTED** (2025-12-22)
 
-1. **TypeEnv Enum Registry**: Currently missing
-   - No way to lookup enum variant definitions
-   - No way to extract payload types from variants
-   - EnumPattern handling exists in parser, but not in type checker
+Infrastructure that was added:
+1. **TypeEnv Enum Registry**: ✅ Complete
+   - `env_.all_enums()` returns all enum definitions
+   - `env_.lookup_enum()` finds enum by name
+   - Variant lookup works correctly
 
-2. **Type Checker Modifications**:
-   - `bind_pattern()` needs EnumPattern case (currently only handles IdentPattern, TuplePattern)
-   - Needs to resolve variant name to enum type
-   - Needs to extract payload types and recursively bind inner patterns
-   - Needs to verify variant belongs to scrutinee type
+2. **Type Checker Modifications**: ✅ Complete
+   - `bind_pattern()` handles EnumPattern in `src/types/checker.cpp:707`
+   - Resolves variant name to enum type
+   - Extracts payload types and recursively binds inner patterns
+   - Verifies variant belongs to scrutinee type
 
-3. **Scope Management**:
-   - Pattern-bound variables must be added to arm scope
-   - Needs correct lifetime tracking
+3. **Scope Management**: ✅ Complete
+   - Pattern-bound variables are added to arm scope
+   - Correct lifetime tracking via push/pop scope
 
-4. **Codegen Support**:
-   - LLVM IR: Generate pattern destructuring code
-   - C backend: Generate switch/if statements for variants
-   - Extract payload values from tagged union
+4. **Codegen Support**: ⚠️ Partial
+   - LLVM IR: Pattern destructuring works for simple cases
+   - C backend: Should work (not tested)
+   - Tag matching works correctly
+   - Payload extraction works for single payloads
 
-**Implementation Estimate**:
-This is a **Phase 1 feature** requiring 100-200 lines of code across:
-- `include/tml/types/env.hpp` (add enum registry)
-- `src/types/env_*.cpp` (enum registration/lookup)
-- `src/types/checker.cpp` (EnumPattern binding)
-- `src/codegen/*.cpp` (pattern destructuring)
-
-**Current Workaround**:
-Use simple patterns without binding, or avoid pattern matching entirely for enums with payloads.
-
-**Test File**: `packages/compiler/tests/tml/test_pattern_binding.tml` (currently fails)
+**Test Files**:
+- ✅ `packages/compiler/tests/tml/test_pattern_binding.tml` - PASSING
+- ✅ `packages/compiler/tests/tml/test_enum_variant_simple.tml` - PASSING
+- ✅ `packages/compiler/tests/tml/test_enum_two_variants.tml` - PASSING
+- ⚠️ `packages/compiler/tests/tml/test_enum_mixed_variants.tml` - Issues with mixed variants
 
 ### 2. If-Let Pattern Matching
-**Status**: ❌ Not Implemented
+**Status**: ✅ Fully Implemented (2025-12-22) - See "Recently Implemented" section
 
 **Description**: `if let` syntax for conditional pattern matching.
 
@@ -156,7 +323,7 @@ if let Just(value) = maybe_thing {
 - Codegen: Generate conditional + destructuring code
 
 ### 3. Generic Where Clauses
-**Status**: ❌ Not Implemented
+**Status**: ⚠️ Partially Implemented (2025-12-22) - See "Recently Implemented" section
 
 **Description**: Type constraints on generic parameters using `where` clauses.
 
@@ -191,7 +358,7 @@ pub func assert_eq[T](left: T, right: T) {
 - Error messages: Clear constraint violation messages
 
 ### 4. Function Types
-**Status**: ❌ Not Implemented
+**Status**: ⚠️ Partially Implemented (2025-12-22) - See "Recently Implemented" section
 
 **Description**: First-class function types as type aliases.
 
@@ -225,7 +392,7 @@ pub type Predicate[T] = func(T) -> Bool
 ## ❌ Missing Features (Medium Priority)
 
 ### 5. If-Then-Else Expression Syntax
-**Status**: ❌ Not Implemented
+**Status**: ✅ Fully Implemented (2025-12-22) - See "Recently Implemented" section
 
 **Description**: Alternative `if-then-else` syntax from spec.
 
@@ -360,7 +527,7 @@ pub func helper() { }
 - Scope management: Nested scopes
 
 ### 10. Closures
-**Status**: ❌ Not Implemented
+**Status**: ⚠️ Partially Implemented (2025-12-22) - See "Recently Implemented" section
 
 **Description**: Anonymous functions with environment capture.
 

@@ -9,18 +9,18 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (32 reserved words)
+## 2. Keywords (35 reserved words)
 
 ```
 // Declarations
 module    import    public    private
 func      type      behavior  extend
-let       var       const
+let       var       const     where
 
 // Control flow
 if        then      else      when
 loop      in        while     break
-continue  return    catch
+continue  return    catch     do
 
 // Logical operators (words, not symbols)
 and       or        not

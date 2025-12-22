@@ -1,0 +1,13 @@
+// Test simple enum variant with payload
+
+type Status {
+    Running(I64),
+}
+
+func main() {
+    let s: Status = Running(42)
+
+    when s {
+        Running(x) => println(x),
+    }
+}

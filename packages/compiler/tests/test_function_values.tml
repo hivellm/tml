@@ -1,0 +1,25 @@
+// Test function values and higher-order functions
+
+type UnaryOp = func(I32) -> I32
+
+func add_one(x: I32) -> I32 {
+    return x + 1
+}
+
+func double(x: I32) -> I32 {
+    return x * 2
+}
+
+// Higher-order function that takes a function as parameter
+func apply_twice(f: UnaryOp, x: I32) -> I32 {
+    return f(f(x))
+}
+
+func main() {
+    // Test higher-order function
+    let result1: I32 = apply_twice(add_one, 5)
+    println(result1)  // Should be 7 (5 + 1 + 1)
+
+    let result2: I32 = apply_twice(double, 3)
+    println(result2)  // Should be 12 (3 * 2 * 2)
+}

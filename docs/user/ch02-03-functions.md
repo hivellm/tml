@@ -138,9 +138,169 @@ func main() {
 }
 ```
 
+## Function Types
+
+Functions can be used as values in TML. Use `func(Args) -> Return` syntax for function types:
+
+```tml
+// Function type alias
+type BinaryOp = func(I32, I32) -> I32
+
+func apply_op(a: I32, b: I32, op: BinaryOp) -> I32 {
+    return op(a, b)
+}
+
+func add(x: I32, y: I32) -> I32 {
+    return x + y
+}
+
+func main() {
+    let result = apply_op(5, 3, add)
+    println(result)  // 8
+}
+```
+
+### Common Function Type Patterns
+
+```tml
+// Predicate (returns Bool)
+type Predicate[T] = func(T) -> Bool
+
+// Mapper (transforms one type to another)
+type Mapper[T, U] = func(T) -> U
+
+// Comparator (compares two values)
+type Comparator[T] = func(T, T) -> I32
+
+// Callback (no return value)
+type Callback = func() -> ()
+```
+
+## Closures (Anonymous Functions)
+
+Use the `do` keyword to create anonymous functions (closures):
+
+```tml
+func main() {
+    // Simple closure
+    let double = do(x: I32) -> I32 x * 2
+
+    println(double(5))  // 10
+    println(double(7))  // 14
+}
+```
+
+### Closure Syntax
+
+Closures can have single-expression or block bodies:
+
+```tml
+// Single expression
+let increment = do(x: I32) -> I32 x + 1
+
+// Block body
+let complex = do(x: I32) -> I32 {
+    let doubled = x * 2
+    let incremented = doubled + 1
+    return incremented
+}
+```
+
+### Using Closures with Higher-Order Functions
+
+```tml
+func filter[T](items: List[T], pred: func(T) -> Bool) -> List[T] {
+    var result = List.new()
+    loop item in items {
+        if pred(item) {
+            result.push(item)
+        }
+    }
+    return result
+}
+
+func map[T, U](items: List[T], mapper: func(T) -> U) -> List[U] {
+    var result = List.new()
+    loop item in items {
+        result.push(mapper(item))
+    }
+    return result
+}
+
+func main() {
+    let numbers = [1, 2, 3, 4, 5, 6]
+
+    // Filter even numbers
+    let evens = filter(numbers, do(n: I32) -> Bool n % 2 == 0)
+    println(evens)  // [2, 4, 6]
+
+    // Map to doubles
+    let doubled = map(numbers, do(n: I32) -> I32 n * 2)
+    println(doubled)  // [2, 4, 6, 8, 10, 12]
+
+    // Chain operations
+    let result = map(
+        filter(numbers, do(n: I32) -> Bool n > 2),
+        do(n: I32) -> I32 n * n
+    )
+    println(result)  // [9, 16, 25, 36]
+}
+```
+
+### Practical Closure Examples
+
+```tml
+// Sorting with custom comparator
+func sort_by[T](items: mut ref List[T], cmp: func(T, T) -> I32) {
+    // Sort using provided comparator
+    items.sort_with(cmp)
+}
+
+func main() {
+    var numbers = [5, 2, 8, 1, 9]
+
+    // Sort ascending
+    sort_by(mut ref numbers, do(a: I32, b: I32) -> I32 a - b)
+
+    // Sort descending
+    sort_by(mut ref numbers, do(a: I32, b: I32) -> I32 b - a)
+}
+```
+
+```tml
+// Event handlers
+type EventHandler = func(I32, I32) -> ()
+
+type Button {
+    label: String,
+    on_click: EventHandler,
+}
+
+func create_button(label: String, handler: EventHandler) -> Button {
+    return Button {
+        label: label,
+        on_click: handler,
+    }
+}
+
+func main() {
+    let button = create_button(
+        "Click me",
+        do(x: I32, y: I32) -> () {
+            println("Clicked at: ", x, ", ", y)
+        }
+    )
+
+    // Simulate click
+    button.on_click(100, 200)
+}
+```
+
 ## Best Practices
 
 1. **Use descriptive names**: `calculate_area` is better than `ca`
 2. **Keep functions small**: Each function should do one thing
 3. **Use snake_case**: `my_function` not `myFunction`
 4. **Document complex functions**: Explain what the function does
+5. **Use closures for short operations**: For longer logic, define named functions
+6. **Prefer function types for callbacks**: Makes APIs clearer

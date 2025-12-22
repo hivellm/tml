@@ -1,0 +1,29 @@
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func test_if_let() {
+    let x: Maybe[I64] = Just(42)
+
+    if let Just(value) = x {
+        println(value)
+    } else {
+        println(0)
+    }
+}
+
+func test_if_let_nothing() {
+    let x: Maybe[I64] = Nothing
+
+    if let Just(value) = x {
+        println(value)
+    } else {
+        println(999)
+    }
+}
+
+func main() {
+    test_if_let()
+    test_if_let_nothing()
+}

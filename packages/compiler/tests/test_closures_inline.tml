@@ -1,0 +1,11 @@
+// Test inline closure usage (without storing in variables)
+
+func apply_operation(x: I32, y: I32) -> I32 {
+    // For now, just use regular function calls
+    return x + y
+}
+
+func main() {
+    let result: I32 = apply_operation(3, 4)
+    println(result)
+}

@@ -1,0 +1,79 @@
+// Comprehensive pattern binding tests
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+// Test 1: Basic Maybe pattern binding
+func test_maybe() {
+    let x: Maybe[I64] = Just(42)
+
+    when x {
+        Just(v) => println(v),
+        Nothing => println(0),
+    }
+}
+
+// Test 2: Maybe with Nothing
+func test_maybe_nothing() {
+    let x: Maybe[I64] = Nothing
+
+    when x {
+        Just(v) => println(v),
+        Nothing => println(-1),
+    }
+}
+
+// Test 3: Outcome pattern binding
+func test_outcome() {
+    let result: Outcome[I64, I64] = Ok(200)
+
+    when result {
+        Ok(val) => println(val),
+        Err(e) => println(e),
+    }
+}
+
+// Test 4: Multiple variants (single payload only for now)
+type Status {
+    Idle,
+    Running(I64),
+    Paused(I64),
+}
+
+func test_multiple_variants() {
+    let s1: Status = Idle
+    let s2: Status = Running(50)
+    let s3: Status = Paused(75)
+
+    when s1 {
+        Idle => println(0),
+        Running(x) => println(x),
+        Paused(x) => println(x),
+    }
+
+    when s2 {
+        Idle => println(0),
+        Running(x) => println(x),
+        Paused(x) => println(x),
+    }
+
+    when s3 {
+        Idle => println(0),
+        Running(x) => println(x),
+        Paused(x) => println(x),
+    }
+}
+
+func main() {
+    test_maybe()
+    test_maybe_nothing()
+    test_outcome()
+    test_multiple_variants()
+}

@@ -564,6 +564,11 @@ auto Parser::parse_if_expr() -> Result<ExprPtr, ParseError> {
     auto start_span = peek().span;
     advance(); // consume 'if'
 
+    // Check for if-let syntax
+    if (match(lexer::TokenKind::KwLet)) {
+        return parse_if_let_expr(start_span);
+    }
+
     auto cond = parse_expr();
     if (is_err(cond)) return cond;
 
@@ -612,6 +617,54 @@ auto Parser::parse_if_expr() -> Result<ExprPtr, ParseError> {
         .kind = IfExpr{
             .condition = std::move(unwrap(cond)),
             .then_branch = std::move(then_branch),
+            .else_branch = std::move(else_branch),
+            .span = SourceSpan::merge(start_span, end_span)
+        },
+        .span = SourceSpan::merge(start_span, end_span)
+    });
+}
+
+auto Parser::parse_if_let_expr(SourceSpan start_span) -> Result<ExprPtr, ParseError> {
+    // Parse pattern
+    auto pattern = parse_pattern();
+    if (is_err(pattern)) return unwrap_err(pattern);
+
+    // Expect '='
+    auto eq = expect(lexer::TokenKind::Assign, "Expected '=' after pattern in if-let");
+    if (is_err(eq)) return unwrap_err(eq);
+
+    // Parse scrutinee expression
+    auto scrutinee = parse_expr();
+    if (is_err(scrutinee)) return scrutinee;
+
+    // Parse then branch (must be a block)
+    auto then_block = parse_block_expr();
+    if (is_err(then_block)) return then_block;
+
+    // Parse optional else branch
+    std::optional<ExprPtr> else_branch;
+    skip_newlines();
+    if (match(lexer::TokenKind::KwElse)) {
+        skip_newlines();
+        if (check(lexer::TokenKind::KwIf)) {
+            // else if or else if let
+            auto else_if = parse_if_expr();
+            if (is_err(else_if)) return else_if;
+            else_branch = std::move(unwrap(else_if));
+        } else {
+            // else block
+            auto else_block = parse_block_expr();
+            if (is_err(else_block)) return else_block;
+            else_branch = std::move(unwrap(else_block));
+        }
+    }
+
+    auto end_span = previous().span;
+    return make_box<Expr>(Expr{
+        .kind = IfLetExpr{
+            .pattern = std::move(unwrap(pattern)),
+            .scrutinee = std::move(unwrap(scrutinee)),
+            .then_branch = std::move(unwrap(then_block)),
             .else_branch = std::move(else_branch),
             .span = SourceSpan::merge(start_span, end_span)
         },

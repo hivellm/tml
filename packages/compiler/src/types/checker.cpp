@@ -294,6 +294,9 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
         else if constexpr (std::is_same_v<T, parser::IfExpr>) {
             return check_if(e);
         }
+        else if constexpr (std::is_same_v<T, parser::IfLetExpr>) {
+            return check_if_let(e);
+        }
         else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
             return check_when(e);
         }
@@ -329,6 +332,9 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
         }
         else if constexpr (std::is_same_v<T, parser::PathExpr>) {
             return check_path(e, expr.span);
+        }
+        else if constexpr (std::is_same_v<T, parser::RangeExpr>) {
+            return check_range(e);
         }
         else {
             return make_unit();
@@ -798,6 +804,25 @@ auto TypeChecker::check_if(const parser::IfExpr& if_expr) -> TypePtr {
     return make_unit();
 }
 
+auto TypeChecker::check_if_let(const parser::IfLetExpr& if_let) -> TypePtr {
+    // Type check the scrutinee
+    auto scrutinee_type = check_expr(*if_let.scrutinee);
+
+    // Type check the then branch with pattern bindings in scope
+    env_.push_scope();
+    bind_pattern(*if_let.pattern, scrutinee_type);
+    auto then_type = check_expr(*if_let.then_branch);
+    env_.pop_scope();
+
+    // Type check the else branch if present
+    if (if_let.else_branch) {
+        check_expr(**if_let.else_branch);
+        return then_type;
+    }
+
+    return make_unit();
+}
+
 auto TypeChecker::check_when(const parser::WhenExpr& when) -> TypePtr {
     auto scrutinee_type = check_expr(*when.scrutinee);
     TypePtr result_type = nullptr;
@@ -851,6 +876,31 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
     loop_depth_--;
 
     return make_unit();
+}
+
+auto TypeChecker::check_range(const parser::RangeExpr& range) -> TypePtr {
+    // Check start expression (if present)
+    TypePtr start_type = make_primitive(PrimitiveKind::I64);
+    if (range.start) {
+        start_type = check_expr(**range.start);
+        if (!is_integer_type(start_type)) {
+            error("Range start must be an integer type", range.span);
+        }
+    }
+
+    // Check end expression (if present)
+    TypePtr end_type = make_primitive(PrimitiveKind::I64);
+    if (range.end) {
+        end_type = check_expr(**range.end);
+        if (!is_integer_type(end_type)) {
+            error("Range end must be an integer type", range.span);
+        }
+    }
+
+    // Both start and end should have compatible types
+    // For simplicity, ranges always produce I64 slices
+    // In a more sophisticated implementation, we could infer the element type
+    return make_slice(make_primitive(PrimitiveKind::I64));
 }
 
 auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
@@ -976,6 +1026,14 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
     }
 
     if (segments.size() == 2) {
+        // Try function lookup with full path first (e.g., "Instant::now")
+        std::string full_name = segments[0] + "::" + segments[1];
+        auto func = env_.lookup_func(full_name);
+        if (func) {
+            return make_func(func->params, func->return_type);
+        }
+
+        // Then try enum variant lookup
         auto enum_def = env_.lookup_enum(segments[0]);
         if (enum_def) {
             for (const auto& variant_pair : enum_def->variants) {

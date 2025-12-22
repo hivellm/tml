@@ -821,8 +821,57 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
 }
 
 auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseError> {
-    // TML doesn't use where clauses - bounds are specified inline with generics
-    return std::nullopt;
+    // Check for 'where' keyword
+    if (!check(lexer::TokenKind::KwWhere)) {
+        return std::nullopt;
+    }
+
+    auto start_span = peek().span;
+    advance(); // consume 'where'
+
+    std::vector<std::pair<TypePtr, std::vector<TypePath>>> constraints;
+
+    // Parse constraints: T: Trait, U: Trait2, ...
+    do {
+        // Parse type parameter (e.g., T)
+        auto type_result = parse_type();
+        if (is_err(type_result)) return unwrap_err(type_result);
+        auto type_param = std::move(unwrap(type_result));
+
+        // Expect ':'
+        auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after type parameter in where clause");
+        if (is_err(colon)) return unwrap_err(colon);
+
+        // Parse trait bounds (e.g., Trait1 or Trait1 + Trait2)
+        std::vector<TypePath> bounds;
+
+        do {
+            auto path_result = parse_type_path();
+            if (is_err(path_result)) return unwrap_err(path_result);
+            bounds.push_back(std::move(unwrap(path_result)));
+
+            // Check for '+' to continue parsing bounds
+            if (!match(lexer::TokenKind::Plus)) {
+                break;
+            }
+        } while (true);
+
+        constraints.push_back({std::move(type_param), std::move(bounds)});
+
+        // Check for ',' to continue parsing constraints
+        if (!match(lexer::TokenKind::Comma)) {
+            break;
+        }
+
+        skip_newlines();
+    } while (!check(lexer::TokenKind::LBrace) && !is_at_end());
+
+    auto end_span = previous().span;
+
+    return std::optional<WhereClause>(WhereClause{
+        .constraints = std::move(constraints),
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
 // ============================================================================

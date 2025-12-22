@@ -1,0 +1,3 @@
+func test() {
+    let arr: [I32] = [1, 2, 3]
+}

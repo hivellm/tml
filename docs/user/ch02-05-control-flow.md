@@ -71,6 +71,100 @@ func main() {
 
 Both branches must return the same type.
 
+### Two `if` Syntaxes: Block Form and Expression Form
+
+TML supports two syntaxes for `if` expressions:
+
+**Block form** (with braces):
+```tml
+func max(a: I32, b: I32) -> I32 {
+    let result = if a > b {
+        a
+    } else {
+        b
+    }
+    return result
+}
+```
+
+**Expression form** (with `then` keyword):
+```tml
+func max(a: I32, b: I32) -> I32 {
+    return if a > b then a else b
+}
+
+func abs(x: I32) -> I32 {
+    return if x < 0 then -x else x
+}
+
+func sign(x: I32) -> String {
+    return if x < 0 then
+        "negative"
+    else if x > 0 then
+        "positive"
+    else
+        "zero"
+}
+```
+
+Both syntaxes work identically—choose based on readability.
+
+### `if let` Pattern Matching
+
+Use `if let` to conditionally unwrap `Maybe` and `Outcome` values:
+
+```tml
+func get_first_item(items: List[I32]) -> String {
+    if let Just(first) = items.get(0) {
+        return "First item: " + first.to_string()
+    } else {
+        return "List is empty"
+    }
+}
+
+func load_config() -> Config {
+    let result = Config.load()
+
+    if let Ok(config) = result {
+        return config
+    } else {
+        return Config.default()
+    }
+}
+```
+
+You can also handle errors with binding:
+
+```tml
+func try_parse(input: String) -> I32 {
+    let result = input.parse_i32()
+
+    if let Err(error) = result {
+        println("Parse failed: " + error.message)
+        return 0
+    }
+
+    if let Ok(value) = result {
+        return value
+    }
+
+    return 0
+}
+```
+
+`if let` works with any pattern, including nested patterns:
+
+```tml
+func process_nested(data: Maybe[Outcome[String, Error]]) -> String {
+    if let Just(result) = data {
+        if let Ok(value) = result {
+            return value
+        }
+    }
+    return "failed"
+}
+```
+
 ## Loops
 
 TML provides a unified `loop` construct with different patterns.

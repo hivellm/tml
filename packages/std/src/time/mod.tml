@@ -51,8 +51,7 @@ pub type Instant {
 impl Instant {
     /// Get current instant
     pub func now() -> Instant {
-        // TODO: Call builtin time function
-        Instant { micros: 0 }
+        Instant { micros: time_us() }
     }
 
     /// Calculate elapsed time

@@ -1,0 +1,8 @@
+func add(x: I32, y: I32) -> I32 {
+    return x + y
+}
+
+func main() {
+    let result: I32 = add(10, 20)
+    println(result)
+}

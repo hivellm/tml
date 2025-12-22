@@ -1,0 +1,23 @@
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func create_point(x: I32, y: I32) -> Point {
+    return Point { x: x, y: y }
+}
+
+func point_distance(p: Point) -> I32 {
+    return p.x + p.y
+}
+
+func main() {
+    let p: Point = create_point(10, 20)
+    let d: I32 = point_distance(p)
+    println(d)
+}

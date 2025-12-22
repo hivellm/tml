@@ -55,11 +55,15 @@ Visibility = 'public' | 'private'
 ```ebnf
 Function = Directive* Visibility? 'func' Ident StableId?
            GenericParams? '(' Params? ')' ('->' Type)?
+           WhereClause?
            Contract? EffectDecl? Block
 
 GenericParams = '[' GenericParam (',' GenericParam)* ']'
 GenericParam  = Ident (':' TypeBound)?
 TypeBound     = Type ('+' Type)*
+
+WhereClause = 'where' WhereConstraint (',' WhereConstraint)*
+WhereConstraint = Type ':' TypeBound
 
 Params = Param (',' Param)*
 Param  = Ident ':' Type
@@ -343,12 +347,19 @@ BoolLit = 'true' | 'false'
 ### 5.3 If Expression
 
 ```ebnf
-IfExpr = 'if' Expr 'then' Expr ('else' Expr)?
+IfExpr    = 'if' IfCond IfBody ('else' ElseBody)?
+IfCond    = 'let' Pattern '=' Expr  // if-let pattern matching
+          | Expr                     // regular condition
+IfBody    = 'then' Expr               // expression form
+          | Block                     // block form
+ElseBody  = 'if' IfCond IfBody ('else' ElseBody)?  // else-if chain
+          | 'then' Expr                             // expression form
+          | Block                                   // block form
 ```
 
-**Note:** `then` is mandatory to avoid ambiguity.
+**Two syntaxes supported:**
 
-**Examples:**
+1. **Expression form** (with `then` keyword):
 ```tml
 if x > 0 then x else -x
 
@@ -361,6 +372,28 @@ else
 if x < 0 then "negative"
 else if x == 0 then "zero"
 else "positive"
+```
+
+2. **Block form** (with braces):
+```tml
+let result: I32 = if x > 0 {
+    x * 2
+} else {
+    0
+}
+```
+
+3. **If-let pattern matching**:
+```tml
+if let Just(value) = maybe_x {
+    println(value)
+} else {
+    println("nothing")
+}
+
+if let Ok(data) = result {
+    process(data)
+}
 ```
 
 ### 5.4 When Expression (Pattern Matching)

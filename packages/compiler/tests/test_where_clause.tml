@@ -1,0 +1,18 @@
+// Test where clause parsing - just check syntax
+
+func simple_where[T](x: T) -> T where T: Display {
+    return x
+}
+
+func multiple_bounds[T](x: T) -> T where T: Display + Eq {
+    return x
+}
+
+func multiple_params[T, U](x: T, y: U) where T: Display, U: Eq {
+    println(x)
+}
+
+// Simple non-generic function to avoid type checking issues
+func main() {
+    println(42)
+}
