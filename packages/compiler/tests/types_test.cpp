@@ -227,7 +227,7 @@ TEST_F(TypeCheckerTest, ImplBlock) {
             }
 
             func increment(this) {
-                let x = 1
+                let x: I32 = 1
             }
         }
     )");
@@ -361,7 +361,7 @@ TEST_F(TypeCheckerTest, WhenExpression) {
 TEST_F(TypeCheckerTest, SimpleClosure) {
     check_ok(R"(
         func test() {
-            let add = do(x: I32, y: I32) x + y
+            let add: (I32, I32) -> I32 = do(x: I32, y: I32) x + y
         }
     )");
 }
@@ -369,7 +369,7 @@ TEST_F(TypeCheckerTest, SimpleClosure) {
 TEST_F(TypeCheckerTest, ClosureWithReturn) {
     check_ok(R"(
         func test() {
-            let double = do(x: I32) -> I32 { x * 2 }
+            let double: (I32) -> I32 = do(x: I32) -> I32 { x * 2 }
         }
     )");
 }
@@ -438,8 +438,8 @@ TEST_F(TypeCheckerTest, CompleteModule) {
         }
 
         func main() {
-            let p = Point::new(10, 20)
-            let d = p.distance()
+            let p: Point = Point::new(10, 20)
+            let d: I32 = p.distance()
         }
     )");
 }
@@ -506,7 +506,7 @@ TEST_F(TypeCheckerTest, UndefinedVariable) {
     // This should produce an error for using undefined 'y'
     auto result = check(R"(
         func test() {
-            let x = y
+            let x: I32 = y
         }
     )");
     // Note: The current implementation may or may not error here
@@ -570,7 +570,7 @@ TEST_F(TypeCheckerTest, EnumConstructorArgCountMismatch) {
         }
 
         func test() {
-            let x = Just(42, 100)
+            let x: Maybe[I32] = Just(42, 100)
         }
     )");
 }
