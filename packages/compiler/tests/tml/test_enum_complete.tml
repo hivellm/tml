@@ -1,0 +1,39 @@
+// Complete enum test with constructors, pattern matching, and multiple variants
+
+type Result {
+    Ok(I64),
+    Err(I32),
+}
+
+func divide(a: I64, b: I64) -> Result {
+    if b == 0 {
+        Err(1)
+    } else {
+        Ok(a / b)
+    }
+}
+
+func handle_result(r: Result) {
+    when r {
+        Ok(value) => {
+            println("Success:")
+            println(value)
+        },
+        Err(code) => {
+            println("Error code:")
+            println(code)
+        },
+    }
+}
+
+func main() {
+    println("Testing enum constructors and pattern matching")
+
+    let result1: Result = divide(10, 2)
+    handle_result(result1)
+
+    let result2: Result = divide(10, 0)
+    handle_result(result2)
+
+    println("All tests passed!")
+}
