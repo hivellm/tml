@@ -721,10 +721,12 @@ auto Lexer::lex_operator() -> Token {
 
         // Potentially multi-character tokens
         case '+':
+            if (peek() == '+') { advance(); return make_token(TokenKind::PlusPlus); }
             if (peek() == '=') { advance(); return make_token(TokenKind::PlusAssign); }
             return make_token(TokenKind::Plus);
 
         case '-':
+            if (peek() == '-') { advance(); return make_token(TokenKind::MinusMinus); }
             if (peek() == '=') { advance(); return make_token(TokenKind::MinusAssign); }
             if (peek() == '>') { advance(); return make_token(TokenKind::Arrow); }
             return make_token(TokenKind::Minus);

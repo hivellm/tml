@@ -159,11 +159,11 @@ public type Arena {
 
 extend Arena with Allocator {
     lowlevel func alloc(this, size: U64, align: U64) -> *mut U8 {
-        let aligned_offset = align_up(this.offset, align)
+        let aligned_offset: U64 = align_up(this.offset, align)
         if aligned_offset + size > this.capacity {
             return null
         }
-        let ptr = this.buffer.add(aligned_offset)
+        let ptr: ptr U8 = this.buffer.add(aligned_offset)
         this.offset = aligned_offset + size
         return ptr
     }
@@ -361,7 +361,7 @@ public func main() {
         log_error("PANIC: " + info.message())
 
         // Print backtrace
-        let bt = Backtrace.capture()
+        let bt: Backtrace = Backtrace.capture()
         eprintln(bt.to_string())
     })
 }

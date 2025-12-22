@@ -9,7 +9,7 @@ func main() {
     y = 20
     println(y)
 
-    // Type inference
-    let z = 100
+    // Explicit type (TML requires explicit types)
+    let z: I32 = 100
     println(z)
 }

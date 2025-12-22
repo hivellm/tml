@@ -21,7 +21,7 @@ The TML formatter produces deterministic, canonical output. Every valid TML prog
 
 ```tml
 func example() {
-    let x = long_function_call(
+    let x: T = long_function_call(
         arg1,
         arg2,
         arg3,
@@ -36,11 +36,11 @@ Never align code by content. Alignment creates noisy diffs.
 ```tml
 // WRONG - alignment
 let short    = 1
-let very_long = 2
+let very_long: I32 = 2
 
 // RIGHT - no alignment
-let short = 1
-let very_long = 2
+let short: I32 = 1
+let very_long: I32 = 2
 ```
 
 ## 3. Line Length
@@ -64,20 +64,20 @@ When a line is too long, break in this order:
 
 ```tml
 // Long argument list
-let result = very_long_function_name(
+let result: T = very_long_function_name(
     first_argument,
     second_argument,
     third_argument,
 )
 
 // Long method chain
-let processed = data
+let processed: T = data
     .filter(do(x) x > 0)
     .map(do(x) x * 2)
     .collect()
 
 // Long binary expression
-let value = first_operand
+let value: T = first_operand
     + second_operand
     + third_operand
 ```
@@ -158,7 +158,7 @@ foo(a, b, c)
 No space before:
 
 ```tml
-let x = 5;
+let x: I32 = 5;
 use std::io;
 ```
 
@@ -301,7 +301,7 @@ impl Foo for Bar { }
 ### 7.1 Multi-line: Always
 
 ```tml
-let point = Point {
+let point: Point = Point {
     x: 0,
     y: 0,  // trailing comma
 }
@@ -315,7 +315,7 @@ foo(
 ### 7.2 Single-line: Never
 
 ```tml
-let point = Point { x: 0, y: 0 }
+let point: Point = Point { x: 0, y: 0 }
 foo(arg1, arg2)
 ```
 
@@ -455,7 +455,7 @@ type Bool = True | False
 Break before `.` when long:
 
 ```tml
-let result = data
+let result: T = data
     .iter()
     .filter(do(x) x.is_valid())
     .map(do(x) x.transform())
@@ -467,7 +467,7 @@ let result = data
 Break after operator:
 
 ```tml
-let total = first_value +
+let total: I32 = first_value +
     second_value +
     third_value
 ```
@@ -514,7 +514,7 @@ Space after `//`:
 
 ```tml
 // This is a comment
-let x = 5  // inline comment
+let x: I32 = 5  // inline comment
 ```
 
 ### 12.2 Doc Comments
@@ -586,7 +586,7 @@ func update_profile(req: Request) -> Response {
 Do not break or reformat:
 
 ```tml
-let long_string = "This is a very long string that exceeds the line limit but we do not break it"
+let long_string: String = "This is a very long string that exceeds the line limit but we do not break it"
 ```
 
 ### 14.3 Raw Strings
@@ -594,7 +594,7 @@ let long_string = "This is a very long string that exceeds the line limit but we
 Preserve internal formatting:
 
 ```tml
-let sql = """
+let sql: String = """
     SELECT *
     FROM users
     WHERE id = ?

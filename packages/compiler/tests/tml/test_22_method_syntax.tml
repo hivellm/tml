@@ -1,0 +1,179 @@
+// Test 22: Method Syntax for Collections
+// Tests object.method() syntax for list operations
+
+func test_list_methods() -> I32 {
+    println("--- List Method Tests ---")
+
+    // Create array with literal syntax
+    let arr: ptr = [10, 20, 30, 40, 50]
+
+    // Test arr.len() method
+    let len: I32 = arr.len()
+    if len != 5 {
+        println("FAIL: arr.len() should be 5")
+        return 1
+    }
+    println("arr.len(): 5 - OK")
+
+    // Test arr.get() method
+    let first: I32 = arr.get(0)
+    let third: I32 = arr.get(2)
+    let last: I32 = arr.get(4)
+
+    if first != 10 {
+        println("FAIL: arr.get(0) should be 10")
+        return 2
+    }
+    if third != 30 {
+        println("FAIL: arr.get(2) should be 30")
+        return 3
+    }
+    if last != 50 {
+        println("FAIL: arr.get(4) should be 50")
+        return 4
+    }
+    println("arr.get(): OK")
+
+    // Test arr.push() method
+    arr.push(60)
+    let new_len: I32 = arr.len()
+    if new_len != 6 {
+        println("FAIL: arr.len() should be 6 after push")
+        return 5
+    }
+    if arr.get(5) != 60 {
+        println("FAIL: arr.get(5) should be 60")
+        return 6
+    }
+    println("arr.push(): OK")
+
+    // Test arr.pop() method
+    let popped: I32 = arr.pop()
+    if popped != 60 {
+        println("FAIL: arr.pop() should return 60")
+        return 7
+    }
+    if arr.len() != 5 {
+        println("FAIL: arr.len() should be 5 after pop")
+        return 8
+    }
+    println("arr.pop(): OK")
+
+    // Test arr.set() method
+    arr.set(0, 100)
+    let updated: I32 = arr.get(0)
+    if updated != 100 {
+        println("FAIL: arr.get(0) should be 100 after set")
+        return 9
+    }
+    println("arr.set(): OK")
+
+    // Test arr.capacity() method
+    let cap: I32 = arr.capacity()
+    if cap < 5 {
+        println("FAIL: arr.capacity() should be at least 5")
+        return 10
+    }
+    println("arr.capacity(): OK")
+
+    // Test list_is_empty function (bool methods need work in type checker)
+    let is_empty: I32 = list_is_empty(arr)
+    if is_empty {
+        println("FAIL: arr should not be empty")
+        return 11
+    }
+    println("is_empty: false - OK")
+
+    // Test arr.clear() method
+    arr.clear()
+    let cleared_len: I32 = arr.len()
+    if cleared_len != 0 {
+        println("FAIL: arr.len() should be 0 after clear")
+        return 12
+    }
+    println("arr.clear(): OK")
+
+    // Test after clear
+    let after_clear: I32 = list_is_empty(arr)
+    if not after_clear {
+        println("FAIL: arr should be empty after clear")
+        return 13
+    }
+    println("is_empty after clear: true - OK")
+
+    // Clean up
+    list_destroy(arr)
+
+    return 0
+}
+
+func test_mixed_syntax() -> I32 {
+    println("--- Mixed Syntax Tests ---")
+
+    // Create with literal, use with methods
+    let nums: ptr = [1, 2, 3, 4, 5]
+
+    // Mix indexing and methods
+    let a: I32 = nums[0]
+    let b: I32 = nums.get(1)
+
+    if a != 1 {
+        println("FAIL: nums[0] should be 1")
+        return 20
+    }
+    if b != 2 {
+        println("FAIL: nums.get(1) should be 2")
+        return 21
+    }
+    println("indexing + .get(): OK")
+
+    // Chain operations
+    nums.push(6)
+    nums.push(7)
+    let len1: I32 = nums.len()
+    if len1 != 7 {
+        println("FAIL: len should be 7")
+        return 22
+    }
+
+    nums.pop()
+    nums.pop()
+    let len2: I32 = nums.len()
+    if len2 != 5 {
+        println("FAIL: len should be 5 after pops")
+        return 23
+    }
+    println("push/pop chain: OK")
+
+    // Modify and read
+    nums.set(2, 300)
+    if nums.get(2) != 300 {
+        println("FAIL: nums.get(2) should be 300")
+        return 24
+    }
+    if nums[2] != 300 {
+        println("FAIL: nums[2] should be 300")
+        return 25
+    }
+    println("set + get/index: OK")
+
+    list_destroy(nums)
+    return 0
+}
+
+func main() -> I32 {
+    println("=== Method Syntax Tests ===")
+
+    let result1: I32 = test_list_methods()
+    if result1 != 0 {
+        return result1
+    }
+
+    let result2: I32 = test_mixed_syntax()
+    if result2 != 0 {
+        return result2
+    }
+
+    println("=== All method syntax tests passed! ===")
+    return 0
+}

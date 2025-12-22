@@ -1,0 +1,6 @@
+// ERROR TEST: Missing type annotation on let mut
+// Expected: error about missing type annotation
+func main() -> I32 {
+    let mut x = 42
+    return x
+}

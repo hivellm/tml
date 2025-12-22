@@ -125,7 +125,7 @@ extend *mut T {
 ```tml
 lowlevel func array_sum(ptr: *const I32, len: U64) -> I32 {
     var sum: I32 = 0
-    var current = ptr
+    var current: ptr U8 = ptr
 
     loop i in 0 to len {
         sum += current.read()
@@ -136,8 +136,8 @@ lowlevel func array_sum(ptr: *const I32, len: U64) -> I32 {
 }
 
 lowlevel func reverse_array(ptr: *mut I32, len: U64) {
-    var left = ptr
-    var right = ptr.add(len - 1)
+    var left: ptr U8 = ptr
+    var right: ptr U8 = ptr.add(len - 1)
 
     loop while left.addr() < right.addr() {
         left.swap(right)
@@ -236,7 +236,7 @@ extend U64 {
 
     /// Insert bit field
     public func insert_bits(this, value: U64, start: U32, len: U32) -> U64 {
-        let mask = ((1 << len) - 1) << start
+        let mask: U64 = ((1 << len) - 1) << start
         return (this & ~mask) | ((value << start) & mask)
     }
 }
@@ -977,7 +977,7 @@ extend Pool {
         assert(block_size >= size_of[Block]())
         assert(size >= block_size)
 
-        var pool = This {
+        var pool: This = This {
             start: memory,
             size: size,
             block_size: block_size,
@@ -985,11 +985,11 @@ extend Pool {
         }
 
         // Initialize free list
-        let num_blocks = size / block_size
-        var current = pool.free_list
+        let num_blocks: U64 = size / block_size
+        var current: ptr Node = pool.free_list
 
         loop i in 0 to (num_blocks - 1) {
-            let next = (current as *mut U8).add(block_size) as *mut Block
+            let next: ptr Block = (current as *mut U8).add(block_size) as *mut Block
             current.write(Block { next: next })
             current = next
         }
@@ -1003,13 +1003,13 @@ extend Pool {
             return null
         }
 
-        let block = this.free_list
+        let block: ptr Block = this.free_list
         this.free_list = block.read().next
         return block as *mut U8
     }
 
     public lowlevel func free(this, ptr: *mut U8) {
-        let block = ptr as *mut Block
+        let block: ptr Block = ptr as *mut Block
         block.write(Block { next: this.free_list })
         this.free_list = block
     }
@@ -1037,11 +1037,11 @@ extend Stack[T] {
 
     public func push(this, value: T) {
         lowlevel {
-            let node = alloc[Node[T]]()
+            let node: ptr Node[T] = alloc[Node[T]]()
             node.write(Node { value: value, next: null })
 
             loop {
-                let head = this.head.load(MemoryOrdering.Relaxed)
+                let head: ptr Node[T] = this.head.load(MemoryOrdering.Relaxed)
                 (*node).next = head
 
                 when this.head.compare_exchange_weak(
@@ -1057,18 +1057,18 @@ extend Stack[T] {
     public func pop(this) -> Maybe[T] {
         lowlevel {
             loop {
-                let head = this.head.load(MemoryOrdering.Acquire)
+                let head: ptr Node[T] = this.head.load(MemoryOrdering.Acquire)
                 if head.is_null() {
                     return Nothing
                 }
 
-                let next = (*head).next
+                let next: ptr Node[T] = (*head).next
 
                 when this.head.compare_exchange_weak(
                     head, next, MemoryOrdering.Release, MemoryOrdering.Relaxed
                 ) {
                     Ok(_) -> {
-                        let value = head.read().value
+                        let value: T = head.read().value
                         dealloc(head)
                         return Just(value)
                     },
@@ -1089,18 +1089,18 @@ module fast_search
 import simd.x86.sse42.*
 
 public func find_char(haystack: ref [U8], needle: U8) -> Maybe[U64] {
-    let len = haystack.len()
-    let ptr = haystack.as_ptr()
+    let len: U64 = haystack.len()
+    let ptr: ptr U8 = haystack.as_ptr()
 
     // Process 16 bytes at a time
-    let needle_vec = set1_i8x16(needle as I8)
+    let needle_vec: i8x16 = set1_i8x16(needle as I8)
     var i: U64 = 0
 
     lowlevel {
         loop while i + 16 <= len {
-            let chunk = loadu_i8x16(ptr.add(i) as *const I8)
-            let mask = cmpeq_i8x16(chunk, needle_vec)
-            let bits = movemask_i8x16(mask)
+            let chunk: i8x16 = loadu_i8x16(ptr.add(i) as *const I8)
+            let mask: i8x16 = cmpeq_i8x16(chunk, needle_vec)
+            let bits: I32 = movemask_i8x16(mask)
 
             if bits != 0 {
                 return Just(i + bits.trailing_zeros() as U64)

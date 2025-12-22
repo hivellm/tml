@@ -1,0 +1,10 @@
+// ERROR TEST: Wrong number of arguments
+// Expected: error about wrong argument count
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+func main() -> I32 {
+    let x: I32 = add(1)
+    return x
+}

@@ -28,7 +28,7 @@ public func fib_iter(n: U64) -> U64 {
     var b: U64 = 1
 
     loop _ in 2 through n {
-        let temp = a + b
+        let temp: U64 = a + b
         a = b
         b = temp
     }
@@ -66,7 +66,7 @@ extend LinkedList[T] {
     }
 
     public func push_front(this, value: T) {
-        let new_node = Heap.new(Node {
+        let new_node: Heap[Node[T]] = Heap.new(Node {
             value: value,
             next: this.head.take(),
         })
@@ -96,7 +96,7 @@ extend LinkedList[T] {
 
 @test
 func test_linked_list() {
-    var list = LinkedList[I32].new()
+    var list: LinkedList[I32].new()
 
     list.push_front(1)
     list.push_front(2)
@@ -172,7 +172,7 @@ extend Tree[T: Ordered] {
 
 @test
 func test_bst() {
-    var tree = Tree[I32].new()
+    var tree: Tree[I32].new()
 
     tree.insert(5)
     tree.insert(3)
@@ -217,15 +217,15 @@ extend ApiClient {
     public func get_user(this, id: U64) -> Outcome[User, Error]
     effects: [io.network.http]
     {
-        let url = this.base_url + "/users/" + id.to_string()
-        let response = this.client.get(url)!
+        let url: String = this.base_url + "/users/" + id.to_string()
+        let response: Response = this.client.get(url)!
 
         if response.status != 200 {
             return Err(Error.new("HTTP " + response.status.to_string()))
         }
 
-        let json = Json.parse(response.body)!
-        let user = User.from_json(json)!
+        let json: Json = Json.parse(response.body)!
+        let user: User = User.from_json(json)!
 
         return Ok(user)
     }
@@ -233,19 +233,19 @@ extend ApiClient {
     public func create_user(this, name: String, email: String) -> Outcome[User, Error]
     effects: [io.network.http]
     {
-        let url = this.base_url + "/users"
-        let body = Json.object()
+        let url: String = this.base_url + "/users"
+        let body: String = Json.object()
             .set("name", name)
             .set("email", email)
             .to_string()
 
-        let response = this.client.post(url, body)!
+        let response: Response = this.client.post(url, body)!
 
         if response.status != 201 {
             return Err(Error.new("Failed to create user"))
         }
 
-        let json = Json.parse(response.body)!
+        let json: Json = Json.parse(response.body)!
         return User.from_json(json)
     }
 }
@@ -283,12 +283,12 @@ extend Counter {
     }
 
     public func increment(this) {
-        let guard = this.value.lock()
+        let guard: Mutex[I64].Guard = this.value.lock()
         *guard += 1
     }
 
     public func get(this) -> I64 {
-        let guard = this.value.lock()
+        let guard: Mutex[I64].Guard = this.value.lock()
         return *guard
     }
 }
@@ -296,12 +296,12 @@ extend Counter {
 public func parallel_count(n: I32) -> I64
 effects: [io.sync]
 {
-    let counter = Counter.new()
-    var handles = List.new()
+    let counter: Counter = Counter.new()
+    var handles: List[thread.Handle] = List.new()
 
     loop _ in 0 to n {
-        let c = counter.duplicate()
-        let handle = thread.spawn(do() {
+        let c: Counter = counter.duplicate()
+        let handle: thread.Handle = thread.spawn(do() {
             loop _ in 0 to 1000 {
                 c.increment()
             }
@@ -318,7 +318,7 @@ effects: [io.sync]
 
 @test
 func test_parallel_count() {
-    let result = parallel_count(4)
+    let result: I64 = parallel_count(4)
     assert_eq(result, 4000)
 }
 ```
@@ -353,7 +353,7 @@ extend Parser {
 
     func parse(this) -> Outcome[JsonValue, ParseError] {
         this.skip_whitespace()
-        let value = this.parse_value()!
+        let value: JsonValue = this.parse_value()!
         this.skip_whitespace()
 
         if this.pos < this.input.len() {
@@ -403,13 +403,13 @@ extend Parser {
 
     func parse_string(this) -> Outcome[JsonValue, ParseError] {
         this.expect("\"")!
-        var result = String.new()
+        var result: String = String.new()
 
         loop {
             when this.next() {
                 Just('"') -> return Ok(Str(result)),
                 Just('\\') -> {
-                    let escaped = this.parse_escape()!
+                    let escaped: Char = this.parse_escape()!
                     result.push(escaped)
                 },
                 Just(c) -> result.push(c),
@@ -419,7 +419,7 @@ extend Parser {
     }
 
     func parse_number(this) -> Outcome[JsonValue, ParseError] {
-        let start = this.pos
+        let start: U64 = this.pos
 
         if this.peek() == Just('-') {
             this.pos += 1
@@ -436,7 +436,7 @@ extend Parser {
             }
         }
 
-        let num_str = this.input.slice(start, this.pos)
+        let num_str: String = this.input.slice(start, this.pos)
         when num_str.parse[F64]() {
             Ok(n) -> return Ok(Number(n)),
             Err(_) -> return Err(this.error("invalid number")),
@@ -447,7 +447,7 @@ extend Parser {
         this.expect("[")!
         this.skip_whitespace()
 
-        var items = List.new()
+        var items: List[JsonValue] = List.new()
 
         if this.peek() == Just(']') {
             this.pos += 1
@@ -455,7 +455,7 @@ extend Parser {
         }
 
         loop {
-            let value = this.parse_value()!
+            let value: JsonValue = this.parse_value()!
             items.push(value)
 
             this.skip_whitespace()
@@ -478,7 +478,7 @@ extend Parser {
         this.expect("{")!
         this.skip_whitespace()
 
-        var entries = Map.new()
+        var entries: Map[String, JsonValue] = Map.new()
 
         if this.peek() == Just('}') {
             this.pos += 1
@@ -486,7 +486,7 @@ extend Parser {
         }
 
         loop {
-            let key = when this.parse_string()! {
+            let key: String = when this.parse_string()! {
                 Str(s) -> s,
                 _ -> return Err(this.error("expected string key")),
             }
@@ -495,7 +495,7 @@ extend Parser {
             this.expect(":")!
             this.skip_whitespace()
 
-            let value = this.parse_value()!
+            let value: JsonValue = this.parse_value()!
             entries.insert(key, value)
 
             this.skip_whitespace()
@@ -520,7 +520,7 @@ extend Parser {
     }
 
     func next(this) -> Maybe[Char] {
-        let c = this.peek()
+        let c: Maybe[Char] = this.peek()
         if c.is_just() {
             this.pos += 1
         }
@@ -548,7 +548,7 @@ extend Parser {
 }
 
 public func parse(input: String) -> Outcome[JsonValue, ParseError] {
-    var parser = Parser.new(input)
+    var parser: Parser = Parser.new(input)
     return parser.parse()
 }
 
@@ -562,13 +562,13 @@ func test_parse_primitives() {
 
 @test
 func test_parse_array() {
-    let result = parse("[1, 2, 3]")
+    let result: Outcome[JsonValue, ParseError] = parse("[1, 2, 3]")
     assert(result.is_ok())
 }
 
 @test
 func test_parse_object() {
-    let result = parse("{\"name\": \"Alice\", \"age\": 30}")
+    let result: Outcome[JsonValue, ParseError] = parse("{\"name\": \"Alice\", \"age\": 30}")
     assert(result.is_ok())
 }
 ```
@@ -592,14 +592,14 @@ type Args {
 public func main() -> Outcome[Unit, Error]
 effects: [io.file, io.process.env]
 {
-    let args = parse_args()!
+    let args: Args = parse_args()!
 
     if args.verbose {
         println("Reading from: " + args.input)
     }
 
-    let content = read_to_string(args.input)!
-    let processed = process(content)
+    let content: String = read_to_string(args.input)!
+    let processed: String = process(content)
 
     when args.output {
         Just(path) -> {
@@ -615,7 +615,7 @@ effects: [io.file, io.process.env]
 }
 
 func parse_args() -> Outcome[Args, Error] {
-    let argv = env.args()
+    let argv: List[String] = env.args()
 
     if argv.len() < 2 {
         return Err(Error.new("Usage: program <input> [-o output] [-v]"))
@@ -623,11 +623,11 @@ func parse_args() -> Outcome[Args, Error] {
 
     var input: Maybe[String] = Nothing
     var output: Maybe[String] = Nothing
-    var verbose = false
+    var verbose: Bool = false
 
     var i: U64 = 1
     loop while i < argv.len() {
-        let arg = argv[i]
+        let arg: String = argv[i]
 
         when arg.as_str() {
             "-o" -> {

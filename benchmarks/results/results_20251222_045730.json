@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-12-22T04:57:28.982655",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.12.10"
+  },
+  "results": [
+    {
+      "name": "arithmetic",
+      "language": "C++",
+      "category": "arithmetic",
+      "build_time_ms": 0,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "C++ compiler not found"
+    },
+    {
+      "name": "arithmetic",
+      "language": "Rust",
+      "category": "arithmetic",
+      "build_time_ms": 713.0531000439078,
+      "run_time_ms": 690.3341000434011,
+      "binary_size_bytes": 169472,
+      "output": "=== Rust Arithmetic Benchmarks ===\n\nint_add_100M: 0.000 ms (avg of 5 runs)\nint_mul_10M: 27.156 ms (avg of 5 runs)\nmixed_ops_10M: 77.794 ms (avg of 5 runs)\nfibonacci_1M: 0.410 ms (avg of 5 runs)\ncount_primes_100K: 3.303 ms (avg of 5 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "arithmetic",
+      "language": "TML",
+      "category": "arithmetic",
+      "build_time_ms": 290.2774999383837,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "warning: overriding the module target triple with x86_64-pc-windows-msvc19.44.35211 [-Woverride-module]\n1 warning generated.\nclang: error: linker command failed with exit code 1120 (use -v to see invocation)\nerror: LLVM compilation failed\n"
+    }
+  ]
+}

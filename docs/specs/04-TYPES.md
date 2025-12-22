@@ -27,10 +27,10 @@ TML has a static and strong type system:
 
 **Literals:**
 ```tml
-let a = 42          // I32 (default)
-let b = 42i64       // I64
-let c = 255u8       // U8
-let d = 0xFF_u32    // U32 hex
+let a: I32 = 42          // I32 (default)
+let b: I64 = 42i64       // I64
+let c: U8 = 255u8       // U8
+let d: U32 = 0xFF_u32    // U32 hex
 ```
 
 **Explicit conversions:**
@@ -49,9 +49,9 @@ let z: U8 = x.to_u8()     // may truncate - checked in debug
 
 **Literals:**
 ```tml
-let pi = 3.14159    // F64 (default)
-let e = 2.71f32     // F32
-let big = 1.5e10    // F64 with exponent
+let pi: F64 = 3.14159    // F64 (default)
+let e: F32 = 2.71f32     // F32
+let big: F64 = 1.5e10    // F64 with exponent
 ```
 
 ### 2.3 Bool
@@ -61,9 +61,9 @@ let yes: Bool = true
 let no: Bool = false
 
 // Operators (keywords, not symbols)
-let a = true and false   // false
-let b = true or false    // true
-let c = not true         // false
+let a: Bool = true and false   // false
+let b: Bool = true or false    // true
+let c: Bool = not true         // false
 ```
 
 ### 2.4 Char
@@ -82,7 +82,7 @@ UTF-8, immutable, heap-allocated.
 
 ```tml
 let s: String = "hello"
-let multi = """
+let multi: String = """
     Multi-line
     string
 """
@@ -123,16 +123,16 @@ type Person {
 }
 
 // Construction
-let p = Point { x: 1.0, y: 2.0 }
-let person = Person {
+let p: Point = Point { x: 1.0, y: 2.0 }
+let person: Person = Person {
     name: "Alice",
     age: 30,
     email: Nothing,
 }
 
 // Access
-let x = p.x
-let name = person.name
+let x: F64 = p.x
+let name: String = person.name
 
 // Update
 let p2 = Point { x: 5.0, ..p }
@@ -164,9 +164,9 @@ type Message =
     | File { path: String, size: U64 }
 
 // Usage
-let color = Red
-let opt = Just(42)
-let msg = Text { content: "hi", sender: "alice" }
+let color: Color = Red
+let opt: Maybe[I32] = Just(42)
+let msg: Message = Text { content: "hi", sender: "alice" }
 ```
 
 ### 3.3 Tuples
@@ -176,8 +176,8 @@ let pair: (I32, String) = (42, "answer")
 let triple: (F64, F64, F64) = (1.0, 2.0, 3.0)
 
 // Access by index
-let first = pair.0    // 42
-let second = pair.1   // "answer"
+let first: I32 = pair.0    // 42
+let second: String = pair.1   // "answer"
 
 // Destructuring
 let (x, y, z) = triple
@@ -190,7 +190,7 @@ let arr: [I32; 5] = [1, 2, 3, 4, 5]
 let zeros: [U8; 256] = [0; 256]
 
 // Access
-let first = arr[0]
+let first: I32 = arr[0]
 arr[1] = 10        // if mutable
 
 // Length is part of the type
@@ -205,7 +205,7 @@ Dynamic array, heap-allocated.
 
 ```tml
 let nums: List[I32] = List.new()
-let items = List.of(1, 2, 3)
+let items: List[I32] = List.of(1, 2, 3)
 
 // Operations
 items.push(4)
@@ -257,7 +257,7 @@ tags.insert("tml")
 tags.contains("rust")  // true
 tags.remove("rust")
 
-let other = Set.of("go", "tml")
+let other: Set[String] = Set.of("go", "tml")
 tags.union(other)
 tags.intersection(other)
 ```
@@ -306,13 +306,13 @@ when divide(10.0, 2.0) {
 
 // ! propagates errors
 func calculate() -> Outcome[F64, String] {
-    let x = divide(10.0, 2.0)!
-    let y = divide(x, 3.0)!
+    let x: F64 = divide(10.0, 2.0)!
+    let y: F64 = divide(x, 3.0)!
     return Ok(y)
 }
 
 // else for fallback
-let result = divide(10.0, 0.0)! else 0.0
+let result: F64 = divide(10.0, 0.0)! else 0.0
 ```
 
 ### 5.3 Unit
@@ -363,7 +363,7 @@ Reference-counted, shared ownership (single-threaded).
 
 ```tml
 let cache: Shared[Map[String, Data]] = Shared.new(Map.new())
-let copy = cache.duplicate()  // increments ref count
+let copy: Shared[Map[String, Data]] = cache.duplicate()  // increments ref count
 ```
 
 ### 6.3 Sync[T]
@@ -384,7 +384,7 @@ func print_point(p: ref Point) {
     print(p.x.to_string())
 }
 
-let point = Point { x: 1.0, y: 2.0 }
+let point: Point = Point { x: 1.0, y: 2.0 }
 print_point(ref point)
 ```
 
@@ -395,7 +395,7 @@ func increment(counter: mut ref I32) {
     counter += 1
 }
 
-var count = 0
+var count: I32 = 0
 increment(mut ref count)
 ```
 
@@ -406,21 +406,21 @@ increment(mut ref count)
 3. Cannot have ref T and mut ref T simultaneously
 
 ```tml
-var data = List.of(1, 2, 3)
+var data: List[I32] = List.of(1, 2, 3)
 
 // OK: multiple reads
-let a = ref data
-let b = ref data
+let a: ref List[I32] = ref data
+let b: ref List[I32] = ref data
 print(a.len())
 print(b.len())
 
 // OK: one exclusive write
-let c = mut ref data
+let c: mut ref List[I32] = mut ref data
 c.push(4)
 
 // ERROR: simultaneous read and write
-let d = ref data
-let e = mut ref data  // error: already has immutable reference
+let d: ref List[I32] = ref data
+let e: mut ref List[I32] = mut ref data  // error: already has immutable reference
 ```
 
 ## 8. Function Types
@@ -436,8 +436,8 @@ func apply(f: func(I32) -> I32, x: I32) -> I32 {
     return f(x)
 }
 
-let double = do(x) x * 2
-let result = apply(double, 21)  // 42
+let double: func(I32) -> I32 = do(x) x * 2
+let result: I32 = apply(double, 21)  // 42
 ```
 
 ## 9. Generics
@@ -454,8 +454,8 @@ func swap[T](a: T, b: T) -> (T, T) {
 }
 
 // Usage (type inferred)
-let x = identity(42)        // I32
-let y = identity("hello")   // String
+let x: I32 = identity(42)        // I32
+let y: String = identity("hello")   // String
 ```
 
 ### 9.2 Generic Types
@@ -471,8 +471,8 @@ type Entry[K, V] {
     value: V,
 }
 
-let pair = Pair { first: 1, second: 2 }
-let entry = Entry { key: "name", value: "Alice" }
+let pair: Pair[I32] = Pair { first: 1, second: 2 }
+let entry: Entry[String, String] = Entry { key: "name", value: "Alice" }
 ```
 
 ### 9.3 Bounds (Constraints)
@@ -576,34 +576,58 @@ let id: UserId = 12345
 let users: StringMap[User] = Map.new()
 ```
 
-## 12. Type Inference
+## 12. Explicit Type Annotations (Mandatory)
 
-### 12.1 Where It Works
+TML requires **explicit type annotations** on all variable declarations. This design choice prioritizes LLM code generation clarity over brevity.
+
+### 12.1 Why Mandatory Types?
+
+| Benefit | Description |
+|---------|-------------|
+| **Zero ambiguity** | LLMs never guess types - no generation errors |
+| **Self-documenting** | Code is immediately clear without analysis |
+| **Deterministic parsing** | Parser knows types at declaration, not inference |
+| **Safer patches** | LLMs can modify code without inferring context |
+
+### 12.2 All Declarations Require Types
 
 ```tml
-// Local variables
-let x = 42          // I32 inferred
-let y = 3.14        // F64 inferred
-let z = "hello"     // String inferred
+// Variables - type annotation required
+let x: I32 = 42
+let y: F64 = 3.14
+let z: String = "hello"
 
-// Closures
-let add = do(x, y) x + y    // types inferred from usage
+// Mutable variables
+var count: I32 = 0
+var name: String = "default"
 
-// Generics
-let list = List.of(1, 2, 3) // List[I32] inferred
+// Constants
+const PI: F64 = 3.14159
+const MAX_SIZE: I32 = 1024
+
+// Closures - parameter types in signature
+let add: func(I32, I32) -> I32 = do(x, y) x + y
+
+// Collections
+let list: List[I32] = List.of(1, 2, 3)
+let map: Map[String, I32] = Map.new()
 ```
 
-### 12.2 Where It's Required
+### 12.3 Function Signatures
 
 ```tml
-// Function parameters
-func add(a: I32, b: I32) -> I32
+// Parameters and return types always explicit
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
 
-// Struct fields
+// Struct fields always explicit
 type Point { x: F64, y: F64 }
 
-// Public constants
-public const MAX: U32 = 1000
+// Behavior methods always explicit
+behavior Addable {
+    func add(this, other: This) -> This
+}
 ```
 
 ## 13. Coercions

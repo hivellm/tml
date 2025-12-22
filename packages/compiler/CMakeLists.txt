@@ -79,6 +79,12 @@ target_include_directories(tml_ir PUBLIC include src)
 # Codegen library (LLVM IR text generator + clang backend)
 add_library(tml_codegen STATIC
     src/codegen/llvm_ir_gen.cpp
+    src/codegen/llvm_ir_gen_decl.cpp
+    src/codegen/llvm_ir_gen_stmt.cpp
+    src/codegen/llvm_ir_gen_expr.cpp
+    src/codegen/llvm_ir_gen_builtins.cpp
+    src/codegen/llvm_ir_gen_control.cpp
+    src/codegen/llvm_ir_gen_types.cpp
     src/codegen/c_gen.cpp
     src/codegen/stub.cpp
 )

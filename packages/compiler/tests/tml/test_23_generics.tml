@@ -1,0 +1,143 @@
+// Test 23: Generic Collections
+// Tests typed collections syntax
+
+func test_list_i32() -> I32 {
+    println("--- List[I32] Tests ---")
+
+    // Test with type annotation
+    let nums: List[I32] = [1, 2, 3, 4, 5]
+
+    if nums.len() != 5 {
+        println("FAIL: nums.len() should be 5")
+        return 1
+    }
+    println("List[I32] len: OK")
+
+    // Operations
+    nums.push(6)
+    if nums.get(5) != 6 {
+        println("FAIL: nums.get(5) should be 6")
+        return 2
+    }
+    println("List[I32] push/get: OK")
+
+    // Sum elements
+    let mut sum: I32 = 0
+    for i in 6 {
+        sum = sum + nums.get(i)
+    }
+    if sum != 21 {
+        println("FAIL: sum should be 21")
+        return 3
+    }
+    println("List[I32] sum: OK")
+
+    list_destroy(nums)
+    return 0
+}
+
+func test_hashmap() -> I32 {
+    println("--- HashMap[I32, I32] Tests ---")
+
+    // Create typed hashmap
+    let map: HashMap[I32, I32] = hashmap_create(16)
+
+    hashmap_set(map, 1, 100)
+    hashmap_set(map, 2, 200)
+    hashmap_set(map, 3, 300)
+
+    if hashmap_len(map) != 3 {
+        println("FAIL: hashmap_len should be 3")
+        return 10
+    }
+    println("HashMap len: OK")
+
+    if hashmap_get(map, 2) != 200 {
+        println("FAIL: hashmap_get(2) should be 200")
+        return 11
+    }
+    println("HashMap get: OK")
+
+    let has_key: I32 = hashmap_has(map, 1)
+    if not has_key {
+        println("FAIL: should have key 1")
+        return 12
+    }
+    println("HashMap has: OK")
+
+    hashmap_destroy(map)
+    return 0
+}
+
+func test_buffer() -> I32 {
+    println("--- Buffer Tests ---")
+
+    let buf: Buffer = buffer_create(32)
+
+    buffer_write_byte(buf, 65)
+    buffer_write_byte(buf, 66)
+    buffer_write_i32(buf, 12345)
+
+    if buffer_len(buf) != 6 {
+        println("FAIL: buffer_len should be 6")
+        return 20
+    }
+    println("Buffer len: OK")
+
+    let b1: I32 = buffer_read_byte(buf)
+    if b1 != 65 {
+        println("FAIL: first byte should be 65")
+        return 21
+    }
+    println("Buffer read_byte: OK")
+
+    buffer_destroy(buf)
+    return 0
+}
+
+func test_nested_types() -> I32 {
+    println("--- Mixed Types Tests ---")
+
+    // Multiple typed lists
+    let a: List[I32] = [10, 20, 30]
+    let b: List[I32] = [1, 2, 3]
+
+    // Combine values
+    let sum: I32 = a.get(0) + b.get(0)
+    if sum != 11 {
+        println("FAIL: sum should be 11")
+        return 30
+    }
+    println("Multiple lists: OK")
+
+    list_destroy(a)
+    list_destroy(b)
+    return 0
+}
+
+func main() -> I32 {
+    println("=== Generic Collection Tests ===")
+
+    let result1: I32 = test_list_i32()
+    if result1 != 0 {
+        return result1
+    }
+
+    let result2: I32 = test_hashmap()
+    if result2 != 0 {
+        return result2
+    }
+
+    let result3: I32 = test_buffer()
+    if result3 != 0 {
+        return result3
+    }
+
+    let result4: I32 = test_nested_types()
+    if result4 != 0 {
+        return result4
+    }
+
+    println("=== All generic collection tests passed! ===")
+    return 0
+}

@@ -1,0 +1,140 @@
+// Benchmark: Basic Arithmetic Operations
+// Category: arithmetic
+// Description: Tests pure computation speed
+
+func bench_int_add(iterations: I32) -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_int_mul(iterations: I32) -> I32 {
+    let mut product: I32 = 1
+    let mut i: I32 = 1
+    loop {
+        if i > iterations {
+            break
+        }
+        product = (product * i) % 1000000007
+        i = i + 1
+    }
+    return product
+}
+
+func bench_mixed_ops(iterations: I32) -> I32 {
+    let mut a: I32 = 1
+    let mut b: I32 = 2
+    let mut c: I32 = 3
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        a = (a + b) * c % 1000000007
+        b = (b * c + a) % 1000000007
+        c = (c + a - b) % 1000000007
+        if c < 0 {
+            c = c + 1000000007
+        }
+        i = i + 1
+    }
+    return a + b + c
+}
+
+func bench_fibonacci(n: I32) -> I32 {
+    if n <= 1 {
+        return n
+    }
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 2
+    loop {
+        if i > n {
+            break
+        }
+        let temp: I32 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+    return b
+}
+
+func bench_count_primes(limit: I32) -> I32 {
+    let mut count: I32 = 0
+    let mut n: I32 = 2
+    loop {
+        if n > limit {
+            break
+        }
+        let mut is_prime: I32 = 1
+        let mut i: I32 = 2
+        loop {
+            if i * i > n {
+                break
+            }
+            if n % i == 0 {
+                is_prime = 0
+                break
+            }
+            i = i + 1
+        }
+        if is_prime == 1 {
+            count = count + 1
+        }
+        n = n + 1
+    }
+    return count
+}
+
+func main() -> I32 {
+    println("=== TML Arithmetic Benchmarks ===")
+
+    let mut checksum: I32 = 0
+
+    println("Running int_add_1M...")
+    let start1: I32 = time_ms()
+    let r1: I32 = bench_int_add(1000000)
+    let t1: I32 = time_ms() - start1
+    checksum = checksum + r1
+    println("  time: {} ms, result = {}", t1, r1)
+
+    println("Running int_mul_1M...")
+    let start2: I32 = time_ms()
+    let r2: I32 = bench_int_mul(1000000)
+    let t2: I32 = time_ms() - start2
+    checksum = checksum + r2
+    println("  time: {} ms, result = {}", t2, r2)
+
+    println("Running mixed_ops_1M...")
+    let start3: I32 = time_ms()
+    let r3: I32 = bench_mixed_ops(1000000)
+    let t3: I32 = time_ms() - start3
+    checksum = checksum + r3
+    println("  time: {} ms, result = {}", t3, r3)
+
+    println("Running fibonacci_100K...")
+    let start4: I32 = time_ms()
+    let r4: I32 = bench_fibonacci(100000)
+    let t4: I32 = time_ms() - start4
+    checksum = checksum + r4
+    println("  time: {} ms, result = {}", t4, r4)
+
+    println("Running count_primes_10K...")
+    let start5: I32 = time_ms()
+    let r5: I32 = bench_count_primes(10000)
+    let t5: I32 = time_ms() - start5
+    checksum = checksum + r5
+    println("  time: {} ms, result = {}", t5, r5)
+
+    println("Checksum: {} (to prevent optimization)", checksum)
+    println("Done.")
+    return 0
+}

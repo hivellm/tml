@@ -85,6 +85,8 @@ enum class TokenKind : uint8_t {
     Slash,           // /
     Percent,         // %
     StarStar,        // ** (power)
+    PlusPlus,        // ++ (increment)
+    MinusMinus,      // -- (decrement)
 
     // Operators - comparison
     Eq,              // ==

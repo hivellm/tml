@@ -98,8 +98,8 @@ module auto {
     // caps inferred as [io.file.read, io.network.http]
 
     func load() -> Data {
-        let local = File.read("cache.txt")
-        let remote = Http.get("https://api.example.com/data")
+        let local: Outcome[String, Error] = File.read("cache.txt")
+        let remote: Outcome[Response, Error] = Http.get("https://api.example.com/data")
         return merge(local, remote)
     }
 }
@@ -280,8 +280,8 @@ effects: [state.read]  // effect from f
 // Effects inferred automatically
 func load_all() -> List[Data] {
     // inferred: [io.file.read, io.network.http]
-    let files = File.list("data/")
-    let remote = Http.get(API_URL)
+    let files: Outcome[List[String], Error] = File.list("data/")
+    let remote: Outcome[Response, Error] = Http.get(API_URL)
     return merge(files, remote)
 }
 ```
@@ -372,7 +372,7 @@ mode = "runtime"   # verify at runtime
 ### 4.2 Move Semantics
 
 ```tml
-let s1 = String.from("hello")
+let s1: String = String.from("hello")
 let s2 = s1        // s1 moved to s2
 
 print(s1)          // ERROR: s1 is no longer valid
@@ -382,10 +382,10 @@ print(s2)          // OK
 ### 4.3 Borrowing
 
 ```tml
-let s = String.from("hello")
+let s: String = String.from("hello")
 
 // Immutable borrow
-let len = calculate_length(ref s)
+let len: U64 = calculate_length(ref s)
 print(s)  // OK: s is still valid
 
 func calculate_length(s: ref String) -> U64 {
@@ -394,7 +394,7 @@ func calculate_length(s: ref String) -> U64 {
 ```
 
 ```tml
-var s = String.from("hello")
+var s: String = String.from("hello")
 
 // Mutable borrow
 append_world(mut ref s)
@@ -409,26 +409,26 @@ func append_world(s: mut ref String) {
 
 **OWN-1: Multiple immutable borrows OK**
 ```tml
-let data = List.of(1, 2, 3)
-let r1 = ref data
-let r2 = ref data
+let data: List[I32] = List.of(1, 2, 3)
+let r1: ref List[I32] = ref data
+let r2: ref List[I32] = ref data
 print(r1.len())  // OK
 print(r2.len())  // OK
 ```
 
 **OWN-2: One exclusive mutable borrow**
 ```tml
-var data = List.of(1, 2, 3)
-let r = mut ref data
+var data: List[I32] = List.of(1, 2, 3)
+let r: mut ref List[I32] = mut ref data
 // ERROR: cannot have another borrow while r exists
-let r2 = ref data
+let r2: ref List[I32] = ref data
 ```
 
 **OWN-3: Don't mix ref and mut ref**
 ```tml
-var data = List.of(1, 2, 3)
-let r1 = ref data
-let r2 = mut ref data  // ERROR: already has immutable borrow
+var data: List[I32] = List.of(1, 2, 3)
+let r1: ref List[I32] = ref data
+let r2: mut ref List[I32] = mut ref data  // ERROR: already has immutable borrow
 ```
 
 ### 4.5 Copy Types
@@ -437,7 +437,7 @@ Small types are copied, not moved:
 
 ```tml
 let x: I32 = 42
-let y = x      // copy, not move
+let y: I32 = x  // copy, not move
 print(x)       // OK: x still valid
 
 // Copy types:
@@ -559,15 +559,15 @@ Every fallible call ends with `!` - highly visible error points:
 
 ```tml
 func process() -> Outcome[Data, Error] {
-    let file = File.open("data.txt")!   // propagate on error
-    let content = file.read()!           // propagate on error
-    let parsed = parse(content)!         // propagate on error
+    let file: Outcome[File, Error] = File.open("data.txt")!   // propagate on error
+    let content: Outcome[String, Error] = file.read()!           // propagate on error
+    let parsed: Outcome[Data, Error] = parse(content)!         // propagate on error
     return Ok(parsed)
 }
 
 // In non-Outcome function, ! panics on error
 func must_load() -> Config {
-    let content = File.read("config.json")!  // panic if fails
+    let content: Outcome[String, Error] = File.read("config.json")!  // panic if fails
     return parse(content)!
 }
 ```
@@ -576,16 +576,16 @@ func must_load() -> Config {
 
 ```tml
 // Simple default
-let port = env.get("PORT")!.parse[U16]()! else 8080
+let port: Outcome[String, Error] = env.get("PORT")!.parse[U16]()! else 8080
 
 // With error binding
-let data = fetch(url)! else |err| {
+let data: Outcome[Data, Error] = fetch(url)! else |err| {
     log.warn("Fetch failed: " + err.to_string())
     load_cached()! else Data.default()
 }
 
 // Early return
-let user = find_user(id)! else {
+let user: User = find_user(id)! else {
     return Err(Error.NotFound)
 }
 ```
@@ -595,8 +595,8 @@ let user = find_user(id)! else {
 ```tml
 func sync_data() -> Outcome[Unit, SyncError] {
     catch {
-        let local = load_local()!
-        let remote = fetch_remote()!
+        let local: Data = load_local()!
+        let remote: Outcome[Data, Error] = fetch_remote()!
         save(merge(local, remote)!)!
         return Ok(())
     } else |err| {
@@ -649,15 +649,15 @@ true or expensive()    // expensive() not called
 Almost everything is an expression:
 
 ```tml
-let x = if cond then 1 else 2
+let x: I32 = if cond then 1 else 2
 
-let y = when opt {
+let y: I32 = when opt {
     Just(n) -> n,
     Nothing -> 0,
 }
 
-let z = {
-    let temp = compute()
+let z: I32 = {
+    let temp: I32 = compute()
     temp * 2
 }
 ```

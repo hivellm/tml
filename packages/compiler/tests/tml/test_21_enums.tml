@@ -1,0 +1,189 @@
+// Test 21: Enums
+// Tests simple enum declarations and usage
+
+// Simple enum (no data)
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
+// Another simple enum
+type Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+// Enum for status
+type Status {
+    Pending,
+    Active,
+    Completed,
+    Failed
+}
+
+func test_color() -> I32 {
+    println("--- Color Enum Tests ---")
+
+    // Test enum values
+    let red: Color = Color::Red
+    let green: Color = Color::Green
+    let blue: Color = Color::Blue
+
+    // Red should be 0
+    if red != 0 {
+        println("FAIL: Color::Red should be 0")
+        return 1
+    }
+    println("Color::Red = 0 - OK")
+
+    // Green should be 1
+    if green != 1 {
+        println("FAIL: Color::Green should be 1")
+        return 2
+    }
+    println("Color::Green = 1 - OK")
+
+    // Blue should be 2
+    if blue != 2 {
+        println("FAIL: Color::Blue should be 2")
+        return 3
+    }
+    println("Color::Blue = 2 - OK")
+
+    // Test comparison with enum variant
+    if red == Color::Red {
+        println("red == Color::Red - OK")
+    } else {
+        println("FAIL: red should equal Color::Red")
+        return 4
+    }
+
+    if green != Color::Red {
+        println("green != Color::Red - OK")
+    } else {
+        println("FAIL: green should not equal Color::Red")
+        return 5
+    }
+
+    return 0
+}
+
+func test_direction() -> I32 {
+    println("--- Direction Enum Tests ---")
+
+    let north: Direction = Direction::North
+    let south: Direction = Direction::South
+    let east: Direction = Direction::East
+    let west: Direction = Direction::West
+
+    if north != 0 {
+        println("FAIL: Direction::North should be 0")
+        return 10
+    }
+    if south != 1 {
+        println("FAIL: Direction::South should be 1")
+        return 11
+    }
+    if east != 2 {
+        println("FAIL: Direction::East should be 2")
+        return 12
+    }
+    if west != 3 {
+        println("FAIL: Direction::West should be 3")
+        return 13
+    }
+    println("Direction values: OK")
+
+    // Test comparison
+    let dir: Direction = Direction::East
+    if dir == Direction::East {
+        println("dir == Direction::East - OK")
+    } else {
+        println("FAIL: dir should be East")
+        return 14
+    }
+
+    return 0
+}
+
+func test_status() -> I32 {
+    println("--- Status Enum Tests ---")
+
+    let pending: Status = Status::Pending
+    let active: Status = Status::Active
+    let completed: Status = Status::Completed
+    let failed: Status = Status::Failed
+
+    // Test all values
+    if pending != 0 {
+        println("FAIL: Status::Pending should be 0")
+        return 20
+    }
+    if active != 1 {
+        println("FAIL: Status::Active should be 1")
+        return 21
+    }
+    if completed != 2 {
+        println("FAIL: Status::Completed should be 2")
+        return 22
+    }
+    if failed != 3 {
+        println("FAIL: Status::Failed should be 3")
+        return 23
+    }
+    println("Status values: OK")
+
+    // Test assignment and comparison
+    let mut status: Status = Status::Pending
+    if status == Status::Pending {
+        println("Initial status is Pending - OK")
+    } else {
+        println("FAIL: status should be Pending")
+        return 24
+    }
+
+    // Change status
+    status = Status::Active
+    if status == Status::Active {
+        println("Changed to Active - OK")
+    } else {
+        println("FAIL: status should be Active")
+        return 25
+    }
+
+    // Mark completed
+    status = Status::Completed
+    if status == Status::Completed {
+        println("Changed to Completed - OK")
+    } else {
+        println("FAIL: status should be Completed")
+        return 26
+    }
+
+    return 0
+}
+
+func main() -> I32 {
+    println("=== Enum Tests ===")
+
+    let result1: I32 = test_color()
+    if result1 != 0 {
+        return result1
+    }
+
+    let result2: I32 = test_direction()
+    if result2 != 0 {
+        return result2
+    }
+
+    let result3: I32 = test_status()
+    if result3 != 0 {
+        return result3
+    }
+
+    println("=== All enum tests passed! ===")
+    return 0
+}

@@ -1,6 +1,6 @@
 // Test 05: If-else expressions
 func main() {
-    let x = 10
+    let x: I32 = 10
 
     // Simple if
     if x > 5 {
@@ -15,7 +15,7 @@ func main() {
     }
 
     // If as expression
-    let result = if x > 5 { 1 } else { 0 }
+    let result: I32 = if x > 5 { 1 } else { 0 }
     println(result)
 
     // Nested if-else

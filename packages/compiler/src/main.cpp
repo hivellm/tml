@@ -130,6 +130,41 @@ MSVCInfo find_msvc() {
 }
 #endif
 
+// Pre-compile runtime to object file if needed (returns path to .obj/.o)
+std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang, bool verbose) {
+    fs::path c_path = runtime_c_path;
+    fs::path obj_path = c_path.parent_path() / "tml_runtime";
+#ifdef _WIN32
+    obj_path += ".obj";
+#else
+    obj_path += ".o";
+#endif
+
+    // Check if object file exists and is newer than source
+    bool needs_compile = !fs::exists(obj_path);
+    if (!needs_compile) {
+        auto c_time = fs::last_write_time(c_path);
+        auto obj_time = fs::last_write_time(obj_path);
+        needs_compile = (c_time > obj_time);
+    }
+
+    if (needs_compile) {
+        if (verbose) {
+            std::cout << "Pre-compiling runtime: " << c_path << "\n";
+        }
+        // Use -O3 -march=native for SIMD and aggressive optimizations
+        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" + to_forward_slashes(obj_path.string()) +
+                                  "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+        int ret = std::system(compile_cmd.c_str());
+        if (ret != 0) {
+            // Fall back to compiling source directly
+            return runtime_c_path;
+        }
+    }
+
+    return to_forward_slashes(obj_path.string());
+}
+
 void print_usage() {
     std::cout << "TML Compiler " << VERSION << "\n\n";
     std::cout << "Usage: tml <command> [options] [files]\n\n";
@@ -483,8 +518,35 @@ int run_build(const std::string& path, bool verbose, bool emit_c_only) {
 
     std::string ll_path = to_forward_slashes(ll_output.string());
     std::string exe_path = to_forward_slashes(exe_output.string());
+
+    // Find runtime - check known locations
+    std::string build_runtime_path;
+    std::vector<std::string> build_runtime_search = {
+        "runtime/tml_runtime.c",
+        "../runtime/tml_runtime.c",
+        "../../runtime/tml_runtime.c",
+        "F:/Node/hivellm/tml/packages/compiler/runtime/tml_runtime.c",
+    };
+    for (const auto& rp : build_runtime_search) {
+        if (fs::exists(rp)) {
+            build_runtime_path = to_forward_slashes(fs::absolute(rp).string());
+            break;
+        }
+    }
+
     // On Windows, cmd.exe has issues with leading quotes - don't quote clang path
-    std::string compile_cmd = clang + " -o \"" + exe_path + "\" \"" + ll_path + "\"";
+    // Use -O3 for aggressive LLVM optimizations, -march=native for SIMD
+    // -flto for link-time optimization, -fomit-frame-pointer for faster calls
+    std::string compile_cmd = clang + " -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" + exe_path + "\" \"" + ll_path + "\"";
+
+    // Add runtime if found (use pre-compiled object if possible)
+    if (!build_runtime_path.empty()) {
+        std::string runtime_to_link = ensure_runtime_compiled(build_runtime_path, clang, verbose);
+        compile_cmd += " \"" + runtime_to_link + "\"";
+        if (verbose) {
+            std::cout << "Including runtime: " << runtime_to_link << "\n";
+        }
+    }
 
     if (verbose) {
         std::cout << "Running: " << compile_cmd << "\n";
@@ -653,13 +715,16 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     }
 
     // On Windows, cmd.exe has issues with leading quotes - don't quote clang path
-    std::string compile_cmd = clang + " -o \"" + exe_path + "\" \"" + ll_path + "\"";
+    // Use -O3 for aggressive LLVM optimizations, -march=native for SIMD
+    // -flto for link-time optimization, -fomit-frame-pointer for faster calls
+    std::string compile_cmd = clang + " -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" + exe_path + "\" \"" + ll_path + "\"";
 
-    // Add runtime if found
+    // Add runtime if found (use pre-compiled object if possible)
     if (!runtime_path.empty()) {
-        compile_cmd += " \"" + runtime_path + "\"";
+        std::string runtime_to_link = ensure_runtime_compiled(runtime_path, clang, verbose);
+        compile_cmd += " \"" + runtime_to_link + "\"";
         if (verbose) {
-            std::cout << "Including runtime: " << runtime_path << "\n";
+            std::cout << "Including runtime: " << runtime_to_link << "\n";
         }
     }
 

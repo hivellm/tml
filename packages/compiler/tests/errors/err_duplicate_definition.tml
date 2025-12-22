@@ -1,0 +1,7 @@
+// ERROR TEST: Duplicate variable definition
+// Expected: error about duplicate definition
+func main() -> I32 {
+    let x: I32 = 10
+    let x: I32 = 20
+    return x
+}

@@ -115,13 +115,13 @@ lowlevel func pointer_ops() {
     let pm: *mut I32 = mut ref x as *mut I32
 
     // Dereference (lowlevel)
-    let value = *p
+    let value: I32 = *p
     *pm = 100
 
     // Pointer arithmetic
     let arr: [I32; 5] = [1, 2, 3, 4, 5]
-    let ptr = arr.as_ptr()
-    let third = *(ptr.offset(2))  // arr[2]
+    let ptr: ptr I32 = arr.as_ptr()
+    let third: I32 = *(ptr.offset(2))  // arr[2]
 
     // Null checks
     if ptr.is_null() {
@@ -166,13 +166,13 @@ extend *mut T {
 func safe_wrapper() -> I32 {
     // Low-level operations require explicit block
     lowlevel {
-        let ptr = malloc(100)
+        let ptr: ptr U8 = malloc(100)
         if ptr.is_null() {
             return -1
         }
 
         // Do work with raw memory
-        let result = process_buffer(ptr, 100)
+        let result: I32 = process_buffer(ptr, 100)
 
         free(ptr)
         return result
@@ -196,7 +196,7 @@ lowlevel func dangerous_operation(ptr: *mut I32, len: U64) -> I32 {
 // Calling lowlevel function
 func caller() {
     lowlevel {
-        let result = dangerous_operation(data.as_mut_ptr(), data.len())
+        let result: I32 = dangerous_operation(data.as_mut_ptr(), data.len())
     }
 }
 ```
@@ -232,7 +232,7 @@ import std.ffi.CString
 
 func use_c_string() {
     // Create from TML String
-    let c_str = CString.new("Hello")!
+    let c_str: Outcome[CString, Error] = CString.new("Hello")!
 
     // Get raw pointer for FFI
     lowlevel {
@@ -240,12 +240,12 @@ func use_c_string() {
     }
 
     // Convert back
-    let tml_str = c_str.to_string()
+    let tml_str: String = c_str.to_string()
 }
 
 // From raw C string
 lowlevel func from_c(ptr: *const U8) -> String {
-    let c_str = CString.from_ptr(ptr)
+    let c_str: CString = CString.from_ptr(ptr)
     return c_str.to_string()
 }
 ```
@@ -257,10 +257,10 @@ import std.ffi.CStr
 
 lowlevel func process_c_string(ptr: *const U8) {
     // Borrow without taking ownership
-    let c_str = CStr.from_ptr(ptr)
+    let c_str: CStr = CStr.from_ptr(ptr)
 
     // Get length (scans for null)
-    let len = c_str.len()
+    let len: U64 = c_str.len()
 
     // Convert to bytes slice
     let bytes: ref [U8] = c_str.as_bytes()
@@ -350,7 +350,7 @@ union Value {
 
 // Usage (requires lowlevel)
 func use_union() {
-    var v = Value { i: 42 }
+    var v: Value = Value { i: 42 }
 
     lowlevel {
         println(v.i.to_string())  // 42
@@ -408,8 +408,8 @@ extern "C" func qsort(
 // TML callback
 func compare_i32(a: *const Void, b: *const Void) -> I32 {
     lowlevel {
-        let va = *(a as *const I32)
-        let vb = *(b as *const I32)
+        let va: I32 = *(a as *const I32)
+        let vb: I32 = *(b as *const I32)
         return va - vb
     }
 }
@@ -444,7 +444,7 @@ type CallbackWrapper[F] {
 }
 
 func with_callback[F: Fn()](callback: F) {
-    var wrapper = CallbackWrapper { func_ptr: callback }
+    var wrapper: CallbackWrapper = CallbackWrapper { func_ptr: callback }
 
     lowlevel {
         set_callback(
@@ -456,7 +456,7 @@ func with_callback[F: Fn()](callback: F) {
 
 func trampoline[F: Fn()](user_data: *mut Void) {
     lowlevel {
-        let wrapper = ref *(user_data as *const CallbackWrapper[F])
+        let wrapper: ref CallbackWrapper[F] = ref *(user_data as *const CallbackWrapper[F])
         (wrapper.func_ptr)()
     }
 }
@@ -631,7 +631,7 @@ public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
     }
 
     lowlevel {
-        let ptr = dangerous_alloc(size)
+        let ptr: ptr U8 = dangerous_alloc(size)
         if ptr.is_null() {
             return Err(AllocError.OutOfMemory)
         }
@@ -654,11 +654,11 @@ public type SafeFile {
 
 extend SafeFile {
     public func open(path: String, mode: String) -> Outcome[This, IoError] {
-        let c_path = CString.new(path)!
-        let c_mode = CString.new(mode)!
+        let c_path: CString = CString.new(path)!
+        let c_mode: CString = CString.new(mode)!
 
         lowlevel {
-            let handle = fopen(c_path.as_ptr(), c_mode.as_ptr())
+            let handle: ptr FILE = fopen(c_path.as_ptr(), c_mode.as_ptr())
             if handle.is_null() {
                 return Err(IoError.from_errno())
             }

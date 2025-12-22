@@ -359,7 +359,7 @@ enum class Place {
 ```cpp
 // When creating a new borrow:
 func check_borrow(place: Place, kind: BorrowKind) -> Outcome[(), BorrowError] {
-    let existing = state.get_borrows(place);
+    let existing: Borrows = state.get_borrows(place);
 
     for borrow in existing {
         if conflicts(borrow.kind, kind) {
@@ -413,7 +413,7 @@ enum class EffectKind {
 
 ```cpp
 func infer_effects(body: ref FuncBody) -> Effect {
-    let effects = Effect::pure();
+    let effects: Effect = Effect::pure();
 
     for stmt in body.statements {
         effects = effects.union(infer_stmt_effects(stmt));
@@ -425,8 +425,8 @@ func infer_effects(body: ref FuncBody) -> Effect {
 func infer_stmt_effects(stmt: ref Stmt) -> Effect {
     when stmt {
         Call(func, args) => {
-            let func_effects = lookup_function_effects(func);
-            let arg_effects = args.map(infer_expr_effects).union_all();
+            let func_effects: Effect = lookup_function_effects(func);
+            let arg_effects: Effect = args.map(infer_expr_effects).union_all();
             func_effects.union(arg_effects)
         },
         // ... other statement kinds
@@ -438,8 +438,8 @@ func infer_stmt_effects(stmt: ref Stmt) -> Effect {
 
 ```cpp
 func check_capabilities(module: ref Module) -> Outcome[(), CapError] {
-    let declared_caps = module.caps;
-    let required_caps = infer_required_caps(module);
+    let declared_caps: Caps = module.caps;
+    let required_caps: Caps = infer_required_caps(module);
 
     if not declared_caps.covers(required_caps) {
         return Err(CapError::Missing {
@@ -650,13 +650,13 @@ target/
 
 ```cpp
 func needs_recompile(module: ModuleId) -> bool {
-    let cached = cache.get(module);
+    let cached: Maybe[ModuleInfo] = cache.get(module);
 
     if cached.is_none() {
         return true;
     }
 
-    let info = cached.unwrap();
+    let info: ModuleInfo = cached.unwrap();
 
     // Source changed?
     if hash(source(module)) != info.source_hash {
@@ -706,7 +706,7 @@ func recover(parser: mut ref Parser) {
 // This allows reporting multiple errors
 
 func check_expr(expr: ref Expr, expected: Type) -> Type {
-    let actual = infer(expr);
+    let actual: Type = infer(expr);
 
     if not unify(actual, expected) {
         report_error(TypeMismatch { expected, actual, span: expr.span });

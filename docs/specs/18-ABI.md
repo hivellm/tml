@@ -417,7 +417,7 @@ func increment() {
 ```tml
 import std.sync.atomic.AtomicI32
 
-var counter = AtomicI32.new(0)
+var counter: AtomicI32 = AtomicI32.new(0)
 
 func increment() {
     counter.fetch_add(1, Ordering.SeqCst)

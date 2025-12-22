@@ -281,8 +281,8 @@ loop i in 1 through 5 {
 }
 
 // Ranges in slices
-let first_five = items[0 to 5]
-let all_from_three = items[3 to items.len()]
+let first_five: T = items[0 to 5]
+let all_from_three: T = items[3 to items.len()]
 ```
 
 ## 6. Type Modifiers

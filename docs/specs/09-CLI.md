@@ -190,7 +190,7 @@ tml doc --format json
 ```bash
 tml repl
 
-# >>> let x = 42
+# >>> let x: I32 = 42
 # x: I32 = 42
 #
 # >>> x * 2

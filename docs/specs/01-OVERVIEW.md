@@ -1,19 +1,39 @@
 # TML v1.0 — Overview
 
-## 1. The Problem
+## 1. Design Philosophy: LLM-First, Human-Friendly
 
-All existing programming languages were designed for **humans**:
+> **TML is designed for LLM code generation, with ergonomics inspired by Rust and C# for human developers.**
+
+### 1.1 The Problem
+
+Existing programming languages were designed for **humans**:
 - Syntax optimized for manual reading and writing
 - Ambiguities resolved by context (which humans understand)
 - Syntactic sugar for typing convenience
 - Cryptic symbols and abbreviations
 
-LLMs are not humans. They need:
+LLMs need something different:
 - **Deterministic parsing** — no ambiguities
 - **Unique tokens** — each symbol with one meaning
 - **Explicit structure** — no contextual inferences
 - **Stable IDs** — references that survive refactoring
 - **Self-documenting syntax** — words over symbols
+
+### 1.2 The Solution: Best of Both Worlds
+
+TML takes the **rigor needed for LLM generation** and combines it with the **ergonomics that humans expect** from modern languages:
+
+| From Rust | From C# | TML Innovation |
+|-----------|---------|----------------|
+| Ownership model | Clean generics `List[T]` | `and`/`or`/`not` keywords |
+| Pattern matching | Method syntax `.len()` | `to`/`through` for ranges |
+| `ref`/`mut` semantics | Properties and indexers | `Maybe[T]`/`Outcome[T,E]` |
+| Zero-cost abstractions | LINQ-style chains | `@directives` over macros |
+| Traits → `behavior` | `async`/`await` | Stable IDs `@abc123` |
+
+**For LLMs:** Deterministic LL(1) grammar, unique token meanings, self-documenting syntax.
+
+**For Humans:** Familiar Rust/C# patterns, readable keywords, method chaining, type inference.
 
 ## 2. The Solution: TML
 
@@ -70,8 +90,8 @@ extend Point {
     }
 
     func distance(this, other: ref Point) -> F64 {
-        let dx = this.x - other.x
-        let dy = this.y - other.y
+        let dx: F64 = this.x - other.x
+        let dy: F64 = this.y - other.y
         return (dx**2 + dy**2).sqrt()
     }
 }
@@ -87,9 +107,9 @@ when value {
 
 **Error handling:**
 ```tml
-let file = File.open("data.txt")!
-let content = file.read_string()!
-let parsed = content.parse[I32]()! else 0
+let file: Outcome[File, Error] = File.open("data.txt")!
+let content: String = file.read_string()!
+let parsed: Outcome[I32, Error] = content.parse[I32]()! else 0
 ```
 
 **Closures:**
@@ -249,6 +269,11 @@ if x > 0 then positive() else negative()  // not: if x > 0 { }
 
 // type in parameters mandatory
 func greet(name: String)  // not: func greet(name)
+
+// type annotations mandatory on all variables
+let x: I32 = 42           // not: let x: I32 = 42
+var count: I32 = 0        // not: var count: I32 = 0
+const PI: F64 = 3.14159   // not: const PI = 3.14159
 ```
 
 ### 7.2 One Way to Do It

@@ -14,7 +14,7 @@ TML doesn't use Garbage Collector. Memory is managed via:
 ```tml
 func example() {
     let x: I32 = 42           // stack
-    let point = Point { x: 1.0, y: 2.0 }  // stack (if small)
+    let point: Point = Point { x: 1.0, y: 2.0 }  // stack (if small)
     let arr: [U8; 16] = [0; 16]  // stack (fixed size)
 }  // all released automatically
 ```
@@ -23,9 +23,9 @@ func example() {
 
 ```tml
 func example() {
-    let s = String.from("hello")  // heap
-    let list = List.of(1, 2, 3)   // heap
-    let map = Map.new()           // heap
+    let s: String = String.from("hello")  // heap
+    let list: List[I32] = List.of(1, 2, 3)   // heap
+    let map: Map[String, I32] = Map.new()           // heap
 }  // heap released when owner goes out of scope
 ```
 
@@ -36,7 +36,7 @@ func example() {
 Every value has exactly one owner:
 
 ```tml
-let s1 = String.from("hello")
+let s1: String = String.from("hello")
 // s1 is owner of "hello"
 
 let s2 = s1
@@ -51,15 +51,15 @@ print(s2)  // OK
 
 **Move** (heap types):
 ```tml
-let a = String.from("hello")
-let b = a   // move
+let a: String = String.from("hello")
+let b: String = a   // move
 // a invalid
 ```
 
 **Copy** (small types):
 ```tml
 let a: I32 = 42
-let b = a   // copy
+let b: I32 = a   // copy
 // both valid
 print(a)    // OK
 print(b)    // OK
@@ -75,8 +75,8 @@ Copy types:
 For explicit copy of non-Copy types:
 
 ```tml
-let a = String.from("hello")
-let b = a.duplicate()  // deep copy
+let a: String = String.from("hello")
+let b: Shared[List[I32]] = a.duplicate()  // deep copy
 
 print(a)  // OK: a still valid
 print(b)  // OK: b is independent copy
@@ -91,7 +91,7 @@ func print_len(s: ref String) {
     print(s.len().to_string())
 }
 
-let s = String.from("hello")
+let s: String = String.from("hello")
 print_len(ref s)   // borrow s
 print(s)           // s still valid
 ```
@@ -103,7 +103,7 @@ func append(s: mut ref String, suffix: String) {
     s.push(suffix)
 }
 
-var s = String.from("hello")
+var s: String = String.from("hello")
 append(mut ref s, " world")
 print(s)  // "hello world"
 ```
@@ -118,20 +118,20 @@ print(s)  // "hello world"
 | Use owner during borrow | Depends |
 
 ```tml
-var data = List.of(1, 2, 3)
+var data: List[I32] = List.of(1, 2, 3)
 
 // OK: multiple immutable
-let r1 = ref data
-let r2 = ref data
+let r1: ref List[I32] = ref data
+let r2: ref List[I32] = ref data
 print(r1.len())
 
 // OK: one mutable
-let r3 = mut ref data
+let r3: mut ref List[I32] = mut ref data
 r3.push(4)
 
 // ERROR: mixing
-let r4 = ref data
-let r5 = mut ref data  // error: r4 still exists
+let r4: ref List[I32] = ref data
+let r5: mut ref List[I32] = mut ref data  // error: r4 still exists
 ```
 
 ## 5. Smart Pointers
@@ -154,8 +154,8 @@ type Tree[T] = Leaf(T) | Node(Heap[Tree[T]], Heap[Tree[T]])
 ```tml
 import std.shared.Shared
 
-let a = Shared.new(List.of(1, 2, 3))
-let b = a.duplicate()  // increments counter, doesn't copy data
+let a: Shared[List[I32]] = Shared.new(List.of(1, 2, 3))
+let b: Shared[List[I32]] = a.duplicate()  // increments counter, doesn't copy data
 
 // a and b point to same data
 // data released when last Shared is dropped
@@ -166,11 +166,11 @@ let b = a.duplicate()  // increments counter, doesn't copy data
 ```tml
 import std.sync.Sync
 
-let shared = Sync.new(data)
+let shared: Sync[T] = Sync.new(data)
 
 // Can be sent between threads
 spawn(do() {
-    let local = shared.duplicate()
+    let local: Sync[T] = shared.duplicate()
     process(local)
 })
 ```
@@ -180,7 +180,7 @@ spawn(do() {
 ```tml
 import std.shared.{Shared, Weak}
 
-let strong = Shared.new(Node { value: 42 })
+let strong: Shared[Node] = Shared.new(Node { value: 42 })
 let weak: Weak[Node] = Shared.downgrade(ref strong)
 
 // weak doesn't keep alive
@@ -203,7 +203,7 @@ type Counter {
 
 extend Counter {
     func increment(this) {  // note: this, not mut ref this
-        let current = this.value.get()
+        let current: I64 = this.value.get()
         this.value.set(current + 1)
     }
 }
@@ -214,17 +214,17 @@ extend Counter {
 ```tml
 import std.cell.RefCell
 
-let data = RefCell.new(List.of(1, 2, 3))
+let data: RefCell[List[I32]] = RefCell.new(List.of(1, 2, 3))
 
 // Immutable borrow
 {
-    let borrowed = data.borrow()
+    let borrowed: ref List[I32] = data.borrow()
     print(borrowed.len())
 }
 
 // Mutable borrow
 {
-    let mut_borrowed = data.borrow_mut()
+    let mut_borrowed: mut ref List[I32] = data.borrow_mut()
     mut_borrowed.push(4)
 }
 
@@ -237,7 +237,7 @@ let data = RefCell.new(List.of(1, 2, 3))
 
 ```tml
 func example() {
-    let file = File.open("data.txt")
+    let file: Outcome[File, Error] = File.open("data.txt")
     // use file...
 }  // file.drop() called automatically
    // file closed
@@ -264,9 +264,9 @@ Reverse order of declaration:
 
 ```tml
 func example() {
-    let a = Resource.new("a")
-    let b = Resource.new("b")
-    let c = Resource.new("c")
+    let a: Resource = Resource.new("a")
+    let b: Resource = Resource.new("b")
+    let c: Resource = Resource.new("c")
 }
 // Drop order: c, b, a
 ```
@@ -279,11 +279,11 @@ For bulk allocation:
 import std.arena.Arena
 
 func process_batch(items: List[Data]) {
-    let arena = Arena.new()
+    let arena: Arena = Arena.new()
 
     loop item in items {
         // Allocate in arena, very fast
-        let processed = arena.alloc(transform(item))
+        let processed: ref T = arena.alloc(transform(item))
         use(processed)
     }
 }  // Arena and all allocations released at once
@@ -300,7 +300,7 @@ func raw_pointer_example() {
     let ptr: ptr I32 = ref x as ptr I32
 
     // Manual dereference
-    let value = ptr.read()  // lowlevel!
+    let value: T = ptr.read()  // lowlevel!
 }
 ```
 
@@ -316,14 +316,14 @@ Low-level operations:
 
 ```tml
 // Small strings (< 24 bytes) don't use heap
-let s = "hello"  // stack, not heap
+let s: String = "hello"  // stack, not heap
 ```
 
 ### 10.2 Move Elision
 
 ```tml
 func create() -> BigStruct {
-    let result = BigStruct { ... }
+    let result: BigStruct = BigStruct { ... }
     return result  // move elided, built in-place
 }
 ```
@@ -332,13 +332,13 @@ func create() -> BigStruct {
 
 ```tml
 // Iterator chains compile to simple loops
-let sum = items
+let sum: I32 = items
     .filter(do(x) x > 0)
     .map(do(x) x * 2)
     .sum()
 
 // Equivalent to:
-var sum = 0
+var sum: I32 = 0
 loop x in items {
     if x > 0 then sum += x * 2
 }
@@ -349,12 +349,12 @@ loop x in items {
 ### 11.1 Use After Move
 
 ```tml
-let s = String.from("hello")
+let s: String = String.from("hello")
 let s2 = s
 print(s)  // ERROR: s moved
 
 // Fix: duplicate if you need both
-let s = String.from("hello")
+let s: String = String.from("hello")
 let s2 = s.duplicate()
 print(s)   // OK
 print(s2)  // OK
@@ -364,13 +364,13 @@ print(s2)  // OK
 
 ```tml
 func dangling() -> ref String {
-    let s = String.from("hello")
+    let s: String = String.from("hello")
     return ref s  // ERROR: s will be destroyed
 }
 
 // Fix: return owned
 func valid() -> String {
-    let s = String.from("hello")
+    let s: String = String.from("hello")
     return s  // move, not reference
 }
 ```
@@ -378,11 +378,11 @@ func valid() -> String {
 ### 11.3 Borrow of Temporary
 
 ```tml
-let r = ref String.from("temp")  // ERROR: temporary destroyed
+let r: ref String = ref String.from("temp")  // ERROR: temporary destroyed
 
 // Fix: bind first
-let s = String.from("temp")
-let r = ref s
+let s: String = String.from("temp")
+let r: ref String = ref s
 ```
 
 ## 12. Complex Borrowing Scenarios
@@ -395,11 +395,11 @@ Closures capture variables from their environment:
 
 ```tml
 func closure_capture_example() {
-    var data = List.new()
+    var data: List[T] = List.new()
     data.push(1)
 
     // Closure captures mut ref data implicitly
-    let modifier = do() {
+    let modifier: func() -> Unit = do() {
         data.push(2)  // Mutable borrow captured
     }
 
@@ -412,10 +412,10 @@ func closure_capture_example() {
 
 // Move into closure with explicit capture
 func move_into_closure() {
-    let data = String.from("owned")
+    let data: String = String.from("owned")
 
     // 'move' transfers ownership to closure
-    let consumer = move do() {
+    let consumer: func() -> Unit = move do() {
         print(data)  // data moved into closure
     }
 
@@ -438,21 +438,21 @@ type Container {
 
 func process(c: mut ref Container) {
     // Can borrow different fields simultaneously
-    let items_ref = mut ref c.items   // Borrows items field
-    let meta_ref = ref c.metadata     // Borrows metadata field (OK - different fields)
+    let items_ref: mut ref List[T] = mut ref c.items   // Borrows items field
+    let meta_ref: ref Metadata = ref c.metadata     // Borrows metadata field (OK - different fields)
 
     items_ref.push(42)
     print(meta_ref)
 }
 
 func conflict_example(c: mut ref Container) {
-    let items_ref = mut ref c.items
+    let items_ref: mut ref List[T] = mut ref c.items
 
     // ERROR: Cannot borrow c.items again
     // let items_ref2 = ref c.items
 
     // But this is OK: different field
-    let meta_ref = ref c.metadata
+    let meta_ref: ref Metadata = ref c.metadata
 }
 ```
 
@@ -462,8 +462,8 @@ Temporary borrows from existing references:
 
 ```tml
 func reborrow_example() {
-    var data = String.from("hello")
-    let r1 = mut ref data
+    var data: String = String.from("hello")
+    let r1: mut ref List[I32] = mut ref data
 
     // Reborrow: temporarily create new reference from existing
     helper(r1)     // r1 is reborrowed as mut ref inside helper
@@ -476,11 +476,11 @@ func helper(s: mut ref String) {
 
 // Reborrow coercion
 func reborrow_coercion() {
-    var data = String.from("test")
+    var data: String = String.from("test")
     let r: mut ref String = mut ref data
 
     // mut ref T can be reborrowed as ref T
-    let len = get_len(r)  // r reborrowed as ref String
+    let len: U64 = get_len(r)  // r reborrowed as ref String
 
     r.push("!")  // OK: mutable access restored
 }
@@ -508,7 +508,7 @@ func longest_owned(a: ref String, b: ref String) -> String {
 // SOLUTION 2: Single source reference (lifetime unambiguous)
 func longest_from_list(items: ref List[String]) -> ref String {
     // Lifetime tied to items - unambiguous
-    var longest = ref items[0]
+    var longest: ref String = ref items[0]
     loop item in items.iter() {
         if item.len() > longest.len() then {
             longest = item
@@ -529,9 +529,9 @@ Borrows end at last use, not at scope end:
 
 ```tml
 func nll_example() {
-    var data = List.of(1, 2, 3)
+    var data: List[I32] = List.of(1, 2, 3)
 
-    let r = ref data[0]
+    let r: ref List[I32] = ref data[0]
     print(r)          // Last use of r
 
     // In lexical lifetimes: ERROR (r still in scope)
@@ -542,9 +542,9 @@ func nll_example() {
 }
 
 func nll_conditional() {
-    var data = List.of(1, 2, 3)
+    var data: List[I32] = List.of(1, 2, 3)
 
-    let r = ref data[0]
+    let r: ref List[I32] = ref data[0]
 
     if some_condition() then {
         print(r)      // r used in this branch
@@ -592,7 +592,7 @@ TML's borrow checker prevents iterator invalidation:
 
 ```tml
 func safe_iteration() {
-    var list = List.of(1, 2, 3)
+    var list: List[I32] = List.of(1, 2, 3)
 
     // ERROR: Cannot mutate while iterating
     // loop item in list.iter() {
@@ -604,9 +604,9 @@ func safe_iteration() {
     list.extend(doubled)
 
     // SOLUTION 2: Index-based iteration
-    let len = list.len()
+    let len: U64 = list.len()
     loop i in 0 to len {
-        let val = list[i]
+        let val: I32 = list[i]
         list.push(val * 2)
     }
 }
@@ -633,10 +633,10 @@ extend Builder {
 }
 
 func builder_chain() {
-    var builder = Builder { value: String.new() }
+    var builder: Builder = Builder { value: String.new() }
 
     // Two-phase borrow enables method chaining
-    let result = builder
+    let result: String = builder
         .append(ref "hello")
         .append(ref " ")
         .append(ref "world")

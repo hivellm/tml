@@ -1,0 +1,94 @@
+// Test bitwise operations with enums
+
+type Flags {
+    None,
+    Read,
+    Write,
+    Execute
+}
+
+func main() -> I32 {
+    println("=== Bitwise Enum Tests ===")
+
+    // Test enum as integers in bitwise
+    let read_flag: Flags = Flags::Read
+    let write_flag: Flags = Flags::Write
+
+    // Combine with OR
+    let rw: I32 = read_flag | write_flag
+    if rw == 3 {
+        println("Test 1: read | write = 3 - OK")
+    } else {
+        println("FAIL: read | write should be 3")
+        return 1
+    }
+
+    // Check with AND
+    let has_read: I32 = (rw & read_flag) != 0
+    if has_read {
+        println("Test 2: has read flag - OK")
+    } else {
+        println("FAIL: should have read flag")
+        return 2
+    }
+
+    // Using defined bit flag values
+    let FLAG_READ: I32 = 1
+    let FLAG_WRITE: I32 = 2
+    let FLAG_EXECUTE: I32 = 4
+
+    let perms: I32 = FLAG_READ | FLAG_WRITE
+    if perms == 3 {
+        println("Test 3: READ | WRITE = 3 - OK")
+    } else {
+        println("FAIL: READ | WRITE should be 3")
+        return 3
+    }
+
+    // Full permission set
+    let full: I32 = FLAG_READ | FLAG_WRITE | FLAG_EXECUTE
+    if full == 7 {
+        println("Test 4: full perms = 7 - OK")
+    } else {
+        println("FAIL: full should be 7")
+        return 4
+    }
+
+    // Test XOR
+    let toggle: I32 = perms ^ FLAG_WRITE
+    if toggle == 1 {
+        println("Test 5: XOR toggle - OK")
+    } else {
+        println("FAIL: toggle should be 1")
+        return 5
+    }
+
+    // Test NOT (complement)
+    let complement: I32 = ~0
+    if complement == -1 {
+        println("Test 6: ~0 = -1 - OK")
+    } else {
+        println("FAIL: ~0 should be -1")
+        return 6
+    }
+
+    // Shift operations
+    let shifted: I32 = 1 << 3
+    if shifted == 8 {
+        println("Test 7: 1 << 3 = 8 - OK")
+    } else {
+        println("FAIL: 1 << 3 should be 8")
+        return 7
+    }
+
+    let right: I32 = 16 >> 2
+    if right == 4 {
+        println("Test 8: 16 >> 2 = 4 - OK")
+    } else {
+        println("FAIL: 16 >> 2 should be 4")
+        return 8
+    }
+
+    println("=== All bitwise enum tests passed! ===")
+    return 0
+}

@@ -42,6 +42,7 @@ private:
 
     // Current function context
     std::string current_func_;
+    std::string current_ret_type_;  // Return type of current function
     std::string current_block_;
     bool block_terminated_ = false;
 
@@ -49,15 +50,32 @@ private:
     std::string current_loop_start_;
     std::string current_loop_end_;
 
-    // Variable name to LLVM register/type mapping
+    // Track last expression type for type-aware codegen
+    std::string last_expr_type_ = "i32";
+
+public:
+    // Variable name to LLVM register/type mapping (public for is_bool_expr helper)
     struct VarInfo {
         std::string reg;
         std::string type;
     };
+
+private:
     std::unordered_map<std::string, VarInfo> locals_;
 
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
+
+    // Enum variant values (EnumName::VariantName -> tag value)
+    std::unordered_map<std::string, int> enum_variants_;
+
+    // Function registry for first-class functions (name -> LLVM function info)
+    struct FuncInfo {
+        std::string llvm_name;      // e.g., "@tml_double"
+        std::string llvm_func_type; // e.g., "i32 (i32)"
+        std::string ret_type;       // e.g., "i32"
+    };
+    std::unordered_map<std::string, FuncInfo> functions_;
 
     // Helper methods
     auto fresh_reg() -> std::string;
@@ -69,6 +87,7 @@ private:
     auto llvm_type(const parser::Type& type) -> std::string;
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;
     auto llvm_type_name(const std::string& name) -> std::string;
+    auto llvm_type_from_semantic(const types::TypePtr& type) -> std::string;
 
     // Module structure
     void emit_header();
@@ -79,6 +98,7 @@ private:
     void gen_decl(const parser::Decl& decl);
     void gen_func_decl(const parser::FuncDecl& func);
     void gen_struct_decl(const parser::StructDecl& s);
+    void gen_enum_decl(const parser::EnumDecl& e);
 
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);
@@ -101,6 +121,10 @@ private:
     auto gen_struct_expr(const parser::StructExpr& s) -> std::string;
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;
+    auto gen_array(const parser::ArrayExpr& arr) -> std::string;
+    auto gen_index(const parser::IndexExpr& idx) -> std::string;
+    auto gen_path(const parser::PathExpr& path) -> std::string;
+    auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format,
@@ -114,6 +138,11 @@ private:
     // String literal handling
     std::vector<std::pair<std::string, std::string>> string_literals_;
     auto add_string_literal(const std::string& value) -> std::string;
+
+public:
+    // Print argument type inference (used by gen_call and gen_format_print)
+    enum class PrintArgType { Int, I64, Float, Bool, Str, Unknown };
+    static PrintArgType infer_print_type(const parser::Expr& expr);
 };
 
 } // namespace tml::codegen

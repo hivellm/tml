@@ -1,0 +1,6 @@
+// ERROR TEST: Missing type annotation on let
+// Expected: error about missing type annotation
+func main() -> I32 {
+    let x = 42
+    return x
+}

@@ -44,7 +44,7 @@ public func saturating_sub[T: Integer](a: T, b: T) -> T
 public func saturating_mul[T: Integer](a: T, b: T) -> T
 
 // Usage
-let x = saturating_add(250_u8, 10_u8)  // Returns 255
+let x: U8 = saturating_add(250_u8, 10_u8)  // Returns 255
 ```
 
 ### 2.3 Wrapping Arithmetic
@@ -66,7 +66,7 @@ public func wrapping_neg[T: SignedInteger](a: T) -> T
 public func wrapping_abs[T: SignedInteger](a: T) -> T
 
 // Usage
-let x = wrapping_add(255_u8, 1_u8)  // Returns 0
+let x: U8 = wrapping_add(255_u8, 1_u8)  // Returns 0
 ```
 
 ### 2.4 Unchecked Arithmetic
@@ -676,7 +676,7 @@ func count_bits(x: U64) -> U32 {
     @when(not(target_feature = "popcnt"))
     {
         // Software fallback
-        var n = x
+        var n: U32 = x
         n = n - ((n >> 1) & 0x5555555555555555)
         n = (n & 0x3333333333333333) + ((n >> 2) & 0x3333333333333333)
         n = (n + (n >> 4)) & 0x0F0F0F0F0F0F0F0F
@@ -691,15 +691,15 @@ func count_bits(x: U64) -> U32 {
 ```tml
 /// Branch-free integer minimum
 func branchless_min(a: I32, b: I32) -> I32 {
-    let diff = a - b
-    let mask = diff >> 31  // All 1s if a < b, all 0s otherwise
+    let diff: I32 = a - b
+    let mask: I32 = diff >> 31  // All 1s if a < b, all 0s otherwise
     return b + (diff & mask)
 }
 
 /// Branch-free integer maximum
 func branchless_max(a: I32, b: I32) -> I32 {
-    let diff = a - b
-    let mask = diff >> 31
+    let diff: I32 = a - b
+    let mask: I32 = diff >> 31
     return a - (diff & mask)
 }
 ```
@@ -715,7 +715,7 @@ func crc32_fast(data: ref [U8]) -> U32 {
     // Process 8 bytes at a time
     loop while i + 8 <= data.len() {
         lowlevel {
-            let chunk = (data.as_ptr().add(i) as *const U64).read_unaligned()
+            let chunk: U64 = (data.as_ptr().add(i) as *const U64).read_unaligned()
             crc = intrinsics.x86.crc32_u64(crc as U64, chunk) as U32
         }
         i += 8

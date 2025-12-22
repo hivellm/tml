@@ -318,7 +318,7 @@ public lowlevel func futex(
 
 /// Wait if *uaddr == val
 public lowlevel func futex_wait(uaddr: *mut U32, val: U32, timeout: Maybe[ref Timespec]) -> I64 {
-    let timeout_ptr = when timeout {
+    let timeout_ptr: ptr Timespec = when timeout {
         Just(t) -> t as *const Timespec,
         Nothing -> null,
     }
@@ -708,18 +708,18 @@ use sys.result.*
 public func read_file(path: ref str) -> Outcome[List[U8], Errno] {
     lowlevel {
         // Open file
-        let fd = check_i32(open(
+        let fd: I32 = check_i32(open(
             path.as_ptr(),
             O_RDONLY,
             0
         ))!
 
         // Read contents
-        var buffer = List.with_capacity(4096)
+        var buffer: List[U8] = List.with_capacity(4096)
         var buf: [U8; 4096] = [0; 4096]
 
         loop {
-            let n = check(read(fd, buf.as_mut_ptr(), buf.len()))!
+            let n: I64 = check(read(fd, buf.as_mut_ptr(), buf.len()))!
             if n == 0 {
                 break
             }
@@ -751,7 +751,7 @@ type BumpAllocator {
 
 extend BumpAllocator {
     public lowlevel func new(size: U64) -> Outcome[This, Errno] {
-        let ptr = mmap(
+        let ptr: ptr Void = mmap(
             null,
             size,
             PROT_READ | PROT_WRITE,
@@ -772,13 +772,13 @@ extend BumpAllocator {
     }
 
     public lowlevel func alloc(this, size: U64, align: U64) -> *mut U8 {
-        let aligned_offset = (this.offset + align - 1) & ~(align - 1)
+        let aligned_offset: U64 = (this.offset + align - 1) & ~(align - 1)
 
         if aligned_offset + size > this.size {
             return null
         }
 
-        let ptr = this.base.add(aligned_offset)
+        let ptr: ptr U8 = this.base.add(aligned_offset)
         this.offset = aligned_offset + size
         return ptr
     }
@@ -807,7 +807,7 @@ const STACK_SIZE: U64 = 1024 * 1024  // 1 MB
 
 public lowlevel func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut Void) -> Outcome[I32, Errno] {
     // Allocate stack
-    let stack = mmap(
+    let stack: ptr Void = mmap(
         null,
         STACK_SIZE,
         PROT_READ | PROT_WRITE,
@@ -821,13 +821,13 @@ public lowlevel func spawn_thread(func: *func(*mut Void) -> *mut Void, arg: *mut
     }
 
     // Stack grows down, so start at top
-    let stack_top = (stack as *mut U8).add(STACK_SIZE) as *mut Void
+    let stack_top: ptr Void = (stack as *mut U8).add(STACK_SIZE) as *mut Void
 
     // Clone with thread flags
-    let flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
+    let flags: I32 = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
                 CLONE_THREAD | CLONE_SYSVSEM
 
-    let tid = clone(
+    let tid: I64 = clone(
         flags,
         stack_top,
         null,

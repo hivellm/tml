@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-12-22T05:10:18.497714",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.12.10"
+  },
+  "results": [
+    {
+      "name": "arithmetic",
+      "language": "C++",
+      "category": "arithmetic",
+      "build_time_ms": 1848.7142999656498,
+      "run_time_ms": 683.1637999275699,
+      "binary_size_bytes": 145920,
+      "output": "=== C++ Arithmetic Benchmarks ===\n\nint_add_100M: 0.000 ms (avg of 5 runs)\nint_mul_10M: 26.955 ms (avg of 5 runs)\nmixed_ops_10M: 77.086 ms (avg of 5 runs)\nfibonacci_1M: 0.188 ms (avg of 5 runs)\ncount_primes_100K: 3.282 ms (avg of 5 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "arithmetic",
+      "language": "Rust",
+      "category": "arithmetic",
+      "build_time_ms": 233.6561999982223,
+      "run_time_ms": 39.568400010466576,
+      "binary_size_bytes": 166912,
+      "output": "=== Rust Arithmetic Benchmarks ===\n\nint_add_1M: 0.000 ms (avg of 3 runs)\nint_mul_100K: 0.271 ms (avg of 3 runs)\nmixed_ops_100K: 0.781 ms (avg of 3 runs)\nfibonacci_10K: 0.004 ms (avg of 3 runs)\ncount_primes_1K: 0.008 ms (avg of 3 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "arithmetic",
+      "language": "TML",
+      "category": "arithmetic",
+      "build_time_ms": 411.5402000024915,
+      "run_time_ms": 0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "[WinError 2] O sistema n\u00e3o pode encontrar o arquivo especificado"
+    }
+  ]
+}

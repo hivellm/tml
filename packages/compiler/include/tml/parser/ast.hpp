@@ -234,6 +234,8 @@ enum class UnaryOp {
     Ref,      // &
     RefMut,   // &mut
     Deref,    // *
+    Inc,      // ++ (postfix increment)
+    Dec,      // -- (postfix decrement)
 };
 
 struct UnaryExpr {

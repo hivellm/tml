@@ -40,11 +40,11 @@ decorator log_calls(level: LogLevel = LogLevel.Debug) {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
             Func(f) -> {
-                let name = f.name
-                let original = f.body
+                let name: String = f.name
+                let original: Expr = f.body
                 f.body = quote {
                     log(${level}, "Entering: " + ${name})
-                    let __result = ${original}
+                    let __result: T = ${original}
                     log(${level}, "Exiting: " + ${name})
                     __result
                 }
@@ -164,11 +164,11 @@ decorator memoize {
             Func(f) -> {
                 f.body = quote {
                     static cache: Map[Args, Return] = Map.new()
-                    let key = (${f.params.as_tuple()})
+                    let key: Tuple = (${f.params.as_tuple()})
                     if let Just(v) = cache.get(ref key) then {
                         return v.duplicate()
                     }
-                    let result = ${f.original_body}
+                    let result: T = ${f.original_body}
                     cache.insert(key, result.duplicate())
                     result
                 }
@@ -187,8 +187,8 @@ decorator memoize {
 `quote { ... }` creates a code template:
 
 ```tml
-let code = quote {
-    let x = 1 + 2
+let code: Code = quote {
+    let x: I32 = 1 + 2
     println(x.to_string())
 }
 ```
@@ -198,9 +198,9 @@ let code = quote {
 `${expr}` inserts expressions into quotes:
 
 ```tml
-let value = 42
-let code = quote {
-    let x = ${value}  // Becomes: let x = 42
+let value: I32 = 42
+let code: Code = quote {
+    let x: I32 = ${value}  // Becomes: let x: I32 = 42
 }
 ```
 
@@ -209,8 +209,8 @@ let code = quote {
 `$name` splices identifiers:
 
 ```tml
-let func_name = "my_func"
-let code = quote {
+let func_name: String = "my_func"
+let code: Code = quote {
     func $func_name() { }  // Becomes: func my_func() { }
 }
 ```
@@ -222,14 +222,14 @@ decorator trace {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
             Func(f) -> {
-                let name = f.name
-                let params_str = f.params.map(do(p) p.name).join(", ")
+                let name: String = f.name
+                let params_str: String = f.params.map(do(p) p.name).join(", ")
 
                 f.body = quote {
                     println("[TRACE] ${name}(" + ${params_str} + ")")
-                    let __start = Instant.now()
-                    let __result = ${f.original_body}
-                    let __elapsed = __start.elapsed()
+                    let __start: Instant = Instant.now()
+                    let __result: T = ${f.original_body}
+                    let __elapsed: Duration = __start.elapsed()
                     println("[TRACE] ${name} returned in " + __elapsed.as_micros().to_string() + "µs")
                     __result
                 }
@@ -337,8 +337,8 @@ decorator derive_builder {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
             Type(t) -> {
-                let builder_type = generate_builder_type(t)
-                let builder_impl = generate_builder_impl(t)
+                let builder_type: Type = generate_builder_type(t)
+                let builder_impl: Impl = generate_builder_impl(t)
                 DecoratorResult.AddItems([builder_type, builder_impl])
             },
             _ -> DecoratorResult.Error("derive_builder only applies to types"),
@@ -402,26 +402,26 @@ func test_addition() {
 
 @test(name: "User creation with valid email")
 func test_user_creation() {
-    let user = User.new("test@example.com")
+    let user: User = User.new("test@example.com")
     assert(user.is_ok())
 }
 
 @test
 @should_panic(expected: "division by zero")
 func test_division_by_zero() {
-    let _ = 1 / 0
+    let _: I32 = 1 / 0
 }
 
 @test
 @timeout(Duration.seconds(5))
 async func test_slow_operation() {
-    let result = slow_fetch().await
+    let result: T = slow_fetch().await
     assert(result.is_ok())
 }
 
 @bench(iterations: 1000)
 func bench_sorting() {
-    let data = generate_random_data(10000)
+    let data: List[I32] = generate_random_data(10000)
     data.sort()
 }
 ```
@@ -451,8 +451,8 @@ decorator middleware(handler: func(Request, Next) -> Response) {
 @route(HttpMethod.Get, "/users/{id}")
 @middleware(auth_required)
 func get_user(req: Request) -> Response {
-    let id = req.params.get("id")!
-    let user = db.find_user(id)!
+    let id: String = req.params.get("id")!
+    let user: User = db.find_user(id)!
     Response.json(user)
 }
 ```

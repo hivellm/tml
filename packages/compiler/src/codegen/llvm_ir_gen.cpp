@@ -1,5 +1,20 @@
-// LLVM IR text generator for TML
+// LLVM IR text generator for TML - Core utilities
 // Generates LLVM IR as text (.ll format) for compilation with clang
+//
+// This file contains:
+// - Constructor and core utilities
+// - Type translation helpers
+// - Module structure generation (header, runtime decls, string constants)
+// - Main generate() function
+// - infer_print_type helper
+//
+// Split files:
+// - llvm_ir_gen_decl.cpp: struct, enum, function declarations
+// - llvm_ir_gen_stmt.cpp: let statements, expression statements
+// - llvm_ir_gen_expr.cpp: literals, identifiers, binary/unary ops
+// - llvm_ir_gen_builtins.cpp: builtin function calls (print, memory, atomics, threading)
+// - llvm_ir_gen_control.cpp: if, block, loop, while, for, return
+// - llvm_ir_gen_types.cpp: struct expressions, fields, arrays, indexing, method calls
 
 #include "tml/codegen/llvm_ir_gen.hpp"
 #include <algorithm>
@@ -46,8 +61,16 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "F64") return "double";
     if (name == "Bool") return "i1";
     if (name == "Char") return "i32";
-    if (name == "Str") return "ptr";  // String is a pointer to struct
+    if (name == "Str" || name == "String") return "ptr";  // String is a pointer to struct
     if (name == "Unit") return "void";
+
+    // Collection types - all are pointers to runtime structs
+    if (name == "List" || name == "Vec" || name == "Array") return "ptr";
+    if (name == "HashMap" || name == "Map" || name == "Dict") return "ptr";
+    if (name == "Buffer") return "ptr";
+    if (name == "Channel") return "ptr";
+    if (name == "Mutex") return "ptr";
+    if (name == "WaitGroup") return "ptr";
 
     // User-defined type - return struct type
     return "%struct." + name;
@@ -65,6 +88,9 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
         return "ptr";
     } else if (type.is<parser::ArrayType>()) {
         return "ptr";
+    } else if (type.is<parser::FuncType>()) {
+        // Function types are pointers in LLVM
+        return "ptr";
     }
     return "i32";  // Default
 }
@@ -72,6 +98,41 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
 auto LLVMIRGen::llvm_type_ptr(const parser::TypePtr& type) -> std::string {
     if (!type) return "void";
     return llvm_type(*type);
+}
+
+auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::string {
+    if (!type) return "void";
+
+    if (type->is<types::PrimitiveType>()) {
+        const auto& prim = type->as<types::PrimitiveType>();
+        switch (prim.kind) {
+            case types::PrimitiveKind::I8: return "i8";
+            case types::PrimitiveKind::I16: return "i16";
+            case types::PrimitiveKind::I32: return "i32";
+            case types::PrimitiveKind::I64: return "i64";
+            case types::PrimitiveKind::I128: return "i128";
+            case types::PrimitiveKind::U8: return "i8";
+            case types::PrimitiveKind::U16: return "i16";
+            case types::PrimitiveKind::U32: return "i32";
+            case types::PrimitiveKind::U64: return "i64";
+            case types::PrimitiveKind::U128: return "i128";
+            case types::PrimitiveKind::F32: return "float";
+            case types::PrimitiveKind::F64: return "double";
+            case types::PrimitiveKind::Bool: return "i1";
+            case types::PrimitiveKind::Char: return "i32";
+            case types::PrimitiveKind::Str: return "ptr";
+            case types::PrimitiveKind::Unit: return "void";
+        }
+    } else if (type->is<types::NamedType>()) {
+        return "%struct." + type->as<types::NamedType>().name;
+    } else if (type->is<types::RefType>() || type->is<types::PtrType>()) {
+        return "ptr";
+    } else if (type->is<types::FuncType>()) {
+        // Function types are pointers in LLVM
+        return "ptr";
+    }
+
+    return "i32";  // Default
 }
 
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
@@ -108,6 +169,51 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @tml_thread_yield()");
     emit_line("declare void @tml_thread_sleep(i32)");
     emit_line("declare i32 @tml_thread_id()");
+    emit_line("");
+
+    // Time functions (for benchmarking)
+    emit_line("; Time functions");
+    emit_line("declare i32 @tml_time_ms()");
+    emit_line("declare i64 @tml_time_us()");
+    emit_line("declare i64 @tml_time_ns()");
+    emit_line("declare ptr @tml_elapsed_secs(i32)");
+    emit_line("declare i32 @tml_elapsed_ms(i32)");
+    emit_line("; Instant API (like Rust)");
+    emit_line("declare i64 @tml_instant_now()");
+    emit_line("declare i64 @tml_instant_elapsed(i64)");
+    emit_line("declare double @tml_duration_as_secs_f64(i64)");
+    emit_line("declare double @tml_duration_as_millis_f64(i64)");
+    emit_line("declare i64 @tml_duration_as_millis(i64)");
+    emit_line("declare ptr @tml_duration_format_ms(i64)");
+    emit_line("declare ptr @tml_duration_format_secs(i64)");
+    emit_line("; Black box (prevent optimization)");
+    emit_line("declare i32 @tml_black_box_i32(i32)");
+    emit_line("declare i64 @tml_black_box_i64(i64)");
+    emit_line("; SIMD operations (auto-vectorized)");
+    emit_line("declare i64 @tml_simd_sum_i32(ptr, i64)");
+    emit_line("declare i64 @tml_simd_sum_i64(ptr, i64)");
+    emit_line("declare double @tml_simd_sum_f64(ptr, i64)");
+    emit_line("declare double @tml_simd_dot_f64(ptr, ptr, i64)");
+    emit_line("declare void @tml_simd_fill_i32(ptr, i32, i64)");
+    emit_line("declare void @tml_simd_add_i32(ptr, ptr, ptr, i64)");
+    emit_line("declare void @tml_simd_mul_i32(ptr, ptr, ptr, i64)");
+    emit_line("");
+
+    // Float functions
+    emit_line("; Float functions");
+    emit_line("declare ptr @tml_float_to_fixed(double, i32)");
+    emit_line("declare ptr @tml_float_to_precision(double, i32)");
+    emit_line("declare ptr @tml_float_to_string(double)");
+    emit_line("declare double @tml_int_to_float(i32)");
+    emit_line("declare double @tml_i64_to_float(i64)");
+    emit_line("declare i32 @tml_float_to_int(double)");
+    emit_line("declare i64 @tml_float_to_i64(double)");
+    emit_line("declare i32 @tml_float_round(double)");
+    emit_line("declare i32 @tml_float_floor(double)");
+    emit_line("declare i32 @tml_float_ceil(double)");
+    emit_line("declare double @tml_float_abs(double)");
+    emit_line("declare double @tml_float_sqrt(double)");
+    emit_line("declare double @tml_float_pow(double, i32)");
     emit_line("");
 
     // Channel runtime declarations
@@ -150,15 +256,70 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @tml_atomic_counter_destroy(ptr)");
     emit_line("");
 
+    // List runtime declarations
+    emit_line("; List (dynamic array) runtime");
+    emit_line("declare ptr @tml_list_create(i32)");
+    emit_line("declare void @tml_list_destroy(ptr)");
+    emit_line("declare void @tml_list_push(ptr, i32)");
+    emit_line("declare i32 @tml_list_pop(ptr)");
+    emit_line("declare i32 @tml_list_get(ptr, i32)");
+    emit_line("declare void @tml_list_set(ptr, i32, i32)");
+    emit_line("declare i32 @tml_list_len(ptr)");
+    emit_line("declare i32 @tml_list_capacity(ptr)");
+    emit_line("declare void @tml_list_clear(ptr)");
+    emit_line("declare i32 @tml_list_is_empty(ptr)");
+    emit_line("");
+
+    // HashMap runtime declarations
+    emit_line("; HashMap runtime");
+    emit_line("declare ptr @tml_hashmap_create()");
+    emit_line("declare void @tml_hashmap_destroy(ptr)");
+    emit_line("declare void @tml_hashmap_set(ptr, i32, i32)");
+    emit_line("declare i32 @tml_hashmap_get(ptr, i32, ptr)");
+    emit_line("declare i32 @tml_hashmap_has(ptr, i32)");
+    emit_line("declare i32 @tml_hashmap_remove(ptr, i32)");
+    emit_line("declare i32 @tml_hashmap_len(ptr)");
+    emit_line("declare void @tml_hashmap_clear(ptr)");
+    emit_line("");
+
+    // Buffer runtime declarations
+    emit_line("; Buffer runtime");
+    emit_line("declare ptr @tml_buffer_create(i32)");
+    emit_line("declare void @tml_buffer_destroy(ptr)");
+    emit_line("declare void @tml_buffer_write_byte(ptr, i32)");
+    emit_line("declare void @tml_buffer_write_i32(ptr, i32)");
+    emit_line("declare i32 @tml_buffer_read_byte(ptr)");
+    emit_line("declare i32 @tml_buffer_read_i32(ptr)");
+    emit_line("declare i32 @tml_buffer_len(ptr)");
+    emit_line("declare i32 @tml_buffer_capacity(ptr)");
+    emit_line("declare i32 @tml_buffer_remaining(ptr)");
+    emit_line("declare void @tml_buffer_clear(ptr)");
+    emit_line("declare void @tml_buffer_reset_read(ptr)");
+    emit_line("");
+
+    // String utilities
+    emit_line("; String utilities");
+    emit_line("declare i32 @tml_str_len(ptr)");
+    emit_line("declare i32 @tml_str_hash(ptr)");
+    emit_line("declare i32 @tml_str_eq(ptr, ptr)");
+    emit_line("");
+
     // Format strings for print/println
+    // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)
     emit_line("; Format strings");
-    emit_line("@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");           // int with newline
-    emit_line("@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");         // int without newline
-    emit_line("@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");         // string without newline
-    emit_line("@.str.true = private constant [5 x i8] c\"true\\00\"");            // "true"
-    emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");          // "false"
-    emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");              // space separator
-    emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");         // newline
+    emit_line("@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");           // %d\n\0 = 4 bytes
+    emit_line("@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");         // %d\0 = 3 bytes
+    emit_line("@.fmt.i64 = private constant [5 x i8] c\"%ld\\0A\\00\"");          // %ld\n\0 = 5 bytes
+    emit_line("@.fmt.i64.no_nl = private constant [4 x i8] c\"%ld\\00\"");        // %ld\0 = 4 bytes
+    emit_line("@.fmt.float = private constant [4 x i8] c\"%f\\0A\\00\"");         // %f\n\0 = 4 bytes
+    emit_line("@.fmt.float.no_nl = private constant [3 x i8] c\"%f\\00\"");       // %f\0 = 3 bytes
+    emit_line("@.fmt.float3 = private constant [6 x i8] c\"%.3f\\0A\\00\"");      // %.3f\n\0 = 6 bytes
+    emit_line("@.fmt.float3.no_nl = private constant [5 x i8] c\"%.3f\\00\"");    // %.3f\0 = 5 bytes
+    emit_line("@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");         // %s\0 = 3 bytes
+    emit_line("@.str.true = private constant [5 x i8] c\"true\\00\"");            // true\0 = 5 bytes
+    emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");          // false\0 = 6 bytes
+    emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");              // " "\0 = 2 bytes
+    emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");         // \n\0 = 2 bytes
     emit_line("");
 }
 
@@ -194,10 +355,12 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     emit_header();
     emit_runtime_decls();
 
-    // First pass: collect struct declarations
+    // First pass: collect struct and enum declarations
     for (const auto& decl : module.decls) {
         if (decl->is<parser::StructDecl>()) {
             gen_struct_decl(decl->as<parser::StructDecl>());
+        } else if (decl->is<parser::EnumDecl>()) {
+            gen_enum_decl(decl->as<parser::EnumDecl>());
         }
     }
 
@@ -224,10 +387,15 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         emit_line("; Entry point");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");
-        emit_line("  call void @tml_main()");
-        emit_line("  ret i32 0");
+        emit_line("  %ret = call i32 @tml_main()");
+        emit_line("  ret i32 %ret");
         emit_line("}");
     }
+
+    // Emit function attributes for optimization
+    emit_line("");
+    emit_line("; Function attributes for optimization");
+    emit_line("attributes #0 = { nounwind mustprogress willreturn }");
 
     if (!errors_.empty()) {
         return errors_;
@@ -236,467 +404,13 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     return output_.str();
 }
 
-void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
-    std::string type_name = "%struct." + s.name;
-    struct_types_[s.name] = type_name;
-
-    emit(type_name + " = type { ");
-    for (size_t i = 0; i < s.fields.size(); ++i) {
-        if (i > 0) emit(", ");
-        emit(llvm_type_ptr(s.fields[i].type));
-    }
-    emit_line(" }");
-    emit_line("");
-}
-
-void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
-    current_func_ = func.name;
-    locals_.clear();
-    temp_counter_ = 0;
-    block_terminated_ = false;
-
-    // Return type
-    std::string ret_type = func.return_type ? llvm_type_ptr(*func.return_type) : "void";
-
-    // Function name (mangle it)
-    std::string fn_name = "@tml_" + func.name;
-
-    // Parameters
-    emit("define " + ret_type + " " + fn_name + "(");
-    for (size_t i = 0; i < func.params.size(); ++i) {
-        if (i > 0) emit(", ");
-        std::string param_type = llvm_type_ptr(func.params[i].type);
-        std::string param_name = "%p" + std::to_string(i);
-        emit(param_type + " " + param_name);
-
-        // Map parameter name to register
-        if (func.params[i].pattern && func.params[i].pattern->is<parser::IdentPattern>()) {
-            const auto& ident = func.params[i].pattern->as<parser::IdentPattern>();
-            locals_[ident.name] = VarInfo{param_name, param_type};
-        }
-    }
-    emit_line(") {");
-
-    emit_line("entry:");
-    current_block_ = "entry";
-
-    // Function body
-    if (func.body.has_value()) {
-        const auto& block = func.body.value();
-
-        // Generate statements
-        for (const auto& stmt : block.stmts) {
-            gen_stmt(*stmt);
-        }
-
-        // Trailing expression
-        if (block.expr.has_value()) {
-            std::string result = gen_expr(*block.expr.value());
-            if (!block_terminated_) {
-                if (ret_type != "void") {
-                    emit_line("  ret " + ret_type + " " + result);
-                } else {
-                    emit_line("  ret void");
-                }
-                block_terminated_ = true;
-            }
-        } else if (!block_terminated_) {
-            emit_line("  ret void");
-            block_terminated_ = true;
-        }
-    } else {
-        emit_line("  ret void");
-    }
-
-    emit_line("}");
-    emit_line("");
-
-    current_func_.clear();
-}
-
-void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
-    if (stmt.is<parser::LetStmt>()) {
-        gen_let_stmt(stmt.as<parser::LetStmt>());
-    } else if (stmt.is<parser::ExprStmt>()) {
-        gen_expr_stmt(stmt.as<parser::ExprStmt>());
-    }
-}
-
-// Helper to check if an expression is boolean-typed
-static bool is_bool_expr(const parser::Expr& expr) {
-    if (expr.is<parser::LiteralExpr>()) {
-        return expr.as<parser::LiteralExpr>().token.kind == lexer::TokenKind::BoolLiteral;
-    }
-    if (expr.is<parser::BinaryExpr>()) {
-        const auto& bin = expr.as<parser::BinaryExpr>();
-        switch (bin.op) {
-            case parser::BinaryOp::Eq:
-            case parser::BinaryOp::Ne:
-            case parser::BinaryOp::Lt:
-            case parser::BinaryOp::Gt:
-            case parser::BinaryOp::Le:
-            case parser::BinaryOp::Ge:
-            case parser::BinaryOp::And:
-            case parser::BinaryOp::Or:
-                return true;
-            default:
-                return false;
-        }
-    }
-    if (expr.is<parser::UnaryExpr>()) {
-        return expr.as<parser::UnaryExpr>().op == parser::UnaryOp::Not;
-    }
-    // Check for functions that return bool
-    if (expr.is<parser::CallExpr>()) {
-        const auto& call = expr.as<parser::CallExpr>();
-        if (call.callee->is<parser::IdentExpr>()) {
-            const auto& name = call.callee->as<parser::IdentExpr>().name;
-            // Atomic/spinlock functions
-            if (name == "atomic_cas" || name == "spin_trylock") {
-                return true;
-            }
-            // Channel functions that return bool
-            if (name == "channel_send" || name == "channel_try_send" || name == "channel_try_recv") {
-                return true;
-            }
-            // Mutex functions that return bool
-            if (name == "mutex_try_lock") {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// Helper to check if expression is a reference (pointer) expression
-static bool is_ref_expr(const parser::Expr& expr) {
-    if (expr.is<parser::UnaryExpr>()) {
-        const auto& un = expr.as<parser::UnaryExpr>();
-        return un.op == parser::UnaryOp::Ref || un.op == parser::UnaryOp::RefMut;
-    }
-    // Check for functions that return pointers
-    if (expr.is<parser::CallExpr>()) {
-        const auto& call = expr.as<parser::CallExpr>();
-        if (call.callee->is<parser::IdentExpr>()) {
-            const auto& name = call.callee->as<parser::IdentExpr>().name;
-            // Memory allocation
-            if (name == "alloc" || name == "ptr_offset") {
-                return true;
-            }
-            // Threading primitives that return handles
-            if (name == "thread_spawn") {
-                return true;
-            }
-            // Channel/Mutex/WaitGroup creation
-            if (name == "channel_create" || name == "mutex_create" || name == "waitgroup_create") {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
-    std::string var_name;
-    if (let.pattern->is<parser::IdentPattern>()) {
-        var_name = let.pattern->as<parser::IdentPattern>().name;
-    } else {
-        var_name = "_anon" + std::to_string(temp_counter_++);
-    }
-
-    // Get the type - check for bool literals, comparisons, struct expressions, and refs
-    std::string var_type = "i32";
-    bool is_struct = false;
-    bool is_ptr = false;
-    if (let.type_annotation) {
-        var_type = llvm_type_ptr(*let.type_annotation);
-        is_struct = var_type.starts_with("%struct.");
-    } else if (let.init.has_value()) {
-        // Infer type from initializer
-        const auto& init = *let.init.value();
-        if (is_bool_expr(init)) {
-            var_type = "i1";
-        } else if (init.is<parser::StructExpr>()) {
-            const auto& s = init.as<parser::StructExpr>();
-            if (!s.path.segments.empty()) {
-                var_type = "%struct." + s.path.segments.back();
-                is_struct = true;
-            }
-        } else if (is_ref_expr(init)) {
-            var_type = "ptr";
-            is_ptr = true;
-        }
-    }
-
-    // For structs, we just track the alloca pointer
-    if (is_struct && let.init.has_value()) {
-        // gen_struct_expr allocates and initializes, returns the pointer
-        std::string init_ptr = gen_struct_expr_ptr(let.init.value()->as<parser::StructExpr>());
-        locals_[var_name] = VarInfo{init_ptr, var_type};
-        return;
-    }
-
-    // For pointer variables, store the pointer value
-    if (is_ptr && let.init.has_value()) {
-        std::string ptr_val = gen_expr(*let.init.value());
-        // Store pointer in a variable - we track the pointer value directly
-        // The pointer points to the original variable's alloca
-        locals_[var_name] = VarInfo{ptr_val, "ptr"};
-        return;
-    }
-
-    // Allocate on stack
-    std::string alloca_reg = fresh_reg();
-    emit_line("  " + alloca_reg + " = alloca " + var_type);
-
-    // Initialize if there's a value
-    if (let.init.has_value()) {
-        std::string init_val = gen_expr(*let.init.value());
-        emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
-    }
-
-    // Map variable name to alloca with type info
-    locals_[var_name] = VarInfo{alloca_reg, var_type};
-}
-
-void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {
-    gen_expr(*expr.expr);
-}
-
-auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
-    if (expr.is<parser::LiteralExpr>()) {
-        return gen_literal(expr.as<parser::LiteralExpr>());
-    } else if (expr.is<parser::IdentExpr>()) {
-        return gen_ident(expr.as<parser::IdentExpr>());
-    } else if (expr.is<parser::BinaryExpr>()) {
-        return gen_binary(expr.as<parser::BinaryExpr>());
-    } else if (expr.is<parser::UnaryExpr>()) {
-        return gen_unary(expr.as<parser::UnaryExpr>());
-    } else if (expr.is<parser::CallExpr>()) {
-        return gen_call(expr.as<parser::CallExpr>());
-    } else if (expr.is<parser::IfExpr>()) {
-        return gen_if(expr.as<parser::IfExpr>());
-    } else if (expr.is<parser::BlockExpr>()) {
-        return gen_block(expr.as<parser::BlockExpr>());
-    } else if (expr.is<parser::LoopExpr>()) {
-        return gen_loop(expr.as<parser::LoopExpr>());
-    } else if (expr.is<parser::WhileExpr>()) {
-        return gen_while(expr.as<parser::WhileExpr>());
-    } else if (expr.is<parser::ForExpr>()) {
-        return gen_for(expr.as<parser::ForExpr>());
-    } else if (expr.is<parser::ReturnExpr>()) {
-        return gen_return(expr.as<parser::ReturnExpr>());
-    } else if (expr.is<parser::StructExpr>()) {
-        return gen_struct_expr(expr.as<parser::StructExpr>());
-    } else if (expr.is<parser::FieldExpr>()) {
-        return gen_field(expr.as<parser::FieldExpr>());
-    } else if (expr.is<parser::BreakExpr>()) {
-        // Break jumps to end of current loop
-        if (!current_loop_end_.empty()) {
-            emit_line("  br label %" + current_loop_end_);
-            block_terminated_ = true;
-        }
-        return "void";
-    } else if (expr.is<parser::ContinueExpr>()) {
-        // Continue jumps to start of current loop
-        if (!current_loop_start_.empty()) {
-            emit_line("  br label %" + current_loop_start_);
-            block_terminated_ = true;
-        }
-        return "void";
-    }
-
-    report_error("Unsupported expression type", expr.span);
-    return "0";
-}
-
-auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
-    switch (lit.token.kind) {
-        case lexer::TokenKind::IntLiteral:
-            // Use the actual numeric value, not the lexeme (handles 0x, 0b, etc.)
-            return std::to_string(lit.token.int_value().value);
-        case lexer::TokenKind::FloatLiteral:
-            return std::to_string(lit.token.float_value().value);
-        case lexer::TokenKind::BoolLiteral:
-            return lit.token.lexeme == "true" ? "1" : "0";
-        case lexer::TokenKind::StringLiteral: {
-            std::string str_val = std::string(lit.token.string_value().value);
-            std::string const_name = add_string_literal(str_val);
-            return const_name;
-        }
-        default:
-            return "0";
-    }
-}
-
-auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
-    auto it = locals_.find(ident.name);
-    if (it != locals_.end()) {
-        const VarInfo& var = it->second;
-        // For pointer variables, we stored the pointer directly (not in an alloca)
-        // So return it without loading
-        if (var.type == "ptr") {
-            return var.reg;
-        }
-        // Check if it's an alloca (starts with %t) that needs loading
-        if (var.reg[0] == '%' && var.reg[1] == 't') {
-            std::string reg = fresh_reg();
-            emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
-            return reg;
-        }
-        return var.reg;
-    }
-
-    report_error("Unknown variable: " + ident.name, ident.span);
-    return "0";
-}
-
-auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
-    // Handle assignment specially - don't evaluate left for deref assignments
-    if (bin.op == parser::BinaryOp::Assign) {
-        std::string right = gen_expr(*bin.right);
-
-        if (bin.left->is<parser::IdentExpr>()) {
-            auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
-            if (it != locals_.end()) {
-                emit_line("  store " + it->second.type + " " + right + ", ptr " + it->second.reg);
-            }
-        } else if (bin.left->is<parser::UnaryExpr>()) {
-            const auto& unary = bin.left->as<parser::UnaryExpr>();
-            if (unary.op == parser::UnaryOp::Deref) {
-                // Dereferenced pointer assignment: *ptr = value
-                // Get the pointer (not the dereferenced value!)
-                std::string ptr = gen_expr(*unary.operand);
-                emit_line("  store i32 " + right + ", ptr " + ptr);
-            }
-        }
-        return right;
-    }
-
-    std::string left = gen_expr(*bin.left);
-    std::string right = gen_expr(*bin.right);
-    std::string result = fresh_reg();
-
-    switch (bin.op) {
-        case parser::BinaryOp::Add:
-            emit_line("  " + result + " = add i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Sub:
-            emit_line("  " + result + " = sub i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Mul:
-            emit_line("  " + result + " = mul i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Div:
-            emit_line("  " + result + " = sdiv i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Mod:
-            emit_line("  " + result + " = srem i32 " + left + ", " + right);
-            break;
-        // Comparisons return i1
-        case parser::BinaryOp::Eq:
-            emit_line("  " + result + " = icmp eq i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Ne:
-            emit_line("  " + result + " = icmp ne i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Lt:
-            emit_line("  " + result + " = icmp slt i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Gt:
-            emit_line("  " + result + " = icmp sgt i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Le:
-            emit_line("  " + result + " = icmp sle i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Ge:
-            emit_line("  " + result + " = icmp sge i32 " + left + ", " + right);
-            break;
-        // Logical operators work on i1
-        case parser::BinaryOp::And:
-            emit_line("  " + result + " = and i1 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Or:
-            emit_line("  " + result + " = or i1 " + left + ", " + right);
-            break;
-        // Bitwise operators work on i32
-        case parser::BinaryOp::BitAnd:
-            emit_line("  " + result + " = and i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::BitOr:
-            emit_line("  " + result + " = or i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::BitXor:
-            emit_line("  " + result + " = xor i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Shl:
-            emit_line("  " + result + " = shl i32 " + left + ", " + right);
-            break;
-        case parser::BinaryOp::Shr:
-            emit_line("  " + result + " = ashr i32 " + left + ", " + right);
-            break;
-        // Note: Assign is handled above before evaluating left/right
-        default:
-            emit_line("  " + result + " = add i32 " + left + ", " + right);
-            break;
-    }
-
-    return result;
-}
-
-auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
-    // Handle ref operations specially - we need the address, not the value
-    if (unary.op == parser::UnaryOp::Ref || unary.op == parser::UnaryOp::RefMut) {
-        // Get pointer to the operand
-        if (unary.operand->is<parser::IdentExpr>()) {
-            const auto& ident = unary.operand->as<parser::IdentExpr>();
-            auto it = locals_.find(ident.name);
-            if (it != locals_.end()) {
-                // Return the alloca pointer directly (don't load)
-                return it->second.reg;
-            }
-        }
-        report_error("Can only take reference of variables", unary.span);
-        return "null";
-    }
-
-    // Handle deref - load from pointer
-    if (unary.op == parser::UnaryOp::Deref) {
-        std::string ptr = gen_expr(*unary.operand);
-        std::string result = fresh_reg();
-        // Assume dereferencing i32* for now
-        emit_line("  " + result + " = load i32, ptr " + ptr);
-        return result;
-    }
-
-    std::string operand = gen_expr(*unary.operand);
-    std::string result = fresh_reg();
-
-    switch (unary.op) {
-        case parser::UnaryOp::Neg:
-            emit_line("  " + result + " = sub i32 0, " + operand);
-            break;
-        case parser::UnaryOp::Not:
-            emit_line("  " + result + " = xor i1 " + operand + ", 1");
-            break;
-        case parser::UnaryOp::BitNot:
-            emit_line("  " + result + " = xor i32 " + operand + ", -1");
-            break;
-        default:
-            return operand;
-    }
-
-    return result;
-}
-
-// Helper to infer expression type for print
-enum class PrintArgType { Int, Bool, Str, Unknown };
-
-static PrintArgType infer_print_type(const parser::Expr& expr) {
+// Infer print argument type from expression
+auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
     if (expr.is<parser::LiteralExpr>()) {
         const auto& lit = expr.as<parser::LiteralExpr>();
         switch (lit.token.kind) {
             case lexer::TokenKind::IntLiteral: return PrintArgType::Int;
+            case lexer::TokenKind::FloatLiteral: return PrintArgType::Float;
             case lexer::TokenKind::BoolLiteral: return PrintArgType::Bool;
             case lexer::TokenKind::StringLiteral: return PrintArgType::Str;
             default: return PrintArgType::Unknown;
@@ -710,6 +424,11 @@ static PrintArgType infer_print_type(const parser::Expr& expr) {
             case parser::BinaryOp::Mul:
             case parser::BinaryOp::Div:
             case parser::BinaryOp::Mod:
+                // Check if operands are float
+                if (infer_print_type(*bin.left) == PrintArgType::Float ||
+                    infer_print_type(*bin.right) == PrintArgType::Float) {
+                    return PrintArgType::Float;
+                }
                 return PrintArgType::Int;
             case parser::BinaryOp::Eq:
             case parser::BinaryOp::Ne:
@@ -727,1142 +446,31 @@ static PrintArgType infer_print_type(const parser::Expr& expr) {
     if (expr.is<parser::UnaryExpr>()) {
         const auto& un = expr.as<parser::UnaryExpr>();
         if (un.op == parser::UnaryOp::Not) return PrintArgType::Bool;
-        if (un.op == parser::UnaryOp::Neg) return PrintArgType::Int;
+        if (un.op == parser::UnaryOp::Neg) {
+            // Check if operand is float
+            if (infer_print_type(*un.operand) == PrintArgType::Float) {
+                return PrintArgType::Float;
+            }
+            return PrintArgType::Int;
+        }
     }
     if (expr.is<parser::IdentExpr>()) {
         // For identifiers, we need to check the variable type
-        // For now, default to Int (will be improved with type tracking)
+        // For now, default to Unknown (will be checked by caller)
         return PrintArgType::Unknown;
     }
     if (expr.is<parser::CallExpr>()) {
+        const auto& call = expr.as<parser::CallExpr>();
+        // Check for known I64-returning functions
+        if (call.callee->is<parser::IdentExpr>()) {
+            const auto& fn_name = call.callee->as<parser::IdentExpr>().name;
+            if (fn_name == "time_us" || fn_name == "time_ns") {
+                return PrintArgType::I64;
+            }
+        }
         return PrintArgType::Int; // Assume functions return int
     }
     return PrintArgType::Unknown;
-}
-
-auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
-    // Get function name
-    std::string fn_name;
-    if (call.callee->is<parser::IdentExpr>()) {
-        fn_name = call.callee->as<parser::IdentExpr>().name;
-    } else {
-        report_error("Complex callee not supported", call.span);
-        return "0";
-    }
-
-    // Handle builtin print/println - unified for all types
-    if (fn_name == "print" || fn_name == "println") {
-        bool with_newline = (fn_name == "println");
-
-        if (call.args.empty()) {
-            if (with_newline) {
-                std::string result = fresh_reg();
-                emit_line("  " + result + " = call i32 @putchar(i32 10)");
-            }
-            return "0";
-        }
-
-        // Check if first arg is a format string with {} placeholders
-        bool is_format_string = false;
-        std::string format_str;
-        if (call.args[0]->is<parser::LiteralExpr>()) {
-            const auto& lit = call.args[0]->as<parser::LiteralExpr>();
-            if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                format_str = std::string(lit.token.string_value().value);
-                if (format_str.find("{}") != std::string::npos && call.args.size() > 1) {
-                    is_format_string = true;
-                }
-            }
-        }
-
-        if (is_format_string) {
-            // Handle format string: "text {} more {}" with args
-            return gen_format_print(format_str, call.args, 1, with_newline);
-        }
-
-        // Single value print - auto-detect type
-        const auto& arg_expr = *call.args[0];
-        std::string arg_val = gen_expr(arg_expr);
-
-        // Try to infer type from expression
-        PrintArgType arg_type = infer_print_type(arg_expr);
-
-        // For identifiers, check if it's a known variable with type info
-        if (arg_type == PrintArgType::Unknown && arg_expr.is<parser::IdentExpr>()) {
-            const auto& ident = arg_expr.as<parser::IdentExpr>();
-            auto it = locals_.find(ident.name);
-            if (it != locals_.end()) {
-                if (it->second.type == "i1") arg_type = PrintArgType::Bool;
-                else if (it->second.type == "i32") arg_type = PrintArgType::Int;
-                else if (it->second.type == "ptr") arg_type = PrintArgType::Str;
-            }
-        }
-
-        // For string constants (@.str.X), treat as string
-        if (arg_val.starts_with("@.str.")) {
-            arg_type = PrintArgType::Str;
-        }
-
-        std::string result = fresh_reg();
-
-        switch (arg_type) {
-            case PrintArgType::Str: {
-                if (with_newline) {
-                    emit_line("  " + result + " = call i32 @puts(ptr " + arg_val + ")");
-                } else {
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + arg_val + ")");
-                }
-                break;
-            }
-            case PrintArgType::Bool: {
-                std::string label_true = fresh_label("print.true");
-                std::string label_false = fresh_label("print.false");
-                std::string label_end = fresh_label("print.end");
-
-                emit_line("  br i1 " + arg_val + ", label %" + label_true + ", label %" + label_false);
-
-                emit_line(label_true + ":");
-                std::string r1 = fresh_reg();
-                if (with_newline) {
-                    emit_line("  " + r1 + " = call i32 @puts(ptr @.str.true)");
-                } else {
-                    emit_line("  " + r1 + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.true)");
-                }
-                emit_line("  br label %" + label_end);
-
-                emit_line(label_false + ":");
-                std::string r2 = fresh_reg();
-                if (with_newline) {
-                    emit_line("  " + r2 + " = call i32 @puts(ptr @.str.false)");
-                } else {
-                    emit_line("  " + r2 + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.false)");
-                }
-                emit_line("  br label %" + label_end);
-
-                emit_line(label_end + ":");
-                block_terminated_ = false;
-                return "0";
-            }
-            case PrintArgType::Int:
-            case PrintArgType::Unknown:
-            default: {
-                if (with_newline) {
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int, i32 " + arg_val + ")");
-                } else {
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int.no_nl, i32 " + arg_val + ")");
-                }
-                break;
-            }
-        }
-        return result;
-    }
-
-    // Legacy support for print_i32, print_bool (deprecated but still works)
-    if (fn_name == "print_i32") {
-        if (!call.args.empty()) {
-            std::string arg = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int, i32 " + arg + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    if (fn_name == "print_bool") {
-        if (!call.args.empty()) {
-            std::string arg = gen_expr(*call.args[0]);
-            std::string label_true = fresh_label("bool.true");
-            std::string label_false = fresh_label("bool.false");
-            std::string label_end = fresh_label("bool.end");
-
-            emit_line("  br i1 " + arg + ", label %" + label_true + ", label %" + label_false);
-
-            emit_line(label_true + ":");
-            std::string r1 = fresh_reg();
-            emit_line("  " + r1 + " = call i32 @puts(ptr @.str.true)");
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_false + ":");
-            std::string r2 = fresh_reg();
-            emit_line("  " + r2 + " = call i32 @puts(ptr @.str.false)");
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_end + ":");
-            block_terminated_ = false;
-            return "0";
-        }
-        return "0";
-    }
-
-    // Memory allocation: alloc(size) -> ptr
-    if (fn_name == "alloc") {
-        if (!call.args.empty()) {
-            std::string size = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            // Convert i32 size to i64 for malloc
-            std::string size64 = fresh_reg();
-            emit_line("  " + size64 + " = sext i32 " + size + " to i64");
-            emit_line("  " + result + " = call ptr @malloc(i64 " + size64 + ")");
-            return result;
-        }
-        return "null";
-    }
-
-    // Memory deallocation: dealloc(ptr)
-    if (fn_name == "dealloc") {
-        if (!call.args.empty()) {
-            std::string ptr = gen_expr(*call.args[0]);
-            emit_line("  call void @free(ptr " + ptr + ")");
-        }
-        return "0";
-    }
-
-    // Read from memory: read_i32(ptr) -> I32
-    if (fn_name == "read_i32") {
-        if (!call.args.empty()) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load i32, ptr " + ptr);
-            return result;
-        }
-        return "0";
-    }
-
-    // Write to memory: write_i32(ptr, value)
-    if (fn_name == "write_i32") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            emit_line("  store i32 " + val + ", ptr " + ptr);
-        }
-        return "0";
-    }
-
-    // Pointer offset: ptr_offset(ptr, offset) -> ptr
-    if (fn_name == "ptr_offset") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string offset = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i32 " + offset);
-            return result;
-        }
-        return "null";
-    }
-
-    // ============ ATOMIC OPERATIONS (Thread-Safe) ============
-
-    // atomic_load(ptr) -> I32 - Thread-safe read
-    if (fn_name == "atomic_load") {
-        if (!call.args.empty()) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load atomic i32, ptr " + ptr + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // atomic_store(ptr, value) - Thread-safe write
-    if (fn_name == "atomic_store") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            emit_line("  store atomic i32 " + val + ", ptr " + ptr + " seq_cst, align 4");
-        }
-        return "0";
-    }
-
-    // atomic_add(ptr, value) -> I32 - Atomic fetch-and-add, returns old value
-    if (fn_name == "atomic_add") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = atomicrmw add ptr " + ptr + ", i32 " + val + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // atomic_sub(ptr, value) -> I32 - Atomic fetch-and-sub, returns old value
-    if (fn_name == "atomic_sub") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = atomicrmw sub ptr " + ptr + ", i32 " + val + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // atomic_exchange(ptr, value) -> I32 - Atomic exchange, returns old value
-    if (fn_name == "atomic_exchange") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = atomicrmw xchg ptr " + ptr + ", i32 " + val + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // atomic_cas(ptr, expected, desired) -> Bool - Compare-and-swap
-    // Returns true if exchange happened (old value == expected)
-    if (fn_name == "atomic_cas") {
-        if (call.args.size() >= 3) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string expected = gen_expr(*call.args[1]);
-            std::string desired = gen_expr(*call.args[2]);
-            std::string cas_result = fresh_reg();
-            std::string success = fresh_reg();
-            emit_line("  " + cas_result + " = cmpxchg ptr " + ptr + ", i32 " + expected + ", i32 " + desired + " seq_cst seq_cst, align 4");
-            emit_line("  " + success + " = extractvalue { i32, i1 } " + cas_result + ", 1");
-            return success;
-        }
-        return "0";
-    }
-
-    // atomic_cas_val(ptr, expected, desired) -> I32 - CAS returning old value
-    if (fn_name == "atomic_cas_val") {
-        if (call.args.size() >= 3) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string expected = gen_expr(*call.args[1]);
-            std::string desired = gen_expr(*call.args[2]);
-            std::string cas_result = fresh_reg();
-            std::string old_val = fresh_reg();
-            emit_line("  " + cas_result + " = cmpxchg ptr " + ptr + ", i32 " + expected + ", i32 " + desired + " seq_cst seq_cst, align 4");
-            emit_line("  " + old_val + " = extractvalue { i32, i1 } " + cas_result + ", 0");
-            return old_val;
-        }
-        return "0";
-    }
-
-    // atomic_and(ptr, value) -> I32 - Atomic fetch-and-and
-    if (fn_name == "atomic_and") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = atomicrmw and ptr " + ptr + ", i32 " + val + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // atomic_or(ptr, value) -> I32 - Atomic fetch-and-or
-    if (fn_name == "atomic_or") {
-        if (call.args.size() >= 2) {
-            std::string ptr = gen_expr(*call.args[0]);
-            std::string val = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = atomicrmw or ptr " + ptr + ", i32 " + val + " seq_cst, align 4");
-            return result;
-        }
-        return "0";
-    }
-
-    // fence() - Memory barrier (full fence)
-    if (fn_name == "fence") {
-        emit_line("  fence seq_cst");
-        return "0";
-    }
-
-    // fence_acquire() - Acquire fence
-    if (fn_name == "fence_acquire") {
-        emit_line("  fence acquire");
-        return "0";
-    }
-
-    // fence_release() - Release fence
-    if (fn_name == "fence_release") {
-        emit_line("  fence release");
-        return "0";
-    }
-
-    // ============ SPINLOCK PRIMITIVES ============
-
-    // spin_lock(lock_ptr) - Acquire spinlock (spins until acquired)
-    if (fn_name == "spin_lock") {
-        if (!call.args.empty()) {
-            std::string lock = gen_expr(*call.args[0]);
-            std::string label_loop = fresh_label("spin.loop");
-            std::string label_acquired = fresh_label("spin.acquired");
-
-            emit_line("  br label %" + label_loop);
-            emit_line(label_loop + ":");
-            std::string old_val = fresh_reg();
-            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock + ", i32 1 acquire, align 4");
-            std::string was_free = fresh_reg();
-            emit_line("  " + was_free + " = icmp eq i32 " + old_val + ", 0");
-            emit_line("  br i1 " + was_free + ", label %" + label_acquired + ", label %" + label_loop);
-            emit_line(label_acquired + ":");
-            block_terminated_ = false;
-        }
-        return "0";
-    }
-
-    // spin_unlock(lock_ptr) - Release spinlock
-    if (fn_name == "spin_unlock") {
-        if (!call.args.empty()) {
-            std::string lock = gen_expr(*call.args[0]);
-            emit_line("  store atomic i32 0, ptr " + lock + " release, align 4");
-        }
-        return "0";
-    }
-
-    // spin_trylock(lock_ptr) -> Bool - Try to acquire, returns true if successful
-    if (fn_name == "spin_trylock") {
-        if (!call.args.empty()) {
-            std::string lock = gen_expr(*call.args[0]);
-            std::string old_val = fresh_reg();
-            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock + ", i32 1 acquire, align 4");
-            std::string success = fresh_reg();
-            emit_line("  " + success + " = icmp eq i32 " + old_val + ", 0");
-            return success;
-        }
-        return "0";
-    }
-
-    // ============ THREADING PRIMITIVES (via runtime) ============
-
-    // thread_spawn(func_ptr, arg_ptr) -> thread_handle
-    if (fn_name == "thread_spawn") {
-        if (call.args.size() >= 2) {
-            std::string func_ptr = gen_expr(*call.args[0]);
-            std::string arg_ptr = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_thread_spawn(ptr " + func_ptr + ", ptr " + arg_ptr + ")");
-            return result;
-        }
-        return "null";
-    }
-
-    // thread_join(handle) -> Unit
-    if (fn_name == "thread_join") {
-        if (!call.args.empty()) {
-            std::string handle = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_thread_join(ptr " + handle + ")");
-        }
-        return "0";
-    }
-
-    // thread_yield() -> Unit
-    if (fn_name == "thread_yield") {
-        emit_line("  call void @tml_thread_yield()");
-        return "0";
-    }
-
-    // thread_sleep(ms: I32) -> Unit
-    if (fn_name == "thread_sleep") {
-        if (!call.args.empty()) {
-            std::string ms = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_thread_sleep(i32 " + ms + ")");
-        }
-        return "0";
-    }
-
-    // thread_id() -> I32
-    if (fn_name == "thread_id") {
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_thread_id()");
-        return result;
-    }
-
-    // ============ CHANNEL PRIMITIVES (Go-style) ============
-
-    // channel_create() -> channel_ptr
-    if (fn_name == "channel_create") {
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_channel_create()");
-        return result;
-    }
-
-    // channel_send(ch, value: I32) -> Bool
-    if (fn_name == "channel_send") {
-        if (call.args.size() >= 2) {
-            std::string ch = gen_expr(*call.args[0]);
-            std::string value = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_send(ptr " + ch + ", i32 " + value + ")");
-            // Convert i32 to i1
-            std::string bool_result = fresh_reg();
-            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
-            return bool_result;
-        }
-        return "0";
-    }
-
-    // channel_recv(ch) -> I32
-    if (fn_name == "channel_recv") {
-        if (!call.args.empty()) {
-            std::string ch = gen_expr(*call.args[0]);
-            // Allocate temp for output value
-            std::string out_ptr = fresh_reg();
-            emit_line("  " + out_ptr + " = alloca i32, align 4");
-            emit_line("  call i32 @tml_channel_recv(ptr " + ch + ", ptr " + out_ptr + ")");
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = load i32, ptr " + out_ptr);
-            return result;
-        }
-        return "0";
-    }
-
-    // channel_try_send(ch, value: I32) -> Bool
-    if (fn_name == "channel_try_send") {
-        if (call.args.size() >= 2) {
-            std::string ch = gen_expr(*call.args[0]);
-            std::string value = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_try_send(ptr " + ch + ", i32 " + value + ")");
-            std::string bool_result = fresh_reg();
-            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
-            return bool_result;
-        }
-        return "0";
-    }
-
-    // channel_try_recv(ch, out_ptr) -> Bool
-    if (fn_name == "channel_try_recv") {
-        if (call.args.size() >= 2) {
-            std::string ch = gen_expr(*call.args[0]);
-            std::string out_ptr = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_try_recv(ptr " + ch + ", ptr " + out_ptr + ")");
-            std::string bool_result = fresh_reg();
-            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
-            return bool_result;
-        }
-        return "0";
-    }
-
-    // channel_close(ch) -> Unit
-    if (fn_name == "channel_close") {
-        if (!call.args.empty()) {
-            std::string ch = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_channel_close(ptr " + ch + ")");
-        }
-        return "0";
-    }
-
-    // channel_destroy(ch) -> Unit
-    if (fn_name == "channel_destroy") {
-        if (!call.args.empty()) {
-            std::string ch = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_channel_destroy(ptr " + ch + ")");
-        }
-        return "0";
-    }
-
-    // channel_len(ch) -> I32
-    if (fn_name == "channel_len") {
-        if (!call.args.empty()) {
-            std::string ch = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_len(ptr " + ch + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    // ============ MUTEX PRIMITIVES ============
-
-    // mutex_create() -> mutex_ptr
-    if (fn_name == "mutex_create") {
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_mutex_create()");
-        return result;
-    }
-
-    // mutex_lock(m) -> Unit
-    if (fn_name == "mutex_lock") {
-        if (!call.args.empty()) {
-            std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_lock(ptr " + m + ")");
-        }
-        return "0";
-    }
-
-    // mutex_unlock(m) -> Unit
-    if (fn_name == "mutex_unlock") {
-        if (!call.args.empty()) {
-            std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_unlock(ptr " + m + ")");
-        }
-        return "0";
-    }
-
-    // mutex_try_lock(m) -> Bool
-    if (fn_name == "mutex_try_lock") {
-        if (!call.args.empty()) {
-            std::string m = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_mutex_try_lock(ptr " + m + ")");
-            std::string bool_result = fresh_reg();
-            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
-            return bool_result;
-        }
-        return "0";
-    }
-
-    // mutex_destroy(m) -> Unit
-    if (fn_name == "mutex_destroy") {
-        if (!call.args.empty()) {
-            std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_destroy(ptr " + m + ")");
-        }
-        return "0";
-    }
-
-    // ============ WAITGROUP PRIMITIVES (Go-style) ============
-
-    // waitgroup_create() -> wg_ptr
-    if (fn_name == "waitgroup_create") {
-        std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_waitgroup_create()");
-        return result;
-    }
-
-    // waitgroup_add(wg, delta: I32) -> Unit
-    if (fn_name == "waitgroup_add") {
-        if (call.args.size() >= 2) {
-            std::string wg = gen_expr(*call.args[0]);
-            std::string delta = gen_expr(*call.args[1]);
-            emit_line("  call void @tml_waitgroup_add(ptr " + wg + ", i32 " + delta + ")");
-        }
-        return "0";
-    }
-
-    // waitgroup_done(wg) -> Unit
-    if (fn_name == "waitgroup_done") {
-        if (!call.args.empty()) {
-            std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_done(ptr " + wg + ")");
-        }
-        return "0";
-    }
-
-    // waitgroup_wait(wg) -> Unit
-    if (fn_name == "waitgroup_wait") {
-        if (!call.args.empty()) {
-            std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_wait(ptr " + wg + ")");
-        }
-        return "0";
-    }
-
-    // waitgroup_destroy(wg) -> Unit
-    if (fn_name == "waitgroup_destroy") {
-        if (!call.args.empty()) {
-            std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_destroy(ptr " + wg + ")");
-        }
-        return "0";
-    }
-
-    // User-defined function
-    std::string mangled = "@tml_" + fn_name;
-
-    // Generate arguments with type inference
-    std::vector<std::pair<std::string, std::string>> arg_vals; // (value, type)
-    for (const auto& arg : call.args) {
-        std::string val = gen_expr(*arg);
-        std::string type = "i32";
-        // Check if it's a string constant
-        if (val.starts_with("@.str.")) {
-            type = "ptr";
-        } else if (arg->is<parser::LiteralExpr>()) {
-            const auto& lit = arg->as<parser::LiteralExpr>();
-            if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                type = "ptr";
-            } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                type = "i1";
-            }
-        }
-        arg_vals.push_back({val, type});
-    }
-
-    // Call
-    std::string result = fresh_reg();
-    emit("  " + result + " = call i32 " + mangled + "(");
-    for (size_t i = 0; i < arg_vals.size(); ++i) {
-        if (i > 0) emit(", ");
-        emit(arg_vals[i].second + " " + arg_vals[i].first);
-    }
-    emit_line(")");
-
-    return result;
-}
-
-auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
-    std::string cond = gen_expr(*if_expr.condition);
-
-    std::string label_then = fresh_label("if.then");
-    std::string label_else = fresh_label("if.else");
-    std::string label_end = fresh_label("if.end");
-
-    // Branch
-    if (if_expr.else_branch.has_value()) {
-        emit_line("  br i1 " + cond + ", label %" + label_then + ", label %" + label_else);
-    } else {
-        emit_line("  br i1 " + cond + ", label %" + label_then + ", label %" + label_end);
-    }
-
-    // Then block
-    emit_line(label_then + ":");
-    block_terminated_ = false;
-    std::string then_val = gen_expr(*if_expr.then_branch);
-    if (!block_terminated_) {
-        emit_line("  br label %" + label_end);
-    }
-
-    // Else block
-    if (if_expr.else_branch.has_value()) {
-        emit_line(label_else + ":");
-        block_terminated_ = false;
-        std::string else_val = gen_expr(*if_expr.else_branch.value());
-        if (!block_terminated_) {
-            emit_line("  br label %" + label_end);
-        }
-    }
-
-    // End block
-    emit_line(label_end + ":");
-    block_terminated_ = false;
-
-    return "0";  // TODO: phi node for if-expression value
-}
-
-auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
-    std::string result = "0";
-
-    for (const auto& stmt : block.stmts) {
-        gen_stmt(*stmt);
-    }
-
-    if (block.expr.has_value()) {
-        result = gen_expr(*block.expr.value());
-    }
-
-    return result;
-}
-
-auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
-    std::string label_start = fresh_label("loop.start");
-    std::string label_body = fresh_label("loop.body");
-    std::string label_end = fresh_label("loop.end");
-
-    // Save current loop labels for break/continue
-    std::string saved_loop_start = current_loop_start_;
-    std::string saved_loop_end = current_loop_end_;
-    current_loop_start_ = label_start;
-    current_loop_end_ = label_end;
-
-    emit_line("  br label %" + label_start);
-    emit_line(label_start + ":");
-    block_terminated_ = false;
-
-    gen_expr(*loop.body);
-
-    if (!block_terminated_) {
-        emit_line("  br label %" + label_start);
-    }
-
-    emit_line(label_end + ":");
-    block_terminated_ = false;
-
-    // Restore loop labels
-    current_loop_start_ = saved_loop_start;
-    current_loop_end_ = saved_loop_end;
-
-    return "0";
-}
-
-auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
-    std::string label_cond = fresh_label("while.cond");
-    std::string label_body = fresh_label("while.body");
-    std::string label_end = fresh_label("while.end");
-
-    // Save current loop labels for break/continue
-    std::string saved_loop_start = current_loop_start_;
-    std::string saved_loop_end = current_loop_end_;
-    current_loop_start_ = label_cond;
-    current_loop_end_ = label_end;
-
-    // Jump to condition
-    emit_line("  br label %" + label_cond);
-
-    // Condition block
-    emit_line(label_cond + ":");
-    block_terminated_ = false;
-    std::string cond = gen_expr(*while_expr.condition);
-    emit_line("  br i1 " + cond + ", label %" + label_body + ", label %" + label_end);
-
-    // Body block
-    emit_line(label_body + ":");
-    block_terminated_ = false;
-    gen_expr(*while_expr.body);
-    if (!block_terminated_) {
-        emit_line("  br label %" + label_cond);
-    }
-
-    // End block
-    emit_line(label_end + ":");
-    block_terminated_ = false;
-
-    // Restore loop labels
-    current_loop_start_ = saved_loop_start;
-    current_loop_end_ = saved_loop_end;
-
-    return "0";
-}
-
-auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
-    // For loops: for pattern in iter { body }
-    // We support range expressions: for i in 0 to 10 { ... }
-    std::string label_init = fresh_label("for.init");
-    std::string label_cond = fresh_label("for.cond");
-    std::string label_body = fresh_label("for.body");
-    std::string label_incr = fresh_label("for.incr");
-    std::string label_end = fresh_label("for.end");
-
-    // Save current loop labels for break/continue
-    std::string saved_loop_start = current_loop_start_;
-    std::string saved_loop_end = current_loop_end_;
-    current_loop_start_ = label_incr;  // continue goes to increment
-    current_loop_end_ = label_end;
-
-    // Get loop variable name from pattern
-    std::string var_name = "_for_idx";
-    if (for_expr.pattern->is<parser::IdentPattern>()) {
-        var_name = for_expr.pattern->as<parser::IdentPattern>().name;
-    }
-
-    // Check if iter is a range expression
-    std::string range_start = "0";
-    std::string range_end = "0";
-    bool inclusive = false;
-
-    if (for_expr.iter->is<parser::RangeExpr>()) {
-        const auto& range = for_expr.iter->as<parser::RangeExpr>();
-        inclusive = range.inclusive;
-        if (range.start.has_value()) {
-            range_start = gen_expr(*range.start.value());
-        }
-        if (range.end.has_value()) {
-            range_end = gen_expr(*range.end.value());
-        }
-    } else {
-        // Fallback: treat as simple range 0 to iter
-        range_end = gen_expr(*for_expr.iter);
-    }
-
-    // Allocate loop variable
-    std::string var_alloca = fresh_reg();
-    emit_line("  " + var_alloca + " = alloca i32");
-    emit_line("  store i32 " + range_start + ", ptr " + var_alloca);
-    locals_[var_name] = VarInfo{var_alloca, "i32"};
-
-    // Jump to condition
-    emit_line("  br label %" + label_cond);
-
-    // Condition block
-    emit_line(label_cond + ":");
-    block_terminated_ = false;
-    std::string current = fresh_reg();
-    emit_line("  " + current + " = load i32, ptr " + var_alloca);
-    std::string cmp_result = fresh_reg();
-    if (inclusive) {
-        emit_line("  " + cmp_result + " = icmp sle i32 " + current + ", " + range_end);
-    } else {
-        emit_line("  " + cmp_result + " = icmp slt i32 " + current + ", " + range_end);
-    }
-    emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_end);
-
-    // Body block
-    emit_line(label_body + ":");
-    block_terminated_ = false;
-    gen_expr(*for_expr.body);
-    if (!block_terminated_) {
-        emit_line("  br label %" + label_incr);
-    }
-
-    // Increment block
-    emit_line(label_incr + ":");
-    block_terminated_ = false;
-    std::string next_val = fresh_reg();
-    std::string current2 = fresh_reg();
-    emit_line("  " + current2 + " = load i32, ptr " + var_alloca);
-    emit_line("  " + next_val + " = add i32 " + current2 + ", 1");
-    emit_line("  store i32 " + next_val + ", ptr " + var_alloca);
-    emit_line("  br label %" + label_cond);
-
-    // End block
-    emit_line(label_end + ":");
-    block_terminated_ = false;
-
-    // Restore loop labels
-    current_loop_start_ = saved_loop_start;
-    current_loop_end_ = saved_loop_end;
-
-    return "0";
-}
-
-auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
-    if (ret.value.has_value()) {
-        std::string val = gen_expr(*ret.value.value());
-        emit_line("  ret i32 " + val);
-    } else {
-        emit_line("  ret void");
-    }
-    block_terminated_ = true;
-    return "void";
-}
-
-// Generate struct expression, returning pointer to allocated struct
-auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string {
-    std::string type_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
-    std::string struct_type = "%struct." + type_name;
-
-    // Allocate struct on stack
-    std::string ptr = fresh_reg();
-    emit_line("  " + ptr + " = alloca " + struct_type);
-
-    // Initialize fields
-    for (size_t i = 0; i < s.fields.size(); ++i) {
-        std::string field_val;
-        std::string field_type = "i32";
-
-        // Check if field value is a nested struct
-        if (s.fields[i].second->is<parser::StructExpr>()) {
-            // Nested struct - allocate and copy
-            const auto& nested = s.fields[i].second->as<parser::StructExpr>();
-            std::string nested_ptr = gen_struct_expr_ptr(nested);
-            std::string nested_type = "%struct." + nested.path.segments.back();
-            std::string nested_val = fresh_reg();
-            emit_line("  " + nested_val + " = load " + nested_type + ", ptr " + nested_ptr);
-            field_val = nested_val;
-            field_type = nested_type;
-        } else {
-            field_val = gen_expr(*s.fields[i].second);
-        }
-
-        std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr + ", i32 0, i32 " + std::to_string(i));
-        emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
-    }
-
-    return ptr;
-}
-
-auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
-    std::string ptr = gen_struct_expr_ptr(s);
-    std::string type_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
-    std::string struct_type = "%struct." + type_name;
-
-    // Load the struct value
-    std::string result = fresh_reg();
-    emit_line("  " + result + " = load " + struct_type + ", ptr " + ptr);
-
-    return result;
-}
-
-// Helper to get field index for known struct types
-static int get_field_index(const std::string& struct_name, const std::string& field_name) {
-    // Point fields
-    if (struct_name == "Point") {
-        if (field_name == "x") return 0;
-        if (field_name == "y") return 1;
-    }
-    // Rectangle fields
-    if (struct_name == "Rectangle") {
-        if (field_name == "origin") return 0;
-        if (field_name == "width") return 1;
-        if (field_name == "height") return 2;
-    }
-    return 0;
-}
-
-// Helper to get field type for known struct types
-static std::string get_field_type(const std::string& struct_name, const std::string& field_name) {
-    if (struct_name == "Rectangle" && field_name == "origin") {
-        return "%struct.Point";
-    }
-    return "i32";
-}
-
-auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
-    // Handle field access on struct
-    std::string struct_type;
-    std::string struct_ptr;
-
-    // If the object is an identifier, look up its type
-    if (field.object->is<parser::IdentExpr>()) {
-        const auto& ident = field.object->as<parser::IdentExpr>();
-        auto it = locals_.find(ident.name);
-        if (it != locals_.end()) {
-            struct_type = it->second.type;
-            struct_ptr = it->second.reg;
-        }
-    } else if (field.object->is<parser::FieldExpr>()) {
-        // Chained field access (e.g., rect.origin.x)
-        // First get the nested field pointer
-        const auto& nested_field = field.object->as<parser::FieldExpr>();
-
-        // Get the outermost struct
-        if (nested_field.object->is<parser::IdentExpr>()) {
-            const auto& ident = nested_field.object->as<parser::IdentExpr>();
-            auto it = locals_.find(ident.name);
-            if (it != locals_.end()) {
-                std::string outer_type = it->second.type;
-                std::string outer_ptr = it->second.reg;
-
-                // Get outer struct type name
-                std::string outer_name = outer_type;
-                if (outer_name.starts_with("%struct.")) {
-                    outer_name = outer_name.substr(8);
-                }
-
-                // Get field index for nested field
-                int nested_idx = get_field_index(outer_name, nested_field.field);
-                std::string nested_type = get_field_type(outer_name, nested_field.field);
-
-                // Get pointer to nested field
-                std::string nested_ptr = fresh_reg();
-                emit_line("  " + nested_ptr + " = getelementptr " + outer_type + ", ptr " + outer_ptr + ", i32 0, i32 " + std::to_string(nested_idx));
-
-                struct_type = nested_type;
-                struct_ptr = nested_ptr;
-            }
-        }
-    }
-
-    if (struct_type.empty() || struct_ptr.empty()) {
-        report_error("Cannot resolve field access object", field.span);
-        return "0";
-    }
-
-    // Get struct type name
-    std::string type_name = struct_type;
-    if (type_name.starts_with("%struct.")) {
-        type_name = type_name.substr(8);
-    }
-
-    // Get field index and type
-    int field_idx = get_field_index(type_name, field.field);
-    std::string field_type = get_field_type(type_name, field.field);
-
-    // Use getelementptr to access field, then load
-    std::string field_ptr = fresh_reg();
-    emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
-
-    std::string result = fresh_reg();
-    emit_line("  " + result + " = load " + field_type + ", ptr " + field_ptr);
-    return result;
-}
-
-// Generate formatted print: "hello {} world {}" with args
-auto LLVMIRGen::gen_format_print(const std::string& format,
-                                   const std::vector<parser::ExprPtr>& args,
-                                   size_t start_idx,
-                                   bool with_newline) -> std::string {
-    // Parse format string and print segments with arguments
-    size_t arg_idx = start_idx;
-    size_t pos = 0;
-    std::string result = "0";
-
-    while (pos < format.size()) {
-        // Find next {} placeholder
-        size_t placeholder = format.find("{}", pos);
-
-        if (placeholder == std::string::npos) {
-            // No more placeholders, print remaining text
-            if (pos < format.size()) {
-                std::string remaining = format.substr(pos);
-                std::string str_const = add_string_literal(remaining);
-                result = fresh_reg();
-                emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + str_const + ")");
-            }
-            break;
-        }
-
-        // Print text before placeholder
-        if (placeholder > pos) {
-            std::string segment = format.substr(pos, placeholder - pos);
-            std::string str_const = add_string_literal(segment);
-            result = fresh_reg();
-            emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + str_const + ")");
-        }
-
-        // Print argument
-        if (arg_idx < args.size()) {
-            const auto& arg_expr = *args[arg_idx];
-            std::string arg_val = gen_expr(arg_expr);
-            PrintArgType arg_type = infer_print_type(arg_expr);
-
-            // For identifiers, check variable type
-            if (arg_type == PrintArgType::Unknown && arg_expr.is<parser::IdentExpr>()) {
-                const auto& ident = arg_expr.as<parser::IdentExpr>();
-                auto it = locals_.find(ident.name);
-                if (it != locals_.end()) {
-                    if (it->second.type == "i1") arg_type = PrintArgType::Bool;
-                    else if (it->second.type == "i32") arg_type = PrintArgType::Int;
-                    else if (it->second.type == "ptr") arg_type = PrintArgType::Str;
-                }
-            }
-
-            // For string constants
-            if (arg_val.starts_with("@.str.")) {
-                arg_type = PrintArgType::Str;
-            }
-
-            result = fresh_reg();
-            switch (arg_type) {
-                case PrintArgType::Str:
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + arg_val + ")");
-                    break;
-                case PrintArgType::Bool: {
-                    std::string label_true = fresh_label("fmt.true");
-                    std::string label_false = fresh_label("fmt.false");
-                    std::string label_end = fresh_label("fmt.end");
-
-                    emit_line("  br i1 " + arg_val + ", label %" + label_true + ", label %" + label_false);
-
-                    emit_line(label_true + ":");
-                    std::string r1 = fresh_reg();
-                    emit_line("  " + r1 + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.true)");
-                    emit_line("  br label %" + label_end);
-
-                    emit_line(label_false + ":");
-                    std::string r2 = fresh_reg();
-                    emit_line("  " + r2 + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.false)");
-                    emit_line("  br label %" + label_end);
-
-                    emit_line(label_end + ":");
-                    block_terminated_ = false;
-                    break;
-                }
-                case PrintArgType::Int:
-                case PrintArgType::Unknown:
-                default:
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int.no_nl, i32 " + arg_val + ")");
-                    break;
-            }
-            ++arg_idx;
-        }
-
-        pos = placeholder + 2; // Skip {}
-    }
-
-    // Print newline if println
-    if (with_newline) {
-        result = fresh_reg();
-        emit_line("  " + result + " = call i32 @putchar(i32 10)");
-    }
-
-    return result;
 }
 
 } // namespace tml::codegen

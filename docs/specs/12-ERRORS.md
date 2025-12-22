@@ -16,7 +16,7 @@ error[L001]: invalid character
 error[L002]: unterminated string literal
   --> src/main.tml:5:15
    |
- 5 |     let s = "hello
+ 5 |     let s: String = "hello
    |             ^ string not closed
    |
    = help: add closing quote `"`
@@ -27,7 +27,7 @@ error[L002]: unterminated string literal
 error[L003]: invalid escape sequence
   --> src/main.tml:5:20
    |
- 5 |     let s = "hello\q"
+ 5 |     let s: String = "hello\q"
    |                   ^^ unknown escape sequence
    |
    = note: valid escapes: \\, \", \n, \r, \t, \0, \xNN, \u{NNNN}
@@ -38,7 +38,7 @@ error[L003]: invalid escape sequence
 error[L004]: invalid number literal
   --> src/main.tml:5:15
    |
- 5 |     let x = 0b123
+ 5 |     let x: I32 = 0b123
    |             ^^^^^ invalid binary literal (only 0 and 1 allowed)
 ```
 
@@ -152,7 +152,7 @@ error[T004]: behavior bound not satisfied
 error[T005]: infinite type detected
   --> src/main.tml:5:5
    |
- 5 |     let x = x
+ 5 |     let x: I32 = x
    |         ^ recursive definition creates infinite type
 ```
 
@@ -163,7 +163,7 @@ error[T006]: return type mismatch
    |
  5 |     func get_value() -> String {
    |                         ^^^^^^ expected String
- 6 |         let x = compute()
+ 6 |         let x: I32 = compute()
  7 |         return x
    |                ^ found I32
 ```
@@ -173,7 +173,7 @@ error[T006]: return type mismatch
 error[T007]: cannot use Maybe[I32] as I32
   --> src/main.tml:6:15
    |
- 6 |     let y = x + 1
+ 6 |     let y: I32 = x + 1
    |             ^ expected I32, found Maybe[I32]
    |
    = help: use `x.unwrap()` or handle Nothing case with `when`
@@ -186,8 +186,8 @@ error[T007]: cannot use Maybe[I32] as I32
 error[S001]: use of moved value
   --> src/main.tml:7:11
    |
- 5 |     let s = String.from("hello")
- 6 |     let t = s
+ 5 |     let s: String = String.from("hello")
+ 6 |     let t: String = s
    |             - value moved here
  7 |     print(s)
    |           ^ value used after move
@@ -200,9 +200,9 @@ error[S001]: use of moved value
 error[S002]: cannot borrow as mutable
   --> src/main.tml:7:15
    |
- 5 |     let r1 = ref data
+ 5 |     let r1: ref List[I32] = ref data
    |              -------- immutable borrow here
- 6 |     let r2 = mut ref data
+ 6 |     let r2: mut ref List[I32] = mut ref data
    |              ^^^^^^^^^^^^ cannot borrow as mutable
  7 |     print(r1)
    |           -- immutable borrow used here
@@ -214,7 +214,7 @@ error[S003]: returns reference to local variable
   --> src/main.tml:6:12
    |
  5 |     func bad() -> ref String {
- 6 |         let s = String.from("local")
+ 6 |         let s: String = String.from("local")
  7 |         return ref s
    |                ^^^^^ returns reference to `s`
    |
@@ -227,7 +227,7 @@ error[S003]: returns reference to local variable
 error[S004]: undefined variable
   --> src/main.tml:5:15
    |
- 5 |     let y = x + 1
+ 5 |     let y: I32 = x + 1
    |             ^ `x` not found in this scope
 ```
 
@@ -236,7 +236,7 @@ error[S004]: undefined variable
 error[S005]: cannot assign to immutable variable
   --> src/main.tml:6:5
    |
- 5 |     let x = 1
+ 5 |     let x: I32 = 1
    |         - declared as immutable (use `var` for mutable)
  6 |     x = 2
    |     ^ cannot assign
@@ -305,7 +305,7 @@ error[S009]: non-exhaustive patterns
 warning[S010]: unused variable
   --> src/main.tml:5:9
    |
- 5 |     let result = compute()
+ 5 |     let result: I32 = compute()
    |         ^^^^^^ never used
    |
    = help: prefix with underscore: `_result`

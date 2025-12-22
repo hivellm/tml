@@ -15,14 +15,14 @@ func main() {
     println(5 < 3)   // false
 
     // Variables with println
-    let x = 10
-    let y = 20
+    let x: I32 = 10
+    let y: I32 = 20
     println(x)       // 10
     println(y)       // 20
     println(x + y)   // 30
 
     // Boolean variables
-    let flag = true
+    let flag: Bool = true
     println(flag)    // true
 
     // print (no newline) followed by println
@@ -41,8 +41,8 @@ func main() {
     println("Sum of {} and {} is {}", 5, 3, 8)
 
     // Format with variables
-    let a = 100
-    let b = 200
+    let a: I32 = 100
+    let b: I32 = 200
     println("a={} b={}", a, b)
 
     // Format with booleans

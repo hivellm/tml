@@ -132,7 +132,7 @@ Breakpoint 1 at src/main.tml:42
 Hit breakpoint 1 at src/main.tml:42
 
    40 | func process(data: List[I32]) -> I32 {
-   41 |     var total = 0
+   41 |     var total: I32 = 0
 -> 42 |     loop item in data {
    43 |         total += item
    44 |     }
@@ -236,11 +236,11 @@ tml profile flamegraph target/profile/cpu.json
 import std.time.Instant
 
 func benchmark_operation() {
-    let start = Instant.now()
+    let start: Instant = Instant.now()
 
     expensive_operation()
 
-    let elapsed = start.elapsed()
+    let elapsed: Duration = start.elapsed()
     log_info("operation took: " + elapsed.to_string())
 }
 
@@ -274,7 +274,7 @@ func divide(a: I32, b: I32) -> I32 {
 
 // Overflow checking (debug mode)
 let x: I32 = I32.MAX
-let y = x + 1  // panic in debug, wraps in release
+let y: I32 = x + 1  // panic in debug, wraps in release
 ```
 
 ## 7. Panic Handling
@@ -305,7 +305,7 @@ func main() {
 ```tml
 import std.panic
 
-let result = panic.catch(do() {
+let result: Outcome[T, PanicInfo] = panic.catch(do() {
     risky_operation()
 })
 
@@ -343,7 +343,7 @@ stack backtrace:
 ```tml
 import std.debug
 
-let x = get_value()
+let x: I32 = get_value()
 print(debug.type_name(x))  // "Maybe[I32]"
 print(debug.size_of(x))    // 8
 ```
@@ -358,14 +358,14 @@ behavior Debug {
 @auto(debug)
 type Point { x: F64, y: F64 }
 
-let p = Point { x: 1.0, y: 2.0 }
+let p: Point = Point { x: 1.0, y: 2.0 }
 print(p.debug())  // "Point { x: 1.0, y: 2.0 }"
 ```
 
 ### 9.3 Dbg Helper
 
 ```tml
-let x = dbg(expensive_computation())
+let x: T = dbg(expensive_computation())
 // Prints: [src/main.tml:42] expensive_computation() = 42
 // Returns the value to continue pipeline
 ```

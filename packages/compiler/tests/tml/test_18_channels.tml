@@ -1,14 +1,14 @@
 // Test 18: Go-style channels and synchronization primitives
 func main() {
     // ========== MUTEX TEST ==========
-    let mtx = mutex_create()
+    let mtx: ptr = mutex_create()
 
     // Lock the mutex
     mutex_lock(mtx)
     println("mutex locked")
 
     // Try to lock again - should fail since we hold it
-    let got_lock = mutex_try_lock(mtx)
+    let got_lock: I32 = mutex_try_lock(mtx)
     if got_lock {
         println("error: mutex_try_lock should have failed")
     } else {
@@ -20,7 +20,7 @@ func main() {
     println("mutex unlocked")
 
     // Now try_lock should succeed
-    let got_lock2 = mutex_try_lock(mtx)
+    let got_lock2: I32 = mutex_try_lock(mtx)
     if got_lock2 {
         println("mutex_try_lock succeeded")
     } else {
@@ -31,46 +31,46 @@ func main() {
     mutex_destroy(mtx)
 
     // ========== CHANNEL TEST ==========
-    let ch = channel_create()
+    let ch: ptr = channel_create()
     println("channel created")
 
     // Check initial length
-    let len0 = channel_len(ch)
+    let len0: I32 = channel_len(ch)
     println(len0)  // 0
 
     // Non-blocking send
-    let sent1 = channel_try_send(ch, 42)
+    let sent1: I32 = channel_try_send(ch, 42)
     if sent1 {
         println("sent 42")
     }
 
-    let sent2 = channel_try_send(ch, 100)
+    let sent2: I32 = channel_try_send(ch, 100)
     if sent2 {
         println("sent 100")
     }
 
     // Check length after sends
-    let len1 = channel_len(ch)
+    let len1: I32 = channel_len(ch)
     println(len1)  // 2
 
     // Non-blocking receive into temp
-    let out_val = alloc(4)
-    let recv1 = channel_try_recv(ch, out_val)
+    let out_val: ptr = alloc(4)
+    let recv1: I32 = channel_try_recv(ch, out_val)
     if recv1 {
         println(read_i32(out_val))  // 42
     }
 
-    let recv2 = channel_try_recv(ch, out_val)
+    let recv2: I32 = channel_try_recv(ch, out_val)
     if recv2 {
         println(read_i32(out_val))  // 100
     }
 
     // Channel should be empty now
-    let len2 = channel_len(ch)
+    let len2: I32 = channel_len(ch)
     println(len2)  // 0
 
     // Try receive on empty channel - should fail
-    let recv3 = channel_try_recv(ch, out_val)
+    let recv3: I32 = channel_try_recv(ch, out_val)
     if recv3 {
         println("error: should not receive from empty")
     } else {
@@ -82,7 +82,7 @@ func main() {
     channel_destroy(ch)
 
     // ========== WAITGROUP TEST ==========
-    let wg = waitgroup_create()
+    let wg: ptr = waitgroup_create()
 
     // Add 3 to counter
     waitgroup_add(wg, 3)

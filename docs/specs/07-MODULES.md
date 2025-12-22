@@ -49,7 +49,7 @@ import std.collections.List
 
 // Usage
 io.print("hello")
-let list = List.new()
+let list: List[T] = List.new()
 ```
 
 ### 2.2 Import with Alias
@@ -58,7 +58,7 @@ let list = List.new()
 import std.collections.HashMap as Map
 import very.long.module.name as short
 
-let m = Map.new()
+let m: Map[String, I32] = Map.new()
 ```
 
 ### 2.3 Multiple Import
@@ -326,8 +326,8 @@ module platform {
 
 func main() {
     // Generate code
-    let proto = read("schema.proto")
-    let generated = compile_proto(proto)
+    let proto: String = read("schema.proto")
+    let generated: String = compile_proto(proto)
     write("src/generated.tml", generated)
 
     // Configure paths
@@ -344,7 +344,7 @@ func main() {
 ///
 /// ## Example
 /// ```
-/// let p = Point.new(1.0, 2.0)
+/// let p: Point = Point.new(1.0, 2.0)
 /// assert_eq(p.x, 1.0)
 /// ```
 public type Point {
@@ -421,7 +421,7 @@ import mylib.math.*
 
 @test
 func test_complex_calculation() {
-    let result = complex_math(42)
+    let result: I32 = complex_math(42)
     assert(result > 0)
 }
 ```

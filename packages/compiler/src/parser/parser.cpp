@@ -829,12 +829,72 @@ auto Parser::parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 }
 
 auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    (void)vis; // TODO: Will be used when implementing use parsing
-    return ParseError{
-        .message = "Use parsing not yet implemented",
-        .span = peek().span,
-        .notes = {}
+    auto start_span = peek().span;
+
+    // Consume 'use' keyword
+    auto use_result = expect(lexer::TokenKind::KwUse, "Expected 'use'");
+    if (is_err(use_result)) return unwrap_err(use_result);
+
+    // Parse path manually to handle grouped imports: std::time::{Instant, Duration}
+    TypePath path;
+
+    // First segment
+    auto first = expect(lexer::TokenKind::Identifier, "Expected identifier");
+    if (is_err(first)) return unwrap_err(first);
+    path.segments.push_back(std::string(unwrap(first).lexeme));
+    path.span = unwrap(first).span;
+
+    // Continue parsing path segments
+    while (match(lexer::TokenKind::ColonColon)) {
+        // Check for grouped imports: {Instant, Duration}
+        if (check(lexer::TokenKind::LBrace)) {
+            advance(); // consume '{'
+            std::vector<std::string> names;
+
+            do {
+                auto name_result = expect(lexer::TokenKind::Identifier, "Expected identifier in use group");
+                if (is_err(name_result)) return unwrap_err(name_result);
+                names.push_back(std::string(unwrap(name_result).lexeme));
+            } while (match(lexer::TokenKind::Comma));
+
+            auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}'");
+            if (is_err(rbrace)) return unwrap_err(rbrace);
+
+            // For grouped imports, append first name to base path
+            // TODO: Return multiple UseDecl for each name
+            if (!names.empty()) {
+                path.segments.push_back(names[0]);
+            }
+            break;
+        }
+
+        auto seg = expect(lexer::TokenKind::Identifier, "Expected identifier after '::'");
+        if (is_err(seg)) return unwrap_err(seg);
+        path.segments.push_back(std::string(unwrap(seg).lexeme));
+        path.span = SourceSpan::merge(path.span, unwrap(seg).span);
+    }
+
+    // Optional alias: as Alias
+    std::optional<std::string> alias;
+    if (match(lexer::TokenKind::KwAs)) {
+        auto alias_result = expect(lexer::TokenKind::Identifier, "Expected alias name");
+        if (is_err(alias_result)) return unwrap_err(alias_result);
+        alias = std::string(unwrap(alias_result).lexeme);
+    }
+
+    auto end_span = previous().span;
+
+    auto use = UseDecl{
+        .vis = vis,
+        .path = std::move(path),
+        .alias = alias,
+        .span = SourceSpan::merge(start_span, end_span)
     };
+
+    return make_box<Decl>(Decl{
+        .kind = std::move(use),
+        .span = SourceSpan::merge(start_span, end_span)
+    });
 }
 
 auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
@@ -996,12 +1056,13 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
     auto pattern = parse_pattern();
     if (is_err(pattern)) return unwrap_err(pattern);
 
-    std::optional<TypePtr> type_annotation;
-    if (match(lexer::TokenKind::Colon)) {
-        auto type = parse_type();
-        if (is_err(type)) return unwrap_err(type);
-        type_annotation = std::move(unwrap(type));
-    }
+    // Type annotation is REQUIRED in TML (explicit typing for LLM clarity)
+    auto colon = expect(lexer::TokenKind::Colon, "Expected ':' and type annotation after variable name (TML requires explicit types)");
+    if (is_err(colon)) return unwrap_err(colon);
+
+    auto type = parse_type();
+    if (is_err(type)) return unwrap_err(type);
+    std::optional<TypePtr> type_annotation = std::move(unwrap(type));
 
     std::optional<ExprPtr> init;
     if (match(lexer::TokenKind::Assign)) {
@@ -1071,9 +1132,34 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         if (check(lexer::TokenKind::LParen) ||
             check(lexer::TokenKind::LBracket) ||
             check(lexer::TokenKind::Dot) ||
-            check(lexer::TokenKind::Bang)) {
+            check(lexer::TokenKind::Bang) ||
+            check(lexer::TokenKind::PlusPlus) ||
+            check(lexer::TokenKind::MinusMinus)) {
             left = parse_postfix_expr(std::move(unwrap(left)));
             if (is_err(left)) return left;
+            continue;
+        }
+
+        // Handle range expressions: x to y, x through y, x..y
+        if (check(lexer::TokenKind::KwTo) ||
+            check(lexer::TokenKind::KwThrough) ||
+            check(lexer::TokenKind::DotDot)) {
+            bool inclusive = check(lexer::TokenKind::KwThrough);
+            auto op_span = advance().span; // consume 'to', 'through', or '..'
+
+            auto end_expr = parse_expr_with_precedence(prec);
+            if (is_err(end_expr)) return end_expr;
+
+            auto span = SourceSpan::merge(unwrap(left)->span, unwrap(end_expr)->span);
+            left = make_box<Expr>(Expr{
+                .kind = RangeExpr{
+                    .start = std::move(unwrap(left)),
+                    .end = std::move(unwrap(end_expr)),
+                    .inclusive = inclusive,
+                    .span = span
+                },
+                .span = span
+            });
             continue;
         }
 
@@ -1215,6 +1301,32 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
         return make_box<Expr>(Expr{
             .kind = TryExpr{
                 .expr = std::move(left),
+                .span = span
+            },
+            .span = span
+        });
+    }
+
+    // Postfix increment (++)
+    if (match(lexer::TokenKind::PlusPlus)) {
+        auto span = SourceSpan::merge(start_span, previous().span);
+        return make_box<Expr>(Expr{
+            .kind = UnaryExpr{
+                .op = UnaryOp::Inc,
+                .operand = std::move(left),
+                .span = span
+            },
+            .span = span
+        });
+    }
+
+    // Postfix decrement (--)
+    if (match(lexer::TokenKind::MinusMinus)) {
+        auto span = SourceSpan::merge(start_span, previous().span);
+        return make_box<Expr>(Expr{
+            .kind = UnaryExpr{
+                .op = UnaryOp::Dec,
+                .operand = std::move(left),
                 .span = span
             },
             .span = span
@@ -2041,6 +2153,49 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         });
     }
 
+    // Function type: Fn(Params) -> RetType
+    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "Fn") {
+        advance(); // consume 'Fn'
+
+        auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'Fn'");
+        if (is_err(lparen)) return unwrap_err(lparen);
+
+        // Parse parameter types
+        std::vector<TypePtr> param_types;
+        while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+            auto param_type = parse_type();
+            if (is_err(param_type)) return param_type;
+            param_types.push_back(std::move(unwrap(param_type)));
+
+            if (!check(lexer::TokenKind::RParen)) {
+                auto comma = expect(lexer::TokenKind::Comma, "Expected ',' or ')' in function type");
+                if (is_err(comma)) return unwrap_err(comma);
+            }
+        }
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after function parameters");
+        if (is_err(rparen)) return unwrap_err(rparen);
+
+        // Parse return type (optional, defaults to Unit)
+        TypePtr return_type = nullptr;
+        if (match(lexer::TokenKind::Arrow)) {
+            auto ret = parse_type();
+            if (is_err(ret)) return ret;
+            return_type = std::move(unwrap(ret));
+        }
+
+        auto end_span = previous().span;
+        auto span = SourceSpan::merge(start_span, end_span);
+        return make_box<Type>(Type{
+            .kind = FuncType{
+                .params = std::move(param_types),
+                .return_type = std::move(return_type),
+                .span = span
+            },
+            .span = span
+        });
+    }
+
     // Named type: Ident or Path::To::Type
     auto path = parse_type_path();
     if (is_err(path)) return unwrap_err(path);
@@ -2335,9 +2490,12 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         case lexer::TokenKind::LBracket:
         case lexer::TokenKind::Dot:
         case lexer::TokenKind::Bang:
+        case lexer::TokenKind::PlusPlus:
+        case lexer::TokenKind::MinusMinus:
             return precedence::CALL;
 
         case lexer::TokenKind::DotDot:
+        case lexer::TokenKind::KwTo:
         case lexer::TokenKind::KwThrough:
             return precedence::RANGE;
 

@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-12-22T05:36:36.865114",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.13.9"
+  },
+  "results": [
+    {
+      "name": "arithmetic",
+      "language": "C++",
+      "category": "arithmetic",
+      "build_time_ms": 987.4042998999357,
+      "run_time_ms": 41.3940999424085,
+      "binary_size_bytes": 145920,
+      "output": "=== C++ Arithmetic Benchmarks ===\n\nint_add_1M: 0.000 ms (avg of 3 runs)\nint_mul_100K: 0.260 ms (avg of 3 runs)\nmixed_ops_100K: 0.726 ms (avg of 3 runs)\nfibonacci_10K: 0.002 ms (avg of 3 runs)\ncount_primes_1K: 0.007 ms (avg of 3 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "arithmetic",
+      "language": "Rust",
+      "category": "arithmetic",
+      "build_time_ms": 220.15840001404285,
+      "run_time_ms": 39.17519992683083,
+      "binary_size_bytes": 166912,
+      "output": "=== Rust Arithmetic Benchmarks ===\n\nint_add_1M: 0.000 ms (avg of 3 runs)\nint_mul_100K: 0.282 ms (avg of 3 runs)\nmixed_ops_100K: 0.806 ms (avg of 3 runs)\nfibonacci_10K: 0.004 ms (avg of 3 runs)\ncount_primes_1K: 0.008 ms (avg of 3 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "arithmetic",
+      "language": "TML",
+      "category": "arithmetic",
+      "build_time_ms": 468.2623000117019,
+      "run_time_ms": 115.17069989349693,
+      "binary_size_bytes": 155136,
+      "output": "=== TML Arithmetic Benchmarks ===\n\nRunning int_add_1M...\nint_add_1M: 0 ms (total of 3 runs)\nRunning int_mul_100K...\nint_mul_100K: 0 ms (total of 3 runs)\nRunning mixed_ops_100K...\nmixed_ops_100K: 0 ms (total of 3 runs)\nRunning fibonacci_10K...\nfibonacci_10K: 0 ms (total of 3 runs)\nRunning count_primes_1K...\ncount_primes_1K: 0 ms (total of 3 runs)\n\nDone.\n",
+      "success": true,
+      "error": ""
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+func main() -> I32 {
+    let x: I32 = 1000000
+    println("x = {}", x)
+    return 0
+}

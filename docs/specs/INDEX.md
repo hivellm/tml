@@ -1,10 +1,30 @@
 # TML v1.0 — To Machine Language
 
-> A language designed for machines (LLMs), not adapted from human languages.
+> **LLM-First Design, Human-Friendly Ergonomics**
+>
+> A language optimized for LLM code generation with the familiar feel of Rust and C#.
 
 ## What is TML?
 
-**TML (To Machine Language)** is a programming language created specifically to be processed by Large Language Models. Unlike other languages designed for humans and later adapted for tools, TML was built from the ground up with deterministic parsing and code generation as priorities.
+**TML (To Machine Language)** is a programming language designed from the ground up for **LLM code generation and analysis**, while maintaining **ergonomics that human developers expect** from modern languages like Rust and C#.
+
+### The Dual Focus
+
+| For LLMs | For Humans |
+|----------|------------|
+| Deterministic LL(1) grammar | Familiar Rust/C# patterns |
+| Unique token meanings | Method chaining `.filter().map()` |
+| Self-documenting keywords | Explicit types everywhere |
+| Stable IDs for patches | Clean generics `List[T]` |
+| No ambiguous syntax | Readable `and`/`or`/`not` |
+
+### Inspired By
+
+| Source | What TML Takes |
+|--------|----------------|
+| **Rust** | Ownership, pattern matching, `ref`/`mut`, zero-cost abstractions, traits (as `behavior`) |
+| **C#** | Clean generics `[T]`, method syntax, properties, LINQ-style chains, `async`/`await` |
+| **TML Innovation** | `and`/`or`/`not` keywords, `to`/`through` ranges, `Maybe[T]`/`Outcome[T,E]`, `@directives`, stable IDs |
 
 ## Why Not Use Existing Languages?
 
@@ -85,10 +105,10 @@ public func factorial(n: U64) -> U64 {
 
 ### Variables
 ```tml
-let x = 42              // immutable, type inferred
-let y: I32 = 100        // immutable, explicit type
-var count = 0           // mutable
-const PI = 3.14159      // compile-time constant
+let x: I32 = 42         // immutable, explicit type required
+let y: I64 = 100        // immutable, explicit type
+var count: I32 = 0      // mutable, explicit type required
+const PI: F64 = 3.14159 // compile-time constant, explicit type
 ```
 
 ### Functions
@@ -114,8 +134,8 @@ type Color = Red | Green | Blue | Rgb(U8, U8, U8)
 
 extend Point {
     func distance(this, other: Point) -> F64 {
-        let dx = this.x - other.x
-        let dy = this.y - other.y
+        let dx: F64 = this.x - other.x
+        let dy: F64 = this.y - other.y
         return (dx**2 + dy**2).sqrt()
     }
 }
@@ -162,15 +182,15 @@ loop while condition {
 ### Error Handling
 ```tml
 // ! propagates errors (visible and clear)
-let data = read_file("config.tml")!
+let data: Outcome[String, Error] = read_file("config.tml")!
 
 // else provides inline fallback
-let config = parse(data)! else default_config()
+let config: Outcome[Data, Error] = parse(data)! else default_config()
 
 // catch for blocks with common handling
 catch {
-    let file = open(path)!
-    let data = file.read()!
+    let file: Outcome[File, Error] = open(path)!
+    let data: Outcome[String, Error] = file.read()!
     return Ok(parse(data)!)
 } else |err| {
     log.error(err)
@@ -238,7 +258,7 @@ if a && b || !c { ... }
 ### 3. Closures with `do()`
 ```tml
 // TML - no ambiguity with |
-let add = do(x, y) x + y
+let add: func(I32, I32) -> I32 = do(x, y) x + y
 items.map(do(x) x * 2)
 
 // Other languages - | is also bitwise OR

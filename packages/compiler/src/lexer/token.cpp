@@ -79,6 +79,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::Slash: return "/";
         case TokenKind::Percent: return "%";
         case TokenKind::StarStar: return "**";
+        case TokenKind::PlusPlus: return "++";
+        case TokenKind::MinusMinus: return "--";
 
         // Operators - comparison
         case TokenKind::Eq: return "==";

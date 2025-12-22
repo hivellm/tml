@@ -17,13 +17,13 @@ func factorial(n: I32) -> I32 {
 
 func main() {
     // Basic function call
-    let result = add(10, 20)
+    let result: I32 = add(10, 20)
     println(result)  // 30
 
     // Function with no return
     greet("TML User")
 
     // Recursive function
-    let fact5 = factorial(5)
+    let fact5: I32 = factorial(5)
     println(fact5)  // 120
 }

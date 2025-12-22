@@ -1,0 +1,6 @@
+// ERROR TEST: Type mismatch in assignment
+// Expected: error about type mismatch (String vs I32)
+func main() -> I32 {
+    let x: Str = 42
+    return 0
+}

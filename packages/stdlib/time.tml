@@ -1,0 +1,49 @@
+// TML Standard Library - Time Module
+// Similar to Rust's std::time
+//
+// Usage:
+//   use std::time::{Instant, Duration}
+//
+//   let start = Instant::now()
+//   // ... do work ...
+//   let elapsed = start.elapsed()
+//   println("Took {} ms", elapsed.as_millis_f64())
+
+// Instant represents a point in time (like Rust's Instant)
+// Internally stored as microseconds (I64)
+type Instant = I64
+
+// Duration represents a span of time (like Rust's Duration)
+// Internally stored as microseconds (I64)
+type Duration = I64
+
+// Instant::now() - Get current instant
+// Returns high-resolution timestamp
+func now() -> Instant {
+    return _instant_now()
+}
+
+// Instant::elapsed() - Get duration since this instant
+func elapsed(start: Instant) -> Duration {
+    return _instant_elapsed(start)
+}
+
+// Duration::as_secs_f64() - Convert to seconds as float string
+func as_secs_f64(d: Duration) -> Str {
+    return _duration_format_secs(d)
+}
+
+// Duration::as_millis_f64() - Convert to milliseconds as float string
+func as_millis_f64(d: Duration) -> Str {
+    return _duration_format_ms(d)
+}
+
+// Duration::as_millis() - Convert to milliseconds as I64
+func as_millis(d: Duration) -> I64 {
+    return _duration_as_millis(d)
+}
+
+// Duration::as_secs() - Convert to seconds as I64
+func as_secs(d: Duration) -> I64 {
+    return _duration_as_secs(d)
+}

@@ -1,7 +1,7 @@
 // Test 04: Comparison and logical operators
 func main() {
-    let a = 10
-    let b = 20
+    let a: I32 = 10
+    let b: I32 = 20
 
     // Comparison operators
     println(a == b)   // false
@@ -12,8 +12,8 @@ func main() {
     println(a >= b)   // false
 
     // Logical operators (TML uses words)
-    let x = true
-    let y = false
+    let x: Bool = true
+    let y: Bool = false
 
     println(x and y)  // false
     println(x or y)   // true

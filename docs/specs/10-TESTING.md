@@ -12,7 +12,7 @@ func test_addition() {
 
 @test
 func test_string_concat() {
-    let result = "hello" + " world"
+    let result: String = "hello" + " world"
     assert_eq(result, "hello world")
 }
 ```
@@ -34,7 +34,7 @@ assert_ge(a, b)                      // a >= b
 ```tml
 @test
 func test_with_message() {
-    let x = compute()
+    let x: I32 = compute()
     assert(x > 0, "x should be positive, got: " + x.to_string())
     assert_eq(x, 42, "expected 42")
 }
@@ -63,7 +63,7 @@ func test_panic_message() {
 ```tml
 @test
 func test_file_not_found() -> Outcome[Unit, TestError] {
-    let result = File.open("nonexistent.txt")
+    let result: Outcome[File, Error] = File.open("nonexistent.txt")
     assert(result.is_err())
     return Ok(unit)
 }
@@ -71,7 +71,7 @@ func test_file_not_found() -> Outcome[Unit, TestError] {
 @test
 @should_error(IoError)
 func test_expects_io_error() -> Outcome[Unit, IoError] {
-    let _ = File.open("nonexistent.txt")!
+    let _: Outcome[File, Error] = File.open("nonexistent.txt")!
     return Ok(unit)
 }
 ```
@@ -104,7 +104,7 @@ module tests {
 
     @test
     func test_insert() {
-        let db = test_db.unwrap()
+        let db: Database = test_db.unwrap()
         db.insert("key", "value")
         assert_eq(db.get("key"), Just("value"))
     }
@@ -129,7 +129,7 @@ func create_context() -> TestContext {
 
 @test
 func test_with_context(ctx: TestContext) {
-    let file = ctx.temp_dir.join("test.txt")
+    let file: Path = ctx.temp_dir.join("test.txt")
     File.write(file, "data")
     assert(file.exists())
 }
@@ -175,7 +175,7 @@ func gen_positive_int() -> I32 {
 
 @property
 func prop_sqrt_positive(@gen(gen_positive_int) x: I32) -> Bool {
-    let sq = (x as F64).sqrt()
+    let sq: F64 = (x as F64).sqrt()
     return sq >= 0.0
 }
 ```
@@ -200,9 +200,9 @@ extend MockHttpClient with HttpClient {
 
 @test
 func test_with_mock() {
-    let client = MockHttpClient {}
-    let service = Service.new(client)
-    let result = service.fetch_data()
+    let client: MockHttpClient = MockHttpClient {}
+    let service: Service = Service.new(client)
+    let result: Outcome[Data, Error] = service.fetch_data()
     assert(result.is_ok())
 }
 ```
@@ -212,9 +212,9 @@ func test_with_mock() {
 ```tml
 @test
 func test_call_count() {
-    let spy = Spy.new[func(String) -> Unit]()
+    let spy: Spy[func(String) -> Unit] = Spy.new[func(String) -> Unit]()
 
-    let service = Service.with_logger(spy.func())
+    let service: Service = Service.with_logger(spy.func())
     service.process()
     service.process()
 
@@ -230,7 +230,7 @@ func test_call_count() {
 ```tml
 @bench
 func bench_sort(b: Bencher) {
-    let data = random_list(1000)
+    let data: List[I32] = random_list(1000)
 
     b.iter(do() {
         data.duplicate().sort()

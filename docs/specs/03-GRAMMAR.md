@@ -107,7 +107,7 @@ TypeBody = StructBody | EnumBody | AliasBody
 StructBody = '{' (Field (',' Field)* ','?)? '}'
 Field      = Ident ':' Type
 
-EnumBody = '=' Variant ('|' Variant)*
+EnumBody = '{' Variant (',' Variant)* ','? '}'
 Variant  = Ident VariantData?
 VariantData = '(' Type (',' Type)* ')'
             | '{' Field (',' Field)* '}'
@@ -123,18 +123,39 @@ type Point {
     y: F64,
 }
 
-// Enum
-type Color = Red | Green | Blue | Rgb(U8, U8, U8)
+// Simple Enum (no data)
+type Color {
+    Red,
+    Green,
+    Blue,
+}
 
-type Outcome[T, E] = Ok(T) | Err(E)
+type Direction {
+    North,
+    South,
+    East,
+    West,
+}
 
-type JsonValue =
-    | Null
-    | Bool(Bool)
-    | Number(F64)
-    | Text(String)
-    | Array(List[JsonValue])
-    | Object(Map[String, JsonValue])
+// Enum with data
+type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+type JsonValue {
+    Null,
+    Bool(Bool),
+    Number(F64),
+    Text(String),
+    Array(List[JsonValue]),
+    Object(Map[String, JsonValue]),
+}
 
 // Alias
 type UserId = U64
@@ -220,8 +241,8 @@ ConstDecl = Visibility? 'const' Ident (':' Type)? '=' Expr
 **Examples:**
 ```tml
 const PI: F64 = 3.14159265359
-const MAX_SIZE = 1024
-public const VERSION = "1.0.0"
+const MAX_SIZE: I32 = 1024
+public const VERSION: String = "1.0.0"
 ```
 
 ## 4. Statements
@@ -234,8 +255,8 @@ Statement = LetStmt
           | BreakStmt
           | ContinueStmt
 
-LetStmt = 'let' Pattern (':' Type)? '=' Expr
-VarStmt = 'var' Ident (':' Type)? '=' Expr
+LetStmt = 'let' Pattern ':' Type '=' Expr
+VarStmt = 'var' Ident ':' Type '=' Expr
 
 ExprStmt = Expr
 
@@ -246,11 +267,11 @@ ContinueStmt = 'continue'
 
 **Examples:**
 ```tml
-let x = 42
+let x: I32 = 42
 let y: I64 = 100
 let Point { x, y } = get_point()
 
-var count = 0
+var count: I32 = 0
 var name: String = "default"
 
 return result
@@ -438,14 +459,14 @@ Propagates errors automatically or recovers with else.
 
 **Examples:**
 ```tml
-let file = File.open(path)!
-let data = file.read()!
+let file: Outcome[File, Error] = File.open(path)!
+let data: Outcome[String, Error] = file.read()!
 
 // With fallback
-let port = env.get("PORT")!.parse[U16]()! else 8080
+let port: Outcome[String, Error] = env.get("PORT")!.parse[U16]()! else 8080
 
 // With error binding
-let data = fetch(url)! else |err| {
+let data: Outcome[Data, Error] = fetch(url)! else |err| {
     log.warn(err.to_string())
     Data.default()
 }
@@ -460,8 +481,8 @@ CatchExpr = 'catch' Block 'else' ('|' Ident '|')? Block
 **Examples:**
 ```tml
 catch {
-    let local = load_local()!
-    let remote = fetch_remote()!
+    let local: Data = load_local()!
+    let remote: Outcome[Data, Error] = fetch_remote()!
     return Ok(merge(local, remote)!)
 } else |err| {
     log.error(err.to_string())
@@ -483,12 +504,12 @@ DoBody = Expr
 
 **Examples:**
 ```tml
-let add = do(x, y) x + y
+let add: func(I32, I32) -> I32 = do(x, y) x + y
 
-let double = do(x) x * 2
+let double: func(I32) -> I32 = do(x) x * 2
 
-let complex = do(x, y) {
-    let sum = x + y
+let complex: func(I32, I32) -> I32 = do(x, y) {
+    let sum: I32 = x + y
     return sum * 2
 }
 
@@ -510,8 +531,8 @@ FieldInit  = Ident (':' Expr)?
 Point { x: 1.0, y: 2.0 }
 
 // Shorthand when variable has same name
-let x = 1.0
-let y = 2.0
+let x: F64 = 1.0
+let y: F64 = 2.0
 Point { x, y }
 
 // Update syntax
@@ -527,9 +548,52 @@ ArrayExpr = '[' (Expr (',' Expr)* ','?)? ']'
 
 **Examples:**
 ```tml
-[1, 2, 3, 4, 5]
-["a", "b", "c"]
-[0; 100]  // 100 zeros
+// Array literals (dynamic lists)
+let numbers: List[I32] = [1, 2, 3, 4, 5]
+let names: List[String] = ["alice", "bob", "charlie"]
+let empty: List[I32] = []
+
+// Repeat syntax
+let zeros: [I32; 100] = [0; 100]  // 100 zeros
+let ones: [I32; 10] = [1; 10]    // 10 ones
+
+// Indexing
+let first: I32 = numbers[0]
+let second: I32 = numbers[1]
+
+// Method syntax
+println(numbers.len())     // 5
+numbers.push(6)
+let last: Maybe[I32] = numbers.pop()
+numbers.set(0, 100)
+let val: Maybe[I32] = numbers.get(0)
+numbers.clear()
+```
+
+### 5.11 Method Call Expression
+
+```ebnf
+MethodCall = Expr '.' Ident '(' Args? ')'
+Args       = Expr (',' Expr)*
+```
+
+**Examples:**
+```tml
+// Collection methods
+let arr: List[I32] = [1, 2, 3]
+arr.push(4)
+arr.pop()
+arr.len()
+arr.get(0)
+arr.set(0, 10)
+arr.clear()
+arr.is_empty()
+arr.capacity()
+
+// String methods (future)
+str.len()
+str.to_upper()
+str.contains("x")
 ```
 
 ## 6. Types
@@ -621,7 +685,7 @@ DirectiveArg  = Ident (':' Value)?
 | `public` | Visibility + Item or Import |
 | `private` | Visibility + Item |
 | `func` | Function |
-| `type` | TypeDecl |
+| `type` | TypeDecl (struct or enum) |
 | `behavior` | BehaviorDecl |
 | `extend` | ExtendDecl |
 | `const` | ConstDecl |
@@ -630,6 +694,7 @@ DirectiveArg  = Ident (':' Value)?
 | `if` | IfExpr |
 | `when` | WhenExpr |
 | `loop` | LoopExpr |
+| `for` | ForExpr (loop i in N) |
 | `catch` | CatchExpr |
 | `return` | ReturnStmt |
 | `break` | BreakStmt |
@@ -640,9 +705,10 @@ DirectiveArg  = Ident (':' Value)?
 | `ref` | RefExpr or RefType |
 | `{` | BlockExpr |
 | `(` | GroupExpr or TupleExpr |
-| `[` | ArrayExpr |
+| `[` | ArrayExpr (dynamic list) |
 | `@` | Directive |
 | Ident | VarRef or FuncCall or TypeRef |
+| Ident `::` Ident | PathExpr (enum variant) |
 | Literal | LiteralExpr |
 
 ### 8.2 No Ambiguities
@@ -656,7 +722,7 @@ a < b       // < always comparison
 **Struct vs Block:**
 ```tml
 Point { x: 1 }  // TypeName followed by { = struct
-{ let x = 1 }   // { alone = block
+{ let x: I32 = 1 }   // { alone = block
 ```
 
 **Closure vs OR:**
@@ -698,8 +764,8 @@ extend Point {
     }
 
     public func distance(this, other: Point) -> F64 {
-        let dx = this.x - other.x
-        let dy = this.y - other.y
+        let dx: F64 = this.x - other.x
+        let dy: F64 = this.y - other.y
         return sqrt(dx**2 + dy**2)
     }
 }

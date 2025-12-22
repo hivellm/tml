@@ -3,6 +3,40 @@
 
 namespace tml::types {
 
+namespace {
+// Helper to check if a type is an integer type
+bool is_integer_type(const TypePtr& type) {
+    if (!type->is<PrimitiveType>()) return false;
+    auto kind = type->as<PrimitiveType>().kind;
+    return kind == PrimitiveKind::I8 || kind == PrimitiveKind::I16 ||
+           kind == PrimitiveKind::I32 || kind == PrimitiveKind::I64 ||
+           kind == PrimitiveKind::I128 ||
+           kind == PrimitiveKind::U8 || kind == PrimitiveKind::U16 ||
+           kind == PrimitiveKind::U32 || kind == PrimitiveKind::U64 ||
+           kind == PrimitiveKind::U128;
+}
+
+// Helper to check if a type is a float type
+bool is_float_type(const TypePtr& type) {
+    if (!type->is<PrimitiveType>()) return false;
+    auto kind = type->as<PrimitiveType>().kind;
+    return kind == PrimitiveKind::F32 || kind == PrimitiveKind::F64;
+}
+
+// Check if types are compatible (allowing numeric coercion)
+bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
+    if (types_equal(expected, actual)) return true;
+
+    // Allow integer literal (I64) to be assigned to any integer type
+    if (is_integer_type(expected) && is_integer_type(actual)) return true;
+
+    // Allow float literal (F64) to be assigned to any float type
+    if (is_float_type(expected) && is_float_type(actual)) return true;
+
+    return false;
+}
+} // anonymous namespace
+
 TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
@@ -308,14 +342,44 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
 auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     auto left = check_expr(*binary.left);
     auto right = check_expr(*binary.right);
-    (void)right;  // Suppress unused warning
+
+    // Helper to check if types are compatible for binary operations
+    auto check_binary_types = [&](const char* op_name) {
+        TypePtr resolved_left = env_.resolve(left);
+        TypePtr resolved_right = env_.resolve(right);
+        if (!types_compatible(resolved_left, resolved_right)) {
+            error(std::string("Binary operator '") + op_name + "' requires matching types, found " +
+                  type_to_string(resolved_left) + " and " + type_to_string(resolved_right),
+                  binary.left->span);
+        }
+    };
+
+    // Helper to check mutability for assignment
+    auto check_assignable = [&]() {
+        if (binary.left->is<parser::IdentExpr>()) {
+            const auto& ident = binary.left->as<parser::IdentExpr>();
+            auto sym = env_.current_scope()->lookup(ident.name);
+            if (sym && !sym->is_mutable) {
+                error("Cannot assign to immutable variable '" + ident.name + "'", binary.left->span);
+            }
+        }
+    };
 
     switch (binary.op) {
         case parser::BinaryOp::Add:
+            check_binary_types("+");
+            return left;
         case parser::BinaryOp::Sub:
+            check_binary_types("-");
+            return left;
         case parser::BinaryOp::Mul:
+            check_binary_types("*");
+            return left;
         case parser::BinaryOp::Div:
+            check_binary_types("/");
+            return left;
         case parser::BinaryOp::Mod:
+            check_binary_types("%");
             return left;
         case parser::BinaryOp::Lt:
         case parser::BinaryOp::Le:
@@ -323,6 +387,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
         case parser::BinaryOp::Ge:
         case parser::BinaryOp::Eq:
         case parser::BinaryOp::Ne:
+            check_binary_types("comparison");
             return make_bool();
         case parser::BinaryOp::And:
         case parser::BinaryOp::Or:
@@ -334,6 +399,9 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
         case parser::BinaryOp::Shr:
             return left;
         case parser::BinaryOp::Assign:
+            check_assignable();
+            check_binary_types("=");
+            return make_unit();
         case parser::BinaryOp::AddAssign:
         case parser::BinaryOp::SubAssign:
         case parser::BinaryOp::MulAssign:
@@ -344,6 +412,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
         case parser::BinaryOp::BitXorAssign:
         case parser::BinaryOp::ShlAssign:
         case parser::BinaryOp::ShrAssign:
+            check_assignable();
             return make_unit();
     }
     return make_unit();
@@ -512,21 +581,45 @@ auto TypeChecker::check_stmt(const parser::Stmt& stmt) -> TypePtr {
 }
 
 auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
-    TypePtr init_type = let.init ? check_expr(**let.init) : make_unit();
-    TypePtr var_type = let.type_annotation.has_value()
-        ? resolve_type(**let.type_annotation)
-        : init_type;
+    // TML requires explicit type annotations on all let statements
+    if (!let.type_annotation.has_value()) {
+        error("TML requires explicit type annotation on 'let' statements. Add ': Type' after the variable name.", let.span);
+        // Continue with unit type to allow further error checking
+        bind_pattern(*let.pattern, make_unit());
+        return make_unit();
+    }
+
+    TypePtr var_type = resolve_type(**let.type_annotation);
+
+    if (let.init) {
+        TypePtr init_type = check_expr(**let.init);
+        // Check that init type is compatible with declared type
+        TypePtr resolved_var = env_.resolve(var_type);
+        TypePtr resolved_init = env_.resolve(init_type);
+        if (!types_compatible(resolved_var, resolved_init)) {
+            error("Type mismatch: expected " + type_to_string(resolved_var) +
+                  ", found " + type_to_string(resolved_init), let.span);
+        }
+    }
 
     bind_pattern(*let.pattern, var_type);
     return make_unit();
 }
 
 auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
-    TypePtr init_type = check_expr(*var.init);
-    TypePtr var_type = var.type_annotation.has_value()
-        ? resolve_type(**var.type_annotation)
-        : init_type;
+    // TML requires explicit type annotations on all var statements
+    if (!var.type_annotation.has_value()) {
+        error("TML requires explicit type annotation on 'var' statements. Add ': Type' after the variable name.", var.span);
+        // Continue with inferred type to allow further error checking
+        TypePtr init_type = check_expr(*var.init);
+        env_.current_scope()->define(var.name, init_type, true, SourceSpan{});
+        return make_unit();
+    }
 
+    TypePtr var_type = resolve_type(**var.type_annotation);
+    TypePtr init_type = check_expr(*var.init);
+
+    // Type compatibility is checked during expression type checking
     env_.current_scope()->define(var.name, var_type, true, SourceSpan{});
     return make_unit();
 }
@@ -536,6 +629,11 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
         using T = std::decay_t<decltype(p)>;
 
         if constexpr (std::is_same_v<T, parser::IdentPattern>) {
+            // Check for duplicate definition in current scope
+            auto existing = env_.current_scope()->lookup(p.name);
+            if (existing) {
+                error("Duplicate definition of variable '" + p.name + "'", pattern.span);
+            }
             env_.current_scope()->define(p.name, type, p.is_mut, pattern.span);
         }
         else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
@@ -611,9 +709,21 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
 }
 
 auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
+    TypePtr value_type = make_unit();
     if (ret.value) {
-        check_expr(**ret.value);
+        value_type = check_expr(**ret.value);
     }
+
+    // Check return type matches function signature
+    if (current_return_type_) {
+        TypePtr resolved_expected = env_.resolve(current_return_type_);
+        TypePtr resolved_actual = env_.resolve(value_type);
+        if (!types_compatible(resolved_expected, resolved_actual)) {
+            error("Return type mismatch: expected " + type_to_string(resolved_expected) +
+                  ", found " + type_to_string(resolved_actual), SourceSpan{});
+        }
+    }
+
     return make_never();
 }
 
@@ -760,6 +870,17 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
         }
         else if constexpr (std::is_same_v<T, parser::InferType>) {
             return env_.fresh_type_var();
+        }
+        else if constexpr (std::is_same_v<T, parser::FuncType>) {
+            // Convert parser FuncType to semantic FuncType
+            std::vector<TypePtr> param_types;
+            for (const auto& param : t.params) {
+                param_types.push_back(resolve_type(*param));
+            }
+            TypePtr ret = t.return_type ? resolve_type(*t.return_type) : make_unit();
+            auto type = std::make_shared<Type>();
+            type->kind = types::FuncType{param_types, ret, false};
+            return type;
         }
         else {
             return make_unit();

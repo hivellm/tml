@@ -358,7 +358,7 @@ behavior Duplicate {
     func duplicate(this) -> This
 }
 
-let copy = original.duplicate()
+let copy: T = original.duplicate()
 ```
 
 ### 8.4 Default
@@ -368,9 +368,9 @@ behavior Default {
     func default() -> This
 }
 
-let x = I32.default()    // 0
-let s = String.default() // ""
-let l = List.default()   // []
+let x: I32 = I32.default()    // 0
+let s: String = String.default() // ""
+let l: List[I32] = List.default()   // []
 ```
 
 ### 8.5 Debug

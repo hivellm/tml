@@ -246,7 +246,7 @@ public behavior Iterator {
     }
 
     func fold[B, F: Callable[(B, This.Item), B]](this, init: B, f: F) -> B {
-        var acc = init
+        var acc: T = init
         loop item in this {
             acc = f(acc, item)
         }
@@ -305,7 +305,7 @@ public type Heap[T] {
 extend Heap[T] {
     public func new(value: T) -> This {
         lowlevel {
-            let ptr = tml_alloc(size_of[T](), align_of[T]()) as *mut T
+            let ptr: ptr T = tml_alloc(size_of[T](), align_of[T]()) as *mut T
             ptr.write(value)
             return This { ptr: ptr }
         }
@@ -313,7 +313,7 @@ extend Heap[T] {
 
     public func into_inner(this) -> T {
         lowlevel {
-            let value = this.ptr.read()
+            let value: T = this.ptr.read()
             tml_dealloc(this.ptr as *mut U8, size_of[T](), align_of[T]())
             forget(this)
             return value
@@ -346,7 +346,7 @@ extend String {
     }
 
     public func from(s: ref str) -> This {
-        var buf = List.with_capacity(s.len())
+        var buf: List[U8] = List.with_capacity(s.len())
         buf.extend_from_slice(s.as_bytes())
         return This { buf: buf }
     }
@@ -361,7 +361,7 @@ extend String {
 
     public func push(this, c: Char) {
         var buf: [U8; 4] = [0, 0, 0, 0]
-        let len = c.encode_utf8(mut ref buf)
+        let len: U64 = c.encode_utf8(mut ref buf)
         this.buf.extend_from_slice(ref buf[0 to len])
     }
 
@@ -384,7 +384,7 @@ extend String with Add[ref str] {
     type Output = String
 
     func add(this, other: ref str) -> String {
-        var result = this.duplicate()
+        var result: This = this.duplicate()
         result.push_str(other)
         return result
     }
@@ -412,7 +412,7 @@ extend List[T] {
             return This.new()
         }
         lowlevel {
-            let ptr = tml_alloc(cap * size_of[T](), align_of[T]()) as *mut T
+            let ptr: ptr T = tml_alloc(cap * size_of[T](), align_of[T]()) as *mut T
             return This { ptr: ptr, len: 0, cap: cap }
         }
     }
@@ -451,9 +451,9 @@ extend List[T] {
     }
 
     func grow(this) {
-        let new_cap = if this.cap == 0 { 4 } else { this.cap * 2 }
+        let new_cap: U64 = if this.cap == 0 { 4 } else { this.cap * 2 }
         lowlevel {
-            let new_ptr = tml_alloc(new_cap * size_of[T](), align_of[T]()) as *mut T
+            let new_ptr: ptr T = tml_alloc(new_cap * size_of[T](), align_of[T]()) as *mut T
             if this.ptr != null {
                 tml_memcpy(new_ptr as *mut U8, this.ptr as *const U8, this.len * size_of[T]())
                 tml_dealloc(this.ptr as *mut U8, this.cap * size_of[T](), align_of[T]())
@@ -504,7 +504,7 @@ public behavior Read {
     func read_exact(this, buf: mut ref [U8]) -> Outcome[Unit, IoError] {
         var filled: U64 = 0
         loop while filled < buf.len() {
-            let n = this.read(mut ref buf[filled to buf.len()])!
+            let n: Outcome[U64, Error] = this.read(mut ref buf[filled to buf.len()])!
             if n == 0 {
                 return Err(IoError.UnexpectedEof)
             }
@@ -517,7 +517,7 @@ public behavior Read {
         var read_total: U64 = 0
         var chunk: [U8; 1024] = [0; 1024]
         loop {
-            let n = this.read(mut ref chunk)!
+            let n: Outcome[U64, Error] = this.read(mut ref chunk)!
             if n == 0 {
                 break
             }
@@ -528,9 +528,9 @@ public behavior Read {
     }
 
     func read_to_string(this, buf: mut ref String) -> Outcome[U64, IoError] {
-        var bytes = List.new()
-        let n = this.read_to_end(mut ref bytes)!
-        let s = String.from_utf8(bytes)!
+        var bytes: List[T] = List.new()
+        let n: U64 = this.read_to_end(mut ref bytes)!
+        let s: String = String.from_utf8(bytes)!
         buf.push_str(ref s)
         return Ok(n)
     }
@@ -543,7 +543,7 @@ public behavior Write {
     func write_all(this, buf: ref [U8]) -> Outcome[Unit, IoError] {
         var written: U64 = 0
         loop while written < buf.len() {
-            let n = this.write(ref buf[written to buf.len()])!
+            let n: Outcome[U64, Error] = this.write(ref buf[written to buf.len()])!
             if n == 0 {
                 return Err(IoError.WriteZero)
             }
@@ -579,7 +579,7 @@ extend File {
     public func open_options(path: ref Path, opts: OpenOptions) -> Outcome[This, IoError]
     effects: [io.file]
     {
-        let handle = platform_open(path, opts)!
+        let handle: Outcome[Handle, Error] = platform_open(path, opts)!
         return Ok(This { handle: handle })
     }
 }
@@ -733,11 +733,11 @@ where F: Callable[(), T] + Sendable,
       T: Sendable
 effects: [io.sync]
 {
-    let result = Sync.new(Mutex.new(Nothing))
-    let result_copy = result.duplicate()
+    let result: Sync[Mutex[Maybe[T]]] = Sync.new(Mutex.new(Nothing))
+    let result_copy: Sync[Mutex[Maybe[T]]] = result.duplicate()
 
-    let handle = platform_spawn(do() {
-        let value = f()
+    let handle: Handle = platform_spawn(do() {
+        let value: T = f()
         *result_copy.lock().get_mut() = Just(value)
     })
 
@@ -750,7 +750,7 @@ extend JoinHandle[T] {
     {
         platform_join(this.handle)!
 
-        let guard = this.result.lock()
+        let guard: MutexGuard[Maybe[T]] = this.result.lock()
         when guard.get_mut().take() {
             Just(value) -> Ok(value),
             Nothing -> Err(JoinError.Panicked),

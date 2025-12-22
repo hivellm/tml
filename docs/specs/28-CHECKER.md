@@ -137,8 +137,8 @@ type Constraint =
 
 ```tml
 func unify(ctx: mut ref InferCtx, a: Ty, b: Ty, span: Span) -> Outcome[Unit, TypeError] {
-    let a = apply_subst(ctx, a)
-    let b = apply_subst(ctx, b)
+    let a: Type = apply_subst(ctx, a)
+    let b: Type = apply_subst(ctx, b)
 
     when (a, b) {
         // Same type
@@ -181,7 +181,7 @@ func unify(ctx: mut ref InferCtx, a: Ty, b: Ty, span: Span) -> Outcome[Unit, Typ
 
 ```tml
 func check_expr(ctx: mut ref CheckCtx, expr: ref Expr, expected: Ty) -> Outcome[Ty, Error] {
-    let actual = infer_expr(ctx, expr)!
+    let actual: Type = infer_expr(ctx, expr)!
     unify(ctx.infer, actual, expected, expr.span)!
     Ok(actual)
 }
@@ -198,13 +198,13 @@ func infer_expr(ctx: mut ref CheckCtx, expr: ref Expr) -> Outcome[Ty, Error] {
         },
 
         Ident(name) -> {
-            let binding = ctx.resolve(name)!
+            let binding: Binding = ctx.resolve(name)!
             Ok(binding.ty())
         },
 
         Binary(b) -> {
-            let left = infer_expr(ctx, b.left)!
-            let right = infer_expr(ctx, b.right)!
+            let left: Type = infer_expr(ctx, b.left)!
+            let right: Type = infer_expr(ctx, b.right)!
 
             when b.op {
                 Add | Sub | Mul | Div | Mod -> {
@@ -225,7 +225,7 @@ func infer_expr(ctx: mut ref CheckCtx, expr: ref Expr) -> Outcome[Ty, Error] {
         },
 
         Call(c) -> {
-            let func_ty = infer_expr(ctx, c.func)!
+            let func_ty: Type = infer_expr(ctx, c.func)!
 
             when func_ty {
                 Func(f) -> {
@@ -248,10 +248,10 @@ func infer_expr(ctx: mut ref CheckCtx, expr: ref Expr) -> Outcome[Ty, Error] {
 
         If(i) -> {
             check_expr(ctx, i.condition, Ty.Bool)!
-            let then_ty = infer_expr(ctx, i.then_branch)!
+            let then_ty: Type = infer_expr(ctx, i.then_branch)!
 
             if let Just(else_branch) = i.else_branch then {
-                let else_ty = infer_expr(ctx, else_branch)!
+                let else_ty: Type = infer_expr(ctx, else_branch)!
                 unify(ctx.infer, then_ty, else_ty, expr.span)!
                 Ok(then_ty)
             } else {
@@ -302,7 +302,7 @@ type EffectCtx = {
 }
 
 func check_effects(ctx: mut ref CheckCtx, span: Span) -> Outcome[Unit, Error] {
-    let disallowed = ctx.effects.actual.difference(ctx.effects.allowed)
+    let disallowed: Set[Effect] = ctx.effects.actual.difference(ctx.effects.allowed)
 
     if not disallowed.is_empty() then {
         Err(Error.DisallowedEffects(disallowed, ctx.effects.allowed, span))
@@ -395,7 +395,7 @@ func instantiate_generic(
     }
 
     // Substitute type parameters
-    let substituted = substitute(generic.ty, generic.params, args)
+    let substituted: Type = substitute(generic.ty, generic.params, args)
     Ok(substituted)
 }
 ```
@@ -404,10 +404,10 @@ func instantiate_generic(
 
 ```tml
 func check_impl(ctx: mut ref CheckCtx, impl_block: ref ImplBlock) -> Outcome[Unit, Error] {
-    let self_ty = resolve_type(ctx, impl_block.self_type)!
+    let self_ty: Type = resolve_type(ctx, impl_block.self_type)!
 
     if let Just(trait_ty) = impl_block.trait_type then {
-        let trait_def = ctx.get_behavior(trait_ty)!
+        let trait_def: Behavior = ctx.get_behavior(trait_ty)!
 
         // Check all required methods are implemented
         for method in trait_def.methods {
@@ -416,7 +416,7 @@ func check_impl(ctx: mut ref CheckCtx, impl_block: ref ImplBlock) -> Outcome[Uni
             }
 
             // Check signature compatibility
-            let impl_method = impl_block.get_method(method.name)!
+            let impl_method: Method = impl_block.get_method(method.name)!
             check_method_signature(ctx, impl_method, method, self_ty)!
         }
     }
@@ -554,7 +554,7 @@ type CheckCache = {
 
 impl CheckCache {
     func invalidate(this: mut ref This, file: FileId) {
-        let types = this.file_types.get(file).unwrap_or_default()
+        let types: List[Type] = this.file_types.get(file).unwrap_or_default()
         for ty in types {
             this.invalidate_type(ty)
         }
@@ -581,7 +581,7 @@ func check_module_parallel(ctx: mut ref CheckCtx, module: ref Module) -> Outcome
     }
 
     // Phase 2: Check bodies (parallel)
-    let errors = module.items
+    let errors: List[Error] = module.items
         .par_iter()
         .filter_map(do(item) {
             when check_item_body(ctx, item) {

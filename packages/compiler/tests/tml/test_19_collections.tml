@@ -1,0 +1,288 @@
+// Test 19: Collection Operations (List, HashMap, Buffer)
+// Tests function-call syntax for all collection operations
+
+func test_list() -> I32 {
+    println("--- List Tests ---")
+
+    // Create list with initial capacity 4
+    let list: ptr = list_create(4)
+
+    // Push elements
+    list_push(list, 10)
+    list_push(list, 20)
+    list_push(list, 30)
+
+    // Test length
+    if list_len(list) != 3 {
+        println("FAIL: list_len should be 3")
+        return 1
+    }
+    println("list_len: 3 - OK")
+
+    // Test get
+    if list_get(list, 0) != 10 {
+        println("FAIL: list_get(0) should be 10")
+        return 2
+    }
+    if list_get(list, 1) != 20 {
+        println("FAIL: list_get(1) should be 20")
+        return 3
+    }
+    if list_get(list, 2) != 30 {
+        println("FAIL: list_get(2) should be 30")
+        return 4
+    }
+    println("list_get: OK")
+
+    // Test set
+    list_set(list, 1, 25)
+    if list_get(list, 1) != 25 {
+        println("FAIL: list_get(1) should be 25 after set")
+        return 5
+    }
+    println("list_set: OK")
+
+    // Test pop
+    let popped: I32 = list_pop(list)
+    if popped != 30 {
+        println("FAIL: list_pop should return 30")
+        return 6
+    }
+    if list_len(list) != 2 {
+        println("FAIL: list_len should be 2 after pop")
+        return 7
+    }
+    println("list_pop: OK")
+
+    // Test is_empty
+    let is_empty1: I32 = list_is_empty(list)
+    if is_empty1 {
+        println("FAIL: list should not be empty")
+        return 8
+    }
+    println("list_is_empty (false): OK")
+
+    // Test clear
+    list_clear(list)
+    let is_empty2: I32 = list_is_empty(list)
+    if not is_empty2 {
+        println("FAIL: list should be empty after clear")
+        return 9
+    }
+    println("list_clear: OK")
+
+    // Test capacity
+    let cap: I32 = list_capacity(list)
+    if cap < 4 {
+        println("FAIL: capacity should be at least 4")
+        return 10
+    }
+    println("list_capacity: OK")
+
+    // Clean up
+    list_destroy(list)
+
+    println("List tests passed!")
+    return 0
+}
+
+func test_hashmap() -> I32 {
+    println("--- HashMap Tests ---")
+
+    // Create hashmap with capacity 16
+    let map: ptr = hashmap_create(16)
+
+    // Set values
+    hashmap_set(map, 1, 100)
+    hashmap_set(map, 2, 200)
+    hashmap_set(map, 3, 300)
+
+    // Test len
+    if hashmap_len(map) != 3 {
+        println("FAIL: hashmap_len should be 3")
+        return 10
+    }
+    println("hashmap_len: 3 - OK")
+
+    // Test has
+    let has1: I32 = hashmap_has(map, 1)
+    if not has1 {
+        println("FAIL: hashmap should have key 1")
+        return 11
+    }
+    let has2: I32 = hashmap_has(map, 2)
+    if not has2 {
+        println("FAIL: hashmap should have key 2")
+        return 12
+    }
+    let has99: I32 = hashmap_has(map, 99)
+    if has99 {
+        println("FAIL: hashmap should not have key 99")
+        return 13
+    }
+    println("hashmap_has: OK")
+
+    // Test get
+    if hashmap_get(map, 1) != 100 {
+        println("FAIL: hashmap_get(1) should be 100")
+        return 14
+    }
+    if hashmap_get(map, 2) != 200 {
+        println("FAIL: hashmap_get(2) should be 200")
+        return 15
+    }
+    if hashmap_get(map, 3) != 300 {
+        println("FAIL: hashmap_get(3) should be 300")
+        return 16
+    }
+    println("hashmap_get: OK")
+
+    // Test overwrite
+    hashmap_set(map, 2, 250)
+    if hashmap_get(map, 2) != 250 {
+        println("FAIL: hashmap_get(2) should be 250 after overwrite")
+        return 17
+    }
+    if hashmap_len(map) != 3 {
+        println("FAIL: hashmap_len should still be 3 after overwrite")
+        return 18
+    }
+    println("hashmap overwrite: OK")
+
+    // Test remove
+    let removed: I32 = hashmap_remove(map, 1)
+    if not removed {
+        println("FAIL: hashmap_remove(1) should return true")
+        return 19
+    }
+    let has1_after: I32 = hashmap_has(map, 1)
+    if has1_after {
+        println("FAIL: hashmap should not have key 1 after remove")
+        return 20
+    }
+    if hashmap_len(map) != 2 {
+        println("FAIL: hashmap_len should be 2 after remove")
+        return 21
+    }
+    println("hashmap_remove: OK")
+
+    // Test clear
+    hashmap_clear(map)
+    if hashmap_len(map) != 0 {
+        println("FAIL: hashmap_len should be 0 after clear")
+        return 22
+    }
+    println("hashmap_clear: OK")
+
+    // Clean up
+    hashmap_destroy(map)
+
+    println("HashMap tests passed!")
+    return 0
+}
+
+func test_buffer() -> I32 {
+    println("--- Buffer Tests ---")
+
+    // Create buffer with capacity 32
+    let buf: ptr = buffer_create(32)
+
+    // Test initial state
+    if buffer_len(buf) != 0 {
+        println("FAIL: buffer_len should be 0 initially")
+        return 30
+    }
+    if buffer_capacity(buf) != 32 {
+        println("FAIL: buffer_capacity should be 32")
+        return 31
+    }
+    println("buffer initial state: OK")
+
+    // Write bytes
+    buffer_write_byte(buf, 65)  // 'A'
+    buffer_write_byte(buf, 66)  // 'B'
+    buffer_write_byte(buf, 67)  // 'C'
+
+    if buffer_len(buf) != 3 {
+        println("FAIL: buffer_len should be 3 after writes")
+        return 32
+    }
+    println("buffer_write_byte: OK")
+
+    // Read bytes
+    let b1: I32 = buffer_read_byte(buf)
+    let b2: I32 = buffer_read_byte(buf)
+    let b3: I32 = buffer_read_byte(buf)
+
+    if b1 != 65 {
+        println("FAIL: first byte should be 65")
+        return 33
+    }
+    if b2 != 66 {
+        println("FAIL: second byte should be 66")
+        return 34
+    }
+    if b3 != 67 {
+        println("FAIL: third byte should be 67")
+        return 35
+    }
+    println("buffer_read_byte: OK")
+
+    // Test remaining
+    if buffer_remaining(buf) != 0 {
+        println("FAIL: buffer_remaining should be 0")
+        return 36
+    }
+
+    // Test reset_read
+    buffer_reset_read(buf)
+    if buffer_remaining(buf) != 3 {
+        println("FAIL: buffer_remaining should be 3 after reset")
+        return 37
+    }
+    println("buffer_reset_read: OK")
+
+    // Write and read i32
+    buffer_clear(buf)
+    buffer_write_i32(buf, 12345678)
+
+    if buffer_len(buf) != 4 {
+        println("FAIL: buffer_len should be 4 after write_i32")
+        return 38
+    }
+
+    let val: I32 = buffer_read_i32(buf)
+    if val != 12345678 {
+        println("FAIL: buffer_read_i32 should return 12345678")
+        return 39
+    }
+    println("buffer_write_i32/read_i32: OK")
+
+    // Clean up
+    buffer_destroy(buf)
+
+    println("Buffer tests passed!")
+    return 0
+}
+
+func main() -> I32 {
+    println("=== Collection Tests ===")
+
+    let result: I32 = test_list()
+    if result != 0 {
+        return result
+    }
+
+    let result2: I32 = test_hashmap()
+    if result2 != 0 {
+        return result2
+    }
+
+    let result3: I32 = test_buffer()
+    if result3 != 0 {
+        return result3
+    }
+
+    println("=== All collection tests passed! ===")
+    return 0
+}

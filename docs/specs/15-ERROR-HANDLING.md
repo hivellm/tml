@@ -17,15 +17,15 @@ Every fallible function call ends with `!` which means:
 ```tml
 // Simple and clear - every ! is a potential exit point
 func process_file(path: String) -> Outcome[Data, Error] {
-    let file = File.open(path)!        // propagate on error
-    let content = file.read_all()!     // propagate on error
-    let data = parse(content)!         // propagate on error
+    let file: Outcome[File, Error] = File.open(path)!        // propagate on error
+    let content: String = file.read_all()!     // propagate on error
+    let data: Outcome[Data, Error] = parse(content)!         // propagate on error
     return Ok(data)
 }
 
 // In a non-Outcome function, ! panics on error
 func must_load_config() -> Config {
-    let content = File.read("config.json")!  // panic if fails
+    let content: Outcome[String, Error] = File.read("config.json")!  // panic if fails
     return parse(content)!                    // panic if fails
 }
 ```
@@ -44,12 +44,12 @@ Handle errors inline without nesting:
 
 ```tml
 // Pattern: expr! else recovery
-let config = parse_config(text)! else Config.default()
+let config: Config = parse_config(text)! else Config.default()
 
-let port = env.get("PORT")!
+let port: Outcome[String, Error] = env.get("PORT")!
     .parse[U16]()! else 8080
 
-let user = db.find_user(id)! else {
+let user: User = db.find_user(id)! else {
     log.warn("User not found: " + id.to_string())
     return Err(Error.NotFound)
 }
@@ -60,7 +60,7 @@ let user = db.find_user(id)! else {
 Access the error in the recovery block:
 
 ```tml
-let data = fetch_remote(url)! else |err| {
+let data: Data = fetch_remote(url)! else |err| {
     log.error("Fetch failed: " + err.to_string())
     load_from_cache(url)! else Data.empty()
 }
@@ -73,9 +73,9 @@ For multiple operations that share error handling:
 ```tml
 func sync_data() -> Outcome[Unit, SyncError] {
     catch {
-        let local = load_local()!
-        let remote = fetch_remote()!
-        let merged = merge(local, remote)!
+        let local: Data = load_local()!
+        let remote: Outcome[Data, Error] = fetch_remote()!
+        let merged: Data = merge(local, remote)!
         save(merged)!
         return Ok(())
     } else |err| {
@@ -145,13 +145,13 @@ func find_user(id: U64) -> Maybe[User] { ... }
 
 // In Outcome-returning function: converts Nothing to Err
 func get_user_email(id: U64) -> Outcome[String, Error] {
-    let user = find_user(id)!  // Nothing becomes Err(Error.NothingValue)
+    let user: User = find_user(id)!  // Nothing becomes Err(Error.NothingValue)
     return Ok(user.email)
 }
 
 // With custom error via else
 func get_user_email(id: U64) -> Outcome[String, Error] {
-    let user = find_user(id)! else return Err(Error.UserNotFound(id))
+    let user: User = find_user(id)! else return Err(Error.UserNotFound(id))
     return Ok(user.email)
 }
 ```
@@ -226,8 +226,8 @@ extend AppError with From[ParseError] {
 
 // Now ! automatically converts:
 func load_and_parse() -> Outcome[Data, AppError] {
-    let content = File.read("data.txt")!  // IoError -> AppError
-    let data = parse(content)!             // ParseError -> AppError
+    let content: Outcome[String, Error] = File.read("data.txt")!  // IoError -> AppError
+    let data: Outcome[Data, Error] = parse(content)!             // ParseError -> AppError
     return Ok(data)
 }
 ```
@@ -300,10 +300,10 @@ func safe_handler(request: Request) -> Response {
 
 ```tml
 func process() -> Outcome[Output, Error] {
-    let a = try step_a()
-    let b = try step_b(a)
-    let c = try step_c(b)
-    let d = try step_d(c)
+    let a: A = try step_a()
+    let b: B = try step_b(a)
+    let c: C = try step_c(b)
+    let d: D = try step_d(c)
     return Ok(d)
 }
 ```
@@ -312,10 +312,10 @@ func process() -> Outcome[Output, Error] {
 
 ```tml
 func process() -> Outcome[Output, Error] {
-    let a = step_a()!
-    let b = step_b(a)!
-    let c = step_c(b)!
-    let d = step_d(c)!
+    let a: A = step_a()!
+    let b: B = step_b(a)!
+    let c: C = step_c(b)!
+    let d: D = step_d(c)!
     return Ok(d)
 }
 ```
@@ -343,12 +343,12 @@ func process() -> Outcome[Output, Error] {
 @id("fetch-data")
 func fetch_data(url: String) -> Outcome[Data, FetchError] {
     @id("http-get")
-    let response = http.get(url)! else |e| {
+    let response: Response = http.get(url)! else |e| {
         return Err(FetchError.Network(e))
     }
 
     @id("parse-json")
-    let data = response.json[Data]()! else |e| {
+    let data: Data = response.json[Data]()! else |e| {
         return Err(FetchError.Parse(e))
     }
 

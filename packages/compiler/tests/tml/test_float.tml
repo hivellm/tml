@@ -1,0 +1,40 @@
+// Test float functions
+
+func main() -> I32 {
+    println("=== Float Function Tests ===")
+    println("")
+
+    // Test round, floor, ceil (these return I32)
+    let r: I32 = round(7)
+    let f: I32 = floor(7)
+    let c: I32 = ceil(7)
+    println("round(7) = {}", r)
+    println("floor(7) = {}", f)
+    println("ceil(7) = {}", c)
+
+    // Test abs
+    let a1: I32 = abs(5)
+    let a2: I32 = abs(-5)
+    println("abs(5) = {}", a1)
+    println("abs(-5) = {}", a2)
+
+    // Test sqrt and pow
+    println("sqrt(16) = {}", sqrt(16))
+    println("pow(2, 10) = {}", pow(2, 10))
+
+    // Test string-returning functions
+    println("")
+    println("String formatting functions:")
+    let fixed: ptr = toFixed(12345, 2)
+    println("toFixed(12345, 2) = {}", fixed)
+
+    let prec: ptr = toPrecision(12345, 3)
+    println("toPrecision(12345, 3) = {}", prec)
+
+    let str: ptr = toString(42)
+    println("toString(42) = {}", str)
+
+    println("")
+    println("Done.")
+    return 0
+}

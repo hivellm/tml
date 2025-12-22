@@ -60,7 +60,7 @@ type NodeId = {
 
 impl NodeId {
     func from_content(content: ref [U8]) -> This {
-        let hash = sha256(content)
+        let hash: String = sha256(content)
         This { hash: hash[0..12] }
     }
 

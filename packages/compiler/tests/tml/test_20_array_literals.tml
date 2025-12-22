@@ -1,0 +1,109 @@
+// Test 20: Array Literal Syntax
+// Tests [...] syntax for creating dynamic arrays
+
+func main() -> I32 {
+    println("=== Array Literal Tests ===")
+
+    // Create array with literal syntax
+    let arr: ptr = [10, 20, 30, 40, 50]
+    println("Created: [10, 20, 30, 40, 50]")
+
+    // Test length
+    let len: I32 = list_len(arr)
+    if len != 5 {
+        println("FAIL: length should be 5")
+        return 1
+    }
+    println("len: 5 - OK")
+
+    // Test indexing with []
+    let first: I32 = arr[0]
+    let second: I32 = arr[1]
+    let third: I32 = arr[2]
+    let fourth: I32 = arr[3]
+    let fifth: I32 = arr[4]
+
+    if first != 10 {
+        println("FAIL: arr[0] should be 10")
+        return 2
+    }
+    if second != 20 {
+        println("FAIL: arr[1] should be 20")
+        return 3
+    }
+    if third != 30 {
+        println("FAIL: arr[2] should be 30")
+        return 4
+    }
+    if fourth != 40 {
+        println("FAIL: arr[3] should be 40")
+        return 5
+    }
+    if fifth != 50 {
+        println("FAIL: arr[4] should be 50")
+        return 6
+    }
+    println("indexing []: OK")
+
+    // Sum all elements using loop
+    let mut sum: I32 = 0
+    for i in 5 {
+        sum = sum + arr[i]
+    }
+    if sum != 150 {
+        println("FAIL: sum should be 150")
+        return 7
+    }
+    println("sum: 150 - OK")
+
+    // Test empty array
+    let empty: ptr = []
+    let empty_len: I32 = list_len(empty)
+    if empty_len != 0 {
+        println("FAIL: empty array length should be 0")
+        return 8
+    }
+    println("empty []: OK")
+
+    // Test array with repeat syntax [value; count]
+    let zeros: ptr = [0; 5]
+    let zeros_len: I32 = list_len(zeros)
+    if zeros_len != 5 {
+        println("FAIL: [0; 5] length should be 5")
+        return 9
+    }
+    if zeros[0] != 0 {
+        println("FAIL: zeros[0] should be 0")
+        return 10
+    }
+    if zeros[4] != 0 {
+        println("FAIL: zeros[4] should be 0")
+        return 11
+    }
+    println("[0; 5]: OK")
+
+    // Test another repeat
+    let ones: ptr = [1; 3]
+    if list_len(ones) != 3 {
+        println("FAIL: [1; 3] length should be 3")
+        return 12
+    }
+    let mut ones_sum: I32 = 0
+    for i in 3 {
+        ones_sum = ones_sum + ones[i]
+    }
+    if ones_sum != 3 {
+        println("FAIL: sum of [1; 3] should be 3")
+        return 13
+    }
+    println("[1; 3]: OK")
+
+    // Clean up
+    list_destroy(arr)
+    list_destroy(empty)
+    list_destroy(zeros)
+    list_destroy(ones)
+
+    println("=== Array literal tests passed! ===")
+    return 0
+}

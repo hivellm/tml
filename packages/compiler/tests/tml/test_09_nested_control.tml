@@ -1,8 +1,8 @@
 // Test 09: Nested control flow
 func main() {
     // Nested if statements
-    let a = 10
-    let b = 5
+    let a: I32 = 10
+    let b: I32 = 5
 
     if a > 5 {
         if b < 10 {
@@ -15,9 +15,9 @@ func main() {
     }
 
     // Nested loops with break
-    let count = 0
+    let count: I32 = 0
     loop {
-        let inner = 0
+        let inner: I32 = 0
         loop {
             if inner >= 3 {
                 break
@@ -32,8 +32,8 @@ func main() {
     println(count)  // 2
 
     // If inside loop
-    let sum = 0
-    let i = 0
+    let sum: I32 = 0
+    let i: I32 = 0
     loop {
         if i >= 5 {
             break
