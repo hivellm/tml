@@ -105,7 +105,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     // Read the TML file
     std::ifstream file(file_path);
     if (!file) {
-        std::cerr << "[MODULE] Failed to open: " << file_path << "\n";
+        TML_DEBUG_LN("[MODULE] Failed to open: " << file_path);
         return false;
     }
 
@@ -118,9 +118,9 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        std::cerr << "[MODULE] Lexer errors in " << file_path << ":\n";
+        TML_DEBUG_LN("[MODULE] Lexer errors in " << file_path << ":");
         for (const auto& error : lex.errors()) {
-            std::cerr << "  " << error.message << "\n";
+            TML_DEBUG_LN("  " << error.message);
         }
         return false;
     }
@@ -130,10 +130,10 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     auto parse_result = parser.parse_module(module_name);
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-        std::cerr << "[MODULE] Parse errors in " << file_path << ":\n";
+        TML_DEBUG_LN("[MODULE] Parse errors in " << file_path << ":");
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
-            std::cerr << "  " << error.message << "\n";
+            TML_DEBUG_LN("  " << error.message);
         }
         return false;
     }
@@ -183,7 +183,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         }
 
         // Fallback: return I32 for unknown types
-        std::cerr << "[MODULE] Warning: Could not resolve type, using I32 as fallback\n";
+        TML_DEBUG_LN("[MODULE] Warning: Could not resolve type, using I32 as fallback");
         return make_primitive(PrimitiveKind::I32);
     };
 
@@ -254,8 +254,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     }
 
     // Register the module
-    std::cerr << "[MODULE] Loaded " << module_path << " from " << file_path
-              << " (" << mod.functions.size() << " functions)\n";
+    TML_DEBUG_LN("[MODULE] Loaded " << module_path << " from " << file_path
+              << " (" << mod.functions.size() << " functions)");
     module_registry_->register_module(module_path, std::move(mod));
     return true;
 }
@@ -291,13 +291,13 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
         for (const auto& module_file : search_paths) {
             if (std::filesystem::exists(module_file)) {
-                std::cerr << "[MODULE] Found core module at: " << module_file << "\n";
+                TML_DEBUG_LN("[MODULE] Found core module at: " << module_file);
                 return load_module_from_file(module_path, module_file.string());
             }
         }
 
-        // Module file not found
-        std::cerr << "[MODULE ERROR] Core module file not found in search paths: " << module_path << "\n";
+        // Module file not found - this is a real error, not debug
+        std::cerr << "error: Core module file not found: " << module_path << "\n";
         return false;
     }
 
@@ -316,13 +316,13 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
         for (const auto& module_file : search_paths) {
             if (std::filesystem::exists(module_file)) {
-                std::cerr << "[MODULE] Found module at: " << module_file << "\n";
+                TML_DEBUG_LN("[MODULE] Found module at: " << module_file);
                 return load_module_from_file(module_path, module_file.string());
             }
         }
 
-        // Module file not found
-        std::cerr << "[MODULE ERROR] Module file not found in search paths: " << module_path << "\n";
+        // Module file not found - this is a real error, not debug
+        std::cerr << "error: Module file not found: " << module_path << "\n";
         return false;
     }
 

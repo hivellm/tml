@@ -18,6 +18,18 @@ constexpr int VERSION_MAJOR = 0;
 constexpr int VERSION_MINOR = 1;
 constexpr int VERSION_PATCH = 0;
 
+// Global compiler options
+struct CompilerOptions {
+    static inline bool verbose = false;  // Enable verbose/debug output
+};
+
+// Convenience macro for debug output (only prints when verbose is enabled)
+#define TML_DEBUG(msg) \
+    do { if (::tml::CompilerOptions::verbose) { std::cerr << msg; } } while(0)
+
+#define TML_DEBUG_LN(msg) \
+    do { if (::tml::CompilerOptions::verbose) { std::cerr << msg << "\n"; } } while(0)
+
 // Source location for error reporting
 struct SourceLocation {
     std::string_view file;

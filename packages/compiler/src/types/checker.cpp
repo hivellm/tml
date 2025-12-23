@@ -61,7 +61,7 @@ TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
-    std::cerr << "[DEBUG] check_module called\n";
+    TML_DEBUG_LN("[DEBUG] check_module called");
 
     // Pass 0: Process use declarations (imports)
     for (const auto& decl : module.decls) {
@@ -313,7 +313,7 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
-    std::cerr << "[DEBUG] check_func_body called for function: " << func.name << "\n";
+    TML_DEBUG_LN("[DEBUG] check_func_body called for function: " << func.name);
     env_.push_scope();
     current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
@@ -340,9 +340,9 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
             if (!return_type->is<PrimitiveType>() ||
                 return_type->as<PrimitiveType>().kind != PrimitiveKind::Unit) {
 
-                std::cerr << "[DEBUG] Checking function '" << func.name << "' for return statement\n";
+                TML_DEBUG_LN("[DEBUG] Checking function '" << func.name << "' for return statement");
                 bool has_ret = block_has_return(*func.body);
-                std::cerr << "[DEBUG] Has return: " << (has_ret ? "yes" : "no") << "\n";
+                TML_DEBUG_LN("[DEBUG] Has return: " << (has_ret ? "yes" : "no"));
 
                 if (!has_ret) {
                     error("Function '" + func.name + "' with return type " +

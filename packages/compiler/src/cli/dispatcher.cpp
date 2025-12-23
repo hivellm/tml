@@ -3,6 +3,7 @@
 #include "cmd_build.hpp"
 #include "cmd_format.hpp"
 #include "cmd_test.hpp"
+#include "tml/common.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -24,6 +25,9 @@ int tml_main(int argc, char* argv[]) {
             verbose = true;
         }
     }
+
+    // Set global verbose flag for debug output
+    tml::CompilerOptions::verbose = verbose;
 
     if (command == "--help" || command == "-h") {
         print_usage();
