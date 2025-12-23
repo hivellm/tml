@@ -4,6 +4,49 @@ All notable changes to the TML test framework.
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-12-23
+
+### Added
+- **Benchmarking support** - `@bench` decorator for performance testing
+  - Automatic 1000-iteration execution
+  - Timing using `tml_time_us()` (microsecond precision)
+  - Average time per iteration calculation
+- Benchmark example (`bench_example.tml`)
+- Documentation for benchmarking in README
+
+### Implementation
+- Benchmark runner auto-generated in LLVM IR
+- PHI node-based loop iteration
+- Integration with existing codegen infrastructure
+
+### Usage
+```tml
+@bench
+func bench_fibonacci() -> Unit {
+    // Benchmark code here
+}
+```
+
+## [0.4.0] - 2025-12-23
+
+### Added
+- **Parallel test execution** - Multi-threaded test runner
+  - Auto-detection of CPU cores
+  - Thread pool implementation with atomic counters
+  - `--test-threads=N` flag for manual thread count
+- **Test filtering enhancements**
+  - `--group=<path>` flag for directory filtering
+  - `--suite=<path>` alias for `--group`
+  - Pattern matching on file paths
+
+### Changed
+- Tests now run in parallel by default
+- Single-threaded mode for `--verbose` or `--nocapture`
+
+### Performance
+- Significant speedup with parallel execution
+- Minimal overhead for single test files
+
 ## [0.3.0] - 2025-12-23### Added- **Module system integration** - Assertions now require `use test` import- **Full enum pattern matching support** - `when` expressions work correctly with enums- Test package examples with `use test`### Changed- **BREAKING**: Assertion functions removed from global scope  - `assert`, `assert_eq_i32`, etc. now require `use test`  - All test files must include `use test` at the top- Improved pattern matching codegen for enum values- Fixed enum value creation and comparison in LLVM backend### Fixed- Enum pattern matching in `when` expressions now returns correct values- Pattern match arms properly store and load results- Type conversion (i1 ↔ i32) handled correctly in pattern matching### Test Results- 9/10 tests passing (90% success rate)- All compiler tests: PASSED- All runtime tests except collections: PASSED- Known issue: collections.test.tml (pre-existing runtime bug)
 
 ### Planned

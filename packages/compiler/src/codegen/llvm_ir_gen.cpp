@@ -407,14 +407,18 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 
-    // Collect test functions (decorated with @test)
+    // Collect test and benchmark functions (decorated with @test and @bench)
     std::vector<std::string> test_functions;
+    std::vector<std::string> bench_functions;
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
             for (const auto& decorator : func.decorators) {
                 if (decorator.name == "test") {
                     test_functions.push_back(func.name);
+                    break;
+                } else if (decorator.name == "bench") {
+                    bench_functions.push_back(func.name);
                     break;
                 }
             }
@@ -430,7 +434,60 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         }
     }
 
-    if (!test_functions.empty()) {
+    if (!bench_functions.empty()) {
+        // Generate benchmark runner main
+        emit_line("; Auto-generated benchmark runner");
+        emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+        emit_line("entry:");
+
+        int bench_num = 0;
+        std::string prev_block = "entry";
+        for (const auto& bench_name : bench_functions) {
+            std::string bench_fn = "@tml_" + bench_name;
+
+            // Get start time
+            std::string start_time = "%bench_start_" + std::to_string(bench_num);
+            emit_line("  " + start_time + " = call i64 @tml_time_us()");
+
+            // Run benchmark 1000 iterations
+            std::string iter_var = "%bench_iter_" + std::to_string(bench_num);
+            std::string loop_header = "bench_loop_header_" + std::to_string(bench_num);
+            std::string loop_body = "bench_loop_body_" + std::to_string(bench_num);
+            std::string loop_end = "bench_loop_end_" + std::to_string(bench_num);
+
+            emit_line("  br label %" + loop_header);
+            emit_line("");
+            emit_line(loop_header + ":");
+            emit_line("  " + iter_var + " = phi i32 [ 0, %" + prev_block + " ], [ " + iter_var + "_next, %" + loop_body + " ]");
+            std::string cmp_var = "%bench_cmp_" + std::to_string(bench_num);
+            emit_line("  " + cmp_var + " = icmp slt i32 " + iter_var + ", 1000");
+            emit_line("  br i1 " + cmp_var + ", label %" + loop_body + ", label %" + loop_end);
+            emit_line("");
+            emit_line(loop_body + ":");
+            emit_line("  call void " + bench_fn + "()");
+            emit_line("  " + iter_var + "_next = add i32 " + iter_var + ", 1");
+            emit_line("  br label %" + loop_header);
+            emit_line("");
+            emit_line(loop_end + ":");
+
+            // Get end time and calculate duration
+            std::string end_time = "%bench_end_" + std::to_string(bench_num);
+            std::string duration = "%bench_duration_" + std::to_string(bench_num);
+            emit_line("  " + end_time + " = call i64 @tml_time_us()");
+            emit_line("  " + duration + " = sub i64 " + end_time + ", " + start_time);
+
+            // Calculate average (duration / 1000)
+            std::string avg_time = "%bench_avg_" + std::to_string(bench_num);
+            emit_line("  " + avg_time + " = sdiv i64 " + duration + ", 1000");
+            emit_line("");
+
+            prev_block = loop_end;
+            bench_num++;
+        }
+
+        emit_line("  ret i32 0");
+        emit_line("}");
+    } else if (!test_functions.empty()) {
         // Generate test runner main
         emit_line("; Auto-generated test runner");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");

@@ -1,0 +1,23 @@
+// Simple benchmark to test @bench decorator
+
+@bench
+func bench_addition() -> Unit {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 100 then break
+        sum = sum + i
+        i = i + 1
+    }
+}
+
+@bench
+func bench_multiplication() -> Unit {
+    let mut prod: I32 = 1
+    let mut i: I32 = 1
+    loop {
+        if i > 10 then break
+        prod = prod * i
+        i = i + 1
+    }
+}

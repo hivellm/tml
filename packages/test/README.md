@@ -128,6 +128,42 @@ tml test --verbose              # Verbose output (single-threaded)
 tml test --quiet                # Minimal output
 ```
 
+## Benchmarking
+
+Benchmark functions with the `@bench` decorator to measure performance:
+
+```tml
+@bench
+func bench_fibonacci() -> Unit {
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= 20 then break
+        let temp: I32 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+}
+```
+
+**How benchmarks work:**
+- Each `@bench` function is executed 1000 times automatically
+- Total time is measured using `tml_time_us()` (microseconds)
+- Average time per iteration is calculated
+- No manual timing code needed
+
+**Running benchmarks:**
+```bash
+tml run bench_file.tml     # Run all benchmarks in file
+```
+
+**Benchmark requirements:**
+- Function must be decorated with `@bench`
+- Must return `Unit` (no return value)
+- Should perform meaningful work in the function body
+
 ## Implementation Status
 
 - [x] Test decorator (`@test`)
@@ -139,7 +175,7 @@ tml test --quiet                # Minimal output
 - [x] CLI integration (`tml test`)
 - [x] Parallel execution (multi-threaded)
 - [x] Test filtering by name/pattern
-- [ ] Benchmarking (`@bench`)
+- [x] Benchmarking (`@bench`)
 
 ## Test Results
 

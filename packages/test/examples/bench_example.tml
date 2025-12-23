@@ -1,0 +1,38 @@
+// Example benchmarks demonstrating @bench decorator
+// Benchmarks measure performance by running functions 1000 times
+
+@bench
+func bench_fibonacci() -> Unit {
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= 20 then break
+        let temp: I32 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+}
+
+@bench
+func bench_factorial() -> Unit {
+    let mut result: I32 = 1
+    let mut i: I32 = 1
+    loop {
+        if i > 10 then break
+        result = result * i
+        i = i + 1
+    }
+}
+
+@bench
+func bench_sum_array() -> Unit {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 100 then break
+        sum = sum + i
+        i = i + 1
+    }
+}
