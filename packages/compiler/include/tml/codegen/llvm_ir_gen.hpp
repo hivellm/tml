@@ -99,6 +99,8 @@ private:
     // Module structure
     void emit_header();
     void emit_runtime_decls();
+    void emit_module_lowlevel_decls();
+    void emit_module_pure_tml_functions();  // Generate code for pure TML functions from imported modules
     void emit_string_constants();
 
     // Declaration generation

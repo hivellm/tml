@@ -17,20 +17,20 @@ pub func round_to_even(x: F64) -> F64 {
     let diff: F64 = x - f
 
     if diff > 0.5 then {
-        f + 1.0
+        return f + 1.0
     } else {
         if diff < -0.5 then {
-            f - 1.0
+            return f - 1.0
         } else {
             if diff == 0.5 then {
                 // Round to even
-                if (i & 1) == 0 then f else f + 1.0
+                return if (i & 1) == 0 then f else f + 1.0
             } else {
                 if diff == -0.5 then {
                     // Round to even
-                    if (i & 1) == 0 then f else f - 1.0
+                    return if (i & 1) == 0 then f else f - 1.0
                 } else {
-                    f
+                    return f
                 }
             }
         }

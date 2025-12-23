@@ -15,10 +15,6 @@ static void tml_print(tml_str_t s) {
     putchar('\n');
 }
 
-static void tml_print_i32(int32_t n) {
-    printf("%d\n", n);
-}
-
 static tml_str_t tml_str_from_literal(const char* s) {
     return (tml_str_t){ .data = s, .len = strlen(s) };
 }

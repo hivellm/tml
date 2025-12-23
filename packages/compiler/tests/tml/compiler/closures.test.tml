@@ -25,7 +25,7 @@ func closure_arithmetic() -> I32 {
 }
 
 func apply_func(f: func(I32) -> I32, val: I32) -> I32 {
-    f(val)
+    return f(val)
 }
 
 @test

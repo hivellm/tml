@@ -1,9 +1,22 @@
-// TML Runtime - Threading
-// Thread, Channel, Mutex, WaitGroup, Atomic
+// TML Core Runtime - Threading
+// Thread, Channel, Mutex, WaitGroup
 
-#include "tml_runtime.h"
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdatomic.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#endif
 
 // ============ THREAD PRIMITIVES ============
+
+typedef void (*ThreadFunc)(void*);
 
 typedef struct {
     ThreadFunc func;
@@ -71,7 +84,7 @@ void tml_thread_sleep_ms(int64_t ms) {
 
 // ============ CHANNEL (Go-style) ============
 
-struct Channel {
+typedef struct Channel {
     void** buffer;
     int64_t capacity;
     int64_t head;
@@ -87,7 +100,7 @@ struct Channel {
     pthread_cond_t not_empty;
     pthread_cond_t not_full;
 #endif
-};
+} Channel;
 
 Channel* tml_channel_new(int64_t capacity) {
     Channel* ch = (Channel*)malloc(sizeof(Channel));
@@ -251,13 +264,13 @@ void tml_channel_free(Channel* ch) {
 
 // ============ MUTEX ============
 
-struct Mutex {
+typedef struct Mutex {
 #ifdef _WIN32
     CRITICAL_SECTION cs;
 #else
     pthread_mutex_t mtx;
 #endif
-};
+} Mutex;
 
 Mutex* tml_mutex_new(void) {
     Mutex* m = (Mutex*)malloc(sizeof(Mutex));
@@ -304,7 +317,7 @@ void tml_mutex_free(Mutex* m) {
 
 // ============ WAIT GROUP ============
 
-struct WaitGroup {
+typedef struct WaitGroup {
     atomic_int_fast64_t count;
 #ifdef _WIN32
     CRITICAL_SECTION lock;
@@ -313,7 +326,7 @@ struct WaitGroup {
     pthread_mutex_t lock;
     pthread_cond_t cond;
 #endif
-};
+} WaitGroup;
 
 WaitGroup* tml_waitgroup_new(void) {
     WaitGroup* wg = (WaitGroup*)malloc(sizeof(WaitGroup));
@@ -371,9 +384,9 @@ void tml_waitgroup_free(WaitGroup* wg) {
 
 // ============ ATOMIC COUNTER ============
 
-struct AtomicCounter {
+typedef struct AtomicCounter {
     atomic_int_fast64_t value;
-};
+} AtomicCounter;
 
 AtomicCounter* tml_atomic_new(int64_t initial) {
     AtomicCounter* a = (AtomicCounter*)malloc(sizeof(AtomicCounter));

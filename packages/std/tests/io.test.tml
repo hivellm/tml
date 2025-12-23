@@ -1,53 +1,54 @@
 use test
 
 // Basic I/O Functions Tests
+// print() is polymorphic - accepts Str, I32, Bool, F64, etc.
 
 @test
 func test_print_basic() -> I32 {
     print("Hello from test")
-    0
+    return 0
 }
 
 @test
 func test_println_basic() -> I32 {
     println("Hello with newline")
-    0
+    return 0
 }
 
 @test
 func test_print_i32_positive() -> I32 {
-    print_i32(42)
-    0
+    print(42)
+    return 0
 }
 
 @test
 func test_print_i32_negative() -> I32 {
-    print_i32(-100)
-    0
+    print(-100)
+    return 0
 }
 
 @test
 func test_print_i32_zero() -> I32 {
-    print_i32(0)
-    0
+    print(0)
+    return 0
 }
 
 @test
 func test_print_bool_true() -> I32 {
-    print_bool(true)
-    0
+    print(true)
+    return 0
 }
 
 @test
 func test_print_bool_false() -> I32 {
-    print_bool(false)
-    0
+    print(false)
+    return 0
 }
 
 @test
 func test_multiple_prints() -> I32 {
     print("Value: ")
-    print_i32(123)
+    print(123)
     println("")
-    0
+    return 0
 }

@@ -715,6 +715,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     path.span = unwrap(first).span;
 
     // Continue parsing path segments
+    std::optional<std::vector<std::string>> symbols;
     while (match(lexer::TokenKind::ColonColon)) {
         // Check for grouped imports: {Instant, Duration}
         if (check(lexer::TokenKind::LBrace)) {
@@ -730,11 +731,8 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
             auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}'");
             if (is_err(rbrace)) return unwrap_err(rbrace);
 
-            // For grouped imports, append first name to base path
-            // TODO: Return multiple UseDecl for each name
-            if (!names.empty()) {
-                path.segments.push_back(names[0]);
-            }
+            // Store all symbols for grouped imports
+            symbols = std::move(names);
             break;
         }
 
@@ -758,6 +756,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
         .vis = vis,
         .path = std::move(path),
         .alias = alias,
+        .symbols = std::move(symbols),
         .span = SourceSpan::merge(start_span, end_span)
     };
 

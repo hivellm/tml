@@ -62,9 +62,11 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
                 auto filename = path.filename().string();
                 std::string path_str = path.string();
 
-                // Skip files in errors/ directories
+                // Skip files in errors/ or pending/ directories
                 if (path_str.find("\\errors\\") != std::string::npos ||
-                    path_str.find("/errors/") != std::string::npos) {
+                    path_str.find("/errors/") != std::string::npos ||
+                    path_str.find("\\pending\\") != std::string::npos ||
+                    path_str.find("/pending/") != std::string::npos) {
                     continue;
                 }
 

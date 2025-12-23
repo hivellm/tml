@@ -18,19 +18,19 @@ pub behavior Display {
 // Implement Display for primitives
 impl Display for I32 {
     pub func display(this) -> Str {
-        this.to_string()
+        return this.to_string()
     }
 }
 
 impl Display for Str {
     pub func display(this) -> Str {
-        this
+        return this
     }
 }
 
 impl Display for Bool {
     pub func display(this) -> Str {
-        when this {
+        return when this {
             true => "true",
             false => "false",
         }
@@ -39,7 +39,7 @@ impl Display for Bool {
 
 /// Format a string with arguments (placeholder for future implementation)
 pub func format(template: Str) -> Str {
-    template
+    return template
 }
 
 @test

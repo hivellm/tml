@@ -1,71 +1,72 @@
 use test
 
 // String Operation Tests
+// str_len, str_eq, str_hash are global builtins
 
 @test
 func test_str_len_empty() -> I32 {
-    let len: I64 = str_len("")
+    let len: I32 = str_len("")
     assert(len == 0, "Empty string should have length 0")
-    0
+    return 0
 }
 
 @test
 func test_str_len_short() -> I32 {
-    let len: I64 = str_len("hello")
+    let len: I32 = str_len("hello")
     assert(len == 5, "hello should have length 5")
-    0
+    return 0
 }
 
 @test
 func test_str_len_long() -> I32 {
-    let len: I64 = str_len("This is a longer string with spaces")
+    let len: I32 = str_len("This is a longer string with spaces")
     assert(len > 10, "Long string should have length > 10")
-    0
+    return 0
 }
 
 @test
 func test_str_eq_same() -> I32 {
     let result: Bool = str_eq("hello", "hello")
     assert_eq_bool(result, true, "Same strings should be equal")
-    0
+    return 0
 }
 
 @test
 func test_str_eq_different() -> I32 {
     let result: Bool = str_eq("hello", "world")
     assert_eq_bool(result, false, "Different strings should not be equal")
-    0
+    return 0
 }
 
 @test
 func test_str_eq_empty() -> I32 {
     let result: Bool = str_eq("", "")
     assert_eq_bool(result, true, "Empty strings should be equal")
-    0
+    return 0
 }
 
 @test
 func test_str_eq_case_sensitive() -> I32 {
     let result: Bool = str_eq("Hello", "hello")
     assert_eq_bool(result, false, "String comparison should be case sensitive")
-    0
+    return 0
 }
 
 @test
 func test_str_hash_consistent() -> I32 {
-    let hash1: I64 = str_hash("test")
-    let hash2: I64 = str_hash("test")
+    let hash1: I32 = str_hash("test")
+    let hash2: I32 = str_hash("test")
     // Same string should produce same hash
     assert(hash1 == hash2, "Same string should produce same hash")
-    0
+    return 0
 }
 
 @test
 func test_str_hash_different() -> I32 {
-    let hash1: I64 = str_hash("hello")
-    let hash2: I64 = str_hash("world")
+    let hash1: I32 = str_hash("hello")
+    let hash2: I32 = str_hash("world")
     // Different strings should (likely) produce different hashes
     // This is probabilistic but should work for simple cases
     assert(hash1 != hash2, "Different strings should produce different hashes")
-    0
+    return 0
 }

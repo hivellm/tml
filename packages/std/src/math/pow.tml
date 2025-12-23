@@ -48,7 +48,7 @@ pub func powi(x: F64, n: I32) -> F64 {
         exp = exp >> 1
     }
 
-    if negative_exp then 1.0 / result else result
+    return if negative_exp then 1.0 / result else result
 }
 
 // General F64 power using exp and log
@@ -57,10 +57,10 @@ pub func powi(x: F64, n: I32) -> F64 {
 pub func pow(x: F64, y: F64) -> F64 {
     // For now, only support integer exponents
     let int_exp: I32 = f64_to_i32(y)
-    powi(x, int_exp)
+    return powi(x, int_exp)
 }
 
 // Pow10 returns 10^n
 pub func pow10(n: I32) -> F64 {
-    powi(10.0, n)
+    return powi(10.0, n)
 }

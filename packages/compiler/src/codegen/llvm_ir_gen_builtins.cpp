@@ -151,43 +151,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return result;
     }
 
-    // Legacy support for print_i32, print_bool (deprecated but still works)
-    if (fn_name == "print_i32") {
-        if (!call.args.empty()) {
-            std::string arg = gen_expr(*call.args[0]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int, i32 " + arg + ")");
-            return result;
-        }
-        return "0";
-    }
-
-    if (fn_name == "print_bool") {
-        if (!call.args.empty()) {
-            std::string arg = gen_expr(*call.args[0]);
-            std::string label_true = fresh_label("bool.true");
-            std::string label_false = fresh_label("bool.false");
-            std::string label_end = fresh_label("bool.end");
-
-            emit_line("  br i1 " + arg + ", label %" + label_true + ", label %" + label_false);
-
-            emit_line(label_true + ":");
-            std::string r1 = fresh_reg();
-            emit_line("  " + r1 + " = call i32 @puts(ptr @.str.true)");
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_false + ":");
-            std::string r2 = fresh_reg();
-            emit_line("  " + r2 + " = call i32 @puts(ptr @.str.false)");
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_end + ":");
-            block_terminated_ = false;
-            return "0";
-        }
-        return "0";
-    }
-
     // panic(msg: Str) -> Never
     // Prints error message to stderr and exits
     if (fn_name == "panic") {
@@ -202,7 +165,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Memory allocation: alloc(size) -> ptr
-    if (fn_name == "alloc") {
+    // Only use builtin if not imported from core::mem module
+    if (fn_name == "alloc" && !env_.lookup_func("alloc").has_value()) {
         if (!call.args.empty()) {
             std::string size = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -216,7 +180,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Memory deallocation: dealloc(ptr)
-    if (fn_name == "dealloc") {
+    if (fn_name == "dealloc" && !env_.lookup_func("dealloc").has_value()) {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
             emit_line("  call void @free(ptr " + ptr + ")");
@@ -225,7 +189,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Read from memory: read_i32(ptr) -> I32
-    if (fn_name == "read_i32") {
+    if (fn_name == "read_i32" && !env_.lookup_func("read_i32").has_value()) {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -236,7 +200,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Write to memory: write_i32(ptr, value)
-    if (fn_name == "write_i32") {
+    if (fn_name == "write_i32" && !env_.lookup_func("write_i32").has_value()) {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string val = gen_expr(*call.args[1]);
@@ -246,7 +210,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Pointer offset: ptr_offset(ptr, offset) -> ptr
-    if (fn_name == "ptr_offset") {
+    if (fn_name == "ptr_offset" && !env_.lookup_func("ptr_offset").has_value()) {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string offset = gen_expr(*call.args[1]);
@@ -701,8 +665,16 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
+    // Helper: check if function is defined as a TML module function (not a builtin)
+    // If so, skip the builtin handler and use the TML implementation
+    auto is_module_func = [&](const std::string& name) -> bool {
+        // Check if function is imported or defined in the type environment
+        return env_.lookup_func(name).has_value();
+    };
+
     // float_round(value: F64) -> I32
-    if (fn_name == "float_round" || fn_name == "round") {
+    // Only use builtin if not imported from a module
+    if (fn_name == "float_round" || (fn_name == "round" && !is_module_func("round"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
@@ -715,7 +687,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // float_floor(value: F64) -> I32
-    if (fn_name == "float_floor" || fn_name == "floor") {
+    if (fn_name == "float_floor" || (fn_name == "floor" && !is_module_func("floor"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
@@ -728,7 +700,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // float_ceil(value: F64) -> I32
-    if (fn_name == "float_ceil" || fn_name == "ceil") {
+    if (fn_name == "float_ceil" || (fn_name == "ceil" && !is_module_func("ceil"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
@@ -741,7 +713,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // abs(value: I32) -> I32 (returns absolute value as int)
-    if (fn_name == "float_abs" || fn_name == "abs") {
+    // Only use float_abs builtin if not imported from a module
+    if (fn_name == "float_abs" || (fn_name == "abs" && !is_module_func("abs"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
@@ -757,7 +730,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // sqrt(value: I32) -> F64 (returns double)
-    if (fn_name == "float_sqrt" || fn_name == "sqrt") {
+    if (fn_name == "float_sqrt" || (fn_name == "sqrt" && !is_module_func("sqrt"))) {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string double_val = fresh_reg();
@@ -774,7 +747,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // pow(base: I32, exp: I32) -> F64 (returns double)
-    if (fn_name == "float_pow" || fn_name == "pow") {
+    if (fn_name == "float_pow" || (fn_name == "pow" && !is_module_func("pow"))) {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
             std::string exp = gen_expr(*call.args[1]);
@@ -1478,30 +1451,60 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         ret_type = llvm_type_from_semantic(func_sig->return_type);
     }
 
-    // Generate arguments with type inference
+    // Generate arguments with proper type conversion
     std::vector<std::pair<std::string, std::string>> arg_vals; // (value, type)
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
-        std::string type = "i32";  // Default
+        std::string actual_type = last_expr_type_;  // Type of the generated value
+        std::string expected_type = "i32";  // Default
 
         // If we have function signature, use parameter type
         if (func_sig.has_value() && i < func_sig->params.size()) {
-            type = llvm_type_from_semantic(func_sig->params[i]);
+            expected_type = llvm_type_from_semantic(func_sig->params[i]);
         } else {
             // Fallback to inference
             // Check if it's a string constant
             if (val.starts_with("@.str.")) {
-                type = "ptr";
+                expected_type = "ptr";
             } else if (call.args[i]->is<parser::LiteralExpr>()) {
                 const auto& lit = call.args[i]->as<parser::LiteralExpr>();
                 if (lit.token.kind == lexer::TokenKind::StringLiteral) {
-                    type = "ptr";
+                    expected_type = "ptr";
                 } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
-                    type = "i1";
+                    expected_type = "i1";
                 }
             }
         }
-        arg_vals.push_back({val, type});
+
+        // Insert type conversion if needed
+        if (actual_type != expected_type) {
+            // i32 -> i64 conversion
+            if (actual_type == "i32" && expected_type == "i64") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = sext i32 " + val + " to i64");
+                val = converted;
+            }
+            // i64 -> i32 conversion (truncate)
+            else if (actual_type == "i64" && expected_type == "i32") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = trunc i64 " + val + " to i32");
+                val = converted;
+            }
+            // i1 -> i32 conversion (zero extend)
+            else if (actual_type == "i1" && expected_type == "i32") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = zext i1 " + val + " to i32");
+                val = converted;
+            }
+            // i32 -> i1 conversion (compare ne 0)
+            else if (actual_type == "i32" && expected_type == "i1") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = icmp ne i32 " + val + ", 0");
+                val = converted;
+            }
+        }
+
+        arg_vals.push_back({val, expected_type});
     }
 
     // Call - handle void vs non-void return types

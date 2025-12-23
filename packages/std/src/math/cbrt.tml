@@ -35,7 +35,7 @@ pub func cbrt(x: F64) -> F64 {
         iterations = iterations + 1
     }
 
-    if negative then -guess else guess
+    return if negative then -guess else guess
 }
 
 pub func cbrt_i32(n: I32) -> I32 {
@@ -67,5 +67,5 @@ pub func cbrt_i32(n: I32) -> I32 {
         }
     }
 
-    if negative then -high else high
+    return if negative then -high else high
 }

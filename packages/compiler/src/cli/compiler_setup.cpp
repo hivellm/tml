@@ -111,10 +111,11 @@ std::string find_clang() {
 
 std::string find_runtime() {
     std::vector<std::string> runtime_search = {
-        "runtime/tml_runtime.c",
-        "../runtime/tml_runtime.c",
-        "../../runtime/tml_runtime.c",
-        "F:/Node/hivellm/tml/packages/compiler/runtime/tml_runtime.c",
+        "packages/compiler/runtime/tml_essential.c",
+        "runtime/tml_essential.c",
+        "../runtime/tml_essential.c",
+        "../../runtime/tml_essential.c",
+        "F:/Node/hivellm/tml/packages/compiler/runtime/tml_essential.c",
     };
     for (const auto& rp : runtime_search) {
         if (fs::exists(rp)) {
@@ -126,7 +127,7 @@ std::string find_runtime() {
 
 std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang, bool verbose) {
     fs::path c_path = runtime_c_path;
-    fs::path obj_path = c_path.parent_path() / "tml_runtime";
+    fs::path obj_path = c_path.parent_path() / "tml_essential";
 #ifdef _WIN32
     obj_path += ".obj";
 #else

@@ -1,4 +1,5 @@
 use test
+use std::collections
 
 // Test foreach over List
 @test
@@ -19,7 +20,7 @@ func test_foreach_list() -> I32 {
 
     assert_eq_i32(sum, 150, "foreach should sum all list elements (10+20+30+40+50)")
     list_destroy(list)
-    0
+    return 0
 }
 
 @test
@@ -40,7 +41,7 @@ func test_foreach_list_with_index() -> I32 {
     assert_eq_i32(count, 3, "foreach should iterate 3 times")
     assert_eq_i32(sum, 30, "foreach should sum to 30 (5+10+15)")
     list_destroy(list)
-    0
+    return 0
 }
 
 @test
@@ -54,7 +55,7 @@ func test_foreach_empty_list() -> I32 {
 
     assert_eq_i32(count, 0, "foreach over empty list should not execute body")
     list_destroy(list)
-    0
+    return 0
 }
 
 @test
@@ -74,7 +75,7 @@ func test_foreach_with_break() -> I32 {
 
     assert_eq_i32(sum, 6, "foreach with break should sum 1+2+3")
     list_destroy(list)
-    0
+    return 0
 }
 
 @test
@@ -95,5 +96,5 @@ func test_foreach_with_continue() -> I32 {
 
     assert_eq_i32(sum, 9, "foreach with continue should sum only odd numbers (1+3+5)")
     list_destroy(list)
-    0
+    return 0
 }

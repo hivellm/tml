@@ -1,0 +1,41 @@
+# TML Standard Library - Pure TML Modules
+# These modules are implemented in pure TML using core:: primitives
+
+[stdlib]
+version = "1.0.0"
+compiler_version = "0.1.0"
+
+# Pure TML modules (no C runtime needed)
+# These will be implemented using core::mem, core::thread, etc.
+
+# [[modules]]
+# name = "std::collections"
+# source = "src/collections.tml"
+# description = "List, HashMap, Buffer (uses core::mem primitives)"
+# depends = ["core::mem"]
+
+# [[modules]]
+# name = "std::str"
+# source = "src/str.tml"
+# description = "String utilities (pure TML)"
+
+# [[modules]]
+# name = "std::math"
+# source = "src/math.tml"
+# description = "Math functions (pure TML implementation)"
+
+# Future modules
+# [[modules]]
+# name = "std::io"
+# source = "src/io.tml"
+# description = "I/O utilities"
+
+# [[modules]]
+# name = "std::fs"
+# source = "src/fs.tml"
+# description = "Filesystem operations"
+
+# [[modules]]
+# name = "std::net"
+# source = "src/net.tml"
+# description = "Networking"

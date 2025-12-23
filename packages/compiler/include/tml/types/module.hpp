@@ -32,6 +32,11 @@ struct Module {
     std::unordered_map<std::string, TypePtr> type_aliases;
     std::unordered_map<std::string, std::string> submodules;  // name -> path
 
+    // Source code for pure TML modules (non-lowlevel)
+    // Stored so codegen can re-parse and generate LLVM IR
+    std::string source_code;
+    bool has_pure_tml_functions = false;
+
     parser::Visibility default_visibility = parser::Visibility::Private;
 };
 
@@ -59,6 +64,11 @@ public:
 
     // List all registered modules
     auto list_modules() const -> std::vector<std::string>;
+
+    // Get all modules
+    auto get_all_modules() const -> const std::unordered_map<std::string, Module>& {
+        return modules_;
+    }
 
     // File-based module resolution
     auto resolve_file_module(const std::string& path) const -> std::optional<std::string>;

@@ -211,12 +211,16 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         }
     }
 
-    // For pointer variables, store the pointer value
+    // For pointer variables, allocate space and store the pointer value
     if (is_ptr && let.init.has_value()) {
         std::string ptr_val = gen_expr(*let.init.value());
-        // Store pointer in a variable - we track the pointer value directly
-        // The pointer points to the original variable's alloca
-        locals_[var_name] = VarInfo{ptr_val, "ptr"};
+        // Allocate space to hold the pointer
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca ptr");
+        // Store the pointer value in the alloca
+        emit_line("  store ptr " + ptr_val + ", ptr " + alloca_reg);
+        // Map variable to the alloca (gen_ident will load from it)
+        locals_[var_name] = VarInfo{alloca_reg, "ptr"};
         return;
     }
 

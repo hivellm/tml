@@ -147,11 +147,11 @@ pub func format_duration_us(us: I64) -> Str {
 /// Convert microseconds to display value
 pub func convert_duration_us(us: I64) -> I64 {
     if us < 1000 {
-        us
+        return us
     } else if us < 1000000 {
-        us / 1000
+        return us / 1000
     } else {
-        us / 1000000
+        return us / 1000000
     }
 }
 

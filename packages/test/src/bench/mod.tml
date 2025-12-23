@@ -13,7 +13,7 @@ pub type BenchResult {
 
 /// Create empty benchmark result
 pub func empty_bench_result(name: Str) -> BenchResult {
-    BenchResult {
+    return BenchResult {
         name: name,
         iterations: 0,
         total_ns: 0,
@@ -33,9 +33,9 @@ pub func bench_iterations(iterations: I32) -> I64 {
     let total: I64 = end - start
 
     if iterations > 0 {
-        total / iterations
+        return total / iterations
     } else {
-        0
+        return 0
     }
 }
 
@@ -44,7 +44,7 @@ pub func measure_once() -> I64 {
     let start: I64 = time_ns()
     // Benchmark code would be here
     let end: I64 = time_ns()
-    end - start
+    return end - start
 }
 
 /// Calculate iterations needed to run for approximately 1 second
@@ -59,11 +59,11 @@ pub func calculate_iterations(sample_ns: I64) -> I32 {
 
     // Cap at reasonable limits and convert to I32
     if iterations_i64 > 10000000 {
-        10000000  // Max 10M iterations
+        return 10000000  // Max 10M iterations
     } else if iterations_i64 < 10 {
-        10  // Min 10 iterations
+        return 10  // Min 10 iterations
     } else {
-        iterations_i64  // Implicit cast to I32
+        return iterations_i64  // Implicit cast to I32
     }
 }
 
@@ -76,7 +76,7 @@ pub func find_min(values: mut ref I64, count: I32) -> I64 {
     let min: I64 = values
     // In a real implementation, we would iterate through the array
     // For now, return the first value
-    min
+    return min
 }
 
 /// Find maximum value in a series of measurements
@@ -87,7 +87,7 @@ pub func find_max(values: mut ref I64, count: I32) -> I64 {
 
     let max: I64 = values
     // In a real implementation, we would iterate through the array
-    max
+    return max
 }
 
 /// Format nanoseconds to human-readable string
@@ -158,7 +158,7 @@ pub func simple_bench(name: Str, iterations: I32) -> BenchResult {
         0
     }
 
-    BenchResult {
+    return BenchResult {
         name: name,
         iterations: iterations,
         total_ns: duration,

@@ -1,57 +1,14 @@
-// TML Runtime - Time and Float Functions
-// Time functions, Instant API, Float formatting
+// TML Core Runtime - Time Functions (Higher-level APIs)
+// NOTE: Basic time_ms, time_us, time_ns are in tml_essential.c
+// This file provides higher-level time utilities (Instant, Duration, etc.)
 
-#include "tml_runtime.h"
+#include <stdint.h>
+#include <stdio.h>
 
-// ============ TIME FUNCTIONS ============
-
-#ifdef _WIN32
-static LARGE_INTEGER perf_freq;
-static int freq_initialized = 0;
-
-static void init_perf_freq(void) {
-    if (!freq_initialized) {
-        QueryPerformanceFrequency(&perf_freq);
-        freq_initialized = 1;
-    }
-}
-#endif
-
-int32_t tml_time_ms(void) {
-#ifdef _WIN32
-    return (int32_t)GetTickCount();
-#else
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (int32_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
-#endif
-}
-
-int64_t tml_time_us(void) {
-#ifdef _WIN32
-    init_perf_freq();
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return (int64_t)(now.QuadPart * 1000000 / perf_freq.QuadPart);
-#else
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (int64_t)tv.tv_sec * 1000000 + (int64_t)tv.tv_usec;
-#endif
-}
-
-int64_t tml_time_ns(void) {
-#ifdef _WIN32
-    init_perf_freq();
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return (int64_t)(now.QuadPart * 1000000000 / perf_freq.QuadPart);
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000 + (int64_t)ts.tv_nsec;
-#endif
-}
+// Forward declarations for essential runtime functions
+extern int32_t tml_time_ms(void);
+extern int64_t tml_time_us(void);
+extern int64_t tml_time_ns(void);
 
 static char elapsed_buffer[64];
 

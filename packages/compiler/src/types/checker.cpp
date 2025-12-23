@@ -189,15 +189,65 @@ void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
 }
 
 void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
-    // Build module path from use declaration
+    if (use_decl.path.segments.empty()) {
+        return;
+    }
+
+    // Build module path from segments
     std::string module_path;
     for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
         if (i > 0) module_path += "::";
         module_path += use_decl.path.segments[i];
     }
 
-    // Look up the module in the registry
+    // Handle grouped imports: use std::math::{abs, sqrt, pow}
+    if (use_decl.symbols.has_value()) {
+        const auto& symbols = use_decl.symbols.value();
+
+        // Load the module
+        env_.load_native_module(module_path);
+        auto module_opt = env_.get_module(module_path);
+
+        if (!module_opt.has_value()) {
+            errors_.push_back(TypeError{
+                "Module '" + module_path + "' not found",
+                use_decl.span,
+                {}
+            });
+            return;
+        }
+
+        // Import each symbol individually
+        for (const auto& symbol : symbols) {
+            env_.import_symbol(module_path, symbol, std::nullopt);
+        }
+        return;
+    }
+
+    // Try first as complete module path
+    env_.load_native_module(module_path);
     auto module_opt = env_.get_module(module_path);
+
+    // If module not found, last segment might be a symbol name
+    if (!module_opt.has_value() && use_decl.path.segments.size() > 1) {
+        // Try module path without last segment
+        std::string base_module_path;
+        for (size_t i = 0; i < use_decl.path.segments.size() - 1; ++i) {
+            if (i > 0) base_module_path += "::";
+            base_module_path += use_decl.path.segments[i];
+        }
+
+        env_.load_native_module(base_module_path);
+        module_opt = env_.get_module(base_module_path);
+
+        if (module_opt.has_value()) {
+            // Last segment is a symbol name - import only that symbol
+            std::string symbol_name = use_decl.path.segments.back();
+            env_.import_symbol(base_module_path, symbol_name, use_decl.alias);
+            return;
+        }
+    }
+
     if (!module_opt.has_value()) {
         errors_.push_back(TypeError{
             "Module '" + module_path + "' not found",
@@ -207,29 +257,8 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         return;
     }
 
-    const auto& module = module_opt.value();
-
-    // Import all functions from the module
-    for (const auto& [name, func_sig] : module.functions) {
-        env_.define_func(func_sig);
-    }
-
-    // Import all types from the module
-    for (const auto& [name, struct_def] : module.structs) {
-        env_.define_struct(struct_def);
-    }
-
-    for (const auto& [name, enum_def] : module.enums) {
-        env_.define_enum(enum_def);
-    }
-
-    for (const auto& [name, behavior_def] : module.behaviors) {
-        env_.define_behavior(behavior_def);
-    }
-
-    for (const auto& [name, type_alias] : module.type_aliases) {
-        env_.define_type_alias(name, type_alias);
-    }
+    // Import all from module
+    env_.import_all_from(module_path);
 }
 
 void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
@@ -628,19 +657,25 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
 auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
     auto callee_type = check_expr(*call.callee);
 
-    // Check if this is a variadic builtin (print/println)
-    bool is_variadic_builtin = false;
+    // Check if this is a polymorphic builtin (print/println accept any type)
+    bool is_polymorphic_builtin = false;
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& name = call.callee->as<parser::IdentExpr>().name;
         if (name == "print" || name == "println") {
-            is_variadic_builtin = true;
+            is_polymorphic_builtin = true;
+            // print/println accept any single argument of any type
+            // Just type-check the argument (without requiring a specific type)
+            for (const auto& arg : call.args) {
+                check_expr(*arg);  // Type-check but accept any type
+            }
+            return make_unit();  // print/println return Unit
         }
     }
 
     if (callee_type->is<FuncType>()) {
         auto& func = callee_type->as<FuncType>();
-        // Check argument count (skip for variadic builtins)
-        if (!is_variadic_builtin && call.args.size() != func.params.size()) {
+        // Check argument count
+        if (call.args.size() != func.params.size()) {
             error("Wrong number of arguments", call.callee->span);
         }
         // Check argument types

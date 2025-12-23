@@ -1,4 +1,5 @@
 use test
+use std::collections
 
 // Collection Operations Tests (List, HashMap, Buffer)
 

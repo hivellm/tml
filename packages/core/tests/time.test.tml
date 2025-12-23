@@ -1,4 +1,5 @@
 use test
+use core::time
 
 // Time Function Tests
 
@@ -6,7 +7,7 @@ use test
 func test_time_ms_positive() -> I32 {
     let t: I32 = time_ms()
     assert(t > 0, "time_ms should return positive value")
-    0
+    return 0
 }
 
 @test
@@ -19,7 +20,7 @@ func test_time_ms_increases() -> I32 {
     }
     let t2: I32 = time_ms()
     assert(t2 >= t1, "time_ms should increase or stay same")
-    0
+    return 0
 }
 
 @test
@@ -27,5 +28,5 @@ func test_elapsed_ms_basic() -> I32 {
     let start: I32 = time_ms()
     let elapsed: I32 = elapsed_ms(start)
     assert(elapsed >= 0, "elapsed_ms should be non-negative")
-    0
+    return 0
 }

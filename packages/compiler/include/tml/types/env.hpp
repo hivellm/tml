@@ -42,6 +42,7 @@ namespace tml::types
         std::string deprecated_message;                      // Migration guide for deprecated functions
         std::string since_version;                           // Version when this status was assigned
         std::vector<WhereConstraint> where_constraints = {}; // At end to not break existing code
+        bool is_lowlevel = false;                            // For C runtime functions
 
         // Helper methods
         [[nodiscard]] bool is_stable() const { return stability == StabilityLevel::Stable; }
@@ -146,6 +147,12 @@ namespace tml::types
         // Module lookup
         [[nodiscard]] auto get_module(const std::string &module_path) const -> std::optional<Module>;
 
+        // Load native module on demand
+        bool load_native_module(const std::string& module_path);
+
+        // Load module from TML file
+        bool load_module_from_file(const std::string& module_path, const std::string& file_path);
+
     private:
         std::unordered_map<std::string, StructDef> structs_;
         std::unordered_map<std::string, EnumDef> enums_;
@@ -164,6 +171,7 @@ namespace tml::types
 
         void init_builtins();
         void init_test_module();
+        // NOTE: init_std_*_module() functions removed - modules now load from .tml files
     };
 
 } // namespace tml::types

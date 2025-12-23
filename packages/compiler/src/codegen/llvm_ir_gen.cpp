@@ -17,7 +17,11 @@
 // - llvm_ir_gen_types.cpp: struct expressions, fields, arrays, indexing, method calls
 
 #include "tml/codegen/llvm_ir_gen.hpp"
+#include "tml/lexer/lexer.hpp"
+#include "tml/lexer/source.hpp"
+#include "tml/parser/parser.hpp"
 #include <algorithm>
+#include <filesystem>
 #include <iomanip>
 
 namespace tml::codegen {
@@ -186,21 +190,17 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @tml_thread_id()");
     emit_line("");
 
-    // Time functions (for benchmarking)
-    emit_line("; Time functions");
-    emit_line("declare i32 @tml_time_ms()");
-    emit_line("declare i64 @tml_time_us()");
-    emit_line("declare i64 @tml_time_ns()");
-    emit_line("declare ptr @tml_elapsed_secs(i32)");
-    emit_line("declare i32 @tml_elapsed_ms(i32)");
-    emit_line("; Instant API (like Rust)");
-    emit_line("declare i64 @tml_instant_now()");
-    emit_line("declare i64 @tml_instant_elapsed(i64)");
-    emit_line("declare double @tml_duration_as_secs_f64(i64)");
-    emit_line("declare double @tml_duration_as_millis_f64(i64)");
-    emit_line("declare i64 @tml_duration_as_millis(i64)");
-    emit_line("declare ptr @tml_duration_format_ms(i64)");
-    emit_line("declare ptr @tml_duration_format_secs(i64)");
+    // I/O functions (print, println) - polymorphic, accept any type
+    emit_line("; I/O functions");
+    emit_line("declare void @tml_print(ptr)");
+    emit_line("declare void @tml_println(ptr)");
+    emit_line("");
+
+    // NOTE: Math functions moved to core::math module
+    // Import with: use core::math
+
+    // NOTE: Assertion functions moved to test module
+    // Import with: use test
     emit_line("; Black box (prevent optimization)");
     emit_line("declare i32 @tml_black_box_i32(i32)");
     emit_line("declare i64 @tml_black_box_i64(i64)");
@@ -319,6 +319,17 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @tml_str_eq(ptr, ptr)");
     emit_line("");
 
+    // Time functions - only declare if not imported from core::time module
+    // (core::time module declares its own lowlevel functions)
+    bool has_time_module = env_.module_registry() && env_.module_registry()->has_module("core::time");
+    if (!has_time_module) {
+        emit_line("; Time functions");
+        emit_line("declare i32 @tml_time_ms()");
+        emit_line("declare i64 @tml_time_us()");
+        emit_line("declare i64 @tml_time_ns()");
+        emit_line("");
+    }
+
     // Format strings for print/println
     // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)
     emit_line("; Format strings");
@@ -335,6 +346,95 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");          // false\0 = 6 bytes
     emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");              // " "\0 = 2 bytes
     emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");         // \n\0 = 2 bytes
+    emit_line("");
+}
+
+void LLVMIRGen::emit_module_lowlevel_decls() {
+    // Emit declarations for lowlevel functions from imported modules
+    if (!env_.module_registry()) {
+        return;
+    }
+
+    emit_line("; Lowlevel functions from imported modules");
+
+    // Get all modules from registry
+    const auto& registry = env_.module_registry();
+    const auto& all_modules = registry->get_all_modules();
+
+    for (const auto& [module_name, module] : all_modules) {
+        for (const auto& [func_name, func_sig] : module.functions) {
+            if (func_sig.is_lowlevel) {
+                // Generate LLVM declaration using semantic types
+                std::string llvm_ret_type = llvm_type_from_semantic(func_sig.return_type);
+
+                std::string params_str;
+                for (size_t i = 0; i < func_sig.params.size(); ++i) {
+                    if (i > 0) params_str += ", ";
+                    params_str += llvm_type_from_semantic(func_sig.params[i]);
+                }
+
+                // Emit declaration with tml_ prefix
+                emit_line("declare " + llvm_ret_type + " @tml_" + func_name + "(" + params_str + ")");
+            }
+        }
+    }
+
+    emit_line("");
+}
+
+void LLVMIRGen::emit_module_pure_tml_functions() {
+    // Emit LLVM IR for pure TML functions from imported modules
+    if (!env_.module_registry()) {
+        return;
+    }
+
+    const auto& registry = env_.module_registry();
+    const auto& all_modules = registry->get_all_modules();
+
+    emit_line("; Pure TML functions from imported modules");
+
+    for (const auto& [module_name, module] : all_modules) {
+        // Check if module has pure TML functions
+        if (!module.has_pure_tml_functions || module.source_code.empty()) {
+            continue;
+        }
+
+        // Re-parse the module source code
+        auto source = lexer::Source::from_string(module.source_code, module.file_path);
+        lexer::Lexer lex(source);
+        auto tokens = lex.tokenize();
+
+        if (lex.has_errors()) {
+            continue;  // Skip modules with lexer errors
+        }
+
+        parser::Parser parser(std::move(tokens));
+        auto mod_name = std::filesystem::path(module.file_path).stem().string();
+        auto parse_result = parser.parse_module(mod_name);
+
+        if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+            continue;  // Skip modules with parse errors
+        }
+
+        const auto& parsed_module = std::get<parser::Module>(parse_result);
+
+        emit_line("; Module: " + module_name);
+
+        // Generate code for each public function
+        for (const auto& decl : parsed_module.decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func = decl->as<parser::FuncDecl>();
+
+                // Only generate code for public, non-lowlevel functions with bodies
+                if (func.vis == parser::Visibility::Public &&
+                    !func.is_unsafe &&
+                    func.body.has_value()) {
+                    gen_func_decl(func);
+                }
+            }
+        }
+    }
+
     emit_line("");
 }
 
@@ -369,6 +469,8 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
     emit_header();
     emit_runtime_decls();
+    emit_module_lowlevel_decls();
+    emit_module_pure_tml_functions();  // Generate code for pure TML imported functions (like std::math)
 
     // First pass: collect const declarations and struct/enum declarations
     for (const auto& decl : module.decls) {
@@ -436,6 +538,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
     if (!bench_functions.empty()) {
         // Generate benchmark runner main
+        // Note: time functions are always declared in preamble
         emit_line("; Auto-generated benchmark runner");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");

@@ -21,6 +21,21 @@ using namespace tml;
 
 namespace tml::cli {
 
+// Helper to check if any function has @bench decorator
+static bool has_bench_functions(const parser::Module& module) {
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::FuncDecl>()) {
+            const auto& func = decl->as<parser::FuncDecl>();
+            for (const auto& decorator : func.decorators) {
+                if (decorator.name == "bench") {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     std::string source_code;
     try {
@@ -137,6 +152,76 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
         compile_cmd += " \"" + runtime_to_link + "\"";
         if (verbose) {
             std::cout << "Including runtime: " << runtime_to_link << "\n";
+        }
+    }
+
+    // Link core module runtimes if they were imported
+    if (registry->has_module("core::mem")) {
+        std::vector<std::string> core_mem_search = {
+            "packages/core/runtime/mem.c",
+            "../../../core/runtime/mem.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
+        };
+        for (const auto& mem_path : core_mem_search) {
+            if (fs::exists(mem_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
+                if (verbose) {
+                    std::cout << "Including core::mem runtime: " << mem_path << "\n";
+                }
+                break;
+            }
+        }
+    }
+
+    // Link time runtime if core::time is imported OR if @bench decorators are present
+    if (registry->has_module("core::time") || has_bench_functions(module)) {
+        std::vector<std::string> core_time_search = {
+            "packages/core/runtime/time.c",
+            "../../../core/runtime/time.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
+        };
+        for (const auto& time_path : core_time_search) {
+            if (fs::exists(time_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
+                if (verbose) {
+                    std::cout << "Including core::time runtime: " << time_path << "\n";
+                }
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
+        std::vector<std::string> core_thread_search = {
+            "packages/core/runtime/thread.c",
+            "../../../core/runtime/thread.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
+        };
+        for (const auto& thread_path : core_thread_search) {
+            if (fs::exists(thread_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
+                if (verbose) {
+                    std::cout << "Including core::thread/sync runtime: " << thread_path << "\n";
+                }
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("test")) {
+        std::vector<std::string> test_runtime_search = {
+            "packages/test/runtime/test.c",
+            "../../../test/runtime/test.c",
+            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
+        };
+        for (const auto& test_path : test_runtime_search) {
+            if (fs::exists(test_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
+                if (verbose) {
+                    std::cout << "Including test runtime: " << test_path << "\n";
+                }
+                break;
+            }
         }
     }
 
@@ -282,6 +367,66 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
             std::cout << "Including runtime: " << runtime_to_link << "\n";
         }
     }
+
+    // Link module runtimes if they were imported (same as run_build)
+    if (registry->has_module("core::mem")) {
+        std::vector<std::string> core_mem_search = {
+            "packages/core/runtime/mem.c",
+            "../../../core/runtime/mem.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
+        };
+        for (const auto& mem_path : core_mem_search) {
+            if (fs::exists(mem_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    // Link time runtime if core::time is imported OR if @bench decorators are present
+    if (registry->has_module("core::time") || has_bench_functions(module)) {
+        std::vector<std::string> core_time_search = {
+            "packages/core/runtime/time.c",
+            "../../../core/runtime/time.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
+        };
+        for (const auto& time_path : core_time_search) {
+            if (fs::exists(time_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
+        std::vector<std::string> core_thread_search = {
+            "packages/core/runtime/thread.c",
+            "../../../core/runtime/thread.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
+        };
+        for (const auto& thread_path : core_thread_search) {
+            if (fs::exists(thread_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("test")) {
+        std::vector<std::string> test_runtime_search = {
+            "packages/test/runtime/test.c",
+            "../../../test/runtime/test.c",
+            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
+        };
+        for (const auto& test_path : test_runtime_search) {
+            if (fs::exists(test_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    // NOTE: std::math is pure TML, no C runtime needed
 
     if (verbose) {
         std::cout << "Compiling: " << compile_cmd << "\n";

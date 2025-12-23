@@ -8,46 +8,46 @@ pub type Path {
 impl Path {
     /// Create from string
     pub func new(s: Str) -> Path {
-        Path { path: s }
+        return Path { path: s }
     }
 
     /// Get as string
     pub func as_str(this) -> Str {
-        this.path
+        return this.path
     }
 
     /// Get file name
     pub func file_name(this) -> Maybe[Str] {
         // TODO: Implement
-        Nothing
+        return Nothing
     }
 
     /// Get extension
     pub func extension(this) -> Maybe[Str] {
         // TODO: Implement
-        Nothing
+        return Nothing
     }
 
     /// Get parent directory
     pub func parent(this) -> Maybe[Path] {
         // TODO: Implement
-        Nothing
+        return Nothing
     }
 
     /// Join with another path
     pub func join(this, other: Str) -> Path {
         // TODO: Implement proper path joining
-        Path::new(this.path + "/" + other)
+        return Path::new(this.path + "/" + other)
     }
 
     /// Check if absolute
     pub func is_absolute(this) -> Bool {
         // TODO: Implement
-        false
+        return false
     }
 
     /// Check if relative
     pub func is_relative(this) -> Bool {
-        not this.is_absolute()
+        return not this.is_absolute()
     }
 }

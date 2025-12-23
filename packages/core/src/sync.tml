@@ -1,0 +1,71 @@
+// TML Core Library - Sync Module
+// Low-level synchronization primitives
+//
+// Atomic operations are LLVM intrinsics (implemented in codegen)
+// Spinlocks are implemented using atomic operations
+
+// ============ ATOMIC OPERATIONS ============
+
+// Atomic load - thread-safe read
+// Returns current value
+pub lowlevel func atomic_load(ptr: ref I32) -> I32
+
+// Atomic store - thread-safe write
+pub lowlevel func atomic_store(ptr: mut ref I32, value: I32) -> Unit
+
+// Atomic add - fetch-and-add
+// Returns old value before addition
+pub lowlevel func atomic_add(ptr: mut ref I32, value: I32) -> I32
+
+// Atomic subtract - fetch-and-subtract
+// Returns old value before subtraction
+pub lowlevel func atomic_sub(ptr: mut ref I32, value: I32) -> I32
+
+// Atomic exchange - swap values
+// Returns old value
+pub lowlevel func atomic_exchange(ptr: mut ref I32, value: I32) -> I32
+
+// Compare-and-swap (CAS) - conditional update
+// If *ptr == expected, set *ptr = desired and return true
+// Otherwise, return false
+pub lowlevel func atomic_cas(ptr: mut ref I32, expected: I32, desired: I32) -> Bool
+
+// Compare-and-swap returning old value
+// If *ptr == expected, set *ptr = desired
+// Returns old value regardless of success
+pub lowlevel func atomic_cas_val(ptr: mut ref I32, expected: I32, desired: I32) -> I32
+
+// Atomic bitwise AND - fetch-and-and
+// Returns old value before AND operation
+pub lowlevel func atomic_and(ptr: mut ref I32, value: I32) -> I32
+
+// Atomic bitwise OR - fetch-and-or
+// Returns old value before OR operation
+pub lowlevel func atomic_or(ptr: mut ref I32, value: I32) -> I32
+
+// ============ MEMORY FENCES ============
+
+// Full memory fence (sequentially consistent)
+// Prevents reordering of all loads and stores
+pub lowlevel func fence() -> Unit
+
+// Acquire fence
+// Prevents reordering of loads after the fence with loads/stores before
+pub lowlevel func fence_acquire() -> Unit
+
+// Release fence
+// Prevents reordering of stores before the fence with loads/stores after
+pub lowlevel func fence_release() -> Unit
+
+// ============ SPINLOCK ============
+
+// Acquire spinlock (busy-wait until acquired)
+// lock_ptr should point to I32 initialized to 0
+pub lowlevel func spin_lock(lock: mut ref I32) -> Unit
+
+// Release spinlock
+pub lowlevel func spin_unlock(lock: mut ref I32) -> Unit
+
+// Try to acquire spinlock without blocking
+// Returns true if acquired, false if already locked
+pub lowlevel func spin_trylock(lock: mut ref I32) -> Bool
