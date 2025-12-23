@@ -15,12 +15,6 @@ categories = ["testing", "development-tools"]
 name = "test"
 path = "src/mod.tml"
 
-[dependencies]
-# No external dependencies - uses only std
-
-[dev-dependencies]
-# Self-testing dependencies
-
 [features]
 default = ["std"]
 std = []

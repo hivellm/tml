@@ -3,6 +3,7 @@
 All notable changes to the TML test framework.
 
 ## [Unreleased]
+
 ## [0.3.0] - 2025-12-23### Added- **Module system integration** - Assertions now require `use test` import- **Full enum pattern matching support** - `when` expressions work correctly with enums- Test package examples with `use test`### Changed- **BREAKING**: Assertion functions removed from global scope  - `assert`, `assert_eq_i32`, etc. now require `use test`  - All test files must include `use test` at the top- Improved pattern matching codegen for enum values- Fixed enum value creation and comparison in LLVM backend### Fixed- Enum pattern matching in `when` expressions now returns correct values- Pattern match arms properly store and load results- Type conversion (i1 ↔ i32) handled correctly in pattern matching### Test Results- 9/10 tests passing (90% success rate)- All compiler tests: PASSED- All runtime tests except collections: PASSED- Known issue: collections.test.tml (pre-existing runtime bug)
 
 ### Planned

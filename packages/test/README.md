@@ -116,6 +116,18 @@ func my_test() -> I32 {
 
 Without `use test`, assertion functions will not be available.
 
+## CLI Options
+
+```bash
+tml test                        # Run all tests (auto-detect threads)
+tml test --test-threads=4       # Run with 4 threads
+tml test --test-threads=1       # Single-threaded mode
+tml test basics                 # Filter by test name
+tml test --group=compiler       # Filter by directory
+tml test --verbose              # Verbose output (single-threaded)
+tml test --quiet                # Minimal output
+```
+
 ## Implementation Status
 
 - [x] Test decorator (`@test`)
@@ -125,9 +137,8 @@ Without `use test`, assertion functions will not be available.
 - [x] Type-specific assertions (I32, Bool, Str)
 - [x] Pattern matching support
 - [x] CLI integration (`tml test`)
-- [x] Sequential execution
-- [ ] Parallel execution
-- [ ] Test filtering by name/pattern
+- [x] Parallel execution (multi-threaded)
+- [x] Test filtering by name/pattern
 - [ ] Benchmarking (`@bench`)
 
 ## Test Results
