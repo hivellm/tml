@@ -16,6 +16,7 @@ struct TestOptions {
     int test_threads = 0;                 // Parallel test threads (0 = auto)
     bool release = false;                 // Run in release mode
     std::string test_binary;              // Path to test binary (if provided)
+    int timeout_seconds = 20;             // Test timeout in seconds (default: 20s)
 };
 
 // Parse test command arguments

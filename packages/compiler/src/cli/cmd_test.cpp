@@ -11,6 +11,8 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <future>
+#include <chrono>
 
 namespace fs = std::filesystem;
 
@@ -36,6 +38,8 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.release = true;
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
+        } else if (arg.starts_with("--timeout=")) {
+            opts.timeout_seconds = std::stoi(arg.substr(10));
         } else if (arg.starts_with("--group=")) {
             opts.patterns.push_back(arg.substr(8));
         } else if (arg.starts_with("--suite=")) {
@@ -90,7 +94,28 @@ int compile_and_run_test(const std::string& test_file, const TestOptions& opts) 
     }
 
     std::vector<std::string> empty_args;
-    int result = run_run(test_file, empty_args, opts.verbose);
+
+    // Run test with timeout using async
+    auto future = std::async(std::launch::async, [&]() {
+        return run_run(test_file, empty_args, opts.verbose);
+    });
+
+    // Wait for test to complete or timeout
+    auto timeout_duration = std::chrono::seconds(opts.timeout_seconds);
+    auto status = future.wait_for(timeout_duration);
+
+    int result = 0;
+    if (status == std::future_status::timeout) {
+        // Test timed out
+        if (!opts.quiet) {
+            std::cout << "test " << fs::path(test_file).filename().string()
+                      << " ... TIMEOUT (exceeded " << opts.timeout_seconds << "s)\n";
+        }
+        return 1;
+    } else {
+        // Test completed
+        result = future.get();
+    }
 
     if (result != 0) {
         if (!opts.quiet) {

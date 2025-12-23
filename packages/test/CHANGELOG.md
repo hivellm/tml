@@ -4,6 +4,27 @@ All notable changes to the TML test framework.
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-12-23
+
+### Added
+- **Test timeout support** - Prevent infinite loops from blocking test suite
+  - Default 20 second timeout per test
+  - Configurable via `--timeout=N` CLI flag
+  - Tests exceeding timeout are marked as FAILED with TIMEOUT message
+  - Uses std::async with std::future::wait_for for timeout detection
+
+### Usage
+```bash
+tml test --timeout=30          # Set 30 second timeout
+tml test --timeout=5           # Set 5 second timeout for quick tests
+```
+
+### Implementation
+- Added timeout_seconds field to TestOptions
+- Modified compile_and_run_test to use async execution with timeout
+- Tests running longer than timeout are automatically terminated
+- Timeout includes both compilation and execution time
+
 ## [0.5.0] - 2025-12-23
 
 ### Added

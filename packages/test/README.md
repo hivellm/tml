@@ -122,10 +122,26 @@ Without `use test`, assertion functions will not be available.
 tml test                        # Run all tests (auto-detect threads)
 tml test --test-threads=4       # Run with 4 threads
 tml test --test-threads=1       # Single-threaded mode
+tml test --timeout=30           # Set test timeout to 30 seconds (default: 20s)
 tml test basics                 # Filter by test name
 tml test --group=compiler       # Filter by directory
 tml test --verbose              # Verbose output (single-threaded)
 tml test --quiet                # Minimal output
+```
+
+## Test Timeout
+
+Tests have a maximum execution time to prevent infinite loops from blocking the test suite:
+
+- **Default timeout**: 20 seconds per test
+- **Configurable via CLI**: `--timeout=N` where N is seconds
+- **Behavior**: If a test exceeds the timeout, it's marked as FAILED with a TIMEOUT message
+- **Use case**: Prevents tests with infinite loops or deadlocks from hanging forever
+
+Example:
+```bash
+tml test --timeout=5            # Set 5 second timeout for all tests
+tml test --timeout=60           # Set 60 second timeout for slower tests
 ```
 
 ## Benchmarking
