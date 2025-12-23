@@ -404,7 +404,30 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
     // Look up in enum variants
     auto it = enum_variants_.find(full_path);
     if (it != enum_variants_.end()) {
-        return std::to_string(it->second);
+        // For enum variants, we need to create a struct { i32 } value
+        // Extract the enum type name (first segment)
+        std::string enum_name = path.path.segments[0];
+        std::string struct_type = "%struct." + enum_name;
+
+        // Allocate the enum struct on stack
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + struct_type);
+
+        // Get pointer to the tag field (GEP with indices 0, 0)
+        std::string tag_ptr = fresh_reg();
+        emit_line("  " + tag_ptr + " = getelementptr " + struct_type + ", ptr " + alloca_reg + ", i32 0, i32 0");
+
+        // Store the tag value
+        emit_line("  store i32 " + std::to_string(it->second) + ", ptr " + tag_ptr);
+
+        // Load the entire struct value
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + struct_type + ", ptr " + alloca_reg);
+
+        // Mark last expr type
+        last_expr_type_ = struct_type;
+
+        return result;
     }
 
     // Not found - might be a function or module path

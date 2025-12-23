@@ -1,0 +1,31 @@
+// Simple enum test for debugging
+
+type Color {
+    Red,
+    Blue
+}
+
+@test
+func test_enum_comparison() -> I32 {
+    let red: Color = Color::Red
+
+    // Test direct comparison
+    let is_same: Bool = red == Color::Red
+    assert_eq_bool(is_same, true, "should be Red")
+
+    return 0
+}
+
+@test
+func test_enum_pattern() -> I32 {
+    let red: Color = Color::Red
+
+    // Test pattern matching
+    let is_red: Bool = when red {
+        Color::Red => true,
+        _ => false
+    }
+    assert_eq_bool(is_red, true, "pattern should match Red")
+
+    return 0
+}

@@ -41,7 +41,11 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
     }
 
     if (!has_data) {
-        // Simple enum - just use i32 for the tag
+        // Simple enum - represented as struct with single i32 tag field
+        std::string type_name = "%struct." + e.name;
+        emit_line(type_name + " = type { i32 }");
+        struct_types_[e.name] = type_name;
+
         // Register variant values
         int tag = 0;
         for (const auto& variant : e.variants) {

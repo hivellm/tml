@@ -1,0 +1,69 @@
+// Enum Tests - Using direct comparison only (pattern matching has issues)
+
+// Simple enum (no data)
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
+type Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+@test
+func test_color_comparison() -> I32 {
+    let red: Color = Color::Red
+    let green: Color = Color::Green
+    let blue: Color = Color::Blue
+
+    // Test direct comparisons
+    assert(red == Color::Red, "red should equal Color::Red")
+    assert(red != Color::Green, "red should not equal Color::Green")
+    assert(red != Color::Blue, "red should not equal Color::Blue")
+
+    assert(green == Color::Green, "green should equal Color::Green")
+    assert(green != Color::Red, "green should not equal Color::Red")
+
+    assert(blue == Color::Blue, "blue should equal Color::Blue")
+    assert(blue != Color::Red, "blue should not equal Color::Red")
+
+    return 0
+}
+
+@test
+func test_direction_comparison() -> I32 {
+    let north: Direction = Direction::North
+    let south: Direction = Direction::South
+    let east: Direction = Direction::East
+    let west: Direction = Direction::West
+
+    // Test comparisons
+    assert(north == Direction::North, "north should be North")
+    assert(south == Direction::South, "south should be South")
+    assert(east == Direction::East, "east should be East")
+    assert(west == Direction::West, "west should be West")
+
+    // Test inequalities
+    assert(north != south, "north should not equal south")
+    assert(east != west, "east should not equal west")
+
+    return 0
+}
+
+@test
+func test_enum_assignment() -> I32 {
+    let mut color: Color = Color::Red
+    assert(color == Color::Red, "Initial color should be Red")
+
+    color = Color::Green
+    assert(color == Color::Green, "Color should be Green after assignment")
+
+    color = Color::Blue
+    assert(color == Color::Blue, "Color should be Blue after assignment")
+
+    return 0
+}

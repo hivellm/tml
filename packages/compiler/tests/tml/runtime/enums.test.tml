@@ -1,5 +1,4 @@
-// Test 21: Enums
-// Tests simple enum declarations and usage
+use testn// Enum Tests
 
 // Simple enum (no data)
 type Color {
@@ -8,7 +7,6 @@ type Color {
     Blue
 }
 
-// Another simple enum
 type Direction {
     North,
     South,
@@ -16,7 +14,6 @@ type Direction {
     West
 }
 
-// Enum for status
 type Status {
     Pending,
     Active,
@@ -24,217 +21,118 @@ type Status {
     Failed
 }
 
+@test
 func test_color() -> I32 {
-    println("--- Color Enum Tests ---")
-
-    // Test enum construction and comparison
     let red: Color = Color::Red
     let green: Color = Color::Green
     let blue: Color = Color::Blue
 
-    // Test Red
+    // Test pattern matching
     let is_red: Bool = when red {
         Color::Red => true,
         _ => false
     }
-    if not is_red {
-        println("FAIL: Color::Red pattern match failed")
-        return 1
-    }
-    println("Color::Red - OK")
+    assert_eq_bool(is_red, true, "Color::Red pattern match should succeed")
 
-    // Test Green
     let is_green: Bool = when green {
         Color::Green => true,
         _ => false
     }
-    if not is_green {
-        println("FAIL: Color::Green pattern match failed")
-        return 2
-    }
-    println("Color::Green - OK")
+    assert_eq_bool(is_green, true, "Color::Green pattern match should succeed")
 
-    // Test Blue
     let is_blue: Bool = when blue {
         Color::Blue => true,
         _ => false
     }
-    if not is_blue {
-        println("FAIL: Color::Blue pattern match failed")
-        return 3
-    }
-    println("Color::Blue - OK")
+    assert_eq_bool(is_blue, true, "Color::Blue pattern match should succeed")
 
-    // Test comparison with enum variant
-    if red == Color::Red {
-        println("red == Color::Red - OK")
-    } else {
-        println("FAIL: red should equal Color::Red")
-        return 4
-    }
-
-    if green != Color::Red {
-        println("green != Color::Red - OK")
-    } else {
-        println("FAIL: green should not equal Color::Red")
-        return 5
-    }
+    // Test enum comparison
+    assert(red == Color::Red, "red should equal Color::Red")
+    assert(green != Color::Red, "green should not equal Color::Red")
 
     return 0
 }
 
+@test
 func test_direction() -> I32 {
-    println("--- Direction Enum Tests ---")
-
     let north: Direction = Direction::North
     let south: Direction = Direction::South
     let east: Direction = Direction::East
     let west: Direction = Direction::West
 
-    // Test pattern matching for each direction
+    // Test pattern matching
     let match_north: Bool = when north {
         Direction::North => true,
         _ => false
     }
-    if not match_north {
-        println("FAIL: Direction::North pattern match failed")
-        return 10
-    }
+    assert_eq_bool(match_north, true, "Direction::North pattern match should succeed")
 
     let match_south: Bool = when south {
         Direction::South => true,
         _ => false
     }
-    if not match_south {
-        println("FAIL: Direction::South pattern match failed")
-        return 11
-    }
+    assert_eq_bool(match_south, true, "Direction::South pattern match should succeed")
 
     let match_east: Bool = when east {
         Direction::East => true,
         _ => false
     }
-    if not match_east {
-        println("FAIL: Direction::East pattern match failed")
-        return 12
-    }
+    assert_eq_bool(match_east, true, "Direction::East pattern match should succeed")
 
     let match_west: Bool = when west {
         Direction::West => true,
         _ => false
     }
-    if not match_west {
-        println("FAIL: Direction::West pattern match failed")
-        return 13
-    }
-    println("Direction values: OK")
+    assert_eq_bool(match_west, true, "Direction::West pattern match should succeed")
 
     // Test comparison
     let dir: Direction = Direction::East
-    if dir == Direction::East {
-        println("dir == Direction::East - OK")
-    } else {
-        println("FAIL: dir should be East")
-        return 14
-    }
+    assert(dir == Direction::East, "dir should be East")
 
     return 0
 }
 
+@test
 func test_status() -> I32 {
-    println("--- Status Enum Tests ---")
-
     let pending: Status = Status::Pending
     let active: Status = Status::Active
     let completed: Status = Status::Completed
     let failed: Status = Status::Failed
 
-    // Test pattern matching for each status
+    // Test pattern matching
     let match_pending: Bool = when pending {
         Status::Pending => true,
         _ => false
     }
-    if not match_pending {
-        println("FAIL: Status::Pending pattern match failed")
-        return 20
-    }
+    assert_eq_bool(match_pending, true, "Status::Pending pattern match should succeed")
 
     let match_active: Bool = when active {
         Status::Active => true,
         _ => false
     }
-    if not match_active {
-        println("FAIL: Status::Active pattern match failed")
-        return 21
-    }
+    assert_eq_bool(match_active, true, "Status::Active pattern match should succeed")
 
     let match_completed: Bool = when completed {
         Status::Completed => true,
         _ => false
     }
-    if not match_completed {
-        println("FAIL: Status::Completed pattern match failed")
-        return 22
-    }
+    assert_eq_bool(match_completed, true, "Status::Completed pattern match should succeed")
 
     let match_failed: Bool = when failed {
         Status::Failed => true,
         _ => false
     }
-    if not match_failed {
-        println("FAIL: Status::Failed pattern match failed")
-        return 23
-    }
-    println("Status values: OK")
+    assert_eq_bool(match_failed, true, "Status::Failed pattern match should succeed")
 
     // Test assignment and comparison
     let mut status: Status = Status::Pending
-    if status == Status::Pending {
-        println("Initial status is Pending - OK")
-    } else {
-        println("FAIL: status should be Pending")
-        return 24
-    }
+    assert(status == Status::Pending, "Initial status should be Pending")
 
-    // Change status
     status = Status::Active
-    if status == Status::Active {
-        println("Changed to Active - OK")
-    } else {
-        println("FAIL: status should be Active")
-        return 25
-    }
+    assert(status == Status::Active, "Status should be Active after assignment")
 
-    // Mark completed
     status = Status::Completed
-    if status == Status::Completed {
-        println("Changed to Completed - OK")
-    } else {
-        println("FAIL: status should be Completed")
-        return 26
-    }
+    assert(status == Status::Completed, "Status should be Completed after assignment")
 
-    return 0
-}
-
-func main() -> I32 {
-    println("=== Enum Tests ===")
-
-    let result1: I32 = test_color()
-    if result1 != 0 {
-        return result1
-    }
-
-    let result2: I32 = test_direction()
-    if result2 != 0 {
-        return result2
-    }
-
-    let result3: I32 = test_status()
-    if result3 != 0 {
-        return result3
-    }
-
-    println("=== All enum tests passed! ===")
     return 0
 }

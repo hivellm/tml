@@ -262,6 +262,40 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     std::string right_type = last_expr_type_;
     std::string result = fresh_reg();
 
+    // Check if either operand is a struct (enum)
+    bool is_enum_struct = left_type.starts_with("%struct.") && right_type.starts_with("%struct.");
+
+    // For enum struct comparisons, extract the tag field (first i32)
+    if (is_enum_struct) {
+        // Allocate space for left struct
+        std::string left_alloca = fresh_reg();
+        emit_line("  " + left_alloca + " = alloca " + left_type);
+        emit_line("  store " + left_type + " " + left + ", ptr " + left_alloca);
+
+        // Extract tag from left
+        std::string left_tag_ptr = fresh_reg();
+        emit_line("  " + left_tag_ptr + " = getelementptr " + left_type + ", ptr " + left_alloca + ", i32 0, i32 0");
+        std::string left_tag = fresh_reg();
+        emit_line("  " + left_tag + " = load i32, ptr " + left_tag_ptr);
+
+        // Allocate space for right struct
+        std::string right_alloca = fresh_reg();
+        emit_line("  " + right_alloca + " = alloca " + right_type);
+        emit_line("  store " + right_type + " " + right + ", ptr " + right_alloca);
+
+        // Extract tag from right
+        std::string right_tag_ptr = fresh_reg();
+        emit_line("  " + right_tag_ptr + " = getelementptr " + right_type + ", ptr " + right_alloca + ", i32 0, i32 0");
+        std::string right_tag = fresh_reg();
+        emit_line("  " + right_tag + " = load i32, ptr " + right_tag_ptr);
+
+        // Replace left/right with tag values
+        left = left_tag;
+        right = right_tag;
+        left_type = "i32";
+        right_type = "i32";
+    }
+
     // Check if either operand is a float
     bool is_float = (left_type == "double" || left_type == "float" ||
                      right_type == "double" || right_type == "float");

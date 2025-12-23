@@ -408,33 +408,49 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     // Generate labels for each arm + end
     std::vector<std::string> arm_labels;
     for (size_t i = 0; i < when.arms.size(); ++i) {
-        arm_labels.push_back(fresh_label("when.arm" + std::to_string(i)));
+        arm_labels.push_back(fresh_label("when_arm"));
     }
-    std::string label_end = fresh_label("when.end");
+    std::string label_end = fresh_label("when_end");
+
+    // Allocate temporary for result
+    std::string result_ptr = fresh_reg();
+    std::string result_type = "i32";  // Will be updated by first arm
+    emit_line("  " + result_ptr + " = alloca i32");
 
     // Generate switch based on pattern
     // For now, simplified: each arm is checked sequentially
     for (size_t arm_idx = 0; arm_idx < when.arms.size(); ++arm_idx) {
         const auto& arm = when.arms[arm_idx];
         std::string next_label = (arm_idx + 1 < when.arms.size())
-            ? fresh_label("when.check" + std::to_string(arm_idx + 1))
+            ? fresh_label("when_next")
             : label_end;
 
         // Check if pattern matches
         if (arm.pattern->is<parser::EnumPattern>()) {
             const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
-            std::string variant_name = enum_pat.path.segments.back();
+            std::string enum_name;
+            std::string variant_name;
 
-            // Find variant index in enum definition
+            // Extract enum name and variant name from path
+            if (enum_pat.path.segments.size() >= 2) {
+                enum_name = enum_pat.path.segments[enum_pat.path.segments.size() - 2];
+                variant_name = enum_pat.path.segments.back();
+            } else if (enum_pat.path.segments.size() == 1) {
+                variant_name = enum_pat.path.segments[0];
+            }
+
+            // Find variant index in the correct enum
+            // Build full path from all segments
             int variant_tag = -1;
-            for (const auto& [enum_name, enum_def] : env_.all_enums()) {
-                for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
-                    if (enum_def.variants[v_idx].first == variant_name) {
-                        variant_tag = static_cast<int>(v_idx);
-                        break;
-                    }
-                }
-                if (variant_tag >= 0) break;
+            std::string full_path;
+            for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
+                if (i > 0) full_path += "::";
+                full_path += enum_pat.path.segments[i];
+            }
+
+            auto it = enum_variants_.find(full_path);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
             }
 
             if (variant_tag >= 0) {
@@ -490,8 +506,28 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Execute arm body
-        gen_expr(*arm.body);
+        std::string arm_value = gen_expr(*arm.body);
+        std::string arm_type = last_expr_type_;
+
+        // Update result_type from first arm
+        if (arm_idx == 0) {
+            result_type = arm_type;
+        }
+
+        // Store arm value to result (with type conversion if needed)
         if (!block_terminated_) {
+            std::string store_value = arm_value;
+            std::string store_type = arm_type;
+
+            // Convert i1 to i32 for storage compatibility
+            if (arm_type == "i1") {
+                std::string converted = fresh_reg();
+                emit_line("  " + converted + " = zext i1 " + arm_value + " to i32");
+                store_value = converted;
+                store_type = "i32";
+            }
+
+            emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
             emit_line("  br label %" + label_end);
         }
 
@@ -506,7 +542,18 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     emit_line(label_end + ":");
     block_terminated_ = false;
 
-    return "0";
+    // Load result (and convert back if needed)
+    std::string result = fresh_reg();
+    if (result_type == "i1") {
+        // i1 was stored as i32, load as i32 and convert back
+        std::string loaded_i32 = fresh_reg();
+        emit_line("  " + loaded_i32 + " = load i32, ptr " + result_ptr);
+        emit_line("  " + result + " = trunc i32 " + loaded_i32 + " to i1");
+    } else {
+        emit_line("  " + result + " = load " + result_type + ", ptr " + result_ptr);
+    }
+    last_expr_type_ = result_type;
+    return result;
 }
 
 } // namespace tml::codegen
