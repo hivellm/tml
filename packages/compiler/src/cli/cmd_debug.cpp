@@ -7,6 +7,7 @@
 #include "tml/types/checker.hpp"
 #include <iostream>
 #include <filesystem>
+#include "tml/types/module.hpp"
 
 namespace fs = std::filesystem;
 using namespace tml;
@@ -176,7 +177,10 @@ int run_check(const std::string& path, bool verbose) {
 
     const auto& module = std::get<parser::Module>(parse_result);
 
+    // Initialize module registry for test module
+    auto registry = std::make_shared<types::ModuleRegistry>();
     types::TypeChecker checker;
+    checker.set_module_registry(registry);
     auto check_result = checker.check_module(module);
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {

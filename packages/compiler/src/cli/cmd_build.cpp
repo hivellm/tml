@@ -13,6 +13,7 @@
 #include <cstdlib>
 #ifndef _WIN32
 #include <sys/wait.h>
+#include "tml/types/module.hpp"
 #endif
 
 namespace fs = std::filesystem;
@@ -61,7 +62,10 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
 
     const auto& module = std::get<parser::Module>(parse_result);
 
+    // Initialize module registry for test module
+    auto registry = std::make_shared<types::ModuleRegistry>();
     types::TypeChecker checker;
+    checker.set_module_registry(registry);
     auto check_result = checker.check_module(module);
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
@@ -193,7 +197,10 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     const auto& module = std::get<parser::Module>(parse_result);
 
+    // Initialize module registry for test module
+    auto registry = std::make_shared<types::ModuleRegistry>();
     types::TypeChecker checker;
+    checker.set_module_registry(registry);
     auto check_result = checker.check_module(module);
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {

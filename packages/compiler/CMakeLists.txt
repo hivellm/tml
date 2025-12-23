@@ -26,7 +26,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         add_link_options(-fsanitize=undefined)
     endif()
 elseif(MSVC)
-    add_compile_options(/W4 /WX /utf-8)
+    add_compile_options(/W4 /WX /utf-8 /FS)
 endif()
 
 # Include directories
@@ -69,6 +69,8 @@ add_library(tml_types STATIC
     src/types/env_builtins.cpp
     src/types/env_definitions.cpp
     src/types/env_lookups.cpp
+    src/types/module.cpp
+    src/types/env_module_support.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)

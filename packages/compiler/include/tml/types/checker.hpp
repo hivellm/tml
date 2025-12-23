@@ -25,6 +25,11 @@ public:
     [[nodiscard]] auto errors() const -> const std::vector<TypeError>& { return errors_; }
     [[nodiscard]] auto has_errors() const -> bool { return !errors_.empty(); }
 
+    // Module system integration
+    void set_module_registry(std::shared_ptr<ModuleRegistry> registry) {
+        env_.set_module_registry(std::move(registry));
+    }
+
 private:
     TypeEnv env_;
     std::vector<TypeError> errors_;
@@ -36,6 +41,7 @@ private:
     void register_enum_decl(const parser::EnumDecl& decl);
     void register_trait_decl(const parser::TraitDecl& decl);
     void register_type_alias(const parser::TypeAliasDecl& decl);
+    void process_use_decl(const parser::UseDecl& use_decl);
 
     // Function and declaration checking
     void check_func_decl(const parser::FuncDecl& func);

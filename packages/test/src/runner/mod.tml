@@ -1,12 +1,108 @@
 // Test Runner Module
-// Simplified version for current compiler capabilities
+// Core test execution functionality
 
-// TODO: Full test runner requires:
-// - if let pattern matching
-// - Pattern binding in when expressions
-// - Function types
-// - const/static arrays
+use types
 
-pub func default_config() {
-    println("Test runner not yet fully implemented")
+/// Create default test configuration
+pub func default_config() -> TestConfig {
+    TestConfig {
+        parallel: false,
+        threads: 1,
+        nocapture: false,
+        verbose: false,
+        quiet: false,
+        filter: Nothing,
+    }
+}
+
+/// Create test statistics with initial values
+pub func empty_stats() -> TestStats {
+    TestStats {
+        total: 0,
+        passed: 0,
+        failed: 0,
+        ignored: 0,
+        duration: 0,
+    }
+}
+
+/// Increment passed test count
+pub func stats_add_passed(mut ref stats: TestStats) {
+    stats.passed = stats.passed + 1
+    stats.total = stats.total + 1
+}
+
+/// Increment failed test count
+pub func stats_add_failed(mut ref stats: TestStats) {
+    stats.failed = stats.failed + 1
+    stats.total = stats.total + 1
+}
+
+/// Increment ignored test count
+pub func stats_add_ignored(mut ref stats: TestStats) {
+    stats.ignored = stats.ignored + 1
+    stats.total = stats.total + 1
+}
+
+/// Set total duration in microseconds
+pub func stats_set_duration(mut ref stats: TestStats, duration_us: I64) {
+    stats.duration = duration_us
+}
+
+/// Create test metadata
+pub func make_metadata(
+    name: Str,
+    module: Str,
+    file: Str,
+    line: I32,
+    should_panic: Bool,
+    ignored: Bool
+) -> TestMetadata {
+    TestMetadata {
+        name: name,
+        module: module,
+        file: file,
+        line: line,
+        should_panic: should_panic,
+        panic_message: Nothing,
+        ignored: ignored,
+    }
+}
+
+/// Print test result in standard format
+pub func print_test_result(name: Str, passed: Bool) {
+    if passed {
+        print("test ")
+        print(name)
+        println(" ... ok")
+    } else {
+        print("test ")
+        print(name)
+        println(" ... FAILED")
+    }
+}
+
+/// Print test summary
+pub func print_test_summary(stats: TestStats) {
+    println("")
+    print("test result: ")
+
+    if stats.failed == 0 {
+        println("ok")
+    } else {
+        println("FAILED")
+    }
+
+    print(stats.passed)
+    print(" passed; ")
+    print(stats.failed)
+    print(" failed; ")
+    print(stats.ignored)
+    print(" ignored; ")
+
+    // Convert microseconds to milliseconds for display
+    let duration_ms: I64 = stats.duration / 1000
+    print(duration_ms)
+    println(" ms")
+    println("")
 }

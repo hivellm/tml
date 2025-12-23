@@ -1,11 +1,234 @@
 // Report Module
-// Simplified version for current compiler capabilities
+// Test result formatting and reporting
 
-// TODO: Full reporting requires:
-// - String interpolation
-// - Format strings
-// - Struct field access
+use types
+use bench
 
-pub func print_stats() {
-    println("Reporting not yet fully implemented")
+/// Output format options
+pub type OutputFormat {
+    Pretty,
+    Quiet,
+    Verbose,
+}
+
+/// Print test header
+pub func print_test_header(total: I32) {
+    println("")
+    print("running ")
+    print(total)
+    println(" tests")
+}
+
+/// Print single test result (compact format)
+pub func print_test_ok(name: Str) {
+    print("test ")
+    print(name)
+    println(" ... ok")
+}
+
+/// Print single test failure (compact format)
+pub func print_test_failed(name: Str) {
+    print("test ")
+    print(name)
+    println(" ... FAILED")
+}
+
+/// Print single test ignored (compact format)
+pub func print_test_ignored(name: Str) {
+    print("test ")
+    print(name)
+    println(" ... ignored")
+}
+
+/// Print test progress indicator (for verbose mode)
+pub func print_test_progress(current: I32, total: I32) {
+    print("[")
+    print(current)
+    print("/")
+    print(total)
+    print("] ")
+}
+
+/// Print failure details
+pub func print_failure_detail(name: Str, reason: Str) {
+    println("")
+    println("---- FAILURE ----")
+    print("test: ")
+    println(name)
+    print("reason: ")
+    println(reason)
+    println("-----------------")
+    println("")
+}
+
+/// Print test summary header
+pub func print_summary_header() {
+    println("")
+    println("test result:")
+}
+
+/// Print final test result (ok or FAILED)
+pub func print_final_result(failed: I32) {
+    if failed == 0 {
+        println("ok")
+    } else {
+        println("FAILED")
+    }
+}
+
+/// Print statistics line
+pub func print_stats_line(stats: TestStats) {
+    print(stats.passed)
+    print(" passed; ")
+    print(stats.failed)
+    print(" failed; ")
+    print(stats.ignored)
+    print(" ignored; ")
+
+    // Convert microseconds to milliseconds
+    let duration_ms: I64 = stats.duration / 1000
+    print("finished in ")
+    print(duration_ms)
+    println(" ms")
+}
+
+/// Print complete test summary
+pub func print_test_summary(stats: TestStats) {
+    println("")
+
+    if stats.failed == 0 {
+        print("test result: ok. ")
+    } else {
+        print("test result: FAILED. ")
+    }
+
+    print(stats.passed)
+    print(" passed; ")
+    print(stats.failed)
+    print(" failed; ")
+    print(stats.ignored)
+    print(" ignored; ")
+
+    let duration_ms: I64 = stats.duration / 1000
+    print(duration_ms)
+    println(" ms")
+    println("")
+}
+
+/// Print benchmark header
+pub func print_bench_header(total: I32) {
+    println("")
+    print("running ")
+    print(total)
+    println(" benchmarks")
+}
+
+/// Print benchmark summary
+pub func print_bench_summary(count: I32, duration_ms: I64) {
+    println("")
+    print("benchmark result: ")
+    print(count)
+    print(" benchmarks completed in ")
+    print(duration_ms)
+    println(" ms")
+}
+
+/// Format duration in microseconds to readable string
+pub func format_duration_us(us: I64) -> Str {
+    if us < 1000 {
+        return "us"
+    } else if us < 1000000 {
+        return "ms"
+    } else {
+        return "s"
+    }
+}
+
+/// Convert microseconds to display value
+pub func convert_duration_us(us: I64) -> I64 {
+    if us < 1000 {
+        us
+    } else if us < 1000000 {
+        us / 1000
+    } else {
+        us / 1000000
+    }
+}
+
+/// Print separator line
+pub func print_separator() {
+    println("----------------------------------------")
+}
+
+/// Print section header with title
+pub func print_section_header(title: Str) {
+    println("")
+    println(title)
+    print_separator()
+}
+
+/// Print colored result (stub - colors not yet supported)
+pub func print_colored(text: Str, passed: Bool) {
+    // TODO: Add color support when terminal colors are available
+    // For now, just print the text
+    print(text)
+}
+
+/// Print progress bar (simplified version)
+pub func print_progress_bar(current: I32, total: I32, width: I32) {
+    print("[")
+
+    let filled: I32 = if total > 0 {
+        (current * width) / total
+    } else {
+        0
+    }
+
+    let i: I32 = 0
+    loop {
+        if i >= width {
+            break
+        }
+
+        if i < filled {
+            print("=")
+        } else {
+            print(" ")
+        }
+
+        i = i + 1
+    }
+
+    print("] ")
+    print(current)
+    print("/")
+    println(total)
+}
+
+/// Print verbose test start
+pub func print_test_start_verbose(name: Str) {
+    print("Starting test: ")
+    print(name)
+    println(" ...")
+}
+
+/// Print verbose test end with timing
+pub func print_test_end_verbose(name: Str, duration_us: I64) {
+    print("Completed test: ")
+    print(name)
+    print(" in ")
+    print(convert_duration_us(duration_us))
+    print(" ")
+    println(format_duration_us(duration_us))
+}
+
+/// Print quiet mode summary (minimal output)
+pub func print_quiet_summary(passed: I32, failed: I32) {
+    if failed == 0 {
+        println("ok")
+    } else {
+        print("FAILED: ")
+        print(failed)
+        println(" tests")
+    }
 }

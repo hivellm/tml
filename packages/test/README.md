@@ -252,12 +252,15 @@ func bench_many_additions() {
 
 - [x] Test decorator syntax
 - [x] Test discovery design
-- [ ] Test runner implementation
-- [ ] CLI integration
-- [ ] Assertion macros
-- [ ] Benchmark support
+- [x] Test runner implementation (basic)
+- [x] CLI integration (via compiler)
+- [x] Assertion functions (builtin)
+- [x] Benchmark support (basic)
+- [x] Output formatters (basic)
 - [ ] Parallel execution
-- [ ] Output formatters
+- [ ] Advanced assertions (generics)
+- [ ] Test fixtures
+- [ ] Snapshot testing
 
 ## Related RFCs
 

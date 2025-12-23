@@ -1,4 +1,4 @@
-use test// Closure Tests
+use test
 
 @test
 func closure_no_capture() -> I32 {
