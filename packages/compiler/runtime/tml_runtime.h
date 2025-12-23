@@ -17,12 +17,10 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdatomic.h>
 
-// ============ PANIC ============
-void tml_panic(const char* msg);
-
-// ============ BLACK BOX ============
+// ============ PANIC ============nnvoid tml_assert(bool condition, const char* message);nvoid tml_assert_ne_i32(int32_t left, int32_t right, const char* message);nvoid tml_assert_eq_bool(bool left, bool right, const char* message);n// ============ BLACK BOX ============
 int32_t tml_black_box_i32(int32_t value);
 int64_t tml_black_box_i64(int64_t value);
 
@@ -96,7 +94,6 @@ HashMap* tml_hashmap_new(void);
 void tml_hashmap_insert(HashMap* map, int64_t key, int64_t value);
 int64_t tml_hashmap_get(HashMap* map, int64_t key);
 int tml_hashmap_contains(HashMap* map, int64_t key);
-void tml_hashmap_remove(HashMap* map, int64_t key);
 int64_t tml_hashmap_len(HashMap* map);
 void tml_hashmap_clear(HashMap* map);
 void tml_hashmap_free(HashMap* map);

@@ -1090,6 +1090,73 @@ void TypeEnv::init_builtins() {
         false,
         builtin_span
     };
+
+    // ============ TEST ASSERTIONS ============
+
+    // assert(condition: Bool, message: Str) -> Unit
+    functions_["assert"] = FuncSig{
+        "assert",
+        {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Str)},
+        make_unit(),
+        {},
+        false,
+        builtin_span,
+        StabilityLevel::Stable,
+        "",
+        "1.0"
+    };
+
+    // assert_eq_i32(left: I32, right: I32, message: Str) -> Unit
+    functions_["assert_eq_i32"] = FuncSig{
+        "assert_eq_i32",
+        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::Str)},
+        make_unit(),
+        {},
+        false,
+        builtin_span,
+        StabilityLevel::Stable,
+        "",
+        "1.0"
+    };
+
+    // assert_ne_i32(left: I32, right: I32, message: Str) -> Unit
+    functions_["assert_ne_i32"] = FuncSig{
+        "assert_ne_i32",
+        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::Str)},
+        make_unit(),
+        {},
+        false,
+        builtin_span,
+        StabilityLevel::Stable,
+        "",
+        "1.0"
+    };
+
+    // assert_eq_str(left: Str, right: Str, message: Str) -> Unit
+    functions_["assert_eq_str"] = FuncSig{
+        "assert_eq_str",
+        {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str)},
+        make_unit(),
+        {},
+        false,
+        builtin_span,
+        StabilityLevel::Stable,
+        "",
+        "1.0"
+    };
+
+    // assert_eq_bool(left: Bool, right: Bool, message: Str) -> Unit
+    functions_["assert_eq_bool"] = FuncSig{
+        "assert_eq_bool",
+        {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Str)},
+        make_unit(),
+        {},
+        false,
+        builtin_span,
+        StabilityLevel::Stable,
+        "",
+        "1.0"
+    };
 }
 
 } // namespace tml::types

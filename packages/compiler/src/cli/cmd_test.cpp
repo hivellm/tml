@@ -1,5 +1,6 @@
 #include "cmd_test.hpp"
 #include "cmd_debug.hpp"
+#include "cmd_build.hpp"
 #include "compiler_setup.hpp"
 #include "utils.hpp"
 #include <iostream>
@@ -91,23 +92,20 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
 
 int compile_and_run_test(const std::string& test_file, const TestOptions& opts) {
     if (opts.verbose) {
-        std::cout << "Compiling test: " << test_file << "\n";
+        std::cout << "Compiling and running test: " << test_file << "\n";
     }
 
-    // Build the test file
-    // For now, just run it through check
-    int result = run_check(test_file.c_str(), opts.verbose);
+    // Build and run the test file
+    std::vector<std::string> empty_args;
+    int result = run_run(test_file, empty_args, opts.verbose);
 
+    // Check result
     if (result != 0) {
-        std::cerr << "Test compilation failed: " << test_file << "\n";
-        return result;
+        if (!opts.quiet) {
+            std::cout << "test " << fs::path(test_file).filename().string() << " ... FAILED (exit code: " << result << ")\n";
+        }
+        return 1;
     }
-
-    // TODO: When code generation is complete:
-    // 1. Compile test file with --test flag
-    // 2. Link with test runtime
-    // 3. Execute test binary
-    // 4. Parse and display results
 
     if (!opts.quiet) {
         std::cout << "test " << fs::path(test_file).filename().string() << " ... ok\n";

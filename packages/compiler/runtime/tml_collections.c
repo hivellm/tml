@@ -64,6 +64,23 @@ void tml_list_free(List* list) {
     free(list);
 }
 
+// Aliases for test compatibility
+List* tml_list_create(int64_t capacity) {
+    List* list = (List*)malloc(sizeof(List));
+    list->cap = capacity > 0 ? capacity : 8;
+    list->len = 0;
+    list->data = (int64_t*)malloc(sizeof(int64_t) * (size_t)list->cap);
+    return list;
+}
+
+int64_t tml_list_capacity(List* list) {
+    return list->cap;
+}
+
+void tml_list_destroy(List* list) {
+    tml_list_free(list);
+}
+
 // ============ HASHMAP ============
 
 #define HASHMAP_SIZE 256
@@ -129,7 +146,7 @@ int tml_hashmap_contains(HashMap* map, int64_t key) {
     return 0;
 }
 
-void tml_hashmap_remove(HashMap* map, int64_t key) {
+static void tml_hashmap_remove_internal(HashMap* map, int64_t key) {
     uint64_t idx = hash_i64(key) % HASHMAP_SIZE;
     for (int i = 0; i < HASHMAP_SIZE; i++) {
         uint64_t probe = (idx + (uint64_t)i) % HASHMAP_SIZE;
@@ -350,4 +367,62 @@ void tml_strmap_free(StrMap* map) {
     }
     free(map->buckets);
     free(map);
+}
+
+// ============ COLLECTION ALIASES FOR TEST COMPATIBILITY ============
+
+// HashMap aliases
+HashMap* tml_hashmap_create(int64_t capacity) {
+    return tml_hashmap_new();
+}
+
+void tml_hashmap_set(HashMap* map, int64_t key, int64_t value) {
+    tml_hashmap_insert(map, key, value);
+}
+
+bool tml_hashmap_has(HashMap* map, int64_t key) {
+    return tml_hashmap_contains(map, key) != 0;
+}
+
+bool tml_hashmap_remove_key(HashMap* map, int64_t key) {
+    int had_key = tml_hashmap_contains(map, key);
+    if (had_key) {
+        tml_hashmap_remove_internal(map, key);
+    }
+    return had_key != 0;
+}
+
+void tml_hashmap_destroy(HashMap* map) {
+    tml_hashmap_free(map);
+}
+
+// Buffer aliases
+Buffer* tml_buffer_create(int64_t capacity) {
+    return tml_buffer_new(capacity);
+}
+
+int64_t tml_buffer_capacity(Buffer* buf) {
+    return buf->cap;
+}
+
+int64_t tml_buffer_remaining(Buffer* buf) {
+    return buf->cap - buf->len;
+}
+
+void tml_buffer_reset_read(Buffer* buf) {
+    buf->pos = 0;
+}
+
+void tml_buffer_clear(Buffer* buf) {
+    buf->len = 0;
+    buf->pos = 0;
+}
+
+void tml_buffer_destroy(Buffer* buf) {
+    tml_buffer_free(buf);
+}
+
+// HashMap remove that returns bool
+bool tml_hashmap_remove(HashMap* map, int64_t key) {
+    return tml_hashmap_remove_key(map, key);
 }

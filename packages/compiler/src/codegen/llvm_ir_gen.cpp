@@ -168,6 +168,15 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @tml_panic(ptr) noreturn");
     emit_line("");
 
+    // TML test assertion functions
+    emit_line("; TML test assertions");
+    emit_line("declare void @tml_assert(i1, ptr)");
+    emit_line("declare void @tml_assert_eq_i32(i32, i32, ptr)");
+    emit_line("declare void @tml_assert_ne_i32(i32, i32, ptr)");
+    emit_line("declare void @tml_assert_eq_str(ptr, ptr, ptr)");
+    emit_line("declare void @tml_assert_eq_bool(i1, i1, ptr)");
+    emit_line("");
+
     // Threading runtime declarations
     emit_line("; Threading runtime (tml_runtime.c)");
     emit_line("declare ptr @tml_thread_spawn(ptr, ptr)");
