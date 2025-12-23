@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <algorithm>
 #include <cstdlib>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -33,13 +37,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--group=")) {
-            // Filter by test group/directory (e.g., --group=compiler)
             opts.patterns.push_back(arg.substr(8));
         } else if (arg.starts_with("--suite=")) {
-            // Filter by test suite/directory (e.g., --suite=runtime)
             opts.patterns.push_back(arg.substr(8));
         } else if (!arg.starts_with("--")) {
-            // Test name pattern
             opts.patterns.push_back(arg);
         }
     }
@@ -50,14 +51,12 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
 std::vector<std::string> discover_test_files(const std::string& root_dir) {
     std::vector<std::string> test_files;
 
-    // Search for *.test.tml files recursively
     try {
         for (const auto& entry : fs::recursive_directory_iterator(root_dir)) {
             if (entry.is_regular_file()) {
                 auto path = entry.path();
                 auto filename = path.filename().string();
 
-                // Match *.test.tml
                 if (filename.ends_with(".test.tml")) {
                     test_files.push_back(path.string());
                 }
@@ -67,14 +66,12 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
         std::cerr << "Error discovering test files: " << e.what() << "\n";
     }
 
-    // Also check tests/ directory (but exclude error tests)
     std::string tests_dir = root_dir + "/tests";
     if (fs::exists(tests_dir) && fs::is_directory(tests_dir)) {
         try {
             for (const auto& entry : fs::recursive_directory_iterator(tests_dir)) {
                 if (entry.is_regular_file() && entry.path().extension() == ".tml") {
                     std::string path_str = entry.path().string();
-                    // Skip error test files (in tests/errors/)
                     if (path_str.find("\\errors\\") == std::string::npos &&
                         path_str.find("/errors/") == std::string::npos) {
                         test_files.push_back(path_str);
@@ -82,7 +79,6 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
                 }
             }
         } catch (const fs::filesystem_error&) {
-            // tests/ dir might not exist, that's ok
         }
     }
 
@@ -95,11 +91,9 @@ int compile_and_run_test(const std::string& test_file, const TestOptions& opts) 
         std::cout << "Compiling and running test: " << test_file << "\n";
     }
 
-    // Build and run the test file
     std::vector<std::string> empty_args;
     int result = run_run(test_file, empty_args, opts.verbose);
 
-    // Check result
     if (result != 0) {
         if (!opts.quiet) {
             std::cout << "test " << fs::path(test_file).filename().string() << " ... FAILED (exit code: " << result << ")\n";
@@ -114,14 +108,39 @@ int compile_and_run_test(const std::string& test_file, const TestOptions& opts) 
     return 0;
 }
 
+// Thread worker for parallel test execution
+void test_worker(
+    const std::vector<std::string>& test_files,
+    std::atomic<size_t>& current_index,
+    std::atomic<int>& passed,
+    std::atomic<int>& failed,
+    std::mutex& output_mutex,
+    const TestOptions& opts
+) {
+    (void)output_mutex;  // Reserved for future use
+    while (true) {
+        size_t index = current_index.fetch_add(1);
+        if (index >= test_files.size()) {
+            break;
+        }
+
+        const auto& file = test_files[index];
+        int result = compile_and_run_test(file, opts);
+
+        // Update counters atomically
+        if (result == 0) {
+            passed.fetch_add(1);
+        } else {
+            failed.fetch_add(1);
+        }
+    }
+}
+
 int run_test(int argc, char* argv[], bool verbose) {
     TestOptions opts = parse_test_args(argc, argv, 2);
     opts.verbose = opts.verbose || verbose;
 
-    // Get current working directory
     std::string cwd = fs::current_path().string();
-
-    // Discover test files
     std::vector<std::string> test_files = discover_test_files(cwd);
 
     if (test_files.empty()) {
@@ -131,7 +150,7 @@ int run_test(int argc, char* argv[], bool verbose) {
         return 0;
     }
 
-    // Filter test files by pattern if provided
+    // Filter test files by pattern
     if (!opts.patterns.empty()) {
         std::vector<std::string> filtered;
         for (const auto& file : test_files) {
@@ -152,21 +171,53 @@ int run_test(int argc, char* argv[], bool verbose) {
         return 0;
     }
 
-    // Print test run header
     if (!opts.quiet) {
         std::cout << "running " << test_files.size() << " test file(s)\n\n";
     }
 
-    // Run each test file
-    int passed = 0;
-    int failed = 0;
+    std::atomic<int> passed{0};
+    std::atomic<int> failed{0};
 
-    for (const auto& file : test_files) {
-        int result = compile_and_run_test(file, opts);
-        if (result == 0) {
-            passed++;
-        } else {
-            failed++;
+    // Determine number of threads
+    unsigned int num_threads = opts.test_threads;
+    if (num_threads == 0) {
+        num_threads = std::thread::hardware_concurrency();
+        if (num_threads == 0) num_threads = 4;  // Fallback
+    }
+
+    // Single-threaded mode for verbose/nocapture or if only 1 test
+    if (opts.verbose || opts.nocapture || test_files.size() == 1 || num_threads == 1) {
+        for (const auto& file : test_files) {
+            int result = compile_and_run_test(file, opts);
+            if (result == 0) {
+                passed++;
+            } else {
+                failed++;
+            }
+        }
+    } else {
+        // Parallel execution
+        std::atomic<size_t> current_index{0};
+        std::mutex output_mutex;
+        std::vector<std::thread> threads;
+
+        // Limit threads to number of tests
+        num_threads = std::min(num_threads, static_cast<unsigned int>(test_files.size()));
+
+        for (unsigned int i = 0; i < num_threads; ++i) {
+            threads.emplace_back(
+                test_worker,
+                std::ref(test_files),
+                std::ref(current_index),
+                std::ref(passed),
+                std::ref(failed),
+                std::ref(output_mutex),
+                std::ref(opts)
+            );
+        }
+
+        for (auto& thread : threads) {
+            thread.join();
         }
     }
 
