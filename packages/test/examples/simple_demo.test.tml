@@ -1,0 +1,100 @@
+use test
+
+// Simple demonstration of test framework concepts
+// Using only builtin functions that are already available
+
+@test
+func test_basic_arithmetic() -> I32 {
+    let a: I32 = 10 + 5
+    assert_eq_i32(a, 15, "10 + 5 should equal 15")
+
+    let b: I32 = 20 - 5
+    assert_eq_i32(b, 15, "20 - 5 should equal 15")
+
+    return 0
+}
+
+@test
+func test_multiplication() -> I32 {
+    let result: I32 = 5 * 3
+    assert_eq_i32(result, 15, "5 * 3 should equal 15")
+    return 0
+}
+
+@test
+func test_boolean_logic() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+
+    assert_eq_bool(t, true, "t should be true")
+    assert_eq_bool(f, false, "f should be false")
+
+    return 0
+}
+
+@test
+func test_string_equality() -> I32 {
+    let s1: Str = "hello"
+    let s2: Str = "hello"
+
+    assert(str_eq(s1, s2), "strings should be equal")
+
+    return 0
+}
+
+@test
+func test_timing_functions() -> I32 {
+    // Test that timing functions work
+    let start: I64 = time_ns()
+
+    // Do some work
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 10 {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+
+    let end: I64 = time_ns()
+    let duration: I64 = end - start
+
+    // Duration should be non-negative (might be 0 on very fast systems)
+    assert(duration >= 0, "duration should be non-negative")
+
+    println("Timing test passed")
+
+    return 0
+}
+
+@test
+func test_nested_loops() -> I32 {
+    let mut total: I32 = 0
+
+    let mut i: I32 = 0
+    loop {
+        if i >= 3 {
+            break
+        }
+
+        let mut j: I32 = 0
+        loop {
+            if j >= 3 {
+                break
+            }
+            total = total + 1
+            j = j + 1
+        }
+
+        i = i + 1
+    }
+
+    assert_eq_i32(total, 9, "nested loops should give 9")
+
+    return 0
+}
+
+// Demonstration: This shows the test framework working
+// with the builtin test support in the TML compiler

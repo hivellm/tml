@@ -1,0 +1,123 @@
+use test
+
+// Demonstration of various assertion types available in TML tests
+
+@test
+func test_basic_assertions() -> I32 {
+    // Basic boolean assertion
+    assert(true, "true should be true")
+    assert(2 + 2 == 4, "basic arithmetic should work")
+
+    return 0
+}
+
+@test
+func test_integer_assertions() -> I32 {
+    // Integer equality
+    assert_eq_i32(5, 5, "5 should equal 5")
+    assert_eq_i32(10 + 5, 15, "10 + 5 should equal 15")
+
+    // Integer inequality
+    assert_ne_i32(5, 10, "5 should not equal 10")
+    assert_ne_i32(0, 1, "0 should not equal 1")
+
+    return 0
+}
+
+@test
+func test_boolean_assertions() -> I32 {
+    // Boolean equality
+    assert_eq_bool(true, true, "true should equal true")
+    assert_eq_bool(false, false, "false should equal false")
+
+    // Boolean logic
+    let a: Bool = true
+    let b: Bool = false
+    assert_eq_bool(a and a, true, "true and true is true")
+    assert_eq_bool(a and b, false, "true and false is false")
+    assert_eq_bool(a or b, true, "true or false is true")
+
+    return 0
+}
+
+@test
+func test_string_assertions() -> I32 {
+    // String equality
+    let s1: Str = "hello"
+    let s2: Str = "hello"
+    let s3: Str = "world"
+
+    assert(str_eq(s1, s2), "identical strings should be equal")
+    // Note: 'not' operator with function calls not yet supported
+    let are_equal: Bool = str_eq(s1, s3)
+    assert(not are_equal, "different strings should not be equal")
+
+    return 0
+}
+
+@test
+func test_i64_values() -> I32 {
+    // 64-bit integers
+    let big1: I64 = 1000000000
+    let big2: I64 = 1000000000
+    let big3: I64 = 2000000000
+
+    // Direct comparison works for I64
+    assert(big1 == big2, "equal i64 values")
+    assert(big1 != big3, "different i64 values")
+
+    return 0
+}
+
+@test
+func test_comparisons() -> I32 {
+    // Greater than
+    assert(5 > 3, "5 is greater than 3")
+    assert(10 > 0, "10 is greater than 0")
+
+    // Less than
+    assert(3 < 5, "3 is less than 5")
+    assert(0 < 10, "0 is less than 10")
+
+    // Greater or equal
+    assert(5 >= 5, "5 is greater or equal to 5")
+    assert(10 >= 5, "10 is greater or equal to 5")
+
+    // Less or equal
+    assert(5 <= 5, "5 is less or equal to 5")
+    assert(3 <= 10, "3 is less or equal to 10")
+
+    return 0
+}
+
+@test
+func test_arithmetic_operations() -> I32 {
+    // Addition
+    assert_eq_i32(2 + 3, 5, "addition")
+
+    // Subtraction
+    assert_eq_i32(10 - 3, 7, "subtraction")
+
+    // Multiplication
+    assert_eq_i32(4 * 5, 20, "multiplication")
+
+    // Division
+    assert_eq_i32(20 / 4, 5, "division")
+
+    // Modulo
+    assert_eq_i32(17 % 5, 2, "modulo")
+
+    return 0
+}
+
+@test
+func test_negative_numbers() -> I32 {
+    let neg: I32 = -5
+    let pos: I32 = 5
+
+    assert_eq_i32(neg, -5, "negative number")
+    assert_eq_i32(neg + pos, 0, "negative + positive")
+    assert_eq_i32(neg * 2, -10, "negative multiplication")
+
+    return 0
+}
