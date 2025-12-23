@@ -13,7 +13,7 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     if (match(lexer::TokenKind::KwMut)) {
         // Must be followed by 'ref'
         if (!match(lexer::TokenKind::KwRef)) {
-            return ParseError{"Expected 'ref' after 'mut' in type", peek().span};
+            return ParseError{"Expected 'ref' after 'mut' in type", peek().span, {}};
         }
         auto inner = parse_type();
         if (is_err(inner)) return inner;

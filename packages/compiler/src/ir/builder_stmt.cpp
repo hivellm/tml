@@ -42,8 +42,8 @@ auto IRBuilder::build_stmt(const parser::Stmt& stmt) -> IRStmtPtr {
         }
         else if constexpr (std::is_same_v<T, parser::ExprStmt>) {
             // Check if this is an assignment expression
-            if (s.expr->is<parser::BinaryExpr>()) {
-                const auto& bin = s.expr->as<parser::BinaryExpr>();
+            if (s.expr->template is<parser::BinaryExpr>()) {
+                const auto& bin = s.expr->template as<parser::BinaryExpr>();
                 if (bin.op == parser::BinaryOp::Assign) {
                     IRAssign assign;
                     assign.target = build_expr(*bin.left);

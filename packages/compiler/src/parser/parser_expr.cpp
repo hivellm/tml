@@ -37,7 +37,7 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             check(lexer::TokenKind::KwThrough) ||
             check(lexer::TokenKind::DotDot)) {
             bool inclusive = check(lexer::TokenKind::KwThrough);
-            auto op_span = advance().span; // consume 'to', 'through', or '..'
+            advance(); // consume 'to', 'through', or '..'
 
             auto end_expr = parse_expr_with_precedence(prec);
             if (is_err(end_expr)) return end_expr;
@@ -969,7 +969,8 @@ auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
             .return_type = std::move(return_type),
             .body = std::move(body),
             .is_move = false,  // TML doesn't have move closures in this syntax
-            .span = SourceSpan::merge(start_span, end_span)
+            .span = SourceSpan::merge(start_span, end_span),
+            .captured_vars = {}
         },
         .span = SourceSpan::merge(start_span, end_span)
     });

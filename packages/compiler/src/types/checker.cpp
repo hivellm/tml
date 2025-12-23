@@ -1,5 +1,6 @@
 #include "tml/types/checker.hpp"
 #include "tml/lexer/token.hpp"
+#include <algorithm>
 #include <iostream>
 
 namespace tml::types {
@@ -650,6 +651,10 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
             }
             error("Cannot dereference non-reference type", unary.operand->span);
             return make_unit();
+        case parser::UnaryOp::Inc:
+        case parser::UnaryOp::Dec:
+            // Increment/decrement return the same type as operand
+            return operand;
     }
     return make_unit();
 }
@@ -658,11 +663,9 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
     auto callee_type = check_expr(*call.callee);
 
     // Check if this is a polymorphic builtin (print/println accept any type)
-    bool is_polymorphic_builtin = false;
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& name = call.callee->as<parser::IdentExpr>().name;
         if (name == "print" || name == "println") {
-            is_polymorphic_builtin = true;
             // print/println accept any single argument of any type
             // Just type-check the argument (without requiring a specific type)
             for (const auto& arg : call.args) {

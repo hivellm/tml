@@ -24,7 +24,7 @@ protected:
         EXPECT_TRUE(is_ok(module));
 
         TypeChecker checker;
-        return checker.check_module(std::get<Module>(module));
+        return checker.check_module(std::get<parser::Module>(module));
     }
 
     auto check_ok(const std::string& code) -> TypeEnv {

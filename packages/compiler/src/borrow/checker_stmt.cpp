@@ -44,8 +44,8 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
             // For tuple patterns, we'd need to destructure
             // For now, just register each sub-pattern
             for (const auto& sub : p.elements) {
-                if (sub->is<parser::IdentPattern>()) {
-                    const auto& ident = sub->as<parser::IdentPattern>();
+                if (sub->template is<parser::IdentPattern>()) {
+                    const auto& ident = sub->template as<parser::IdentPattern>();
                     auto loc = current_location(let.span);
                     env_.define(ident.name, nullptr, ident.is_mut, loc);
                 }

@@ -39,8 +39,8 @@ namespace tml::types
         bool is_async;
         SourceSpan span;
         StabilityLevel stability = StabilityLevel::Unstable;
-        std::string deprecated_message;                      // Migration guide for deprecated functions
-        std::string since_version;                           // Version when this status was assigned
+        std::string deprecated_message = {};                 // Migration guide for deprecated functions
+        std::string since_version = {};                      // Version when this status was assigned
         std::vector<WhereConstraint> where_constraints = {}; // At end to not break existing code
         bool is_lowlevel = false;                            // For C runtime functions
 

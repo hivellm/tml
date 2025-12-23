@@ -77,8 +77,8 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
         bool is_mut = false;
         std::string name;
 
-        if (param.pattern->is<parser::IdentPattern>()) {
-            const auto& ident = param.pattern->as<parser::IdentPattern>();
+        if (param.pattern->template is<parser::IdentPattern>()) {
+            const auto& ident = param.pattern->template as<parser::IdentPattern>();
             is_mut = ident.is_mut;
             name = ident.name;
         } else {

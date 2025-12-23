@@ -24,7 +24,7 @@ protected:
             return "PARSE_ERROR";
         }
 
-        const auto& module = std::get<Module>(result);
+        const auto& module = std::get<parser::Module>(result);
         Formatter formatter(options_);
         return formatter.format(module);
     }

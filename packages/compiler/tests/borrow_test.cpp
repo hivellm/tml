@@ -23,7 +23,7 @@ protected:
         EXPECT_TRUE(is_ok(module)) << "Parse failed";
 
         BorrowChecker checker;
-        return checker.check_module(std::get<Module>(module));
+        return checker.check_module(std::get<parser::Module>(module));
     }
 
     void check_ok(const std::string& code) {

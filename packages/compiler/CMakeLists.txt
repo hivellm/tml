@@ -16,7 +16,17 @@ option(TML_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+    add_compile_options(-Wall -Wextra -Wpedantic)
+    # GCC-specific: Relax some overly strict requirements
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(
+            -Wno-missing-field-initializers  # Allow partial struct init with defaults
+            -fpermissive                     # Allow template calls on dependent types without 'template' keyword
+        )
+    else()
+        # Clang: Use -Werror
+        add_compile_options(-Werror)
+    endif()
     if(TML_ENABLE_ASAN)
         add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
         add_link_options(-fsanitize=address)

@@ -42,8 +42,8 @@ auto IRBuilder::build_type_expr(const parser::Type& type) -> IRTypeExpr {
             auto inner = build_type_expr(*t.element);
             arr.element = make_box<IRTypeRef>(std::move(std::get<IRTypeRef>(inner.kind)));
             // Try to extract literal size from the expression
-            if (t.size && t.size->is<parser::LiteralExpr>()) {
-                const auto& lit = t.size->as<parser::LiteralExpr>();
+            if (t.size && t.size->template is<parser::LiteralExpr>()) {
+                const auto& lit = t.size->template as<parser::LiteralExpr>();
                 if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
                     arr.size = static_cast<size_t>(std::get<lexer::IntValue>(lit.token.value).value);
                 } else {

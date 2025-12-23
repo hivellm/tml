@@ -40,8 +40,8 @@ auto IRBuilder::build_func(const parser::FuncDecl& func) -> IRFunc {
     // Build parameters
     for (const auto& p : func.params) {
         IRParam param;
-        if (p.pattern->is<parser::IdentPattern>()) {
-            param.name = p.pattern->as<parser::IdentPattern>().name;
+        if (p.pattern->template is<parser::IdentPattern>()) {
+            param.name = p.pattern->template as<parser::IdentPattern>().name;
         } else {
             param.name = "_";
         }
@@ -156,8 +156,8 @@ auto IRBuilder::build_trait(const parser::TraitDecl& trait) -> IRBehavior {
         method.name = m.name;
         for (const auto& p : m.params) {
             IRParam param;
-            if (p.pattern->is<parser::IdentPattern>()) {
-                param.name = p.pattern->as<parser::IdentPattern>().name;
+            if (p.pattern->template is<parser::IdentPattern>()) {
+                param.name = p.pattern->template as<parser::IdentPattern>().name;
             } else {
                 param.name = "_";
             }
@@ -218,8 +218,8 @@ auto IRBuilder::build_impl(const parser::ImplDecl& impl) -> IRImpl {
 
         for (const auto& p : m.params) {
             IRParam param;
-            if (p.pattern->is<parser::IdentPattern>()) {
-                param.name = p.pattern->as<parser::IdentPattern>().name;
+            if (p.pattern->template is<parser::IdentPattern>()) {
+                param.name = p.pattern->template as<parser::IdentPattern>().name;
             } else {
                 param.name = "_";
             }

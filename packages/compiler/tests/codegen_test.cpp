@@ -28,7 +28,7 @@ protected:
             Parser parser(std::move(tokens));
             auto module_result = parser.parse_module("test");
             EXPECT_TRUE(is_ok(module_result));
-            auto& module = std::get<Module>(module_result);
+            auto& module = std::get<parser::Module>(module_result);
             std::cout << "Module parsed" << std::endl;
 
             std::cout << "\n=== Type Checking ===" << std::endl;

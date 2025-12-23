@@ -72,6 +72,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::KwWith: return "with";
         case TokenKind::KwLowlevel: return "lowlevel";
         case TokenKind::KwQuote: return "quote";
+        case TokenKind::KwWhere: return "where";
 
         // Operators - arithmetic
         case TokenKind::Plus: return "+";

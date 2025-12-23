@@ -18,6 +18,7 @@ auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut
         .active_borrows = {},
         .definition = loc,
         .last_use = std::nullopt,
+        .borrowed_from = std::nullopt,
     };
 
     places_[id] = std::move(state);

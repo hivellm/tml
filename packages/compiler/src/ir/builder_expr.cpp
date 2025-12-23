@@ -84,10 +84,10 @@ auto IRBuilder::build_expr(const parser::Expr& expr) -> IRExprPtr {
         else if constexpr (std::is_same_v<T, parser::CallExpr>) {
             IRCall call;
             // Extract function name from callee
-            if (e.callee->is<parser::IdentExpr>()) {
-                call.func_name = e.callee->as<parser::IdentExpr>().name;
-            } else if (e.callee->is<parser::PathExpr>()) {
-                const auto& path = e.callee->as<parser::PathExpr>();
+            if (e.callee->template is<parser::IdentExpr>()) {
+                call.func_name = e.callee->template as<parser::IdentExpr>().name;
+            } else if (e.callee->template is<parser::PathExpr>()) {
+                const auto& path = e.callee->template as<parser::PathExpr>();
                 for (size_t i = 0; i < path.path.segments.size(); ++i) {
                     if (i > 0) call.func_name += "::";
                     call.func_name += path.path.segments[i];
@@ -203,8 +203,8 @@ auto IRBuilder::build_expr(const parser::Expr& expr) -> IRExprPtr {
         }
         else if constexpr (std::is_same_v<T, parser::ForExpr>) {
             IRLoopIn loop;
-            if (e.pattern->is<parser::IdentPattern>()) {
-                loop.binding = e.pattern->as<parser::IdentPattern>().name;
+            if (e.pattern->template is<parser::IdentPattern>()) {
+                loop.binding = e.pattern->template as<parser::IdentPattern>().name;
             } else {
                 loop.binding = "_";
             }
@@ -233,8 +233,8 @@ auto IRBuilder::build_expr(const parser::Expr& expr) -> IRExprPtr {
             IRClosure closure;
             for (const auto& [pattern, type] : e.params) {
                 std::string name = "_";
-                if (pattern->is<parser::IdentPattern>()) {
-                    name = pattern->as<parser::IdentPattern>().name;
+                if (pattern->template is<parser::IdentPattern>()) {
+                    name = pattern->template as<parser::IdentPattern>().name;
                 }
                 std::optional<IRTypeExpr> ir_type;
                 if (type) {

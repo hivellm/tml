@@ -92,8 +92,8 @@ void BorrowChecker::check_binary(const parser::BinaryExpr& binary) {
         binary.op == parser::BinaryOp::ModAssign) {
 
         // Check if LHS is a mutable place
-        if (binary.left->is<parser::IdentExpr>()) {
-            const auto& ident = binary.left->as<parser::IdentExpr>();
+        if (binary.left->template is<parser::IdentExpr>()) {
+            const auto& ident = binary.left->template as<parser::IdentExpr>();
             auto place_id = env_.lookup(ident.name);
             if (place_id) {
                 auto loc = current_location(binary.span);
@@ -108,8 +108,8 @@ void BorrowChecker::check_unary(const parser::UnaryExpr& unary) {
 
     // Ref and RefMut create borrows
     if (unary.op == parser::UnaryOp::Ref || unary.op == parser::UnaryOp::RefMut) {
-        if (unary.operand->is<parser::IdentExpr>()) {
-            const auto& ident = unary.operand->as<parser::IdentExpr>();
+        if (unary.operand->template is<parser::IdentExpr>()) {
+            const auto& ident = unary.operand->template as<parser::IdentExpr>();
             auto place_id = env_.lookup(ident.name);
             if (place_id) {
                 auto loc = current_location(unary.span);
@@ -179,8 +179,8 @@ void BorrowChecker::check_when(const parser::WhenExpr& when) {
 
         // Bind pattern variables
         // For now, simplified handling
-        if (arm.pattern->is<parser::IdentPattern>()) {
-            const auto& ident = arm.pattern->as<parser::IdentPattern>();
+        if (arm.pattern->template is<parser::IdentPattern>()) {
+            const auto& ident = arm.pattern->template as<parser::IdentPattern>();
             auto loc = current_location(arm.pattern->span);
             env_.define(ident.name, nullptr, ident.is_mut, loc);
         }
@@ -217,8 +217,8 @@ void BorrowChecker::check_for(const parser::ForExpr& for_expr) {
     env_.push_scope();
 
     // Bind loop variable
-    if (for_expr.pattern->is<parser::IdentPattern>()) {
-        const auto& ident = for_expr.pattern->as<parser::IdentPattern>();
+    if (for_expr.pattern->template is<parser::IdentPattern>()) {
+        const auto& ident = for_expr.pattern->template as<parser::IdentPattern>();
         auto loc = current_location(for_expr.span);
         env_.define(ident.name, nullptr, ident.is_mut, loc);
     }
@@ -283,8 +283,8 @@ void BorrowChecker::check_closure(const parser::ClosureExpr& closure) {
         bool is_mut = false;
         std::string name;
 
-        if (pattern->is<parser::IdentPattern>()) {
-            const auto& ident = pattern->as<parser::IdentPattern>();
+        if (pattern->template is<parser::IdentPattern>()) {
+            const auto& ident = pattern->template as<parser::IdentPattern>();
             is_mut = ident.is_mut;
             name = ident.name;
         } else {

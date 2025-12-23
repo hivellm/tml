@@ -509,7 +509,7 @@ public:
         bool compact = false;
     };
 
-    explicit IREmitter(Options opts = {});
+    explicit IREmitter(Options opts = {2, false});
 
     auto emit_module(const IRModule& module) -> std::string;
 

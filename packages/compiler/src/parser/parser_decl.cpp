@@ -910,7 +910,7 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
         // 'this' without type - use This type implicitly
         auto span = pattern->span;
         auto this_type = make_box<Type>(Type{
-            .kind = NamedType{TypePath{{"This"}, span}, {}},
+            .kind = NamedType{TypePath{{"This"}, span}, {}, span},
             .span = span
         });
         return FuncParam{
