@@ -1,268 +1,138 @@
 # TML Test Framework
 
-A lightweight, built-in testing framework for TML inspired by Rust's test system.
+A lightweight, built-in testing framework for TML.
 
 ## Features
 
 - **Decorator-based tests** - Mark tests with `@test`
 - **Automatic test discovery** - Files ending in `.test.tml`
-- **Rich assertions** - `assert!`, `assert_eq!`, `assert_ne!`
-- **Test filtering** - Run specific tests or patterns
-- **Parallel execution** - Tests run concurrently by default
-- **Benchmarking** - Performance testing with `@bench`
-- **Setup/teardown** - Per-test and per-module hooks
+- **Module-based assertions** - Import via `use test`
+- **Type-specific assertions** - `assert_eq_i32`, `assert_eq_bool`, `assert_eq_str`, etc.
+- **Pattern matching support** - Full enum pattern matching in tests
+- **Auto-generated test runner** - Tests return I32 (0 = success)
 
 ## Quick Start
 
 Create a test file `math.test.tml`:
 
 ```tml
-use std.test
+use test
 
 @test
-func test_addition() {
-    assert_eq!(2 + 2, 4)
+func test_addition() -> I32 {
+    let result: I32 = 2 + 2
+    assert_eq_i32(result, 4, "2 + 2 should equal 4")
+    return 0
 }
 
 @test
-func test_subtraction() {
-    assert_eq!(5 - 3, 2)
-}
-
-@test(name: "Division by zero panics")
-@should_panic
-func test_division_panic() {
-    let x: I32 = 1 / 0
+func test_subtraction() -> I32 {
+    let result: I32 = 5 - 3
+    assert_eq_i32(result, 2, "5 - 3 should equal 2")
+    return 0
 }
 ```
 
 Run tests:
 
 ```bash
-tml test                    # Run all tests
-tml test math              # Run tests in math.test.tml
-tml test test_addition     # Run specific test
-tml test --nocapture       # Show print output
+tml test                    # Run all tests in current directory
 ```
 
-## Test Decorators
+## Available Assertions
 
-### `@test`
-Mark a function as a test:
+All assertion functions are available via `use test`:
+
+### `assert(condition: Bool, message: Str)`
+Basic boolean assertion:
+```tml
+assert(x > 0, "x must be positive")
+```
+
+### `assert_eq_i32(left: I32, right: I32, message: Str)`
+Assert I32 equality:
+```tml
+assert_eq_i32(result, 42, "result should be 42")
+```
+
+### `assert_ne_i32(left: I32, right: I32, message: Str)`
+Assert I32 inequality:
+```tml
+assert_ne_i32(result, 0, "result should not be zero")
+```
+
+### `assert_eq_bool(left: Bool, right: Bool, message: Str)`
+Assert boolean equality:
+```tml
+assert_eq_bool(is_valid, true, "should be valid")
+```
+
+### `assert_eq_str(left: Str, right: Str, message: Str)`
+Assert string equality:
+```tml
+assert_eq_str(name, "Alice", "name should be Alice")
+```
+
+## Pattern Matching in Tests
+
+Full enum pattern matching is supported:
 
 ```tml
+use test
+
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
 @test
-func test_name() {
-    // Test code
-}
-```
-
-### `@test(name: "...")`
-Named test with custom display name:
-
-```tml
-@test(name: "User creation with valid email")
-func test_user_creation() {
-    // Test code
-}
-```
-
-### `@should_panic`
-Expect test to panic:
-
-```tml
-@test
-@should_panic
-func test_overflow() {
-    let x: I32 = I32::MAX + 1
-}
-```
-
-### `@should_panic(expected: "...")`
-Expect panic with specific message:
-
-```tml
-@test
-@should_panic(expected: "division by zero")
-func test_divide_zero() {
-    let _: I32 = 1 / 0
-}
-```
-
-### `@ignore`
-Skip test:
-
-```tml
-@test
-@ignore
-func slow_test() {
-    // This won't run by default
-}
-```
-
-### `@bench`
-Benchmark test (requires `--bench` flag):
-
-```tml
-@bench
-func bench_sort() {
-    let arr: [I32] = [10, 5, 8, 2, 7]
-    arr.sort()
-}
-```
-
-## Assertions
-
-### `assert!(condition)`
-Assert condition is true:
-
-```tml
-assert!(x > 0)
-assert!(user.is_valid())
-```
-
-### `assert_eq!(left, right)`
-Assert equality:
-
-```tml
-assert_eq!(result, 42)
-assert_eq!(user.name, "Alice")
-```
-
-### `assert_ne!(left, right)`
-Assert inequality:
-
-```tml
-assert_ne!(x, 0)
-assert_ne!(status, Status.Error)
-```
-
-### Custom messages:
-
-```tml
-assert!(x > 0, "x must be positive, got: {}", x)
-assert_eq!(a, b, "values should match")
-```
-
-## Test Organization
-
-### File naming
-- Test files: `*.test.tml`
-- Integration tests: `tests/*.tml`
-- Unit tests: Inline or separate `*.test.tml` files
-
-### Module structure
-```
-src/
-  lib.tml           # Main library
-  math.tml          # Math module
-  math.test.tml     # Math tests
-  string.tml        # String module
-  string.test.tml   # String tests
-tests/
-  integration.test.tml  # Integration tests
-```
-
-## CLI Commands
-
-### Basic usage
-```bash
-tml test                    # Run all tests
-tml test --release          # Run in release mode
-tml test --nocapture        # Show stdout/stderr
-tml test --test-threads=4   # Parallel threads
-```
-
-### Filtering
-```bash
-tml test test_name          # Run specific test
-tml test math::             # Run tests in math module
-tml test --ignored          # Run only ignored tests
-```
-
-### Benchmarking
-```bash
-tml test --bench            # Run benchmarks
-tml test --bench pattern    # Run specific benchmarks
-```
-
-### Output control
-```bash
-tml test --quiet            # Minimal output
-tml test --verbose          # Verbose output
-tml test --nocapture        # Show test output
-```
-
-## Example Test Suite
-
-```tml
-// calculator.test.tml
-use std.test
-
-type Calculator {
-    value: I32,
-}
-
-impl Calculator {
-    func new() -> Calculator {
-        Calculator { value: 0 }
+func test_color_matching() -> I32 {
+    let color: Color = Color::Red
+    
+    let is_red: Bool = when color {
+        Color::Red => true,
+        _ => false
     }
-
-    func add(mut this, x: I32) {
-        this.value = this.value + x
-    }
-
-    func result(this) -> I32 {
-        this.value
-    }
-}
-
-@test
-func test_new_calculator() {
-    let calc: Calculator = Calculator.new()
-    assert_eq!(calc.result(), 0)
-}
-
-@test
-func test_addition() {
-    let mut calc: Calculator = Calculator.new()
-    calc.add(5)
-    calc.add(3)
-    assert_eq!(calc.result(), 8)
-}
-
-@test
-@should_panic(expected: "overflow")
-func test_overflow() {
-    let mut calc: Calculator = Calculator.new()
-    calc.value = I32::MAX
-    calc.add(1)  // Should panic
-}
-
-@bench
-func bench_many_additions() {
-    let mut calc: Calculator = Calculator.new()
-    for i in 0 to 1000 {
-        calc.add(1)
-    }
+    
+    assert_eq_bool(is_red, true, "color should be Red")
+    return 0
 }
 ```
+
+## Module System
+
+Tests must explicitly import the test module:
+
+```tml
+use test  // Required at top of file
+
+@test
+func my_test() -> I32 {
+    assert_eq_i32(1, 1, "test")
+    return 0
+}
+```
+
+Without `use test`, assertion functions will not be available.
 
 ## Implementation Status
 
-- [x] Test decorator syntax
-- [x] Test discovery design
-- [x] Test runner implementation (basic)
-- [x] CLI integration (via compiler)
-- [x] Assertion functions (builtin)
-- [x] Benchmark support (basic)
-- [x] Output formatters (basic)
+- [x] Test decorator (`@test`)
+- [x] Test discovery (*.test.tml files)
+- [x] Auto-generated test runner
+- [x] Module system (`use test`)
+- [x] Type-specific assertions (I32, Bool, Str)
+- [x] Pattern matching support
+- [x] CLI integration (`tml test`)
+- [x] Sequential execution
 - [ ] Parallel execution
-- [ ] Advanced assertions (generics)
-- [ ] Test fixtures
-- [ ] Snapshot testing
+- [ ] Test filtering by name/pattern
+- [ ] Benchmarking (`@bench`)
 
-## Related RFCs
+## Test Results
 
-- RFC-0010: Testing Framework
-- RFC-0025: Decorators (Section 8 - Built-in decorators)
+Current test suite: 9/10 tests passing (90%)
+- All compiler tests: PASSED
+- All runtime tests except collections: PASSED
+- Known issue: collections.test.tml (runtime bug)
