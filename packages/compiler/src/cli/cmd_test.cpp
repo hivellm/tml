@@ -56,9 +56,20 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
             if (entry.is_regular_file()) {
                 auto path = entry.path();
                 auto filename = path.filename().string();
+                std::string path_str = path.string();
 
-                if (filename.ends_with(".test.tml")) {
-                    test_files.push_back(path.string());
+                // Skip files in errors/ directories
+                if (path_str.find("\\errors\\") != std::string::npos ||
+                    path_str.find("/errors/") != std::string::npos) {
+                    continue;
+                }
+
+                // Include .test.tml files or .tml files in tests/ directory
+                if (filename.ends_with(".test.tml") ||
+                    (path.extension() == ".tml" &&
+                     (path_str.find("\\tests\\") != std::string::npos ||
+                      path_str.find("/tests/") != std::string::npos))) {
+                    test_files.push_back(path_str);
                 }
             }
         }
@@ -66,23 +77,10 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
         std::cerr << "Error discovering test files: " << e.what() << "\n";
     }
 
-    std::string tests_dir = root_dir + "/tests";
-    if (fs::exists(tests_dir) && fs::is_directory(tests_dir)) {
-        try {
-            for (const auto& entry : fs::recursive_directory_iterator(tests_dir)) {
-                if (entry.is_regular_file() && entry.path().extension() == ".tml") {
-                    std::string path_str = entry.path().string();
-                    if (path_str.find("\\errors\\") == std::string::npos &&
-                        path_str.find("/errors/") == std::string::npos) {
-                        test_files.push_back(path_str);
-                    }
-                }
-            }
-        } catch (const fs::filesystem_error&) {
-        }
-    }
-
+    // Remove duplicates and sort
     std::sort(test_files.begin(), test_files.end());
+    test_files.erase(std::unique(test_files.begin(), test_files.end()), test_files.end());
+
     return test_files;
 }
 
