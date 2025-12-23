@@ -1,0 +1,265 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "TML",
+  "scopeName": "source.tml",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#directives" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#literals" },
+    { "include": "#operators" },
+    { "include": "#functions" },
+    { "include": "#constants" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.ai.tml",
+          "match": "//\\s*@ai:(context|intent|invariant|warning|example):.*$",
+          "captures": {
+            "0": { "name": "comment.line.documentation.ai.tml" }
+          }
+        },
+        {
+          "name": "comment.line.documentation.tml",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.documentation.module.tml",
+          "match": "//!.*$"
+        },
+        {
+          "name": "comment.line.double-slash.tml",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.tml",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            { "include": "#comments" }
+          ]
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "meta.directive.tml",
+          "match": "@(test|benchmark|when|unless|auto|hint|deprecated|lowlevel|export|doc)\\b",
+          "captures": {
+            "1": { "name": "storage.modifier.directive.tml" }
+          }
+        },
+        {
+          "name": "meta.directive.with-args.tml",
+          "begin": "@(test|when|unless|auto|hint|deprecated|doc)\\s*\\(",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": { "name": "storage.modifier.directive.tml" }
+          },
+          "patterns": [
+            { "include": "#literals" },
+            { "include": "#keywords" }
+          ]
+        },
+        {
+          "name": "meta.stable-id.tml",
+          "match": "@[0-9a-fA-F]{8}\\b",
+          "captures": {
+            "0": { "name": "constant.numeric.stable-id.tml" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.tml",
+          "match": "\\b(if|then|else|when|loop|while|for|in|break|continue|return|catch|do)\\b"
+        },
+        {
+          "name": "keyword.declaration.tml",
+          "match": "\\b(module|import|public|private|func|type|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.tml",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "keyword.other.tml",
+          "match": "\\b(this|This|ref|mut|lowlevel|async|await|with|quote|as)\\b"
+        },
+        {
+          "name": "keyword.control.range.tml",
+          "match": "\\b(to|through)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.primitive.tml",
+          "match": "\\b(Bool|I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|String|Char|Unit)\\b"
+        },
+        {
+          "name": "storage.type.builtin.tml",
+          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync)\\b"
+        },
+        {
+          "name": "entity.name.type.tml",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.tml",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.numeric.integer.hexadecimal.tml",
+          "match": "\\b0x[0-9a-fA-F_]+(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.binary.tml",
+          "match": "\\b0b[01_]+(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.octal.tml",
+          "match": "\\b0o[0-7_]+(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128)?\\b"
+        },
+        {
+          "name": "constant.numeric.float.tml",
+          "match": "\\b[0-9][0-9_]*\\.[0-9_]+([eE][+-]?[0-9_]+)?(f32|f64)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.decimal.tml",
+          "match": "\\b[0-9][0-9_]*(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128)?\\b"
+        },
+        {
+          "name": "string.quoted.triple.tml",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.tml",
+          "begin": "r#*\"",
+          "end": "\"#*",
+          "patterns": []
+        },
+        {
+          "name": "string.quoted.double.tml",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        },
+        {
+          "name": "string.quoted.byte.tml",
+          "begin": "b\"",
+          "end": "\"",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.tml",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        }
+      ]
+    },
+    "string-escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.tml",
+          "match": "\\\\(\\\\|\"|'|n|r|t|0|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.tml",
+          "match": "(=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=)"
+        },
+        {
+          "name": "keyword.operator.comparison.tml",
+          "match": "(==|!=|<|>|<=|>=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.tml",
+          "match": "(\\+|-|\\*\\*|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.bitwise.tml",
+          "match": "(&|\\||\\^|~|<<|>>)"
+        },
+        {
+          "name": "keyword.operator.ternary.tml",
+          "match": "(\\?|:)"
+        },
+        {
+          "name": "keyword.operator.arrow.tml",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.propagate.tml",
+          "match": "!"
+        },
+        {
+          "name": "keyword.operator.path.tml",
+          "match": "::"
+        },
+        {
+          "name": "keyword.operator.access.tml",
+          "match": "\\."
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "meta.function.declaration.tml",
+          "match": "\\b(func)\\s+([a-z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "keyword.declaration.function.tml" },
+            "2": { "name": "entity.name.function.tml" }
+          }
+        },
+        {
+          "name": "entity.name.function.call.tml",
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.other.tml",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.tml",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

@@ -19,7 +19,7 @@ LLMs process code as text. The surface syntax should:
 
 ## 1. Lexical Structure
 
-### 1.1 Keywords (35 total)
+### 1.1 Keywords (36 total)
 
 ```
 and         as          async       await       behavior
@@ -28,7 +28,8 @@ enum        false       for         func        if
 impl        in          let         loop        mod
 mut         not         or          pub         ref
 return      then        this        through     to
-true        type        when        where       with
+true        type        when        where       while
+with
 ```
 
 ### 1.2 Additional Keywords
@@ -53,9 +54,10 @@ Comparison:   == != < > <= >=
 Logical:      and or not
 Bitwise:      & | ^ ~ << >>
 Assignment:   = += -= *= /= %= &= |= ^= <<= >>=
+Conditional:  ? :  (ternary operator)
 Access:       .  ::  ->
 Range:        to  through
-Other:        !  ?  @  #  ..  ...
+Other:        !  @  #  ..  ...
 ```
 
 ### 1.4 Delimiters
@@ -145,7 +147,8 @@ TypePath    <- Ident ('::' Ident)*
 
 ```peg
 Expr        <- Assignment
-Assignment  <- LogicalOr (AssignOp Assignment)?
+Assignment  <- Ternary (AssignOp Assignment)?
+Ternary     <- LogicalOr ('?' Expr ':' Ternary)?
 LogicalOr   <- LogicalAnd ('or' LogicalAnd)*
 LogicalAnd  <- Comparison ('and' Comparison)*
 Comparison  <- BitwiseOr (CompareOp BitwiseOr)?
@@ -160,8 +163,8 @@ Unary       <- UnaryOp* Postfix
 Postfix     <- Primary PostfixOp*
 
 Primary     <- Literal / Ident / 'this' / ParenExpr / BlockExpr
-             / IfExpr / WhenExpr / LoopExpr / ReturnExpr / BreakExpr
-             / Closure / StructInit / ArrayInit
+             / IfExpr / WhenExpr / LoopExpr / WhileExpr / ForExpr
+             / ReturnExpr / BreakExpr / Closure / StructInit / ArrayInit
 
 PostfixOp   <- Call / Index / FieldAccess / MethodCall / Propagate / Await
 Call        <- '(' ArgList? ')'
@@ -170,6 +173,10 @@ FieldAccess <- '.' Ident
 MethodCall  <- '.' Ident GenericArgs? '(' ArgList? ')'
 Propagate   <- '!'
 Await       <- '.await'
+
+LoopExpr    <- 'loop' Block
+WhileExpr   <- 'while' Expr Block
+ForExpr     <- 'for' Pattern 'in' Expr Block
 ```
 
 ### 2.4 Statements
@@ -256,7 +263,47 @@ RangeInclusive::new(1, 10)  // through
 ### 3.4 Loop Expressions
 
 ```tml
-// Surface: for-in loop
+// Surface: infinite loop
+loop {
+    body
+}
+
+// No desugaring - core construct
+```
+
+```tml
+// Surface: while loop
+while condition {
+    body
+}
+
+// Desugars to
+loop {
+    if not condition then break
+    body
+}
+```
+
+```tml
+// Surface: for-in loop with ranges
+for i in 0 to 10 {
+    process(i)
+}
+
+// Desugars to
+{
+    let mut __i = 0
+    loop {
+        if __i >= 10 then break
+        let i = __i
+        process(i)
+        __i = __i + 1
+    }
+}
+```
+
+```tml
+// Surface: for-in loop with iterators
 for item in collection {
     process(item)
 }
@@ -274,15 +321,21 @@ for item in collection {
 ```
 
 ```tml
-// Surface: while loop
-loop condition {
-    body
+// Surface: for-in loop with collections (List, HashMap, Buffer, Vec)
+for item in list {
+    process(item)
 }
 
-// Desugars to
-loop {
-    if not condition then break
-    body
+// Desugars to (direct indexing for performance)
+{
+    let mut __i = 0
+    let __len = list.len()
+    loop {
+        if __i >= __len then break
+        let item = list.get(__i)!
+        process(item)
+        __i = __i + 1
+    }
 }
 ```
 
@@ -624,6 +677,43 @@ if condition then { side_effect() }
 // Desugars to
 if condition then { side_effect() } else { () }
 ```
+
+### 5.1a Ternary Operator
+
+```tml
+// Surface: ternary conditional (? :)
+let max = a > b ? a : b
+
+// Desugars to
+let max = if a > b then a else b
+```
+
+```tml
+// Surface: nested ternary
+let max = a > b ? (a > c ? a : c) : (b > c ? b : c)
+
+// Desugars to
+let max = if a > b then {
+    if a > c then a else c
+} else {
+    if b > c then b else c
+}
+```
+
+**Features:**
+- Right-associative (groups right-to-left)
+- Same type required for both branches
+- Lower precedence than logical operators, higher than assignment
+- Useful for simple inline conditionals
+
+**When to use:**
+- Simple value selection: `x > 0 ? x : -x`
+- Inline max/min: `max = a > b ? a : b`
+
+**Avoid for:**
+- Complex logic (use if-then-else instead)
+- Multiple statements in branches
+- Deep nesting (hard to read)
 
 ### 5.2 If-Let Pattern Matching
 

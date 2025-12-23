@@ -77,6 +77,75 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     return "0";
 }
 
+auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
+    // Evaluate condition
+    std::string cond = gen_expr(*ternary.condition);
+
+    // Convert condition to i1 if needed
+    if (!is_bool_expr(*ternary.condition, locals_)) {
+        std::string bool_cond = fresh_reg();
+        emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
+        cond = bool_cond;
+    }
+
+    // Allocate temporary for result (use i32 initially, will work for most types)
+    std::string result_ptr = fresh_reg();
+    emit_line("  " + result_ptr + " = alloca i32");
+
+    std::string label_true = fresh_label("ternary.true");
+    std::string label_false = fresh_label("ternary.false");
+    std::string label_end = fresh_label("ternary.end");
+
+    // Branch on condition
+    emit_line("  br i1 " + cond + ", label %" + label_true + ", label %" + label_false);
+
+    // True branch
+    emit_line(label_true + ":");
+    block_terminated_ = false;
+    std::string true_val = gen_expr(*ternary.true_value);
+    std::string true_type = last_expr_type_;
+    // Store result
+    if (!block_terminated_) {
+        // Convert i1 to i32 if needed
+        if (true_type == "i1") {
+            std::string converted = fresh_reg();
+            emit_line("  " + converted + " = zext i1 " + true_val + " to i32");
+            emit_line("  store i32 " + converted + ", ptr " + result_ptr);
+        } else {
+            emit_line("  store " + true_type + " " + true_val + ", ptr " + result_ptr);
+        }
+        emit_line("  br label %" + label_end);
+    }
+
+    // False branch
+    emit_line(label_false + ":");
+    block_terminated_ = false;
+    std::string false_val = gen_expr(*ternary.false_value);
+    std::string false_type = last_expr_type_;
+    // Store result
+    if (!block_terminated_) {
+        // Convert i1 to i32 if needed
+        if (false_type == "i1") {
+            std::string converted = fresh_reg();
+            emit_line("  " + converted + " = zext i1 " + false_val + " to i32");
+            emit_line("  store i32 " + converted + ", ptr " + result_ptr);
+        } else {
+            emit_line("  store " + false_type + " " + false_val + ", ptr " + result_ptr);
+        }
+        emit_line("  br label %" + label_end);
+    }
+
+    // End block - load result
+    emit_line(label_end + ":");
+    block_terminated_ = false;
+
+    std::string result = fresh_reg();
+    std::string result_type = (true_type == "i1") ? "i32" : true_type;
+    emit_line("  " + result + " = load " + result_type + ", ptr " + result_ptr);
+    last_expr_type_ = result_type;
+    return result;
+}
+
 auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
     // Evaluate scrutinee
     std::string scrutinee = gen_expr(*if_let.scrutinee);
@@ -286,6 +355,8 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
 auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // For loops: for pattern in iter { body }
     // We support range expressions: for i in 0 to 10 { ... }
+    // And collection iteration: for item in list { ... }
+
     std::string label_init = fresh_label("for.init");
     std::string label_cond = fresh_label("for.cond");
     std::string label_body = fresh_label("for.body");
@@ -308,8 +379,10 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string range_start = "0";
     std::string range_end = "0";
     bool inclusive = false;
-
     std::string range_type = "i32";  // Default type for range
+    bool is_collection_iter = false;
+    std::string collection_ptr;
+    std::string idx_var_name = "_for_collection_idx";
 
     if (for_expr.iter->is<parser::RangeExpr>()) {
         const auto& range = for_expr.iter->as<parser::RangeExpr>();
@@ -322,9 +395,38 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
             range_type = last_expr_type_;  // Use type of end value
         }
     } else {
-        // Fallback: treat as simple range 0 to iter
-        range_end = gen_expr(*for_expr.iter);
-        range_type = last_expr_type_;
+        // Check if it's a collection (List, HashMap, Buffer)
+        std::string iter_val = gen_expr(*for_expr.iter);
+        std::string iter_type = last_expr_type_;
+
+        // Check if iter_type is ptr (collections are pointers)
+        if (iter_type == "ptr") {
+            is_collection_iter = true;
+
+            // Store collection pointer in an alloca so we can use it in the loop body
+            std::string collection_alloca = fresh_reg();
+            emit_line("  " + collection_alloca + " = alloca ptr");
+            emit_line("  store ptr " + iter_val + ", ptr " + collection_alloca);
+
+            // Load it back to call _len
+            std::string collection_loaded = fresh_reg();
+            emit_line("  " + collection_loaded + " = load ptr, ptr " + collection_alloca);
+            collection_ptr = collection_alloca;  // Store the alloca, not the value
+
+            // Call the appropriate _len function to get collection size
+            std::string len_result = fresh_reg();
+            emit_line("  " + len_result + " = call i64 @tml_list_len(ptr " + collection_loaded + ")");
+
+            // Convert i64 to i32 for loop counter
+            std::string len_i32 = fresh_reg();
+            emit_line("  " + len_i32 + " = trunc i64 " + len_result + " to i32");
+            range_end = len_i32;
+            range_type = "i32";
+        } else {
+            // Fallback: treat as simple range 0 to iter
+            range_end = iter_val;
+            range_type = iter_type;
+        }
     }
 
     // Allocate loop variable with correct type
@@ -352,6 +454,35 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // Body block
     emit_line(label_body + ":");
     block_terminated_ = false;
+
+    // If iterating over a collection, get the element and bind it to the loop variable
+    if (is_collection_iter) {
+        // Load the collection pointer
+        std::string collection_loaded = fresh_reg();
+        emit_line("  " + collection_loaded + " = load ptr, ptr " + collection_ptr);
+
+        // Get current index
+        std::string idx = fresh_reg();
+        emit_line("  " + idx + " = load " + range_type + ", ptr " + var_alloca);
+
+        // Convert i32 index to i64 for list_get call
+        std::string idx_i64 = fresh_reg();
+        emit_line("  " + idx_i64 + " = sext i32 " + idx + " to i64");
+
+        // Call list_get(collection, index)
+        std::string element = fresh_reg();
+        emit_line("  " + element + " = call i64 @tml_list_get(ptr " + collection_loaded + ", i64 " + idx_i64 + ")");
+
+        // Convert i64 result to i32 and store in actual loop variable
+        std::string element_i32 = fresh_reg();
+        emit_line("  " + element_i32 + " = trunc i64 " + element + " to i32");
+
+        std::string element_alloca = fresh_reg();
+        emit_line("  " + element_alloca + " = alloca i32");
+        emit_line("  store i32 " + element_i32 + ", ptr " + element_alloca);
+        locals_[var_name] = VarInfo{element_alloca, "i32"};
+    }
+
     gen_expr(*for_expr.body);
     if (!block_terminated_) {
         emit_line("  br label %" + label_incr);

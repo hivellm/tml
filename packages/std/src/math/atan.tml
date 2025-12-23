@@ -1,0 +1,76 @@
+// Arctangent functions
+
+use const::Pi
+use abs
+
+// atan(x) using Taylor series for small x, range reduction for larger
+// Taylor: atan(x) = x - x^3/3 + x^5/5 - x^7/7 + ...
+pub func atan(x: F64) -> F64 {
+    if x == 0.0 then return 0.0
+
+    let abs_x: F64 = abs(x)
+    let negative: Bool = x < 0.0
+
+    // For |x| > 1, use atan(x) = π/2 - atan(1/x)
+    if abs_x > 1.0 then {
+        let recip: F64 = 1.0 / abs_x
+
+        let mut sum: F64 = recip
+        let mut term: F64 = recip
+        let mut i: I32 = 1
+
+        loop {
+            if i > 20 then break
+
+            term = term * (-recip) * recip
+            sum = sum + term / i32_to_f64(2 * i + 1)
+
+            let abs_term: F64 = abs(term)
+            if abs_term < 0.00000001 then break
+
+            i = i + 1
+        }
+
+        let result: F64 = Pi / 2.0 - sum
+        return if negative then -result else result
+    } else {
+        // Use Taylor series directly
+        let mut sum: F64 = abs_x
+        let mut term: F64 = abs_x
+        let mut i: I32 = 1
+
+        loop {
+            if i > 30 then break
+
+            term = term * (-abs_x) * abs_x
+            sum = sum + term / i32_to_f64(2 * i + 1)
+
+            let abs_term: F64 = abs(term)
+            if abs_term < 0.00000001 then break
+
+            i = i + 1
+        }
+
+        return if negative then -sum else sum
+    }
+}
+
+// atan2(y, x) returns the angle θ such that x = r*cos(θ) and y = r*sin(θ)
+pub func atan2(y: F64, x: F64) -> F64 {
+    if x == 0.0 then {
+        if y > 0.0 then return Pi / 2.0
+        if y < 0.0 then return -Pi / 2.0
+        return 0.0
+    }
+
+    if x > 0.0 then {
+        atan(y / x)
+    } else {
+        // x < 0
+        if y >= 0.0 then {
+            atan(y / x) + Pi
+        } else {
+            atan(y / x) - Pi
+        }
+    }
+}

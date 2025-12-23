@@ -32,6 +32,12 @@ This appendix lists all TML operators, grouped by category.
 | `or` | Logical OR | `a or b` |
 | `not` | Logical NOT | `not a` |
 
+## Conditional Operators
+
+| Operator | Name | Example |
+|----------|------|---------|
+| `? :` | Ternary conditional | `a > b ? a : b` |
+
 ## Bitwise Operators
 
 | Operator | Name | Example |
@@ -74,20 +80,21 @@ This appendix lists all TML operators, grouped by category.
 
 From highest to lowest precedence:
 
-| Precedence | Operators |
-|------------|-----------|
-| 1 (highest) | `.` `::` function calls |
-| 2 | `-` (unary) `not` `~` `ref` `*` |
-| 3 | `*` `/` `%` |
-| 4 | `+` `-` |
-| 5 | `<<` `>>` |
-| 6 | `&` |
-| 7 | `^` |
-| 8 | `\|` |
-| 9 | `==` `!=` `<` `>` `<=` `>=` |
-| 10 | `and` |
-| 11 | `or` |
-| 12 (lowest) | `=` |
+| Precedence | Operators | Associativity |
+|------------|-----------|---------------|
+| 1 (highest) | `.` `::` function calls | Left |
+| 2 | `-` (unary) `not` `~` `ref` `*` | Right |
+| 3 | `*` `/` `%` | Left |
+| 4 | `+` `-` | Left |
+| 5 | `<<` `>>` | Left |
+| 6 | `&` | Left |
+| 7 | `^` | Left |
+| 8 | `\|` | Left |
+| 9 | `==` `!=` `<` `>` `<=` `>=` | Left |
+| 10 | `and` | Left |
+| 11 | `or` | Left |
+| 12 | `? :` (ternary) | Right |
+| 13 (lowest) | `=` | Right |
 
 ## Examples
 
@@ -104,6 +111,11 @@ let is_greater = 10 > 5    // true
 let both = true and false   // false
 let either = true or false  // true
 let negated = not true      // false
+
+// Ternary conditional
+let max = 10 > 5 ? 10 : 5        // 10
+let min = 10 < 5 ? 10 : 5        // 5
+let abs = -5 < 0 ? -(-5) : -5    // 5
 
 // Bitwise
 let masked = 0xFF & 0x0F    // 15

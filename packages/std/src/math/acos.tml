@@ -1,0 +1,14 @@
+// Arccosine function
+
+use const::Pi
+use asin
+
+// acos(x) = π/2 - asin(x)
+pub func acos(x: F64) -> F64 {
+    if x < -1.0 then return Pi  // Undefined, return π
+    if x > 1.0 then return 0.0  // Undefined, return 0
+    if x == 1.0 then return 0.0
+    if x == -1.0 then return Pi
+
+    Pi / 2.0 - asin(x)
+}

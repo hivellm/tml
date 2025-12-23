@@ -1,0 +1,55 @@
+{
+  "name": "tml-language",
+  "displayName": "TML Language Support",
+  "description": "Syntax highlighting and language support for TML (To Machine Language)",
+  "version": "0.1.0",
+  "publisher": "tml-lang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "tml",
+    "to-machine-language",
+    "syntax",
+    "highlighting"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/tml"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "tml",
+        "aliases": [
+          "TML",
+          "tml"
+        ],
+        "extensions": [
+          ".tml"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/tml-icon.png",
+          "dark": "./icons/tml-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tml",
+        "scopeName": "source.tml",
+        "path": "./syntaxes/tml.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^2.19.0"
+  }
+}

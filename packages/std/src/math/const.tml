@@ -1,0 +1,73 @@
+// Mathematical Constants
+// Based on Go's math package constants
+
+// Euler's number
+pub const E: F64 = 2.71828182845904523536028747135266249775724709369995
+
+// Pi - ratio of circle's circumference to diameter
+pub const Pi: F64 = 3.14159265358979323846264338327950288419716939937510
+
+// Golden ratio
+pub const Phi: F64 = 1.61803398874989484820458683436563811772030917980576
+
+// Square root of 2
+pub const Sqrt2: F64 = 1.41421356237309504880168872420969807856967187537694
+
+// Square root of E
+pub const SqrtE: F64 = 1.64872127070012814684865078781416357165377610071014
+
+// Square root of Pi
+pub const SqrtPi: F64 = 1.77245385090551602729816748334114518279754945612238
+
+// Square root of Phi
+pub const SqrtPhi: F64 = 1.27201964951406896425242246173749149171560804184009
+
+// Natural logarithm of 2
+pub const Ln2: F64 = 0.693147180559945309417232121458176568075500134360255
+
+// Base 2 logarithm of E
+pub const Log2E: F64 = 1.44269504088896340735992468100189213742664595415298
+
+// Natural logarithm of 10
+pub const Ln10: F64 = 2.30258509299404568401799145468436420760110148862877
+
+// Base 10 logarithm of E
+pub const Log10E: F64 = 0.434294481903251827651128918916605082294397005803666
+
+// Floating-point limit values
+
+// Largest finite F64 value
+pub const MaxFloat64: F64 = 1.79769313486231570814527423731704356798070e+308
+
+// Smallest positive non-zero F64 value
+pub const SmallestNonzeroFloat64: F64 = 4.9406564584124654417656879286822137236505980e-324
+
+// Largest finite F32 value (represented as F64)
+pub const MaxFloat32: F64 = 3.40282346638528859811704183484516925440e+38
+
+// Smallest positive non-zero F32 value (represented as F64)
+pub const SmallestNonzeroFloat32: F64 = 1.401298464324817070923729583289916131280e-45
+
+// Integer limit values (as F64 for compatibility)
+
+pub const MaxInt8: I32 = 127
+pub const MinInt8: I32 = -128
+pub const MaxUint8: I32 = 255
+
+pub const MaxInt16: I32 = 32767
+pub const MinInt16: I32 = -32768
+pub const MaxUint16: I32 = 65535
+
+pub const MaxInt32: I32 = 2147483647
+pub const MinInt32: I32 = -2147483648
+
+pub const MaxInt64: I64 = 9223372036854775807
+pub const MinInt64: I64 = -9223372036854775808
+
+// Special helper constants (not in Go, but useful)
+
+// Conversion factor: degrees to radians
+pub const DegToRad: F64 = 0.017453292519943295769236907684886127134428718885417
+
+// Conversion factor: radians to degrees
+pub const RadToDeg: F64 = 57.295779513082320876798154814105170332405472466564

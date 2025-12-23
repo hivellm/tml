@@ -120,6 +120,7 @@ private:
     auto gen_unary(const parser::UnaryExpr& unary) -> std::string;
     auto gen_call(const parser::CallExpr& call) -> std::string;
     auto gen_if(const parser::IfExpr& if_expr) -> std::string;
+    auto gen_ternary(const parser::TernaryExpr& ternary) -> std::string;
     auto gen_if_let(const parser::IfLetExpr& if_let) -> std::string;
     auto gen_block(const parser::BlockExpr& block) -> std::string;
     auto gen_loop(const parser::LoopExpr& loop) -> std::string;

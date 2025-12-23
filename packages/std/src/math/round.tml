@@ -1,0 +1,47 @@
+// Round returns the nearest integer, rounding half away from zero
+
+pub func round(x: F64) -> F64 {
+    if x < 0.0 then {
+        let i: I64 = f64_to_i64(x - 0.5)
+        return i64_to_f64(i)
+    } else {
+        let i: I64 = f64_to_i64(x + 0.5)
+        return i64_to_f64(i)
+    }
+}
+
+// RoundToEven returns the nearest integer, rounding ties to even
+pub func round_to_even(x: F64) -> F64 {
+    let i: I64 = f64_to_i64(x)
+    let f: F64 = i64_to_f64(i)
+    let diff: F64 = x - f
+
+    if diff > 0.5 then {
+        f + 1.0
+    } else {
+        if diff < -0.5 then {
+            f - 1.0
+        } else {
+            if diff == 0.5 then {
+                // Round to even
+                if (i & 1) == 0 then f else f + 1.0
+            } else {
+                if diff == -0.5 then {
+                    // Round to even
+                    if (i & 1) == 0 then f else f - 1.0
+                } else {
+                    f
+                }
+            }
+        }
+    }
+}
+
+// Integer versions are identity functions
+pub func round_i32(n: I32) -> I32 {
+    return n
+}
+
+pub func round_i64(n: I64) -> I64 {
+    return n
+}

@@ -1,0 +1,61 @@
+// Min and Max functions for various types
+
+// I32 versions
+pub func min_i32(a: I32, b: I32) -> I32 {
+    return if a < b then a else b
+}
+
+pub func max_i32(a: I32, b: I32) -> I32 {
+    return if a > b then a else b
+}
+
+// I64 versions
+pub func min_i64(a: I64, b: I64) -> I64 {
+    return if a < b then a else b
+}
+
+pub func max_i64(a: I64, b: I64) -> I64 {
+    return if a > b then a else b
+}
+
+// F64 versions (default for Go compatibility)
+pub func min(x: F64, y: F64) -> F64 {
+    return if x < y then x else y
+}
+
+pub func max(x: F64, y: F64) -> F64 {
+    return if x > y then x else y
+}
+
+pub func min_f64(x: F64, y: F64) -> F64 {
+    return if x < y then x else y
+}
+
+pub func max_f64(x: F64, y: F64) -> F64 {
+    return if x > y then x else y
+}
+
+// Clamp function - restrict value to range [min_val, max_val]
+pub func clamp_i32(value: I32, min_val: I32, max_val: I32) -> I32 {
+    if value < min_val then return min_val
+    if value > max_val then return max_val
+    return value
+}
+
+pub func clamp_i64(value: I64, min_val: I64, max_val: I64) -> I64 {
+    if value < min_val then return min_val
+    if value > max_val then return max_val
+    return value
+}
+
+pub func clamp_f64(value: F64, min_val: F64, max_val: F64) -> F64 {
+    if value < min_val then return min_val
+    if value > max_val then return max_val
+    return value
+}
+
+pub func clamp(value: F64, min_val: F64, max_val: F64) -> F64 {
+    if value < min_val then return min_val
+    if value > max_val then return max_val
+    return value
+}

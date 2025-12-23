@@ -1,12 +1,30 @@
 // TML Standard Library
 // Provides core functionality for all TML programs
 
+// ============ MATH MODULE ============
+// Comprehensive mathematical functions based on Go's math package
+// Includes: constants, basic arithmetic, rounding, power/root,
+//           exponential, logarithmic, trigonometric, hyperbolic,
+//           special functions, and floating-point manipulation
+pub mod math
+
+// ============ FUTURE MODULES ============
 // TODO: Full module system with `pub mod` declarations not yet implemented
 // For now, individual files are used directly
 
+// Planned modules:
+// - pub mod io      // Input/output operations
+// - pub mod time    // Time and date handling
+// - pub mod fmt     // String formatting
+// - pub mod option  // Maybe/Just/Nothing types
+// - pub mod result  // Outcome/Ok/Err types
+// - pub mod vec     // Dynamic arrays
+// - pub mod string  // String manipulation
+// - pub mod hash    // Hash functions
+// - pub mod rand    // Random number generation
+
 // Note: In a full implementation, this would re-export all standard library modules
 // Currently the compiler doesn't support:
-// - pub mod declarations
 // - Re-exporting from submodules with paths (option::{Maybe, Just, Nothing})
 
 // Once module system is complete, restore full re-exports

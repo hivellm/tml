@@ -46,6 +46,7 @@ by TML. These cannot be used as identifiers.
 | `type` | Type/struct declaration |
 | `use` | Import declaration |
 | `when` | Pattern matching |
+| `while` | While loop |
 | `with` | Context expression |
 
 ## Reserved for Future Use

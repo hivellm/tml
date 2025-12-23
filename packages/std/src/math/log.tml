@@ -1,0 +1,149 @@
+// Logarithm functions
+
+use const::{E, Ln2, Ln10}
+use abs
+use sqrt
+
+// Natural logarithm using Newton's method
+// We want to find y such that e^y = x
+// Using Newton: y_{n+1} = y_n + (x - e^{y_n}) / e^{y_n}
+pub func log(x: F64) -> F64 {
+    if x <= 0.0 then return 0.0  // Undefined, return 0
+    if x == 1.0 then return 0.0
+    if x == E then return 1.0
+
+    // Range reduction: log(x) = log(m * 2^e) = log(m) + e*log(2)
+    // where 1 <= m < 2
+
+    let mut mantissa: F64 = x
+    let mut exponent: I32 = 0
+
+    // Normalize mantissa to [1, 2)
+    loop {
+        if mantissa >= 1.0 then {
+            if mantissa < 2.0 then break
+        }
+
+        if mantissa >= 2.0 then {
+            mantissa = mantissa / 2.0
+            exponent = exponent + 1
+        } else {
+            mantissa = mantissa * 2.0
+            exponent = exponent - 1
+        }
+    }
+
+    // Use Taylor series for log(1 + x) where x = mantissa - 1
+    // log(1 + x) = x - x^2/2 + x^3/3 - x^4/4 + ...
+    let z: F64 = mantissa - 1.0
+
+    let mut sum: F64 = 0.0
+    let mut term: F64 = z
+    let mut i: I32 = 1
+
+    loop {
+        if i > 50 then break
+
+        sum = sum + term / i32_to_f64(i)
+        term = term * (-z)
+
+        let abs_term: F64 = abs(term)
+        if abs_term < 0.00000001 then break
+
+        i = i + 1
+    }
+
+    return sum + i32_to_f64(exponent) * Ln2
+}
+
+// log2(x) = log(x) / log(2)
+pub func log2(x: F64) -> F64 {
+    log(x) / Ln2
+}
+
+// log10(x) = log(x) / log(10)
+pub func log10(x: F64) -> F64 {
+    log(x) / Ln10
+}
+
+// log1p(x) = log(1 + x) (accurate for small x)
+pub func log1p(x: F64) -> F64 {
+    if x == 0.0 then return 0.0
+
+    // For small x, use Taylor series directly
+    // log(1 + x) = x - x^2/2 + x^3/3 - x^4/4 + ...
+    let abs_x: F64 = abs(x)
+
+    if abs_x < 0.5 then {
+        let mut sum: F64 = 0.0
+        let mut term: F64 = x
+        let mut i: I32 = 1
+
+        loop {
+            if i > 50 then break
+
+            sum = sum + term / i32_to_f64(i)
+            term = term * (-x)
+
+            let abs_term: F64 = abs(term)
+            if abs_term < 0.00000001 then break
+
+            i = i + 1
+        }
+
+        return sum
+    } else {
+        return log(1.0 + x)
+    }
+}
+
+// logb(x) returns the binary exponent of x
+pub func logb(x: F64) -> F64 {
+    if x == 0.0 then return 0.0
+
+    let abs_x: F64 = abs(x)
+    let mut mantissa: F64 = abs_x
+    let mut exponent: I32 = 0
+
+    // Find exponent
+    loop {
+        if mantissa >= 1.0 then {
+            if mantissa < 2.0 then break
+        }
+
+        if mantissa >= 2.0 then {
+            mantissa = mantissa / 2.0
+            exponent = exponent + 1
+        } else {
+            mantissa = mantissa * 2.0
+            exponent = exponent - 1
+        }
+    }
+
+    i32_to_f64(exponent)
+}
+
+// ilogb(x) returns the binary exponent of x as an integer
+pub func ilogb(x: F64) -> I32 {
+    if x == 0.0 then return 0
+
+    let abs_x: F64 = abs(x)
+    let mut mantissa: F64 = abs_x
+    let mut exponent: I32 = 0
+
+    loop {
+        if mantissa >= 1.0 then {
+            if mantissa < 2.0 then break
+        }
+
+        if mantissa >= 2.0 then {
+            mantissa = mantissa / 2.0
+            exponent = exponent + 1
+        } else {
+            mantissa = mantissa * 2.0
+            exponent = exponent - 1
+        }
+    }
+
+    exponent
+}

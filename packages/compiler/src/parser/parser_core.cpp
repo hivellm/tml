@@ -163,6 +163,9 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         case lexer::TokenKind::ShrAssign:
             return precedence::ASSIGN;
 
+        case lexer::TokenKind::Question:
+            return precedence::TERNARY;
+
         case lexer::TokenKind::KwOr:
             return precedence::OR;
 
@@ -218,7 +221,7 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
 }
 
 auto Parser::is_right_associative(lexer::TokenKind kind) -> bool {
-    // Assignment is right-associative
+    // Assignment and ternary are right-associative
     switch (kind) {
         case lexer::TokenKind::Assign:
         case lexer::TokenKind::PlusAssign:
@@ -231,6 +234,7 @@ auto Parser::is_right_associative(lexer::TokenKind kind) -> bool {
         case lexer::TokenKind::BitXorAssign:
         case lexer::TokenKind::ShlAssign:
         case lexer::TokenKind::ShrAssign:
+        case lexer::TokenKind::Question:
             return true;
         default:
             return false;

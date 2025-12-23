@@ -1,0 +1,66 @@
+// Square root implementation
+
+// Integer square root using Newton's method
+pub func sqrt_i32(n: I32) -> I32 {
+    if n < 0 then return 0
+    if n == 0 then return 0
+    if n == 1 then return 1
+
+    let mut result: I32 = 0
+    let mut bit: I32 = 1
+
+    // Find highest bit
+    let mut b: I32 = bit << 15
+    loop {
+        if b <= n then break
+        b = b >> 1
+    }
+    bit = b
+
+    // Newton's method for integer square root
+    loop {
+        if bit == 0 then break
+
+        if n >= result + bit {
+            let temp: I32 = result + bit
+            result = (result >> 1) + bit
+        } else {
+            result = result >> 1
+        }
+        bit = bit >> 2
+    }
+
+    return result
+}
+
+// F64 square root using Newton-Raphson method
+pub func sqrt(x: F64) -> F64 {
+    if x < 0.0 then return 0.0
+    if x == 0.0 then return 0.0
+    if x == 1.0 then return 1.0
+
+    // Initial guess using bit manipulation would be ideal
+    // For now, use x/2 as initial guess
+    let mut guess: F64 = x / 2.0
+    let mut prev: F64 = 0.0
+
+    // Newton-Raphson: x_{n+1} = (x_n + S/x_n) / 2
+    let mut iterations: I32 = 0
+    loop {
+        if iterations >= 20 then break
+
+        let next: F64 = (guess + x / guess) / 2.0
+
+        // Check for convergence
+        let diff: F64 = next - prev
+        let abs_diff: F64 = if diff < 0.0 then -diff else diff
+
+        if abs_diff < 0.000001 then break
+
+        prev = guess
+        guess = next
+        iterations = iterations + 1
+    }
+
+    return guess
+}

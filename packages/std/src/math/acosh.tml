@@ -1,0 +1,15 @@
+// Inverse hyperbolic cosine function
+
+use log
+use sqrt
+
+// acosh(x) = log(x + sqrt(x^2 - 1))
+pub func acosh(x: F64) -> F64 {
+    if x < 1.0 then return 0.0  // Undefined for x < 1
+    if x == 1.0 then return 0.0
+
+    let x_squared: F64 = x * x
+    let sqrt_part: F64 = sqrt(x_squared - 1.0)
+
+    return log(x + sqrt_part)
+}

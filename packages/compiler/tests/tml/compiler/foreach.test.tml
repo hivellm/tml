@@ -1,0 +1,99 @@
+use test
+
+// Test foreach over List
+@test
+func test_foreach_list() -> I32 {
+    // Create a list with some values
+    let list: List = list_create(5)
+    list_push(list, 10)
+    list_push(list, 20)
+    list_push(list, 30)
+    list_push(list, 40)
+    list_push(list, 50)
+
+    // Sum all elements using foreach
+    let mut sum: I32 = 0
+    for item in list {
+        sum = sum + item
+    }
+
+    assert_eq_i32(sum, 150, "foreach should sum all list elements (10+20+30+40+50)")
+    list_destroy(list)
+    0
+}
+
+@test
+func test_foreach_list_with_index() -> I32 {
+    let list: List = list_create(3)
+    list_push(list, 5)
+    list_push(list, 10)
+    list_push(list, 15)
+
+    let mut count: I32 = 0
+    let mut sum: I32 = 0
+
+    for val in list {
+        count = count + 1
+        sum = sum + val
+    }
+
+    assert_eq_i32(count, 3, "foreach should iterate 3 times")
+    assert_eq_i32(sum, 30, "foreach should sum to 30 (5+10+15)")
+    list_destroy(list)
+    0
+}
+
+@test
+func test_foreach_empty_list() -> I32 {
+    let list: List = list_create(0)
+
+    let mut count: I32 = 0
+    for item in list {
+        count = count + 1
+    }
+
+    assert_eq_i32(count, 0, "foreach over empty list should not execute body")
+    list_destroy(list)
+    0
+}
+
+@test
+func test_foreach_with_break() -> I32 {
+    let list: List = list_create(5)
+    list_push(list, 1)
+    list_push(list, 2)
+    list_push(list, 3)
+    list_push(list, 4)
+    list_push(list, 5)
+
+    let mut sum: I32 = 0
+    for val in list {
+        if val == 4 then break
+        sum = sum + val
+    }
+
+    assert_eq_i32(sum, 6, "foreach with break should sum 1+2+3")
+    list_destroy(list)
+    0
+}
+
+@test
+func test_foreach_with_continue() -> I32 {
+    let list: List = list_create(5)
+    list_push(list, 1)
+    list_push(list, 2)
+    list_push(list, 3)
+    list_push(list, 4)
+    list_push(list, 5)
+
+    let mut sum: I32 = 0
+    for val in list {
+        // Skip even numbers
+        if val % 2 == 0 then continue
+        sum = sum + val
+    }
+
+    assert_eq_i32(sum, 9, "foreach with continue should sum only odd numbers (1+3+5)")
+    list_destroy(list)
+    0
+}

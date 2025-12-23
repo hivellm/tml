@@ -30,6 +30,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"else", TokenKind::KwElse},
     {"when", TokenKind::KwWhen},
     {"loop", TokenKind::KwLoop},
+    {"while", TokenKind::KwWhile},
     {"for", TokenKind::KwFor},
     {"in", TokenKind::KwIn},
     {"to", TokenKind::KwTo},

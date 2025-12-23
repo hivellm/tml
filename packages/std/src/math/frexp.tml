@@ -1,0 +1,33 @@
+// Frexp breaks f into a normalized fraction and an integral power of 2
+// It returns frac and exp satisfying f == frac × 2^exp, with 0.5 <= |frac| < 1
+
+use abs
+
+pub func frexp(f: F64) -> (F64, I32) {
+    if f == 0.0 then return (0.0, 0)
+
+    let abs_f: F64 = abs(f)
+    let negative: Bool = f < 0.0
+
+    let mut mantissa: F64 = abs_f
+    let mut exponent: I32 = 0
+
+    // Normalize to [0.5, 1.0)
+    loop {
+        if mantissa >= 0.5 then {
+            if mantissa < 1.0 then break
+        }
+
+        if mantissa >= 1.0 then {
+            mantissa = mantissa / 2.0
+            exponent = exponent + 1
+        } else {
+            mantissa = mantissa * 2.0
+            exponent = exponent - 1
+        }
+    }
+
+    let frac: F64 = if negative then -mantissa else mantissa
+
+    return (frac, exponent)
+}

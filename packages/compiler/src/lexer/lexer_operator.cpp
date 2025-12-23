@@ -97,6 +97,9 @@ auto Lexer::lex_operator() -> Token {
             if (peek() == ':') { advance(); return make_token(TokenKind::ColonColon); }
             return make_token(TokenKind::Colon);
 
+        case '?':
+            return make_token(TokenKind::Question);
+
         default:
             return make_error_token("Unexpected character: " + std::string(1, c));
     }

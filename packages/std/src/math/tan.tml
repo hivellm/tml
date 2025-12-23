@@ -1,0 +1,13 @@
+// Tangent function
+
+use sin
+use cos
+
+// tan(x) = sin(x) / cos(x)
+pub func tan(x: F64) -> F64 {
+    let cos_x: F64 = cos(x)
+
+    if cos_x == 0.0 then return 0.0  // Undefined, return 0
+
+    return sin(x) / cos_x
+}

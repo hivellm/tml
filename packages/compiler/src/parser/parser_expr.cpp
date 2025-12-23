@@ -55,6 +55,41 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             continue;
         }
 
+        // Handle ternary operator: condition ? true_value : false_value
+        if (check(lexer::TokenKind::Question)) {
+            advance(); // consume '?'
+
+            // Parse true branch (right-associative, so use prec - 1)
+            auto true_val = parse_expr_with_precedence(prec - 1);
+            if (is_err(true_val)) return true_val;
+
+            // Expect ':'
+            if (!check(lexer::TokenKind::Colon)) {
+                return ParseError{
+                    "Expected ':' in ternary expression",
+                    peek().span,
+                    {}
+                };
+            }
+            advance(); // consume ':'
+
+            // Parse false branch (right-associative)
+            auto false_val = parse_expr_with_precedence(prec - 1);
+            if (is_err(false_val)) return false_val;
+
+            auto span = SourceSpan::merge(unwrap(left)->span, unwrap(false_val)->span);
+            left = make_box<Expr>(Expr{
+                .kind = TernaryExpr{
+                    .condition = std::move(unwrap(left)),
+                    .true_value = std::move(unwrap(true_val)),
+                    .false_value = std::move(unwrap(false_val)),
+                    .span = span
+                },
+                .span = span
+            });
+            continue;
+        }
+
         // Infix operators
         auto op = token_to_binary_op(peek().kind);
         if (!op) {
@@ -296,6 +331,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
     // Loop
     if (check(lexer::TokenKind::KwLoop)) {
         return parse_loop_expr();
+    }
+
+    // While
+    if (check(lexer::TokenKind::KwWhile)) {
+        return parse_while_expr();
     }
 
     // For

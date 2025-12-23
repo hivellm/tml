@@ -1,0 +1,37 @@
+// Special floating-point values - infinity and NaN
+
+use const::MaxFloat64
+
+// Inf returns positive or negative infinity
+pub func inf(sign: I32) -> F64 {
+    // Approximate infinity with max float
+    return if sign >= 0 then MaxFloat64 else -MaxFloat64
+}
+
+// IsInf reports whether f is an infinity
+pub func is_inf(f: F64, sign: I32) -> Bool {
+    if sign == 0 then {
+        // Check for any infinity
+        return f == MaxFloat64 or f == -MaxFloat64
+    } else {
+        if sign > 0 then {
+            return f == MaxFloat64
+        } else {
+            return f == -MaxFloat64
+        }
+    }
+}
+
+// NaN returns IEEE 754 "not-a-number" value
+pub func nan() -> F64 {
+    // In a real implementation, would return actual NaN
+    // For now, use 0 as placeholder
+    return 0.0
+}
+
+// IsNaN reports whether f is NaN
+pub func is_nan(f: F64) -> Bool {
+    // NaN is the only value that is not equal to itself
+    // For now, always false since we don't have true NaN
+    return false
+}

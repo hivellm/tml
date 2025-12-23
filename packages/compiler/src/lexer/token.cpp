@@ -40,6 +40,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::KwElse: return "else";
         case TokenKind::KwWhen: return "when";
         case TokenKind::KwLoop: return "loop";
+        case TokenKind::KwWhile: return "while";
         case TokenKind::KwFor: return "for";
         case TokenKind::KwIn: return "in";
         case TokenKind::KwTo: return "to";
@@ -118,6 +119,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::DotDot: return "..";
         case TokenKind::Colon: return ":";
         case TokenKind::ColonColon: return "::";
+        case TokenKind::Question: return "?";
         case TokenKind::Bang: return "!";
         case TokenKind::At: return "@";
         case TokenKind::Pipe: return "|";

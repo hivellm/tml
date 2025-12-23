@@ -288,7 +288,13 @@ continue
 ### 5.1 Precedence Hierarchy
 
 ```ebnf
-Expr = OrExpr
+Expr = AssignExpr
+
+AssignExpr  = TernaryExpr (AssignOp TernaryExpr)?
+AssignOp    = '=' | '+=' | '-=' | '*=' | '/=' | '%='
+            | '&=' | '|=' | '^=' | '<<=' | '>>='
+
+TernaryExpr = OrExpr ('?' Expr ':' Expr)?   // Ternary conditional
 
 OrExpr      = AndExpr ('or' AndExpr)*
 AndExpr     = NotExpr ('and' NotExpr)*
@@ -314,7 +320,6 @@ Postfix     = '.' Ident
             | '(' Args? ')'
             | '[' Expr ']'
             | '!'
-            | '?'
 ```
 
 ### 5.2 Primary Expressions
@@ -330,6 +335,8 @@ PrimaryExpr = Literal
             | IfExpr
             | WhenExpr
             | LoopExpr
+            | WhileExpr
+            | ForExpr
             | CatchExpr
             | DoExpr
             | StructExpr
@@ -443,43 +450,133 @@ when opt {
 }
 ```
 
-### 5.5 Loop Expression
+### 5.4.1 Ternary Conditional Operator
+
+The ternary operator provides a concise syntax for inline conditional expressions.
 
 ```ebnf
-LoopExpr = 'loop' LoopKind Block
+TernaryExpr = OrExpr ('?' Expr ':' Expr)?
+```
 
-LoopKind = Ident 'in' Expr       // for-each with binding
-         | 'in' Expr             // for-each anonymous
-         | 'while' Expr          // while
-         | ε                     // infinite
+**Characteristics:**
+- **Right-associative**: Groups from right to left
+- **Precedence**: Between assignment and logical OR
+- **Type checking**: Both branches must return the same type
+- **Nestable**: Can be nested for multiple conditions
+
+**Examples:**
+```tml
+// Basic usage
+let max: I32 = x > y ? x : y
+let min: I32 = x < y ? x : y
+
+// With expressions
+let result: I32 = score > 60 ? score * 2 : score + 10
+
+// Nested (find max of three)
+let max3: I32 = a > b ? (a > c ? a : c) : (b > c ? b : c)
+
+// In assignments
+let status: String = is_valid ? "PASS" : "FAIL"
+
+// With method calls
+let value: I32 = list.is_empty() ? 0 : list.get(0)
+```
+
+**Comparison with if-then-else:**
+```tml
+// Ternary (concise)
+let x: I32 = condition ? 10 : 20
+
+// If-then-else (verbose)
+let x: I32 = if condition then 10 else 20
+```
+
+### 5.5 Loop Expressions
+
+#### 5.5.1 Infinite Loop
+
+```ebnf
+LoopExpr = 'loop' Block
 ```
 
 **Examples:**
 ```tml
-// For-each
-loop item in items {
-    process(item)
-}
-
-loop i in 0 to 10 {
-    print(i)
-}
-
-loop i in 1 through 5 {
-    print(i)  // 1, 2, 3, 4, 5
-}
-
-// While
-loop while running {
-    tick()
-}
-
-// Infinite
+// Infinite loop
 loop {
     if done then break
     work()
 }
+
+// Loop with labeled break
+loop {
+    if error then break
+    process()
+}
 ```
+
+#### 5.5.2 While Loop
+
+```ebnf
+WhileExpr = 'while' Expr Block
+```
+
+**Examples:**
+```tml
+// Traditional while loop
+while running {
+    tick()
+}
+
+while count < 10 {
+    print(count)
+    count = count + 1
+}
+
+// With break/continue
+while true {
+    if should_exit then break
+    if should_skip then continue
+    process()
+}
+```
+
+#### 5.5.3 For Loop (Iteration)
+
+```ebnf
+ForExpr = 'for' Pattern 'in' Expr Block
+```
+
+**Examples:**
+```tml
+// Range iteration
+for i in 0 to 10 {
+    print(i)  // 0, 1, 2, ..., 9
+}
+
+for i in 1 through 5 {
+    print(i)  // 1, 2, 3, 4, 5
+}
+
+// Collection iteration (List, HashMap, Buffer, Vec)
+for item in list {
+    process(item)
+}
+
+for value in hashmap {
+    print(value)
+}
+
+// With pattern destructuring
+for Point { x, y } in points {
+    draw(x, y)
+}
+```
+
+**Note:** The `for` loop supports:
+- Range expressions: `0 to 10`, `1 through 5`
+- Collection types: `List`, `HashMap`, `Buffer`, `Vec`
+- Pattern matching in the loop variable
 
 ### 5.6 Error Propagation with `!`
 

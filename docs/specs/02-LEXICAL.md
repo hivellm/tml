@@ -255,15 +255,34 @@ if a && b || !c { ... }
 | `<<=` | Shl-assign |
 | `>>=` | Shr-assign |
 
-### 5.6 Other
+### 5.6 Conditional
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `? :` | Ternary conditional | `x > 0 ? x : -x` |
+
+**Examples:**
+```tml
+// Basic ternary
+let max: I32 = a > b ? a : b
+
+// Nested ternary
+let max3: I32 = a > b ? (a > c ? a : c) : (b > c ? b : c)
+
+// In expressions
+let result: I32 = score > 60 ? score * 2 : score + 10
+```
+
+**Precedence:** Between assignment and logical OR (right-associative)
+
+### 5.7 Other
 
 | Operator | Meaning |
 |----------|---------|
 | `->` | Return type arrow |
 | `!` | Error propagation |
-| `?` | Optional chaining (reserved) |
 
-### 5.7 Range Keywords
+### 5.8 Range Keywords
 
 | Keyword | Meaning | Example |
 |---------|---------|---------|
@@ -272,12 +291,17 @@ if a && b || !c { ... }
 
 ```tml
 // Ranges in loops
-loop i in 0 to 10 {
+for i in 0 to 10 {
     print(i)  // 0 through 9
 }
 
-loop i in 1 through 5 {
+for i in 1 through 5 {
     print(i)  // 1 through 5
+}
+
+// While loops
+while count < 10 {
+    count = count + 1
 }
 
 // Ranges in slices

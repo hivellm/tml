@@ -1,0 +1,22 @@
+// Nextafter returns the next representable float64 value after x towards y
+
+use abs
+
+pub func nextafter(x: F64, y: F64) -> F64 {
+    if x == y then return x
+
+    // Simple implementation - increment/decrement by smallest step
+    // This is a simplified version; real IEEE 754 implementation would be more complex
+
+    let epsilon: F64 = 0.00000000000001  // Approximate smallest increment
+
+    return if y > x then x + epsilon else x - epsilon
+}
+
+pub func nextafter32(x: F32, y: F32) -> F32 {
+    if x == y then return x
+
+    let epsilon: F32 = 0.000001
+
+    return if y > x then x + epsilon else x - epsilon
+}

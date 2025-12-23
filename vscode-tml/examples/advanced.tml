@@ -1,0 +1,243 @@
+// Advanced TML features: directives, closures, effects, contracts
+
+module examples.advanced
+
+import std.io
+import std.collections.List
+
+//! This module demonstrates advanced TML features
+//! including directives, closures, effects, and contracts
+
+// @ai:context: This module is performance-critical
+// @ai:intent: Demonstrate advanced language features
+
+/// Square root with precondition and postcondition
+func safe_sqrt(x: F64) -> F64
+pre: x >= 0.0
+post(result): result >= 0.0
+{
+    return x.sqrt()
+}
+
+/// Division with contract
+func safe_divide(a: I32, b: I32) -> F64
+pre: b != 0
+post(result): result.is_finite()
+{
+    return a.to_f64() / b.to_f64()
+}
+
+/// File reading with effects declaration
+func read_file(path: String) -> Outcome[String, IoError]
+effects: [io.file.read]
+{
+    let file: File = File.open(path)!
+    return file.read_to_string()
+}
+
+/// Write file with effects
+func write_file(path: String, content: String) -> Outcome[Unit, IoError]
+effects: [io.file.write]
+{
+    let file: File = File.create(path)!
+    file.write(content)!
+    return Ok(Unit)
+}
+
+// Closure examples
+func closure_examples() {
+    // Simple closure
+    let add: func(I32, I32) -> I32 = do(x, y) x + y
+
+    // Closure with block body
+    let multiply: func(I32, I32) -> I32 = do(x, y) {
+        let result: I32 = x * y
+        return result
+    }
+
+    // Using closures with collections
+    let numbers: List[I32] = [1, 2, 3, 4, 5]
+    let doubled: List[I32] = numbers.map(do(x) x * 2)
+    let evens: List[I32] = numbers.filter(do(x) x % 2 == 0)
+    let sum: I32 = numbers.fold(0, do(acc, x) acc + x)
+}
+
+// Directives showcase
+@test
+func test_safe_sqrt() {
+    assert_eq(safe_sqrt(9.0), 3.0)
+    assert_eq(safe_sqrt(0.0), 0.0)
+}
+
+@test(should_fail)
+func test_negative_sqrt() {
+    // This should fail the precondition
+    safe_sqrt(-1.0)
+}
+
+@benchmark
+func bench_fibonacci() {
+    fibonacci(20)
+}
+
+@when(os: linux)
+func linux_specific() {
+    println("Running on Linux")
+}
+
+@when(os: windows)
+func windows_specific() {
+    println("Running on Windows")
+}
+
+@unless(debug)
+func release_only() {
+    // This only runs in release mode
+}
+
+@hint(inline: always)
+func inline_me(x: I32) -> I32 {
+    return x * 2
+}
+
+@hint(cold)
+func rarely_called() {
+    println("This is rarely executed")
+}
+
+@auto(debug, duplicate, equal)
+type Config {
+    host: String,
+    port: U16,
+    timeout: I32,
+}
+
+@deprecated("Use new_function instead")
+func old_function() {
+    println("This is deprecated")
+}
+
+/// Demonstrates all number types
+func number_types_demo() {
+    // Signed integers
+    let i8_val: I8 = 127i8
+    let i16_val: I16 = 32767i16
+    let i32_val: I32 = 2147483647i32
+    let i64_val: I64 = 9223372036854775807i64
+
+    // Unsigned integers
+    let u8_val: U8 = 255u8
+    let u16_val: U16 = 65535u16
+    let u32_val: U32 = 4294967295u32
+    let u64_val: U64 = 18446744073709551615u64
+
+    // Floats
+    let f32_val: F32 = 3.14f32
+    let f64_val: F64 = 2.718281828459045
+
+    // Different number formats
+    let hex: I32 = 0xFF_AA_BB
+    let binary: I32 = 0b1010_1010
+    let octal: I32 = 0o755
+    let decimal: I32 = 1_000_000
+}
+
+/// String examples
+func string_examples() {
+    // Regular string
+    let regular: String = "Hello, world!"
+
+    // String with escapes
+    let escaped: String = "Line 1\nLine 2\tTabbed"
+
+    // Raw string (no escapes)
+    let raw: String = r"C:\Users\path\to\file.txt"
+
+    // Raw string with hash delimiters
+    let raw_hash: String = r#"Can use "quotes" freely"#
+
+    // Multi-line string
+    let multiline: String = """
+    This is a
+    multi-line
+    string
+    """
+
+    // Byte string
+    let bytes: Bytes = b"Hello"
+
+    // Character
+    let char_a: Char = 'a'
+    let char_emoji: Char = '\u{1F600}'
+}
+
+/// Bitwise operations
+func bitwise_ops(a: I32, b: I32) -> I32 {
+    let and_result: I32 = a & b
+    let or_result: I32 = a | b
+    let xor_result: I32 = a ^ b
+    let not_result: I32 = ~a
+    let shl_result: I32 = a << 2
+    let shr_result: I32 = b >> 1
+
+    return and_result
+}
+
+/// Compound assignment operators
+func compound_assignments() {
+    var x: I32 = 10
+
+    x += 5   // x = 15
+    x -= 3   // x = 12
+    x *= 2   // x = 24
+    x /= 4   // x = 6
+    x %= 4   // x = 2
+    x <<= 1  // x = 4
+    x >>= 1  // x = 2
+    x &= 3   // x = 2
+    x |= 1   // x = 3
+    x ^= 1   // x = 2
+}
+
+// Lowlevel (unsafe) code
+@lowlevel
+func pointer_operations() {
+    let ptr: ptr U8 = allocate(1024)
+    let value: U8 = ptr.read()
+    ptr.write(42)
+    deallocate(ptr)
+}
+
+/// Error propagation examples
+func error_propagation() -> Outcome[I32, String] {
+    // Using ! to propagate errors
+    let config: Config = load_config()!
+    let data: Data = fetch_data(config.host)!
+
+    // Using ! with else for fallback
+    let port: U16 = env.get("PORT")!.parse[U16]()! else 8080
+
+    // Using ! with error binding
+    let result: Data = risky_operation()! else |err| {
+        log.error(err)
+        return Err("Operation failed")
+    }
+
+    return Ok(42)
+}
+
+/* Block comment
+   spanning multiple lines
+   can contain // line comments
+   and even /* nested comments */
+*/
+
+/// Documentation with markdown
+///
+/// # Example
+/// ```tml
+/// let result = example_function(42)
+/// ```
+func example_function(n: I32) -> I32 {
+    return n * 2
+}

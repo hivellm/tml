@@ -327,6 +327,14 @@ struct IfExpr {
     SourceSpan span;
 };
 
+// Ternary expression: condition ? true_value : false_value
+struct TernaryExpr {
+    ExprPtr condition;
+    ExprPtr true_value;
+    ExprPtr false_value;
+    SourceSpan span;
+};
+
 // If-let expression: if let pattern = expr { then } else { else }
 struct IfLetExpr {
     PatternPtr pattern;
@@ -461,6 +469,7 @@ struct Expr {
         ArrayExpr,
         StructExpr,
         IfExpr,
+        TernaryExpr,
         IfLetExpr,
         WhenExpr,
         LoopExpr,

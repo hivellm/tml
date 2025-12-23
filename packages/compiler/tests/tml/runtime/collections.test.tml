@@ -5,7 +5,7 @@ use test
 @test
 func test_list() -> I32 {
     // Create list with initial capacity 4
-    let list: mut ref I32 = list_create(4)
+    let list: List = list_create(4)
 
     // Push elements
     list_push(list, 10)
@@ -51,7 +51,7 @@ func test_list() -> I32 {
 @test
 func test_hashmap() -> I32 {
     // Create hashmap with capacity 16
-    let map: mut ref I32 = hashmap_create(16)
+    let map: HashMap = hashmap_create(16)
 
     // Set values
     hashmap_set(map, 1, 100)
@@ -99,16 +99,16 @@ func test_hashmap() -> I32 {
 @test
 func test_buffer() -> I32 {
     // Create buffer with capacity 32
-    let buf: mut ref I32 = buffer_create(32)
+    let buf: Buffer = buffer_create(32)
 
     // Test initial state
     assert_eq_i32(buffer_len(buf), 0, "buffer_len should be 0 initially")
     assert_eq_i32(buffer_capacity(buf), 32, "buffer_capacity should be 32")
 
     // Write bytes
-    buffer_write_byte(buf, 65)  // '\''A'\''
-    buffer_write_byte(buf, 66)  // '\''B'\''
-    buffer_write_byte(buf, 67)  // '\''C'\''
+    buffer_write_byte(buf, 65)  // 'A'
+    buffer_write_byte(buf, 66)  // 'B'
+    buffer_write_byte(buf, 67)  // 'C'
 
     assert_eq_i32(buffer_len(buf), 3, "buffer_len should be 3 after writes")
 

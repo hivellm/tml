@@ -20,6 +20,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_call(expr.as<parser::CallExpr>());
     } else if (expr.is<parser::IfExpr>()) {
         return gen_if(expr.as<parser::IfExpr>());
+    } else if (expr.is<parser::TernaryExpr>()) {
+        return gen_ternary(expr.as<parser::TernaryExpr>());
     } else if (expr.is<parser::IfLetExpr>()) {
         return gen_if_let(expr.as<parser::IfLetExpr>());
     } else if (expr.is<parser::BlockExpr>()) {

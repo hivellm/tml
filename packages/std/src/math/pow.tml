@@ -1,0 +1,66 @@
+// Power functions
+
+// Integer power using fast exponentiation by squaring
+pub func pow_i32(base: I32, exp: I32) -> I32 {
+    if exp < 0 then return 0
+    if exp == 0 then return 1
+    if base == 0 then return 0
+    if base == 1 then return 1
+
+    let mut result: I32 = 1
+    let mut b: I32 = base
+    let mut e: I32 = exp
+
+    // Fast exponentiation by squaring
+    loop {
+        if e == 0 then break
+
+        if (e & 1) != 0 then {
+            result = result * b
+        }
+        b = b * b
+        e = e >> 1
+    }
+
+    return result
+}
+
+// F64 power - for integer exponents
+pub func powi(x: F64, n: I32) -> F64 {
+    if n == 0 then return 1.0
+    if x == 0.0 then return 0.0
+    if x == 1.0 then return 1.0
+
+    let negative_exp: Bool = n < 0
+    let abs_n: I32 = if n < 0 then -n else n
+
+    let mut result: F64 = 1.0
+    let mut base: F64 = x
+    let mut exp: I32 = abs_n
+
+    loop {
+        if exp == 0 then break
+
+        if (exp & 1) != 0 then {
+            result = result * base
+        }
+        base = base * base
+        exp = exp >> 1
+    }
+
+    if negative_exp then 1.0 / result else result
+}
+
+// General F64 power using exp and log
+// pow(x, y) = exp(y * log(x))
+// TODO: Requires log and exp implementation
+pub func pow(x: F64, y: F64) -> F64 {
+    // For now, only support integer exponents
+    let int_exp: I32 = f64_to_i32(y)
+    powi(x, int_exp)
+}
+
+// Pow10 returns 10^n
+pub func pow10(n: I32) -> F64 {
+    powi(10.0, n)
+}

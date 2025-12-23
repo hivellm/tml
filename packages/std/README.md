@@ -12,7 +12,6 @@ The TML standard library provides essential functionality for all TML programs.
 
 ### Collections
 - **`vec`** - Dynamic arrays
-- **`string`** - String type and operations
 - **`map`** - Hash maps
 - **`set`** - Hash sets
 
@@ -77,6 +76,31 @@ For embedded or no_std environments:
 [dependencies]
 std = { version = "0.1.0", default-features = false, features = ["alloc"] }
 ```
+
+## Testing
+
+The standard library includes comprehensive tests for all builtin functions:
+
+```bash
+# Run all stdlib tests
+tml test packages/std/tests/stdlib/
+
+# Run specific category
+tml test packages/std/tests/stdlib/io.test.tml
+tml test packages/std/tests/stdlib/time.test.tml
+tml test packages/std/tests/stdlib/strings.test.tml
+```
+
+**Test Categories (stdlib only):**
+- `io.test.tml` - I/O functions (print, println, print_i32, print_bool) ✅
+- `time.test.tml` - Time functions (time_ms, elapsed_ms) ✅
+- `math.test.tml` - Math functions (abs, sqrt, pow, round, floor, ceil) ❌
+
+**Core/Runtime tests** (strings, memory, atomics) are in `packages/compiler/tests/runtime/`
+
+See test READMEs for detailed results:
+- `packages/std/tests/stdlib/README.md` - Stdlib test results
+- `packages/compiler/tests/runtime/README.md` - Runtime test results
 
 ## Documentation
 

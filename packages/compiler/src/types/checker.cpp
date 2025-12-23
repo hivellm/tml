@@ -61,6 +61,7 @@ TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
+    std::cerr << "[DEBUG] check_module called\n";
 
     // Pass 0: Process use declarations (imports)
     for (const auto& decl : module.decls) {
@@ -283,6 +284,7 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
+    std::cerr << "[DEBUG] check_func_body called for function: " << func.name << "\n";
     env_.push_scope();
     current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
@@ -301,6 +303,26 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
 
     if (func.body) {
         auto body_type = check_block(*func.body);
+
+        // Check if function with explicit non-Unit return type has return statement
+        if (func.return_type) {
+            auto return_type = resolve_type(**func.return_type);
+            // Only require return if return type is not Unit
+            if (!return_type->is<PrimitiveType>() ||
+                return_type->as<PrimitiveType>().kind != PrimitiveKind::Unit) {
+
+                std::cerr << "[DEBUG] Checking function '" << func.name << "' for return statement\n";
+                bool has_ret = block_has_return(*func.body);
+                std::cerr << "[DEBUG] Has return: " << (has_ret ? "yes" : "no") << "\n";
+
+                if (!has_ret) {
+                    error("Function '" + func.name + "' with return type " +
+                          type_to_string(return_type) + " must have an explicit return statement",
+                          func.span);
+                }
+            }
+        }
+
         // Check return type compatibility (simplified for now)
         (void)body_type;
     }
@@ -391,6 +413,9 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
         }
         else if constexpr (std::is_same_v<T, parser::IfExpr>) {
             return check_if(e);
+        }
+        else if constexpr (std::is_same_v<T, parser::TernaryExpr>) {
+            return check_ternary(e);
         }
         else if constexpr (std::is_same_v<T, parser::IfLetExpr>) {
             return check_if_let(e);
@@ -902,6 +927,25 @@ auto TypeChecker::check_if(const parser::IfExpr& if_expr) -> TypePtr {
     return make_unit();
 }
 
+auto TypeChecker::check_ternary(const parser::TernaryExpr& ternary) -> TypePtr {
+    // Check condition is Bool
+    auto cond_type = check_expr(*ternary.condition);
+    if (!types_equal(env_.resolve(cond_type), make_bool())) {
+        error("Ternary condition must be Bool", ternary.condition->span);
+    }
+
+    // Check both branches and ensure they return the same type
+    auto true_type = check_expr(*ternary.true_value);
+    auto false_type = check_expr(*ternary.false_value);
+
+    // Both branches must have the same type
+    if (!types_equal(env_.resolve(true_type), env_.resolve(false_type))) {
+        error("Ternary branches must have the same type", ternary.span);
+    }
+
+    return true_type;
+}
+
 auto TypeChecker::check_if_let(const parser::IfLetExpr& if_let) -> TypePtr {
     // Type check the scrutinee
     auto scrutinee_type = check_expr(*if_let.scrutinee);
@@ -957,12 +1001,31 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
 
     auto iter_type = check_expr(*for_expr.iter);
 
-    // Extract element type from slice for pattern binding
+    // Extract element type from slice or collection for pattern binding
     TypePtr element_type = make_unit();
     if (iter_type->is<SliceType>()) {
         element_type = iter_type->as<SliceType>().element;
+    } else if (iter_type->is<NamedType>()) {
+        // Check if it's a collection type (List, HashMap, Buffer, Vec)
+        const auto& named = iter_type->as<NamedType>();
+        if (named.name == "List" || named.name == "Vec" || named.name == "Buffer") {
+            // For List/Vec/Buffer, elements are I32 (stored as i64 but converted)
+            element_type = make_primitive(PrimitiveKind::I32);
+        } else if (named.name == "HashMap") {
+            // For HashMap iteration, we get values (I32)
+            element_type = make_primitive(PrimitiveKind::I32);
+        } else if (iter_type->is<PrimitiveType>()) {
+            // Allow iteration over integer ranges (for i in 0 to 10)
+            element_type = iter_type;
+        } else {
+            error("For loop requires slice or collection type, found: " + type_to_string(iter_type), for_expr.span);
+            element_type = make_unit();
+        }
+    } else if (iter_type->is<PrimitiveType>()) {
+        // Allow iteration over integer ranges (for i in 0 to 10)
+        element_type = iter_type;
     } else {
-        error("For loop requires slice type, found: " + type_to_string(iter_type), for_expr.span);
+        error("For loop requires slice or collection type, found: " + type_to_string(iter_type), for_expr.span);
         element_type = make_unit();
     }
 
@@ -1184,6 +1247,11 @@ void TypeChecker::collect_captures_from_expr(const parser::Expr& expr,
                 collect_captures_from_expr(**e.else_branch, closure_scope, parent_scope, captures);
             }
         }
+        else if constexpr (std::is_same_v<T, parser::TernaryExpr>) {
+            collect_captures_from_expr(*e.condition, closure_scope, parent_scope, captures);
+            collect_captures_from_expr(*e.true_value, closure_scope, parent_scope, captures);
+            collect_captures_from_expr(*e.false_value, closure_scope, parent_scope, captures);
+        }
         else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
             if (e.value) {
                 collect_captures_from_expr(**e.value, closure_scope, parent_scope, captures);
@@ -1311,6 +1379,86 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
 
 void TypeChecker::error(const std::string& message, SourceSpan span) {
     errors_.push_back(TypeError{message, span, {}});
+}
+
+// Check if a block contains a return statement
+bool TypeChecker::block_has_return(const parser::BlockExpr& block) {
+    // Check if any statement has return
+    for (const auto& stmt : block.stmts) {
+        if (stmt_has_return(*stmt)) {
+            return true;
+        }
+    }
+
+    // Check the final expression
+    if (block.expr) {
+        return expr_has_return(**block.expr);
+    }
+
+    return false;
+}
+
+// Check if a statement contains a return
+bool TypeChecker::stmt_has_return(const parser::Stmt& stmt) {
+    return std::visit([this](const auto& s) -> bool {
+        using T = std::decay_t<decltype(s)>;
+
+        if constexpr (std::is_same_v<T, parser::ExprStmt>) {
+            return expr_has_return(*s.expr);
+        }
+        else if constexpr (std::is_same_v<T, parser::LetStmt>) {
+            // Let statements don't contain returns
+            return false;
+        }
+        else if constexpr (std::is_same_v<T, parser::VarStmt>) {
+            // Var statements don't contain returns
+            return false;
+        }
+        else {
+            return false;
+        }
+    }, stmt.kind);
+}
+
+// Check if an expression contains a return
+bool TypeChecker::expr_has_return(const parser::Expr& expr) {
+    return std::visit([this](const auto& e) -> bool {
+        using T = std::decay_t<decltype(e)>;
+
+        if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
+            return true;
+        }
+        else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
+            return block_has_return(e);
+        }
+        else if constexpr (std::is_same_v<T, parser::IfExpr>) {
+            // If expr has return if both branches have return
+            bool then_has = expr_has_return(*e.then_branch);
+            bool else_has = e.else_branch.has_value() && expr_has_return(**e.else_branch);
+            return then_has && else_has;
+        }
+        else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
+            // When expr has return if all arms have return
+            for (const auto& arm : e.arms) {
+                if (!expr_has_return(*arm.body)) {
+                    return false;
+                }
+            }
+            return !e.arms.empty();
+        }
+        else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
+            // Loop can have return in body
+            return expr_has_return(*e.body);
+        }
+        else if constexpr (std::is_same_v<T, parser::TernaryExpr>) {
+            // Ternary has return if both branches have it
+            return expr_has_return(*e.true_value) && expr_has_return(*e.false_value);
+        }
+        else {
+            // Most expressions don't contain returns
+            return false;
+        }
+    }, expr.kind);
 }
 
 } // namespace tml::types

@@ -13,18 +13,19 @@ namespace tml::parser {
 namespace precedence {
     constexpr int NONE = 0;
     constexpr int ASSIGN = 1;      // =, +=, etc.
-    constexpr int OR = 2;          // ||
-    constexpr int AND = 3;         // &&
-    constexpr int COMPARISON = 4;  // ==, !=, <, >, <=, >=
-    constexpr int BITOR = 5;       // |
-    constexpr int BITXOR = 6;      // ^
-    constexpr int BITAND = 7;      // &
-    constexpr int SHIFT = 8;       // <<, >>
-    constexpr int TERM = 9;        // +, -
-    constexpr int FACTOR = 10;     // *, /, %
-    constexpr int UNARY = 11;      // -, !, ~, &, *
-    constexpr int CALL = 12;       // (), [], .
-    constexpr int RANGE = 13;      // .., ..=
+    constexpr int TERNARY = 2;     // ? :
+    constexpr int OR = 3;          // ||
+    constexpr int AND = 4;         // &&
+    constexpr int COMPARISON = 5;  // ==, !=, <, >, <=, >=
+    constexpr int BITOR = 6;       // |
+    constexpr int BITXOR = 7;      // ^
+    constexpr int BITAND = 8;      // &
+    constexpr int SHIFT = 9;       // <<, >>
+    constexpr int TERM = 10;       // +, -
+    constexpr int FACTOR = 11;     // *, /, %
+    constexpr int UNARY = 12;      // -, !, ~, &, *
+    constexpr int CALL = 13;       // (), [], .
+    constexpr int RANGE = 14;      // .., ..=
 }
 
 // Parser error

@@ -62,6 +62,7 @@ private:
     auto check_index(const parser::IndexExpr& idx) -> TypePtr;
     auto check_block(const parser::BlockExpr& block) -> TypePtr;
     auto check_if(const parser::IfExpr& if_expr) -> TypePtr;
+    auto check_ternary(const parser::TernaryExpr& ternary) -> TypePtr;
     auto check_if_let(const parser::IfLetExpr& if_let) -> TypePtr;
     auto check_when(const parser::WhenExpr& when) -> TypePtr;
     auto check_loop(const parser::LoopExpr& loop) -> TypePtr;
@@ -93,6 +94,11 @@ private:
                                      std::shared_ptr<Scope> closure_scope,
                                      std::shared_ptr<Scope> parent_scope,
                                      std::vector<CapturedVar>& captures);
+
+    // Return statement validation
+    bool block_has_return(const parser::BlockExpr& block);
+    bool stmt_has_return(const parser::Stmt& stmt);
+    bool expr_has_return(const parser::Expr& expr);
 
     void error(const std::string& message, SourceSpan span);
 };

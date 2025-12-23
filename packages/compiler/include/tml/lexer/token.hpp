@@ -46,6 +46,7 @@ enum class TokenKind : uint8_t {
     KwElse,          // else
     KwWhen,          // when (match)
     KwLoop,          // loop
+    KwWhile,         // while
     KwFor,           // for
     KwIn,            // in
     KwTo,            // to (range exclusive)
@@ -125,6 +126,7 @@ enum class TokenKind : uint8_t {
     DotDot,          // .. (also via 'to' keyword)
     Colon,           // :
     ColonColon,      // ::
+    Question,        // ? (ternary operator)
     Bang,            // ! (error propagation)
     At,              // @
     Pipe,            // | (in patterns)

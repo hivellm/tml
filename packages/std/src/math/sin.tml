@@ -1,0 +1,53 @@
+// Sine function using Taylor series
+
+use const::Pi
+use abs
+use floor
+
+// Reduce angle to [-π, π]
+func reduce_angle(x: F64) -> F64 {
+    // x mod 2π
+    let two_pi: F64 = 2.0 * Pi
+    let n: I32 = f64_to_i32(x / two_pi)
+    let reduced: F64 = x - i32_to_f64(n) * two_pi
+
+    // Ensure [-π, π]
+    if reduced > Pi then {
+        return reduced - two_pi
+    } else {
+        if reduced < -Pi then {
+            return reduced + two_pi
+        } else {
+            return reduced
+        }
+    }
+}
+
+// sin(x) using Taylor series
+// sin(x) = x - x^3/3! + x^5/5! - x^7/7! + ...
+pub func sin(x: F64) -> F64 {
+    if x == 0.0 then return 0.0
+
+    // Reduce angle to [-π, π]
+    let angle: F64 = reduce_angle(x)
+
+    let mut sum: F64 = angle
+    let mut term: F64 = angle
+    let mut i: I32 = 1
+
+    loop {
+        if i > 15 then break
+
+        // Next term: multiply by -x^2 / ((2i)(2i+1))
+        let denominator: I32 = (2 * i) * (2 * i + 1)
+        term = term * (-angle) * angle / i32_to_f64(denominator)
+        sum = sum + term
+
+        let abs_term: F64 = abs(term)
+        if abs_term < 0.00000001 then break
+
+        i = i + 1
+    }
+
+    return sum
+}

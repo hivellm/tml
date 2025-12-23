@@ -1,0 +1,29 @@
+// Floating-point bit manipulation functions
+
+// Note: TML doesn't have direct bit access to floats yet
+// These are simplified placeholder implementations
+
+// Float32bits returns the IEEE 754 binary representation
+pub func float32_bits(f: F32) -> U32 {
+    // Would need unsafe bit cast
+    // For now, return 0
+    return 0u32
+}
+
+// Float32frombits returns the float corresponding to IEEE 754 bits
+pub func float32_from_bits(b: U32) -> F32 {
+    // Would need unsafe bit cast
+    return 0.0f32
+}
+
+// Float64bits returns the IEEE 754 binary representation
+pub func float64_bits(f: F64) -> U64 {
+    // Would need unsafe bit cast
+    return 0u64
+}
+
+// Float64frombits returns the float corresponding to IEEE 754 bits
+pub func float64_from_bits(b: U64) -> F64 {
+    // Would need unsafe bit cast
+    return 0.0
+}
