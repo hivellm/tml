@@ -463,4 +463,233 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 #endif
 }
 
+int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
+                  bool verbose, std::string* output) {
+    std::string source_code;
+    try {
+        source_code = read_file(path);
+    } catch (const std::exception& e) {
+        if (output) *output = std::string("error: ") + e.what();
+        return 1;
+    }
+
+    auto source = lexer::Source::from_string(source_code, path);
+    lexer::Lexer lex(source);
+    auto tokens = lex.tokenize();
+
+    if (lex.has_errors()) {
+        std::string err_output;
+        for (const auto& error : lex.errors()) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": error: " +
+                          error.message + "\n";
+        }
+        if (output) *output = err_output;
+        return 1;
+    }
+
+    parser::Parser parser(std::move(tokens));
+    auto module_name = fs::path(path).stem().string();
+    auto parse_result = parser.parse_module(module_name);
+
+    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+        std::string err_output;
+        const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
+        for (const auto& error : errors) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": error: " +
+                          error.message + "\n";
+        }
+        if (output) *output = err_output;
+        return 1;
+    }
+
+    const auto& module = std::get<parser::Module>(parse_result);
+
+    auto registry = std::make_shared<types::ModuleRegistry>();
+    types::TypeChecker checker;
+    checker.set_module_registry(registry);
+    auto check_result = checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
+        std::string err_output;
+        const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
+        for (const auto& error : errors) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": error: " +
+                          error.message + "\n";
+        }
+        if (output) *output = err_output;
+        return 1;
+    }
+
+    const auto& env = std::get<types::TypeEnv>(check_result);
+
+    codegen::LLVMGenOptions options;
+    options.emit_comments = false;
+    codegen::LLVMIRGen llvm_gen(env, options);
+
+    auto gen_result = llvm_gen.generate(module);
+    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
+        std::string err_output;
+        const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+        for (const auto& error : errors) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": codegen error: " +
+                          error.message + "\n";
+        }
+        if (output) *output = err_output;
+        return 1;
+    }
+
+    const auto& llvm_ir = std::get<std::string>(gen_result);
+
+    fs::path temp_dir = fs::temp_directory_path() / ("tml_run_" + std::to_string(std::hash<std::string>{}(path)));
+    fs::create_directories(temp_dir);
+
+    fs::path ll_output = temp_dir / (module_name + ".ll");
+    fs::path exe_output = temp_dir / module_name;
+    fs::path out_file = temp_dir / "output.txt";
+#ifdef _WIN32
+    exe_output += ".exe";
+#endif
+
+    std::ofstream ll_file(ll_output);
+    if (!ll_file) {
+        if (output) *output = "error: Cannot write to " + ll_output.string();
+        return 1;
+    }
+    ll_file << llvm_ir;
+    ll_file.close();
+
+    std::string clang = find_clang();
+    if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
+        if (output) *output = "error: clang not found";
+        fs::remove_all(temp_dir);
+        return 1;
+    }
+
+    std::string ll_path = to_forward_slashes(ll_output.string());
+    std::string exe_path = to_forward_slashes(exe_output.string());
+
+    std::string runtime_path = find_runtime();
+    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+                              exe_path + "\" \"" + ll_path + "\"";
+
+    if (!runtime_path.empty()) {
+        std::string runtime_to_link = ensure_runtime_compiled(runtime_path, clang, verbose);
+        compile_cmd += " \"" + runtime_to_link + "\"";
+    }
+
+    // Link module runtimes (same logic as run_run)
+    if (registry->has_module("core::mem")) {
+        std::vector<std::string> core_mem_search = {
+            "packages/core/runtime/mem.c",
+            "../../../core/runtime/mem.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
+        };
+        for (const auto& mem_path : core_mem_search) {
+            if (fs::exists(mem_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("core::time") || has_bench_functions(module)) {
+        std::vector<std::string> core_time_search = {
+            "packages/core/runtime/time.c",
+            "../../../core/runtime/time.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
+        };
+        for (const auto& time_path : core_time_search) {
+            if (fs::exists(time_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
+        std::vector<std::string> core_thread_search = {
+            "packages/core/runtime/thread.c",
+            "../../../core/runtime/thread.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
+        };
+        for (const auto& thread_path : core_thread_search) {
+            if (fs::exists(thread_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    if (registry->has_module("test")) {
+        std::vector<std::string> test_runtime_search = {
+            "packages/test/runtime/test.c",
+            "../../../test/runtime/test.c",
+            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
+        };
+        for (const auto& test_path : test_runtime_search) {
+            if (fs::exists(test_path)) {
+                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
+                break;
+            }
+        }
+    }
+
+    // Redirect compile output to null (only stderr, keep stdout for errors)
+#ifdef _WIN32
+    compile_cmd += " 2>nul";
+#else
+    compile_cmd += " 2>/dev/null";
+#endif
+
+    int compile_ret = std::system(compile_cmd.c_str());
+    if (compile_ret != 0) {
+        if (output) *output = "error: LLVM compilation failed";
+        fs::remove_all(temp_dir);
+        return 1;
+    }
+
+    // Run with output redirected to a file
+    // Use native path format for Windows compatibility
+    std::string exe_native = exe_output.string();
+    std::string out_native = out_file.string();
+    std::string run_cmd;
+
+#ifdef _WIN32
+    // Windows: use cmd /c to properly handle redirection
+    // Format: cmd /c "\"exe_path\" args > \"output_path\" 2>&1"
+    run_cmd = "cmd /c \"\"" + exe_native + "\"";
+    for (const auto& arg : args) {
+        run_cmd += " \"" + arg + "\"";
+    }
+    run_cmd += " > \"" + out_native + "\" 2>&1\"";
+#else
+    run_cmd = "\"" + exe_native + "\"";
+    for (const auto& arg : args) {
+        run_cmd += " \"" + arg + "\"";
+    }
+    run_cmd += " > \"" + out_native + "\" 2>&1";
+#endif
+
+    int run_ret = std::system(run_cmd.c_str());
+
+    // Read captured output
+    if (output && fs::exists(out_file)) {
+        std::ifstream ifs(out_file);
+        *output = std::string((std::istreambuf_iterator<char>(ifs)),
+                              std::istreambuf_iterator<char>());
+    }
+
+    fs::remove_all(temp_dir);
+
+#ifdef _WIN32
+    return run_ret;
+#else
+    return WEXITSTATUS(run_ret);
+#endif
+}
+
 }

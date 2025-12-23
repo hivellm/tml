@@ -8,4 +8,9 @@ namespace tml::cli {
 int run_build(const std::string& path, bool verbose, bool emit_ir_only);
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose);
 
+// Run with output capture (for test runner)
+// Returns exit code, stores stdout/stderr in output if provided
+int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
+                  bool verbose, std::string* output = nullptr);
+
 }
