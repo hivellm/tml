@@ -1,6 +1,6 @@
 #!/bin/bash
 # TML Compiler Build Script
-# Usage: ./scripts/build.sh [debug|release] [--clean] [--tests]
+# Usage: ./scripts/build.sh [debug|release] [--clean] [--tests] [--target <triple>]
 
 set -e
 
@@ -9,34 +9,64 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+DIM='\033[2m'
 NC='\033[0m' # No Color
 
 # Get the root directory (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Detect host target triple
+detect_target() {
+    local arch=$(uname -m)
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+    case "$arch" in
+        x86_64|amd64) arch="x86_64" ;;
+        aarch64|arm64) arch="aarch64" ;;
+        i686|i386) arch="i686" ;;
+    esac
+
+    case "$os" in
+        linux) echo "${arch}-unknown-linux-gnu" ;;
+        darwin) echo "${arch}-apple-darwin" ;;
+        mingw*|msys*|cygwin*) echo "${arch}-pc-windows-msvc" ;;
+        *) echo "${arch}-unknown-${os}" ;;
+    esac
+}
+
 # Default values
 BUILD_TYPE="debug"
 CLEAN_BUILD=false
 BUILD_TESTS=true
+TARGET=$(detect_target)
 
 # Parse arguments
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         debug|Debug|DEBUG)
             BUILD_TYPE="debug"
+            shift
             ;;
         release|Release|RELEASE)
             BUILD_TYPE="release"
+            shift
             ;;
         --clean)
             CLEAN_BUILD=true
+            shift
             ;;
         --no-tests)
             BUILD_TESTS=false
+            shift
             ;;
         --tests)
             BUILD_TESTS=true
+            shift
+            ;;
+        --target)
+            TARGET="$2"
+            shift 2
             ;;
         --help|-h)
             echo "TML Compiler Build Script"
@@ -48,34 +78,36 @@ for arg in "$@"; do
             echo "  release   Build with optimizations"
             echo ""
             echo "Options:"
-            echo "  --clean     Clean build directory before building"
-            echo "  --tests     Build tests (default)"
-            echo "  --no-tests  Don't build tests"
-            echo "  --help      Show this help message"
+            echo "  --clean          Clean build directory before building"
+            echo "  --tests          Build tests (default)"
+            echo "  --no-tests       Don't build tests"
+            echo "  --target <triple> Target triple (default: host)"
+            echo "  --help           Show this help message"
             echo ""
-            echo "Output:"
-            echo "  /build/debug/    Debug build output"
-            echo "  /build/release/  Release build output"
-            echo "  /build/cache/    Compilation cache"
+            echo "Host target: $(detect_target)"
+            echo ""
+            echo "Output structure (like Rust's target/):"
+            echo "  build/<target>/debug/"
+            echo "  build/<target>/release/"
             exit 0
             ;;
         *)
-            echo -e "${RED}Unknown argument: $arg${NC}"
+            echo -e "${RED}Unknown argument: $1${NC}"
             exit 1
             ;;
     esac
 done
 
-# Set build directory
-BUILD_DIR="$ROOT_DIR/build/$BUILD_TYPE"
-CACHE_DIR="$ROOT_DIR/build/cache"
+# Set build directory (target-specific, like Rust's target/<triple>/)
+BUILD_DIR="$ROOT_DIR/build/$TARGET/$BUILD_TYPE"
 
 echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║       TML Compiler Build System        ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
 echo ""
+echo -e "Target:      ${YELLOW}$TARGET${NC}"
 echo -e "Build type:  ${YELLOW}$BUILD_TYPE${NC}"
-echo -e "Build dir:   ${YELLOW}$BUILD_DIR${NC}"
+echo -e "Build dir:   ${DIM}$BUILD_DIR${NC}"
 echo -e "Tests:       ${YELLOW}$BUILD_TESTS${NC}"
 echo ""
 
@@ -87,7 +119,6 @@ fi
 
 # Create directories
 mkdir -p "$BUILD_DIR"
-mkdir -p "$CACHE_DIR"
 
 # Configure CMake
 echo -e "${GREEN}Configuring CMake...${NC}"
@@ -133,7 +164,4 @@ echo -e "Compiler:    ${CYAN}$BUILD_DIR/tml${NC}"
 if [ "$BUILD_TESTS" = true ]; then
     echo -e "Tests:       ${CYAN}$BUILD_DIR/tml_tests${NC}"
 fi
-echo ""
-echo -e "To use the compiler:"
-echo -e "  ${YELLOW}$BUILD_DIR/tml --help${NC}"
 echo ""

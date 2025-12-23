@@ -10,6 +10,10 @@ set "ROOT_DIR=%SCRIPT_DIR%.."
 cd /d "%ROOT_DIR%"
 set "ROOT_DIR=%CD%"
 
+:: Detect target triple (Windows MSVC)
+set "TARGET=x86_64-pc-windows-msvc"
+if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "TARGET=aarch64-pc-windows-msvc"
+
 :: Default values
 set "BUILD_TYPE=debug"
 set "CLEAN_BUILD=0"
@@ -43,23 +47,24 @@ echo   --tests     Build tests (default)
 echo   --no-tests  Don't build tests
 echo   --help      Show this help message
 echo.
-echo Output:
-echo   \build\debug\    Debug build output
-echo   \build\release\  Release build output
-echo   \build\cache\    Compilation cache
+echo Host target: %TARGET%
+echo.
+echo Output structure (like Rust's target/):
+echo   build\^<target^>\debug\
+echo   build\^<target^>\release\
 exit /b 0
 
 :args_done
 
-:: Set build directory
-set "BUILD_DIR=%ROOT_DIR%\build\%BUILD_TYPE%"
-set "CACHE_DIR=%ROOT_DIR%\build\cache"
+:: Set build directory (target-specific, like Rust's target/<triple>/)
+set "BUILD_DIR=%ROOT_DIR%\build\%TARGET%\%BUILD_TYPE%"
 
 echo.
 echo ========================================
 echo        TML Compiler Build System
 echo ========================================
 echo.
+echo Target:      %TARGET%
 echo Build type:  %BUILD_TYPE%
 echo Build dir:   %BUILD_DIR%
 echo Tests:       %BUILD_TESTS%
@@ -73,7 +78,6 @@ if "%CLEAN_BUILD%"=="1" (
 
 :: Create directories
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
-if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
 
 :: Set CMake build type
 set "CMAKE_BUILD_TYPE=Debug"
@@ -119,9 +123,6 @@ echo Compiler:    %BUILD_DIR%\%CMAKE_BUILD_TYPE%\tml.exe
 if "%BUILD_TESTS%"=="ON" (
     echo Tests:       %BUILD_DIR%\%CMAKE_BUILD_TYPE%\tml_tests.exe
 )
-echo.
-echo To use the compiler:
-echo   %BUILD_DIR%\%CMAKE_BUILD_TYPE%\tml.exe --help
 echo.
 
 endlocal
