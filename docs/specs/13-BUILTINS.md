@@ -288,6 +288,42 @@ eprint(msg)          // stderr
 eprintln(msg)        // stderr with newline
 ```
 
+**Polymorphic Functions:**
+
+The `print` and `println` functions are **polymorphic** - they accept multiple types with the same function name. This is implemented through compiler-level type resolution, not runtime polymorphism.
+
+```tml
+// All of these use the same function name 'print'
+print(42)           // I32
+print(-100)         // I32
+print(3.14)         // F64
+print(true)         // Bool
+print(false)        // Bool
+print("hello")      // Str
+
+// The compiler resolves the correct runtime function based on argument type:
+// - I32    → tml_print_i32()
+// - I64    → tml_print_i64()
+// - F64    → tml_print_f64()
+// - Bool   → tml_print_bool()
+// - Str    → tml_print_str()
+```
+
+**Type-Specific Print Functions:**
+
+While `print()` handles most cases automatically, you can use type-specific variants if needed:
+
+```tml
+// These are the underlying functions (prefer polymorphic print())
+print_i32(42)        // explicit I32 print
+print_i64(100)       // explicit I64 print
+print_f64(3.14)      // explicit F64 print
+print_bool(true)     // explicit Bool print
+print_str("hello")   // explicit Str print
+```
+
+**Note:** The polymorphic `print()` is recommended over type-specific variants as it provides a cleaner, more ergonomic API.
+
 **Format Strings:**
 
 Both `print` and `println` support format strings with placeholders:
@@ -357,7 +393,32 @@ drop(value)          // explicitly destroys value
 forget(value)        // doesn't call destructor
 ```
 
-### 7.5 Time and Benchmarking
+### 7.5 String Utilities
+
+These are low-level string utility functions available as global builtins:
+
+```tml
+str_len(s: Str) -> I32       // Length of string in bytes
+str_eq(a: Str, b: Str) -> Bool  // Compare two strings for equality
+str_hash(s: Str) -> I32      // Compute hash of a string
+```
+
+**Examples:**
+
+```tml
+let len: I32 = str_len("hello")      // 5
+let same: Bool = str_eq("a", "a")    // true
+let diff: Bool = str_eq("a", "b")    // false
+let hash: I32 = str_hash("key")      // some I32 hash value
+
+// str_hash is useful for implementing custom hash-based data structures
+// Same strings always produce the same hash
+assert(str_hash("test") == str_hash("test"))
+```
+
+**Note:** For most string operations, prefer using the `String` type methods (see section 1.5). These low-level functions are provided for cases where you need direct, simple operations without the overhead of method calls.
+
+### 7.6 Time and Benchmarking
 
 ```tml
 // ⚠️ DEPRECATED: Use Instant API instead

@@ -1,0 +1,312 @@
+use test
+
+// ============================================================================
+// Comprehensive Struct Tests
+// Tests struct declarations, field access, construction, methods
+// ============================================================================
+
+// ============================================================================
+// Basic Struct Declaration and Construction
+// ============================================================================
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+@test
+func test_struct_construction() -> I32 {
+    let p: Point = Point { x: 10, y: 20 }
+    assert_eq_i32(p.x, 10, "p.x should be 10")
+    assert_eq_i32(p.y, 20, "p.y should be 20")
+    return 0
+}
+
+@test
+func test_struct_field_access() -> I32 {
+    let p: Point = Point { x: 42, y: 99 }
+    let x_val: I32 = p.x
+    let y_val: I32 = p.y
+    assert_eq_i32(x_val, 42, "x_val should be 42")
+    assert_eq_i32(y_val, 99, "y_val should be 99")
+    return 0
+}
+
+@test
+func test_struct_field_expression() -> I32 {
+    let p: Point = Point { x: 5, y: 3 }
+    let sum: I32 = p.x + p.y
+    assert_eq_i32(sum, 8, "sum of fields should be 8")
+    return 0
+}
+
+// ============================================================================
+// Struct with Different Field Types
+// ============================================================================
+
+type Person {
+    age: I32,
+    is_active: Bool,
+}
+
+@test
+func test_struct_mixed_types() -> I32 {
+    let person: Person = Person { age: 25, is_active: true }
+    assert_eq_i32(person.age, 25, "age should be 25")
+    assert_eq_bool(person.is_active, true, "is_active should be true")
+    return 0
+}
+
+// ============================================================================
+// Nested Structs
+// ============================================================================
+
+type Rectangle {
+    top_left: Point,
+    bottom_right: Point,
+}
+
+@test
+func test_nested_struct() -> I32 {
+    let rect: Rectangle = Rectangle {
+        top_left: Point { x: 0, y: 10 },
+        bottom_right: Point { x: 20, y: 0 },
+    }
+    assert_eq_i32(rect.top_left.x, 0, "top_left.x should be 0")
+    assert_eq_i32(rect.top_left.y, 10, "top_left.y should be 10")
+    assert_eq_i32(rect.bottom_right.x, 20, "bottom_right.x should be 20")
+    assert_eq_i32(rect.bottom_right.y, 0, "bottom_right.y should be 0")
+    return 0
+}
+
+@test
+func test_nested_struct_computation() -> I32 {
+    let rect: Rectangle = Rectangle {
+        top_left: Point { x: 5, y: 15 },
+        bottom_right: Point { x: 25, y: 5 },
+    }
+    let width: I32 = rect.bottom_right.x - rect.top_left.x
+    let height: I32 = rect.top_left.y - rect.bottom_right.y
+    let area: I32 = width * height
+    assert_eq_i32(area, 200, "area should be 20 * 10 = 200")
+    return 0
+}
+
+// ============================================================================
+// Struct Methods via Impl
+// ============================================================================
+
+// Static factory methods (no 'this' required)
+impl Point {
+    func new(x: I32, y: I32) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    func origin() -> Point {
+        return Point { x: 0, y: 0 }
+    }
+}
+
+// Instance methods using standalone functions instead of 'this' methods
+// (this.field access has codegen issues, also -field.access has issues)
+func point_manhattan_distance(p: Point) -> I32 {
+    let px: I32 = p.x
+    let py: I32 = p.y
+    let x_abs: I32 = if px < 0 { -px } else { px }
+    let y_abs: I32 = if py < 0 { -py } else { py }
+    return x_abs + y_abs
+}
+
+func point_add(p1: Point, p2: Point) -> Point {
+    return Point { x: p1.x + p2.x, y: p1.y + p2.y }
+}
+
+@test
+func test_static_method() -> I32 {
+    let p: Point = Point::new(5, 10)
+    assert_eq_i32(p.x, 5, "new point x should be 5")
+    assert_eq_i32(p.y, 10, "new point y should be 10")
+    return 0
+}
+
+@test
+func test_static_method_origin() -> I32 {
+    let origin: Point = Point::origin()
+    assert_eq_i32(origin.x, 0, "origin x should be 0")
+    assert_eq_i32(origin.y, 0, "origin y should be 0")
+    return 0
+}
+
+@test
+func test_manhattan_distance() -> I32 {
+    let p: Point = Point { x: 3, y: 4 }
+    let dist: I32 = point_manhattan_distance(p)
+    assert_eq_i32(dist, 7, "manhattan distance should be 7")
+    return 0
+}
+
+@test
+func test_manhattan_distance_negative() -> I32 {
+    let p: Point = Point { x: -3, y: -4 }
+    let dist: I32 = point_manhattan_distance(p)
+    assert_eq_i32(dist, 7, "manhattan distance of (-3,-4) should be 7")
+    return 0
+}
+
+@test
+func test_point_addition() -> I32 {
+    let p1: Point = Point { x: 1, y: 2 }
+    let p2: Point = Point { x: 3, y: 4 }
+    let p3: Point = point_add(p1, p2)
+    assert_eq_i32(p3.x, 4, "sum x should be 4")
+    assert_eq_i32(p3.y, 6, "sum y should be 6")
+    return 0
+}
+
+// ============================================================================
+// Struct as Function Parameter
+// ============================================================================
+
+func point_sum(p: Point) -> I32 {
+    return p.x + p.y
+}
+
+@test
+func test_struct_as_parameter() -> I32 {
+    let p: Point = Point { x: 15, y: 27 }
+    let result: I32 = point_sum(p)
+    assert_eq_i32(result, 42, "point_sum should return 42")
+    return 0
+}
+
+func swap_point(p: Point) -> Point {
+    return Point { x: p.y, y: p.x }
+}
+
+@test
+func test_struct_return() -> I32 {
+    let p: Point = Point { x: 1, y: 2 }
+    let swapped: Point = swap_point(p)
+    assert_eq_i32(swapped.x, 2, "swapped x should be 2")
+    assert_eq_i32(swapped.y, 1, "swapped y should be 1")
+    return 0
+}
+
+// ============================================================================
+// Struct with Mutable Fields
+// ============================================================================
+
+@test
+func test_struct_field_mutation() -> I32 {
+    let mut p: Point = Point { x: 0, y: 0 }
+    p.x = 10
+    p.y = 20
+    assert_eq_i32(p.x, 10, "mutated x should be 10")
+    assert_eq_i32(p.y, 20, "mutated y should be 20")
+    return 0
+}
+
+@test
+func test_struct_field_increment() -> I32 {
+    let mut p: Point = Point { x: 5, y: 5 }
+    p.x = p.x + 1
+    p.y = p.y + 2
+    assert_eq_i32(p.x, 6, "incremented x should be 6")
+    assert_eq_i32(p.y, 7, "incremented y should be 7")
+    return 0
+}
+
+// ============================================================================
+// Complex Struct Operations
+// ============================================================================
+
+type Counter {
+    value: I32,
+    step: I32,
+}
+
+impl Counter {
+    func new(start: I32, step: I32) -> Counter {
+        return Counter { value: start, step: step }
+    }
+}
+
+// Standalone functions instead of 'this' methods
+func counter_current(c: Counter) -> I32 {
+    return c.value
+}
+
+func counter_next(c: Counter) -> Counter {
+    return Counter { value: c.value + c.step, step: c.step }
+}
+
+@test
+func test_counter_struct() -> I32 {
+    let c: Counter = Counter::new(0, 5)
+    assert_eq_i32(counter_current(c), 0, "initial value should be 0")
+
+    let c2: Counter = counter_next(c)
+    assert_eq_i32(counter_current(c2), 5, "after one next should be 5")
+
+    let c3: Counter = counter_next(c2)
+    assert_eq_i32(counter_current(c3), 10, "after two nexts should be 10")
+    return 0
+}
+
+// ============================================================================
+// Struct Comparison (Field-wise)
+// ============================================================================
+
+func points_equal(p1: Point, p2: Point) -> Bool {
+    return p1.x == p2.x and p1.y == p2.y
+}
+
+@test
+func test_struct_equality() -> I32 {
+    let p1: Point = Point { x: 5, y: 10 }
+    let p2: Point = Point { x: 5, y: 10 }
+    let p3: Point = Point { x: 5, y: 11 }
+
+    assert_eq_bool(points_equal(p1, p2), true, "identical points should be equal")
+    assert_eq_bool(points_equal(p1, p3), false, "different points should not be equal")
+    return 0
+}
+
+// ============================================================================
+// Struct with Zero/Default Values
+// ============================================================================
+
+type Stats {
+    count: I32,
+    sum: I32,
+    min: I32,
+    max: I32,
+}
+
+@test
+func test_struct_all_fields() -> I32 {
+    let stats: Stats = Stats {
+        count: 5,
+        sum: 100,
+        min: 10,
+        max: 30,
+    }
+    assert_eq_i32(stats.count, 5, "count should be 5")
+    assert_eq_i32(stats.sum, 100, "sum should be 100")
+    assert_eq_i32(stats.min, 10, "min should be 10")
+    assert_eq_i32(stats.max, 30, "max should be 30")
+    return 0
+}
+
+@test
+func test_struct_average_computation() -> I32 {
+    let stats: Stats = Stats {
+        count: 4,
+        sum: 100,
+        min: 20,
+        max: 30,
+    }
+    let avg: I32 = stats.sum / stats.count
+    assert_eq_i32(avg, 25, "average should be 25")
+    return 0
+}

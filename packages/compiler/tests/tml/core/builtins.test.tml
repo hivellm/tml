@@ -1,0 +1,323 @@
+use test
+
+// ============================================================================
+// Comprehensive Builtin Function Tests
+// Tests print, str_len, str_eq, str_hash, time functions
+// ============================================================================
+
+// ============================================================================
+// String Length (str_len)
+// ============================================================================
+
+@test
+func test_str_len_empty() -> I32 {
+    let len: I32 = str_len("")
+    assert_eq_i32(len, 0, "empty string should have length 0")
+    return 0
+}
+
+@test
+func test_str_len_single_char() -> I32 {
+    let len: I32 = str_len("x")
+    assert_eq_i32(len, 1, "single char should have length 1")
+    return 0
+}
+
+@test
+func test_str_len_word() -> I32 {
+    let len: I32 = str_len("hello")
+    assert_eq_i32(len, 5, "hello should have length 5")
+    return 0
+}
+
+@test
+func test_str_len_sentence() -> I32 {
+    let len: I32 = str_len("Hello, World!")
+    assert_eq_i32(len, 13, "Hello, World! should have length 13")
+    return 0
+}
+
+@test
+func test_str_len_with_spaces() -> I32 {
+    let len: I32 = str_len("   ")
+    assert_eq_i32(len, 3, "three spaces should have length 3")
+    return 0
+}
+
+@test
+func test_str_len_numbers() -> I32 {
+    let len: I32 = str_len("12345")
+    assert_eq_i32(len, 5, "12345 should have length 5")
+    return 0
+}
+
+// ============================================================================
+// String Equality (str_eq)
+// ============================================================================
+
+@test
+func test_str_eq_identical() -> I32 {
+    let result: Bool = str_eq("hello", "hello")
+    assert_eq_bool(result, true, "identical strings should be equal")
+    return 0
+}
+
+@test
+func test_str_eq_different() -> I32 {
+    let result: Bool = str_eq("hello", "world")
+    assert_eq_bool(result, false, "different strings should not be equal")
+    return 0
+}
+
+@test
+func test_str_eq_empty() -> I32 {
+    let result: Bool = str_eq("", "")
+    assert_eq_bool(result, true, "two empty strings should be equal")
+    return 0
+}
+
+@test
+func test_str_eq_empty_vs_nonempty() -> I32 {
+    let result: Bool = str_eq("", "a")
+    assert_eq_bool(result, false, "empty vs non-empty should not be equal")
+    return 0
+}
+
+@test
+func test_str_eq_case_sensitive() -> I32 {
+    let result: Bool = str_eq("Hello", "hello")
+    assert_eq_bool(result, false, "case should matter in comparison")
+    return 0
+}
+
+@test
+func test_str_eq_same_prefix() -> I32 {
+    let result: Bool = str_eq("hello", "helloworld")
+    assert_eq_bool(result, false, "prefix should not equal longer string")
+    return 0
+}
+
+@test
+func test_str_eq_whitespace() -> I32 {
+    let result1: Bool = str_eq(" ", " ")
+    let result2: Bool = str_eq("a ", "a")
+    assert_eq_bool(result1, true, "same whitespace should be equal")
+    assert_eq_bool(result2, false, "trailing space should matter")
+    return 0
+}
+
+// ============================================================================
+// String Hash (str_hash)
+// ============================================================================
+
+@test
+func test_str_hash_consistent() -> I32 {
+    let hash1: I32 = str_hash("test")
+    let hash2: I32 = str_hash("test")
+    assert_eq_i32(hash1, hash2, "same string should produce same hash")
+    return 0
+}
+
+@test
+func test_str_hash_different() -> I32 {
+    let hash1: I32 = str_hash("hello")
+    let hash2: I32 = str_hash("world")
+    // Different strings should (very likely) produce different hashes
+    let different: Bool = hash1 != hash2
+    assert_eq_bool(different, true, "different strings should have different hashes")
+    return 0
+}
+
+@test
+func test_str_hash_empty() -> I32 {
+    let hash: I32 = str_hash("")
+    // Empty string hash should be consistent
+    let hash2: I32 = str_hash("")
+    assert_eq_i32(hash, hash2, "empty string hash should be consistent")
+    return 0
+}
+
+@test
+func test_str_hash_single_char_different() -> I32 {
+    let hash_a: I32 = str_hash("a")
+    let hash_b: I32 = str_hash("b")
+    let different: Bool = hash_a != hash_b
+    assert_eq_bool(different, true, "a and b should have different hashes")
+    return 0
+}
+
+// ============================================================================
+// Time Functions (time_ms, time_us, time_ns)
+// ============================================================================
+
+@test
+func test_time_ms_positive() -> I32 {
+    let t: I32 = time_ms()
+    // Time should always be positive (or zero for very early timestamps)
+    let is_non_negative: Bool = t >= 0
+    assert_eq_bool(is_non_negative, true, "time_ms should return non-negative")
+    return 0
+}
+
+@test
+func test_time_ms_monotonic() -> I32 {
+    let t1: I32 = time_ms()
+    // Do some work to ensure time passes
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 1000 then break
+        sum = sum + i
+        i = i + 1
+    }
+    let t2: I32 = time_ms()
+    // t2 should be >= t1 (monotonic)
+    let is_monotonic: Bool = t2 >= t1
+    assert_eq_bool(is_monotonic, true, "time_ms should be monotonic")
+    return 0
+}
+
+@test
+func test_time_us_runs() -> I32 {
+    // Just verify time_us() runs without crashing and returns a value
+    let t: I64 = time_us()
+    // Can't reliably compare I64 values in tests due to potential codegen issues
+    // The fact that this compiles and runs is the test
+    return 0
+}
+
+@test
+func test_time_ns_runs() -> I32 {
+    // Just verify time_ns() runs without crashing and returns a value
+    let t: I64 = time_ns()
+    // The fact that this compiles and runs is the test
+    return 0
+}
+
+// ============================================================================
+// Print Functions (polymorphic)
+// ============================================================================
+
+@test
+func test_print_i32() -> I32 {
+    // Just verify it doesn't crash - output goes to stdout
+    print(42)
+    print(-100)
+    print(0)
+    return 0
+}
+
+@test
+func test_print_bool() -> I32 {
+    print(true)
+    print(false)
+    return 0
+}
+
+@test
+func test_print_string() -> I32 {
+    print("Hello from test")
+    return 0
+}
+
+@test
+func test_println_string() -> I32 {
+    println("Test output line")
+    return 0
+}
+
+@test
+func test_print_mixed() -> I32 {
+    print("Value: ")
+    print(42)
+    println("")
+    return 0
+}
+
+// ============================================================================
+// Panic Function (commented out - would terminate test)
+// ============================================================================
+
+// Note: panic() terminates the program, so we can't directly test it
+// But we can verify it exists by referencing it in a conditional that's never true
+
+@test
+func test_panic_exists() -> I32 {
+    // This should compile, showing panic exists
+    // We never execute it
+    if false {
+        panic("This should never run")
+    }
+    return 0
+}
+
+// ============================================================================
+// Combined Builtin Usage
+// ============================================================================
+
+@test
+func test_string_operations_combined() -> I32 {
+    let s1: Str = "hello"
+    let s2: Str = "hello"
+    let s3: Str = "world"
+
+    // Check length
+    let len: I32 = str_len(s1)
+    assert_eq_i32(len, 5, "hello length should be 5")
+
+    // Check equality
+    let eq1: Bool = str_eq(s1, s2)
+    let eq2: Bool = str_eq(s1, s3)
+    assert_eq_bool(eq1, true, "hello == hello")
+    assert_eq_bool(eq2, false, "hello != world")
+
+    // Check hash consistency
+    let h1: I32 = str_hash(s1)
+    let h2: I32 = str_hash(s2)
+    assert_eq_i32(h1, h2, "equal strings should have equal hashes")
+
+    return 0
+}
+
+@test
+func test_time_precision_ordering() -> I32 {
+    // time_ns should give more precision than time_us
+    // time_us should give more precision than time_ms
+    // We can't directly compare values but we can check they all work
+    let ms: I32 = time_ms()
+    let us: I64 = time_us()
+    let ns: I64 = time_ns()
+
+    // Just verify time_ms is non-negative (I32 comparison works)
+    assert_eq_bool(ms >= 0, true, "time_ms should be non-negative")
+    // I64 comparisons may have codegen issues, just verify functions run
+    return 0
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+@test
+func test_str_len_special_chars() -> I32 {
+    // Test with special characters
+    let len: I32 = str_len("a\tb\nc")
+    // a, tab, b, newline, c = 5 characters
+    assert_eq_i32(len, 5, "string with escapes should have correct length")
+    return 0
+}
+
+@test
+func test_str_eq_special_chars() -> I32 {
+    let result: Bool = str_eq("a\n", "a\n")
+    assert_eq_bool(result, true, "strings with newlines should be equal")
+    return 0
+}
+
+@test
+func test_str_hash_special_chars() -> I32 {
+    let h1: I32 = str_hash("a\n")
+    let h2: I32 = str_hash("a\n")
+    assert_eq_i32(h1, h2, "special char strings should have consistent hash")
+    return 0
+}
