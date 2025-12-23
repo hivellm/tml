@@ -1,3 +1,5 @@
+use test
+
 // Collection Operations Tests (List, HashMap, Buffer)
 
 @test

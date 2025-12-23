@@ -1,3 +1,5 @@
+use test
+
 // Enum Tests - Using direct comparison only (pattern matching has issues)
 
 // Simple enum (no data)

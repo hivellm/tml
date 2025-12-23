@@ -1,3 +1,5 @@
+use test// Struct Tests
+
 type Point {
     x: I32,
     y: I32,
@@ -9,12 +11,23 @@ type Rectangle {
     height: I32,
 }
 
-func main() {
+@test
+func test_point_creation() -> I32 {
     let p: Point = Point { x: 10, y: 20 }
-    println(p.x)
-    println(p.y)
-    let rect: Rectangle = Rectangle { origin: Point { x: 0, y: 0 }, width: 100, height: 50 }
-    println(rect.width)
-    println(rect.height)
-    println(rect.origin.x)
+    assert_eq_i32(p.x, 10, "Point x should be 10")
+    assert_eq_i32(p.y, 20, "Point y should be 20")
+    return 0
+}
+
+@test
+func test_rectangle_creation() -> I32 {
+    let rect: Rectangle = Rectangle { 
+        origin: Point { x: 0, y: 0 }, 
+        width: 100, 
+        height: 50 
+    }
+    assert_eq_i32(rect.width, 100, "Rectangle width should be 100")
+    assert_eq_i32(rect.height, 50, "Rectangle height should be 50")
+    assert_eq_i32(rect.origin.x, 0, "Rectangle origin.x should be 0")
+    return 0
 }

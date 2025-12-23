@@ -1,50 +1,41 @@
-// Basic Language Features Test Suite
+use test// Basic Language Features Test Suite
 
 @test
 func arithmetic() -> I32 {
-    println("--- Arithmetic ---")
-
     let a: I32 = 10 + 5
-    if a != 15 { return 1 }
+    assert_eq_i32(a, 15, "10 + 5 should equal 15")
 
     let b: I32 = 20 - 5
-    if b != 15 { return 2 }
+    assert_eq_i32(b, 15, "20 - 5 should equal 15")
 
     let c: I32 = 5 * 4
-    if c != 20 { return 3 }
+    assert_eq_i32(c, 20, "5 * 4 should equal 20")
 
     let d: I32 = 20 / 4
-    if d != 5 { return 4 }
+    assert_eq_i32(d, 5, "20 / 4 should equal 5")
 
-    println("Arithmetic: OK")
     return 0
 }
 
 @test
 func variables() -> I32 {
-    println("--- Variables ---")
-
     let x: I32 = 42
-    if x != 42 { return 10 }
+    assert_eq_i32(x, 42, "x should equal 42")
 
     let mut y: I32 = 10
     y = 20
-    if y != 20 { return 11 }
+    assert_eq_i32(y, 20, "y should equal 20 after assignment")
 
-    println("Variables: OK")
     return 0
 }
 
 @test
 func conditionals() -> I32 {
-    println("--- Conditionals ---")
-
     let result: I32 = if 5 > 3 then 1 else 0
-    if result != 1 { return 20 }
+    assert_eq_i32(result, 1, "5 > 3 should be true")
 
     let result2: I32 = if 2 > 10 then 1 else 0
-    if result2 != 0 { return 21 }
+    assert_eq_i32(result2, 0, "2 > 10 should be false")
 
-    println("Conditionals: OK")
     return 0
 }

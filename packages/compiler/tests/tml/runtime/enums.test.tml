@@ -1,4 +1,4 @@
-use testn// Enum Tests
+use test// Enum Tests
 
 // Simple enum (no data)
 type Color {

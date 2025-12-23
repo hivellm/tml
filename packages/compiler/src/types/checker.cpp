@@ -62,6 +62,12 @@ TypeChecker::TypeChecker() = default;
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
 
+    // Pass 0: Process use declarations (imports)
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::UseDecl>()) {
+            process_use_decl(decl->as<parser::UseDecl>());
+        }
+    }
     // First pass: register all type declarations
     for (const auto& decl : module.decls) {
         if (decl->is<parser::StructDecl>()) {
@@ -179,6 +185,50 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
 void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
     env_.define_type_alias(decl.name, resolve_type(*decl.type));
+}
+
+void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
+    // Build module path from use declaration
+    std::string module_path;
+    for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
+        if (i > 0) module_path += "::";
+        module_path += use_decl.path.segments[i];
+    }
+
+    // Look up the module in the registry
+    auto module_opt = env_.get_module(module_path);
+    if (!module_opt.has_value()) {
+        errors_.push_back(TypeError{
+            "Module '" + module_path + "' not found",
+            use_decl.span,
+            {}
+        });
+        return;
+    }
+
+    const auto& module = module_opt.value();
+
+    // Import all functions from the module
+    for (const auto& [name, func_sig] : module.functions) {
+        env_.define_func(func_sig);
+    }
+
+    // Import all types from the module
+    for (const auto& [name, struct_def] : module.structs) {
+        env_.define_struct(struct_def);
+    }
+
+    for (const auto& [name, enum_def] : module.enums) {
+        env_.define_enum(enum_def);
+    }
+
+    for (const auto& [name, behavior_def] : module.behaviors) {
+        env_.define_behavior(behavior_def);
+    }
+
+    for (const auto& [name, type_alias] : module.type_aliases) {
+        env_.define_type_alias(name, type_alias);
+    }
 }
 
 void TypeChecker::check_func_decl(const parser::FuncDecl& func) {

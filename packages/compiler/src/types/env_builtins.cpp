@@ -1,4 +1,5 @@
 #include "tml/types/env.hpp"
+#include "tml/types/module.hpp"
 
 namespace tml::types {
 
@@ -1091,72 +1092,87 @@ void TypeEnv::init_builtins() {
         builtin_span
     };
 
-    // ============ TEST ASSERTIONS ============
+}
 
-    // assert(condition: Bool, message: Str) -> Unit
-    functions_["assert"] = FuncSig{
+
+void TypeEnv::init_test_module() {
+    if (!module_registry_) {
+        return;  // No module registry available
+    }
+
+    Module test_module;
+    test_module.name = "test";
+
+    // Basic assert(condition: Bool, message: Str) -> Unit
+    test_module.functions["assert"] = FuncSig{
         "assert",
         {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Str)},
         make_unit(),
         {},
         false,
-        builtin_span,
+        SourceSpan{},
         StabilityLevel::Stable,
         "",
         "1.0"
     };
 
-    // assert_eq_i32(left: I32, right: I32, message: Str) -> Unit
-    functions_["assert_eq_i32"] = FuncSig{
+    // Specific assert_eq_i32(left: I32, right: I32, message: Str) -> Unit
+    test_module.functions["assert_eq_i32"] = FuncSig{
         "assert_eq_i32",
-        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::Str)},
+        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), 
+         make_primitive(PrimitiveKind::Str)},
         make_unit(),
         {},
         false,
-        builtin_span,
+        SourceSpan{},
         StabilityLevel::Stable,
         "",
         "1.0"
     };
 
     // assert_ne_i32(left: I32, right: I32, message: Str) -> Unit
-    functions_["assert_ne_i32"] = FuncSig{
+    test_module.functions["assert_ne_i32"] = FuncSig{
         "assert_ne_i32",
-        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::Str)},
+        {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32), 
+         make_primitive(PrimitiveKind::Str)},
         make_unit(),
         {},
         false,
-        builtin_span,
+        SourceSpan{},
         StabilityLevel::Stable,
         "",
         "1.0"
     };
 
     // assert_eq_str(left: Str, right: Str, message: Str) -> Unit
-    functions_["assert_eq_str"] = FuncSig{
+    test_module.functions["assert_eq_str"] = FuncSig{
         "assert_eq_str",
-        {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str)},
+        {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str), 
+         make_primitive(PrimitiveKind::Str)},
         make_unit(),
         {},
         false,
-        builtin_span,
+        SourceSpan{},
         StabilityLevel::Stable,
         "",
         "1.0"
     };
 
     // assert_eq_bool(left: Bool, right: Bool, message: Str) -> Unit
-    functions_["assert_eq_bool"] = FuncSig{
+    test_module.functions["assert_eq_bool"] = FuncSig{
         "assert_eq_bool",
-        {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Str)},
+        {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Bool), 
+         make_primitive(PrimitiveKind::Str)},
         make_unit(),
         {},
         false,
-        builtin_span,
+        SourceSpan{},
         StabilityLevel::Stable,
         "",
         "1.0"
     };
+
+    module_registry_->register_module("test", std::move(test_module));
 }
 
 } // namespace tml::types

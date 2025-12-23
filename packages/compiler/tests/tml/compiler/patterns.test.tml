@@ -1,4 +1,4 @@
-// Pattern Matching Tests
+use test// Pattern Matching Tests
 
 type Maybe[T] {
     Just(T),
@@ -12,38 +12,23 @@ type Outcome[T, E] {
 
 @test
 func pattern_binding_let() -> I32 {
-    println("--- Pattern Binding in Let ---")
-
     let x: I32 = 42
-
-    if x != 42 { return 1 }
-
-    println("OK")
+    assert_eq_i32(x, 42, "x should equal 42")
     return 0
 }
 
 @test
 func pattern_maybe() -> I32 {
-    println("--- Maybe Pattern ---")
-
     let x: Maybe[I32] = Just(42)
-
     // Pattern matching with when is tested here
     // For now, just verify the type compiles
-
-    println("OK")
     return 0
 }
 
 @test
 func pattern_outcome() -> I32 {
-    println("--- Outcome Pattern ---")
-
     let result: Outcome[I32, I32] = Ok(200)
-
     // Pattern matching with when expression
     // Verifies the type system accepts the pattern
-
-    println("OK")
     return 0
 }
