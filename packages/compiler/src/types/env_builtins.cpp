@@ -22,6 +22,15 @@ void TypeEnv::init_builtins() {
     builtins_["Str"] = make_primitive(PrimitiveKind::Str);
     builtins_["Unit"] = make_unit();
 
+    // Collection types (defined here before function signatures)
+    auto list_type = std::make_shared<Type>(Type{NamedType{"List", "", {}}});
+    auto hashmap_type = std::make_shared<Type>(Type{NamedType{"HashMap", "", {}}});
+    auto buffer_type = std::make_shared<Type>(Type{NamedType{"Buffer", "", {}}});
+
+    builtins_["List"] = list_type;
+    builtins_["HashMap"] = hashmap_type;
+    builtins_["Buffer"] = buffer_type;
+
     // Builtin functions
     SourceSpan builtin_span{};
 
@@ -538,11 +547,11 @@ void TypeEnv::init_builtins() {
 
     // ============ LIST (Dynamic Array) ============
 
-    // list_create(capacity: I32) -> list_ptr
+    // list_create(capacity: I32) -> List
     functions_["list_create"] = FuncSig{
         "list_create",
         {make_primitive(PrimitiveKind::I32)},
-        ptr_type,
+        list_type,
         {},
         false,
         builtin_span
@@ -551,7 +560,7 @@ void TypeEnv::init_builtins() {
     // list_destroy(list) -> Unit
     functions_["list_destroy"] = FuncSig{
         "list_destroy",
-        {ptr_type},
+        {list_type},
         make_unit(),
         {},
         false,
@@ -561,7 +570,7 @@ void TypeEnv::init_builtins() {
     // list_push(list, value: I32) -> Unit
     functions_["list_push"] = FuncSig{
         "list_push",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {list_type, make_primitive(PrimitiveKind::I32)},
         make_unit(),
         {},
         false,
@@ -571,7 +580,7 @@ void TypeEnv::init_builtins() {
     // list_pop(list) -> I32
     functions_["list_pop"] = FuncSig{
         "list_pop",
-        {ptr_type},
+        {list_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -581,7 +590,7 @@ void TypeEnv::init_builtins() {
     // list_get(list, index: I32) -> I32
     functions_["list_get"] = FuncSig{
         "list_get",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {list_type, make_primitive(PrimitiveKind::I32)},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -591,7 +600,7 @@ void TypeEnv::init_builtins() {
     // list_set(list, index: I32, value: I32) -> Unit
     functions_["list_set"] = FuncSig{
         "list_set",
-        {ptr_type, make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32)},
+        {list_type, make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32)},
         make_unit(),
         {},
         false,
@@ -601,7 +610,7 @@ void TypeEnv::init_builtins() {
     // list_len(list) -> I32
     functions_["list_len"] = FuncSig{
         "list_len",
-        {ptr_type},
+        {list_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -611,7 +620,7 @@ void TypeEnv::init_builtins() {
     // list_capacity(list) -> I32
     functions_["list_capacity"] = FuncSig{
         "list_capacity",
-        {ptr_type},
+        {list_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -621,7 +630,7 @@ void TypeEnv::init_builtins() {
     // list_clear(list) -> Unit
     functions_["list_clear"] = FuncSig{
         "list_clear",
-        {ptr_type},
+        {list_type},
         make_unit(),
         {},
         false,
@@ -631,7 +640,7 @@ void TypeEnv::init_builtins() {
     // list_is_empty(list) -> Bool
     functions_["list_is_empty"] = FuncSig{
         "list_is_empty",
-        {ptr_type},
+        {list_type},
         make_primitive(PrimitiveKind::Bool),
         {},
         false,
@@ -640,11 +649,11 @@ void TypeEnv::init_builtins() {
 
     // ============ HASHMAP ============
 
-    // hashmap_create(capacity: I32) -> map_ptr
+    // hashmap_create(capacity: I32) -> HashMap
     functions_["hashmap_create"] = FuncSig{
         "hashmap_create",
         {make_primitive(PrimitiveKind::I32)},
-        ptr_type,
+        hashmap_type,
         {},
         false,
         builtin_span
@@ -653,7 +662,7 @@ void TypeEnv::init_builtins() {
     // hashmap_destroy(map) -> Unit
     functions_["hashmap_destroy"] = FuncSig{
         "hashmap_destroy",
-        {ptr_type},
+        {hashmap_type},
         make_unit(),
         {},
         false,
@@ -663,7 +672,7 @@ void TypeEnv::init_builtins() {
     // hashmap_set(map, key: I32, value: I32) -> Unit
     functions_["hashmap_set"] = FuncSig{
         "hashmap_set",
-        {ptr_type, make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32)},
+        {hashmap_type, make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32)},
         make_unit(),
         {},
         false,
@@ -673,7 +682,7 @@ void TypeEnv::init_builtins() {
     // hashmap_get(map, key: I32) -> I32
     functions_["hashmap_get"] = FuncSig{
         "hashmap_get",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {hashmap_type, make_primitive(PrimitiveKind::I32)},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -683,7 +692,7 @@ void TypeEnv::init_builtins() {
     // hashmap_has(map, key: I32) -> Bool
     functions_["hashmap_has"] = FuncSig{
         "hashmap_has",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {hashmap_type, make_primitive(PrimitiveKind::I32)},
         make_primitive(PrimitiveKind::Bool),
         {},
         false,
@@ -693,7 +702,7 @@ void TypeEnv::init_builtins() {
     // hashmap_remove(map, key: I32) -> Bool
     functions_["hashmap_remove"] = FuncSig{
         "hashmap_remove",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {hashmap_type, make_primitive(PrimitiveKind::I32)},
         make_primitive(PrimitiveKind::Bool),
         {},
         false,
@@ -703,7 +712,7 @@ void TypeEnv::init_builtins() {
     // hashmap_len(map) -> I32
     functions_["hashmap_len"] = FuncSig{
         "hashmap_len",
-        {ptr_type},
+        {hashmap_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -713,7 +722,7 @@ void TypeEnv::init_builtins() {
     // hashmap_clear(map) -> Unit
     functions_["hashmap_clear"] = FuncSig{
         "hashmap_clear",
-        {ptr_type},
+        {hashmap_type},
         make_unit(),
         {},
         false,
@@ -722,11 +731,11 @@ void TypeEnv::init_builtins() {
 
     // ============ BUFFER ============
 
-    // buffer_create(capacity: I32) -> buf_ptr
+    // buffer_create(capacity: I32) -> Buffer
     functions_["buffer_create"] = FuncSig{
         "buffer_create",
         {make_primitive(PrimitiveKind::I32)},
-        ptr_type,
+        buffer_type,
         {},
         false,
         builtin_span
@@ -735,7 +744,7 @@ void TypeEnv::init_builtins() {
     // buffer_destroy(buf) -> Unit
     functions_["buffer_destroy"] = FuncSig{
         "buffer_destroy",
-        {ptr_type},
+        {buffer_type},
         make_unit(),
         {},
         false,
@@ -745,7 +754,7 @@ void TypeEnv::init_builtins() {
     // buffer_write_byte(buf, byte: I32) -> Unit
     functions_["buffer_write_byte"] = FuncSig{
         "buffer_write_byte",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {buffer_type, make_primitive(PrimitiveKind::I32)},
         make_unit(),
         {},
         false,
@@ -755,7 +764,7 @@ void TypeEnv::init_builtins() {
     // buffer_write_i32(buf, value: I32) -> Unit
     functions_["buffer_write_i32"] = FuncSig{
         "buffer_write_i32",
-        {ptr_type, make_primitive(PrimitiveKind::I32)},
+        {buffer_type, make_primitive(PrimitiveKind::I32)},
         make_unit(),
         {},
         false,
@@ -765,7 +774,7 @@ void TypeEnv::init_builtins() {
     // buffer_read_byte(buf) -> I32
     functions_["buffer_read_byte"] = FuncSig{
         "buffer_read_byte",
-        {ptr_type},
+        {buffer_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -775,7 +784,7 @@ void TypeEnv::init_builtins() {
     // buffer_read_i32(buf) -> I32
     functions_["buffer_read_i32"] = FuncSig{
         "buffer_read_i32",
-        {ptr_type},
+        {buffer_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -785,7 +794,7 @@ void TypeEnv::init_builtins() {
     // buffer_len(buf) -> I32
     functions_["buffer_len"] = FuncSig{
         "buffer_len",
-        {ptr_type},
+        {buffer_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -795,7 +804,7 @@ void TypeEnv::init_builtins() {
     // buffer_capacity(buf) -> I32
     functions_["buffer_capacity"] = FuncSig{
         "buffer_capacity",
-        {ptr_type},
+        {buffer_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -805,7 +814,7 @@ void TypeEnv::init_builtins() {
     // buffer_remaining(buf) -> I32
     functions_["buffer_remaining"] = FuncSig{
         "buffer_remaining",
-        {ptr_type},
+        {buffer_type},
         make_primitive(PrimitiveKind::I32),
         {},
         false,
@@ -815,7 +824,7 @@ void TypeEnv::init_builtins() {
     // buffer_clear(buf) -> Unit
     functions_["buffer_clear"] = FuncSig{
         "buffer_clear",
-        {ptr_type},
+        {buffer_type},
         make_unit(),
         {},
         false,
@@ -825,7 +834,7 @@ void TypeEnv::init_builtins() {
     // buffer_reset_read(buf) -> Unit
     functions_["buffer_reset_read"] = FuncSig{
         "buffer_reset_read",
-        {ptr_type},
+        {buffer_type},
         make_unit(),
         {},
         false,

@@ -273,41 +273,41 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // List runtime declarations
     emit_line("; List (dynamic array) runtime");
-    emit_line("declare ptr @tml_list_create(i32)");
+    emit_line("declare ptr @tml_list_create(i64)");
     emit_line("declare void @tml_list_destroy(ptr)");
-    emit_line("declare void @tml_list_push(ptr, i32)");
-    emit_line("declare i32 @tml_list_pop(ptr)");
-    emit_line("declare i32 @tml_list_get(ptr, i32)");
-    emit_line("declare void @tml_list_set(ptr, i32, i32)");
-    emit_line("declare i32 @tml_list_len(ptr)");
-    emit_line("declare i32 @tml_list_capacity(ptr)");
+    emit_line("declare void @tml_list_push(ptr, i64)");
+    emit_line("declare i64 @tml_list_pop(ptr)");
+    emit_line("declare i64 @tml_list_get(ptr, i64)");
+    emit_line("declare void @tml_list_set(ptr, i64, i64)");
+    emit_line("declare i64 @tml_list_len(ptr)");
+    emit_line("declare i64 @tml_list_capacity(ptr)");
     emit_line("declare void @tml_list_clear(ptr)");
     emit_line("declare i32 @tml_list_is_empty(ptr)");
     emit_line("");
 
     // HashMap runtime declarations
     emit_line("; HashMap runtime");
-    emit_line("declare ptr @tml_hashmap_create()");
+    emit_line("declare ptr @tml_hashmap_create(i64)");
     emit_line("declare void @tml_hashmap_destroy(ptr)");
-    emit_line("declare void @tml_hashmap_set(ptr, i32, i32)");
-    emit_line("declare i32 @tml_hashmap_get(ptr, i32, ptr)");
-    emit_line("declare i32 @tml_hashmap_has(ptr, i32)");
-    emit_line("declare i32 @tml_hashmap_remove(ptr, i32)");
-    emit_line("declare i32 @tml_hashmap_len(ptr)");
+    emit_line("declare void @tml_hashmap_set(ptr, i64, i64)");
+    emit_line("declare i64 @tml_hashmap_get(ptr, i64)");
+    emit_line("declare i1 @tml_hashmap_has(ptr, i64)");
+    emit_line("declare i1 @tml_hashmap_remove(ptr, i64)");
+    emit_line("declare i64 @tml_hashmap_len(ptr)");
     emit_line("declare void @tml_hashmap_clear(ptr)");
     emit_line("");
 
     // Buffer runtime declarations
     emit_line("; Buffer runtime");
-    emit_line("declare ptr @tml_buffer_create(i32)");
+    emit_line("declare ptr @tml_buffer_create(i64)");
     emit_line("declare void @tml_buffer_destroy(ptr)");
     emit_line("declare void @tml_buffer_write_byte(ptr, i32)");
     emit_line("declare void @tml_buffer_write_i32(ptr, i32)");
     emit_line("declare i32 @tml_buffer_read_byte(ptr)");
     emit_line("declare i32 @tml_buffer_read_i32(ptr)");
-    emit_line("declare i32 @tml_buffer_len(ptr)");
-    emit_line("declare i32 @tml_buffer_capacity(ptr)");
-    emit_line("declare i32 @tml_buffer_remaining(ptr)");
+    emit_line("declare i64 @tml_buffer_len(ptr)");
+    emit_line("declare i64 @tml_buffer_capacity(ptr)");
+    emit_line("declare i64 @tml_buffer_remaining(ptr)");
     emit_line("declare void @tml_buffer_clear(ptr)");
     emit_line("declare void @tml_buffer_reset_read(ptr)");
     emit_line("");
