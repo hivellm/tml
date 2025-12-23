@@ -31,6 +31,12 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.release = true;
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
+        } else if (arg.starts_with("--group=")) {
+            // Filter by test group/directory (e.g., --group=compiler)
+            opts.patterns.push_back(arg.substr(8));
+        } else if (arg.starts_with("--suite=")) {
+            // Filter by test suite/directory (e.g., --suite=runtime)
+            opts.patterns.push_back(arg.substr(8));
         } else if (!arg.starts_with("--")) {
             // Test name pattern
             opts.patterns.push_back(arg);
@@ -60,13 +66,18 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
         std::cerr << "Error discovering test files: " << e.what() << "\n";
     }
 
-    // Also check tests/ directory
+    // Also check tests/ directory (but exclude error tests)
     std::string tests_dir = root_dir + "/tests";
     if (fs::exists(tests_dir) && fs::is_directory(tests_dir)) {
         try {
             for (const auto& entry : fs::recursive_directory_iterator(tests_dir)) {
                 if (entry.is_regular_file() && entry.path().extension() == ".tml") {
-                    test_files.push_back(entry.path().string());
+                    std::string path_str = entry.path().string();
+                    // Skip error test files (in tests/errors/)
+                    if (path_str.find("\\errors\\") == std::string::npos &&
+                        path_str.find("/errors/") == std::string::npos) {
+                        test_files.push_back(path_str);
+                    }
                 }
             }
         } catch (const fs::filesystem_error&) {

@@ -46,18 +46,29 @@ func variables() -> I32 {
 ## Running Tests
 
 ```bash
-# Run all tests in a file
-cd packages/compiler/build
-./Debug/tml.exe run ../tests/tml/basics.test.tml
-
-# Build test executable
-./Debug/tml.exe build ../tests/tml/closures.test.tml
-
-# Type check only
-./Debug/tml.exe check ../tests/tml/enums.test.tml
+# From packages/compiler directory:
+cd packages/compiler
 
 # Run all tests
-for file in ../tests/tml/*.test.tml; do ./Debug/tml.exe run "$file"; done
+./build/Debug/tml.exe test
+
+# Run only compiler tests (basics, closures, features, patterns)
+./build/Debug/tml.exe test --group='tests\tml\compiler'
+
+# Run only runtime tests (structs, enums, collections)
+./build/Debug/tml.exe test --suite='tests\tml\runtime'
+
+# Run with verbose output
+./build/Debug/tml.exe test --verbose
+
+# Run a specific test file
+./build/Debug/tml.exe run tests/tml/compiler/basics.test.tml
+
+# Build test executable
+./build/Debug/tml.exe build tests/tml/compiler/closures.test.tml
+
+# Type check only
+./build/Debug/tml.exe check tests/tml/runtime/enums.test.tml
 ```
 
 ## How @test Works

@@ -5,7 +5,7 @@ func test_list() -> I32 {
     println("--- List Tests ---")
 
     // Create list with initial capacity 4
-    let list: ptr = list_create(4)
+    let list: mut ref I32 = list_create(4)
 
     // Push elements
     list_push(list, 10)
@@ -55,7 +55,7 @@ func test_list() -> I32 {
     println("list_pop: OK")
 
     // Test is_empty
-    let is_empty1: I32 = list_is_empty(list)
+    let is_empty1: Bool = list_is_empty(list)
     if is_empty1 {
         println("FAIL: list should not be empty")
         return 8
@@ -64,7 +64,7 @@ func test_list() -> I32 {
 
     // Test clear
     list_clear(list)
-    let is_empty2: I32 = list_is_empty(list)
+    let is_empty2: Bool = list_is_empty(list)
     if not is_empty2 {
         println("FAIL: list should be empty after clear")
         return 9
@@ -90,7 +90,7 @@ func test_hashmap() -> I32 {
     println("--- HashMap Tests ---")
 
     // Create hashmap with capacity 16
-    let map: ptr = hashmap_create(16)
+    let map: mut ref I32 = hashmap_create(16)
 
     // Set values
     hashmap_set(map, 1, 100)
@@ -105,17 +105,17 @@ func test_hashmap() -> I32 {
     println("hashmap_len: 3 - OK")
 
     // Test has
-    let has1: I32 = hashmap_has(map, 1)
+    let has1: Bool = hashmap_has(map, 1)
     if not has1 {
         println("FAIL: hashmap should have key 1")
         return 11
     }
-    let has2: I32 = hashmap_has(map, 2)
+    let has2: Bool = hashmap_has(map, 2)
     if not has2 {
         println("FAIL: hashmap should have key 2")
         return 12
     }
-    let has99: I32 = hashmap_has(map, 99)
+    let has99: Bool = hashmap_has(map, 99)
     if has99 {
         println("FAIL: hashmap should not have key 99")
         return 13
@@ -150,12 +150,12 @@ func test_hashmap() -> I32 {
     println("hashmap overwrite: OK")
 
     // Test remove
-    let removed: I32 = hashmap_remove(map, 1)
+    let removed: Bool = hashmap_remove(map, 1)
     if not removed {
         println("FAIL: hashmap_remove(1) should return true")
         return 19
     }
-    let has1_after: I32 = hashmap_has(map, 1)
+    let has1_after: Bool = hashmap_has(map, 1)
     if has1_after {
         println("FAIL: hashmap should not have key 1 after remove")
         return 20
@@ -185,7 +185,7 @@ func test_buffer() -> I32 {
     println("--- Buffer Tests ---")
 
     // Create buffer with capacity 32
-    let buf: ptr = buffer_create(32)
+    let buf: mut ref I32 = buffer_create(32)
 
     // Test initial state
     if buffer_len(buf) != 0 {

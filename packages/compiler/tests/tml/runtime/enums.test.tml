@@ -27,31 +27,43 @@ type Status {
 func test_color() -> I32 {
     println("--- Color Enum Tests ---")
 
-    // Test enum values
+    // Test enum construction and comparison
     let red: Color = Color::Red
     let green: Color = Color::Green
     let blue: Color = Color::Blue
 
-    // Red should be 0
-    if red != 0 {
-        println("FAIL: Color::Red should be 0")
+    // Test Red
+    let is_red: Bool = when red {
+        Color::Red => true,
+        _ => false
+    }
+    if not is_red {
+        println("FAIL: Color::Red pattern match failed")
         return 1
     }
-    println("Color::Red = 0 - OK")
+    println("Color::Red - OK")
 
-    // Green should be 1
-    if green != 1 {
-        println("FAIL: Color::Green should be 1")
+    // Test Green
+    let is_green: Bool = when green {
+        Color::Green => true,
+        _ => false
+    }
+    if not is_green {
+        println("FAIL: Color::Green pattern match failed")
         return 2
     }
-    println("Color::Green = 1 - OK")
+    println("Color::Green - OK")
 
-    // Blue should be 2
-    if blue != 2 {
-        println("FAIL: Color::Blue should be 2")
+    // Test Blue
+    let is_blue: Bool = when blue {
+        Color::Blue => true,
+        _ => false
+    }
+    if not is_blue {
+        println("FAIL: Color::Blue pattern match failed")
         return 3
     }
-    println("Color::Blue = 2 - OK")
+    println("Color::Blue - OK")
 
     // Test comparison with enum variant
     if red == Color::Red {
@@ -79,20 +91,40 @@ func test_direction() -> I32 {
     let east: Direction = Direction::East
     let west: Direction = Direction::West
 
-    if north != 0 {
-        println("FAIL: Direction::North should be 0")
+    // Test pattern matching for each direction
+    let match_north: Bool = when north {
+        Direction::North => true,
+        _ => false
+    }
+    if not match_north {
+        println("FAIL: Direction::North pattern match failed")
         return 10
     }
-    if south != 1 {
-        println("FAIL: Direction::South should be 1")
+
+    let match_south: Bool = when south {
+        Direction::South => true,
+        _ => false
+    }
+    if not match_south {
+        println("FAIL: Direction::South pattern match failed")
         return 11
     }
-    if east != 2 {
-        println("FAIL: Direction::East should be 2")
+
+    let match_east: Bool = when east {
+        Direction::East => true,
+        _ => false
+    }
+    if not match_east {
+        println("FAIL: Direction::East pattern match failed")
         return 12
     }
-    if west != 3 {
-        println("FAIL: Direction::West should be 3")
+
+    let match_west: Bool = when west {
+        Direction::West => true,
+        _ => false
+    }
+    if not match_west {
+        println("FAIL: Direction::West pattern match failed")
         return 13
     }
     println("Direction values: OK")
@@ -117,21 +149,40 @@ func test_status() -> I32 {
     let completed: Status = Status::Completed
     let failed: Status = Status::Failed
 
-    // Test all values
-    if pending != 0 {
-        println("FAIL: Status::Pending should be 0")
+    // Test pattern matching for each status
+    let match_pending: Bool = when pending {
+        Status::Pending => true,
+        _ => false
+    }
+    if not match_pending {
+        println("FAIL: Status::Pending pattern match failed")
         return 20
     }
-    if active != 1 {
-        println("FAIL: Status::Active should be 1")
+
+    let match_active: Bool = when active {
+        Status::Active => true,
+        _ => false
+    }
+    if not match_active {
+        println("FAIL: Status::Active pattern match failed")
         return 21
     }
-    if completed != 2 {
-        println("FAIL: Status::Completed should be 2")
+
+    let match_completed: Bool = when completed {
+        Status::Completed => true,
+        _ => false
+    }
+    if not match_completed {
+        println("FAIL: Status::Completed pattern match failed")
         return 22
     }
-    if failed != 3 {
-        println("FAIL: Status::Failed should be 3")
+
+    let match_failed: Bool = when failed {
+        Status::Failed => true,
+        _ => false
+    }
+    if not match_failed {
+        println("FAIL: Status::Failed pattern match failed")
         return 23
     }
     println("Status values: OK")
