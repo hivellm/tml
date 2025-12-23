@@ -21,6 +21,20 @@ using namespace tml;
 
 namespace tml::cli {
 
+// Find or create build directory for a TML project
+// Returns: project_root/build/debug or project_root/build/release
+static fs::path get_build_dir(const fs::path& source_file, bool release = false) {
+    // For now, use the source file's directory as project root
+    // In the future, we could look for tml.toml or similar
+    fs::path project_root = source_file.parent_path();
+
+    // Create build directory structure
+    fs::path build_dir = project_root / "build" / (release ? "release" : "debug");
+    fs::create_directories(build_dir);
+
+    return build_dir;
+}
+
 // Helper to check if any function has @bench decorator
 static bool has_bench_functions(const parser::Module& module) {
     for (const auto& decl : module.decls) {
@@ -116,8 +130,11 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
     fs::path input_path = fs::absolute(path);
-    fs::path ll_output = input_path.parent_path() / (module_name + ".ll");
-    fs::path exe_output = input_path.parent_path() / module_name;
+
+    // Use build directory structure (like Rust's target/)
+    fs::path build_dir = get_build_dir(input_path, false /* debug */);
+    fs::path ll_output = build_dir / (module_name + ".ll");
+    fs::path exe_output = build_dir / module_name;
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
@@ -135,7 +152,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     }
 
     if (emit_ir_only) {
-        std::cout << "build: " << ll_output << "\n";
+        std::cout << "emit-ir: " << ll_output << "\n";
         return 0;
     }
 
@@ -320,11 +337,14 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
-    fs::path temp_dir = fs::temp_directory_path() / ("tml_run_" + std::to_string(std::hash<std::string>{}(path)));
-    fs::create_directories(temp_dir);
+    fs::path input_path = fs::absolute(path);
 
-    fs::path ll_output = temp_dir / (module_name + ".ll");
-    fs::path exe_output = temp_dir / module_name;
+    // Use local build/.cache directory instead of system temp
+    fs::path cache_dir = input_path.parent_path() / "build" / ".cache";
+    fs::create_directories(cache_dir);
+
+    fs::path ll_output = cache_dir / (module_name + ".ll");
+    fs::path exe_output = cache_dir / module_name;
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
@@ -345,7 +365,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
         std::cerr << "error: clang not found.\n";
         std::cerr << "Please install LLVM/clang\n";
-        fs::remove_all(temp_dir);
+        fs::remove(ll_output);  // Clean up .ll file
         return 1;
     }
 
@@ -435,7 +455,6 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     int compile_ret = std::system(compile_cmd.c_str());
     if (compile_ret != 0) {
         std::cerr << "error: LLVM compilation failed\n";
-        fs::remove_all(temp_dir);
         return 1;
     }
 
@@ -450,10 +469,12 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     int run_ret = std::system(run_cmd.c_str());
 
+    // Keep cache files for faster re-runs (in build/.cache/)
+    // Only clean up .ll files, keep .exe for potential caching
     if (!verbose) {
-        fs::remove_all(temp_dir);
+        fs::remove(ll_output);  // Remove intermediate .ll file
     } else {
-        std::cout << "Temp files kept at: " << temp_dir << "\n";
+        std::cout << "Build cache at: " << cache_dir << "\n";
     }
 
 #ifdef _WIN32
@@ -544,12 +565,15 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
-    fs::path temp_dir = fs::temp_directory_path() / ("tml_run_" + std::to_string(std::hash<std::string>{}(path)));
-    fs::create_directories(temp_dir);
+    fs::path input_path = fs::absolute(path);
 
-    fs::path ll_output = temp_dir / (module_name + ".ll");
-    fs::path exe_output = temp_dir / module_name;
-    fs::path out_file = temp_dir / "output.txt";
+    // Use local build/.cache directory instead of system temp
+    fs::path cache_dir = input_path.parent_path() / "build" / ".cache";
+    fs::create_directories(cache_dir);
+
+    fs::path ll_output = cache_dir / (module_name + ".ll");
+    fs::path exe_output = cache_dir / module_name;
+    fs::path out_file = cache_dir / (module_name + "_output.txt");
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
@@ -565,7 +589,6 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     std::string clang = find_clang();
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
         if (output) *output = "error: clang not found";
-        fs::remove_all(temp_dir);
         return 1;
     }
 
@@ -648,7 +671,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     int compile_ret = std::system(compile_cmd.c_str());
     if (compile_ret != 0) {
         if (output) *output = "error: LLVM compilation failed";
-        fs::remove_all(temp_dir);
+        fs::remove(ll_output);  // Clean up .ll file
         return 1;
     }
 
@@ -683,7 +706,9 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                               std::istreambuf_iterator<char>());
     }
 
-    fs::remove_all(temp_dir);
+    // Clean up intermediate files (keep exe for caching)
+    fs::remove(ll_output);
+    fs::remove(out_file);
 
 #ifdef _WIN32
     return run_ret;
