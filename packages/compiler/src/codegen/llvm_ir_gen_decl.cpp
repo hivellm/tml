@@ -2,16 +2,27 @@
 // Handles: struct, enum, function declarations
 
 #include "tml/codegen/llvm_ir_gen.hpp"
+#include "tml/types/type.hpp"
 
 namespace tml::codegen {
 
 void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
+    // If struct has generic parameters, defer generation until instantiated
+    if (!s.generics.empty()) {
+        pending_generic_structs_[s.name] = &s;
+        return;
+    }
+
+    // Non-generic struct: generate immediately
     std::string type_name = "%struct." + s.name;
 
-    // Collect field types
+    // Collect field types and register field info
     std::vector<std::string> field_types;
-    for (const auto& field : s.fields) {
-        field_types.push_back(llvm_type_ptr(field.type));
+    std::vector<FieldInfo> fields;
+    for (size_t i = 0; i < s.fields.size(); ++i) {
+        std::string ft = llvm_type_ptr(s.fields[i].type);
+        field_types.push_back(ft);
+        fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
     }
 
     // Emit struct type definition
@@ -25,9 +36,103 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
 
     // Register for later use
     struct_types_[s.name] = type_name;
+    struct_fields_[s.name] = fields;
+}
+
+// Generate a specialized version of a generic struct
+void LLVMIRGen::gen_struct_instantiation(
+    const parser::StructDecl& decl,
+    const std::vector<types::TypePtr>& type_args
+) {
+    // 1. Create substitution map: T -> I32, K -> Str, etc.
+    std::unordered_map<std::string, types::TypePtr> subs;
+    for (size_t i = 0; i < decl.generics.size() && i < type_args.size(); ++i) {
+        subs[decl.generics[i].name] = type_args[i];
+    }
+
+    // 2. Generate mangled name: Pair[I32] -> Pair__I32
+    std::string mangled = mangle_struct_name(decl.name, type_args);
+    std::string type_name = "%struct." + mangled;
+
+    // 3. Collect field types with substitution and register field info
+    std::vector<std::string> field_types;
+    std::vector<FieldInfo> fields;
+    for (size_t i = 0; i < decl.fields.size(); ++i) {
+        // Resolve field type and apply substitution
+        types::TypePtr field_type = resolve_parser_type_with_subs(*decl.fields[i].type, subs);
+        std::string ft = llvm_type_from_semantic(field_type);
+        field_types.push_back(ft);
+        fields.push_back({decl.fields[i].name, static_cast<int>(i), ft});
+    }
+
+    // 4. Emit struct type definition
+    std::string def = type_name + " = type { ";
+    for (size_t i = 0; i < field_types.size(); ++i) {
+        if (i > 0) def += ", ";
+        def += field_types[i];
+    }
+    def += " }";
+    emit_line(def);
+
+    // 5. Register for later use
+    struct_types_[mangled] = type_name;
+    struct_fields_[mangled] = fields;
+}
+
+// Request instantiation of a generic struct - returns mangled name
+auto LLVMIRGen::require_struct_instantiation(
+    const std::string& base_name,
+    const std::vector<types::TypePtr>& type_args
+) -> std::string {
+    // Generate mangled name
+    std::string mangled = mangle_struct_name(base_name, type_args);
+
+    // Check if already registered
+    auto it = struct_instantiations_.find(mangled);
+    if (it != struct_instantiations_.end()) {
+        return mangled;  // Already queued or generated
+    }
+
+    // Register new instantiation
+    struct_instantiations_[mangled] = GenericInstantiation{
+        base_name,
+        type_args,
+        mangled,
+        false  // Not yet generated
+    };
+
+    // Also register field info immediately so it's available during code generation
+    // (struct_fields_ is used before generate_pending_instantiations runs)
+    auto decl_it = pending_generic_structs_.find(base_name);
+    if (decl_it != pending_generic_structs_.end()) {
+        const parser::StructDecl* decl = decl_it->second;
+
+        // Create substitution map
+        std::unordered_map<std::string, types::TypePtr> subs;
+        for (size_t i = 0; i < decl->generics.size() && i < type_args.size(); ++i) {
+            subs[decl->generics[i].name] = type_args[i];
+        }
+
+        // Register field info
+        std::vector<FieldInfo> fields;
+        for (size_t i = 0; i < decl->fields.size(); ++i) {
+            types::TypePtr field_type = resolve_parser_type_with_subs(*decl->fields[i].type, subs);
+            std::string ft = llvm_type_from_semantic(field_type);
+            fields.push_back({decl->fields[i].name, static_cast<int>(i), ft});
+        }
+        struct_fields_[mangled] = fields;
+    }
+
+    return mangled;
 }
 
 void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
+    // If enum has generic parameters, defer generation until instantiated
+    if (!e.generics.empty()) {
+        pending_generic_enums_[e.name] = &e;
+        return;
+    }
+
     // TML enums are represented as tagged unions
     // For now, simple enums are just integers (tag only)
     // Complex enums with data would need { i32, union_data }
@@ -97,6 +202,85 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
     }
 }
 
+// Generate a specialized version of a generic enum
+void LLVMIRGen::gen_enum_instantiation(
+    const parser::EnumDecl& decl,
+    const std::vector<types::TypePtr>& type_args
+) {
+    // 1. Create substitution map: T -> I32, K -> Str, etc.
+    std::unordered_map<std::string, types::TypePtr> subs;
+    for (size_t i = 0; i < decl.generics.size() && i < type_args.size(); ++i) {
+        subs[decl.generics[i].name] = type_args[i];
+    }
+
+    // 2. Generate mangled name: Maybe[I32] -> Maybe__I32
+    std::string mangled = mangle_struct_name(decl.name, type_args);
+    std::string type_name = "%struct." + mangled;
+
+    // Check if any variant has data
+    bool has_data = false;
+    for (const auto& variant : decl.variants) {
+        if (variant.tuple_fields.has_value() || variant.struct_fields.has_value()) {
+            has_data = true;
+            break;
+        }
+    }
+
+    if (!has_data) {
+        // Simple enum - just a tag
+        emit_line(type_name + " = type { i32 }");
+        struct_types_[mangled] = type_name;
+
+        int tag = 0;
+        for (const auto& variant : decl.variants) {
+            std::string key = mangled + "::" + variant.name;
+            enum_variants_[key] = tag++;
+        }
+    } else {
+        // Complex enum with data
+        // Calculate max size with substituted types
+        size_t max_size = 0;
+        for (const auto& variant : decl.variants) {
+            size_t size = 0;
+            if (variant.tuple_fields.has_value()) {
+                for (const auto& field_type : *variant.tuple_fields) {
+                    types::TypePtr resolved = resolve_parser_type_with_subs(*field_type, subs);
+                    std::string ty = llvm_type_from_semantic(resolved);
+                    if (ty == "i8") size += 1;
+                    else if (ty == "i16") size += 2;
+                    else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
+                    else size += 8;
+                }
+            }
+            if (variant.struct_fields.has_value()) {
+                for (const auto& field : *variant.struct_fields) {
+                    types::TypePtr resolved = resolve_parser_type_with_subs(*field.type, subs);
+                    std::string ty = llvm_type_from_semantic(resolved);
+                    if (ty == "i8") size += 1;
+                    else if (ty == "i16") size += 2;
+                    else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
+                    else size += 8;
+                }
+            }
+            max_size = std::max(max_size, size);
+        }
+
+        // Ensure at least 8 bytes for data
+        if (max_size == 0) max_size = 8;
+
+        emit_line(type_name + " = type { i32, [" + std::to_string(max_size) + " x i8] }");
+        struct_types_[mangled] = type_name;
+
+        int tag = 0;
+        for (const auto& variant : decl.variants) {
+            std::string key = mangled + "::" + variant.name;
+            enum_variants_[key] = tag++;
+        }
+    }
+}
+
 // Helper to extract name from FuncParam pattern
 static std::string get_param_name(const parser::FuncParam& param) {
     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
@@ -154,14 +338,20 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     emit_line("define " + linkage + ret_type + " @" + func_llvm_name + "(" + params + ")" + attrs + " {");
     emit_line("entry:");
 
-    // Allocate parameters as locals (so they can be mutated)
-    for (const auto& param : func.params) {
-        std::string param_type = llvm_type_ptr(param.type);
-        std::string param_name = get_param_name(param);
-        std::string alloc = fresh_reg();
-        emit_line("  " + alloc + " = alloca " + param_type);
-        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloc);
-        locals_[param_name] = {alloc, param_type};
+    // Register function parameters in locals_ by creating allocas
+    for (size_t i = 0; i < func.params.size(); ++i) {
+        std::string param_type = llvm_type_ptr(func.params[i].type);
+        std::string param_name = get_param_name(func.params[i]);
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + param_type);
+        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+        locals_[param_name] = VarInfo{alloca_reg, param_type};
+    }
+
+    // Coverage instrumentation - inject call at function entry
+    if (options_.coverage_enabled) {
+        std::string func_name_str = add_string_literal(func.name);
+        emit_line("  call void @tml_cover_func(ptr " + func_name_str + ")");
     }
 
     // Generate function body
@@ -201,4 +391,114 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     current_ret_type_.clear();
 }
 
+// Generate a specialized version of a generic function
+void LLVMIRGen::gen_func_instantiation(
+    const parser::FuncDecl& func,
+    const std::vector<types::TypePtr>& type_args
+) {
+    // 1. Create substitution map: T -> I32, U -> Str, etc.
+    std::unordered_map<std::string, types::TypePtr> subs;
+    for (size_t i = 0; i < func.generics.size() && i < type_args.size(); ++i) {
+        subs[func.generics[i].name] = type_args[i];
+    }
+
+    // 2. Generate mangled function name: identity[I32] -> identity__I32
+    std::string mangled = mangle_func_name(func.name, type_args);
+
+    // Save current context
+    std::string saved_func = current_func_;
+    std::string saved_ret_type = current_ret_type_;
+    bool saved_terminated = block_terminated_;
+    auto saved_locals = locals_;
+
+    current_func_ = mangled;
+    locals_.clear();
+    block_terminated_ = false;
+
+    // 3. Determine return type with substitution
+    std::string ret_type = "void";
+    if (func.return_type.has_value()) {
+        types::TypePtr resolved_ret = resolve_parser_type_with_subs(**func.return_type, subs);
+        ret_type = llvm_type_from_semantic(resolved_ret);
+    }
+    current_ret_type_ = ret_type;
+
+    // 4. Build parameter list with substituted types
+    std::string params;
+    std::string param_types;
+    std::vector<std::pair<std::string, std::string>> param_info;  // name -> type
+
+    for (size_t i = 0; i < func.params.size(); ++i) {
+        if (i > 0) {
+            params += ", ";
+            param_types += ", ";
+        }
+        // Resolve param type with substitution
+        types::TypePtr resolved_param = resolve_parser_type_with_subs(*func.params[i].type, subs);
+        std::string param_type = llvm_type_from_semantic(resolved_param);
+        std::string param_name = get_param_name(func.params[i]);
+
+        params += param_type + " %" + param_name;
+        param_types += param_type;
+        param_info.push_back({param_name, param_type});
+    }
+
+    // 5. Register function for first-class function support
+    std::string func_type = ret_type + " (" + param_types + ")";
+    functions_[mangled] = FuncInfo{
+        "@tml_" + mangled,
+        func_type,
+        ret_type
+    };
+
+    // 6. Emit function definition
+    std::string attrs = " #0";
+    emit_line("");
+    emit_line("define internal " + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
+    emit_line("entry:");
+
+    // 7. Register parameters in locals_
+    for (const auto& [param_name, param_type] : param_info) {
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + param_type);
+        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+        locals_[param_name] = VarInfo{alloca_reg, param_type};
+    }
+
+    // 8. Generate function body
+    if (func.body) {
+        for (const auto& stmt : func.body->stmts) {
+            if (block_terminated_) break;
+            gen_stmt(*stmt);
+        }
+
+        // Handle trailing expression (return value)
+        if (func.body->expr.has_value() && !block_terminated_) {
+            std::string result = gen_expr(*func.body->expr.value());
+            if (ret_type != "void" && !block_terminated_) {
+                emit_line("  ret " + ret_type + " " + result);
+                block_terminated_ = true;
+            }
+        }
+    }
+
+    // 9. Add implicit return if needed
+    if (!block_terminated_) {
+        if (ret_type == "void") {
+            emit_line("  ret void");
+        } else if (ret_type == "i32") {
+            emit_line("  ret i32 0");
+        } else {
+            emit_line("  ret " + ret_type + " zeroinitializer");
+        }
+    }
+
+    emit_line("}");
+
+    // Restore context
+    current_func_ = saved_func;
+    current_ret_type_ = saved_ret_type;
+    block_terminated_ = saved_terminated;
+    locals_ = saved_locals;
+}
 } // namespace tml::codegen

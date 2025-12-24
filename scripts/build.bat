@@ -56,8 +56,11 @@ exit /b 0
 
 :args_done
 
-:: Set build directory (target-specific, like Rust's target/<triple>/)
-set "BUILD_DIR=%ROOT_DIR%\build\%TARGET%\%BUILD_TYPE%"
+:: Set directories
+:: Cache: build/cache/<target>/<config>/ - CMake files, object files
+:: Output: build/<config>/ - final executables only
+set "CACHE_DIR=%ROOT_DIR%\build\cache\%TARGET%\%BUILD_TYPE%"
+set "OUTPUT_DIR=%ROOT_DIR%\build\%BUILD_TYPE%"
 
 echo.
 echo ========================================
@@ -66,18 +69,20 @@ echo ========================================
 echo.
 echo Target:      %TARGET%
 echo Build type:  %BUILD_TYPE%
-echo Build dir:   %BUILD_DIR%
+echo Cache dir:   %CACHE_DIR%
+echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
 echo.
 
 :: Clean if requested
 if "%CLEAN_BUILD%"=="1" (
-    echo Cleaning build directory...
-    if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
+    echo Cleaning cache directory...
+    if exist "%CACHE_DIR%" rmdir /s /q "%CACHE_DIR%"
 )
 
 :: Create directories
-if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+if not exist "%CACHE_DIR%" mkdir "%CACHE_DIR%"
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 :: Set CMake build type
 set "CMAKE_BUILD_TYPE=Debug"
@@ -85,12 +90,13 @@ if /i "%BUILD_TYPE%"=="release" set "CMAKE_BUILD_TYPE=Release"
 
 :: Configure CMake
 echo Configuring CMake...
-cd /d "%BUILD_DIR%"
+cd /d "%CACHE_DIR%"
 
 cmake "%ROOT_DIR%\packages\compiler" ^
     -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
+    -DTML_OUTPUT_DIR="%OUTPUT_DIR%"
 
 if errorlevel 1 (
     echo CMake configuration failed!
@@ -119,9 +125,9 @@ echo ========================================
 echo          Build Complete!
 echo ========================================
 echo.
-echo Compiler:    %BUILD_DIR%\%CMAKE_BUILD_TYPE%\tml.exe
+echo Compiler:    %OUTPUT_DIR%\tml.exe
 if "%BUILD_TESTS%"=="ON" (
-    echo Tests:       %BUILD_DIR%\%CMAKE_BUILD_TYPE%\tml_tests.exe
+    echo Tests:       %OUTPUT_DIR%\tml_tests.exe
 )
 echo.
 

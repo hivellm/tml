@@ -1,5 +1,10 @@
 // Power functions
 
+use abs
+use exp::{exp}
+use log::{log}
+use floor::{floor}
+
 // Integer power using fast exponentiation by squaring
 pub func pow_i32(base: I32, exp: I32) -> I32 {
     if exp < 0 then return 0
@@ -25,7 +30,7 @@ pub func pow_i32(base: I32, exp: I32) -> I32 {
     return result
 }
 
-// F64 power - for integer exponents
+// F64 power - for integer exponents (fast path)
 pub func powi(x: F64, n: I32) -> F64 {
     if n == 0 then return 1.0
     if x == 0.0 then return 0.0
@@ -36,16 +41,16 @@ pub func powi(x: F64, n: I32) -> F64 {
 
     let mut result: F64 = 1.0
     let mut base: F64 = x
-    let mut exp: I32 = abs_n
+    let mut e: I32 = abs_n
 
     loop {
-        if exp == 0 then break
+        if e == 0 then break
 
-        if (exp & 1) != 0 then {
+        if (e & 1) != 0 then {
             result = result * base
         }
         base = base * base
-        exp = exp >> 1
+        e = e >> 1
     }
 
     return if negative_exp then 1.0 / result else result
@@ -53,11 +58,44 @@ pub func powi(x: F64, n: I32) -> F64 {
 
 // General F64 power using exp and log
 // pow(x, y) = exp(y * log(x))
-// TODO: Requires log and exp implementation
 pub func pow(x: F64, y: F64) -> F64 {
-    // For now, only support integer exponents
-    let int_exp: I32 = f64_to_i32(y)
-    return powi(x, int_exp)
+    // Special cases
+    if y == 0.0 then return 1.0
+    if x == 0.0 then {
+        if y > 0.0 then return 0.0
+        return 0.0  // 0^negative is undefined, return 0
+    }
+    if x == 1.0 then return 1.0
+    if y == 1.0 then return x
+
+    // Check if y is an integer for fast path
+    let y_int: I64 = f64_to_i64(y)
+    let y_frac: F64 = y - i64_to_f64(y_int)
+
+    if y_frac == 0.0 then {
+        // Integer exponent - use fast path
+        if y_int >= -2147483648 then {
+            if y_int <= 2147483647 then {
+                return powi(x, i64_to_i32(y_int))
+            }
+        }
+    }
+
+    // General case: x^y = exp(y * log(x))
+    // Note: x must be positive for real result
+    if x < 0.0 then {
+        // For negative x with non-integer y, result is complex (undefined)
+        // Check if y is close to an integer
+        let abs_y_frac: F64 = abs(y_frac)
+        if abs_y_frac < 0.0000001 then {
+            // Close enough to integer, use powi
+            return powi(x, i64_to_i32(y_int))
+        }
+        // Return 0 for undefined case
+        return 0.0
+    }
+
+    return exp(y * log(x))
 }
 
 // Pow10 returns 10^n

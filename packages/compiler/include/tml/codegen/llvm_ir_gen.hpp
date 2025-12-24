@@ -20,7 +20,9 @@ struct LLVMGenError {
 // LLVM IR generator options
 struct LLVMGenOptions {
     bool emit_comments = true;
+    bool coverage_enabled = false;  // Inject coverage instrumentation
     std::string target_triple = "x86_64-pc-windows-msvc";
+    std::string source_file;  // Source file path for coverage tracking
 };
 
 // LLVM IR text generator
@@ -53,6 +55,10 @@ private:
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
 
+    // Expected type context for enum constructors (used in gen_call_expr)
+    // When set, enum constructors will use this type instead of inferring
+    std::string expected_enum_type_;  // e.g., "%struct.Outcome__I32__I32"
+
 public:
     // Variable name to LLVM register/type mapping (public for is_bool_expr helper)
     struct VarInfo {
@@ -69,6 +75,14 @@ private:
     // Enum variant values (EnumName::VariantName -> tag value)
     std::unordered_map<std::string, int> enum_variants_;
 
+    // Struct field info for dynamic field access
+    struct FieldInfo {
+        std::string name;
+        int index;
+        std::string llvm_type;
+    };
+    std::unordered_map<std::string, std::vector<FieldInfo>> struct_fields_;  // struct_name -> fields
+
     // Function registry for first-class functions (name -> LLVM function info)
     struct FuncInfo {
         std::string llvm_name;      // e.g., "@tml_double"
@@ -84,6 +98,28 @@ private:
     std::vector<std::string> module_functions_;  // Generated closure functions
     uint32_t closure_counter_ = 0;                // For unique closure names
 
+    // ============ Generic Instantiation Support ============
+    // Tracks generic type/function instantiations to avoid duplicates
+    // and generate specialized code for each unique type argument combination
+
+    struct GenericInstantiation {
+        std::string base_name;                      // Original name (e.g., "Pair")
+        std::vector<types::TypePtr> type_args;      // Type arguments (e.g., [I32, Str])
+        std::string mangled_name;                   // Mangled name (e.g., "Pair__I32__Str")
+        bool generated = false;                     // Has code been generated?
+    };
+
+    // Cache of struct/enum instantiations (mangled_name -> info)
+    std::unordered_map<std::string, GenericInstantiation> struct_instantiations_;
+    std::unordered_map<std::string, GenericInstantiation> enum_instantiations_;
+    std::unordered_map<std::string, GenericInstantiation> func_instantiations_;
+
+    // Pending generic declarations (base_name -> AST node pointer)
+    // These are registered but not generated until instantiated
+    std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
+    std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
+    std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+
     // Helper methods
     auto fresh_reg() -> std::string;
     auto fresh_label(const std::string& prefix = "L") -> std::string;
@@ -95,6 +131,35 @@ private:
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;
     auto llvm_type_name(const std::string& name) -> std::string;
     auto llvm_type_from_semantic(const types::TypePtr& type) -> std::string;
+
+    // Generic type mangling
+    auto mangle_type(const types::TypePtr& type) -> std::string;
+    auto mangle_type_args(const std::vector<types::TypePtr>& args) -> std::string;
+    auto mangle_struct_name(const std::string& base_name,
+                            const std::vector<types::TypePtr>& type_args) -> std::string;
+    auto mangle_func_name(const std::string& base_name,
+                          const std::vector<types::TypePtr>& type_args) -> std::string;
+
+    // Generic instantiation management
+    auto require_struct_instantiation(const std::string& base_name,
+                                      const std::vector<types::TypePtr>& type_args) -> std::string;
+    auto require_enum_instantiation(const std::string& base_name,
+                                    const std::vector<types::TypePtr>& type_args) -> std::string;
+    auto require_func_instantiation(const std::string& base_name,
+                                    const std::vector<types::TypePtr>& type_args) -> std::string;
+    void generate_pending_instantiations();
+    void gen_struct_instantiation(const parser::StructDecl& decl,
+                                  const std::vector<types::TypePtr>& type_args);
+    void gen_enum_instantiation(const parser::EnumDecl& decl,
+                                const std::vector<types::TypePtr>& type_args);
+    void gen_func_instantiation(const parser::FuncDecl& decl,
+                                const std::vector<types::TypePtr>& type_args);
+
+    // Helper: convert parser type to semantic type with generic substitution
+    auto resolve_parser_type_with_subs(
+        const parser::Type& type,
+        const std::unordered_map<std::string, types::TypePtr>& subs
+    ) -> types::TypePtr;
 
     // Module structure
     void emit_header();
@@ -147,6 +212,13 @@ private:
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
+
+    // Struct field access helpers
+    auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;
+    auto get_field_type(const std::string& struct_name, const std::string& field_name) -> std::string;
+
+    // Type inference for generics instantiation
+    auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;
 
     // String literal handling
     std::vector<std::pair<std::string, std::string>> string_literals_;

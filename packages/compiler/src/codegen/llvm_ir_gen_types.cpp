@@ -7,36 +7,217 @@
 
 namespace tml::codegen {
 
+// Helper: infer semantic type from expression for generics instantiation
+auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
+    if (expr.is<parser::LiteralExpr>()) {
+        const auto& lit = expr.as<parser::LiteralExpr>();
+        switch (lit.token.kind) {
+            case lexer::TokenKind::IntLiteral: return types::make_i32();
+            case lexer::TokenKind::FloatLiteral: return types::make_f64();
+            case lexer::TokenKind::BoolLiteral: return types::make_bool();
+            case lexer::TokenKind::StringLiteral: return types::make_str();
+            case lexer::TokenKind::CharLiteral: return types::make_primitive(types::PrimitiveKind::Char);
+            default: return types::make_i32();
+        }
+    }
+    if (expr.is<parser::IdentExpr>()) {
+        const auto& ident = expr.as<parser::IdentExpr>();
+        auto it = locals_.find(ident.name);
+        if (it != locals_.end()) {
+            // Map LLVM type back to semantic type
+            const std::string& ty = it->second.type;
+            if (ty == "i32") return types::make_i32();
+            if (ty == "i64") return types::make_i64();
+            if (ty == "i1") return types::make_bool();
+            if (ty == "float") return types::make_primitive(types::PrimitiveKind::F32);
+            if (ty == "double") return types::make_f64();
+            if (ty == "ptr") return types::make_str(); // Assume string for now
+            // For struct types, try to extract
+            if (ty.starts_with("%struct.")) {
+                std::string name = ty.substr(8);
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{name, "", {}};
+                return result;
+            }
+        }
+    }
+    if (expr.is<parser::BinaryExpr>()) {
+        // Binary expressions: infer from left operand
+        const auto& bin = expr.as<parser::BinaryExpr>();
+        return infer_expr_type(*bin.left);
+    }
+    if (expr.is<parser::UnaryExpr>()) {
+        const auto& unary = expr.as<parser::UnaryExpr>();
+        return infer_expr_type(*unary.operand);
+    }
+    if (expr.is<parser::StructExpr>()) {
+        const auto& s = expr.as<parser::StructExpr>();
+        if (!s.path.segments.empty()) {
+            std::string base_name = s.path.segments.back();
+
+            // Check if this is a generic struct
+            auto generic_it = pending_generic_structs_.find(base_name);
+            if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+                // Infer type arguments from field values
+                const parser::StructDecl* decl = generic_it->second;
+                std::vector<types::TypePtr> type_args;
+                std::unordered_map<std::string, types::TypePtr> inferred_generics;
+
+                for (const auto& gp : decl->generics) {
+                    inferred_generics[gp.name] = nullptr;
+                }
+
+                for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
+                    const auto& field_decl = decl->fields[fi];
+                    if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
+                        const auto& ftype = field_decl.type->as<parser::NamedType>();
+                        std::string ft_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                        auto gen_it = inferred_generics.find(ft_name);
+                        if (gen_it != inferred_generics.end() && !gen_it->second) {
+                            gen_it->second = infer_expr_type(*s.fields[fi].second);
+                        }
+                    }
+                }
+
+                for (const auto& gp : decl->generics) {
+                    auto inf = inferred_generics[gp.name];
+                    type_args.push_back(inf ? inf : types::make_i32());
+                }
+
+                // Return NamedType with type_args
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{base_name, "", std::move(type_args)};
+                return result;
+            }
+
+            // Non-generic struct
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::NamedType{base_name, "", {}};
+            return result;
+        }
+    }
+    // Default: I32
+    return types::make_i32();
+}
+
 // Generate struct expression, returning pointer to allocated struct
 auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string {
-    std::string type_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
-    std::string struct_type = "%struct." + type_name;
+    std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
+    std::string struct_type;
+
+    // Check if this is a generic struct
+    auto generic_it = pending_generic_structs_.find(base_name);
+    if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+        // This is a generic struct - infer type arguments from field values
+        const parser::StructDecl* decl = generic_it->second;
+
+        // Build substitution map by matching field types
+        std::vector<types::TypePtr> type_args;
+        std::unordered_map<std::string, types::TypePtr> inferred_generics;
+
+        for (const auto& generic_param : decl->generics) {
+            inferred_generics[generic_param.name] = nullptr;
+        }
+
+        // Match fields to infer generic types
+        for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
+            const auto& field_decl = decl->fields[fi];
+            // Check if field type is a generic parameter
+            if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
+                const auto& ftype = field_decl.type->as<parser::NamedType>();
+                std::string type_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                auto gen_it = inferred_generics.find(type_name);
+                if (gen_it != inferred_generics.end() && !gen_it->second) {
+                    // This field's type is a generic parameter - infer from value
+                    gen_it->second = infer_expr_type(*s.fields[fi].second);
+                }
+            }
+        }
+
+        // Build type_args in order
+        for (const auto& generic_param : decl->generics) {
+            auto inferred = inferred_generics[generic_param.name];
+            type_args.push_back(inferred ? inferred : types::make_i32());
+        }
+
+        // Get mangled name and ensure instantiation
+        std::string mangled = require_struct_instantiation(base_name, type_args);
+        struct_type = "%struct." + mangled;
+    } else {
+        // Non-generic struct
+        struct_type = "%struct." + base_name;
+    }
 
     // Allocate struct on stack
     std::string ptr = fresh_reg();
     emit_line("  " + ptr + " = alloca " + struct_type);
 
-    // Initialize fields
+    // Initialize fields - look up field index by name, not expression order
+    // Get the struct name for field index lookup
+    std::string struct_name_for_lookup = struct_type;
+    if (struct_name_for_lookup.starts_with("%struct.")) {
+        struct_name_for_lookup = struct_name_for_lookup.substr(8);
+    }
+
     for (size_t i = 0; i < s.fields.size(); ++i) {
+        const std::string& field_name = s.fields[i].first;
         std::string field_val;
         std::string field_type = "i32";
+
+        // Look up field index by name
+        int field_idx = get_field_index(struct_name_for_lookup, field_name);
 
         // Check if field value is a nested struct
         if (s.fields[i].second->is<parser::StructExpr>()) {
             // Nested struct - allocate and copy
             const auto& nested = s.fields[i].second->as<parser::StructExpr>();
             std::string nested_ptr = gen_struct_expr_ptr(nested);
-            std::string nested_type = "%struct." + nested.path.segments.back();
+
+            // Need to determine nested struct type (may also be generic)
+            std::string nested_base = nested.path.segments.back();
+            auto nested_generic_it = pending_generic_structs_.find(nested_base);
+            if (nested_generic_it != pending_generic_structs_.end()) {
+                // Generic nested struct - infer its type
+                const parser::StructDecl* nested_decl = nested_generic_it->second;
+                std::vector<types::TypePtr> nested_type_args;
+                std::unordered_map<std::string, types::TypePtr> nested_inferred;
+
+                for (const auto& gp : nested_decl->generics) {
+                    nested_inferred[gp.name] = nullptr;
+                }
+                for (size_t ni = 0; ni < nested.fields.size() && ni < nested_decl->fields.size(); ++ni) {
+                    const auto& nf = nested_decl->fields[ni];
+                    if (nf.type && nf.type->is<parser::NamedType>()) {
+                        const auto& nft = nf.type->as<parser::NamedType>();
+                        std::string nft_name = nft.path.segments.empty() ? "" : nft.path.segments.back();
+                        auto ngen_it = nested_inferred.find(nft_name);
+                        if (ngen_it != nested_inferred.end() && !ngen_it->second) {
+                            ngen_it->second = infer_expr_type(*nested.fields[ni].second);
+                        }
+                    }
+                }
+                for (const auto& gp : nested_decl->generics) {
+                    auto inf = nested_inferred[gp.name];
+                    nested_type_args.push_back(inf ? inf : types::make_i32());
+                }
+                std::string nested_mangled = require_struct_instantiation(nested_base, nested_type_args);
+                field_type = "%struct." + nested_mangled;
+            } else {
+                field_type = "%struct." + nested_base;
+            }
+
             std::string nested_val = fresh_reg();
-            emit_line("  " + nested_val + " = load " + nested_type + ", ptr " + nested_ptr);
+            emit_line("  " + nested_val + " = load " + field_type + ", ptr " + nested_ptr);
             field_val = nested_val;
-            field_type = nested_type;
         } else {
             field_val = gen_expr(*s.fields[i].second);
+            // Infer field type for proper store
+            types::TypePtr expr_type = infer_expr_type(*s.fields[i].second);
+            field_type = llvm_type_from_semantic(expr_type);
         }
 
         std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr + ", i32 0, i32 " + std::to_string(i));
+        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr + ", i32 0, i32 " + std::to_string(field_idx));
         emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
     }
 
@@ -45,8 +226,39 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
 
 auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
     std::string ptr = gen_struct_expr_ptr(s);
-    std::string type_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
-    std::string struct_type = "%struct." + type_name;
+    std::string base_name = s.path.segments.empty() ? "anon" : s.path.segments.back();
+    std::string struct_type;
+
+    // Check if this is a generic struct - same logic as gen_struct_expr_ptr
+    auto generic_it = pending_generic_structs_.find(base_name);
+    if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+        const parser::StructDecl* decl = generic_it->second;
+        std::vector<types::TypePtr> type_args;
+        std::unordered_map<std::string, types::TypePtr> inferred_generics;
+
+        for (const auto& generic_param : decl->generics) {
+            inferred_generics[generic_param.name] = nullptr;
+        }
+        for (size_t fi = 0; fi < s.fields.size() && fi < decl->fields.size(); ++fi) {
+            const auto& field_decl = decl->fields[fi];
+            if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
+                const auto& ftype = field_decl.type->as<parser::NamedType>();
+                std::string type_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                auto gen_it = inferred_generics.find(type_name);
+                if (gen_it != inferred_generics.end() && !gen_it->second) {
+                    gen_it->second = infer_expr_type(*s.fields[fi].second);
+                }
+            }
+        }
+        for (const auto& generic_param : decl->generics) {
+            auto inferred = inferred_generics[generic_param.name];
+            type_args.push_back(inferred ? inferred : types::make_i32());
+        }
+        std::string mangled = require_struct_instantiation(base_name, type_args);
+        struct_type = "%struct." + mangled;
+    } else {
+        struct_type = "%struct." + base_name;
+    }
 
     // Load the struct value
     std::string result = fresh_reg();
@@ -55,14 +267,23 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
     return result;
 }
 
-// Helper to get field index for known struct types
-static int get_field_index(const std::string& struct_name, const std::string& field_name) {
-    // Point fields
+// Helper to get field index for struct types - uses dynamic registry
+auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::string& field_name) -> int {
+    // First check the dynamic struct_fields_ registry
+    auto it = struct_fields_.find(struct_name);
+    if (it != struct_fields_.end()) {
+        for (const auto& field : it->second) {
+            if (field.name == field_name) {
+                return field.index;
+            }
+        }
+    }
+
+    // Fallback for hardcoded types (legacy support)
     if (struct_name == "Point") {
         if (field_name == "x") return 0;
         if (field_name == "y") return 1;
     }
-    // Rectangle fields
     if (struct_name == "Rectangle") {
         if (field_name == "origin") return 0;
         if (field_name == "width") return 1;
@@ -71,8 +292,19 @@ static int get_field_index(const std::string& struct_name, const std::string& fi
     return 0;
 }
 
-// Helper to get field type for known struct types
-static std::string get_field_type(const std::string& struct_name, const std::string& field_name) {
+// Helper to get field type for struct types - uses dynamic registry
+auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string& field_name) -> std::string {
+    // First check the dynamic struct_fields_ registry
+    auto it = struct_fields_.find(struct_name);
+    if (it != struct_fields_.end()) {
+        for (const auto& field : it->second) {
+            if (field.name == field_name) {
+                return field.llvm_type;
+            }
+        }
+    }
+
+    // Fallback for hardcoded types (legacy support)
     if (struct_name == "Rectangle" && field_name == "origin") {
         return "%struct.Point";
     }

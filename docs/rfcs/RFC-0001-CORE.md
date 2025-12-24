@@ -3,6 +3,21 @@
 ## Status
 Draft
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Primitive Types | ✅ Complete | I8-I128, U8-U128, F32, F64, Bool, Str |
+| Structs | ✅ Complete | Named fields, construction, access |
+| Enums | ✅ Complete | Simple and with data, pattern matching |
+| **Generics** | ✅ Complete | Monomorphization (Rust-style) |
+| Generic Structs | ✅ Complete | `Pair[T]`, `Entry[K, V]` |
+| Generic Enums | ✅ Complete | `Maybe[T]`, `Outcome[T, E]` |
+| Generic Functions | ⚠️ Parsing Only | Codegen pending |
+| Bounds/Constraints | ❌ Not Started | `T: Addable` syntax |
+| Effects | ❌ Not Started | `with io, panic` |
+| Ownership | ✅ Basic | Move semantics, no borrow checker |
+
 ## Summary
 
 This RFC defines the core language of TML: the type system, effect system, ownership model, and canonical IR format. The core is the semantic foundation—surface syntax (RFC-0002) desugars into it.

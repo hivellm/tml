@@ -11,6 +11,10 @@
 #include <fstream>
 #include <filesystem>
 #include <cstdlib>
+#include <functional>
+#include <thread>
+#include <sstream>
+#include <iomanip>
 #ifndef _WIN32
 #include <sys/wait.h>
 #include "tml/types/module.hpp"
@@ -20,6 +24,19 @@ namespace fs = std::filesystem;
 using namespace tml;
 
 namespace tml::cli {
+
+// Generate a unique cache key for a file path (to avoid collisions in parallel tests)
+static std::string generate_cache_key(const std::string& path) {
+    // Use hash of full path + thread ID to ensure uniqueness
+    std::hash<std::string> hasher;
+    size_t path_hash = hasher(path);
+    size_t thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    size_t combined = path_hash ^ (thread_hash << 1);
+
+    std::ostringstream oss;
+    oss << std::hex << std::setw(8) << std::setfill('0') << (combined & 0xFFFFFFFF);
+    return oss.str();
+}
 
 // Find or create build directory for a TML project
 // Returns: project_root/build/debug or project_root/build/release
@@ -48,6 +65,125 @@ static bool has_bench_functions(const parser::Module& module) {
         }
     }
     return false;
+}
+
+// Helper to link runtime files with caching
+// Returns the additional arguments to pass to clang
+static std::string link_runtimes_cached(
+    const std::shared_ptr<types::ModuleRegistry>& registry,
+    const parser::Module& module,
+    const std::string& deps_cache,
+    const std::string& clang,
+    bool verbose
+) {
+    std::string result;
+
+    // Helper to find and compile runtime with caching
+    auto link_runtime = [&](const std::vector<std::string>& search_paths, const std::string& name) {
+        for (const auto& path : search_paths) {
+            if (fs::exists(path)) {
+                std::string obj = ensure_c_compiled(to_forward_slashes(fs::absolute(path).string()), deps_cache, clang, verbose);
+                result += " \"" + obj + "\"";
+                if (verbose) {
+                    std::cout << "Including " << name << ": " << obj << "\n";
+                }
+                return;
+            }
+        }
+    };
+
+    // Essential runtime
+    std::string runtime_path = find_runtime();
+    if (!runtime_path.empty()) {
+        std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
+        result += " \"" + obj + "\"";
+        if (verbose) {
+            std::cout << "Including runtime: " << obj << "\n";
+        }
+    }
+
+    // Link core module runtimes if they were imported
+    if (registry->has_module("core::mem")) {
+        link_runtime({
+            "packages/core/runtime/mem.c",
+            "../../../core/runtime/mem.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
+        }, "core::mem");
+    }
+
+    // Link time runtime if core::time is imported OR if @bench decorators are present
+    if (registry->has_module("core::time") || has_bench_functions(module)) {
+        link_runtime({
+            "packages/core/runtime/time.c",
+            "../../../core/runtime/time.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
+        }, "core::time");
+    }
+
+    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
+        link_runtime({
+            "packages/core/runtime/thread.c",
+            "../../../core/runtime/thread.c",
+            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
+        }, "core::thread");
+    }
+
+    if (registry->has_module("test")) {
+        link_runtime({
+            "packages/test/runtime/test.c",
+            "../../../test/runtime/test.c",
+            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
+        }, "test");
+
+        // Also link coverage runtime (part of test module)
+        link_runtime({
+            "packages/test/runtime/coverage.c",
+            "../../../test/runtime/coverage.c",
+            "F:/Node/hivellm/tml/packages/test/runtime/coverage.c",
+        }, "test::coverage");
+    }
+
+    return result;
+}
+
+// Get the global deps cache directory
+static fs::path get_deps_cache_dir() {
+    // Use a global cache in the TML installation or current working directory
+    std::vector<std::string> cache_search = {
+        "build/debug/deps",
+        "F:/Node/hivellm/tml/build/debug/deps",
+    };
+    for (const auto& p : cache_search) {
+        fs::path dir = p;
+        if (fs::exists(dir.parent_path())) {
+            fs::create_directories(dir);
+            return dir;
+        }
+    }
+    // Fallback to local build/debug/deps
+    fs::path deps = fs::current_path() / "build" / "debug" / "deps";
+    fs::create_directories(deps);
+    return deps;
+}
+
+// Get the global run cache directory (for tml run temporary files)
+static fs::path get_run_cache_dir() {
+    // Use a global cache - not local to each file
+    std::vector<std::string> cache_search = {
+        "build/debug/.run-cache",
+        "F:/Node/hivellm/tml/build/debug/.run-cache",
+    };
+    for (const auto& p : cache_search) {
+        fs::path dir = p;
+        if (fs::exists(dir.parent_path().parent_path())) {
+            fs::create_directories(dir);
+            return dir;
+        }
+    }
+    // Fallback to current directory
+    fs::path cache = fs::current_path() / "build" / "debug" / ".run-cache";
+    fs::create_directories(cache);
+    return cache;
 }
 
 int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
@@ -160,87 +296,16 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     std::string ll_path = to_forward_slashes(ll_output.string());
     std::string exe_path = to_forward_slashes(exe_output.string());
 
-    std::string build_runtime_path = find_runtime();
+    // Create deps cache directory for precompiled runtimes
+    fs::path deps_dir = build_dir / "deps";
+    fs::create_directories(deps_dir);
+    std::string deps_cache = to_forward_slashes(deps_dir.string());
+
     std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
-    if (!build_runtime_path.empty()) {
-        std::string runtime_to_link = ensure_runtime_compiled(build_runtime_path, clang, verbose);
-        compile_cmd += " \"" + runtime_to_link + "\"";
-        if (verbose) {
-            std::cout << "Including runtime: " << runtime_to_link << "\n";
-        }
-    }
-
-    // Link core module runtimes if they were imported
-    if (registry->has_module("core::mem")) {
-        std::vector<std::string> core_mem_search = {
-            "packages/core/runtime/mem.c",
-            "../../../core/runtime/mem.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
-        };
-        for (const auto& mem_path : core_mem_search) {
-            if (fs::exists(mem_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
-                if (verbose) {
-                    std::cout << "Including core::mem runtime: " << mem_path << "\n";
-                }
-                break;
-            }
-        }
-    }
-
-    // Link time runtime if core::time is imported OR if @bench decorators are present
-    if (registry->has_module("core::time") || has_bench_functions(module)) {
-        std::vector<std::string> core_time_search = {
-            "packages/core/runtime/time.c",
-            "../../../core/runtime/time.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
-        };
-        for (const auto& time_path : core_time_search) {
-            if (fs::exists(time_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
-                if (verbose) {
-                    std::cout << "Including core::time runtime: " << time_path << "\n";
-                }
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
-        std::vector<std::string> core_thread_search = {
-            "packages/core/runtime/thread.c",
-            "../../../core/runtime/thread.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
-        };
-        for (const auto& thread_path : core_thread_search) {
-            if (fs::exists(thread_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
-                if (verbose) {
-                    std::cout << "Including core::thread/sync runtime: " << thread_path << "\n";
-                }
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("test")) {
-        std::vector<std::string> test_runtime_search = {
-            "packages/test/runtime/test.c",
-            "../../../test/runtime/test.c",
-            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
-        };
-        for (const auto& test_path : test_runtime_search) {
-            if (fs::exists(test_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
-                if (verbose) {
-                    std::cout << "Including test runtime: " << test_path << "\n";
-                }
-                break;
-            }
-        }
-    }
+    // Link all runtimes with caching
+    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
 
     if (verbose) {
         std::cout << "Running: " << compile_cmd << "\n";
@@ -258,7 +323,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     return 0;
 }
 
-int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose) {
+int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose, bool coverage) {
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -322,6 +387,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
+    options.coverage_enabled = coverage;
+    options.source_file = path;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -337,11 +404,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
-    fs::path input_path = fs::absolute(path);
-
-    // Use local build/.cache directory instead of system temp
-    fs::path cache_dir = input_path.parent_path() / "build" / ".cache";
-    fs::create_directories(cache_dir);
+    // Use centralized run cache - NEVER create files inside packages
+    fs::path cache_dir = get_run_cache_dir();
 
     fs::path ll_output = cache_dir / (module_name + ".ll");
     fs::path exe_output = cache_dir / module_name;
@@ -376,77 +440,14 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     std::string ll_path = to_forward_slashes(ll_output.string());
     std::string exe_path = to_forward_slashes(exe_output.string());
 
-    std::string runtime_path = find_runtime();
+    // Use global deps cache for precompiled runtimes
+    std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
+
     std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
-    if (!runtime_path.empty()) {
-        std::string runtime_to_link = ensure_runtime_compiled(runtime_path, clang, verbose);
-        compile_cmd += " \"" + runtime_to_link + "\"";
-        if (verbose) {
-            std::cout << "Including runtime: " << runtime_to_link << "\n";
-        }
-    }
-
-    // Link module runtimes if they were imported (same as run_build)
-    if (registry->has_module("core::mem")) {
-        std::vector<std::string> core_mem_search = {
-            "packages/core/runtime/mem.c",
-            "../../../core/runtime/mem.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
-        };
-        for (const auto& mem_path : core_mem_search) {
-            if (fs::exists(mem_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    // Link time runtime if core::time is imported OR if @bench decorators are present
-    if (registry->has_module("core::time") || has_bench_functions(module)) {
-        std::vector<std::string> core_time_search = {
-            "packages/core/runtime/time.c",
-            "../../../core/runtime/time.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
-        };
-        for (const auto& time_path : core_time_search) {
-            if (fs::exists(time_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
-        std::vector<std::string> core_thread_search = {
-            "packages/core/runtime/thread.c",
-            "../../../core/runtime/thread.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
-        };
-        for (const auto& thread_path : core_thread_search) {
-            if (fs::exists(thread_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("test")) {
-        std::vector<std::string> test_runtime_search = {
-            "packages/test/runtime/test.c",
-            "../../../test/runtime/test.c",
-            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
-        };
-        for (const auto& test_path : test_runtime_search) {
-            if (fs::exists(test_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    // NOTE: std::math is pure TML, no C runtime needed
+    // Link all runtimes with caching
+    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
 
     if (verbose) {
         std::cout << "Compiling: " << compile_cmd << "\n";
@@ -485,7 +486,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 }
 
 int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
-                  bool verbose, std::string* output) {
+                  bool verbose, std::string* output, bool coverage) {
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -548,6 +549,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
+    options.coverage_enabled = coverage;
+    options.source_file = path;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
@@ -565,15 +568,16 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
-    fs::path input_path = fs::absolute(path);
+    // Use centralized run cache - NEVER create files inside packages
+    fs::path cache_dir = get_run_cache_dir();
 
-    // Use local build/.cache directory instead of system temp
-    fs::path cache_dir = input_path.parent_path() / "build" / ".cache";
-    fs::create_directories(cache_dir);
+    // Generate unique file names using path hash + thread ID to avoid race conditions
+    std::string cache_key = generate_cache_key(path);
+    std::string unique_name = module_name + "_" + cache_key;
 
-    fs::path ll_output = cache_dir / (module_name + ".ll");
-    fs::path exe_output = cache_dir / module_name;
-    fs::path out_file = cache_dir / (module_name + "_output.txt");
+    fs::path ll_output = cache_dir / (unique_name + ".ll");
+    fs::path exe_output = cache_dir / unique_name;
+    fs::path out_file = cache_dir / (unique_name + "_output.txt");
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
@@ -595,71 +599,14 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     std::string ll_path = to_forward_slashes(ll_output.string());
     std::string exe_path = to_forward_slashes(exe_output.string());
 
-    std::string runtime_path = find_runtime();
+    // Use global deps cache for precompiled runtimes
+    std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
+
     std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
-    if (!runtime_path.empty()) {
-        std::string runtime_to_link = ensure_runtime_compiled(runtime_path, clang, verbose);
-        compile_cmd += " \"" + runtime_to_link + "\"";
-    }
-
-    // Link module runtimes (same logic as run_run)
-    if (registry->has_module("core::mem")) {
-        std::vector<std::string> core_mem_search = {
-            "packages/core/runtime/mem.c",
-            "../../../core/runtime/mem.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
-        };
-        for (const auto& mem_path : core_mem_search) {
-            if (fs::exists(mem_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(mem_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("core::time") || has_bench_functions(module)) {
-        std::vector<std::string> core_time_search = {
-            "packages/core/runtime/time.c",
-            "../../../core/runtime/time.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
-        };
-        for (const auto& time_path : core_time_search) {
-            if (fs::exists(time_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(time_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
-        std::vector<std::string> core_thread_search = {
-            "packages/core/runtime/thread.c",
-            "../../../core/runtime/thread.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
-        };
-        for (const auto& thread_path : core_thread_search) {
-            if (fs::exists(thread_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(thread_path).string()) + "\"";
-                break;
-            }
-        }
-    }
-
-    if (registry->has_module("test")) {
-        std::vector<std::string> test_runtime_search = {
-            "packages/test/runtime/test.c",
-            "../../../test/runtime/test.c",
-            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
-        };
-        for (const auto& test_path : test_runtime_search) {
-            if (fs::exists(test_path)) {
-                compile_cmd += " \"" + to_forward_slashes(fs::absolute(test_path).string()) + "\"";
-                break;
-            }
-        }
-    }
+    // Link all runtimes with caching
+    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
 
     // Redirect compile output to null (only stderr, keep stdout for errors)
 #ifdef _WIN32
@@ -706,9 +653,10 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                               std::istreambuf_iterator<char>());
     }
 
-    // Clean up intermediate files (keep exe for caching)
+    // Clean up all intermediate files (unique names per thread, no caching benefit)
     fs::remove(ll_output);
     fs::remove(out_file);
+    fs::remove(exe_output);  // Also remove exe since it has unique thread-specific name
 
 #ifdef _WIN32
     return run_ret;

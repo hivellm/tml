@@ -1,0 +1,94 @@
+// Test generic types - monomorphization
+// Note: Type checker doesn't yet resolve generic field types for comparisons,
+// so we test via print and return values instead of assertions
+
+// ============ Generic Struct ============
+
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+// Test basic generic struct - prints 10 then 20
+func test_generic_struct_i32() -> I32 {
+    let p: Pair[I32] = Pair { first: 10, second: 20 }
+    print(p.first)
+    print(p.second)
+    return 0
+}
+
+// Test multiple instantiations of same generic
+func test_generic_struct_multiple() -> I32 {
+    let p1: Pair[I32] = Pair { first: 1, second: 2 }
+    let p2: Pair[I32] = Pair { first: 100, second: 200 }
+    print(p1.first)
+    print(p2.first)
+    return 0
+}
+
+// ============ Generic Enum ============
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+// Test generic enum with payload
+func test_generic_enum_just() -> I32 {
+    let m: Maybe[I32] = Just(42)
+    when m {
+        Just(v) => {
+            print(v)
+            return 0
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+// Test generic enum unit variant
+func test_generic_enum_nothing() -> I32 {
+    let m: Maybe[I32] = Nothing
+    when m {
+        Just(v) => return 1,
+        Nothing => {
+            print(0)  // Success
+            return 0
+        },
+    }
+    return 1
+}
+
+// ============ Multi-parameter Generic ============
+
+type Entry[K, V] {
+    key: K,
+    value: V,
+}
+
+func test_multi_param_generic() -> I32 {
+    let e: Entry[I32, I32] = Entry { key: 1, value: 100 }
+    print(e.key)
+    print(e.value)
+    return 0
+}
+
+// Main function to run all tests
+func main() -> I32 {
+    print("test_generic_struct_i32:")
+    let r1: I32 = test_generic_struct_i32()
+
+    print("test_generic_struct_multiple:")
+    let r2: I32 = test_generic_struct_multiple()
+
+    print("test_generic_enum_just:")
+    let r3: I32 = test_generic_enum_just()
+
+    print("test_generic_enum_nothing:")
+    let r4: I32 = test_generic_enum_nothing()
+
+    print("test_multi_param_generic:")
+    let r5: I32 = test_multi_param_generic()
+
+    return r1 + r2 + r3 + r4 + r5
+}

@@ -1,0 +1,210 @@
+use test
+
+// ============ Variable Declaration ============
+
+@test
+func test_let_basic() -> I32 {
+    let x: I32 = 10
+    assert_eq_i32(x, 10, "let x = 10")
+
+    let y: I32 = 20
+    assert_eq_i32(y, 20, "let y = 20")
+
+    let z: I32 = x + y
+    assert_eq_i32(z, 30, "z = x + y")
+
+    return 0
+}
+
+@test
+func test_let_types() -> I32 {
+    let i: I32 = 42
+    assert_eq_i32(i, 42, "I32")
+
+    let b: Bool = true
+    assert(b, "Bool true")
+
+    let f: Bool = false
+    assert_eq_bool(f, false, "Bool false")
+
+    return 0
+}
+
+// ============ Mutable Variables ============
+
+@test
+func test_mut_basic() -> I32 {
+    let mut x: I32 = 0
+    assert_eq_i32(x, 0, "initial value")
+
+    x = 10
+    assert_eq_i32(x, 10, "after assignment")
+
+    x = x + 5
+    assert_eq_i32(x, 15, "after increment")
+
+    x = x * 2
+    assert_eq_i32(x, 30, "after multiply")
+
+    return 0
+}
+
+@test
+func test_mut_multiple() -> I32 {
+    let mut a: I32 = 1
+    let mut b: I32 = 2
+    let mut c: I32 = 3
+
+    a = b + c
+    assert_eq_i32(a, 5, "a = b + c")
+
+    b = a * 2
+    assert_eq_i32(b, 10, "b = a * 2")
+
+    c = a + b
+    assert_eq_i32(c, 15, "c = a + b")
+
+    return 0
+}
+
+@test
+func test_mut_in_loop() -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 1
+
+    loop {
+        if i > 5 then break
+        sum = sum + i
+        i = i + 1
+    }
+
+    assert_eq_i32(sum, 15, "sum 1 to 5")
+    assert_eq_i32(i, 6, "i after loop")
+
+    return 0
+}
+
+// ============ Variable Scoping ============
+
+@test
+func test_scoping() -> I32 {
+    let x: I32 = 10
+    assert_eq_i32(x, 10, "outer x")
+
+    // Variables in different scopes are independent
+    let y: I32 = 20
+    assert_eq_i32(y, 20, "y in scope")
+
+    let z: I32 = x + y
+    assert_eq_i32(z, 30, "z = x + y")
+
+    return 0
+}
+
+// ============ Boolean Variables ============
+
+@test
+func test_bool_vars() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+
+    assert(t, "t is true")
+    assert_eq_bool(f, false, "f is false")
+
+    let and_result: Bool = t and t
+    assert(and_result, "true and true")
+
+    let or_result: Bool = t or f
+    assert(or_result, "true or false")
+
+    let not_result: Bool = not f
+    assert(not_result, "not false")
+
+    return 0
+}
+
+@test
+func test_bool_expressions() -> I32 {
+    let x: I32 = 5
+    let y: I32 = 10
+
+    let lt: Bool = x < y
+    assert(lt, "5 < 10")
+
+    let gt: Bool = y > x
+    assert(gt, "10 > 5")
+
+    let eq: Bool = x == x
+    assert(eq, "5 == 5")
+
+    let ne: Bool = x != y
+    assert(ne, "5 != 10")
+
+    return 0
+}
+
+// ============ Computed Initialization ============
+
+@test
+func test_computed_init() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 3
+    let sum: I32 = a + b
+    let product: I32 = a * b
+    let diff: I32 = a - b
+
+    assert_eq_i32(sum, 8, "sum")
+    assert_eq_i32(product, 15, "product")
+    assert_eq_i32(diff, 2, "diff")
+
+    return 0
+}
+
+@test
+func test_chained_init() -> I32 {
+    let a: I32 = 1
+    let b: I32 = a + 1
+    let c: I32 = b + 1
+    let d: I32 = c + 1
+    let e: I32 = d + 1
+
+    assert_eq_i32(a, 1, "a")
+    assert_eq_i32(b, 2, "b")
+    assert_eq_i32(c, 3, "c")
+    assert_eq_i32(d, 4, "d")
+    assert_eq_i32(e, 5, "e")
+
+    return 0
+}
+
+// ============ Variable in Expressions ============
+
+@test
+func test_var_in_expressions() -> I32 {
+    let x: I32 = 10
+    let y: I32 = 3
+
+    assert_eq_i32(x + y, 13, "x + y")
+    assert_eq_i32(x - y, 7, "x - y")
+    assert_eq_i32(x * y, 30, "x * y")
+    assert_eq_i32(x / y, 3, "x / y")
+    assert_eq_i32(x % y, 1, "x % y")
+
+    return 0
+}
+
+@test
+func test_var_comparison() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 5
+    let c: I32 = 10
+
+    assert(a == b, "a == b")
+    assert(a != c, "a != c")
+    assert(a < c, "a < c")
+    assert(c > a, "c > a")
+    assert(a <= b, "a <= b")
+    assert(a >= b, "a >= b")
+
+    return 0
+}

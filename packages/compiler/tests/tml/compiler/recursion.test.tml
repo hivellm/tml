@@ -1,0 +1,189 @@
+use test
+
+// ============ Basic Recursion ============
+
+func factorial(n: I32) -> I32 {
+    if n <= 1 then {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+@test
+func test_factorial() -> I32 {
+    assert_eq_i32(factorial(0), 1, "0!")
+    assert_eq_i32(factorial(1), 1, "1!")
+    assert_eq_i32(factorial(2), 2, "2!")
+    assert_eq_i32(factorial(3), 6, "3!")
+    assert_eq_i32(factorial(4), 24, "4!")
+    assert_eq_i32(factorial(5), 120, "5!")
+    assert_eq_i32(factorial(6), 720, "6!")
+
+    return 0
+}
+
+// ============ Fibonacci ============
+
+func fibonacci(n: I32) -> I32 {
+    if n <= 0 then {
+        return 0
+    }
+    if n == 1 then {
+        return 1
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+@test
+func test_fibonacci() -> I32 {
+    assert_eq_i32(fibonacci(0), 0, "fib(0)")
+    assert_eq_i32(fibonacci(1), 1, "fib(1)")
+    assert_eq_i32(fibonacci(2), 1, "fib(2)")
+    assert_eq_i32(fibonacci(3), 2, "fib(3)")
+    assert_eq_i32(fibonacci(4), 3, "fib(4)")
+    assert_eq_i32(fibonacci(5), 5, "fib(5)")
+    assert_eq_i32(fibonacci(6), 8, "fib(6)")
+    assert_eq_i32(fibonacci(7), 13, "fib(7)")
+    assert_eq_i32(fibonacci(10), 55, "fib(10)")
+
+    return 0
+}
+
+// ============ Sum to N ============
+
+func sum_to_n(n: I32) -> I32 {
+    if n <= 0 then {
+        return 0
+    }
+    return n + sum_to_n(n - 1)
+}
+
+@test
+func test_sum_to_n() -> I32 {
+    assert_eq_i32(sum_to_n(0), 0, "sum(0)")
+    assert_eq_i32(sum_to_n(1), 1, "sum(1)")
+    assert_eq_i32(sum_to_n(5), 15, "sum(5)")
+    assert_eq_i32(sum_to_n(10), 55, "sum(10)")
+    assert_eq_i32(sum_to_n(100), 5050, "sum(100)")
+
+    return 0
+}
+
+// ============ Power Function ============
+
+func power(base: I32, exp: I32) -> I32 {
+    if exp <= 0 then {
+        return 1
+    }
+    return base * power(base, exp - 1)
+}
+
+@test
+func test_power() -> I32 {
+    assert_eq_i32(power(2, 0), 1, "2^0")
+    assert_eq_i32(power(2, 1), 2, "2^1")
+    assert_eq_i32(power(2, 2), 4, "2^2")
+    assert_eq_i32(power(2, 3), 8, "2^3")
+    assert_eq_i32(power(2, 10), 1024, "2^10")
+
+    assert_eq_i32(power(3, 0), 1, "3^0")
+    assert_eq_i32(power(3, 2), 9, "3^2")
+    assert_eq_i32(power(3, 4), 81, "3^4")
+
+    return 0
+}
+
+// ============ GCD (Euclidean Algorithm) ============
+
+func gcd(a: I32, b: I32) -> I32 {
+    if b == 0 then {
+        return a
+    }
+    return gcd(b, a % b)
+}
+
+@test
+func test_gcd() -> I32 {
+    assert_eq_i32(gcd(48, 18), 6, "gcd(48, 18)")
+    assert_eq_i32(gcd(100, 35), 5, "gcd(100, 35)")
+    assert_eq_i32(gcd(17, 13), 1, "gcd(17, 13) - coprime")
+    assert_eq_i32(gcd(100, 100), 100, "gcd(100, 100)")
+    assert_eq_i32(gcd(0, 5), 5, "gcd(0, 5)")
+
+    return 0
+}
+
+// ============ Count Digits ============
+
+func count_digits(n: I32) -> I32 {
+    if n < 10 then {
+        return 1
+    }
+    return 1 + count_digits(n / 10)
+}
+
+@test
+func test_count_digits() -> I32 {
+    assert_eq_i32(count_digits(0), 1, "digits(0)")
+    assert_eq_i32(count_digits(5), 1, "digits(5)")
+    assert_eq_i32(count_digits(10), 2, "digits(10)")
+    assert_eq_i32(count_digits(99), 2, "digits(99)")
+    assert_eq_i32(count_digits(100), 3, "digits(100)")
+    assert_eq_i32(count_digits(12345), 5, "digits(12345)")
+
+    return 0
+}
+
+// ============ Sum of Digits ============
+
+func sum_digits(n: I32) -> I32 {
+    if n < 10 then {
+        return n
+    }
+    return (n % 10) + sum_digits(n / 10)
+}
+
+@test
+func test_sum_digits() -> I32 {
+    assert_eq_i32(sum_digits(0), 0, "sum_digits(0)")
+    assert_eq_i32(sum_digits(5), 5, "sum_digits(5)")
+    assert_eq_i32(sum_digits(123), 6, "sum_digits(123)")
+    assert_eq_i32(sum_digits(999), 27, "sum_digits(999)")
+    assert_eq_i32(sum_digits(12345), 15, "sum_digits(12345)")
+
+    return 0
+}
+
+// ============ Mutual Recursion ============
+
+func is_even(n: I32) -> Bool {
+    if n == 0 then {
+        return true
+    }
+    return is_odd(n - 1)
+}
+
+func is_odd(n: I32) -> Bool {
+    if n == 0 then {
+        return false
+    }
+    return is_even(n - 1)
+}
+
+@test
+func test_mutual_recursion() -> I32 {
+    assert(is_even(0), "0 is even")
+    assert(is_even(2), "2 is even")
+    assert(is_even(4), "4 is even")
+    assert(is_even(10), "10 is even")
+
+    assert(is_odd(1), "1 is odd")
+    assert(is_odd(3), "3 is odd")
+    assert(is_odd(5), "5 is odd")
+    assert(is_odd(11), "11 is odd")
+
+    assert_eq_bool(is_even(3), false, "3 not even")
+    assert_eq_bool(is_odd(4), false, "4 not odd")
+
+    return 0
+}

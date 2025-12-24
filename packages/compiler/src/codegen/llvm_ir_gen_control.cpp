@@ -173,15 +173,33 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
         emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
 
         // Find variant index
+        // First, try using scrutinee type for generic enum lookup
         int variant_tag = -1;
-        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
-            for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
-                if (enum_def.variants[v_idx].first == variant_name) {
-                    variant_tag = static_cast<int>(v_idx);
-                    break;
-                }
+        std::string scrutinee_enum_name;
+        if (scrutinee_type.starts_with("%struct.")) {
+            scrutinee_enum_name = scrutinee_type.substr(8);  // Remove "%struct."
+        }
+
+        // Try lookup with scrutinee-derived enum name (for generic enums)
+        if (!scrutinee_enum_name.empty()) {
+            std::string key = scrutinee_enum_name + "::" + variant_name;
+            auto it = enum_variants_.find(key);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
             }
-            if (variant_tag >= 0) break;
+        }
+
+        // Fallback: try non-generic enums from type environment
+        if (variant_tag < 0) {
+            for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+                for (size_t v_idx = 0; v_idx < enum_def.variants.size(); ++v_idx) {
+                    if (enum_def.variants[v_idx].first == variant_name) {
+                        variant_tag = static_cast<int>(v_idx);
+                        break;
+                    }
+                }
+                if (variant_tag >= 0) break;
+            }
         }
 
         // Compare tag
@@ -571,17 +589,34 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             // Find variant index in the correct enum
-            // Build full path from all segments
+            // First, try to extract enum name from scrutinee type (e.g., %struct.Maybe__I32 -> Maybe__I32)
             int variant_tag = -1;
-            std::string full_path;
-            for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
-                if (i > 0) full_path += "::";
-                full_path += enum_pat.path.segments[i];
+            std::string scrutinee_enum_name;
+            if (scrutinee_type.starts_with("%struct.")) {
+                scrutinee_enum_name = scrutinee_type.substr(8);  // Remove "%struct."
             }
 
-            auto it = enum_variants_.find(full_path);
-            if (it != enum_variants_.end()) {
-                variant_tag = it->second;
+            // Try lookup with scrutinee-derived enum name (for generic enums)
+            if (!scrutinee_enum_name.empty()) {
+                std::string key = scrutinee_enum_name + "::" + variant_name;
+                auto it = enum_variants_.find(key);
+                if (it != enum_variants_.end()) {
+                    variant_tag = it->second;
+                }
+            }
+
+            // Fallback: Try full path from pattern segments
+            if (variant_tag < 0) {
+                std::string full_path;
+                for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
+                    if (i > 0) full_path += "::";
+                    full_path += enum_pat.path.segments[i];
+                }
+
+                auto it = enum_variants_.find(full_path);
+                if (it != enum_variants_.end()) {
+                    variant_tag = it->second;
+                }
             }
 
             if (variant_tag >= 0) {

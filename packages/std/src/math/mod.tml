@@ -1,5 +1,6 @@
 // TML Standard Library - Math Module
 // Comprehensive mathematical functions library based on Go's math package
+// All functions use F64 (double precision) like Go's math package
 
 // ============ CONSTANTS ============
 
@@ -25,110 +26,33 @@ pub use const::{
 
 // ============ BASIC ARITHMETIC ============
 
-pub use abs::{
-    abs,        // Absolute value (F64)
-    abs_i32,    // Absolute value (I32)
-    abs_i64,    // Absolute value (I64)
-    abs_f64     // Absolute value (F64, explicit)
-}
-
-pub use minmax::{
-    min, max,           // Min/max (F64)
-    min_i32, max_i32,   // Min/max (I32)
-    min_i64, max_i64,   // Min/max (I64)
-    min_f64, max_f64,   // Min/max (F64, explicit)
-    clamp,              // Clamp (F64)
-    clamp_i32,          // Clamp (I32)
-    clamp_i64,          // Clamp (I64)
-    clamp_f64           // Clamp (F64, explicit)
-}
-
-pub use dim::{
-    dim,        // Positive difference (F64)
-    dim_i32,    // Positive difference (I32)
-    dim_i64     // Positive difference (I64)
-}
-
-pub use copysign::{
-    copysign,   // Value with magnitude of f and sign of sign
-    signbit     // Check if negative
-}
-
-pub use mod::{
-    mod_f64,    // Floating-point remainder
-    mod,        // Floating-point remainder (default)
-    remainder   // IEEE 754 remainder
-}
+pub use abs::{abs}
+pub use minmax::{min, max, clamp}
+pub use dim::{dim}
+pub use copysign::{copysign, signbit}
+pub use fmod::{mod, remainder}
 
 // ============ ROUNDING ============
 
-pub use floor::{
-    floor,      // Greatest integer <= x (F64)
-    floor_i32,  // Identity for I32
-    floor_i64   // Identity for I64
-}
-
-pub use ceil::{
-    ceil,       // Least integer >= x (F64)
-    ceil_i32,   // Identity for I32
-    ceil_i64    // Identity for I64
-}
-
-pub use round::{
-    round,          // Round to nearest integer (F64)
-    round_to_even,  // Round ties to even
-    round_i32,      // Identity for I32
-    round_i64       // Identity for I64
-}
-
-pub use trunc::{
-    trunc,      // Truncate toward zero (F64)
-    trunc_i32,  // Identity for I32
-    trunc_i64   // Identity for I64
-}
+pub use floor::{floor}
+pub use ceil::{ceil}
+pub use round::{round, round_to_even}
+pub use trunc::{trunc}
 
 // ============ POWER & ROOT ============
 
-pub use sqrt::{
-    sqrt,       // Square root (F64)
-    sqrt_i32    // Integer square root
-}
-
-pub use cbrt::{
-    cbrt,       // Cube root (F64)
-    cbrt_i32    // Integer cube root
-}
-
-pub use pow::{
-    pow,        // General power x^y
-    powi,       // Integer exponent power
-    pow_i32,    // Integer power (I32)
-    pow10       // 10^n
-}
-
-pub use hypot::{
-    hypot,      // sqrt(p^2 + q^2)
-    hypot_i32   // Integer hypotenuse
-}
+pub use sqrt::{sqrt}
+pub use cbrt::{cbrt}
+pub use pow::{pow, powi, pow10}
+pub use hypot::{hypot}
 
 // ============ EXPONENTIAL ============
 
-pub use exp::{
-    exp,        // e^x
-    exp2,       // 2^x
-    expm1       // e^x - 1 (accurate for small x)
-}
+pub use exp::{exp, exp2, expm1}
 
 // ============ LOGARITHMIC ============
 
-pub use log::{
-    log,        // Natural logarithm
-    log2,       // Base-2 logarithm
-    log10,      // Base-10 logarithm
-    log1p,      // log(1 + x) (accurate for small x)
-    logb,       // Binary exponent (F64)
-    ilogb       // Binary exponent (I32)
-}
+pub use log::{log, log2, log10, log1p, logb, ilogb}
 
 // ============ TRIGONOMETRIC ============
 
@@ -152,48 +76,26 @@ pub use atanh::{atanh}
 
 // ============ SPECIAL FUNCTIONS ============
 
-pub use gamma::{
-    gamma,      // Gamma function
-    lgamma      // Log of Gamma function
-}
-
-pub use erf::{
-    erf,        // Error function
-    erfc,       // Complementary error function
-    erfinv,     // Inverse error function
-    erfcinv     // Inverse complementary error function
-}
-
-pub use bessel::{
-    j0, j1, jn,     // Bessel functions (first kind)
-    y0, y1, yn      // Bessel functions (second kind)
-}
+pub use gamma::{gamma, lgamma}
+pub use erf::{erf, erfc, erfinv, erfcinv}
+pub use bessel::{j0, j1, jn, y0, y1, yn}
 
 // ============ FLOATING-POINT MANIPULATION ============
 
-pub use frexp::{frexp}              // Break into fraction and exponent
-pub use ldexp::{ldexp}              // Compute frac × 2^exp
-pub use modf::{modf}                // Integer and fractional parts
-pub use nextafter::{
-    nextafter,                      // Next F64 toward y
-    nextafter32                     // Next F32 toward y
-}
-pub use fma::{fma}                  // Fused multiply-add
+pub use frexp::{frexp}
+pub use ldexp::{ldexp}
+pub use modf::{modf}
+pub use fma::{fma}
+// Note: nextafter and nextafter32 are available as global builtins
 
 // ============ BIT OPERATIONS ============
-
-pub use bits::{
-    float32_bits,                   // F32 to U32 bits
-    float32_from_bits,              // U32 bits to F32
-    float64_bits,                   // F64 to U64 bits
-    float64_from_bits               // U64 bits to F64
-}
+// Note: float32_bits, float32_from_bits, float64_bits, float64_from_bits
+// are available as global builtins - no import needed
 
 // ============ SPECIAL VALUES ============
+// Note: infinity, nan, is_inf, is_nan are available as global builtins
+// inf() wrapper provided for Go compatibility
 
-pub use inf::{
-    inf,        // Infinity
-    is_inf,     // Check if infinity
-    nan,        // Not-a-number
-    is_nan      // Check if NaN
+pub func inf(sign: I32) -> F64 {
+    return infinity(sign)
 }

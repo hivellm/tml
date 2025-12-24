@@ -1,0 +1,209 @@
+use test
+
+// ============ Basic Math Functions ============
+
+func abs(x: I32) -> I32 {
+    return if x >= 0 then x else 0 - x
+}
+
+func signum(x: I32) -> I32 {
+    if x > 0 then { return 1 }
+    if x < 0 then { return 0 - 1 }
+    return 0
+}
+
+@test
+func test_abs() -> I32 {
+    assert_eq_i32(abs(5), 5, "abs(5)")
+    assert_eq_i32(abs(0 - 5), 5, "abs(-5)")
+    assert_eq_i32(abs(0), 0, "abs(0)")
+    assert_eq_i32(abs(100), 100, "abs(100)")
+    assert_eq_i32(abs(0 - 100), 100, "abs(-100)")
+
+    return 0
+}
+
+@test
+func test_signum() -> I32 {
+    assert_eq_i32(signum(42), 1, "sign(42)")
+    assert_eq_i32(signum(0 - 42), 0 - 1, "sign(-42)")
+    assert_eq_i32(signum(0), 0, "sign(0)")
+
+    return 0
+}
+
+// ============ Division and Modulo ============
+
+func divmod_quotient(a: I32, b: I32) -> I32 {
+    return a / b
+}
+
+func divmod_remainder(a: I32, b: I32) -> I32 {
+    return a % b
+}
+
+@test
+func test_divmod() -> I32 {
+    // a = q*b + r
+    let a: I32 = 17
+    let b: I32 = 5
+    let q: I32 = divmod_quotient(a, b)
+    let r: I32 = divmod_remainder(a, b)
+
+    assert_eq_i32(q, 3, "17 / 5 = 3")
+    assert_eq_i32(r, 2, "17 % 5 = 2")
+    assert_eq_i32(q * b + r, a, "q*b + r = a")
+
+    return 0
+}
+
+// ============ GCD and LCM ============
+
+func gcd(a: I32, b: I32) -> I32 {
+    let mut x: I32 = a
+    let mut y: I32 = b
+    loop {
+        if y == 0 then { break }
+        let t: I32 = y
+        y = x % y
+        x = t
+    }
+    return x
+}
+
+func lcm(a: I32, b: I32) -> I32 {
+    return (a / gcd(a, b)) * b
+}
+
+@test
+func test_gcd() -> I32 {
+    assert_eq_i32(gcd(12, 8), 4, "gcd(12, 8)")
+    assert_eq_i32(gcd(100, 35), 5, "gcd(100, 35)")
+    assert_eq_i32(gcd(17, 13), 1, "gcd(17, 13) coprime")
+    assert_eq_i32(gcd(24, 24), 24, "gcd(24, 24)")
+
+    return 0
+}
+
+@test
+func test_lcm() -> I32 {
+    assert_eq_i32(lcm(4, 6), 12, "lcm(4, 6)")
+    assert_eq_i32(lcm(3, 5), 15, "lcm(3, 5) coprime")
+    assert_eq_i32(lcm(7, 7), 7, "lcm(7, 7)")
+
+    return 0
+}
+
+// ============ Factorial ============
+
+func factorial(n: I32) -> I32 {
+    let mut result: I32 = 1
+    let mut i: I32 = 2
+    loop {
+        if i > n then { break }
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+@test
+func test_factorial() -> I32 {
+    assert_eq_i32(factorial(0), 1, "0!")
+    assert_eq_i32(factorial(1), 1, "1!")
+    assert_eq_i32(factorial(2), 2, "2!")
+    assert_eq_i32(factorial(3), 6, "3!")
+    assert_eq_i32(factorial(4), 24, "4!")
+    assert_eq_i32(factorial(5), 120, "5!")
+
+    return 0
+}
+
+// ============ Fibonacci ============
+
+func fibonacci(n: I32) -> I32 {
+    if n <= 1 then { return n }
+
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 2
+    loop {
+        if i > n then { break }
+        let t: I32 = a + b
+        a = b
+        b = t
+        i = i + 1
+    }
+    return b
+}
+
+@test
+func test_fibonacci() -> I32 {
+    assert_eq_i32(fibonacci(0), 0, "fib(0)")
+    assert_eq_i32(fibonacci(1), 1, "fib(1)")
+    assert_eq_i32(fibonacci(2), 1, "fib(2)")
+    assert_eq_i32(fibonacci(3), 2, "fib(3)")
+    assert_eq_i32(fibonacci(4), 3, "fib(4)")
+    assert_eq_i32(fibonacci(5), 5, "fib(5)")
+    assert_eq_i32(fibonacci(6), 8, "fib(6)")
+    assert_eq_i32(fibonacci(10), 55, "fib(10)")
+
+    return 0
+}
+
+// ============ Power ============
+
+func power(base: I32, exp: I32) -> I32 {
+    if exp == 0 then { return 1 }
+
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= exp then { break }
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+@test
+func test_power() -> I32 {
+    assert_eq_i32(power(2, 0), 1, "2^0")
+    assert_eq_i32(power(2, 1), 2, "2^1")
+    assert_eq_i32(power(2, 8), 256, "2^8")
+    assert_eq_i32(power(3, 3), 27, "3^3")
+    assert_eq_i32(power(10, 3), 1000, "10^3")
+
+    return 0
+}
+
+// ============ Integer Square Root ============
+
+func isqrt(n: I32) -> I32 {
+    if n <= 1 then { return n }
+
+    let mut x: I32 = n
+    let mut y: I32 = (x + 1) / 2
+    loop {
+        if y >= x then { break }
+        x = y
+        y = (x + n / x) / 2
+    }
+    return x
+}
+
+@test
+func test_isqrt() -> I32 {
+    assert_eq_i32(isqrt(0), 0, "sqrt(0)")
+    assert_eq_i32(isqrt(1), 1, "sqrt(1)")
+    assert_eq_i32(isqrt(4), 2, "sqrt(4)")
+    assert_eq_i32(isqrt(9), 3, "sqrt(9)")
+    assert_eq_i32(isqrt(16), 4, "sqrt(16)")
+    assert_eq_i32(isqrt(100), 10, "sqrt(100)")
+
+    // Non-perfect squares (floor)
+    assert_eq_i32(isqrt(5), 2, "sqrt(5) floor")
+    assert_eq_i32(isqrt(10), 3, "sqrt(10) floor")
+
+    return 0
+}

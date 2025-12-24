@@ -1,0 +1,89 @@
+# TML Project Configuration
+# Similar to vitest.config.ts / vite.config.ts
+
+[package]
+name = "tml"
+version = "0.1.0"
+edition = "2025"
+
+# ============ Test Configuration ============
+[test]
+# Include patterns for test files
+include = ["**/*.test.tml", "**/tests/**/*.tml"]
+# Exclude patterns
+exclude = ["**/errors/**", "**/pending/**", "**/node_modules/**"]
+# Run tests in parallel
+parallel = true
+# Number of threads (0 = auto-detect)
+threads = 0
+# Test timeout in seconds
+timeout = 20
+# Watch mode
+watch = false
+
+# ============ Coverage Configuration ============
+[test.coverage]
+# Enable coverage collection
+enabled = false
+# Include all files, not just tested ones
+all = false
+# Coverage provider (built-in)
+provider = "native"
+# Include patterns for coverage
+include = ["packages/**/*.tml"]
+# Exclude patterns from coverage
+exclude = [
+    "**/tests/**",
+    "**/*.test.tml",
+    "**/examples/**",
+    "**/node_modules/**"
+]
+# Reporters: "text", "html", "json", "lcov"
+reporter = ["text"]
+# Output directory for coverage reports
+reportsDirectory = "./coverage"
+# Skip files with no statements
+skipFull = false
+
+# Coverage thresholds (fail if below these percentages)
+[test.coverage.thresholds]
+lines = 0          # 0 = disabled, e.g., 80 for 80%
+functions = 0
+branches = 0
+statements = 0
+# Per-file thresholds
+perFile = false
+# Auto-update thresholds (like vitest)
+autoUpdate = false
+
+# ============ Build Configuration ============
+[build]
+# Target triple (auto-detected if not specified)
+# target = "x86_64-pc-windows-msvc"
+# Output directory
+outDir = "build"
+# Optimization level for release
+opt-level = 3
+# Enable LTO for release builds
+lto = true
+
+# Debug build profile
+[build.profile.debug]
+opt-level = 0
+debug = true
+lto = false
+
+# Release build profile
+[build.profile.release]
+opt-level = 3
+debug = false
+lto = true
+
+# ============ Compiler Options ============
+[compiler]
+# Emit warnings as errors
+warnings-as-errors = false
+# Enable verbose output
+verbose = false
+# Max errors before stopping
+max-errors = 50

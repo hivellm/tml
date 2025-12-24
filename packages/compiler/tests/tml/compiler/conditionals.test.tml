@@ -1,0 +1,227 @@
+use test
+
+// ============ Basic If-Then-Else ============
+
+@test
+func test_if_then_else_basic() -> I32 {
+    let x: I32 = 10
+    let result: I32 = if x > 5 then 1 else 0
+    assert_eq_i32(result, 1, "10 > 5")
+
+    let y: I32 = 3
+    let result2: I32 = if y > 5 then 1 else 0
+    assert_eq_i32(result2, 0, "3 > 5 false")
+
+    return 0
+}
+
+@test
+func test_if_then_else_equality() -> I32 {
+    let x: I32 = 42
+    let result: I32 = if x == 42 then 1 else 0
+    assert_eq_i32(result, 1, "x == 42")
+
+    let result2: I32 = if x != 42 then 1 else 0
+    assert_eq_i32(result2, 0, "x != 42 false")
+
+    return 0
+}
+
+// ============ If Statement ============
+
+@test
+func test_if_statement() -> I32 {
+    let mut value: I32 = 0
+
+    if true then {
+        value = 10
+    }
+
+    assert_eq_i32(value, 10, "if true executes")
+
+    if false then {
+        value = 20
+    }
+
+    assert_eq_i32(value, 10, "if false doesn't execute")
+
+    return 0
+}
+
+@test
+func test_if_else_statement() -> I32 {
+    let x: I32 = 5
+    let mut result: I32 = 0
+
+    if x > 10 then {
+        result = 1
+    } else {
+        result = 2
+    }
+
+    assert_eq_i32(result, 2, "else branch taken")
+
+    if x > 0 then {
+        result = 3
+    } else {
+        result = 4
+    }
+
+    assert_eq_i32(result, 3, "then branch taken")
+
+    return 0
+}
+
+// ============ Comparison Operators ============
+
+@test
+func test_less_than() -> I32 {
+    assert(3 < 5, "3 < 5")
+    assert_eq_bool(5 < 3, false, "5 < 3 false")
+    assert_eq_bool(5 < 5, false, "5 < 5 false")
+
+    return 0
+}
+
+@test
+func test_greater_than() -> I32 {
+    assert(5 > 3, "5 > 3")
+    assert_eq_bool(3 > 5, false, "3 > 5 false")
+    assert_eq_bool(5 > 5, false, "5 > 5 false")
+
+    return 0
+}
+
+@test
+func test_less_or_equal() -> I32 {
+    assert(3 <= 5, "3 <= 5")
+    assert(5 <= 5, "5 <= 5")
+    assert_eq_bool(5 <= 3, false, "5 <= 3 false")
+
+    return 0
+}
+
+@test
+func test_greater_or_equal() -> I32 {
+    assert(5 >= 3, "5 >= 3")
+    assert(5 >= 5, "5 >= 5")
+    assert_eq_bool(3 >= 5, false, "3 >= 5 false")
+
+    return 0
+}
+
+@test
+func test_equality_operators() -> I32 {
+    assert(5 == 5, "5 == 5")
+    assert_eq_bool(5 == 3, false, "5 == 3 false")
+    assert(5 != 3, "5 != 3")
+    assert_eq_bool(5 != 5, false, "5 != 5 false")
+
+    return 0
+}
+
+// ============ Chained Comparisons ============
+
+@test
+func test_chained_conditions() -> I32 {
+    let x: I32 = 5
+
+    // x is between 0 and 10
+    let in_range: Bool = x >= 0 and x <= 10
+    assert(in_range, "5 in [0, 10]")
+
+    // x is outside 0 to 3
+    let outside: Bool = x < 0 or x > 3
+    assert(outside, "5 outside [0, 3]")
+
+    return 0
+}
+
+// ============ Conditional with Variables ============
+
+func max(a: I32, b: I32) -> I32 {
+    return if a > b then a else b
+}
+
+func min(a: I32, b: I32) -> I32 {
+    return if a < b then a else b
+}
+
+func abs(x: I32) -> I32 {
+    return if x >= 0 then x else 0 - x
+}
+
+@test
+func test_max_min_abs() -> I32 {
+    assert_eq_i32(max(3, 7), 7, "max(3, 7)")
+    assert_eq_i32(max(7, 3), 7, "max(7, 3)")
+    assert_eq_i32(max(5, 5), 5, "max(5, 5)")
+
+    assert_eq_i32(min(3, 7), 3, "min(3, 7)")
+    assert_eq_i32(min(7, 3), 3, "min(7, 3)")
+    assert_eq_i32(min(5, 5), 5, "min(5, 5)")
+
+    assert_eq_i32(abs(5), 5, "abs(5)")
+    assert_eq_i32(abs(0 - 5), 5, "abs(-5)")
+    assert_eq_i32(abs(0), 0, "abs(0)")
+
+    return 0
+}
+
+// ============ Conditional Assignment ============
+
+func get_sign(x: I32) -> I32 {
+    if x > 0 then { return 1 }
+    if x < 0 then { return 0 - 1 }
+    return 0
+}
+
+@test
+func test_conditional_assignment() -> I32 {
+    assert_eq_i32(get_sign(10), 1, "positive label")
+    assert_eq_i32(get_sign(0 - 5), 0 - 1, "negative label")
+    assert_eq_i32(get_sign(0), 0, "zero label")
+
+    return 0
+}
+
+// ============ Boolean Conditions ============
+
+@test
+func test_bool_conditions() -> I32 {
+    let t: Bool = true
+    let f: Bool = false
+
+    let r1: I32 = if t then 1 else 0
+    assert_eq_i32(r1, 1, "if true")
+
+    let r2: I32 = if f then 1 else 0
+    assert_eq_i32(r2, 0, "if false")
+
+    let r3: I32 = if not f then 1 else 0
+    assert_eq_i32(r3, 1, "if not false")
+
+    return 0
+}
+
+// ============ Complex Conditions ============
+
+@test
+func test_complex_conditions() -> I32 {
+    let x: I32 = 15
+    let y: I32 = 20
+
+    // Multiple AND conditions
+    let r1: I32 = if x > 0 and y > 0 and x < y then 1 else 0
+    assert_eq_i32(r1, 1, "all true")
+
+    // Multiple OR conditions
+    let r2: I32 = if x > 100 or y > 100 or (x + y) > 30 then 1 else 0
+    assert_eq_i32(r2, 1, "one true")
+
+    // Mixed AND/OR
+    let r3: I32 = if (x > 10 and y > 10) or x + y == 0 then 1 else 0
+    assert_eq_i32(r3, 1, "first group true")
+
+    return 0
+}

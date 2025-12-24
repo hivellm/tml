@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -156,6 +157,17 @@ struct Type {
 // Type comparison
 [[nodiscard]] auto types_equal(const TypePtr& a, const TypePtr& b) -> bool;
 [[nodiscard]] auto type_to_string(const TypePtr& type) -> std::string;
+
+// Generic type substitution
+// Replaces GenericType instances with concrete types from the substitution map
+// e.g., substitute_type(List[T], {T -> I32}) returns List[I32]
+[[nodiscard]] auto substitute_type(
+    const TypePtr& type,
+    const std::unordered_map<std::string, TypePtr>& substitutions
+) -> TypePtr;
+
+// Helper to convert primitive kind to string name
+[[nodiscard]] auto primitive_kind_to_string(PrimitiveKind kind) -> std::string;
 
 } // namespace tml::types
 

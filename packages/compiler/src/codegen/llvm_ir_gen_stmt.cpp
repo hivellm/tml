@@ -146,7 +146,16 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         } else if (init.is<parser::StructExpr>()) {
             const auto& s = init.as<parser::StructExpr>();
             if (!s.path.segments.empty()) {
-                var_type = "%struct." + s.path.segments.back();
+                std::string base_name = s.path.segments.back();
+                // Check if this is a generic struct - use mangled name
+                auto generic_it = pending_generic_structs_.find(base_name);
+                if (generic_it != pending_generic_structs_.end() && !s.fields.empty()) {
+                    // Infer type from field values
+                    types::TypePtr inferred = infer_expr_type(init);
+                    var_type = llvm_type_from_semantic(inferred);
+                } else {
+                    var_type = "%struct." + base_name;
+                }
                 is_struct = true;
             }
         } else if (is_ref_expr(init)) {
@@ -199,6 +208,49 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
+    // Handle generic enum unit variants (like Nothing from Maybe[I32])
+    // When we have an explicit type annotation for a generic enum, we need to use that type
+    // rather than inferring from the expression (which can't infer type args for unit variants)
+    if (is_struct && let.init.has_value() && let.init.value()->is<parser::IdentExpr>()) {
+        const auto& ident_init = let.init.value()->as<parser::IdentExpr>();
+
+        // Check if this is a unit variant of a generic enum
+        for (const auto& [gen_enum_name, gen_enum_decl] : pending_generic_enums_) {
+            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size(); ++variant_idx) {
+                const auto& variant = gen_enum_decl->variants[variant_idx];
+                // Check if this is a unit variant (no tuple_fields and no struct_fields)
+                bool is_unit = !variant.tuple_fields.has_value() && !variant.struct_fields.has_value();
+
+                if (variant.name == ident_init.name && is_unit) {
+                    // Found matching unit variant - use var_type from annotation
+                    // var_type should already be %struct.Maybe__I32 etc from annotation
+
+                    std::string result = fresh_reg();
+                    std::string enum_val = fresh_reg();
+
+                    // Create enum value on stack with correct mangled type
+                    emit_line("  " + enum_val + " = alloca " + var_type + ", align 8");
+
+                    // Set tag (field 0)
+                    std::string tag_ptr = fresh_reg();
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + var_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                    // Load the complete enum value
+                    emit_line("  " + result + " = load " + var_type + ", ptr " + enum_val);
+
+                    // Allocate storage for the variable
+                    std::string alloca_reg = fresh_reg();
+                    emit_line("  " + alloca_reg + " = alloca " + var_type);
+                    emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
+
+                    locals_[var_name] = VarInfo{alloca_reg, var_type};
+                    return;
+                }
+            }
+        }
+    }
+
     // For function/closure types, store the function pointer directly
     if (let.type_annotation) {
         if (let.type_annotation.value()->is<parser::FuncType>()) {
@@ -227,7 +279,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // Initialize if there's a value - generate first to infer type
     std::string init_val;
     if (let.init.has_value()) {
+        // Set expected type for generic enum constructors
+        // If var_type is a generic enum like %struct.Outcome__I32__I32, set context
+        if (is_struct && var_type.find("__") != std::string::npos) {
+            expected_enum_type_ = var_type;
+        }
         init_val = gen_expr(*let.init.value());
+        expected_enum_type_.clear();  // Clear context after expression
         // If type wasn't explicitly annotated and expression has a known type, use it
         if (!let.type_annotation && last_expr_type_ != "i32") {
             if (last_expr_type_ == "double" || last_expr_type_ == "i64" ||

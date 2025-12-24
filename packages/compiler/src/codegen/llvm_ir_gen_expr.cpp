@@ -396,29 +396,53 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
             break;
-        // Comparisons return i1
+        // Comparisons return i1 (use fcmp for floats, icmp for integers)
         case parser::BinaryOp::Eq:
-            emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp oeq double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         case parser::BinaryOp::Ne:
-            emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp one double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         case parser::BinaryOp::Lt:
-            emit_line("  " + result + " = icmp slt " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp olt double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp slt " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         case parser::BinaryOp::Gt:
-            emit_line("  " + result + " = icmp sgt " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp ogt double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp sgt " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         case parser::BinaryOp::Le:
-            emit_line("  " + result + " = icmp sle " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp ole double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp sle " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         case parser::BinaryOp::Ge:
-            emit_line("  " + result + " = icmp sge " + int_type + " " + left + ", " + right);
+            if (is_float) {
+                emit_line("  " + result + " = fcmp oge double " + left + ", " + right);
+            } else {
+                emit_line("  " + result + " = icmp sge " + int_type + " " + left + ", " + right);
+            }
             last_expr_type_ = "i1";
             break;
         // Logical operators work on i1
@@ -533,17 +557,26 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     }
 
     std::string operand = gen_expr(*unary.operand);
+    std::string operand_type = last_expr_type_;
     std::string result = fresh_reg();
 
     switch (unary.op) {
         case parser::UnaryOp::Neg:
-            emit_line("  " + result + " = sub i32 0, " + operand);
+            if (operand_type == "double" || operand_type == "float") {
+                emit_line("  " + result + " = fsub double 0.0, " + operand);
+                last_expr_type_ = "double";
+            } else {
+                emit_line("  " + result + " = sub " + operand_type + " 0, " + operand);
+                last_expr_type_ = operand_type;
+            }
             break;
         case parser::UnaryOp::Not:
             emit_line("  " + result + " = xor i1 " + operand + ", 1");
+            last_expr_type_ = "i1";
             break;
         case parser::UnaryOp::BitNot:
             emit_line("  " + result + " = xor i32 " + operand + ", -1");
+            last_expr_type_ = "i32";
             break;
         default:
             return operand;

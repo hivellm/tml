@@ -1,0 +1,154 @@
+use test
+
+// ============ Coverage Demo Tests ============
+// Demonstrates the coverage tracking functionality
+
+func helper_add(a: I32, b: I32) -> I32 {
+    cover_func("helper_add")
+    return a + b
+}
+
+func helper_mul(a: I32, b: I32) -> I32 {
+    cover_func("helper_mul")
+    return a * b
+}
+
+func helper_sub(a: I32, b: I32) -> I32 {
+    cover_func("helper_sub")
+    return a - b
+}
+
+func helper_div(a: I32, b: I32) -> I32 {
+    cover_func("helper_div")
+    if b == 0 then {
+        return 0
+    }
+    return a / b
+}
+
+@test
+func test_basic_coverage() -> I32 {
+    reset_coverage()
+
+    // No functions covered yet
+    assert_eq_i32(get_covered_func_count(), 0, "no coverage yet")
+
+    // Call add
+    let r1: I32 = helper_add(5, 3)
+    assert_eq_i32(r1, 8, "add result")
+    assert_eq_i32(get_covered_func_count(), 1, "1 function covered")
+
+    // Call mul
+    let r2: I32 = helper_mul(4, 3)
+    assert_eq_i32(r2, 12, "mul result")
+    assert_eq_i32(get_covered_func_count(), 2, "2 functions covered")
+
+    // Call add again (shouldn't increase count)
+    let r3: I32 = helper_add(10, 20)
+    assert_eq_i32(r3, 30, "add again")
+    assert_eq_i32(get_covered_func_count(), 2, "still 2 functions")
+
+    return 0
+}
+
+@test
+func test_coverage_percent() -> I32 {
+    reset_coverage()
+
+    // Register 4 functions
+    cover_func("f1")
+    cover_func("f2")
+    cover_func("f3")
+    cover_func("f4")
+
+    // All 4 are covered (we just called cover_func on all of them)
+    let percent: I32 = get_coverage_percent()
+    assert_eq_i32(percent, 100, "100% coverage")
+
+    return 0
+}
+
+@test
+func test_is_func_covered_check() -> I32 {
+    reset_coverage()
+
+    cover_func("tested_function")
+
+    assert(is_func_covered("tested_function"), "function is covered")
+
+    let not_tested: Bool = is_func_covered("untested_function")
+    assert_eq_bool(not_tested, false, "untested function not covered")
+
+    return 0
+}
+
+@test
+func test_line_coverage() -> I32 {
+    reset_coverage()
+
+    cover_line("test.tml", 10)
+    cover_line("test.tml", 20)
+    cover_line("test.tml", 30)
+
+    assert_eq_i32(get_covered_line_count(), 3, "3 lines covered")
+
+    return 0
+}
+
+@test
+func test_branch_coverage() -> I32 {
+    reset_coverage()
+
+    // Simulate covering both branches of an if statement
+    cover_branch("test.tml", 50, 0)  // true branch
+    cover_branch("test.tml", 50, 1)  // false branch
+
+    assert_eq_i32(get_covered_branch_count(), 2, "2 branches covered")
+
+    return 0
+}
+
+@test
+func test_coverage_reset() -> I32 {
+    // Add some coverage
+    cover_func("will_be_reset")
+    cover_line("file.tml", 100)
+    cover_branch("file.tml", 100, 0)
+
+    // Reset
+    reset_coverage()
+
+    // Verify all cleared
+    assert_eq_i32(get_covered_func_count(), 0, "funcs reset")
+    assert_eq_i32(get_covered_line_count(), 0, "lines reset")
+    assert_eq_i32(get_covered_branch_count(), 0, "branches reset")
+
+    return 0
+}
+
+@test
+func test_full_workflow() -> I32 {
+    reset_coverage()
+
+    // Simulate testing a module with 4 functions
+    // but only testing 3 of them
+
+    cover_func("module::func1")
+    let r1: I32 = 1 + 1
+    assert_eq_i32(r1, 2, "func1 works")
+
+    cover_func("module::func2")
+    let r2: I32 = 2 * 3
+    assert_eq_i32(r2, 6, "func2 works")
+
+    cover_func("module::func3")
+    let r3: I32 = 10 - 4
+    assert_eq_i32(r3, 6, "func3 works")
+
+    // func4 not tested
+
+    // Check coverage
+    assert_eq_i32(get_covered_func_count(), 3, "3/4 functions tested")
+
+    return 0
+}

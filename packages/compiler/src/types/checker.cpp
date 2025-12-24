@@ -62,9 +62,6 @@ TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
-    TML_DEBUG_LN("[DEBUG] check_module called");
-
-    // Pass 0: Process use declarations (imports)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::UseDecl>()) {
             process_use_decl(decl->as<parser::UseDecl>());
@@ -263,7 +260,6 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
 }
 
 void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
-    std::vector<TypePtr> params;
     for (const auto& p : func.params) {
         params.push_back(resolve_type(*p.type));
     }
@@ -299,11 +295,19 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
+    // Extract generic type parameter names
+    std::vector<std::string> func_type_params;
+    for (const auto& param : func.generics) {
+        func_type_params.push_back(param.name);
+    }
+
+    std::cerr << std::endl;
+
     env_.define_func(FuncSig{
         .name = func.name,
         .params = std::move(params),
         .return_type = std::move(ret),
-        .type_params = {},
+        .type_params = std::move(func_type_params),
         .is_async = func.is_async,
         .span = func.span,
         .stability = StabilityLevel::Unstable,
@@ -314,9 +318,6 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
-    TML_DEBUG_LN("[DEBUG] check_func_body called for function: " << func.name);
-    env_.push_scope();
-    current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
     // Add parameters to scope
     for (const auto& p : func.params) {
@@ -341,9 +342,6 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
             if (!return_type->is<PrimitiveType>() ||
                 return_type->as<PrimitiveType>().kind != PrimitiveKind::Unit) {
 
-                TML_DEBUG_LN("[DEBUG] Checking function '" << func.name << "' for return statement");
-                bool has_ret = block_has_return(*func.body);
-                TML_DEBUG_LN("[DEBUG] Has return: " << (has_ret ? "yes" : "no"));
 
                 if (!has_ret) {
                     error("Function '" + func.name + "' with return type " +
@@ -393,11 +391,13 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
-        env_.define_func(FuncSig{
+    std::cerr << std::endl;
+
+    env_.define_func(FuncSig{
             .name = qualified_name,
             .params = std::move(params),
             .return_type = std::move(ret),
-            .type_params = {},
+        .type_params = {},
             .is_async = method.is_async,
             .span = method.span
         });
@@ -696,6 +696,34 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         // First try function lookup
         auto func = env_.lookup_func(ident.name);
         if (func) {
+            // DEBUG: Print function info
+
+            // Check if this is a generic function
+            if (!func->type_params.empty()) {
+                // Infer type arguments from call arguments
+                std::unordered_map<std::string, TypePtr> substitutions;
+                for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
+                    auto arg_type = check_expr(*call.args[i]);
+                    // Check if the param type is a generic type
+                    if (func->params[i]->is<GenericType>()) {
+                        const auto& generic = func->params[i]->as<GenericType>();
+                        substitutions[generic.name] = arg_type;
+                    }
+                    // Also check NamedType (resolve_type creates NamedType for unknown types like T)
+                    else if (func->params[i]->is<NamedType>()) {
+                        const auto& named = func->params[i]->as<NamedType>();
+                        // Check if name matches a type parameter
+                        for (const auto& tp : func->type_params) {
+                            if (named.name == tp) {
+                                substitutions[tp] = arg_type;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Substitute the return type
+                return substitute_type(func->return_type, substitutions);
+            }
             return func->return_type;
         }
 

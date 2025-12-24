@@ -656,10 +656,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "float_to_int" || fn_name == "toInt") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
-            std::string double_val = fresh_reg();
-            emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
+            std::string double_val;
+            // Convert to double if needed
+            if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
+                double_val = fresh_reg();
+                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value + " to double");
+            } else {
+                double_val = value;  // Already a double
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @tml_float_to_int(double " + double_val + ")");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -729,38 +736,182 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
-    // sqrt(value: I32) -> F64 (returns double)
-    if (fn_name == "float_sqrt" || (fn_name == "sqrt" && !is_module_func("sqrt"))) {
+    // sqrt(value: F64) -> F64 (returns double)
+    if (fn_name == "float_sqrt" || fn_name == "sqrt") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
-            std::string double_val = fresh_reg();
-            emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
-            std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @tml_float_sqrt(double " + double_val + ")");
-            // Convert to i32 since type checker says I32 for now
-            // TODO: Add proper F64 type support
+            std::string double_val;
+            // Convert to double if needed
+            if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
+                double_val = fresh_reg();
+                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value + " to double");
+            } else {
+                double_val = value;  // Already a double
+            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = fptosi double " + double_result + " to i32");
+            emit_line("  " + result + " = call double @tml_float_sqrt(double " + double_val + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0.0";
+    }
+
+    // pow(base: F64, exp: I32) -> F64 (returns double)
+    if (fn_name == "float_pow" || fn_name == "pow") {
+        if (call.args.size() >= 2) {
+            std::string base = gen_expr(*call.args[0]);
+            std::string base_type = last_expr_type_;
+            std::string exp = gen_expr(*call.args[1]);
+            std::string double_base;
+            // Convert base to double if needed
+            if (base_type == "i32" || base_type == "i64") {
+                double_base = fresh_reg();
+                emit_line("  " + double_base + " = sitofp " + base_type + " " + base + " to double");
+            } else {
+                double_base = base;  // Already a double
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @tml_float_pow(double " + double_base + ", i32 " + exp + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "1.0";
+    }
+
+    // ============ BIT MANIPULATION FUNCTIONS ============
+    // These are always builtins (no TML module versions)
+
+    // float32_bits(f: F32) -> U32
+    if (fn_name == "float32_bits") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @tml_float32_bits(float " + value + ")");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
     }
 
-    // pow(base: I32, exp: I32) -> F64 (returns double)
-    if (fn_name == "float_pow" || (fn_name == "pow" && !is_module_func("pow"))) {
-        if (call.args.size() >= 2) {
-            std::string base = gen_expr(*call.args[0]);
-            std::string exp = gen_expr(*call.args[1]);
-            std::string double_base = fresh_reg();
-            emit_line("  " + double_base + " = sitofp i32 " + base + " to double");
-            std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @tml_float_pow(double " + double_base + ", i32 " + exp + ")");
-            // Convert to i32 since type checker says I32 for now
+    // float32_from_bits(b: U32) -> F32
+    if (fn_name == "float32_from_bits") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = fptosi double " + double_result + " to i32");
+            emit_line("  " + result + " = call float @tml_float32_from_bits(i32 " + value + ")");
+            last_expr_type_ = "float";
             return result;
         }
-        return "1";
+        return "0.0";
+    }
+
+    // float64_bits(f: F64) -> U64
+    if (fn_name == "float64_bits") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @tml_float64_bits(double " + value + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        return "0";
+    }
+
+    // float64_from_bits(b: U64) -> F64
+    if (fn_name == "float64_from_bits") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @tml_float64_from_bits(i64 " + value + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0.0";
+    }
+
+    // ============ SPECIAL FLOAT VALUES ============
+    // These are always builtins (no TML module versions)
+
+    // infinity(sign: I32) -> F64
+    if (fn_name == "infinity") {
+        if (!call.args.empty()) {
+            std::string sign = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @tml_infinity(i32 " + sign + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        // Default to positive infinity
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call double @tml_infinity(i32 1)");
+        last_expr_type_ = "double";
+        return result;
+    }
+
+    // nan() -> F64
+    if (fn_name == "nan") {
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call double @tml_nan()");
+        last_expr_type_ = "double";
+        return result;
+    }
+
+    // is_inf(f: F64, sign: I32) -> Bool
+    if (fn_name == "is_inf") {
+        if (call.args.size() >= 2) {
+            std::string f = gen_expr(*call.args[0]);
+            std::string sign = gen_expr(*call.args[1]);
+            std::string int_result = fresh_reg();
+            emit_line("  " + int_result + " = call i32 @tml_is_inf(double " + f + ", i32 " + sign + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // is_nan(f: F64) -> Bool
+    if (fn_name == "is_nan") {
+        if (!call.args.empty()) {
+            std::string f = gen_expr(*call.args[0]);
+            std::string int_result = fresh_reg();
+            emit_line("  " + int_result + " = call i32 @tml_is_nan(double " + f + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // ============ NEXTAFTER FUNCTIONS ============
+    // Only use builtin if not imported from a module
+
+    // nextafter(x: F64, y: F64) -> F64
+    if (fn_name == "nextafter" && !is_module_func("nextafter")) {
+        if (call.args.size() >= 2) {
+            std::string x = gen_expr(*call.args[0]);
+            std::string y = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @tml_nextafter(double " + x + ", double " + y + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0.0";
+    }
+
+    // nextafter32(x: F32, y: F32) -> F32
+    if (fn_name == "nextafter32" && !is_module_func("nextafter32")) {
+        if (call.args.size() >= 2) {
+            std::string x = gen_expr(*call.args[0]);
+            std::string y = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call float @tml_nextafter32(float " + x + ", float " + y + ")");
+            last_expr_type_ = "float";
+            return result;
+        }
+        return "0.0";
     }
 
     // ============ CHANNEL PRIMITIVES (Go-style) ============
@@ -1363,6 +1514,68 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& ident = call.callee->as<parser::IdentExpr>();
 
+        // First check pending generic enums
+        for (const auto& [gen_enum_name, gen_enum_decl] : pending_generic_enums_) {
+            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size(); ++variant_idx) {
+                const auto& variant = gen_enum_decl->variants[variant_idx];
+                if (variant.name == ident.name) {
+                    // Found generic enum constructor
+                    std::string enum_type;
+
+                    // Check if variant has payload (tuple_fields for tuple variants like Just(T))
+                    bool has_payload = variant.tuple_fields.has_value() && !variant.tuple_fields->empty();
+
+                    // If we have expected type from context, use it (for multi-param generics)
+                    if (!expected_enum_type_.empty()) {
+                        enum_type = expected_enum_type_;
+                    } else {
+                        // Infer type from arguments
+                        std::vector<types::TypePtr> inferred_type_args;
+                        if (has_payload && !call.args.empty()) {
+                            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+                            inferred_type_args.push_back(arg_type);
+                        } else {
+                            // No payload to infer from - default to I32
+                            inferred_type_args.push_back(types::make_i32());
+                        }
+                        std::string mangled_name = require_enum_instantiation(gen_enum_name, inferred_type_args);
+                        enum_type = "%struct." + mangled_name;
+                    }
+
+                    std::string result = fresh_reg();
+                    std::string enum_val = fresh_reg();
+
+                    // Create enum value on stack
+                    emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                    // Set tag (field 0)
+                    std::string tag_ptr = fresh_reg();
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                    // Set payload if present (stored in field 1, the [N x i8] array)
+                    if (has_payload && !call.args.empty()) {
+                        std::string payload = gen_expr(*call.args[0]);
+
+                        // Get pointer to payload field ([N x i8])
+                        std::string payload_ptr = fresh_reg();
+                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                        // Cast payload to bytes and store
+                        std::string payload_typed_ptr = fresh_reg();
+                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr + " to ptr");
+                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " + payload_typed_ptr);
+                    }
+
+                    // Load the complete enum value
+                    emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                    last_expr_type_ = enum_type;
+                    return result;
+                }
+            }
+        }
+
+        // Then check non-generic enums
         for (const auto& [enum_name, enum_def] : env_.all_enums()) {
             for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
                 const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];

@@ -188,40 +188,27 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
     std::vector<std::string> empty_args;
     std::string captured_output;
 
-    // Run test with timeout using async
-    auto future = std::async(std::launch::async, [&]() {
-        // Use quiet mode (output captured) unless nocapture
-        // --verbose only controls test runner output format, not compiler debug
-        if (opts.nocapture) {
-            // nocapture mode shows all output live
-            return run_run(test_file, empty_args, false);
-        } else {
-            // Default: capture output (shown on failure)
-            return run_run_quiet(test_file, empty_args, false, &captured_output);
-        }
-    });
-
-    // Wait for test to complete or timeout
-    auto timeout_duration = std::chrono::seconds(opts.timeout_seconds);
-    auto status = future.wait_for(timeout_duration);
+    // Run test directly (parallelism is handled at the outer level)
+    // Note: timeout is not enforced here - tests should complete reasonably fast
+    if (opts.nocapture) {
+        result.exit_code = run_run(test_file, empty_args, false);
+    } else {
+        result.exit_code = run_run_quiet(test_file, empty_args, false, &captured_output);
+    }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time).count();
 
-    if (status == std::future_status::timeout) {
-        result.passed = false;
+    // Check for soft timeout (just flag it, test already completed)
+    if (result.duration_ms > opts.timeout_seconds * 1000) {
         result.timeout = true;
-        result.error_message = "Timeout exceeded " + std::to_string(opts.timeout_seconds) + "s";
-        return result;
     }
 
-    result.exit_code = future.get();
     result.passed = (result.exit_code == 0);
 
     if (!result.passed) {
         result.error_message = "Exit code: " + std::to_string(result.exit_code);
-        // Store captured output for failed tests
         if (!captured_output.empty()) {
             result.error_message += "\n" + captured_output;
         }

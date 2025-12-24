@@ -84,7 +84,37 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
     if (type.is<parser::NamedType>()) {
         const auto& named = type.as<parser::NamedType>();
         if (!named.path.segments.empty()) {
-            return llvm_type_name(named.path.segments.back());
+            std::string base_name = named.path.segments.back();
+
+            // Check if this is a generic type with type arguments
+            if (named.generics.has_value() && !named.generics->args.empty()) {
+                // Check if this is a known generic struct/enum
+                auto it = pending_generic_structs_.find(base_name);
+                if (it != pending_generic_structs_.end()) {
+                    // Convert parser type args to semantic types
+                    std::vector<types::TypePtr> type_args;
+                    for (const auto& arg : named.generics->args) {
+                        types::TypePtr semantic_type = resolve_parser_type_with_subs(*arg, {});
+                        type_args.push_back(semantic_type);
+                    }
+                    // Get mangled name and ensure instantiation
+                    std::string mangled = require_struct_instantiation(base_name, type_args);
+                    return "%struct." + mangled;
+                }
+                // Check enum
+                auto enum_it = pending_generic_enums_.find(base_name);
+                if (enum_it != pending_generic_enums_.end()) {
+                    std::vector<types::TypePtr> type_args;
+                    for (const auto& arg : named.generics->args) {
+                        types::TypePtr semantic_type = resolve_parser_type_with_subs(*arg, {});
+                        type_args.push_back(semantic_type);
+                    }
+                    std::string mangled = require_enum_instantiation(base_name, type_args);
+                    return "%struct." + mangled;
+                }
+            }
+
+            return llvm_type_name(base_name);
         }
     } else if (type.is<parser::RefType>()) {
         return "ptr";
@@ -128,7 +158,20 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::stri
             case types::PrimitiveKind::Unit: return "void";
         }
     } else if (type->is<types::NamedType>()) {
-        return "%struct." + type->as<types::NamedType>().name;
+        const auto& named = type->as<types::NamedType>();
+
+        // If it has type arguments, need to use mangled name and ensure instantiation
+        if (!named.type_args.empty()) {
+            // Request instantiation (will be generated later if needed)
+            std::string mangled = require_struct_instantiation(named.name, named.type_args);
+            return "%struct." + mangled;
+        }
+
+        return "%struct." + named.name;
+    } else if (type->is<types::GenericType>()) {
+        // Uninstantiated generic type - this shouldn't happen in codegen normally
+        // Return a placeholder (will cause error if actually used)
+        return "i32";
     } else if (type->is<types::RefType>() || type->is<types::PtrType>()) {
         return "ptr";
     } else if (type->is<types::FuncType>()) {
@@ -139,10 +182,289 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::stri
     return "i32";  // Default
 }
 
+// ============ Generic Type Mangling ============
+// Converts type to mangled string for LLVM IR names
+// e.g., I32 -> "I32", List[I32] -> "List__I32", HashMap[Str, Bool] -> "HashMap__Str__Bool"
+
+auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
+    if (!type) return "void";
+
+    if (type->is<types::PrimitiveType>()) {
+        return types::primitive_kind_to_string(type->as<types::PrimitiveType>().kind);
+    }
+    else if (type->is<types::NamedType>()) {
+        const auto& named = type->as<types::NamedType>();
+        if (named.type_args.empty()) {
+            return named.name;
+        }
+        // Mangle with type arguments: List[I32] -> List__I32
+        return named.name + "__" + mangle_type_args(named.type_args);
+    }
+    else if (type->is<types::RefType>()) {
+        const auto& ref = type->as<types::RefType>();
+        return (ref.is_mut ? "mutref_" : "ref_") + mangle_type(ref.inner);
+    }
+    else if (type->is<types::PtrType>()) {
+        const auto& ptr = type->as<types::PtrType>();
+        return (ptr.is_mut ? "mutptr_" : "ptr_") + mangle_type(ptr.inner);
+    }
+    else if (type->is<types::ArrayType>()) {
+        const auto& arr = type->as<types::ArrayType>();
+        return "arr_" + mangle_type(arr.element) + "_" + std::to_string(arr.size);
+    }
+    else if (type->is<types::GenericType>()) {
+        // Uninstantiated generic - shouldn't reach codegen normally
+        return type->as<types::GenericType>().name;
+    }
+
+    return "unknown";
+}
+
+auto LLVMIRGen::mangle_type_args(const std::vector<types::TypePtr>& args) -> std::string {
+    std::string result;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0) result += "__";
+        result += mangle_type(args[i]);
+    }
+    return result;
+}
+
+auto LLVMIRGen::mangle_struct_name(
+    const std::string& base_name,
+    const std::vector<types::TypePtr>& type_args
+) -> std::string {
+    if (type_args.empty()) {
+        return base_name;
+    }
+    return base_name + "__" + mangle_type_args(type_args);
+}
+
+auto LLVMIRGen::mangle_func_name(
+    const std::string& base_name,
+    const std::vector<types::TypePtr>& type_args
+) -> std::string {
+    if (type_args.empty()) {
+        return base_name;
+    }
+    return base_name + "__" + mangle_type_args(type_args);
+}
+
+// ============ Parser Type to Semantic Type with Substitution ============
+// Converts parser::Type to types::TypePtr, applying generic substitutions
+
+auto LLVMIRGen::resolve_parser_type_with_subs(
+    const parser::Type& type,
+    const std::unordered_map<std::string, types::TypePtr>& subs
+) -> types::TypePtr {
+    return std::visit([this, &subs](const auto& t) -> types::TypePtr {
+        using T = std::decay_t<decltype(t)>;
+
+        if constexpr (std::is_same_v<T, parser::NamedType>) {
+            // Get the type name
+            std::string name;
+            if (!t.path.segments.empty()) {
+                name = t.path.segments.back();
+            }
+
+            // Check if it's a generic parameter that needs substitution
+            auto it = subs.find(name);
+            if (it != subs.end()) {
+                return it->second;  // Return substituted type
+            }
+
+            // Check for primitive types
+            static const std::unordered_map<std::string, types::PrimitiveKind> primitives = {
+                {"I8", types::PrimitiveKind::I8},
+                {"I16", types::PrimitiveKind::I16},
+                {"I32", types::PrimitiveKind::I32},
+                {"I64", types::PrimitiveKind::I64},
+                {"I128", types::PrimitiveKind::I128},
+                {"U8", types::PrimitiveKind::U8},
+                {"U16", types::PrimitiveKind::U16},
+                {"U32", types::PrimitiveKind::U32},
+                {"U64", types::PrimitiveKind::U64},
+                {"U128", types::PrimitiveKind::U128},
+                {"F32", types::PrimitiveKind::F32},
+                {"F64", types::PrimitiveKind::F64},
+                {"Bool", types::PrimitiveKind::Bool},
+                {"Char", types::PrimitiveKind::Char},
+                {"Str", types::PrimitiveKind::Str},
+                {"String", types::PrimitiveKind::Str},
+                {"Unit", types::PrimitiveKind::Unit},
+            };
+
+            auto prim_it = primitives.find(name);
+            if (prim_it != primitives.end()) {
+                return types::make_primitive(prim_it->second);
+            }
+
+            // Named type - process generic arguments if present
+            std::vector<types::TypePtr> type_args;
+            if (t.generics.has_value()) {
+                for (const auto& arg : t.generics->args) {
+                    type_args.push_back(resolve_parser_type_with_subs(*arg, subs));
+                }
+            }
+
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::NamedType{name, "", std::move(type_args)};
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, parser::RefType>) {
+            auto inner = resolve_parser_type_with_subs(*t.inner, subs);
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::RefType{t.is_mut, inner};
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, parser::PtrType>) {
+            auto inner = resolve_parser_type_with_subs(*t.inner, subs);
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::PtrType{t.is_mut, inner};
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, parser::ArrayType>) {
+            auto element = resolve_parser_type_with_subs(*t.element, subs);
+            // parser::ArrayType::size is an ExprPtr, need to evaluate it
+            // For now, use a default size of 0 (will be computed elsewhere if needed)
+            size_t arr_size = 0;
+            if (t.size && t.size->is<parser::LiteralExpr>()) {
+                const auto& lit = t.size->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    arr_size = static_cast<size_t>(lit.token.int_value().value);
+                }
+            }
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::ArrayType{element, arr_size};
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, parser::SliceType>) {
+            auto element = resolve_parser_type_with_subs(*t.element, subs);
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::SliceType{element};
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, parser::TupleType>) {
+            std::vector<types::TypePtr> elements;
+            for (const auto& elem : t.elements) {
+                elements.push_back(resolve_parser_type_with_subs(*elem, subs));
+            }
+            return types::make_tuple(std::move(elements));
+        }
+        else if constexpr (std::is_same_v<T, parser::FuncType>) {
+            std::vector<types::TypePtr> params;
+            for (const auto& param : t.params) {
+                params.push_back(resolve_parser_type_with_subs(*param, subs));
+            }
+            types::TypePtr ret = types::make_unit();
+            if (t.return_type) {
+                ret = resolve_parser_type_with_subs(*t.return_type, subs);
+            }
+            return types::make_func(std::move(params), ret);
+        }
+        else if constexpr (std::is_same_v<T, parser::InferType>) {
+            // Infer type - return a type variable or Unit as placeholder
+            return types::make_unit();
+        }
+        else {
+            // Default: return Unit
+            return types::make_unit();
+        }
+    }, type.kind);
+}
+
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
     std::string name = "@.str." + std::to_string(string_literals_.size());
     string_literals_.emplace_back(name, value);
     return name;
+}
+
+// ============ Generate Pending Generic Instantiations ============
+// Iteratively generate all pending struct/enum/func instantiations
+// Loops until no new instantiations are added (handles recursive types)
+
+void LLVMIRGen::generate_pending_instantiations() {
+    const int MAX_ITERATIONS = 100;  // Prevent infinite loops
+    int iterations = 0;
+
+    bool changed = true;
+    while (changed && iterations < MAX_ITERATIONS) {
+        changed = false;
+        ++iterations;
+
+        // Generate pending struct instantiations
+        for (auto& [key, inst] : struct_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+
+                // Find the generic struct declaration
+                auto it = pending_generic_structs_.find(inst.base_name);
+                if (it != pending_generic_structs_.end()) {
+                    gen_struct_instantiation(*it->second, inst.type_args);
+                    changed = true;
+                }
+            }
+        }
+
+        // Generate pending enum instantiations
+        for (auto& [key, inst] : enum_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+
+                auto it = pending_generic_enums_.find(inst.base_name);
+                if (it != pending_generic_enums_.end()) {
+                    gen_enum_instantiation(*it->second, inst.type_args);
+                    changed = true;
+                }
+            }
+        }
+
+        // Note: Function instantiations would be handled similarly
+        // but for now we focus on types
+    }
+}
+
+// Request enum instantiation - returns mangled name
+auto LLVMIRGen::require_enum_instantiation(
+    const std::string& base_name,
+    const std::vector<types::TypePtr>& type_args
+) -> std::string {
+    std::string mangled = mangle_struct_name(base_name, type_args);
+
+    auto it = enum_instantiations_.find(mangled);
+    if (it != enum_instantiations_.end()) {
+        return mangled;
+    }
+
+    enum_instantiations_[mangled] = GenericInstantiation{
+        base_name,
+        type_args,
+        mangled,
+        false
+    };
+
+    // Also register enum variants immediately so they're available during code generation
+    // (enum_variants_ is used before generate_pending_instantiations runs)
+    auto decl_it = pending_generic_enums_.find(base_name);
+    if (decl_it != pending_generic_enums_.end()) {
+        const parser::EnumDecl* decl = decl_it->second;
+
+        // Register variant tags with mangled enum name
+        int tag = 0;
+        for (const auto& variant : decl->variants) {
+            std::string key = mangled + "::" + variant.name;
+            enum_variants_[key] = tag++;
+        }
+    }
+
+    return mangled;
+}
+
+// Placeholder for function instantiation (will implement when adding generic functions)
+auto LLVMIRGen::require_func_instantiation(
+    const std::string& base_name,
+    const std::vector<types::TypePtr>& type_args
+) -> std::string {
+    return mangle_func_name(base_name, type_args);
 }
 
 void LLVMIRGen::emit_header() {
@@ -179,6 +501,20 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @tml_assert_ne_i32(i32, i32, ptr)");
     emit_line("declare void @tml_assert_eq_str(ptr, ptr, ptr)");
     emit_line("declare void @tml_assert_eq_bool(i1, i1, ptr)");
+    emit_line("");
+
+    // TML code coverage functions
+    emit_line("; TML code coverage");
+    emit_line("declare void @tml_cover_func(ptr)");
+    emit_line("declare void @tml_cover_line(ptr, i32)");
+    emit_line("declare void @tml_cover_branch(ptr, i32, i32)");
+    emit_line("declare void @tml_print_coverage_report()");
+    emit_line("declare i32 @tml_get_covered_func_count()");
+    emit_line("declare i32 @tml_get_covered_line_count()");
+    emit_line("declare i32 @tml_get_covered_branch_count()");
+    emit_line("declare void @tml_reset_coverage()");
+    emit_line("declare i32 @tml_is_func_covered(ptr)");
+    emit_line("declare i32 @tml_get_coverage_percent()");
     emit_line("");
 
     // Threading runtime declarations
@@ -229,6 +565,28 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare double @tml_float_abs(double)");
     emit_line("declare double @tml_float_sqrt(double)");
     emit_line("declare double @tml_float_pow(double, i32)");
+    emit_line("");
+
+    // Bit manipulation runtime declarations
+    emit_line("; Bit manipulation runtime");
+    emit_line("declare i32 @tml_float32_bits(float)");
+    emit_line("declare float @tml_float32_from_bits(i32)");
+    emit_line("declare i64 @tml_float64_bits(double)");
+    emit_line("declare double @tml_float64_from_bits(i64)");
+    emit_line("");
+
+    // Special float value runtime declarations
+    emit_line("; Special float values runtime");
+    emit_line("declare double @tml_infinity(i32)");
+    emit_line("declare double @tml_nan()");
+    emit_line("declare i32 @tml_is_inf(double, i32)");
+    emit_line("declare i32 @tml_is_nan(double)");
+    emit_line("");
+
+    // Nextafter runtime declarations
+    emit_line("; Nextafter runtime");
+    emit_line("declare double @tml_nextafter(double, double)");
+    emit_line("declare float @tml_nextafter32(float, float)");
     emit_line("");
 
     // Channel runtime declarations
@@ -494,12 +852,37 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         }
     }
 
-    // Second pass: generate function declarations
+    // Generate any pending generic instantiations collected during first pass
+    // This happens after structs/enums are registered but before function codegen
+    generate_pending_instantiations();
+
+    // Buffer function code separately so we can emit type instantiations before functions
+    std::stringstream func_output;
+    std::stringstream saved_output;
+    saved_output.str(output_.str());  // Save current output (headers, type defs)
+    output_.str("");  // Clear for function code
+
+    // Second pass: generate function declarations (into temp buffer)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             gen_func_decl(decl->as<parser::FuncDecl>());
         }
     }
+
+    // Save function code
+    func_output.str(output_.str());
+    output_.str("");
+
+    // Restore header output
+    output_ << saved_output.str();
+
+    // Now emit any generic instantiations discovered during function codegen
+    // These will appear BEFORE function code
+    generate_pending_instantiations();
+    emit_line("");
+
+    // Now append function code
+    output_ << func_output.str();
 
     // Emit generated closure functions
     for (const auto& closure_func : module_functions_) {
@@ -620,7 +1003,12 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
             // Success path - continue to next test
             emit_line(next_label + ":");
 
-            test_num++;
+test_num++;
+        }
+
+        // Print coverage report if enabled
+        if (options_.coverage_enabled) {
+            emit_line("  call void @tml_print_coverage_report()");
         }
 
         // All tests passed

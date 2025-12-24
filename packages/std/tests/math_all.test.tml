@@ -1,0 +1,550 @@
+use test
+
+// ============================================================================
+// COMPREHENSIVE TESTS FOR ALL STD::MATH IMPLEMENTATIONS
+// ============================================================================
+
+// ============ ABS FUNCTIONS ============
+
+func abs_i32(n: I32) -> I32 {
+    return if n < 0 then 0 - n else n
+}
+
+@test
+func test_abs_i32() -> I32 {
+    assert_eq_i32(abs_i32(0), 0, "abs(0)")
+    assert_eq_i32(abs_i32(5), 5, "abs(5)")
+    assert_eq_i32(abs_i32(0 - 5), 5, "abs(-5)")
+    assert_eq_i32(abs_i32(100), 100, "abs(100)")
+    assert_eq_i32(abs_i32(0 - 100), 100, "abs(-100)")
+    assert_eq_i32(abs_i32(1), 1, "abs(1)")
+    assert_eq_i32(abs_i32(0 - 1), 1, "abs(-1)")
+
+    return 0
+}
+
+// ============ MIN/MAX FUNCTIONS ============
+
+func min_i32(a: I32, b: I32) -> I32 {
+    return if a < b then a else b
+}
+
+func max_i32(a: I32, b: I32) -> I32 {
+    return if a > b then a else b
+}
+
+@test
+func test_min_i32() -> I32 {
+    assert_eq_i32(min_i32(3, 5), 3, "min(3,5)")
+    assert_eq_i32(min_i32(5, 3), 3, "min(5,3)")
+    assert_eq_i32(min_i32(5, 5), 5, "min(5,5)")
+    assert_eq_i32(min_i32(0, 10), 0, "min(0,10)")
+    assert_eq_i32(min_i32(0 - 5, 5), 0 - 5, "min(-5,5)")
+    assert_eq_i32(min_i32(0 - 10, 0 - 5), 0 - 10, "min(-10,-5)")
+
+    return 0
+}
+
+@test
+func test_max_i32() -> I32 {
+    assert_eq_i32(max_i32(3, 5), 5, "max(3,5)")
+    assert_eq_i32(max_i32(5, 3), 5, "max(5,3)")
+    assert_eq_i32(max_i32(5, 5), 5, "max(5,5)")
+    assert_eq_i32(max_i32(0, 10), 10, "max(0,10)")
+    assert_eq_i32(max_i32(0 - 5, 5), 5, "max(-5,5)")
+    assert_eq_i32(max_i32(0 - 10, 0 - 5), 0 - 5, "max(-10,-5)")
+
+    return 0
+}
+
+// ============ CLAMP FUNCTION ============
+
+func clamp_i32(value: I32, min_val: I32, max_val: I32) -> I32 {
+    if value < min_val then { return min_val }
+    if value > max_val then { return max_val }
+    return value
+}
+
+@test
+func test_clamp_i32() -> I32 {
+    // Within range
+    assert_eq_i32(clamp_i32(5, 0, 10), 5, "5 in [0,10]")
+    assert_eq_i32(clamp_i32(0, 0, 10), 0, "0 at min")
+    assert_eq_i32(clamp_i32(10, 0, 10), 10, "10 at max")
+
+    // Below range
+    assert_eq_i32(clamp_i32(0 - 5, 0, 10), 0, "-5 clamped to 0")
+    assert_eq_i32(clamp_i32(0 - 100, 0, 10), 0, "-100 clamped to 0")
+
+    // Above range
+    assert_eq_i32(clamp_i32(15, 0, 10), 10, "15 clamped to 10")
+    assert_eq_i32(clamp_i32(100, 0, 10), 10, "100 clamped to 10")
+
+    // Negative range
+    assert_eq_i32(clamp_i32(0, 0 - 10, 0 - 5), 0 - 5, "0 clamped to -5")
+    assert_eq_i32(clamp_i32(0 - 20, 0 - 10, 0 - 5), 0 - 10, "-20 clamped to -10")
+
+    return 0
+}
+
+// ============ DIM FUNCTION (Positive Difference) ============
+
+func dim_i32(x: I32, y: I32) -> I32 {
+    // Returns max(x - y, 0)
+    let diff: I32 = x - y
+    return if diff > 0 then diff else 0
+}
+
+@test
+func test_dim_i32() -> I32 {
+    assert_eq_i32(dim_i32(5, 3), 2, "dim(5,3)")
+    assert_eq_i32(dim_i32(3, 5), 0, "dim(3,5)")
+    assert_eq_i32(dim_i32(5, 5), 0, "dim(5,5)")
+    assert_eq_i32(dim_i32(10, 0), 10, "dim(10,0)")
+    assert_eq_i32(dim_i32(0, 10), 0, "dim(0,10)")
+
+    return 0
+}
+
+// ============ SIGN FUNCTION ============
+
+func sign_i32(n: I32) -> I32 {
+    if n > 0 then { return 1 }
+    if n < 0 then { return 0 - 1 }
+    return 0
+}
+
+@test
+func test_sign_i32() -> I32 {
+    assert_eq_i32(sign_i32(100), 1, "sign(100)")
+    assert_eq_i32(sign_i32(1), 1, "sign(1)")
+    assert_eq_i32(sign_i32(0), 0, "sign(0)")
+    assert_eq_i32(sign_i32(0 - 1), 0 - 1, "sign(-1)")
+    assert_eq_i32(sign_i32(0 - 100), 0 - 1, "sign(-100)")
+
+    return 0
+}
+
+// ============ SQRT (Integer) ============
+
+func sqrt_i32(n: I32) -> I32 {
+    if n <= 0 then { return 0 }
+    if n == 1 then { return 1 }
+
+    let mut x: I32 = n
+    let mut y: I32 = (x + 1) / 2
+    loop {
+        if y >= x then { break }
+        x = y
+        y = (x + n / x) / 2
+    }
+    return x
+}
+
+@test
+func test_sqrt_i32() -> I32 {
+    // Perfect squares
+    assert_eq_i32(sqrt_i32(0), 0, "sqrt(0)")
+    assert_eq_i32(sqrt_i32(1), 1, "sqrt(1)")
+    assert_eq_i32(sqrt_i32(4), 2, "sqrt(4)")
+    assert_eq_i32(sqrt_i32(9), 3, "sqrt(9)")
+    assert_eq_i32(sqrt_i32(16), 4, "sqrt(16)")
+    assert_eq_i32(sqrt_i32(25), 5, "sqrt(25)")
+    assert_eq_i32(sqrt_i32(36), 6, "sqrt(36)")
+    assert_eq_i32(sqrt_i32(49), 7, "sqrt(49)")
+    assert_eq_i32(sqrt_i32(64), 8, "sqrt(64)")
+    assert_eq_i32(sqrt_i32(81), 9, "sqrt(81)")
+    assert_eq_i32(sqrt_i32(100), 10, "sqrt(100)")
+
+    // Non-perfect squares (floor)
+    assert_eq_i32(sqrt_i32(2), 1, "sqrt(2)")
+    assert_eq_i32(sqrt_i32(3), 1, "sqrt(3)")
+    assert_eq_i32(sqrt_i32(5), 2, "sqrt(5)")
+    assert_eq_i32(sqrt_i32(10), 3, "sqrt(10)")
+    assert_eq_i32(sqrt_i32(99), 9, "sqrt(99)")
+
+    return 0
+}
+
+// ============ CBRT (Integer Cube Root) ============
+
+func cbrt_i32(n: I32) -> I32 {
+    if n == 0 then { return 0 }
+
+    let is_negative: Bool = n < 0
+    let mut x: I32 = if is_negative then 0 - n else n
+
+    let mut lo: I32 = 1
+    let mut hi: I32 = x
+    let mut result: I32 = 1
+
+    loop {
+        if lo > hi then { break }
+        let mid: I32 = (lo + hi) / 2
+        let cube: I32 = mid * mid * mid
+        if cube <= x then {
+            result = mid
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+
+    return if is_negative then 0 - result else result
+}
+
+@test
+func test_cbrt_i32() -> I32 {
+    // Perfect cubes
+    assert_eq_i32(cbrt_i32(0), 0, "cbrt(0)")
+    assert_eq_i32(cbrt_i32(1), 1, "cbrt(1)")
+    assert_eq_i32(cbrt_i32(8), 2, "cbrt(8)")
+    assert_eq_i32(cbrt_i32(27), 3, "cbrt(27)")
+    assert_eq_i32(cbrt_i32(64), 4, "cbrt(64)")
+    assert_eq_i32(cbrt_i32(125), 5, "cbrt(125)")
+
+    // Non-perfect cubes (floor)
+    assert_eq_i32(cbrt_i32(2), 1, "cbrt(2)")
+    assert_eq_i32(cbrt_i32(10), 2, "cbrt(10)")
+    assert_eq_i32(cbrt_i32(100), 4, "cbrt(100)")
+
+    return 0
+}
+
+// ============ POW (Integer Power) ============
+
+func pow_i32(base: I32, exp: I32) -> I32 {
+    if exp < 0 then { return 0 }
+    if exp == 0 then { return 1 }
+
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= exp then { break }
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+@test
+func test_pow_i32() -> I32 {
+    // Powers of 2
+    assert_eq_i32(pow_i32(2, 0), 1, "2^0")
+    assert_eq_i32(pow_i32(2, 1), 2, "2^1")
+    assert_eq_i32(pow_i32(2, 2), 4, "2^2")
+    assert_eq_i32(pow_i32(2, 3), 8, "2^3")
+    assert_eq_i32(pow_i32(2, 4), 16, "2^4")
+    assert_eq_i32(pow_i32(2, 8), 256, "2^8")
+    assert_eq_i32(pow_i32(2, 10), 1024, "2^10")
+
+    // Powers of 3
+    assert_eq_i32(pow_i32(3, 0), 1, "3^0")
+    assert_eq_i32(pow_i32(3, 1), 3, "3^1")
+    assert_eq_i32(pow_i32(3, 2), 9, "3^2")
+    assert_eq_i32(pow_i32(3, 3), 27, "3^3")
+    assert_eq_i32(pow_i32(3, 4), 81, "3^4")
+
+    // Powers of 10
+    assert_eq_i32(pow_i32(10, 0), 1, "10^0")
+    assert_eq_i32(pow_i32(10, 1), 10, "10^1")
+    assert_eq_i32(pow_i32(10, 2), 100, "10^2")
+    assert_eq_i32(pow_i32(10, 3), 1000, "10^3")
+
+    // Edge cases
+    assert_eq_i32(pow_i32(0, 5), 0, "0^5")
+    assert_eq_i32(pow_i32(1, 100), 1, "1^100")
+    assert_eq_i32(pow_i32(5, 0), 1, "5^0")
+
+    return 0
+}
+
+// ============ HYPOT (Integer) ============
+
+func hypot_i32(a: I32, b: I32) -> I32 {
+    // sqrt(a^2 + b^2)
+    return sqrt_i32(a * a + b * b)
+}
+
+@test
+func test_hypot_i32() -> I32 {
+    // Pythagorean triples
+    assert_eq_i32(hypot_i32(3, 4), 5, "hypot(3,4) = 5")
+    assert_eq_i32(hypot_i32(5, 12), 13, "hypot(5,12) = 13")
+    assert_eq_i32(hypot_i32(8, 15), 17, "hypot(8,15) = 17")
+    assert_eq_i32(hypot_i32(7, 24), 25, "hypot(7,24) = 25")
+
+    // Zero cases
+    assert_eq_i32(hypot_i32(0, 5), 5, "hypot(0,5)")
+    assert_eq_i32(hypot_i32(5, 0), 5, "hypot(5,0)")
+    assert_eq_i32(hypot_i32(0, 0), 0, "hypot(0,0)")
+
+    return 0
+}
+
+// ============ GCD ============
+
+func gcd(a: I32, b: I32) -> I32 {
+    let mut x: I32 = a
+    let mut y: I32 = b
+    loop {
+        if y == 0 then { break }
+        let t: I32 = y
+        y = x % y
+        x = t
+    }
+    return x
+}
+
+@test
+func test_gcd() -> I32 {
+    assert_eq_i32(gcd(12, 8), 4, "gcd(12,8)")
+    assert_eq_i32(gcd(100, 35), 5, "gcd(100,35)")
+    assert_eq_i32(gcd(17, 13), 1, "gcd(17,13)")
+    assert_eq_i32(gcd(48, 18), 6, "gcd(48,18)")
+    assert_eq_i32(gcd(54, 24), 6, "gcd(54,24)")
+    assert_eq_i32(gcd(100, 100), 100, "gcd(100,100)")
+    assert_eq_i32(gcd(0, 5), 5, "gcd(0,5)")
+    assert_eq_i32(gcd(5, 0), 5, "gcd(5,0)")
+
+    return 0
+}
+
+// ============ LCM ============
+
+func lcm(a: I32, b: I32) -> I32 {
+    if a == 0 or b == 0 then { return 0 }
+    return (a / gcd(a, b)) * b
+}
+
+@test
+func test_lcm() -> I32 {
+    assert_eq_i32(lcm(4, 6), 12, "lcm(4,6)")
+    assert_eq_i32(lcm(3, 5), 15, "lcm(3,5)")
+    assert_eq_i32(lcm(12, 8), 24, "lcm(12,8)")
+    assert_eq_i32(lcm(7, 7), 7, "lcm(7,7)")
+    assert_eq_i32(lcm(21, 6), 42, "lcm(21,6)")
+    assert_eq_i32(lcm(0, 5), 0, "lcm(0,5)")
+
+    return 0
+}
+
+// ============ FACTORIAL ============
+
+func factorial(n: I32) -> I32 {
+    if n <= 1 then { return 1 }
+
+    let mut result: I32 = 1
+    let mut i: I32 = 2
+    loop {
+        if i > n then { break }
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+@test
+func test_factorial() -> I32 {
+    assert_eq_i32(factorial(0), 1, "0!")
+    assert_eq_i32(factorial(1), 1, "1!")
+    assert_eq_i32(factorial(2), 2, "2!")
+    assert_eq_i32(factorial(3), 6, "3!")
+    assert_eq_i32(factorial(4), 24, "4!")
+    assert_eq_i32(factorial(5), 120, "5!")
+    assert_eq_i32(factorial(6), 720, "6!")
+    assert_eq_i32(factorial(7), 5040, "7!")
+
+    return 0
+}
+
+// ============ FIBONACCI ============
+
+func fibonacci(n: I32) -> I32 {
+    if n <= 0 then { return 0 }
+    if n == 1 then { return 1 }
+
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 2
+    loop {
+        if i > n then { break }
+        let t: I32 = a + b
+        a = b
+        b = t
+        i = i + 1
+    }
+    return b
+}
+
+@test
+func test_fibonacci() -> I32 {
+    assert_eq_i32(fibonacci(0), 0, "fib(0)")
+    assert_eq_i32(fibonacci(1), 1, "fib(1)")
+    assert_eq_i32(fibonacci(2), 1, "fib(2)")
+    assert_eq_i32(fibonacci(3), 2, "fib(3)")
+    assert_eq_i32(fibonacci(4), 3, "fib(4)")
+    assert_eq_i32(fibonacci(5), 5, "fib(5)")
+    assert_eq_i32(fibonacci(6), 8, "fib(6)")
+    assert_eq_i32(fibonacci(7), 13, "fib(7)")
+    assert_eq_i32(fibonacci(8), 21, "fib(8)")
+    assert_eq_i32(fibonacci(9), 34, "fib(9)")
+    assert_eq_i32(fibonacci(10), 55, "fib(10)")
+
+    return 0
+}
+
+// ============ IS_PRIME ============
+
+func is_prime(n: I32) -> I32 {
+    if n <= 1 then { return 0 }
+    if n <= 3 then { return 1 }
+    if n % 2 == 0 then { return 0 }
+
+    let mut i: I32 = 3
+    loop {
+        if i * i > n then { break }
+        if n % i == 0 then { return 0 }
+        i = i + 2
+    }
+    return 1
+}
+
+@test
+func test_is_prime() -> I32 {
+    // Non-primes
+    assert_eq_i32(is_prime(0), 0, "0 not prime")
+    assert_eq_i32(is_prime(1), 0, "1 not prime")
+    assert_eq_i32(is_prime(4), 0, "4 not prime")
+    assert_eq_i32(is_prime(6), 0, "6 not prime")
+    assert_eq_i32(is_prime(9), 0, "9 not prime")
+    assert_eq_i32(is_prime(100), 0, "100 not prime")
+
+    // Primes
+    assert_eq_i32(is_prime(2), 1, "2 is prime")
+    assert_eq_i32(is_prime(3), 1, "3 is prime")
+    assert_eq_i32(is_prime(5), 1, "5 is prime")
+    assert_eq_i32(is_prime(7), 1, "7 is prime")
+    assert_eq_i32(is_prime(11), 1, "11 is prime")
+    assert_eq_i32(is_prime(13), 1, "13 is prime")
+    assert_eq_i32(is_prime(17), 1, "17 is prime")
+    assert_eq_i32(is_prime(97), 1, "97 is prime")
+
+    return 0
+}
+
+// ============ DIVMOD ============
+
+func divmod_q(a: I32, b: I32) -> I32 {
+    return a / b
+}
+
+func divmod_r(a: I32, b: I32) -> I32 {
+    return a % b
+}
+
+@test
+func test_divmod() -> I32 {
+    // Verify a = q*b + r
+    let a: I32 = 17
+    let b: I32 = 5
+    let q: I32 = divmod_q(a, b)
+    let r: I32 = divmod_r(a, b)
+
+    assert_eq_i32(q, 3, "17 / 5 = 3")
+    assert_eq_i32(r, 2, "17 % 5 = 2")
+    assert_eq_i32(q * b + r, a, "q*b + r = a")
+
+    // More cases
+    assert_eq_i32(divmod_q(100, 7), 14, "100/7")
+    assert_eq_i32(divmod_r(100, 7), 2, "100%7")
+
+    return 0
+}
+
+// ============ LOG2 (Integer) ============
+
+func log2_i32(n: I32) -> I32 {
+    if n <= 0 then { return 0 - 1 }
+
+    let mut result: I32 = 0
+    let mut x: I32 = n
+    loop {
+        if x <= 1 then { break }
+        x = x >> 1
+        result = result + 1
+    }
+    return result
+}
+
+@test
+func test_log2_i32() -> I32 {
+    // Powers of 2
+    assert_eq_i32(log2_i32(1), 0, "log2(1)")
+    assert_eq_i32(log2_i32(2), 1, "log2(2)")
+    assert_eq_i32(log2_i32(4), 2, "log2(4)")
+    assert_eq_i32(log2_i32(8), 3, "log2(8)")
+    assert_eq_i32(log2_i32(16), 4, "log2(16)")
+    assert_eq_i32(log2_i32(256), 8, "log2(256)")
+    assert_eq_i32(log2_i32(1024), 10, "log2(1024)")
+
+    // Non-powers of 2 (floor)
+    assert_eq_i32(log2_i32(3), 1, "log2(3)")
+    assert_eq_i32(log2_i32(5), 2, "log2(5)")
+    assert_eq_i32(log2_i32(100), 6, "log2(100)")
+
+    return 0
+}
+
+// ============ POPCOUNT (Bit Count) ============
+
+func popcount(n: I32) -> I32 {
+    let mut count: I32 = 0
+    let mut x: I32 = n
+    loop {
+        if x == 0 then { break }
+        count = count + (x & 1)
+        x = x >> 1
+    }
+    return count
+}
+
+@test
+func test_popcount() -> I32 {
+    assert_eq_i32(popcount(0), 0, "popcount(0)")
+    assert_eq_i32(popcount(1), 1, "popcount(1)")
+    assert_eq_i32(popcount(2), 1, "popcount(2)")
+    assert_eq_i32(popcount(3), 2, "popcount(3)")
+    assert_eq_i32(popcount(7), 3, "popcount(7)")
+    assert_eq_i32(popcount(15), 4, "popcount(15)")
+    assert_eq_i32(popcount(255), 8, "popcount(255)")
+
+    return 0
+}
+
+// ============ IS_POWER_OF_TWO ============
+
+func is_power_of_two(n: I32) -> I32 {
+    if n <= 0 then { return 0 }
+    return if (n & (n - 1)) == 0 then 1 else 0
+}
+
+@test
+func test_is_power_of_two() -> I32 {
+    // Powers of 2
+    assert_eq_i32(is_power_of_two(1), 1, "1 = 2^0")
+    assert_eq_i32(is_power_of_two(2), 1, "2 = 2^1")
+    assert_eq_i32(is_power_of_two(4), 1, "4 = 2^2")
+    assert_eq_i32(is_power_of_two(8), 1, "8 = 2^3")
+    assert_eq_i32(is_power_of_two(16), 1, "16 = 2^4")
+    assert_eq_i32(is_power_of_two(256), 1, "256 = 2^8")
+
+    // Non-powers of 2
+    assert_eq_i32(is_power_of_two(0), 0, "0")
+    assert_eq_i32(is_power_of_two(3), 0, "3")
+    assert_eq_i32(is_power_of_two(5), 0, "5")
+    assert_eq_i32(is_power_of_two(6), 0, "6")
+    assert_eq_i32(is_power_of_two(100), 0, "100")
+
+    return 0
+}

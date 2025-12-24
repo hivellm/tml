@@ -442,7 +442,100 @@ let result: I32 = apply(double, 21)  // 42
 
 ## 9. Generics
 
-### 9.1 Generic Functions
+TML uses **monomorphization** for generics (like Rust). Each unique instantiation
+generates specialized code: `Pair[I32]` and `Pair[Bool]` become separate types.
+
+### 9.1 Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Generic Structs | ✅ Complete | `Pair[T]`, `Entry[K, V]`, `Triple[A, B, C]` |
+| Generic Enums | ✅ Complete | `Maybe[T]`, `Outcome[T, E]` |
+| Pattern Matching | ✅ Complete | `when` expressions with generic enums |
+| Multi-param Generics | ✅ Complete | Unlimited type parameters |
+| Generic Functions | ⚠️ Parsing Only | Codegen not yet implemented |
+| Bounds/Constraints | ❌ Not Started | `T: Addable` syntax parsed but not checked |
+
+### 9.2 Generic Structs
+
+```tml
+// Single type parameter
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+// Two type parameters
+type Entry[K, V] {
+    key: K,
+    value: V,
+}
+
+// Three type parameters
+type Triple[A, B, C] {
+    a: A,
+    b: B,
+    c: C,
+}
+
+// Usage
+let p: Pair[I32] = Pair { first: 10, second: 20 }
+print(p.first)   // 10
+print(p.second)  // 20
+
+let e: Entry[I32, I32] = Entry { key: 1, value: 100 }
+print(e.key)     // 1
+print(e.value)   // 100
+```
+
+### 9.3 Generic Enums
+
+```tml
+// Maybe (Option) type
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+// Outcome (Result) type
+type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+// Usage with pattern matching
+let m: Maybe[I32] = Just(42)
+when m {
+    Just(v) => print(v),     // 42
+    Nothing => print(0),
+}
+
+let r: Outcome[I32, I32] = Ok(200)
+when r {
+    Ok(v) => print(v),       // 200
+    Err(e) => print(e),
+}
+
+// Unit variant
+let n: Maybe[I32] = Nothing
+when n {
+    Just(v) => print(v),
+    Nothing => print(0),     // 0
+}
+```
+
+### 9.4 Monomorphization
+
+The compiler generates specialized code for each unique type instantiation:
+
+| TML Type | Mangled Name | LLVM Type |
+|----------|--------------|-----------|
+| `Pair[I32]` | `Pair__I32` | `%struct.Pair__I32` |
+| `Entry[I32, Str]` | `Entry__I32__Str` | `%struct.Entry__I32__Str` |
+| `Maybe[Bool]` | `Maybe__Bool` | `%struct.Maybe__Bool` |
+| `Outcome[I32, I32]` | `Outcome__I32__I32` | `%struct.Outcome__I32__I32` |
+
+### 9.5 Generic Functions (Not Yet Implemented)
 
 ```tml
 func identity[T](x: T) -> T {
@@ -458,24 +551,9 @@ let x: I32 = identity(42)        // I32
 let y: String = identity("hello")   // String
 ```
 
-### 9.2 Generic Types
+> **Note:** Generic function parsing works, but codegen is not yet implemented.
 
-```tml
-type Pair[T] {
-    first: T,
-    second: T,
-}
-
-type Entry[K, V] {
-    key: K,
-    value: V,
-}
-
-let pair: Pair[I32] = Pair { first: 1, second: 2 }
-let entry: Entry[String, String] = Entry { key: "name", value: "Alice" }
-```
-
-### 9.3 Bounds (Constraints)
+### 9.6 Bounds/Constraints (Not Yet Implemented)
 
 ```tml
 // T must implement Addable
@@ -495,6 +573,25 @@ where K: Equal + Hashable, V: Duplicate
     // ...
 }
 ```
+
+> **Note:** Bounds syntax is parsed but not enforced by the type checker yet.
+
+### 9.7 Known Limitations
+
+1. **Field Type Resolution**: The type checker doesn't resolve generic field
+   types for comparisons or assignments to typed variables:
+   ```tml
+   let p: Pair[I32] = Pair { first: 10, second: 20 }
+
+   // Works
+   print(p.first)
+
+   // Doesn't work (type checker sees T, not I32)
+   let x: I32 = p.first  // Error: expected I32, found T
+   if p.first == 10 { }  // Error: requires matching types
+   ```
+
+2. **Workaround**: Use `print()` directly on field access, which is polymorphic.
 
 ## 10. Behaviors
 

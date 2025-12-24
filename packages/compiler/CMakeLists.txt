@@ -9,6 +9,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Output directory for executables (separate from build cache)
+# TML_OUTPUT_DIR is set by build scripts, defaults to CMAKE_BINARY_DIR
+if(NOT DEFINED TML_OUTPUT_DIR OR TML_OUTPUT_DIR STREQUAL "")
+    set(TML_OUTPUT_DIR ${CMAKE_BINARY_DIR})
+endif()
+
+# Put executables in the output directory
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR})
+
+# For multi-config generators (Visual Studio, Xcode), flatten the structure
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR})
+endforeach()
+
+# Libraries/archives stay in the build cache directory
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 # Build options
 option(TML_BUILD_TESTS "Build tests" ON)
 option(TML_ENABLE_ASAN "Enable AddressSanitizer" OFF)

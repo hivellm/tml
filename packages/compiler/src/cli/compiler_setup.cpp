@@ -156,4 +156,44 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
     return to_forward_slashes(obj_path.string());
 }
 
+std::string ensure_c_compiled(const std::string& c_path_str, const std::string& cache_dir,
+                               const std::string& clang, bool verbose) {
+    fs::path c_path = c_path_str;
+
+    // Create cache directory if needed
+    fs::path cache_path = cache_dir;
+    fs::create_directories(cache_path);
+
+    // Generate object file name from source file name
+    std::string base_name = c_path.stem().string();
+    fs::path obj_path = cache_path / base_name;
+#ifdef _WIN32
+    obj_path += ".obj";
+#else
+    obj_path += ".o";
+#endif
+
+    bool needs_compile = !fs::exists(obj_path);
+    if (!needs_compile) {
+        auto c_time = fs::last_write_time(c_path);
+        auto obj_time = fs::last_write_time(obj_path);
+        needs_compile = (c_time > obj_time);
+    }
+
+    if (needs_compile) {
+        if (verbose) {
+            std::cout << "Compiling: " << c_path.filename().string() << " -> " << obj_path.filename().string() << "\n";
+        }
+        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+                                  to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+        int ret = std::system(compile_cmd.c_str());
+        if (ret != 0) {
+            // Fallback to returning .c path on compile failure
+            return c_path_str;
+        }
+    }
+
+    return to_forward_slashes(obj_path.string());
+}
+
 }

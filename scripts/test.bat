@@ -6,18 +6,13 @@ set "SCRIPT_DIR=%~dp0"
 set "ROOT_DIR=%SCRIPT_DIR%.."
 cd /d "%ROOT_DIR%"
 
-:: Detect target triple (Windows MSVC)
-set "TARGET=x86_64-pc-windows-msvc"
-if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "TARGET=aarch64-pc-windows-msvc"
-
 :: Find compiler (check debug first, then release)
-set "TML_EXE=%ROOT_DIR%\build\%TARGET%\debug\Debug\tml.exe"
-if not exist "%TML_EXE%" set "TML_EXE=%ROOT_DIR%\build\%TARGET%\debug\tml.exe"
-if not exist "%TML_EXE%" set "TML_EXE=%ROOT_DIR%\build\%TARGET%\release\Release\tml.exe"
-if not exist "%TML_EXE%" set "TML_EXE=%ROOT_DIR%\build\%TARGET%\release\tml.exe"
+:: Structure: build/debug/tml.exe or build/release/tml.exe
+set "TML_EXE=%ROOT_DIR%\build\debug\tml.exe"
+if not exist "%TML_EXE%" set "TML_EXE=%ROOT_DIR%\build\release\tml.exe"
 
 if not exist "%TML_EXE%" (
-    echo Error: Compiler not found at build\%TARGET%\
+    echo Error: Compiler not found at build\debug\ or build\release\
     echo Run scripts\build.bat first.
     exit /b 1
 )

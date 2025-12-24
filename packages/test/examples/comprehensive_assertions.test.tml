@@ -1,0 +1,178 @@
+use test
+
+// ============ Test assert() Function ============
+
+@test
+func test_assert_basic() -> I32 {
+    assert(true, "true should pass")
+    assert(1 == 1, "1 == 1")
+    assert(2 > 1, "2 > 1")
+    assert(1 < 2, "1 < 2")
+
+    return 0
+}
+
+@test
+func test_assert_expressions() -> I32 {
+    let x: I32 = 5
+    let y: I32 = 10
+
+    assert(x < y, "x < y")
+    assert(x + 5 == y, "x + 5 == y")
+    assert(y - x == 5, "y - x == 5")
+
+    return 0
+}
+
+// ============ Test assert_eq_i32() ============
+
+@test
+func test_assert_eq_i32_basic() -> I32 {
+    assert_eq_i32(0, 0, "zero equals zero")
+    assert_eq_i32(1, 1, "one equals one")
+    assert_eq_i32(42, 42, "42 equals 42")
+
+    return 0
+}
+
+@test
+func test_assert_eq_i32_expressions() -> I32 {
+    assert_eq_i32(1 + 1, 2, "1 + 1 = 2")
+    assert_eq_i32(5 - 3, 2, "5 - 3 = 2")
+    assert_eq_i32(6 * 7, 42, "6 * 7 = 42")
+    assert_eq_i32(100 / 10, 10, "100 / 10 = 10")
+    assert_eq_i32(17 % 5, 2, "17 % 5 = 2")
+
+    return 0
+}
+
+@test
+func test_assert_eq_i32_variables() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 10
+    let c: I32 = 5
+
+    assert_eq_i32(a, b, "a == b")
+    assert_eq_i32(a - c, c, "a - c == c")
+    assert_eq_i32(c * 2, a, "c * 2 == a")
+
+    return 0
+}
+
+// ============ Test assert_eq_bool() ============
+
+@test
+func test_assert_eq_bool_basic() -> I32 {
+    assert_eq_bool(true, true, "true == true")
+    assert_eq_bool(false, false, "false == false")
+
+    return 0
+}
+
+@test
+func test_assert_eq_bool_expressions() -> I32 {
+    assert_eq_bool(1 == 1, true, "1 == 1 is true")
+    assert_eq_bool(1 == 2, false, "1 == 2 is false")
+    assert_eq_bool(5 > 3, true, "5 > 3 is true")
+    assert_eq_bool(3 > 5, false, "3 > 5 is false")
+
+    return 0
+}
+
+@test
+func test_assert_eq_bool_logical() -> I32 {
+    assert_eq_bool(true and true, true, "T and T")
+    assert_eq_bool(true and false, false, "T and F")
+    assert_eq_bool(true or false, true, "T or F")
+    assert_eq_bool(false or false, false, "F or F")
+    assert_eq_bool(not false, true, "not F")
+    assert_eq_bool(not true, false, "not T")
+
+    return 0
+}
+
+// ============ Complex Test Scenarios ============
+
+func compute_and_check(x: I32) -> I32 {
+    let result: I32 = x * x + x + 1
+    return result
+}
+
+@test
+func test_computed_values() -> I32 {
+    // f(x) = x^2 + x + 1
+    assert_eq_i32(compute_and_check(0), 1, "f(0) = 1")
+    assert_eq_i32(compute_and_check(1), 3, "f(1) = 3")
+    assert_eq_i32(compute_and_check(2), 7, "f(2) = 7")
+    assert_eq_i32(compute_and_check(3), 13, "f(3) = 13")
+    assert_eq_i32(compute_and_check(5), 31, "f(5) = 31")
+
+    return 0
+}
+
+func check_range(x: I32, min: I32, max: I32) -> Bool {
+    return x >= min and x <= max
+}
+
+@test
+func test_range_checks() -> I32 {
+    assert(check_range(5, 0, 10), "5 in [0,10]")
+    assert(check_range(0, 0, 10), "0 in [0,10]")
+    assert(check_range(10, 0, 10), "10 in [0,10]")
+
+    assert_eq_bool(check_range(0 - 1, 0, 10), false, "-1 not in [0,10]")
+    assert_eq_bool(check_range(11, 0, 10), false, "11 not in [0,10]")
+
+    return 0
+}
+
+// ============ Assertions in Loops ============
+
+@test
+func test_loop_invariants() -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 1
+
+    loop {
+        if i > 10 then { break }
+
+        sum = sum + i
+        // At this point, sum should equal i*(i+1)/2
+        let expected: I32 = (i * (i + 1)) / 2
+        assert_eq_i32(sum, expected, "sum formula")
+
+        i = i + 1
+    }
+
+    assert_eq_i32(sum, 55, "final sum 1-10")
+
+    return 0
+}
+
+// ============ Multiple Assertions Per Test ============
+
+@test
+func test_many_assertions() -> I32 {
+    // Arithmetic
+    assert_eq_i32(1 + 1, 2, "a1")
+    assert_eq_i32(2 + 2, 4, "a2")
+    assert_eq_i32(3 + 3, 6, "a3")
+    assert_eq_i32(4 + 4, 8, "a4")
+    assert_eq_i32(5 + 5, 10, "a5")
+
+    // Comparison
+    assert(1 < 2, "c1")
+    assert(2 < 3, "c2")
+    assert(3 < 4, "c3")
+    assert(4 < 5, "c4")
+    assert(5 < 6, "c5")
+
+    // Boolean
+    assert_eq_bool(true, true, "b1")
+    assert_eq_bool(false, false, "b2")
+    assert_eq_bool(1 == 1, true, "b3")
+    assert_eq_bool(1 != 2, true, "b4")
+    assert_eq_bool(0 == 0, true, "b5")
+
+    return 0
+}

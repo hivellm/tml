@@ -119,6 +119,10 @@ VariantData = '(' Type (',' Type)* ')'
 AliasBody = '=' Type
 ```
 
+> **Implementation Note (v0.4.0):** Generic types are fully implemented via
+> monomorphization. `Pair[I32]` becomes `Pair__I32` in LLVM IR. Both generic
+> structs and enums with pattern matching are supported.
+
 **Examples:**
 ```tml
 // Struct

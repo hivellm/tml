@@ -1,6 +1,8 @@
 // Test Framework Assertions
 // Assertion functions for writing tests
 
+// ============ Basic Assertions ============
+
 /// Assert that a condition is true
 /// Panics with message if condition is false
 pub func assert(condition: Bool, message: Str) {
@@ -8,6 +10,15 @@ pub func assert(condition: Bool, message: Str) {
         panic("assertion failed: " + message)
     }
 }
+
+/// Assert that a condition is false
+pub func assert_false(condition: Bool, message: Str) {
+    if condition {
+        panic("assertion failed (expected false): " + message)
+    }
+}
+
+// ============ I32 Assertions ============
 
 /// Assert two I32 values are equal
 pub func assert_eq_i32(left: I32, right: I32, message: Str) {
@@ -23,6 +34,59 @@ pub func assert_ne_i32(left: I32, right: I32, message: Str) {
     }
 }
 
+/// Assert left > right for I32
+pub func assert_gt_i32(left: I32, right: I32, message: Str) {
+    if left <= right {
+        panic("assertion failed (expected >): " + message)
+    }
+}
+
+/// Assert left >= right for I32
+pub func assert_gte_i32(left: I32, right: I32, message: Str) {
+    if left < right {
+        panic("assertion failed (expected >=): " + message)
+    }
+}
+
+/// Assert left < right for I32
+pub func assert_lt_i32(left: I32, right: I32, message: Str) {
+    if left >= right {
+        panic("assertion failed (expected <): " + message)
+    }
+}
+
+/// Assert left <= right for I32
+pub func assert_lte_i32(left: I32, right: I32, message: Str) {
+    if left > right {
+        panic("assertion failed (expected <=): " + message)
+    }
+}
+
+/// Assert I32 value is in range [min, max]
+pub func assert_in_range_i32(value: I32, min: I32, max: I32, message: Str) {
+    if value < min or value > max {
+        panic("assertion failed (out of range): " + message)
+    }
+}
+
+// ============ I64 Assertions ============
+
+/// Assert two I64 values are equal
+pub func assert_eq_i64(left: I64, right: I64, message: Str) {
+    if left != right {
+        panic("assertion failed: " + message)
+    }
+}
+
+/// Assert two I64 values are not equal
+pub func assert_ne_i64(left: I64, right: I64, message: Str) {
+    if left == right {
+        panic("assertion failed: " + message)
+    }
+}
+
+// ============ Bool Assertions ============
+
 /// Assert two Bool values are equal
 pub func assert_eq_bool(left: Bool, right: Bool, message: Str) {
     if left != right {
@@ -30,9 +94,47 @@ pub func assert_eq_bool(left: Bool, right: Bool, message: Str) {
     }
 }
 
+/// Assert value is true
+pub func assert_true(value: Bool, message: Str) {
+    if not value {
+        panic("assertion failed (expected true): " + message)
+    }
+}
+
+// ============ Str Assertions ============
+
 /// Assert two Str values are equal
 pub func assert_eq_str(left: Str, right: Str, message: Str) {
     if left != right {
         panic("assertion failed: " + message)
+    }
+}
+
+/// Assert two Str values are not equal
+pub func assert_ne_str(left: Str, right: Str, message: Str) {
+    if left == right {
+        panic("assertion failed (expected not equal): " + message)
+    }
+}
+
+/// Assert string length equals expected
+pub func assert_str_len(s: Str, expected_len: I32, message: Str) {
+    let actual: I32 = str_len(s)
+    if actual != expected_len {
+        panic("assertion failed (wrong length): " + message)
+    }
+}
+
+/// Assert string is empty
+pub func assert_str_empty(s: Str, message: Str) {
+    if str_len(s) != 0 {
+        panic("assertion failed (expected empty string): " + message)
+    }
+}
+
+/// Assert string is not empty
+pub func assert_str_not_empty(s: Str, message: Str) {
+    if str_len(s) == 0 {
+        panic("assertion failed (expected non-empty string): " + message)
     }
 }

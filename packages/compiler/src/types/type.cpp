@@ -269,4 +269,131 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
     }, a->kind);
 }
 
+// Generic type substitution - replaces GenericType with concrete types
+auto substitute_type(
+    const TypePtr& type,
+    const std::unordered_map<std::string, TypePtr>& subs
+) -> TypePtr {
+    if (!type) return type;
+    if (subs.empty()) return type;
+
+    return std::visit([&subs](const auto& t) -> TypePtr {
+        using T = std::decay_t<decltype(t)>;
+
+        // GenericType: look up in substitution map
+        if constexpr (std::is_same_v<T, GenericType>) {
+            auto it = subs.find(t.name);
+            if (it != subs.end()) {
+                return it->second;
+            }
+            // Not found in subs, return as-is (might be unbound)
+            auto result = std::make_shared<Type>();
+            result->kind = t;
+            return result;
+        }
+        // NamedType: check if name matches substitution (for type params like T)
+        // then recursively substitute type_args
+        else if constexpr (std::is_same_v<T, NamedType>) {
+            // First check if the name itself is a type parameter
+            auto it = subs.find(t.name);
+            if (it != subs.end() && t.type_args.empty()) {
+                return it->second;
+            }
+            if (t.type_args.empty()) {
+                auto result = std::make_shared<Type>();
+                result->kind = t;
+                return result;
+            }
+            std::vector<TypePtr> new_args;
+            new_args.reserve(t.type_args.size());
+            for (const auto& arg : t.type_args) {
+                new_args.push_back(substitute_type(arg, subs));
+            }
+            auto result = std::make_shared<Type>();
+            result->kind = NamedType{t.name, t.module_path, std::move(new_args)};
+            return result;
+        }
+        // RefType: substitute inner type
+        else if constexpr (std::is_same_v<T, RefType>) {
+            auto result = std::make_shared<Type>();
+            result->kind = RefType{t.is_mut, substitute_type(t.inner, subs)};
+            return result;
+        }
+        // PtrType: substitute inner type
+        else if constexpr (std::is_same_v<T, PtrType>) {
+            auto result = std::make_shared<Type>();
+            result->kind = PtrType{t.is_mut, substitute_type(t.inner, subs)};
+            return result;
+        }
+        // ArrayType: substitute element type
+        else if constexpr (std::is_same_v<T, ArrayType>) {
+            auto result = std::make_shared<Type>();
+            result->kind = ArrayType{substitute_type(t.element, subs), t.size};
+            return result;
+        }
+        // SliceType: substitute element type
+        else if constexpr (std::is_same_v<T, SliceType>) {
+            auto result = std::make_shared<Type>();
+            result->kind = SliceType{substitute_type(t.element, subs)};
+            return result;
+        }
+        // TupleType: substitute all element types
+        else if constexpr (std::is_same_v<T, TupleType>) {
+            std::vector<TypePtr> new_elements;
+            new_elements.reserve(t.elements.size());
+            for (const auto& elem : t.elements) {
+                new_elements.push_back(substitute_type(elem, subs));
+            }
+            auto result = std::make_shared<Type>();
+            result->kind = TupleType{std::move(new_elements)};
+            return result;
+        }
+        // FuncType: substitute params and return type
+        else if constexpr (std::is_same_v<T, FuncType>) {
+            std::vector<TypePtr> new_params;
+            new_params.reserve(t.params.size());
+            for (const auto& param : t.params) {
+                new_params.push_back(substitute_type(param, subs));
+            }
+            auto result = std::make_shared<Type>();
+            result->kind = FuncType{
+                std::move(new_params),
+                substitute_type(t.return_type, subs),
+                t.is_async
+            };
+            return result;
+        }
+        // ClosureType: substitute params, return type, and captures
+        else if constexpr (std::is_same_v<T, ClosureType>) {
+            std::vector<TypePtr> new_params;
+            new_params.reserve(t.params.size());
+            for (const auto& param : t.params) {
+                new_params.push_back(substitute_type(param, subs));
+            }
+            std::vector<CapturedVar> new_captures;
+            new_captures.reserve(t.captures.size());
+            for (const auto& cap : t.captures) {
+                new_captures.push_back(CapturedVar{
+                    cap.name,
+                    substitute_type(cap.type, subs),
+                    cap.is_mut
+                });
+            }
+            auto result = std::make_shared<Type>();
+            result->kind = ClosureType{
+                std::move(new_params),
+                substitute_type(t.return_type, subs),
+                std::move(new_captures)
+            };
+            return result;
+        }
+        // PrimitiveType, TypeVar: no substitution needed
+        else {
+            auto result = std::make_shared<Type>();
+            result->kind = t;
+            return result;
+        }
+    }, type->kind);
+}
+
 } // namespace tml::types

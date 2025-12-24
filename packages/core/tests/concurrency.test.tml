@@ -1,0 +1,226 @@
+use test
+
+// ============ Concurrency Primitives Simulation ============
+// (Testing the logic, not actual threading)
+
+// Simulated mutex state
+func sim_mutex_try_lock(current_state: I32) -> I32 {
+    // 0 = unlocked, 1 = locked
+    // Returns 1 if lock acquired, 0 if already locked
+    return if current_state == 0 then 1 else 0
+}
+
+func sim_mutex_unlock(current_state: I32) -> I32 {
+    // Returns new state (always 0)
+    return 0
+}
+
+@test
+func test_mutex_operations() -> I32 {
+    let unlocked: I32 = 0
+    let locked: I32 = 1
+
+    // Can acquire unlocked mutex
+    assert_eq_i32(sim_mutex_try_lock(unlocked), 1, "can lock unlocked")
+
+    // Cannot acquire locked mutex
+    assert_eq_i32(sim_mutex_try_lock(locked), 0, "cannot lock locked")
+
+    // Unlock always returns unlocked state
+    assert_eq_i32(sim_mutex_unlock(locked), 0, "unlock returns 0")
+    assert_eq_i32(sim_mutex_unlock(unlocked), 0, "unlock unlocked is 0")
+
+    return 0
+}
+
+// ============ Semaphore Logic ============
+
+func semaphore_wait(count: I32) -> I32 {
+    // Decrements count if > 0, returns new count
+    // Returns -1 if would block
+    return if count > 0 then count - 1 else 0 - 1
+}
+
+func semaphore_signal(count: I32, max: I32) -> I32 {
+    // Increments count up to max
+    return if count < max then count + 1 else count
+}
+
+@test
+func test_semaphore_operations() -> I32 {
+    // Wait decrements
+    assert_eq_i32(semaphore_wait(5), 4, "wait(5) = 4")
+    assert_eq_i32(semaphore_wait(1), 0, "wait(1) = 0")
+    assert_eq_i32(semaphore_wait(0), 0 - 1, "wait(0) blocks")
+
+    // Signal increments
+    assert_eq_i32(semaphore_signal(0, 5), 1, "signal(0, max=5) = 1")
+    assert_eq_i32(semaphore_signal(4, 5), 5, "signal(4, max=5) = 5")
+    assert_eq_i32(semaphore_signal(5, 5), 5, "signal at max stays")
+
+    return 0
+}
+
+// ============ Spin Lock Simulation ============
+
+func spin_iterations(attempts: I32, max_spins: I32) -> I32 {
+    // Returns how many spins before giving up
+    return if attempts < max_spins then attempts else max_spins
+}
+
+@test
+func test_spin_logic() -> I32 {
+    let max_spins: I32 = 100
+
+    assert_eq_i32(spin_iterations(50, max_spins), 50, "50 attempts < max")
+    assert_eq_i32(spin_iterations(100, max_spins), 100, "100 = max")
+    assert_eq_i32(spin_iterations(200, max_spins), 100, "200 capped at max")
+
+    return 0
+}
+
+// ============ Reference Counting ============
+
+func refcount_inc(count: I32) -> I32 {
+    return count + 1
+}
+
+func refcount_dec(count: I32) -> I32 {
+    return if count > 0 then count - 1 else 0
+}
+
+func refcount_should_free(count: I32) -> Bool {
+    return count == 0
+}
+
+@test
+func test_refcount_operations() -> I32 {
+    // Increment
+    assert_eq_i32(refcount_inc(0), 1, "inc 0 -> 1")
+    assert_eq_i32(refcount_inc(5), 6, "inc 5 -> 6")
+
+    // Decrement
+    assert_eq_i32(refcount_dec(5), 4, "dec 5 -> 4")
+    assert_eq_i32(refcount_dec(1), 0, "dec 1 -> 0")
+    assert_eq_i32(refcount_dec(0), 0, "dec 0 stays 0")
+
+    // Should free check
+    assert(refcount_should_free(0), "free when 0")
+    assert_eq_bool(refcount_should_free(1), false, "don't free when 1")
+
+    return 0
+}
+
+// ============ Atomic Compare-and-Swap Logic ============
+
+func cas_check(current: I32, expected: I32, new_val: I32) -> I32 {
+    // Returns new_val if current == expected, else current
+    return if current == expected then new_val else current
+}
+
+func cas_succeeded(current: I32, expected: I32) -> Bool {
+    return current == expected
+}
+
+@test
+func test_cas_operations() -> I32 {
+    // CAS succeeds when current matches expected
+    assert_eq_i32(cas_check(5, 5, 10), 10, "CAS 5->10 succeeds")
+    assert(cas_succeeded(5, 5), "CAS check passes")
+
+    // CAS fails when current doesn't match
+    assert_eq_i32(cas_check(5, 3, 10), 5, "CAS 3->10 fails, stays 5")
+    assert_eq_bool(cas_succeeded(5, 3), false, "CAS check fails")
+
+    return 0
+}
+
+// ============ Producer-Consumer Logic ============
+
+func buffer_can_produce(count: I32, capacity: I32) -> Bool {
+    return count < capacity
+}
+
+func buffer_can_consume(count: I32) -> Bool {
+    return count > 0
+}
+
+func buffer_produce(count: I32, capacity: I32) -> I32 {
+    return if count < capacity then count + 1 else count
+}
+
+func buffer_consume(count: I32) -> I32 {
+    return if count > 0 then count - 1 else count
+}
+
+@test
+func test_producer_consumer() -> I32 {
+    let capacity: I32 = 10
+
+    // Empty buffer
+    assert(buffer_can_produce(0, capacity), "can produce to empty")
+    assert_eq_bool(buffer_can_consume(0), false, "cannot consume empty")
+
+    // Partial buffer
+    assert(buffer_can_produce(5, capacity), "can produce at 5/10")
+    assert(buffer_can_consume(5), "can consume at 5/10")
+
+    // Full buffer
+    assert_eq_bool(buffer_can_produce(10, capacity), false, "cannot produce full")
+    assert(buffer_can_consume(10), "can consume full")
+
+    // Operations
+    assert_eq_i32(buffer_produce(5, capacity), 6, "produce 5->6")
+    assert_eq_i32(buffer_produce(10, capacity), 10, "produce full stays")
+    assert_eq_i32(buffer_consume(5), 4, "consume 5->4")
+    assert_eq_i32(buffer_consume(0), 0, "consume empty stays")
+
+    return 0
+}
+
+// ============ State Machine for Lock States ============
+
+// States: 0=Unlocked, 1=Locked, 2=Contended
+func lock_state_transition(current: I32, action: I32) -> I32 {
+    // action: 0=lock, 1=unlock, 2=contend
+    if action == 0 then {
+        // Lock
+        if current == 0 then { return 1 }  // Unlocked -> Locked
+        return 2  // Already locked -> Contended
+    }
+    if action == 1 then {
+        // Unlock
+        return 0  // Any state -> Unlocked
+    }
+    if action == 2 then {
+        // Contend
+        if current == 1 then { return 2 }  // Locked -> Contended
+        return current
+    }
+    return current
+}
+
+@test
+func test_lock_state_machine() -> I32 {
+    let unlocked: I32 = 0
+    let locked: I32 = 1
+    let contended: I32 = 2
+
+    let lock_action: I32 = 0
+    let unlock_action: I32 = 1
+    let contend_action: I32 = 2
+
+    // Unlocked -> Lock -> Locked
+    assert_eq_i32(lock_state_transition(unlocked, lock_action), locked, "unlock->lock")
+
+    // Locked -> Lock -> Contended
+    assert_eq_i32(lock_state_transition(locked, lock_action), contended, "lock->contend")
+
+    // Locked -> Unlock -> Unlocked
+    assert_eq_i32(lock_state_transition(locked, unlock_action), unlocked, "lock->unlock")
+
+    // Contended -> Unlock -> Unlocked
+    assert_eq_i32(lock_state_transition(contended, unlock_action), unlocked, "contend->unlock")
+
+    return 0
+}

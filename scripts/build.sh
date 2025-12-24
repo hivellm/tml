@@ -98,8 +98,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Set build directory (target-specific, like Rust's target/<triple>/)
-BUILD_DIR="$ROOT_DIR/build/$TARGET/$BUILD_TYPE"
+# Set directories
+# Cache: build/cache/<target>/<config>/ - CMake files, object files
+# Output: build/<config>/ - final executables only
+CACHE_DIR="$ROOT_DIR/build/cache/$TARGET/$BUILD_TYPE"
+OUTPUT_DIR="$ROOT_DIR/build/$BUILD_TYPE"
 
 echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║       TML Compiler Build System        ║${NC}"
@@ -107,22 +110,24 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo -e "Target:      ${YELLOW}$TARGET${NC}"
 echo -e "Build type:  ${YELLOW}$BUILD_TYPE${NC}"
-echo -e "Build dir:   ${DIM}$BUILD_DIR${NC}"
+echo -e "Cache dir:   ${DIM}$CACHE_DIR${NC}"
+echo -e "Output dir:  ${DIM}$OUTPUT_DIR${NC}"
 echo -e "Tests:       ${YELLOW}$BUILD_TESTS${NC}"
 echo ""
 
 # Clean if requested
 if [ "$CLEAN_BUILD" = true ]; then
-    echo -e "${YELLOW}Cleaning build directory...${NC}"
-    rm -rf "$BUILD_DIR"
+    echo -e "${YELLOW}Cleaning cache directory...${NC}"
+    rm -rf "$CACHE_DIR"
 fi
 
 # Create directories
-mkdir -p "$BUILD_DIR"
+mkdir -p "$CACHE_DIR"
+mkdir -p "$OUTPUT_DIR"
 
 # Configure CMake
 echo -e "${GREEN}Configuring CMake...${NC}"
-cd "$BUILD_DIR"
+cd "$CACHE_DIR"
 
 CMAKE_BUILD_TYPE="Debug"
 if [ "$BUILD_TYPE" = "release" ]; then
@@ -132,7 +137,8 @@ fi
 cmake "$ROOT_DIR/packages/compiler" \
     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
     -DTML_BUILD_TESTS="$BUILD_TESTS" \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DTML_OUTPUT_DIR="$OUTPUT_DIR"
 
 # Build
 echo ""
@@ -160,8 +166,8 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║          Build Complete!               ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "Compiler:    ${CYAN}$BUILD_DIR/tml${NC}"
+echo -e "Compiler:    ${CYAN}$OUTPUT_DIR/tml${NC}"
 if [ "$BUILD_TESTS" = true ]; then
-    echo -e "Tests:       ${CYAN}$BUILD_DIR/tml_tests${NC}"
+    echo -e "Tests:       ${CYAN}$OUTPUT_DIR/tml_tests${NC}"
 fi
 echo ""

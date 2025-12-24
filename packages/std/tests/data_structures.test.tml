@@ -1,0 +1,241 @@
+use test
+
+// ============ Stack Simulation (using I32 array simulation) ============
+
+// Simulate a stack with capacity 5
+// stack[0] = top pointer, stack[1-5] = data
+
+func stack_push(top: I32, value: I32, capacity: I32) -> I32 {
+    // Returns new top pointer, or -1 if full
+    if top >= capacity then { return 0 - 1 }
+    return top + 1
+}
+
+func stack_pop(top: I32) -> I32 {
+    // Returns new top pointer, or -1 if empty
+    if top <= 0 then { return 0 - 1 }
+    return top - 1
+}
+
+func stack_is_empty(top: I32) -> I32 {
+    return if top == 0 then 1 else 0
+}
+
+func stack_is_full(top: I32, capacity: I32) -> I32 {
+    return if top >= capacity then 1 else 0
+}
+
+@test
+func test_stack_operations() -> I32 {
+    let capacity: I32 = 5
+    let mut top: I32 = 0
+
+    // Empty stack
+    assert_eq_i32(stack_is_empty(top), 1, "initially empty")
+    assert_eq_i32(stack_is_full(top, capacity), 0, "not full")
+
+    // Push 3 items
+    top = stack_push(top, 10, capacity)
+    assert_eq_i32(top, 1, "after push 1")
+
+    top = stack_push(top, 20, capacity)
+    assert_eq_i32(top, 2, "after push 2")
+
+    top = stack_push(top, 30, capacity)
+    assert_eq_i32(top, 3, "after push 3")
+
+    assert_eq_i32(stack_is_empty(top), 0, "not empty")
+
+    // Pop 2 items
+    top = stack_pop(top)
+    assert_eq_i32(top, 2, "after pop 1")
+
+    top = stack_pop(top)
+    assert_eq_i32(top, 1, "after pop 2")
+
+    return 0
+}
+
+@test
+func test_stack_overflow_underflow() -> I32 {
+    let capacity: I32 = 3
+    let mut top: I32 = 0
+
+    // Fill stack
+    top = stack_push(top, 1, capacity)
+    top = stack_push(top, 2, capacity)
+    top = stack_push(top, 3, capacity)
+
+    assert_eq_i32(stack_is_full(top, capacity), 1, "stack full")
+
+    // Overflow returns -1
+    let overflow: I32 = stack_push(top, 4, capacity)
+    assert_eq_i32(overflow, 0 - 1, "overflow returns -1")
+
+    // Empty stack
+    top = stack_pop(top)
+    top = stack_pop(top)
+    top = stack_pop(top)
+
+    assert_eq_i32(stack_is_empty(top), 1, "stack empty")
+
+    // Underflow returns -1
+    let underflow: I32 = stack_pop(top)
+    assert_eq_i32(underflow, 0 - 1, "underflow returns -1")
+
+    return 0
+}
+
+// ============ Queue Simulation ============
+
+func queue_enqueue(rear: I32, capacity: I32) -> I32 {
+    if rear >= capacity then { return 0 - 1 }
+    return rear + 1
+}
+
+func queue_dequeue(front: I32, rear: I32) -> I32 {
+    if front >= rear then { return 0 - 1 }
+    return front + 1
+}
+
+func queue_size(front: I32, rear: I32) -> I32 {
+    return rear - front
+}
+
+@test
+func test_queue_operations() -> I32 {
+    let capacity: I32 = 5
+    let mut front: I32 = 0
+    let mut rear: I32 = 0
+
+    // Empty queue
+    assert_eq_i32(queue_size(front, rear), 0, "initially empty")
+
+    // Enqueue 3 items
+    rear = queue_enqueue(rear, capacity)
+    rear = queue_enqueue(rear, capacity)
+    rear = queue_enqueue(rear, capacity)
+
+    assert_eq_i32(queue_size(front, rear), 3, "3 items")
+
+    // Dequeue 1 item
+    front = queue_dequeue(front, rear)
+    assert_eq_i32(queue_size(front, rear), 2, "2 items after dequeue")
+
+    return 0
+}
+
+// ============ Bit Set Simulation ============
+
+func bitset_set(bits: I32, position: I32) -> I32 {
+    return bits | (1 << position)
+}
+
+func bitset_clear(bits: I32, position: I32) -> I32 {
+    return bits & (0 - 1 - (1 << position))
+}
+
+func bitset_test(bits: I32, position: I32) -> I32 {
+    return if (bits & (1 << position)) != 0 then 1 else 0
+}
+
+func bitset_count(bits: I32) -> I32 {
+    let mut count: I32 = 0
+    let mut b: I32 = bits
+    loop {
+        if b == 0 then { break }
+        count = count + (b & 1)
+        b = b >> 1
+    }
+    return count
+}
+
+@test
+func test_bitset() -> I32 {
+    let mut bits: I32 = 0
+
+    // Set bits 0, 2, 4
+    bits = bitset_set(bits, 0)
+    bits = bitset_set(bits, 2)
+    bits = bitset_set(bits, 4)
+
+    // Should be 0b10101 = 21
+    assert_eq_i32(bits, 21, "bits 0,2,4 set")
+    assert_eq_i32(bitset_count(bits), 3, "3 bits set")
+
+    // Test individual bits
+    assert_eq_i32(bitset_test(bits, 0), 1, "bit 0 is set")
+    assert_eq_i32(bitset_test(bits, 1), 0, "bit 1 not set")
+    assert_eq_i32(bitset_test(bits, 2), 1, "bit 2 is set")
+
+    // Clear bit 2
+    bits = bitset_clear(bits, 2)
+    assert_eq_i32(bitset_test(bits, 2), 0, "bit 2 cleared")
+    assert_eq_i32(bitset_count(bits), 2, "2 bits set")
+
+    return 0
+}
+
+// ============ Priority Queue (simulated with comparisons) ============
+
+func pq_compare(a: I32, b: I32) -> I32 {
+    // Min-heap comparison: returns 1 if a should be higher priority (smaller)
+    return if a < b then 1 else 0
+}
+
+func pq_swap_needed(parent: I32, child: I32) -> I32 {
+    // For min-heap: swap if child < parent
+    return pq_compare(child, parent)
+}
+
+@test
+func test_priority_queue_logic() -> I32 {
+    // In a min-heap, smaller values have higher priority
+    assert_eq_i32(pq_compare(3, 5), 1, "3 has higher priority than 5")
+    assert_eq_i32(pq_compare(5, 3), 0, "5 does not have higher priority")
+    assert_eq_i32(pq_compare(5, 5), 0, "equal priorities")
+
+    // Swap needed when child is smaller
+    assert_eq_i32(pq_swap_needed(10, 5), 1, "swap needed: 5 < 10")
+    assert_eq_i32(pq_swap_needed(5, 10), 0, "no swap: 10 > 5")
+
+    return 0
+}
+
+// ============ Ring Buffer ============
+
+func ring_next_index(current: I32, capacity: I32) -> I32 {
+    let next: I32 = current + 1
+    return if next >= capacity then 0 else next
+}
+
+func ring_prev_index(current: I32, capacity: I32) -> I32 {
+    return if current == 0 then capacity - 1 else current - 1
+}
+
+func ring_distance(start: I32, end: I32, capacity: I32) -> I32 {
+    if end >= start then {
+        return end - start
+    }
+    return capacity - start + end
+}
+
+@test
+func test_ring_buffer() -> I32 {
+    let capacity: I32 = 8
+
+    // Next index wraps around
+    assert_eq_i32(ring_next_index(0, capacity), 1, "0 -> 1")
+    assert_eq_i32(ring_next_index(6, capacity), 7, "6 -> 7")
+    assert_eq_i32(ring_next_index(7, capacity), 0, "7 -> 0 (wrap)")
+
+    // Prev index wraps around
+    assert_eq_i32(ring_prev_index(1, capacity), 0, "1 -> 0")
+    assert_eq_i32(ring_prev_index(0, capacity), 7, "0 -> 7 (wrap)")
+
+    // Distance calculation
+    assert_eq_i32(ring_distance(2, 5, capacity), 3, "2 to 5 = 3")
+    assert_eq_i32(ring_distance(6, 2, capacity), 4, "6 to 2 = 4 (wrap)")
+
+    return 0
+}

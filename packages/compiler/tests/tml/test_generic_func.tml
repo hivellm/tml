@@ -1,0 +1,21 @@
+// Test generic function identity[T]
+func identity[T](x: T) -> T {
+    return x
+}
+
+func main() -> I32 {
+    let a: I32 = identity(42)
+    print(a)
+    
+    let b: I32 = identity(100)
+    print(b)
+    
+    // Test with different values
+    if a == 42 and b == 100 {
+        print("PASS: Generic functions work")
+        return 0
+    } else {
+        print("FAIL: Generic function returned wrong value")
+        return 1
+    }
+}

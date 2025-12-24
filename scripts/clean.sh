@@ -28,7 +28,7 @@ detect_target() {
 }
 
 CLEAN_ALL=false
-TARGET=""
+CLEAN_CACHE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -37,9 +37,9 @@ while [[ $# -gt 0 ]]; do
             CLEAN_ALL=true
             shift
             ;;
-        --target)
-            TARGET="$2"
-            shift 2
+        --cache)
+            CLEAN_CACHE=true
+            shift
             ;;
         --help|-h)
             echo "TML Build Cleanup Script"
@@ -47,11 +47,11 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: ./scripts/clean.sh [options]"
             echo ""
             echo "Options:"
-            echo "  --all            Remove entire build directory (all targets)"
-            echo "  --target <triple> Only clean specific target"
-            echo "  --help           Show this help message"
+            echo "  --all    Remove entire build directory"
+            echo "  --cache  Only clean build cache for current target"
+            echo "  --help   Show this help message"
             echo ""
-            echo "Without options: cleans current host target ($(detect_target))"
+            echo "Without options: cleans outputs and cache for current target"
             exit 0
             ;;
         *)
@@ -61,17 +61,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+TARGET=$(detect_target)
+
 if [ "$CLEAN_ALL" = true ]; then
     echo "Removing entire build directory..."
     rm -rf "$BUILD_DIR"
     echo "Done."
-elif [ -n "$TARGET" ]; then
-    echo "Cleaning target: $TARGET..."
-    rm -rf "$BUILD_DIR/$TARGET"
+elif [ "$CLEAN_CACHE" = true ]; then
+    echo "Cleaning build cache for $TARGET..."
+    rm -rf "$BUILD_DIR/cache/$TARGET"
     echo "Done."
 else
-    TARGET=$(detect_target)
-    echo "Cleaning host target: $TARGET..."
-    rm -rf "$BUILD_DIR/$TARGET"
+    echo "Cleaning build outputs and cache..."
+    rm -rf "$BUILD_DIR/debug"
+    rm -rf "$BUILD_DIR/release"
+    rm -rf "$BUILD_DIR/cache/$TARGET"
     echo "Done."
 fi
