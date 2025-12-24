@@ -1,8 +1,0 @@
-// FMA - Fused multiply-add: x*y + z
-// Computes x*y + z with only one rounding
-
-pub func fma(x: F64, y: F64, z: F64) -> F64 {
-    // In a real implementation, this would use hardware FMA if available
-    // For now, simple implementation
-    return x * y + z
-}
