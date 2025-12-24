@@ -120,4 +120,17 @@ auto TypeEnv::get_module(const std::string &module_path) const -> std::optional<
     return module_registry_->get_module(module_path);
 }
 
+void TypeEnv::register_impl(const std::string& type_name, const std::string& behavior_name) {
+    behavior_impls_[type_name].push_back(behavior_name);
+}
+
+bool TypeEnv::type_implements(const std::string& type_name, const std::string& behavior_name) const {
+    auto it = behavior_impls_.find(type_name);
+    if (it == behavior_impls_.end()) {
+        return false;
+    }
+    const auto& behaviors = it->second;
+    return std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end();
+}
+
 } // namespace tml::types

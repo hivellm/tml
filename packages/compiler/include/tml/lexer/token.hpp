@@ -77,6 +77,7 @@ enum class TokenKind : uint8_t {
     KwAwait,         // await
     KwWith,          // with (effects)
     KwWhere,         // where (generic constraints)
+    KwDyn,           // dyn (trait objects)
     KwLowlevel,      // lowlevel (unsafe in Rust)
     KwQuote,         // quote (metaprogramming)
 

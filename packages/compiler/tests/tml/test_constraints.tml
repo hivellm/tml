@@ -1,0 +1,33 @@
+// Test where clause constraint checking
+
+// Function with Eq constraint
+func equals[T](a: T, b: T) -> Bool where T: Eq {
+    return true  // Implementation doesn't matter for constraint test
+}
+
+// Function with Ord constraint
+func compare[T](a: T, b: T) -> I32 where T: Ord {
+    return 0
+}
+
+// Function with multiple constraints
+func process[T](x: T) -> T where T: Eq + Ord {
+    return x
+}
+
+func main() -> I32 {
+    // These should all work - I32 implements Eq and Ord
+    let result1: Bool = equals(10, 20)
+    let result2: I32 = compare(5, 10)
+    let result3: I32 = process(42)
+
+    // Str also implements Eq and Ord
+    let str_eq: Bool = equals("hello", "world")
+    let str_cmp: I32 = compare("a", "b")
+
+    // Bool implements Eq and Ord
+    let bool_eq: Bool = equals(true, false)
+
+    print("All constraint checks passed!")
+    return 0
+}

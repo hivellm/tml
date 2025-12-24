@@ -61,6 +61,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"await", TokenKind::KwAwait},
     {"with", TokenKind::KwWith},
     {"where", TokenKind::KwWhere},
+    {"dyn", TokenKind::KwDyn},
     {"lowlevel", TokenKind::KwLowlevel},
     {"quote", TokenKind::KwQuote},
 

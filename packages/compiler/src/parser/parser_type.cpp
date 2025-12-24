@@ -37,6 +37,31 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     }
 
     // Pointer: *const T, *mut T
+    // Dyn trait object: dyn Behavior[T] or dyn mut Behavior[T]
+    if (match(lexer::TokenKind::KwDyn)) {
+        bool is_mut = match(lexer::TokenKind::KwMut);
+
+        // Parse the behavior path
+        auto behavior_path = parse_type_path();
+        if (is_err(behavior_path)) return unwrap_err(behavior_path);
+
+        // Parse optional generic arguments
+        auto generics = parse_generic_args();
+        if (is_err(generics)) return unwrap_err(generics);
+
+        auto end_span = previous().span;
+        auto span = SourceSpan::merge(start_span, end_span);
+        return make_box<Type>(Type{
+            .kind = DynType{
+                .behavior = std::move(unwrap(behavior_path)),
+                .generics = std::move(unwrap(generics)),
+                .is_mut = is_mut,
+                .span = span
+            },
+            .span = span
+        });
+    }
+
     if (match(lexer::TokenKind::Star)) {
         bool is_mut = false;
         if (match(lexer::TokenKind::KwMut)) {

@@ -1652,6 +1652,66 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return result;
     }
 
+    // Check if this is a generic function call
+    auto pending_func_it = pending_generic_funcs_.find(fn_name);
+    if (pending_func_it != pending_generic_funcs_.end()) {
+        const auto& gen_func = *pending_func_it->second;
+
+        // Infer type arguments from call arguments
+        std::vector<types::TypePtr> inferred_type_args;
+        for (size_t i = 0; i < call.args.size() && i < gen_func.generics.size(); ++i) {
+            types::TypePtr arg_type = infer_expr_type(*call.args[i]);
+            inferred_type_args.push_back(arg_type);
+        }
+
+        // Register and get mangled name
+        std::string mangled_name = require_func_instantiation(fn_name, inferred_type_args);
+
+        // Create substitution map for return type
+        std::unordered_map<std::string, types::TypePtr> subs;
+        for (size_t i = 0; i < gen_func.generics.size() && i < inferred_type_args.size(); ++i) {
+            subs[gen_func.generics[i].name] = inferred_type_args[i];
+        }
+
+        // Get substituted return type
+        std::string ret_type = "void";
+        if (gen_func.return_type.has_value()) {
+            types::TypePtr subbed_ret = resolve_parser_type_with_subs(**gen_func.return_type, subs);
+            ret_type = llvm_type_from_semantic(subbed_ret);
+        }
+
+        // Generate arguments
+        std::vector<std::pair<std::string, std::string>> arg_vals;
+        for (size_t i = 0; i < call.args.size(); ++i) {
+            std::string val = gen_expr(*call.args[i]);
+            std::string arg_type = last_expr_type_;
+            arg_vals.push_back({val, arg_type});
+        }
+
+        // Call the instantiated function
+        std::string func_name = "@tml_" + mangled_name;
+        if (ret_type == "void") {
+            emit("  call void " + func_name + "(");
+            for (size_t i = 0; i < arg_vals.size(); ++i) {
+                if (i > 0) emit(", ");
+                emit(arg_vals[i].second + " " + arg_vals[i].first);
+            }
+            emit_line(")");
+            last_expr_type_ = "void";
+            return "0";
+        } else {
+            std::string result = fresh_reg();
+            emit("  " + result + " = call " + ret_type + " " + func_name + "(");
+            for (size_t i = 0; i < arg_vals.size(); ++i) {
+                if (i > 0) emit(", ");
+                emit(arg_vals[i].second + " " + arg_vals[i].first);
+            }
+            emit_line(")");
+            last_expr_type_ = ret_type;
+            return result;
+        }
+    }
+
     // User-defined function - look up signature from type environment
     std::string mangled = "@tml_" + fn_name;
 

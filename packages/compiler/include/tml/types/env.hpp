@@ -114,6 +114,10 @@ namespace tml::types
         [[nodiscard]] auto lookup_func(const std::string &name) const -> std::optional<FuncSig>;
         [[nodiscard]] auto lookup_type_alias(const std::string &name) const -> std::optional<TypePtr>;
 
+        // Behavior implementation tracking
+        void register_impl(const std::string& type_name, const std::string& behavior_name);
+        [[nodiscard]] bool type_implements(const std::string& type_name, const std::string& behavior_name) const;
+
         // Get all enums (for enum constructor lookup)
         [[nodiscard]] auto all_enums() const -> const std::unordered_map<std::string, EnumDef> &;
 
@@ -158,6 +162,8 @@ namespace tml::types
         std::unordered_map<std::string, EnumDef> enums_;
         std::unordered_map<std::string, BehaviorDef> behaviors_;
         std::unordered_map<std::string, FuncSig> functions_;
+        // Type -> behaviors implemented
+        std::unordered_map<std::string, std::vector<std::string>> behavior_impls_;
         std::unordered_map<std::string, TypePtr> type_aliases_;
         std::unordered_map<std::string, TypePtr> builtins_;
 

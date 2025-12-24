@@ -34,6 +34,7 @@ private:
     TypeEnv env_;
     std::vector<TypeError> errors_;
     TypePtr current_return_type_ = nullptr;
+    TypePtr current_self_type_ = nullptr;  // For resolving 'This' in impl blocks
     int loop_depth_ = 0;
 
     // Declaration registration (first pass)

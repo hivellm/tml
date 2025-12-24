@@ -22,6 +22,52 @@ void TypeEnv::init_builtins() {
     builtins_["Str"] = make_primitive(PrimitiveKind::Str);
     builtins_["Unit"] = make_unit();
 
+    // Register builtin behavior implementations for primitive types
+    // These are used for where clause constraint checking
+
+    // All integer types implement Eq, Ord, Numeric, Hash, Display, Debug
+    std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128", "U8", "U16", "U32", "U64", "U128"};
+    std::vector<std::string> integer_behaviors = {"Eq", "Ord", "Numeric", "Hash", "Display", "Debug", "Default", "Duplicate"};
+    for (const auto& type : integer_types) {
+        for (const auto& behavior : integer_behaviors) {
+            register_impl(type, behavior);
+        }
+    }
+
+    // Float types
+    std::vector<std::string> float_types = {"F32", "F64"};
+    std::vector<std::string> float_behaviors = {"Eq", "Ord", "Numeric", "Display", "Debug", "Default", "Duplicate"};
+    for (const auto& type : float_types) {
+        for (const auto& behavior : float_behaviors) {
+            register_impl(type, behavior);
+        }
+    }
+
+    // Bool
+    register_impl("Bool", "Eq");
+    register_impl("Bool", "Ord");
+    register_impl("Bool", "Hash");
+    register_impl("Bool", "Display");
+    register_impl("Bool", "Debug");
+    register_impl("Bool", "Default");
+    register_impl("Bool", "Duplicate");
+
+    // Char
+    register_impl("Char", "Eq");
+    register_impl("Char", "Ord");
+    register_impl("Char", "Hash");
+    register_impl("Char", "Display");
+    register_impl("Char", "Debug");
+    register_impl("Char", "Duplicate");
+
+    // Str
+    register_impl("Str", "Eq");
+    register_impl("Str", "Ord");
+    register_impl("Str", "Hash");
+    register_impl("Str", "Display");
+    register_impl("Str", "Debug");
+    register_impl("Str", "Duplicate");
+
     // Collection types (defined here before function signatures)
     auto list_type = std::make_shared<Type>(Type{NamedType{"List", "", {}}});
     auto hashmap_type = std::make_shared<Type>(Type{NamedType{"HashMap", "", {}}});

@@ -103,6 +103,13 @@ struct GenericType {
     std::vector<TypePtr> bounds; // Trait bounds
 };
 
+// Dynamic behavior (trait object): dyn Behavior[T]
+struct DynBehaviorType {
+    std::string behavior_name;           // The behavior this is a trait object of
+    std::vector<TypePtr> type_args;      // Generic parameters
+    bool is_mut;                         // dyn mut Behavior
+};
+
 // Type variant
 struct Type {
     std::variant<
@@ -116,7 +123,8 @@ struct Type {
         FuncType,
         ClosureType,
         TypeVar,
-        GenericType
+        GenericType,
+        DynBehaviorType
     > kind;
 
     // Type ID for fast comparison

@@ -208,6 +208,52 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
+    // Handle dyn coercion: let d: dyn Describable = c (where c is Counter)
+    if (var_type.starts_with("%dyn.") && let.init.has_value()) {
+        // Extract behavior name from %dyn.Describable
+        std::string behavior_name = var_type.substr(5);  // Skip "%dyn."
+
+        // Get the concrete type name from the initializer
+        std::string concrete_type;
+        std::string data_ptr;
+
+        if (let.init.value()->is<parser::IdentExpr>()) {
+            const auto& ident = let.init.value()->as<parser::IdentExpr>();
+            auto it = locals_.find(ident.name);
+            if (it != locals_.end()) {
+                // Get type from locals_
+                std::string local_type = it->second.type;
+                if (local_type.starts_with("%struct.")) {
+                    concrete_type = local_type.substr(8);  // Skip "%struct."
+                }
+                data_ptr = it->second.reg;  // Use alloca pointer
+            }
+        }
+
+        if (!concrete_type.empty() && !data_ptr.empty()) {
+            // Look up the vtable
+            std::string vtable = get_vtable(concrete_type, behavior_name);
+            if (!vtable.empty()) {
+                // Allocate the fat pointer struct
+                std::string dyn_alloca = fresh_reg();
+                emit_line("  " + dyn_alloca + " = alloca " + var_type);
+
+                // Store data pointer (field 0)
+                std::string data_field = fresh_reg();
+                emit_line("  " + data_field + " = getelementptr " + var_type + ", ptr " + dyn_alloca + ", i32 0, i32 0");
+                emit_line("  store ptr " + data_ptr + ", ptr " + data_field);
+
+                // Store vtable pointer (field 1)
+                std::string vtable_field = fresh_reg();
+                emit_line("  " + vtable_field + " = getelementptr " + var_type + ", ptr " + dyn_alloca + ", i32 0, i32 1");
+                emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
+
+                locals_[var_name] = VarInfo{dyn_alloca, var_type};
+                return;
+            }
+        }
+    }
+
     // Handle generic enum unit variants (like Nothing from Maybe[I32])
     // When we have an explicit type annotation for a generic enum, we need to use that type
     // rather than inferring from the expression (which can't infer type args for unit variants)

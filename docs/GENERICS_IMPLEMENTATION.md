@@ -152,30 +152,61 @@ std::unordered_map<std::string, int> enum_variants_;
 3. **Immediate Registration**: Field/variant info is registered immediately for use in function codegen
 4. **Deferred IR Generation**: Actual LLVM IR types are emitted in `generate_pending_instantiations()`
 
-## Known Limitations
+## Implemented Features
 
-### Type Checker Limitations
+### Generic Functions
 
-The type checker doesn't fully resolve generic field types for:
-
-1. **Comparisons**: `p.first == 10` sees `T` instead of `I32`
-2. **Variable Assignment**: `let x: I32 = p.first` sees `T` instead of `I32`
-
-**Workaround**: Use `print()` directly on field access:
 ```tml
-// Works
-print(p.first)
+func identity[T](x: T) -> T {
+    return x
+}
 
-// Doesn't work (type checker sees T, not I32)
-let x: I32 = p.first
-if p.first == 10 { ... }
+// Usage - types are inferred from arguments
+let x: I32 = identity(42)  // Infers T = I32
 ```
 
-### Not Yet Implemented
+### Where Clause Constraints
 
-1. **Generic Functions**: `func identity[T](x: T) -> T` (parsing works, codegen pending)
-2. **Bounds/Constraints**: `func sum[T: Addable](items: List[T])`
-3. **Where Clauses**: `where K: Equal + Hashable`
+Constraints are enforced at call sites:
+
+```tml
+// Function with constraint
+func equals[T](a: T, b: T) -> Bool where T: Eq {
+    return true
+}
+
+// Works - I32 implements Eq
+let result: Bool = equals(10, 20)
+
+// Error - MyType doesn't implement Eq
+type MyType { value: I32 }
+let x: MyType = MyType { value: 1 }
+equals(x, x)  // Error: Type 'MyType' does not implement behavior 'Eq'
+```
+
+Supported constraint syntax:
+- Single behavior: `where T: Eq`
+- Multiple behaviors: `where T: Eq + Ord`
+- Multiple type params: `where T: Eq, U: Ord`
+
+### Builtin Behavior Implementations
+
+| Type | Implements |
+|------|-----------|
+| I8-I128, U8-U128 | Eq, Ord, Numeric, Hash, Display, Debug, Default, Duplicate |
+| F32, F64 | Eq, Ord, Numeric, Display, Debug, Default, Duplicate |
+| Bool | Eq, Ord, Hash, Display, Debug, Default, Duplicate |
+| Char, Str | Eq, Ord, Hash, Display, Debug, Duplicate |
+
+### Generic Field Access
+
+Field access on generic structs correctly resolves types:
+
+```tml
+let p: Pair[I32] = Pair { first: 10, second: 20 }
+let x: I32 = p.first  // Works - correctly infers I32
+if p.first == 10 { ... }  // Works - comparison uses I32
+```
 
 ## Test Coverage
 

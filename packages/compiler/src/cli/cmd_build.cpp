@@ -459,10 +459,20 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         return 1;
     }
 
-    std::string run_cmd = "\"" + exe_path + "\"";
+    std::string run_cmd;
+#ifdef _WIN32
+    // Windows: use cmd /c to properly handle relative paths with forward slashes
+    run_cmd = "cmd /c \"\"" + exe_path + "\"";
     for (const auto& arg : args) {
         run_cmd += " \"" + arg + "\"";
     }
+    run_cmd += "\"";
+#else
+    run_cmd = "\"" + exe_path + "\"";
+    for (const auto& arg : args) {
+        run_cmd += " \"" + arg + "\"";
+    }
+#endif
 
     if (verbose) {
         std::cout << "Running: " << run_cmd << "\n";

@@ -323,6 +323,16 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         if (it != locals_.end()) {
             struct_type = it->second.type;
             struct_ptr = it->second.reg;
+
+            // Special handling for 'this' in impl methods
+            if (ident.name == "this" && !current_impl_type_.empty()) {
+                // 'this' is a pointer to the impl type
+                struct_type = "%struct." + current_impl_type_;
+                // Load the actual 'this' pointer from the alloca
+                std::string loaded_this = fresh_reg();
+                emit_line("  " + loaded_this + " = load ptr, ptr " + struct_ptr);
+                struct_ptr = loaded_this;
+            }
         }
     } else if (field.object->is<parser::FieldExpr>()) {
         // Chained field access (e.g., rect.origin.x)
@@ -770,6 +780,114 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i32 @tml_buffer_remaining(ptr " + receiver + ")");
         return result;
+    }
+
+    // Try to find impl method using type inference
+    // Get receiver type from type environment
+    types::TypePtr receiver_type = infer_expr_type(*call.receiver);
+    if (receiver_type && receiver_type->is<types::NamedType>()) {
+        const auto& named = receiver_type->as<types::NamedType>();
+        std::string qualified_name = named.name + "::" + method;
+        auto func_sig = env_.lookup_func(qualified_name);
+        if (func_sig) {
+            // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
+            std::string fn_name = "@tml_" + named.name + "_" + method;
+
+            // Get receiver pointer (not the loaded value)
+            // For identifiers, use the alloca directly
+            std::string receiver_ptr;
+            if (call.receiver->is<parser::IdentExpr>()) {
+                const auto& ident = call.receiver->as<parser::IdentExpr>();
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    receiver_ptr = it->second.reg;  // Use alloca pointer directly
+                } else {
+                    receiver_ptr = receiver;  // Fall back to generated value
+                }
+            } else {
+                // For other expressions, receiver is already a pointer
+                receiver_ptr = receiver;
+            }
+
+            // Build argument list: self (receiver ptr) + args
+            std::vector<std::pair<std::string, std::string>> typed_args;
+            typed_args.push_back({"ptr", receiver_ptr});  // self reference
+
+            for (const auto& arg : call.args) {
+                std::string val = gen_expr(*arg);
+                // Infer arg type from func signature
+                std::string arg_type = "i32";  // default
+                typed_args.push_back({arg_type, val});
+            }
+
+            // Get return type
+            std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+
+            // Build call
+            std::string args_str;
+            for (size_t i = 0; i < typed_args.size(); ++i) {
+                if (i > 0) args_str += ", ";
+                args_str += typed_args[i].first + " " + typed_args[i].second;
+            }
+
+            std::string result = fresh_reg();
+            if (ret_type == "void") {
+                emit_line("  call void " + fn_name + "(" + args_str + ")");
+                return "void";
+            } else {
+                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
+                return result;
+            }
+        }
+    }
+
+    // Handle dyn dispatch: call method through vtable
+    if (call.receiver->is<parser::IdentExpr>()) {
+        const auto& ident = call.receiver->as<parser::IdentExpr>();
+        auto it = locals_.find(ident.name);
+        if (it != locals_.end() && it->second.type.starts_with("%dyn.")) {
+            std::string dyn_type = it->second.type;
+            std::string behavior_name = dyn_type.substr(5);  // Skip "%dyn."
+            std::string dyn_ptr = it->second.reg;
+
+            // Get method index in vtable
+            auto behavior_methods_it = behavior_method_order_.find(behavior_name);
+            if (behavior_methods_it != behavior_method_order_.end()) {
+                const auto& methods = behavior_methods_it->second;
+                int method_idx = -1;
+                for (size_t i = 0; i < methods.size(); ++i) {
+                    if (methods[i] == method) {
+                        method_idx = static_cast<int>(i);
+                        break;
+                    }
+                }
+
+                if (method_idx >= 0) {
+                    // Load data pointer from fat pointer (field 0)
+                    std::string data_field = fresh_reg();
+                    emit_line("  " + data_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr + ", i32 0, i32 0");
+                    std::string data_ptr = fresh_reg();
+                    emit_line("  " + data_ptr + " = load ptr, ptr " + data_field);
+
+                    // Load vtable pointer from fat pointer (field 1)
+                    std::string vtable_field = fresh_reg();
+                    emit_line("  " + vtable_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr + ", i32 0, i32 1");
+                    std::string vtable_ptr = fresh_reg();
+                    emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_field);
+
+                    // Get function pointer from vtable
+                    std::string fn_ptr_loc = fresh_reg();
+                    emit_line("  " + fn_ptr_loc + " = getelementptr { ptr }, ptr " + vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
+                    std::string fn_ptr = fresh_reg();
+                    emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
+
+                    // Call through function pointer (assumes method takes self and returns i32)
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i32 " + fn_ptr + "(ptr " + data_ptr + ")");
+                    return result;
+                }
+            }
+        }
     }
 
     report_error("Unknown method: " + method, call.span);

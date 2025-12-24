@@ -125,6 +125,14 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
     } else if (type.is<parser::FuncType>()) {
         // Function types are pointers in LLVM
         return "ptr";
+    } else if (type.is<parser::DynType>()) {
+        // Dyn types are fat pointers: { data_ptr, vtable_ptr }
+        const auto& dyn = type.as<parser::DynType>();
+        std::string behavior_name;
+        if (!dyn.behavior.segments.empty()) {
+            behavior_name = dyn.behavior.segments.back();
+        }
+        return "%dyn." + behavior_name;
     }
     return "i32";  // Default
 }
@@ -177,6 +185,11 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::stri
     } else if (type->is<types::FuncType>()) {
         // Function types are pointers in LLVM
         return "ptr";
+    } else if (type->is<types::DynBehaviorType>()) {
+        // Trait objects are fat pointers: { data_ptr, vtable_ptr }
+        // We use a struct type: %dyn.BehaviorName
+        const auto& dyn = type->as<types::DynBehaviorType>();
+        return "%dyn." + dyn.behavior_name;
     }
 
     return "i32";  // Default
@@ -207,6 +220,13 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
     else if (type->is<types::PtrType>()) {
         const auto& ptr = type->as<types::PtrType>();
         return (ptr.is_mut ? "mutptr_" : "ptr_") + mangle_type(ptr.inner);
+    }
+    else if (type->is<types::DynBehaviorType>()) {
+        const auto& dyn = type->as<types::DynBehaviorType>();
+        if (dyn.type_args.empty()) {
+            return "dyn_" + dyn.behavior_name;
+        }
+        return "dyn_" + dyn.behavior_name + "__" + mangle_type_args(dyn.type_args);
     }
     else if (type->is<types::ArrayType>()) {
         const auto& arr = type->as<types::ArrayType>();
@@ -418,8 +438,18 @@ void LLVMIRGen::generate_pending_instantiations() {
             }
         }
 
-        // Note: Function instantiations would be handled similarly
-        // but for now we focus on types
+        // Generate pending function instantiations
+        for (auto& [key, inst] : func_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+
+                auto it = pending_generic_funcs_.find(inst.base_name);
+                if (it != pending_generic_funcs_.end()) {
+                    gen_func_instantiation(*it->second, inst.type_args);
+                    changed = true;
+                }
+            }
+        }
     }
 }
 
@@ -464,7 +494,19 @@ auto LLVMIRGen::require_func_instantiation(
     const std::string& base_name,
     const std::vector<types::TypePtr>& type_args
 ) -> std::string {
-    return mangle_func_name(base_name, type_args);
+    std::string mangled = mangle_func_name(base_name, type_args);
+
+    // Register the instantiation if not already registered
+    if (func_instantiations_.find(mangled) == func_instantiations_.end()) {
+        func_instantiations_[mangled] = GenericInstantiation{
+            base_name,
+            type_args,
+            mangled,
+            false  // not generated yet
+        };
+    }
+
+    return mangled;
 }
 
 void LLVMIRGen::emit_header() {
@@ -849,12 +891,25 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
             gen_struct_decl(decl->as<parser::StructDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             gen_enum_decl(decl->as<parser::EnumDecl>());
+        } else if (decl->is<parser::ImplDecl>()) {
+            // Register impl block for vtable generation
+            register_impl(&decl->as<parser::ImplDecl>());
         }
     }
 
     // Generate any pending generic instantiations collected during first pass
     // This happens after structs/enums are registered but before function codegen
     generate_pending_instantiations();
+
+    // Emit dyn types for all registered behaviors before function generation
+    for (const auto& [key, vtable_name] : vtables_) {
+        // key is "TypeName::BehaviorName", extract behavior name
+        size_t pos = key.find("::");
+        if (pos != std::string::npos) {
+            std::string behavior_name = key.substr(pos + 2);
+            emit_dyn_type(behavior_name);
+        }
+    }
 
     // Buffer function code separately so we can emit type instantiations before functions
     std::stringstream func_output;
@@ -866,6 +921,108 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             gen_func_decl(decl->as<parser::FuncDecl>());
+        } else if (decl->is<parser::ImplDecl>()) {
+            // Generate impl methods as named functions inline
+            const auto& impl = decl->as<parser::ImplDecl>();
+            std::string type_name;
+            if (impl.self_type->kind.index() == 0) {  // NamedType
+                const auto& named = std::get<parser::NamedType>(impl.self_type->kind);
+                if (!named.path.segments.empty()) {
+                    type_name = named.path.segments.back();
+                }
+            }
+            if (!type_name.empty()) {
+                for (const auto& method : impl.methods) {
+                    // Generate method with mangled name TypeName_MethodName
+                    std::string method_name = type_name + "_" + method.name;
+                    current_func_ = method_name;
+                    current_impl_type_ = type_name;  // Track impl self type for 'this' access
+                    locals_.clear();
+                    block_terminated_ = false;
+
+                    // Determine return type
+                    std::string ret_type = "void";
+                    if (method.return_type.has_value()) {
+                        ret_type = llvm_type_ptr(*method.return_type);
+                    }
+                    current_ret_type_ = ret_type;
+
+                    // Build parameter list (including 'this')
+                    std::string params;
+                    std::string param_types;
+                    for (size_t i = 0; i < method.params.size(); ++i) {
+                        if (i > 0) {
+                            params += ", ";
+                            param_types += ", ";
+                        }
+                        std::string param_type = llvm_type_ptr(method.params[i].type);
+                        std::string param_name;
+                        if (method.params[i].pattern && method.params[i].pattern->is<parser::IdentPattern>()) {
+                            param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
+                        } else {
+                            param_name = "_anon";
+                        }
+                        // Substitute 'This' type with the actual impl type
+                        if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                            param_type = "ptr";  // 'this' is always a pointer to the struct
+                        }
+                        params += param_type + " %" + param_name;
+                        param_types += param_type;
+                    }
+
+                    // Register function
+                    std::string func_type = ret_type + " (" + param_types + ")";
+                    functions_[method_name] = FuncInfo{
+                        "@tml_" + method_name,
+                        func_type,
+                        ret_type
+                    };
+
+                    // Generate function
+                    emit_line("");
+                    emit_line("define internal " + ret_type + " @tml_" + method_name + "(" + params + ") #0 {");
+                    emit_line("entry:");
+
+                    // Register params in locals
+                    for (size_t i = 0; i < method.params.size(); ++i) {
+                        std::string param_type = llvm_type_ptr(method.params[i].type);
+                        std::string param_name;
+                        if (method.params[i].pattern && method.params[i].pattern->is<parser::IdentPattern>()) {
+                            param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
+                        } else {
+                            param_name = "_anon";
+                        }
+                        // Substitute 'This' type with ptr for 'this' param
+                        if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                            param_type = "ptr";
+                        }
+                        std::string alloca_reg = fresh_reg();
+                        emit_line("  " + alloca_reg + " = alloca " + param_type);
+                        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+                        locals_[param_name] = VarInfo{alloca_reg, param_type};
+                    }
+
+                    // Generate body
+                    if (method.body.has_value()) {
+                        gen_block(*method.body);
+                        if (!block_terminated_) {
+                            if (ret_type == "void") {
+                                emit_line("  ret void");
+                            } else {
+                                emit_line("  ret " + ret_type + " 0");
+                            }
+                        }
+                    } else {
+                        if (ret_type == "void") {
+                            emit_line("  ret void");
+                        } else {
+                            emit_line("  ret " + ret_type + " 0");
+                        }
+                    }
+                    emit_line("}");
+                    current_impl_type_.clear();  // Clear impl type context
+                }
+            }
         }
     }
 
@@ -888,6 +1045,9 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     for (const auto& closure_func : module_functions_) {
         emit(closure_func);
     }
+
+    // Emit vtables for trait objects (dyn dispatch)
+    emit_vtables();
 
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
@@ -1103,6 +1263,123 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
         return PrintArgType::Int; // Assume functions return int
     }
     return PrintArgType::Unknown;
+}
+
+// ============ Vtable Support ============
+
+void LLVMIRGen::register_impl(const parser::ImplDecl* impl) {
+    pending_impls_.push_back(impl);
+
+    // Eagerly populate behavior_method_order_ for dyn dispatch
+    if (impl->trait_path && !impl->trait_path->segments.empty()) {
+        std::string behavior_name = impl->trait_path->segments.back();
+        if (behavior_method_order_.find(behavior_name) == behavior_method_order_.end()) {
+            auto behavior_def = env_.lookup_behavior(behavior_name);
+            if (behavior_def) {
+                std::vector<std::string> methods;
+                for (const auto& m : behavior_def->methods) {
+                    methods.push_back(m.name);
+                }
+                behavior_method_order_[behavior_name] = methods;
+
+                // Also eagerly register vtable name
+                // Get type name
+                std::string type_name;
+                if (impl->self_type->kind.index() == 0) {
+                    const auto& named = std::get<parser::NamedType>(impl->self_type->kind);
+                    if (!named.path.segments.empty()) {
+                        type_name = named.path.segments.back();
+                    }
+                }
+                if (!type_name.empty()) {
+                    std::string vtable_name = "@vtable." + type_name + "." + behavior_name;
+                    std::string key = type_name + "::" + behavior_name;
+                    vtables_[key] = vtable_name;
+                }
+            }
+        }
+    }
+}
+
+void LLVMIRGen::emit_dyn_type(const std::string& behavior_name) {
+    if (emitted_dyn_types_.count(behavior_name)) return;
+    emitted_dyn_types_.insert(behavior_name);
+
+    // Emit the dyn type as a fat pointer struct: { data_ptr, vtable_ptr }
+    emit_line("%dyn." + behavior_name + " = type { ptr, ptr }");
+}
+
+auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& behavior_name) -> std::string {
+    std::string key = type_name + "::" + behavior_name;
+    auto it = vtables_.find(key);
+    if (it != vtables_.end()) {
+        return it->second;
+    }
+    return "";  // No vtable found
+}
+
+void LLVMIRGen::emit_vtables() {
+    // For each registered impl block, generate a vtable
+    for (const auto* impl : pending_impls_) {
+        if (!impl->trait_path) continue;  // Skip inherent impls
+
+        // Get the type name and behavior name
+        std::string type_name;
+        if (impl->self_type->kind.index() == 0) {  // NamedType
+            const auto& named = std::get<parser::NamedType>(impl->self_type->kind);
+            if (!named.path.segments.empty()) {
+                type_name = named.path.segments.back();
+            }
+        }
+
+        std::string behavior_name;
+        if (!impl->trait_path->segments.empty()) {
+            behavior_name = impl->trait_path->segments.back();
+        }
+
+        if (type_name.empty() || behavior_name.empty()) continue;
+
+        // Emit the dyn type for this behavior
+        emit_dyn_type(behavior_name);
+
+        // Get behavior method order
+        auto behavior_def = env_.lookup_behavior(behavior_name);
+        if (!behavior_def) continue;
+
+        // Build vtable type: array of function pointers
+        std::string vtable_name = "@vtable." + type_name + "." + behavior_name;
+        std::string vtable_type = "{ ";
+        for (size_t i = 0; i < behavior_def->methods.size(); ++i) {
+            if (i > 0) vtable_type += ", ";
+            vtable_type += "ptr";
+        }
+        vtable_type += " }";
+
+        // Build vtable value with function pointers
+        std::string vtable_value = "{ ";
+        for (size_t i = 0; i < behavior_def->methods.size(); ++i) {
+            if (i > 0) vtable_value += ", ";
+            const auto& method = behavior_def->methods[i];
+            vtable_value += "ptr @tml_" + type_name + "_" + method.name;
+        }
+        vtable_value += " }";
+
+        // Emit vtable global constant
+        emit_line(vtable_name + " = internal constant " + vtable_type + " " + vtable_value);
+
+        // Register vtable
+        std::string key = type_name + "::" + behavior_name;
+        vtables_[key] = vtable_name;
+
+        // Store method order for this behavior
+        if (behavior_method_order_.find(behavior_name) == behavior_method_order_.end()) {
+            std::vector<std::string> methods;
+            for (const auto& m : behavior_def->methods) {
+                methods.push_back(m.name);
+            }
+            behavior_method_order_[behavior_name] = methods;
+        }
+    }
 }
 
 } // namespace tml::codegen

@@ -290,6 +290,12 @@ static std::string get_param_name(const parser::FuncParam& param) {
 }
 
 void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
+    // Defer generic functions - they will be instantiated when called
+    if (!func.generics.empty()) {
+        pending_generic_funcs_[func.name] = &func;
+        return;
+    }
+
     current_func_ = func.name;
     locals_.clear();
     block_terminated_ = false;

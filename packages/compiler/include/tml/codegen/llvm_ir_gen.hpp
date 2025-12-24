@@ -7,6 +7,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <set>
 
 namespace tml::codegen {
 
@@ -47,6 +48,9 @@ private:
     std::string current_ret_type_;  // Return type of current function
     std::string current_block_;
     bool block_terminated_ = false;
+
+    // Current impl self type (for resolving 'this' in impl methods)
+    std::string current_impl_type_;  // e.g., "Counter" when in impl Describable for Counter
 
     // Current loop context for break/continue
     std::string current_loop_start_;
@@ -97,6 +101,33 @@ private:
     // Closure support
     std::vector<std::string> module_functions_;  // Generated closure functions
     uint32_t closure_counter_ = 0;                // For unique closure names
+
+    // ============ Vtable Support for Trait Objects ============
+    // Tracks behavior implementations and generates vtables for dyn dispatch
+
+    // Vtable info: maps (type_name, behavior_name) -> vtable global name
+    std::unordered_map<std::string, std::string> vtables_;  // "Type::Behavior" -> "@vtable.Type.Behavior"
+
+    // Behavior method order: behavior_name -> [method_names in order]
+    std::unordered_map<std::string, std::vector<std::string>> behavior_method_order_;
+
+    // Pending impl blocks to process
+    std::vector<const parser::ImplDecl*> pending_impls_;
+
+    // Dyn type definitions (emitted once per behavior)
+    std::set<std::string> emitted_dyn_types_;
+
+    // Register an impl block for vtable generation
+    void register_impl(const parser::ImplDecl* impl);
+
+    // Generate all vtables from registered impls
+    void emit_vtables();
+
+    // Emit dyn type definition if not already emitted
+    void emit_dyn_type(const std::string& behavior_name);
+
+    // Get vtable global name for a type/behavior pair
+    auto get_vtable(const std::string& type_name, const std::string& behavior_name) -> std::string;
 
     // ============ Generic Instantiation Support ============
     // Tracks generic type/function instantiations to avoid duplicates

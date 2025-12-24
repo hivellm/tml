@@ -92,6 +92,14 @@ struct InferType {
     SourceSpan span;
 };
 
+// Dynamic trait object type: dyn Behavior[T]
+struct DynType {
+    TypePath behavior;                      // The behavior being used as trait object
+    std::optional<GenericArgs> generics;    // Generic parameters: dyn Iterator[I32]
+    bool is_mut;                            // dyn mut Behavior
+    SourceSpan span;
+};
+
 // Type variant
 struct Type {
     std::variant<
@@ -102,7 +110,8 @@ struct Type {
         SliceType,
         TupleType,
         FuncType,
-        InferType
+        InferType,
+        DynType
     > kind;
     SourceSpan span;
 

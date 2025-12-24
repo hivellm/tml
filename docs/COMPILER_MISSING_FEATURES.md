@@ -177,40 +177,43 @@ let y = if flag then "yes" else "no"
 - `if cond then expr else expr` (expression form with `then`)
 - `if cond { block } else { block }` (block form)
 
-### Generic Where Clauses (Syntax Only)
-**Status**: ⚠️ Partially Implemented (2025-12-22)
+### Generic Where Clauses (Fully Implemented)
+**Status**: ✅ Fully Implemented (2025-12-24)
 
 **Implementation**:
 - Lexer: Added `where` keyword (TokenKind::KwWhere)
 - Parser: `parse_where_clause()` in `parser_decl.cpp` - fully implemented
-- AST: WhereClause struct already defined
-- Type Checker: Parses and stores constraints, but **does NOT enforce them yet**
+- AST: WhereClause struct defined
+- Type Checker: Parses, stores, and **enforces constraints at call sites**
+- Behavior tracking: TypeEnv tracks which types implement which behaviors
 
 **Example**:
 ```tml
-pub func assert_eq[T](left: T, right: T) where T: Eq {
-    // Syntax works, constraints not enforced
+func equals[T](a: T, b: T) -> Bool where T: Eq {
+    return true  // T must implement Eq
 }
 
-func complex[T, U](x: T, y: U) where T: Display + Eq, U: Clone {
-    // Multiple constraints supported syntactically
-}
+// Works - I32 implements Eq
+let result: Bool = equals(10, 20)
+
+// Error - MyType doesn't implement Eq
+type MyType { value: I32 }
+equals(x, x)  // Error: Type 'MyType' does not implement behavior 'Eq'
 ```
 
-**Tests**: `packages/compiler/tests/test_where_clause.tml` ✅ PASSING (syntax only)
+**Tests**: `packages/compiler/tests/tml/test_constraints.tml` ✅ PASSING
 
 **What Works**:
 - ✅ Single trait bounds: `where T: Trait`
 - ✅ Multiple trait bounds: `where T: Trait1 + Trait2`
 - ✅ Multiple type parameters: `where T: Trait1, U: Trait2`
 - ✅ Parsing and AST storage
+- ✅ Constraint enforcement at call sites
+- ✅ Behavior implementation tracking for builtin types
+- ✅ Error messages for constraint violations
 
-**What's Missing**:
-- ❌ Constraint enforcement at call sites
-- ❌ Trait/behavior implementation tracking
-- ❌ Error messages for constraint violations
-
-**Impact**: Syntax is now available for writing generic code with constraints, but the compiler won't verify that types satisfy the constraints. This allows code to be written in the proper style, even though full type safety isn't enforced yet.
+**Builtin Types**: I8-I128, U8-U128 implement Eq, Ord, Numeric, Hash, Display, Debug, Default, Duplicate.
+F32, F64, Bool, Char, Str also implement appropriate behaviors.
 
 ### Closures (Syntax Only)
 **Status**: ⚠️ Partially Implemented (2025-12-22)
@@ -405,39 +408,33 @@ if let Just(value) = maybe_thing {
 - Codegen: Generate conditional + destructuring code
 
 ### 3. Generic Where Clauses
-**Status**: ⚠️ Partially Implemented (2025-12-22) - See "Recently Implemented" section
+**Status**: ✅ Fully Implemented (2025-12-24)
 
 **Description**: Type constraints on generic parameters using `where` clauses.
 
 **Current Behavior**:
 ```tml
-// ❌ DOESN'T WORK - Parser error
-pub func assert_eq[T](left: T, right: T) where T: Eq {
-    // ...
+// ✅ WORKS - Constraint enforced at call site
+func equals[T](a: T, b: T) -> Bool where T: Eq {
+    return true
 }
+
+// Works - I32 implements Eq
+equals(10, 20)
+
+// Error - MyType doesn't implement Eq
+type MyType { value: I32 }
+let x: MyType = MyType { value: 1 }
+equals(x, x)  // Compile error: Type 'MyType' does not implement behavior 'Eq'
 ```
 
-**Workaround**:
-```tml
-// ✅ WORKS - No constraints (runtime errors possible)
-pub func assert_eq[T](left: T, right: T) {
-    // ...
-}
-```
+**Implementation**:
+- ✅ Parser: `where T: Trait` syntax
+- ✅ Type checker: Constraint enforcement at call sites
+- ✅ Error messages: Clear constraint violation messages
+- ✅ Behavior tracking: Builtin types implement common behaviors
 
-**Impact**:
-- No compile-time enforcement of trait bounds
-- Generic functions can't guarantee required operations exist
-- Runtime errors instead of compile-time errors
-
-**Affected Files**:
-- `packages/test/src/assertions/mod.tml` (all generic functions)
-- `packages/std/src/collections/` (all collection types)
-
-**Implementation Needs**:
-- Parser: Support `where T: Trait` syntax
-- Type checker: Constraint solving system
-- Error messages: Clear constraint violation messages
+**Note**: Custom types must implement behaviors to satisfy constraints. Currently, only builtin types (I32, Bool, Str, etc.) have behavior implementations registered.
 
 ### 4. Function Types
 **Status**: ⚠️ Partially Implemented (2025-12-22) - See "Recently Implemented" section

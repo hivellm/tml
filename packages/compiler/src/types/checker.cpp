@@ -6,6 +6,31 @@
 namespace tml::types {
 
 namespace {
+
+// Convert PrimitiveKind to string name
+std::string primitive_to_string(PrimitiveKind kind) {
+    switch (kind) {
+        case PrimitiveKind::I8: return "I8";
+        case PrimitiveKind::I16: return "I16";
+        case PrimitiveKind::I32: return "I32";
+        case PrimitiveKind::I64: return "I64";
+        case PrimitiveKind::I128: return "I128";
+        case PrimitiveKind::U8: return "U8";
+        case PrimitiveKind::U16: return "U16";
+        case PrimitiveKind::U32: return "U32";
+        case PrimitiveKind::U64: return "U64";
+        case PrimitiveKind::U128: return "U128";
+        case PrimitiveKind::F32: return "F32";
+        case PrimitiveKind::F64: return "F64";
+        case PrimitiveKind::Bool: return "Bool";
+        case PrimitiveKind::Char: return "Char";
+        case PrimitiveKind::Str: return "Str";
+        case PrimitiveKind::Unit: return "Unit";
+        case PrimitiveKind::Never: return "Never";
+    }
+    return "unknown";
+}
+
 // Helper to check if a type is an integer type
 bool is_integer_type(const TypePtr& type) {
     if (!type->is<PrimitiveType>()) return false;
@@ -62,6 +87,9 @@ TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
+    TML_DEBUG_LN("[DEBUG] check_module called");
+
+    // Pass 0: Process use declarations (imports)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::UseDecl>()) {
             process_use_decl(decl->as<parser::UseDecl>());
@@ -260,6 +288,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
 }
 
 void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
+    std::vector<TypePtr> params;
     for (const auto& p : func.params) {
         params.push_back(resolve_type(*p.type));
     }
@@ -295,13 +324,11 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
-    // Extract generic type parameter names
+    // Extract type parameter names from generics
     std::vector<std::string> func_type_params;
     for (const auto& param : func.generics) {
         func_type_params.push_back(param.name);
     }
-
-    std::cerr << std::endl;
 
     env_.define_func(FuncSig{
         .name = func.name,
@@ -318,6 +345,9 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
+    TML_DEBUG_LN("[DEBUG] check_func_body called for function: " << func.name);
+    env_.push_scope();
+    current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
     // Add parameters to scope
     for (const auto& p : func.params) {
@@ -342,6 +372,9 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
             if (!return_type->is<PrimitiveType>() ||
                 return_type->as<PrimitiveType>().kind != PrimitiveKind::Unit) {
 
+                TML_DEBUG_LN("[DEBUG] Checking function '" << func.name << "' for return statement");
+                bool has_ret = block_has_return(*func.body);
+                TML_DEBUG_LN("[DEBUG] Has return: " << (has_ret ? "yes" : "no"));
 
                 if (!has_ret) {
                     error("Function '" + func.name + "' with return type " +
@@ -391,13 +424,11 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
-    std::cerr << std::endl;
-
-    env_.define_func(FuncSig{
+        env_.define_func(FuncSig{
             .name = qualified_name,
             .params = std::move(params),
             .return_type = std::move(ret),
-        .type_params = {},
+            .type_params = {},
             .is_async = method.is_async,
             .span = method.span
         });
@@ -405,9 +436,14 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
 }
 
 void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
+    // Set current_self_type_ so 'This' resolves correctly
+    current_self_type_ = resolve_type(*impl.self_type);
+
     for (const auto& method : impl.methods) {
         check_func_body(method);
     }
+
+    current_self_type_ = nullptr;
 }
 
 auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
@@ -660,8 +696,6 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
 }
 
 auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
-    auto callee_type = check_expr(*call.callee);
-
     // Check if this is a polymorphic builtin (print/println accept any type)
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& name = call.callee->as<parser::IdentExpr>().name;
@@ -675,53 +709,66 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         }
     }
 
-    if (callee_type->is<FuncType>()) {
-        auto& func = callee_type->as<FuncType>();
-        // Check argument count
-        if (call.args.size() != func.params.size()) {
-            error("Wrong number of arguments", call.callee->span);
-        }
-        // Check argument types
-        for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
-            auto arg_type = check_expr(*call.args[i]);
-            (void)arg_type;  // Type checking would happen here
-        }
-        return func.return_type;
-    }
-
-    // Try to look up as a constructor or function
+    // IMPORTANT: Check function lookup FIRST before checking FuncType
+    // This handles generic functions with type inference
     if (call.callee->is<parser::IdentExpr>()) {
         auto& ident = call.callee->as<parser::IdentExpr>();
 
-        // First try function lookup
+        // First try function lookup (handles generic functions)
         auto func = env_.lookup_func(ident.name);
         if (func) {
-            // DEBUG: Print function info
-
-            // Check if this is a generic function
+            // Handle generic functions - infer type arguments from call arguments
             if (!func->type_params.empty()) {
-                // Infer type arguments from call arguments
                 std::unordered_map<std::string, TypePtr> substitutions;
+                // Infer type parameters from argument types
                 for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
                     auto arg_type = check_expr(*call.args[i]);
-                    // Check if the param type is a generic type
-                    if (func->params[i]->is<GenericType>()) {
-                        const auto& generic = func->params[i]->as<GenericType>();
-                        substitutions[generic.name] = arg_type;
-                    }
-                    // Also check NamedType (resolve_type creates NamedType for unknown types like T)
-                    else if (func->params[i]->is<NamedType>()) {
+                    // Check if this parameter is a generic type
+                    if (func->params[i]->is<NamedType>()) {
                         const auto& named = func->params[i]->as<NamedType>();
-                        // Check if name matches a type parameter
+                        // Check if param type name matches a type parameter
                         for (const auto& tp : func->type_params) {
-                            if (named.name == tp) {
+                            if (named.name == tp && named.type_args.empty()) {
+                                substitutions[tp] = arg_type;
+                                break;
+                            }
+                        }
+                    }
+                    // Also check for GenericType directly
+                    if (func->params[i]->is<GenericType>()) {
+                        const auto& gen = func->params[i]->as<GenericType>();
+                        for (const auto& tp : func->type_params) {
+                            if (gen.name == tp) {
                                 substitutions[tp] = arg_type;
                                 break;
                             }
                         }
                     }
                 }
-                // Substitute the return type
+
+                // Check where clause constraints
+                for (const auto& constraint : func->where_constraints) {
+                    auto it = substitutions.find(constraint.type_param);
+                    if (it != substitutions.end()) {
+                        // Get the actual type name
+                        std::string type_name;
+                        if (it->second->is<PrimitiveType>()) {
+                            type_name = primitive_to_string(it->second->as<PrimitiveType>().kind);
+                        } else if (it->second->is<NamedType>()) {
+                            type_name = it->second->as<NamedType>().name;
+                        }
+
+                        // Check each required behavior
+                        for (const auto& behavior : constraint.required_behaviors) {
+                            if (!env_.type_implements(type_name, behavior)) {
+                                error("Type '" + type_name + "' does not implement behavior '" + behavior +
+                                      "' required by constraint on " + constraint.type_param, call.callee->span);
+                            }
+                        }
+                    }
+                }
+
+                // Substitute generic types in return type
                 return substitute_type(func->return_type, substitutions);
             }
             return func->return_type;
@@ -755,6 +802,22 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         }
     }
 
+    // Fallback: evaluate callee and check if it's a FuncType (for closures, etc.)
+    auto callee_type = check_expr(*call.callee);
+    if (callee_type->is<FuncType>()) {
+        auto& func = callee_type->as<FuncType>();
+        // Check argument count
+        if (call.args.size() != func.params.size()) {
+            error("Wrong number of arguments", call.callee->span);
+        }
+        // Check argument types
+        for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
+            auto arg_type = check_expr(*call.args[i]);
+            (void)arg_type;  // Type checking would happen here
+        }
+        return func.return_type;
+    }
+
     return make_unit();
 }
 
@@ -771,6 +834,19 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
+    // Handle method calls on dyn Behavior types - look up in behavior definition
+    if (receiver_type->is<DynBehaviorType>()) {
+        auto& dyn = receiver_type->as<DynBehaviorType>();
+        auto behavior_def = env_.lookup_behavior(dyn.behavior_name);
+        if (behavior_def) {
+            for (const auto& method : behavior_def->methods) {
+                if (method.name == call.method) {
+                    return method.return_type;
+                }
+            }
+            error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'", call.receiver->span);
+        }
+    }
     return make_unit();
 }
 
@@ -781,8 +857,20 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
         auto& named = obj_type->as<NamedType>();
         auto struct_def = env_.lookup_struct(named.name);
         if (struct_def) {
+            // Build substitution map for generic structs like Pair[I32]
+            std::unordered_map<std::string, TypePtr> subs;
+            if (!struct_def->type_params.empty() && !named.type_args.empty()) {
+                for (size_t i = 0; i < struct_def->type_params.size() && i < named.type_args.size(); ++i) {
+                    subs[struct_def->type_params[i]] = named.type_args[i];
+                }
+            }
+
             for (const auto& [fname, ftype] : struct_def->fields) {
                 if (fname == field.field) {
+                    // Apply type substitution for generic fields
+                    if (!subs.empty()) {
+                        return substitute_type(ftype, subs);
+                    }
                     return ftype;
                 }
             }
@@ -1374,7 +1462,23 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
     return std::visit([this](const auto& t) -> TypePtr {
         using T = std::decay_t<decltype(t)>;
         if constexpr (std::is_same_v<T, parser::NamedType>) {
-            return resolve_type_path(t.path);
+            auto base_type = resolve_type_path(t.path);
+            // If the parser type has generic arguments, add them to the semantic type
+            if (t.generics && !t.generics->args.empty()) {
+                // Resolve each generic argument
+                std::vector<TypePtr> type_args;
+                for (const auto& arg : t.generics->args) {
+                    type_args.push_back(resolve_type(*arg));
+                }
+                // Create new type with type_args
+                if (base_type->is<types::NamedType>()) {
+                    auto& named = base_type->as<types::NamedType>();
+                    auto result = std::make_shared<Type>();
+                    result->kind = types::NamedType{named.name, named.module_path, std::move(type_args)};
+                    return result;
+                }
+            }
+            return base_type;
         }
         else if constexpr (std::is_same_v<T, parser::RefType>) {
             return make_ref(resolve_type(*t.inner), t.is_mut);
@@ -1394,6 +1498,32 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
         }
         else if constexpr (std::is_same_v<T, parser::InferType>) {
             return env_.fresh_type_var();
+        }
+        else if constexpr (std::is_same_v<T, parser::DynType>) {
+            // Convert parser DynType to semantic DynBehaviorType
+            std::string behavior_name;
+            if (!t.behavior.segments.empty()) {
+                behavior_name = t.behavior.segments.back();
+            }
+
+            // Verify the behavior exists
+            auto behavior_def = env_.lookup_behavior(behavior_name);
+            if (!behavior_def) {
+                error("Unknown behavior '" + behavior_name + "' in dyn type", t.span);
+                return make_unit();
+            }
+
+            // Resolve generic arguments
+            std::vector<TypePtr> type_args;
+            if (t.generics) {
+                for (const auto& arg : t.generics->args) {
+                    type_args.push_back(resolve_type(*arg));
+                }
+            }
+
+            auto result = std::make_shared<Type>();
+            result->kind = DynBehaviorType{behavior_name, std::move(type_args), t.is_mut};
+            return result;
         }
         else if constexpr (std::is_same_v<T, parser::FuncType>) {
             // Convert parser FuncType to semantic FuncType
@@ -1416,6 +1546,11 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
     if (path.segments.empty()) return make_unit();
 
     const auto& name = path.segments.back();
+
+    // Handle 'This' type in impl blocks
+    if (name == "This" && current_self_type_) {
+        return current_self_type_;
+    }
 
     auto& builtins = env_.builtin_types();
     auto it = builtins.find(name);
