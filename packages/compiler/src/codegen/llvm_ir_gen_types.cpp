@@ -36,11 +36,55 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (ty == "float") return types::make_primitive(types::PrimitiveKind::F32);
             if (ty == "double") return types::make_f64();
             if (ty == "ptr") return types::make_str(); // Assume string for now
-            // For struct types, try to extract
+            // For struct types, try to extract and demangle generic types
             if (ty.starts_with("%struct.")) {
-                std::string name = ty.substr(8);
+                std::string mangled = ty.substr(8);
+
+                // Check if this is a generic type (contains __ separator)
+                auto sep_pos = mangled.find("__");
+                if (sep_pos != std::string::npos) {
+                    // Parse mangled name: Maybe__I32 -> Maybe[I32]
+                    std::string base_name = mangled.substr(0, sep_pos);
+                    std::string type_args_str = mangled.substr(sep_pos + 2);
+
+                    // Split type args by __ and create nested types
+                    std::vector<types::TypePtr> type_args;
+                    size_t pos = 0;
+                    while (pos < type_args_str.size()) {
+                        auto next_sep = type_args_str.find("__", pos);
+                        std::string arg = (next_sep == std::string::npos)
+                            ? type_args_str.substr(pos)
+                            : type_args_str.substr(pos, next_sep - pos);
+
+                        // Create type for this arg
+                        types::TypePtr arg_type;
+                        if (arg == "I32") arg_type = types::make_i32();
+                        else if (arg == "I64") arg_type = types::make_i64();
+                        else if (arg == "Bool") arg_type = types::make_bool();
+                        else if (arg == "Str") arg_type = types::make_str();
+                        else if (arg == "F32") arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                        else if (arg == "F64") arg_type = types::make_f64();
+                        else if (arg == "Unit") arg_type = types::make_unit();
+                        else {
+                            // Named type without generics
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::NamedType{arg, "", {}};
+                            arg_type = t;
+                        }
+                        type_args.push_back(arg_type);
+
+                        if (next_sep == std::string::npos) break;
+                        pos = next_sep + 2;
+                    }
+
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{base_name, "", std::move(type_args)};
+                    return result;
+                }
+
+                // Non-generic struct type
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::NamedType{name, "", {}};
+                result->kind = types::NamedType{mangled, "", {}};
                 return result;
             }
         }
@@ -705,7 +749,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (has_type_name) {
         // Check if this is a known struct type (not a variable)
         bool is_type_name = struct_types_.count(type_name) > 0 ||
-                           type_name == "List" || type_name == "HashMap" || type_name == "Buffer";
+                           type_name == "List" || type_name == "HashMap" || type_name == "Buffer" ||
+                           type_name == "File" || type_name == "Path";
 
         // Also check it's not a local variable
         if (is_type_name && locals_.count(type_name) == 0) {
@@ -769,6 +814,186 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
             }
 
+            // File static methods - methods that return File need to construct %struct.File
+            if (type_name == "File") {
+                if (method == "open_read") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    // Call runtime to get handle
+                    std::string handle = fresh_reg();
+                    emit_line("  " + handle + " = call ptr @file_open_read(ptr " + path_arg + ")");
+                    // Construct File struct with the handle
+                    std::string file_ptr = fresh_reg();
+                    emit_line("  " + file_ptr + " = alloca %struct.File");
+                    std::string handle_field = fresh_reg();
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  store ptr " + handle + ", ptr " + handle_field);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
+                    last_expr_type_ = "%struct.File";
+                    return result;
+                }
+                if (method == "open_write") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    // Call runtime to get handle
+                    std::string handle = fresh_reg();
+                    emit_line("  " + handle + " = call ptr @file_open_write(ptr " + path_arg + ")");
+                    // Construct File struct with the handle
+                    std::string file_ptr = fresh_reg();
+                    emit_line("  " + file_ptr + " = alloca %struct.File");
+                    std::string handle_field = fresh_reg();
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  store ptr " + handle + ", ptr " + handle_field);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
+                    last_expr_type_ = "%struct.File";
+                    return result;
+                }
+                if (method == "open_append") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    // Call runtime to get handle
+                    std::string handle = fresh_reg();
+                    emit_line("  " + handle + " = call ptr @file_open_append(ptr " + path_arg + ")");
+                    // Construct File struct with the handle
+                    std::string file_ptr = fresh_reg();
+                    emit_line("  " + file_ptr + " = alloca %struct.File");
+                    std::string handle_field = fresh_reg();
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  store ptr " + handle + ", ptr " + handle_field);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
+                    last_expr_type_ = "%struct.File";
+                    return result;
+                }
+                if (method == "read_all") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @file_read_all(ptr " + path_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "write_all") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string content_arg = gen_expr(*call.args[1]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @file_write_all(ptr " + path_arg + ", ptr " + content_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "append_all") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string content_arg = gen_expr(*call.args[1]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @file_append_all(ptr " + path_arg + ", ptr " + content_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+            }
+
+            // Path static methods
+            if (type_name == "Path") {
+                if (method == "exists") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_exists(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "is_file") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_is_file(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "is_dir") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_is_dir(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "create_dir") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_create_dir(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "create_dir_all") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_create_dir_all(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "remove") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_remove(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "remove_dir") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_remove_dir(ptr " + path_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "rename") {
+                    std::string from_arg = gen_expr(*call.args[0]);
+                    std::string to_arg = gen_expr(*call.args[1]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_rename(ptr " + from_arg + ", ptr " + to_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "copy") {
+                    std::string from_arg = gen_expr(*call.args[0]);
+                    std::string to_arg = gen_expr(*call.args[1]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call i1 @path_copy(ptr " + from_arg + ", ptr " + to_arg + ")");
+                    last_expr_type_ = "i1";
+                    return result;
+                }
+                if (method == "join") {
+                    std::string base_arg = gen_expr(*call.args[0]);
+                    std::string child_arg = gen_expr(*call.args[1]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @path_join(ptr " + base_arg + ", ptr " + child_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "parent") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @path_parent(ptr " + path_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "filename") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @path_filename(ptr " + path_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "extension") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @path_extension(ptr " + path_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "absolute") {
+                    std::string path_arg = gen_expr(*call.args[0]);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @path_absolute(ptr " + path_arg + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+            }
+
             // Unknown static method - report error
             report_error("Unknown static method: " + type_name + "." + method, call.span);
             return "0";
@@ -777,6 +1002,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
     // Generate receiver (the object the method is called on)
     std::string receiver = gen_expr(*call.receiver);
+
+    // For struct instance methods (like File), we also need the pointer to the receiver
+    // gen_expr loads the value, but getelementptr needs a pointer
+    std::string receiver_ptr;
+    if (call.receiver->is<parser::IdentExpr>()) {
+        const auto& ident = call.receiver->as<parser::IdentExpr>();
+        auto it = locals_.find(ident.name);
+        if (it != locals_.end()) {
+            receiver_ptr = it->second.reg;  // Use alloca pointer directly
+        }
+    }
 
     // Handle Ptr[T] methods
     types::TypePtr receiver_type = infer_expr_type(*call.receiver);
@@ -1042,7 +1278,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // Get receiver pointer (not the loaded value)
             // For identifiers, use the alloca directly
-            std::string receiver_ptr;
+            std::string impl_receiver_ptr;
             if (call.receiver->is<parser::IdentExpr>()) {
                 const auto& ident = call.receiver->as<parser::IdentExpr>();
                 auto it = locals_.find(ident.name);
@@ -1050,21 +1286,21 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     // If the variable stores a pointer (like 'this' parameter),
                     // we need to load it to get the actual pointer value
                     if (it->second.type == "ptr") {
-                        receiver_ptr = receiver;  // Use the loaded value
+                        impl_receiver_ptr = receiver;  // Use the loaded value
                     } else {
-                        receiver_ptr = it->second.reg;  // Use alloca pointer directly
+                        impl_receiver_ptr = it->second.reg;  // Use alloca pointer directly
                     }
                 } else {
-                    receiver_ptr = receiver;  // Fall back to generated value
+                    impl_receiver_ptr = receiver;  // Fall back to generated value
                 }
             } else {
                 // For other expressions, receiver is already a pointer
-                receiver_ptr = receiver;
+                impl_receiver_ptr = receiver;
             }
 
             // Build argument list: self (receiver ptr) + args
             std::vector<std::pair<std::string, std::string>> typed_args;
-            typed_args.push_back({"ptr", receiver_ptr});  // self reference
+            typed_args.push_back({"ptr", impl_receiver_ptr});  // self reference
 
             for (const auto& arg : call.args) {
                 std::string val = gen_expr(*arg);
@@ -1140,6 +1376,60 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     return result;
                 }
             }
+        }
+    }
+
+    // File instance methods - use receiver_ptr (alloca) instead of receiver (loaded value)
+    // For getelementptr, we need a pointer, not a loaded struct value
+    if (method == "is_open" || method == "read_line" || method == "write_str" ||
+        method == "size" || method == "close") {
+        // Get pointer to the File struct (either from alloca or create temp)
+        std::string file_ptr = receiver_ptr;
+        if (file_ptr.empty()) {
+            // Receiver is a complex expression - store to temp alloca
+            file_ptr = fresh_reg();
+            emit_line("  " + file_ptr + " = alloca %struct.File");
+            emit_line("  store %struct.File " + receiver + ", ptr " + file_ptr);
+        }
+
+        // Get handle field from File struct
+        std::string handle_field_ptr = fresh_reg();
+        emit_line("  " + handle_field_ptr + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+        std::string handle = fresh_reg();
+        emit_line("  " + handle + " = load ptr, ptr " + handle_field_ptr);
+
+        if (method == "is_open") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i1 @file_is_open(ptr " + handle + ")");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        if (method == "read_line") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @file_read_line(ptr " + handle + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        if (method == "write_str") {
+            if (call.args.empty()) {
+                report_error("write_str requires a content argument", call.span);
+                return "0";
+            }
+            std::string content_arg = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i1 @file_write_str(ptr " + handle + ", ptr " + content_arg + ")");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        if (method == "size") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @file_size(ptr " + handle + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+        if (method == "close") {
+            emit_line("  call void @file_close(ptr " + handle + ")");
+            return "void";
         }
     }
 

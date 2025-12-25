@@ -12,9 +12,9 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string cond = gen_expr(*if_expr.condition);
 
     // If condition is not already i1 (bool), convert it
-    // This handles user-defined functions that return Bool but are generated as i32
-    if (!is_bool_expr(*if_expr.condition, locals_)) {
-        // Condition might be i32, convert to i1 by comparing with 0
+    // Use last_expr_type_ which is set by gen_expr for accurate type info
+    if (last_expr_type_ != "i1") {
+        // Condition is not i1, convert to i1 by comparing with 0
         std::string bool_cond = fresh_reg();
         emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
         cond = bool_cond;
@@ -104,7 +104,7 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
     std::string cond = gen_expr(*ternary.condition);
 
     // Convert condition to i1 if needed
-    if (!is_bool_expr(*ternary.condition, locals_)) {
+    if (last_expr_type_ != "i1") {
         std::string bool_cond = fresh_reg();
         emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
         cond = bool_cond;
@@ -365,7 +365,7 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     std::string cond = gen_expr(*while_expr.condition);
 
     // If condition is not already i1 (bool), convert it
-    if (!is_bool_expr(*while_expr.condition, locals_)) {
+    if (last_expr_type_ != "i1") {
         std::string bool_cond = fresh_reg();
         emit_line("  " + bool_cond + " = icmp ne i32 " + cond + ", 0");
         cond = bool_cond;

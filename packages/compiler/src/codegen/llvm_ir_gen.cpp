@@ -203,7 +203,11 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
     if (!type) return "void";
 
     if (type->is<types::PrimitiveType>()) {
-        return types::primitive_kind_to_string(type->as<types::PrimitiveType>().kind);
+        auto kind = type->as<types::PrimitiveType>().kind;
+        // Special handling for Unit and Never - symbols invalid in LLVM identifiers
+        if (kind == types::PrimitiveKind::Unit) return "Unit";
+        if (kind == types::PrimitiveKind::Never) return "Never";
+        return types::primitive_kind_to_string(kind);
     }
     else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
@@ -392,6 +396,88 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
     }, type.kind);
 }
 
+
+// ============ Type Unification ============
+// Unify a parser type pattern with a semantic type to extract type bindings.
+// For example: unify(Maybe[T], Maybe[I32], {T}) -> {T: I32}
+
+void LLVMIRGen::unify_types(
+    const parser::Type& pattern,
+    const types::TypePtr& concrete,
+    const std::unordered_set<std::string>& generics,
+    std::unordered_map<std::string, types::TypePtr>& bindings
+) {
+    if (!concrete) return;
+
+    std::visit([this, &concrete, &generics, &bindings](const auto& p) {
+        using T = std::decay_t<decltype(p)>;
+
+        if constexpr (std::is_same_v<T, parser::NamedType>) {
+            // Get the pattern's name
+            std::string pattern_name;
+            if (!p.path.segments.empty()) {
+                pattern_name = p.path.segments.back();
+            }
+
+            // Check if this is a generic parameter we're looking for
+            if (generics.count(pattern_name) > 0) {
+                // Found a binding: T = concrete
+                bindings[pattern_name] = concrete;
+                return;
+            }
+
+            // Not a generic param - try to match structurally
+            if (auto* named = std::get_if<types::NamedType>(&concrete->kind)) {
+                // If both are the same named type (e.g., Maybe), match type args
+                if (named->name == pattern_name && p.generics.has_value()) {
+                    const auto& pattern_args = p.generics->args;
+                    const auto& concrete_args = named->type_args;
+
+                    for (size_t i = 0; i < pattern_args.size() && i < concrete_args.size(); ++i) {
+                        unify_types(*pattern_args[i], concrete_args[i], generics, bindings);
+                    }
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::RefType>) {
+            if (auto* ref = std::get_if<types::RefType>(&concrete->kind)) {
+                unify_types(*p.inner, ref->inner, generics, bindings);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::PtrType>) {
+            if (auto* ptr = std::get_if<types::PtrType>(&concrete->kind)) {
+                unify_types(*p.inner, ptr->inner, generics, bindings);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::ArrayType>) {
+            if (auto* arr = std::get_if<types::ArrayType>(&concrete->kind)) {
+                unify_types(*p.element, arr->element, generics, bindings);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::SliceType>) {
+            if (auto* slice = std::get_if<types::SliceType>(&concrete->kind)) {
+                unify_types(*p.element, slice->element, generics, bindings);
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::TupleType>) {
+            if (auto* tup = std::get_if<types::TupleType>(&concrete->kind)) {
+                for (size_t i = 0; i < p.elements.size() && i < tup->elements.size(); ++i) {
+                    unify_types(*p.elements[i], tup->elements[i], generics, bindings);
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::FuncType>) {
+            if (auto* func = std::get_if<types::FuncType>(&concrete->kind)) {
+                for (size_t i = 0; i < p.params.size() && i < func->params.size(); ++i) {
+                    unify_types(*p.params[i], func->params[i], generics, bindings);
+                }
+                if (p.return_type && func->return_type) {
+                    unify_types(*p.return_type, func->return_type, generics, bindings);
+                }
+            }
+        }
+    }, pattern.kind);
+}
 auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
     std::string name = "@.str." + std::to_string(string_literals_.size());
     string_literals_.emplace_back(name, value);
@@ -519,6 +605,10 @@ void LLVMIRGen::emit_runtime_decls() {
     // String type: { ptr, i64 } (pointer to data, length)
     emit_line("; Runtime type declarations");
     emit_line("%struct.tml_str = type { ptr, i64 }");
+
+    // File I/O types (from std::file)
+    emit_line("%struct.File = type { ptr }");  // handle field
+    emit_line("%struct.Path = type { ptr }");  // path string field
     emit_line("");
 
     // External C functions
@@ -713,6 +803,39 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i64 @buffer_remaining(ptr)");
     emit_line("declare void @buffer_clear(ptr)");
     emit_line("declare void @buffer_reset_read(ptr)");
+    emit_line("");
+
+    // File I/O runtime declarations
+    emit_line("; File I/O runtime");
+    emit_line("declare ptr @file_open_read(ptr)");
+    emit_line("declare ptr @file_open_write(ptr)");
+    emit_line("declare ptr @file_open_append(ptr)");
+    emit_line("declare void @file_close(ptr)");
+    emit_line("declare i1 @file_is_open(ptr)");
+    emit_line("declare ptr @file_read_line(ptr)");
+    emit_line("declare i1 @file_write_str(ptr, ptr)");
+    emit_line("declare i64 @file_size(ptr)");
+    emit_line("declare ptr @file_read_all(ptr)");
+    emit_line("declare i1 @file_write_all(ptr, ptr)");
+    emit_line("declare i1 @file_append_all(ptr, ptr)");
+    emit_line("");
+
+    // Path utilities runtime declarations
+    emit_line("; Path utilities runtime");
+    emit_line("declare i1 @path_exists(ptr)");
+    emit_line("declare i1 @path_is_file(ptr)");
+    emit_line("declare i1 @path_is_dir(ptr)");
+    emit_line("declare i1 @path_create_dir(ptr)");
+    emit_line("declare i1 @path_create_dir_all(ptr)");
+    emit_line("declare i1 @path_remove(ptr)");
+    emit_line("declare i1 @path_remove_dir(ptr)");
+    emit_line("declare i1 @path_rename(ptr, ptr)");
+    emit_line("declare i1 @path_copy(ptr, ptr)");
+    emit_line("declare ptr @path_join(ptr, ptr)");
+    emit_line("declare ptr @path_parent(ptr)");
+    emit_line("declare ptr @path_filename(ptr)");
+    emit_line("declare ptr @path_extension(ptr)");
+    emit_line("declare ptr @path_absolute(ptr)");
     emit_line("");
 
     // String utilities

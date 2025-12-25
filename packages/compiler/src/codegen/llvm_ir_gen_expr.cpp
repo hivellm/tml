@@ -131,9 +131,19 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
             const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
 
-            if (variant_name == ident.name && payload_types.empty()) {
+                        if (variant_name == ident.name && payload_types.empty()) {
                 // Found unit variant - create enum value with just the tag
                 std::string enum_type = "%struct." + enum_name;
+
+                // For generic enums, try to infer the correct mangled type from context
+                // If we're in a function with a return type like Maybe__I32, use that
+                if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
+                    std::string prefix = "%struct." + enum_name + "__";
+                    if (current_ret_type_.starts_with(prefix) ||
+                        current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                        enum_type = current_ret_type_;
+                    }
+                }
                 std::string result = fresh_reg();
                 std::string enum_val = fresh_reg();
 

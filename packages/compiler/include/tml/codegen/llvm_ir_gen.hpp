@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <set>
 
@@ -206,6 +207,15 @@ private:
         const parser::Type& type,
         const std::unordered_map<std::string, types::TypePtr>& subs
     ) -> types::TypePtr;
+
+    // Helper: unify a parser type pattern with a semantic type to extract type bindings
+    // Example: unify(Maybe[T], Maybe[I32], {T}) -> {T: I32}
+    void unify_types(
+        const parser::Type& pattern,
+        const types::TypePtr& concrete,
+        const std::unordered_set<std::string>& generics,
+        std::unordered_map<std::string, types::TypePtr>& bindings
+    );
 
     // Module structure
     void emit_header();

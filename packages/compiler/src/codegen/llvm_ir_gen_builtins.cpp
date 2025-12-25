@@ -3,6 +3,7 @@
 
 #include "tml/codegen/llvm_ir_gen.hpp"
 
+
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
@@ -933,6 +934,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             // Convert i32 to i1
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
             return bool_result;
         }
         return "0";
@@ -1503,6 +1505,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             emit_line("  " + result + " = call i32 @str_eq(ptr " + a + ", ptr " + b + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
             return bool_result;
         }
         return "0";
@@ -1528,6 +1531,12 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     // If we have expected type from context, use it (for multi-param generics)
                     if (!expected_enum_type_.empty()) {
                         enum_type = expected_enum_type_;
+                    } else if (!current_ret_type_.empty() &&
+                               current_ret_type_.find("%struct." + gen_enum_name + "__") == 0) {
+                        // Function returns this generic enum type - use the return type directly
+                        // This handles multi-param generics like Outcome[T, E] where we can only
+                        // infer T from Ok(value) but need E from context
+                        enum_type = current_ret_type_;
                     } else {
                         // Infer type from arguments
                         std::vector<types::TypePtr> inferred_type_args;
@@ -1679,21 +1688,42 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (pending_func_it != pending_generic_funcs_.end()) {
         const auto& gen_func = *pending_func_it->second;
 
-        // Infer type arguments from call arguments
-        std::vector<types::TypePtr> inferred_type_args;
-        for (size_t i = 0; i < call.args.size() && i < gen_func.generics.size(); ++i) {
+        // Build set of generic parameter names for unification
+        std::unordered_set<std::string> generic_names;
+        for (const auto& g : gen_func.generics) {
+            generic_names.insert(g.name);
+        }
+
+        // Infer type arguments using unification
+        // For each argument, unify the parameter type pattern with the argument type
+        std::unordered_map<std::string, types::TypePtr> bindings;
+        for (size_t i = 0; i < call.args.size() && i < gen_func.params.size(); ++i) {
             types::TypePtr arg_type = infer_expr_type(*call.args[i]);
-            inferred_type_args.push_back(arg_type);
+            
+            unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
+        }
+        
+        for (const auto& [k, v] : bindings) {
+            
+        }
+
+        // Extract inferred type args in the order of generic parameters
+        std::vector<types::TypePtr> inferred_type_args;
+        for (const auto& g : gen_func.generics) {
+            auto it = bindings.find(g.name);
+            if (it != bindings.end()) {
+                inferred_type_args.push_back(it->second);
+            } else {
+                // Generic not inferred - use Unit as fallback
+                inferred_type_args.push_back(types::make_unit());
+            }
         }
 
         // Register and get mangled name
         std::string mangled_name = require_func_instantiation(fn_name, inferred_type_args);
 
-        // Create substitution map for return type
-        std::unordered_map<std::string, types::TypePtr> subs;
-        for (size_t i = 0; i < gen_func.generics.size() && i < inferred_type_args.size(); ++i) {
-            subs[gen_func.generics[i].name] = inferred_type_args[i];
-        }
+        // Use bindings as substitution map for return type
+        std::unordered_map<std::string, types::TypePtr>& subs = bindings;
 
         // Get substituted return type
         std::string ret_type = "void";
