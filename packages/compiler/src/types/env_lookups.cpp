@@ -4,15 +4,11 @@
 namespace tml::types {
 
 auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<StructDef> {
-    // 1. Check local module
     auto it = structs_.find(name);
     if (it != structs_.end()) return it->second;
-
-    // 2. Check imported symbols
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
-            // Parse module_path::symbol_name
             auto pos = import_path->rfind("::");
             if (pos != std::string::npos) {
                 std::string module_path = import_path->substr(0, pos);
@@ -21,16 +17,12 @@ auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<Stru
             }
         }
     }
-
     return std::nullopt;
 }
 
 auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDef> {
-    // 1. Check local module
     auto it = enums_.find(name);
     if (it != enums_.end()) return it->second;
-
-    // 2. Check imported symbols
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -42,16 +34,12 @@ auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDe
             }
         }
     }
-
     return std::nullopt;
 }
 
 auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef> {
-    // 1. Check local module
     auto it = behaviors_.find(name);
     if (it != behaviors_.end()) return it->second;
-
-    // 2. Check imported symbols
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -63,16 +51,40 @@ auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<Be
             }
         }
     }
-
     return std::nullopt;
 }
 
-auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSig> {
-    // 1. Check local module
-    auto it = functions_.find(name);
-    if (it != functions_.end()) return it->second;
+bool TypeEnv::types_match(const TypePtr &a, const TypePtr &b) {
+    if (!a || !b) return false;
+    if (a->kind.index() != b->kind.index()) return false;
+    if (a->is<PrimitiveType>() && b->is<PrimitiveType>()) {
+        return a->as<PrimitiveType>().kind == b->as<PrimitiveType>().kind;
+    }
+    if (a->is<NamedType>() && b->is<NamedType>()) {
+        return a->as<NamedType>().name == b->as<NamedType>().name;
+    }
+    if (a->is<RefType>() && b->is<RefType>()) {
+        const auto& ref_a = a->as<RefType>();
+        const auto& ref_b = b->as<RefType>();
+        return ref_a.is_mut == ref_b.is_mut && types_match(ref_a.inner, ref_b.inner);
+    }
+    if (a->is<FuncType>() && b->is<FuncType>()) {
+        const auto& func_a = a->as<FuncType>();
+        const auto& func_b = b->as<FuncType>();
+        if (func_a.params.size() != func_b.params.size()) return false;
+        for (size_t i = 0; i < func_a.params.size(); ++i) {
+            if (!types_match(func_a.params[i], func_b.params[i])) return false;
+        }
+        return types_match(func_a.return_type, func_b.return_type);
+    }
+    return false;
+}
 
-    // 2. Check imported symbols
+auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSig> {
+    auto it = functions_.find(name);
+    if (it != functions_.end() && !it->second.empty()) {
+        return it->second[0];
+    }
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -84,16 +96,57 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
             }
         }
     }
-
     return std::nullopt;
 }
 
+auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<TypePtr>& arg_types) const -> std::optional<FuncSig> {
+    auto it = functions_.find(name);
+    if (it != functions_.end()) {
+        for (const auto& sig : it->second) {
+            if (sig.params.size() != arg_types.size()) continue;
+            bool matches = true;
+            for (size_t i = 0; i < arg_types.size(); ++i) {
+                if (!types_match(arg_types[i], sig.params[i])) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) return sig;
+        }
+    }
+    if (module_registry_) {
+        auto import_path = resolve_imported_symbol(name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                std::string module_path = import_path->substr(0, pos);
+                std::string symbol_name = import_path->substr(pos + 2);
+                auto sig = module_registry_->lookup_function(module_path, symbol_name);
+                if (sig && sig->params.size() == arg_types.size()) {
+                    bool matches = true;
+                    for (size_t i = 0; i < arg_types.size(); ++i) {
+                        if (!types_match(arg_types[i], sig->params[i])) {
+                            matches = false;
+                            break;
+                        }
+                    }
+                    if (matches) return sig;
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+auto TypeEnv::get_all_overloads(const std::string& name) const -> std::vector<FuncSig> {
+    auto it = functions_.find(name);
+    if (it != functions_.end()) return it->second;
+    return {};
+}
+
 auto TypeEnv::lookup_type_alias(const std::string& name) const -> std::optional<TypePtr> {
-    // 1. Check local module
     auto it = type_aliases_.find(name);
     if (it != type_aliases_.end()) return it->second;
-
-    // 2. Check imported symbols
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -105,7 +158,6 @@ auto TypeEnv::lookup_type_alias(const std::string& name) const -> std::optional<
             }
         }
     }
-
     return std::nullopt;
 }
 
@@ -114,9 +166,7 @@ auto TypeEnv::all_enums() const -> const std::unordered_map<std::string, EnumDef
 }
 
 auto TypeEnv::get_module(const std::string &module_path) const -> std::optional<Module> {
-    if (!module_registry_) {
-        return std::nullopt;
-    }
+    if (!module_registry_) return std::nullopt;
     return module_registry_->get_module(module_path);
 }
 
@@ -126,9 +176,7 @@ void TypeEnv::register_impl(const std::string& type_name, const std::string& beh
 
 bool TypeEnv::type_implements(const std::string& type_name, const std::string& behavior_name) const {
     auto it = behavior_impls_.find(type_name);
-    if (it == behavior_impls_.end()) {
-        return false;
-    }
+    if (it == behavior_impls_.end()) return false;
     const auto& behaviors = it->second;
     return std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end();
 }

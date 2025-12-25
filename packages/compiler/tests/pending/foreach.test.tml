@@ -18,7 +18,7 @@ func test_foreach_list() -> I32 {
         sum = sum + item
     }
 
-    assert_eq_i32(sum, 150, "foreach should sum all list elements (10+20+30+40+50)")
+    assert_eq(sum, 150, "foreach should sum all list elements (10+20+30+40+50)")
     list_destroy(list)
     return 0
 }
@@ -38,8 +38,8 @@ func test_foreach_list_with_index() -> I32 {
         sum = sum + val
     }
 
-    assert_eq_i32(count, 3, "foreach should iterate 3 times")
-    assert_eq_i32(sum, 30, "foreach should sum to 30 (5+10+15)")
+    assert_eq(count, 3, "foreach should iterate 3 times")
+    assert_eq(sum, 30, "foreach should sum to 30 (5+10+15)")
     list_destroy(list)
     return 0
 }
@@ -53,7 +53,7 @@ func test_foreach_empty_list() -> I32 {
         count = count + 1
     }
 
-    assert_eq_i32(count, 0, "foreach over empty list should not execute body")
+    assert_eq(count, 0, "foreach over empty list should not execute body")
     list_destroy(list)
     return 0
 }
@@ -73,7 +73,7 @@ func test_foreach_with_break() -> I32 {
         sum = sum + val
     }
 
-    assert_eq_i32(sum, 6, "foreach with break should sum 1+2+3")
+    assert_eq(sum, 6, "foreach with break should sum 1+2+3")
     list_destroy(list)
     return 0
 }
@@ -94,7 +94,7 @@ func test_foreach_with_continue() -> I32 {
         sum = sum + val
     }
 
-    assert_eq_i32(sum, 9, "foreach with continue should sum only odd numbers (1+3+5)")
+    assert_eq(sum, 9, "foreach with continue should sum only odd numbers (1+3+5)")
     list_destroy(list)
     return 0
 }

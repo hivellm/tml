@@ -1,0 +1,759 @@
+// Comprehensive pointer tests for TML
+// Tests: read, write, offset, is_null for all supported types
+
+use test
+
+// ============================================================================
+// SECTION 1: Basic I32 Pointer Operations
+// ============================================================================
+
+@test
+func test_ptr_i32_read_basic() {
+    let mut x: I32 = 42
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, 42, "Ptr.read() should return 42")
+}
+
+@test
+func test_ptr_i32_read_zero() {
+    let mut x: I32 = 0
+    let mut result: I32 = -1
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, 0, "Ptr.read() should return 0")
+}
+
+@test
+func test_ptr_i32_read_negative() {
+    let mut x: I32 = -999
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, -999, "Ptr.read() should return negative value")
+}
+
+@test
+func test_ptr_i32_write_basic() {
+    let mut x: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(100)
+    }
+
+    assert_eq(x, 100, "Ptr.write() should set value to 100")
+}
+
+@test
+func test_ptr_i32_write_zero() {
+    let mut x: I32 = 999
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(0)
+    }
+
+    assert_eq(x, 0, "Ptr.write() should set value to 0")
+}
+
+@test
+func test_ptr_i32_write_negative() {
+    let mut x: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(-12345)
+    }
+
+    assert_eq(x, -12345, "Ptr.write() should set negative value")
+}
+
+@test
+func test_ptr_i32_multiple_writes() {
+    let mut x: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(1)
+        p.write(2)
+        p.write(3)
+        p.write(42)
+    }
+
+    assert_eq(x, 42, "Last write should persist")
+}
+
+@test
+func test_ptr_i32_read_after_write() {
+    let mut x: I32 = 0
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(777)
+        result = p.read()
+    }
+
+    assert_eq(result, 777, "Read after write should return written value")
+}
+
+// ============================================================================
+// SECTION 2: Bool Pointer Operations
+// ============================================================================
+
+@test
+func test_ptr_bool_read_true() {
+    let mut flag: Bool = true
+    let mut result: Bool = false
+
+    lowlevel {
+        let p: *Bool = &flag
+        result = p.read()
+    }
+
+    assert_eq(result, true, "Ptr.read() should return true")
+}
+
+@test
+func test_ptr_bool_read_false() {
+    let mut flag: Bool = false
+    let mut result: Bool = true
+
+    lowlevel {
+        let p: *Bool = &flag
+        result = p.read()
+    }
+
+    assert_eq(result, false, "Ptr.read() should return false")
+}
+
+@test
+func test_ptr_bool_write_true() {
+    let mut flag: Bool = false
+
+    lowlevel {
+        let p: *Bool = &flag
+        p.write(true)
+    }
+
+    assert_eq(flag, true, "Ptr.write() should set true")
+}
+
+@test
+func test_ptr_bool_write_false() {
+    let mut flag: Bool = true
+
+    lowlevel {
+        let p: *Bool = &flag
+        p.write(false)
+    }
+
+    assert_eq(flag, false, "Ptr.write() should set false")
+}
+
+@test
+func test_ptr_bool_toggle() {
+    let mut flag: Bool = false
+    let mut val: Bool = false
+
+    lowlevel {
+        let p: *Bool = &flag
+
+        // Toggle: read, negate, write
+        val = p.read()
+    }
+
+    // Can't negate inside lowlevel easily, so check initial read
+    assert_eq(val, false, "Initial read should be false")
+
+    lowlevel {
+        let p2: *Bool = &flag
+        p2.write(true)
+    }
+
+    assert_eq(flag, true, "After write should be true")
+}
+
+// ============================================================================
+// SECTION 3: is_null Tests
+// ============================================================================
+
+@test
+func test_ptr_is_null_i32() {
+    let mut x: I32 = 42
+    let mut result: Bool = true
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.is_null()
+    }
+
+    assert_eq(result, false, "Pointer to stack var should not be null")
+}
+
+@test
+func test_ptr_is_null_bool() {
+    let mut flag: Bool = true
+    let mut result: Bool = true
+
+    lowlevel {
+        let p: *Bool = &flag
+        result = p.is_null()
+    }
+
+    assert_eq(result, false, "Pointer to bool should not be null")
+}
+
+@test
+func test_ptr_is_null_multiple_vars() {
+    let mut a: I32 = 1
+    let mut b: I32 = 2
+    let mut c: I32 = 3
+    let mut null_a: Bool = true
+    let mut null_b: Bool = true
+    let mut null_c: Bool = true
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+        let pc: *I32 = &c
+        null_a = pa.is_null()
+        null_b = pb.is_null()
+        null_c = pc.is_null()
+    }
+
+    assert_eq(null_a, false, "Pointer a should not be null")
+    assert_eq(null_b, false, "Pointer b should not be null")
+    assert_eq(null_c, false, "Pointer c should not be null")
+}
+
+// ============================================================================
+// SECTION 4: Offset Tests
+// ============================================================================
+
+@test
+func test_ptr_offset_zero() {
+    let mut x: I32 = 123
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        let p_offset: *I32 = p.offset(0)
+        result = p_offset.read()
+    }
+
+    assert_eq(result, 123, "Offset(0) should read same value")
+}
+
+@test
+func test_ptr_offset_chain() {
+    let mut x: I32 = 999
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        // Offset forward then back should give same location
+        let p1: *I32 = p.offset(1)
+        let p2: *I32 = p1.offset(-1)
+        result = p2.read()
+    }
+
+    assert_eq(result, 999, "Offset(1).offset(-1) should read original")
+}
+
+@test
+func test_ptr_offset_preserves_type() {
+    let mut x: I32 = 42
+    let mut result: I32 = 0
+    let mut null_check: Bool = true
+
+    lowlevel {
+        let p: *I32 = &x
+        let p_off: *I32 = p.offset(0)
+        result = p_off.read()
+        null_check = p_off.is_null()
+    }
+
+    assert_eq(result, 42, "Offset pointer should read correctly")
+    assert_eq(null_check, false, "Offset pointer should not be null")
+}
+
+// ============================================================================
+// SECTION 5: Multiple Pointers
+// ============================================================================
+
+@test
+func test_ptr_two_pointers_different_vars() {
+    let mut a: I32 = 10
+    let mut b: I32 = 20
+    let mut ra: I32 = 0
+    let mut rb: I32 = 0
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+        ra = pa.read()
+        rb = pb.read()
+    }
+
+    assert_eq(ra, 10, "Pointer a should read 10")
+    assert_eq(rb, 20, "Pointer b should read 20")
+}
+
+@test
+func test_ptr_swap_values() {
+    let mut a: I32 = 100
+    let mut b: I32 = 200
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+        let temp: I32 = pa.read()
+        pa.write(pb.read())
+        pb.write(temp)
+    }
+
+    assert_eq(a, 200, "After swap, a should be 200")
+    assert_eq(b, 100, "After swap, b should be 100")
+}
+
+@test
+func test_ptr_three_way_rotate() {
+    let mut a: I32 = 1
+    let mut b: I32 = 2
+    let mut c: I32 = 3
+
+    // Rotate: a <- b <- c <- a
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+        let pc: *I32 = &c
+
+        let temp: I32 = pa.read()
+        pa.write(pb.read())
+        pb.write(pc.read())
+        pc.write(temp)
+    }
+
+    assert_eq(a, 2, "After rotate, a should be 2")
+    assert_eq(b, 3, "After rotate, b should be 3")
+    assert_eq(c, 1, "After rotate, c should be 1")
+}
+
+@test
+func test_ptr_same_var_two_pointers() {
+    let mut x: I32 = 50
+    let mut r1: I32 = 0
+    let mut r2: I32 = 0
+
+    lowlevel {
+        let p1: *I32 = &x
+        let p2: *I32 = &x
+        r1 = p1.read()
+        r2 = p2.read()
+    }
+
+    assert_eq(r1, 50, "First pointer should read 50")
+    assert_eq(r2, 50, "Second pointer should also read 50")
+}
+
+@test
+func test_ptr_write_through_one_read_other() {
+    let mut x: I32 = 0
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p1: *I32 = &x
+        let p2: *I32 = &x
+        p1.write(999)
+        result = p2.read()
+    }
+
+    assert_eq(result, 999, "Write through p1, read through p2")
+}
+
+// ============================================================================
+// SECTION 6: Read-Modify-Write Patterns
+// ============================================================================
+
+@test
+func test_ptr_increment() {
+    let mut counter: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &counter
+        let val: I32 = p.read()
+        p.write(val + 1)
+    }
+
+    assert_eq(counter, 1, "Counter should be 1 after increment")
+}
+
+@test
+func test_ptr_decrement() {
+    let mut counter: I32 = 10
+
+    lowlevel {
+        let p: *I32 = &counter
+        let val: I32 = p.read()
+        p.write(val - 1)
+    }
+
+    assert_eq(counter, 9, "Counter should be 9 after decrement")
+}
+
+@test
+func test_ptr_multiply() {
+    let mut value: I32 = 7
+
+    lowlevel {
+        let p: *I32 = &value
+        let val: I32 = p.read()
+        p.write(val * 6)
+    }
+
+    assert_eq(value, 42, "7 * 6 should be 42")
+}
+
+@test
+func test_ptr_accumulate() {
+    let mut sum: I32 = 0
+
+    // Add 1 + 2 + 3 + 4 + 5 = 15
+    lowlevel {
+        let p1: *I32 = &sum
+        let v1: I32 = p1.read()
+        p1.write(v1 + 1)
+    }
+
+    lowlevel {
+        let p2: *I32 = &sum
+        let v2: I32 = p2.read()
+        p2.write(v2 + 2)
+    }
+
+    lowlevel {
+        let p3: *I32 = &sum
+        let v3: I32 = p3.read()
+        p3.write(v3 + 3)
+    }
+
+    lowlevel {
+        let p4: *I32 = &sum
+        let v4: I32 = p4.read()
+        p4.write(v4 + 4)
+    }
+
+    lowlevel {
+        let p5: *I32 = &sum
+        let v5: I32 = p5.read()
+        p5.write(v5 + 5)
+    }
+
+    assert_eq(sum, 15, "Sum should be 15")
+}
+
+// ============================================================================
+// SECTION 7: Edge Cases
+// ============================================================================
+
+@test
+func test_ptr_large_positive() {
+    let mut x: I32 = 2147483647
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, 2147483647, "Should read max I32")
+}
+
+@test
+func test_ptr_large_negative() {
+    let mut x: I32 = -2147483648
+    let mut result: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        result = p.read()
+    }
+
+    assert_eq(result, -2147483648, "Should read min I32")
+}
+
+@test
+func test_ptr_write_max_i32() {
+    let mut x: I32 = 0
+
+    lowlevel {
+        let p: *I32 = &x
+        p.write(2147483647)
+    }
+
+    assert_eq(x, 2147483647, "Should write max I32")
+}
+
+@test
+func test_ptr_nested_lowlevel() {
+    let mut x: I32 = 1
+    let mut y: I32 = 2
+
+    lowlevel {
+        let px: *I32 = &x
+        px.write(10)
+    }
+
+    lowlevel {
+        let py: *I32 = &y
+        py.write(20)
+    }
+
+    assert_eq(x, 10, "x should be 10")
+    assert_eq(y, 20, "y should be 20")
+}
+
+@test
+func test_ptr_conditional_write() {
+    let mut x: I32 = 0
+    let mut condition: Bool = true
+    let mut cond_val: Bool = false
+
+    lowlevel {
+        let c: *Bool = &condition
+        cond_val = c.read()
+    }
+
+    if cond_val {
+        lowlevel {
+            let p: *I32 = &x
+            p.write(42)
+        }
+    }
+
+    assert_eq(x, 42, "Conditional write should set 42")
+}
+
+@test
+func test_ptr_conditional_write_false() {
+    let mut x: I32 = 99
+    let mut condition: Bool = false
+    let mut cond_val: Bool = false
+
+    lowlevel {
+        let c: *Bool = &condition
+        cond_val = c.read()
+    }
+
+    if cond_val {
+        lowlevel {
+            let p: *I32 = &x
+            p.write(0)
+        }
+    }
+
+    assert_eq(x, 99, "Conditional write should not change value")
+}
+
+// ============================================================================
+// SECTION 8: Mixed Types
+// ============================================================================
+
+@test
+func test_ptr_mixed_i32_bool() {
+    let mut num: I32 = 0
+    let mut flag: Bool = false
+
+    lowlevel {
+        let pn: *I32 = &num
+        let pf: *Bool = &flag
+
+        pn.write(42)
+        pf.write(true)
+    }
+
+    assert_eq(num, 42, "I32 should be 42")
+    assert_eq(flag, true, "Bool should be true")
+}
+
+@test
+func test_ptr_multiple_types_read() {
+    let mut a: I32 = 100
+    let mut b: Bool = true
+    let mut c: I32 = 200
+    let mut ra: I32 = 0
+    let mut rb: Bool = false
+    let mut rc: I32 = 0
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *Bool = &b
+        let pc: *I32 = &c
+
+        ra = pa.read()
+        rb = pb.read()
+        rc = pc.read()
+    }
+
+    assert_eq(ra, 100, "a should be 100")
+    assert_eq(rb, true, "b should be true")
+    assert_eq(rc, 200, "c should be 200")
+}
+
+// ============================================================================
+// SECTION 9: Pointer Assignment and Reassignment
+// ============================================================================
+
+@test
+func test_ptr_reassign_pointer() {
+    let mut a: I32 = 10
+    let mut b: I32 = 20
+    let mut result: I32 = 0
+
+    lowlevel {
+        let mut p: *I32 = &a
+        result = p.read()  // Should be 10
+        p = &b
+        result = p.read()  // Should be 20
+    }
+
+    assert_eq(result, 20, "After reassignment, should read b")
+}
+
+@test
+func test_ptr_copy_pointer() {
+    let mut x: I32 = 777
+    let mut r1: I32 = 0
+    let mut r2: I32 = 0
+
+    lowlevel {
+        let p1: *I32 = &x
+        let p2: *I32 = p1  // Copy pointer
+
+        r1 = p1.read()
+        r2 = p2.read()
+    }
+
+    assert_eq(r1, 777, "Original pointer should read 777")
+    assert_eq(r2, 777, "Copied pointer should also read 777")
+}
+
+// ============================================================================
+// SECTION 10: Complex Patterns
+// ============================================================================
+
+@test
+func test_ptr_fibonacci_step() {
+    // One step of fibonacci: (a, b) -> (b, a+b)
+    let mut a: I32 = 5
+    let mut b: I32 = 8
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+
+        let old_a: I32 = pa.read()
+        let old_b: I32 = pb.read()
+
+        pa.write(old_b)
+        pb.write(old_a + old_b)
+    }
+
+    assert_eq(a, 8, "a should become old b (8)")
+    assert_eq(b, 13, "b should become old a + old b (13)")
+}
+
+@test
+func test_ptr_min_max() {
+    let mut min_val: I32 = 100
+    let mut max_val: I32 = -100
+    let mut val1: I32 = 50
+    let mut val2: I32 = -25
+    let mut val3: I32 = 75
+    let mut v1: I32 = 0
+    let mut v2: I32 = 0
+    let mut v3: I32 = 0
+    let mut current_min: I32 = 0
+    let mut current_max: I32 = 0
+
+    // Read all values through pointers
+    lowlevel {
+        let p1: *I32 = &val1
+        let p2: *I32 = &val2
+        let p3: *I32 = &val3
+        v1 = p1.read()
+        v2 = p2.read()
+        v3 = p3.read()
+    }
+
+    // Find min
+    current_min = min_val
+    if v1 < current_min { current_min = v1 }
+    if v2 < current_min { current_min = v2 }
+    if v3 < current_min { current_min = v3 }
+
+    // Find max
+    current_max = max_val
+    if v1 > current_max { current_max = v1 }
+    if v2 > current_max { current_max = v2 }
+    if v3 > current_max { current_max = v3 }
+
+    // Write results through pointers
+    lowlevel {
+        let pmin: *I32 = &min_val
+        let pmax: *I32 = &max_val
+        pmin.write(current_min)
+        pmax.write(current_max)
+    }
+
+    assert_eq(min_val, -25, "Min should be -25")
+    assert_eq(max_val, 75, "Max should be 75")
+}
+
+@test
+func test_ptr_counting_trues() {
+    let mut b1: Bool = true
+    let mut b2: Bool = false
+    let mut b3: Bool = true
+    let mut b4: Bool = true
+    let mut count: I32 = 0
+    let mut r1: Bool = false
+    let mut r2: Bool = false
+    let mut r3: Bool = false
+    let mut r4: Bool = false
+
+    // Read all bools through pointers
+    lowlevel {
+        let p1: *Bool = &b1
+        let p2: *Bool = &b2
+        let p3: *Bool = &b3
+        let p4: *Bool = &b4
+        r1 = p1.read()
+        r2 = p2.read()
+        r3 = p3.read()
+        r4 = p4.read()
+    }
+
+    // Count trues
+    if r1 { count = count + 1 }
+    if r2 { count = count + 1 }
+    if r3 { count = count + 1 }
+    if r4 { count = count + 1 }
+
+    assert_eq(count, 3, "Should count 3 true values")
+}

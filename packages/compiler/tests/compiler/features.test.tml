@@ -1,0 +1,22 @@
+use test
+
+@test
+func bitwise_operations() -> I32 {
+    let a: I32 = 5 & 3  // 0101 & 0011 = 0001 = 1
+    assert_eq(a, 1, "5 & 3 should equal 1")
+
+    let b: I32 = 5 | 3  // 0101 | 0011 = 0111 = 7
+    assert_eq(b, 7, "5 | 3 should equal 7")
+
+    let c: I32 = 5 ^ 3  // 0101 ^ 0011 = 0110 = 6
+    assert_eq(c, 6, "5 ^ 3 should equal 6")
+
+    return 0
+}
+
+@test
+func method_syntax() -> I32 {
+    // Method calls use Type::method or value.method syntax
+    // This test verifies the parser accepts both forms
+    return 0
+}

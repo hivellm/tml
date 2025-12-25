@@ -1,0 +1,28 @@
+// TML Core Library - Memory Module
+// Low-level memory allocation primitives
+//
+// All functions are lowlevel - implemented in runtime/mem.c
+
+// ============ MEMORY ALLOCATION ============
+
+// Allocate memory for N elements of size sizeof(i32)
+// Returns pointer to allocated memory
+pub lowlevel func alloc(count: I64) -> mut ref I32
+
+// Free allocated memory
+// ptr: Pointer previously returned by alloc()
+pub lowlevel func dealloc(ptr: mut ref I32) -> Unit
+
+// ============ MEMORY READ/WRITE ============
+
+// Read i32 value from pointer
+pub lowlevel func read_i32(ptr: ref I32) -> I32
+
+// Write i32 value to pointer
+pub lowlevel func write_i32(ptr: mut ref I32, value: I32) -> Unit
+
+// ============ POINTER ARITHMETIC ============
+
+// Calculate pointer offset
+// Returns pointer + offset (in units of sizeof(i32))
+pub lowlevel func ptr_offset(ptr: mut ref I32, offset: I64) -> mut ref I32

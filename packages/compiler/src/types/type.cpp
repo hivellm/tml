@@ -70,6 +70,13 @@ auto make_ref(TypePtr inner, bool is_mut) -> TypePtr {
     return type;
 }
 
+auto make_ptr(TypePtr inner, bool is_mut) -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = PtrType{is_mut, std::move(inner)};
+    type->id = next_type_id++;
+    return type;
+}
+
 auto make_array(TypePtr element, size_t size) -> TypePtr {
     auto type = std::make_shared<Type>();
     type->kind = ArrayType{std::move(element), size};

@@ -27,28 +27,28 @@ func test_str_len_long() -> I32 {
 @test
 func test_str_eq_same() -> I32 {
     let result: Bool = str_eq("hello", "hello")
-    assert_eq_bool(result, true, "Same strings should be equal")
+    assert_eq(result, true, "Same strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_different() -> I32 {
     let result: Bool = str_eq("hello", "world")
-    assert_eq_bool(result, false, "Different strings should not be equal")
+    assert_eq(result, false, "Different strings should not be equal")
     return 0
 }
 
 @test
 func test_str_eq_empty() -> I32 {
     let result: Bool = str_eq("", "")
-    assert_eq_bool(result, true, "Empty strings should be equal")
+    assert_eq(result, true, "Empty strings should be equal")
     return 0
 }
 
 @test
 func test_str_eq_case_sensitive() -> I32 {
     let result: Bool = str_eq("Hello", "hello")
-    assert_eq_bool(result, false, "String comparison should be case sensitive")
+    assert_eq(result, false, "String comparison should be case sensitive")
     return 0
 }
 

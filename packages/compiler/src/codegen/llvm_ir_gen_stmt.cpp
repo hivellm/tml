@@ -303,7 +303,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             if (let.init.has_value()) {
                 std::string closure_fn = gen_expr(*let.init.value());
                 // closure_fn is like "@tml_closure_0", store it as a function pointer
-                locals_[var_name] = VarInfo{closure_fn, "ptr"};
+                // Also capture closure info if it was a closure with captures
+                VarInfo info{closure_fn, "ptr", nullptr, std::nullopt};
+                if (last_closure_captures_.has_value()) {
+                    info.closure_captures = last_closure_captures_;
+                    last_closure_captures_ = std::nullopt;  // Clear after use
+                }
+                locals_[var_name] = info;
                 return;
             }
         }
@@ -318,7 +324,12 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // Store the pointer value in the alloca
         emit_line("  store ptr " + ptr_val + ", ptr " + alloca_reg);
         // Map variable to the alloca (gen_ident will load from it)
-        locals_[var_name] = VarInfo{alloca_reg, "ptr"};
+        // Also store semantic type for pointer method dispatch
+        types::TypePtr semantic_type = nullptr;
+        if (let.type_annotation) {
+            semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+        }
+        locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type};
         return;
     }
 

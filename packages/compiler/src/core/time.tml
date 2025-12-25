@@ -1,0 +1,42 @@
+// TML Core Library - Time Module
+// Low-level time primitives
+//
+// All functions are lowlevel - implemented in runtime/time.c
+
+// ============ TIME FUNCTIONS ============
+
+// Get current time in milliseconds
+// Suitable for benchmarking and timeouts
+pub lowlevel func time_ms() -> I32
+
+// Get current time in microseconds
+// Higher precision for performance measurement
+pub lowlevel func time_us() -> I64
+
+// Get current time in nanoseconds
+// Highest precision available
+pub lowlevel func time_ns() -> I64
+
+// Calculate elapsed milliseconds since start_ms
+// Handles overflow correctly
+pub lowlevel func elapsed_ms(start_ms: I32) -> I32
+
+// ============ INSTANT API ============
+
+// Capture current instant (in microseconds)
+// Use for measuring durations
+pub lowlevel func instant_now() -> I64
+
+// Calculate elapsed time since instant (in microseconds)
+// Returns duration in microseconds
+pub lowlevel func instant_elapsed(start: I64) -> I64
+
+// ============ DURATION API ============
+
+// Convert duration to milliseconds
+// duration_us: Duration in microseconds
+pub lowlevel func duration_as_millis(duration_us: I64) -> I64
+
+// Convert duration to seconds
+// duration_us: Duration in microseconds
+pub lowlevel func duration_as_secs(duration_us: I64) -> I64

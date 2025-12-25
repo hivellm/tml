@@ -24,6 +24,28 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string label_else = fresh_label("if.else");
     std::string label_end = fresh_label("if.end");
 
+    // Check if branches have trailing expressions (i.e., return values)
+    // If not, they return Unit and we should not generate a phi node
+    bool then_has_value = false;
+    bool else_has_value = false;
+
+    if (if_expr.then_branch->is<parser::BlockExpr>()) {
+        const auto& block = if_expr.then_branch->as<parser::BlockExpr>();
+        then_has_value = block.expr.has_value();
+    } else {
+        // Non-block expressions always have values
+        then_has_value = true;
+    }
+
+    if (if_expr.else_branch.has_value()) {
+        if (if_expr.else_branch.value()->is<parser::BlockExpr>()) {
+            const auto& block = if_expr.else_branch.value()->as<parser::BlockExpr>();
+            else_has_value = block.expr.has_value();
+        } else {
+            else_has_value = true;
+        }
+    }
+
     // Branch
     if (if_expr.else_branch.has_value()) {
         emit_line("  br i1 " + cond + ", label %" + label_then + ", label %" + label_else);
@@ -37,26 +59,20 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string then_val = gen_expr(*if_expr.then_branch);
     std::string then_type = last_expr_type_;
     bool then_terminated = block_terminated_;
-    std::string then_block_label = label_then;
     if (!block_terminated_) {
         emit_line("  br label %" + label_end);
-        then_block_label = fresh_label("if.then.end");
-        // Track the actual block label where the then value was produced
-        then_block_label = label_then;
     }
 
     // Else block
     std::string else_val = "0";
     std::string else_type = "i32";
     bool else_terminated = false;
-    std::string else_block_label = label_else;
     if (if_expr.else_branch.has_value()) {
         emit_line(label_else + ":");
         block_terminated_ = false;
         else_val = gen_expr(*if_expr.else_branch.value());
         else_type = last_expr_type_;
         else_terminated = block_terminated_;
-        else_block_label = label_else;
         if (!block_terminated_) {
             emit_line("  br label %" + label_end);
         }
@@ -66,14 +82,20 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     emit_line(label_end + ":");
     block_terminated_ = false;
 
-    // If both branches return values and neither is terminated, create phi node
-    if (if_expr.else_branch.has_value() && !then_terminated && !else_terminated) {
+    // Only generate phi if BOTH branches have trailing expressions (return values)
+    // AND neither is terminated (by return/break/continue)
+    if (if_expr.else_branch.has_value() &&
+        then_has_value && else_has_value &&
+        !then_terminated && !else_terminated) {
+
+        // Ensure types match for phi node
         std::string result = fresh_reg();
         emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" + label_then + " ], [ " + else_val + ", %" + label_else + " ]");
         last_expr_type_ = then_type;
         return result;
     }
 
+    last_expr_type_ = "void";
     return "0";
 }
 
@@ -433,7 +455,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 
             // Call the appropriate _len function to get collection size
             std::string len_result = fresh_reg();
-            emit_line("  " + len_result + " = call i64 @tml_list_len(ptr " + collection_loaded + ")");
+            emit_line("  " + len_result + " = call i64 @list_len(ptr " + collection_loaded + ")");
 
             // Convert i64 to i32 for loop counter
             std::string len_i32 = fresh_reg();
@@ -489,7 +511,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 
         // Call list_get(collection, index)
         std::string element = fresh_reg();
-        emit_line("  " + element + " = call i64 @tml_list_get(ptr " + collection_loaded + ", i64 " + idx_i64 + ")");
+        emit_line("  " + element + " = call i64 @list_get(ptr " + collection_loaded + ", i64 " + idx_i64 + ")");
 
         // Convert i64 result to i32 and store in actual loop variable
         std::string element_i32 = fresh_reg();
@@ -498,7 +520,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         std::string element_alloca = fresh_reg();
         emit_line("  " + element_alloca + " = alloca i32");
         emit_line("  store i32 " + element_i32 + ", ptr " + element_alloca);
-        locals_[var_name] = VarInfo{element_alloca, "i32"};
+        locals_[var_name] = VarInfo{element_alloca, "i32", nullptr};
     }
 
     gen_expr(*for_expr.body);

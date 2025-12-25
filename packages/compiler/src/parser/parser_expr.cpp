@@ -363,6 +363,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_closure_expr();
     }
 
+    // Lowlevel block: lowlevel { ... }
+    if (check(lexer::TokenKind::KwLowlevel)) {
+        return parse_lowlevel_expr();
+    }
+
     return ParseError{
         .message = "Expected expression",
         .span = peek().span,
@@ -378,6 +383,10 @@ auto Parser::parse_literal_expr() -> Result<ExprPtr, ParseError> {
 auto Parser::parse_ident_or_path_expr() -> Result<ExprPtr, ParseError> {
     auto path = parse_type_path();
     if (is_err(path)) return unwrap_err(path);
+
+    // Parse optional generic arguments: List[I32], HashMap[K, V]
+    auto generics = parse_generic_args();
+    if (is_err(generics)) return unwrap_err(generics);
 
     // Check if it's a struct literal
     // Need to distinguish from block expressions: Point { x: 1 } vs { let x = 1 }
@@ -409,19 +418,29 @@ auto Parser::parse_ident_or_path_expr() -> Result<ExprPtr, ParseError> {
         pos_ = saved_pos; // restore to before '{'
 
         if (is_struct) {
-            return parse_struct_expr(std::move(unwrap(path)));
+            return parse_struct_expr(std::move(unwrap(path)), std::move(unwrap(generics)));
         }
-        // Otherwise, it's not a struct literal - just return the identifier
+        // Otherwise, it's not a struct literal - just return the identifier/path
     }
 
     auto span = unwrap(path).span;
-    if (unwrap(path).segments.size() == 1) {
+    auto has_generics = unwrap(generics).has_value();
+
+    // If we have generics, extend the span
+    if (has_generics) {
+        span = SourceSpan::merge(span, unwrap(generics)->span);
+    }
+
+    // Single identifier without generics -> IdentExpr
+    if (unwrap(path).segments.size() == 1 && !has_generics) {
         return make_ident_expr(std::move(unwrap(path).segments[0]), span);
     }
 
+    // Path with or without generics -> PathExpr
     return make_box<Expr>(Expr{
         .kind = PathExpr{
             .path = std::move(unwrap(path)),
+            .generics = std::move(unwrap(generics)),
             .span = span
         },
         .span = span
@@ -976,7 +995,7 @@ auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
     });
 }
 
-auto Parser::parse_struct_expr(TypePath path) -> Result<ExprPtr, ParseError> {
+auto Parser::parse_struct_expr(TypePath path, std::optional<GenericArgs> generics) -> Result<ExprPtr, ParseError> {
     auto start_span = path.span;
 
     auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{'");
@@ -1026,6 +1045,7 @@ auto Parser::parse_struct_expr(TypePath path) -> Result<ExprPtr, ParseError> {
     return make_box<Expr>(Expr{
         .kind = StructExpr{
             .path = std::move(path),
+            .generics = std::move(generics),
             .fields = std::move(fields),
             .base = std::move(base),
             .span = SourceSpan::merge(start_span, end_span)
@@ -1052,6 +1072,52 @@ auto Parser::parse_call_args() -> Result<std::vector<ExprPtr>, ParseError> {
     }
 
     return args;
+}
+
+auto Parser::parse_lowlevel_expr() -> Result<ExprPtr, ParseError> {
+    auto start_span = peek().span;
+    auto lowlevel_tok = expect(lexer::TokenKind::KwLowlevel, "Expected 'lowlevel'");
+    if (is_err(lowlevel_tok)) return unwrap_err(lowlevel_tok);
+
+    auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' after 'lowlevel'");
+    if (is_err(lbrace)) return unwrap_err(lbrace);
+
+    std::vector<StmtPtr> stmts;
+    std::optional<ExprPtr> expr;
+
+    skip_newlines();
+
+    while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        auto stmt = parse_stmt();
+        if (is_err(stmt)) return unwrap_err(stmt);
+
+        skip_newlines();
+
+        if (check(lexer::TokenKind::RBrace)) {
+            if (unwrap(stmt)->is<ExprStmt>()) {
+                expr = std::move(unwrap(stmt)->as<ExprStmt>().expr);
+            } else {
+                stmts.push_back(std::move(unwrap(stmt)));
+            }
+        } else {
+            stmts.push_back(std::move(unwrap(stmt)));
+            match(lexer::TokenKind::Semi);
+            skip_newlines();
+        }
+    }
+
+    auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}'");
+    if (is_err(rbrace)) return unwrap_err(rbrace);
+
+    auto span = SourceSpan::merge(start_span, previous().span);
+    return make_box<Expr>(Expr{
+        .kind = LowlevelExpr{
+            .stmts = std::move(stmts),
+            .expr = std::move(expr),
+            .span = span
+        },
+        .span = span
+    });
 }
 
 // ============================================================================

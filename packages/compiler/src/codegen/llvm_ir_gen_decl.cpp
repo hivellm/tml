@@ -351,7 +351,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
     }
 
     // Coverage instrumentation - inject call at function entry
@@ -468,7 +468,7 @@ void LLVMIRGen::gen_func_instantiation(
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
     }
 
     // 8. Generate function body

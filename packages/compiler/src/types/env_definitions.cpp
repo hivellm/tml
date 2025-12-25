@@ -15,7 +15,8 @@ void TypeEnv::define_behavior(BehaviorDef def) {
 }
 
 void TypeEnv::define_func(FuncSig sig) {
-    functions_[sig.name] = std::move(sig);
+    // Function overloading: add to vector of overloads instead of replacing
+    functions_[sig.name].push_back(std::move(sig));
 }
 
 void TypeEnv::define_type_alias(const std::string& name, TypePtr type) {

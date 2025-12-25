@@ -131,7 +131,8 @@ private:
     auto parse_break_expr() -> Result<ExprPtr, ParseError>;
     auto parse_continue_expr() -> Result<ExprPtr, ParseError>;
     auto parse_closure_expr() -> Result<ExprPtr, ParseError>;
-    auto parse_struct_expr(TypePath path) -> Result<ExprPtr, ParseError>;
+    auto parse_struct_expr(TypePath path, std::optional<GenericArgs> generics = std::nullopt) -> Result<ExprPtr, ParseError>;
+    auto parse_lowlevel_expr() -> Result<ExprPtr, ParseError>;
 
     // Call and member access
     auto parse_call_args() -> Result<std::vector<ExprPtr>, ParseError>;

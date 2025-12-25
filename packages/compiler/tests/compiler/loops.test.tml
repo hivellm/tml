@@ -1,0 +1,227 @@
+use test
+
+// ============ Basic Loop ============
+
+@test
+func test_basic_loop() -> I32 {
+    // Count to 5
+    let mut count: I32 = 0
+    loop {
+        if count >= 5 then break
+        count = count + 1
+    }
+    assert_eq(count, 5, "loop should count to 5")
+
+    // Sum 1 to 10
+    let mut sum: I32 = 0
+    let mut i: I32 = 1
+    loop {
+        if i > 10 then break
+        sum = sum + i
+        i = i + 1
+    }
+    assert_eq(sum, 55, "sum of 1 to 10 should equal 55")
+
+    return 0
+}
+
+// ============ Nested Loops ============
+
+@test
+func test_nested_loops() -> I32 {
+    // Simple multiplication table counting
+    let mut total: I32 = 0
+    let mut i: I32 = 1
+    loop {
+        if i > 3 then break
+        let mut j: I32 = 1
+        loop {
+            if j > 3 then break
+            total = total + (i * j)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    // 1*1 + 1*2 + 1*3 + 2*1 + 2*2 + 2*3 + 3*1 + 3*2 + 3*3 = 36
+    assert_eq(total, 36, "nested loop sum should equal 36")
+
+    return 0
+}
+
+// ============ Loop with Continue ============
+
+@test
+func test_loop_continue() -> I32 {
+    // Sum only even numbers 1-10
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        i = i + 1
+        if i > 10 then break
+        if i % 2 != 0 then continue
+        sum = sum + i
+    }
+    // 2 + 4 + 6 + 8 + 10 = 30
+    assert_eq(sum, 30, "sum of even numbers 1-10 should equal 30")
+
+    return 0
+}
+
+// ============ Loop with Early Break ============
+
+@test
+func test_loop_early_break() -> I32 {
+    // Find first number divisible by 7
+    let mut i: I32 = 1
+    let mut found: I32 = 0
+    loop {
+        if i > 100 then break
+        if i % 7 == 0 then {
+            found = i
+            break
+        }
+        i = i + 1
+    }
+    assert_eq(found, 7, "first number divisible by 7 should be 7")
+
+    return 0
+}
+
+// ============ Factorial with Loop ============
+
+@test
+func test_loop_factorial() -> I32 {
+    // Calculate 5!
+    let mut result: I32 = 1
+    let mut i: I32 = 1
+    loop {
+        if i > 5 then break
+        result = result * i
+        i = i + 1
+    }
+    assert_eq(result, 120, "5! should equal 120")
+
+    // Calculate 6!
+    result = 1
+    i = 1
+    loop {
+        if i > 6 then break
+        result = result * i
+        i = i + 1
+    }
+    assert_eq(result, 720, "6! should equal 720")
+
+    return 0
+}
+
+// ============ Fibonacci with Loop ============
+
+@test
+func test_loop_fibonacci() -> I32 {
+    // Calculate fib(10)
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= 10 then break
+        let temp: I32 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+    assert_eq(a, 55, "fib(10) should equal 55")
+
+    return 0
+}
+
+// ============ Loop with Multiple Conditions ============
+
+@test
+func test_loop_multiple_conditions() -> I32 {
+    // Find first number divisible by both 3 and 5
+    let mut i: I32 = 1
+    let mut found: I32 = 0
+    loop {
+        if i > 100 then break
+        if i % 3 == 0 and i % 5 == 0 then {
+            found = i
+            break
+        }
+        i = i + 1
+    }
+    assert_eq(found, 15, "first number divisible by 3 and 5 should be 15")
+
+    return 0
+}
+
+// ============ Countdown Loop ============
+
+@test
+func test_countdown_loop() -> I32 {
+    let mut count: I32 = 10
+    let mut sum: I32 = 0
+    loop {
+        if count <= 0 then break
+        sum = sum + count
+        count = count - 1
+    }
+    assert_eq(sum, 55, "countdown sum should equal 55")
+
+    return 0
+}
+
+// ============ Power Function with Loop ============
+
+@test
+func test_loop_power() -> I32 {
+    // Calculate 2^10
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= 10 then break
+        result = result * 2
+        i = i + 1
+    }
+    assert_eq(result, 1024, "2^10 should equal 1024")
+
+    // Calculate 3^4
+    result = 1
+    i = 0
+    loop {
+        if i >= 4 then break
+        result = result * 3
+        i = i + 1
+    }
+    assert_eq(result, 81, "3^4 should equal 81")
+
+    return 0
+}
+
+// ============ GCD with Loop (Euclidean Algorithm) ============
+
+@test
+func test_loop_gcd() -> I32 {
+    // GCD of 48 and 18
+    let mut a: I32 = 48
+    let mut b: I32 = 18
+    loop {
+        if b == 0 then break
+        let temp: I32 = b
+        b = a % b
+        a = temp
+    }
+    assert_eq(a, 6, "GCD(48, 18) should equal 6")
+
+    // GCD of 100 and 35
+    a = 100
+    b = 35
+    loop {
+        if b == 0 then break
+        let temp: I32 = b
+        b = a % b
+        a = temp
+    }
+    assert_eq(a, 5, "GCD(100, 35) should equal 5")
+
+    return 0
+}

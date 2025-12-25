@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 #include <memory>
+#include <set>
 
 namespace tml::types
 {
@@ -75,6 +76,7 @@ namespace tml::types
         std::vector<std::string> type_params;
         std::vector<FuncSig> methods;
         std::vector<std::string> super_behaviors;
+        std::set<std::string> methods_with_defaults;  // Method names that have default implementations
         SourceSpan span;
     };
 
@@ -112,6 +114,9 @@ namespace tml::types
         [[nodiscard]] auto lookup_enum(const std::string &name) const -> std::optional<EnumDef>;
         [[nodiscard]] auto lookup_behavior(const std::string &name) const -> std::optional<BehaviorDef>;
         [[nodiscard]] auto lookup_func(const std::string &name) const -> std::optional<FuncSig>;
+        // Function overloading support - select overload based on argument types
+        [[nodiscard]] auto lookup_func_overload(const std::string &name, const std::vector<TypePtr> &arg_types) const -> std::optional<FuncSig>;
+        [[nodiscard]] auto get_all_overloads(const std::string &name) const -> std::vector<FuncSig>;
         [[nodiscard]] auto lookup_type_alias(const std::string &name) const -> std::optional<TypePtr>;
 
         // Behavior implementation tracking
@@ -157,11 +162,14 @@ namespace tml::types
         // Load module from TML file
         bool load_module_from_file(const std::string& module_path, const std::string& file_path);
 
+        // Type comparison for overload resolution
+        [[nodiscard]] static bool types_match(const TypePtr &a, const TypePtr &b);
+
     private:
         std::unordered_map<std::string, StructDef> structs_;
         std::unordered_map<std::string, EnumDef> enums_;
         std::unordered_map<std::string, BehaviorDef> behaviors_;
-        std::unordered_map<std::string, FuncSig> functions_;
+        std::unordered_map<std::string, std::vector<FuncSig>> functions_;
         // Type -> behaviors implemented
         std::unordered_map<std::string, std::vector<std::string>> behavior_impls_;
         std::unordered_map<std::string, TypePtr> type_aliases_;
@@ -176,7 +184,7 @@ namespace tml::types
         std::unordered_map<std::string, ImportedSymbol> imported_symbols_; // local_name -> import info
 
         void init_builtins();
-        void init_test_module();
+
         // NOTE: init_std_*_module() functions removed - modules now load from .tml files
     };
 

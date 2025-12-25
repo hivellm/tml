@@ -1,0 +1,85 @@
+// TML Core Library - Thread Module
+// Low-level threading primitives
+//
+// Thread functions are lowlevel - implemented in runtime/thread.c
+
+// ============ THREAD PRIMITIVES ============
+
+// Create new thread executing given function pointer
+// Returns thread handle for joining
+pub lowlevel func thread_spawn(func_ptr: I64) -> I64
+
+// Wait for thread to complete
+pub lowlevel func thread_join(thread_id: I64) -> I32
+
+// Yield CPU to other threads
+pub lowlevel func thread_yield() -> Unit
+
+// Sleep for N milliseconds
+pub lowlevel func thread_sleep(ms: I32) -> Unit
+
+// ============ CHANNEL (Go-style) ============
+
+// Create buffered channel with given capacity
+// Returns channel handle
+pub lowlevel func channel_create(capacity: I32) -> I64
+
+// Send value to channel (blocks if full)
+pub lowlevel func channel_send(chan: I64, value: I32) -> Unit
+
+// Receive value from channel (blocks if empty)
+// Returns received value
+pub lowlevel func channel_recv(chan: I64) -> I32
+
+// Try to send value without blocking
+// Returns true if sent, false if channel full
+pub lowlevel func channel_try_send(chan: I64, value: I32) -> Bool
+
+// Try to receive value without blocking
+// Returns (success: Bool, value: I32)
+// If success is false, value is undefined
+pub lowlevel func channel_try_recv(chan: I64) -> I32
+
+// Close channel (no more sends allowed)
+pub lowlevel func channel_close(chan: I64) -> Unit
+
+// Check if channel is closed
+pub lowlevel func channel_is_closed(chan: I64) -> Bool
+
+// Free channel resources
+pub lowlevel func channel_free(chan: I64) -> Unit
+
+// ============ MUTEX ============
+
+// Create new mutex
+pub lowlevel func mutex_create() -> I64
+
+// Lock mutex (blocks until acquired)
+pub lowlevel func mutex_lock(mutex: I64) -> Unit
+
+// Unlock mutex
+pub lowlevel func mutex_unlock(mutex: I64) -> Unit
+
+// Try to lock without blocking
+// Returns true if locked, false if already locked
+pub lowlevel func mutex_trylock(mutex: I64) -> Bool
+
+// Free mutex resources
+pub lowlevel func mutex_free(mutex: I64) -> Unit
+
+// ============ WAITGROUP (Go-style) ============
+
+// Create new wait group
+pub lowlevel func waitgroup_create() -> I64
+
+// Add delta to wait group counter
+pub lowlevel func waitgroup_add(wg: I64, delta: I32) -> Unit
+
+// Decrement wait group counter by 1
+pub lowlevel func waitgroup_done(wg: I64) -> Unit
+
+// Wait for counter to reach zero
+pub lowlevel func waitgroup_wait(wg: I64) -> Unit
+
+// Free wait group resources
+pub lowlevel func waitgroup_free(wg: I64) -> Unit

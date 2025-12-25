@@ -156,7 +156,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "panic") {
         if (!call.args.empty()) {
             std::string msg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_panic(ptr " + msg + ")");
+            emit_line("  call void @panic(ptr " + msg + ")");
             emit_line("  unreachable");
             block_terminated_ = true;
             return "0";
@@ -405,7 +405,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string func_ptr = gen_expr(*call.args[0]);
             std::string arg_ptr = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_thread_spawn(ptr " + func_ptr + ", ptr " + arg_ptr + ")");
+            emit_line("  " + result + " = call ptr @thread_spawn(ptr " + func_ptr + ", ptr " + arg_ptr + ")");
             return result;
         }
         return "null";
@@ -415,14 +415,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "thread_join") {
         if (!call.args.empty()) {
             std::string handle = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_thread_join(ptr " + handle + ")");
+            emit_line("  call void @thread_join(ptr " + handle + ")");
         }
         return "0";
     }
 
     // thread_yield() -> Unit
     if (fn_name == "thread_yield") {
-        emit_line("  call void @tml_thread_yield()");
+        emit_line("  call void @thread_yield()");
         return "0";
     }
 
@@ -430,7 +430,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "thread_sleep") {
         if (!call.args.empty()) {
             std::string ms = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_thread_sleep(i32 " + ms + ")");
+            emit_line("  call void @thread_sleep(i32 " + ms + ")");
         }
         return "0";
     }
@@ -438,7 +438,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // thread_id() -> I32
     if (fn_name == "thread_id") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_thread_id()");
+        emit_line("  " + result + " = call i32 @thread_id()");
         return result;
     }
 
@@ -447,21 +447,21 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // time_ms() -> I32 - Current time in milliseconds
     if (fn_name == "time_ms") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_time_ms()");
+        emit_line("  " + result + " = call i32 @time_ms()");
         return result;
     }
 
     // time_us() -> I64 - Current time in microseconds
     if (fn_name == "time_us") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i64 @tml_time_us()");
+        emit_line("  " + result + " = call i64 @time_us()");
         return result;
     }
 
     // time_ns() -> I64 - Current time in nanoseconds
     if (fn_name == "time_ns") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i64 @tml_time_ns()");
+        emit_line("  " + result + " = call i64 @time_ns()");
         return result;
     }
 
@@ -470,7 +470,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_elapsed_secs(i32 " + start + ")");
+            emit_line("  " + result + " = call ptr @elapsed_secs(i32 " + start + ")");
             return result;
         }
         return "0";
@@ -481,7 +481,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_elapsed_ms(i32 " + start + ")");
+            emit_line("  " + result + " = call i32 @elapsed_ms(i32 " + start + ")");
             return result;
         }
         return "0";
@@ -492,7 +492,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // Instant::now() -> I64 - Get current instant
     if (fn_name == "Instant::now") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i64 @tml_instant_now()");
+        emit_line("  " + result + " = call i64 @instant_now()");
         last_expr_type_ = "i64";
         return result;
     }
@@ -502,7 +502,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @tml_instant_elapsed(i64 " + start + ")");
+            emit_line("  " + result + " = call i64 @instant_elapsed(i64 " + start + ")");
             last_expr_type_ = "i64";
             return result;
         }
@@ -514,7 +514,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string duration = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_duration_as_millis_f64(i64 " + duration + ")");
+            emit_line("  " + result + " = call double @duration_as_millis_f64(i64 " + duration + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -526,7 +526,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string duration = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_duration_format_secs(i64 " + duration + ")");
+            emit_line("  " + result + " = call ptr @duration_format_secs(i64 " + duration + ")");
             return result;
         }
         return "0";
@@ -539,7 +539,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_black_box_i32(i32 " + value + ")");
+            emit_line("  " + result + " = call i32 @black_box_i32(i32 " + value + ")");
             last_expr_type_ = "i32";
             return result;
         }
@@ -551,7 +551,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @tml_black_box_i64(i64 " + value + ")");
+            emit_line("  " + result + " = call i64 @black_box_i64(i64 " + value + ")");
             last_expr_type_ = "i64";
             return result;
         }
@@ -566,7 +566,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string arr = gen_expr(*call.args[0]);
             std::string len = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @tml_simd_sum_i32(ptr " + arr + ", i64 " + len + ")");
+            emit_line("  " + result + " = call i64 @simd_sum_i32(ptr " + arr + ", i64 " + len + ")");
             return result;
         }
         return "0";
@@ -578,7 +578,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string arr = gen_expr(*call.args[0]);
             std::string len = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_simd_sum_f64(ptr " + arr + ", i64 " + len + ")");
+            emit_line("  " + result + " = call double @simd_sum_f64(ptr " + arr + ", i64 " + len + ")");
             return result;
         }
         return "0.0";
@@ -591,7 +591,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string b = gen_expr(*call.args[1]);
             std::string len = gen_expr(*call.args[2]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_simd_dot_f64(ptr " + a + ", ptr " + b + ", i64 " + len + ")");
+            emit_line("  " + result + " = call double @simd_dot_f64(ptr " + a + ", ptr " + b + ", i64 " + len + ")");
             return result;
         }
         return "0.0";
@@ -608,7 +608,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_float_to_fixed(double " + double_val + ", i32 " + decimals + ")");
+            emit_line("  " + result + " = call ptr @float_to_fixed(double " + double_val + ", i32 " + decimals + ")");
             return result;
         }
         return "0";
@@ -622,7 +622,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_float_to_precision(double " + double_val + ", i32 " + precision + ")");
+            emit_line("  " + result + " = call ptr @float_to_precision(double " + double_val + ", i32 " + precision + ")");
             return result;
         }
         return "0";
@@ -635,7 +635,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_float_to_string(double " + double_val + ")");
+            emit_line("  " + result + " = call ptr @float_to_string(double " + double_val + ")");
             return result;
         }
         return "0";
@@ -646,7 +646,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_int_to_float(i32 " + value + ")");
+            emit_line("  " + result + " = call double @int_to_float(i32 " + value + ")");
             return result;
         }
         return "0.0";
@@ -665,7 +665,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 double_val = value;  // Already a double
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_float_to_int(double " + double_val + ")");
+            emit_line("  " + result + " = call i32 @float_to_int(double " + double_val + ")");
             last_expr_type_ = "i32";
             return result;
         }
@@ -687,7 +687,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_float_round(double " + double_val + ")");
+            emit_line("  " + result + " = call i32 @float_round(double " + double_val + ")");
             return result;
         }
         return "0";
@@ -700,7 +700,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_float_floor(double " + double_val + ")");
+            emit_line("  " + result + " = call i32 @float_floor(double " + double_val + ")");
             return result;
         }
         return "0";
@@ -713,7 +713,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_float_ceil(double " + double_val + ")");
+            emit_line("  " + result + " = call i32 @float_ceil(double " + double_val + ")");
             return result;
         }
         return "0";
@@ -727,7 +727,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @tml_float_abs(double " + double_val + ")");
+            emit_line("  " + double_result + " = call double @float_abs(double " + double_val + ")");
             // Convert back to i32
             std::string result = fresh_reg();
             emit_line("  " + result + " = fptosi double " + double_result + " to i32");
@@ -749,7 +749,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 double_val = value;  // Already a double
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_float_sqrt(double " + double_val + ")");
+            emit_line("  " + result + " = call double @float_sqrt(double " + double_val + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -771,7 +771,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 double_base = base;  // Already a double
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_float_pow(double " + double_base + ", i32 " + exp + ")");
+            emit_line("  " + result + " = call double @float_pow(double " + double_base + ", i32 " + exp + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -786,7 +786,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_float32_bits(float " + value + ")");
+            emit_line("  " + result + " = call i32 @float32_bits(float " + value + ")");
             last_expr_type_ = "i32";
             return result;
         }
@@ -798,7 +798,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call float @tml_float32_from_bits(i32 " + value + ")");
+            emit_line("  " + result + " = call float @float32_from_bits(i32 " + value + ")");
             last_expr_type_ = "float";
             return result;
         }
@@ -810,7 +810,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @tml_float64_bits(double " + value + ")");
+            emit_line("  " + result + " = call i64 @float64_bits(double " + value + ")");
             last_expr_type_ = "i64";
             return result;
         }
@@ -822,7 +822,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_float64_from_bits(i64 " + value + ")");
+            emit_line("  " + result + " = call double @float64_from_bits(i64 " + value + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -837,13 +837,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string sign = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_infinity(i32 " + sign + ")");
+            emit_line("  " + result + " = call double @infinity(i32 " + sign + ")");
             last_expr_type_ = "double";
             return result;
         }
         // Default to positive infinity
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call double @tml_infinity(i32 1)");
+        emit_line("  " + result + " = call double @infinity(i32 1)");
         last_expr_type_ = "double";
         return result;
     }
@@ -851,7 +851,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // nan() -> F64
     if (fn_name == "nan") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call double @tml_nan()");
+        emit_line("  " + result + " = call double @nan()");
         last_expr_type_ = "double";
         return result;
     }
@@ -862,7 +862,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string f = gen_expr(*call.args[0]);
             std::string sign = gen_expr(*call.args[1]);
             std::string int_result = fresh_reg();
-            emit_line("  " + int_result + " = call i32 @tml_is_inf(double " + f + ", i32 " + sign + ")");
+            emit_line("  " + int_result + " = call i32 @is_inf(double " + f + ", i32 " + sign + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
             last_expr_type_ = "i1";
@@ -876,7 +876,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string f = gen_expr(*call.args[0]);
             std::string int_result = fresh_reg();
-            emit_line("  " + int_result + " = call i32 @tml_is_nan(double " + f + ")");
+            emit_line("  " + int_result + " = call i32 @is_nan(double " + f + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
             last_expr_type_ = "i1";
@@ -894,7 +894,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string x = gen_expr(*call.args[0]);
             std::string y = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @tml_nextafter(double " + x + ", double " + y + ")");
+            emit_line("  " + result + " = call double @nextafter(double " + x + ", double " + y + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -907,7 +907,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string x = gen_expr(*call.args[0]);
             std::string y = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call float @tml_nextafter32(float " + x + ", float " + y + ")");
+            emit_line("  " + result + " = call float @nextafter32(float " + x + ", float " + y + ")");
             last_expr_type_ = "float";
             return result;
         }
@@ -919,7 +919,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // channel_create() -> channel_ptr
     if (fn_name == "channel_create") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_channel_create()");
+        emit_line("  " + result + " = call ptr @channel_create()");
         return result;
     }
 
@@ -929,7 +929,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string ch = gen_expr(*call.args[0]);
             std::string value = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_send(ptr " + ch + ", i32 " + value + ")");
+            emit_line("  " + result + " = call i32 @channel_send(ptr " + ch + ", i32 " + value + ")");
             // Convert i32 to i1
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
@@ -945,7 +945,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             // Allocate temp for output value
             std::string out_ptr = fresh_reg();
             emit_line("  " + out_ptr + " = alloca i32, align 4");
-            emit_line("  call i32 @tml_channel_recv(ptr " + ch + ", ptr " + out_ptr + ")");
+            emit_line("  call i32 @channel_recv(ptr " + ch + ", ptr " + out_ptr + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = load i32, ptr " + out_ptr);
             return result;
@@ -959,7 +959,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string ch = gen_expr(*call.args[0]);
             std::string value = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_try_send(ptr " + ch + ", i32 " + value + ")");
+            emit_line("  " + result + " = call i32 @channel_try_send(ptr " + ch + ", i32 " + value + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -973,7 +973,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string ch = gen_expr(*call.args[0]);
             std::string out_ptr = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_try_recv(ptr " + ch + ", ptr " + out_ptr + ")");
+            emit_line("  " + result + " = call i32 @channel_try_recv(ptr " + ch + ", ptr " + out_ptr + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -985,7 +985,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "channel_close") {
         if (!call.args.empty()) {
             std::string ch = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_channel_close(ptr " + ch + ")");
+            emit_line("  call void @channel_close(ptr " + ch + ")");
         }
         return "0";
     }
@@ -994,7 +994,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "channel_destroy") {
         if (!call.args.empty()) {
             std::string ch = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_channel_destroy(ptr " + ch + ")");
+            emit_line("  call void @channel_destroy(ptr " + ch + ")");
         }
         return "0";
     }
@@ -1004,7 +1004,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string ch = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_channel_len(ptr " + ch + ")");
+            emit_line("  " + result + " = call i32 @channel_len(ptr " + ch + ")");
             return result;
         }
         return "0";
@@ -1015,7 +1015,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // mutex_create() -> mutex_ptr
     if (fn_name == "mutex_create") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_mutex_create()");
+        emit_line("  " + result + " = call ptr @mutex_create()");
         return result;
     }
 
@@ -1023,7 +1023,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "mutex_lock") {
         if (!call.args.empty()) {
             std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_lock(ptr " + m + ")");
+            emit_line("  call void @mutex_lock(ptr " + m + ")");
         }
         return "0";
     }
@@ -1032,7 +1032,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "mutex_unlock") {
         if (!call.args.empty()) {
             std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_unlock(ptr " + m + ")");
+            emit_line("  call void @mutex_unlock(ptr " + m + ")");
         }
         return "0";
     }
@@ -1042,7 +1042,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string m = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_mutex_try_lock(ptr " + m + ")");
+            emit_line("  " + result + " = call i32 @mutex_try_lock(ptr " + m + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -1054,7 +1054,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "mutex_destroy") {
         if (!call.args.empty()) {
             std::string m = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_mutex_destroy(ptr " + m + ")");
+            emit_line("  call void @mutex_destroy(ptr " + m + ")");
         }
         return "0";
     }
@@ -1064,7 +1064,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // waitgroup_create() -> wg_ptr
     if (fn_name == "waitgroup_create") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call ptr @tml_waitgroup_create()");
+        emit_line("  " + result + " = call ptr @waitgroup_create()");
         return result;
     }
 
@@ -1073,7 +1073,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (call.args.size() >= 2) {
             std::string wg = gen_expr(*call.args[0]);
             std::string delta = gen_expr(*call.args[1]);
-            emit_line("  call void @tml_waitgroup_add(ptr " + wg + ", i32 " + delta + ")");
+            emit_line("  call void @waitgroup_add(ptr " + wg + ", i32 " + delta + ")");
         }
         return "0";
     }
@@ -1082,7 +1082,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "waitgroup_done") {
         if (!call.args.empty()) {
             std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_done(ptr " + wg + ")");
+            emit_line("  call void @waitgroup_done(ptr " + wg + ")");
         }
         return "0";
     }
@@ -1091,7 +1091,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "waitgroup_wait") {
         if (!call.args.empty()) {
             std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_wait(ptr " + wg + ")");
+            emit_line("  call void @waitgroup_wait(ptr " + wg + ")");
         }
         return "0";
     }
@@ -1100,7 +1100,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "waitgroup_destroy") {
         if (!call.args.empty()) {
             std::string wg = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_waitgroup_destroy(ptr " + wg + ")");
+            emit_line("  call void @waitgroup_destroy(ptr " + wg + ")");
         }
         return "0";
     }
@@ -1111,14 +1111,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "list_create") {
         if (call.args.empty()) {
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_list_create(i64 4)");
+            emit_line("  " + result + " = call ptr @list_create(i64 4)");
             return result;
         } else {
             std::string i32_cap = gen_expr(*call.args[0]);
             std::string cap = fresh_reg();
             emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_list_create(i64 " + cap + ")");
+            emit_line("  " + result + " = call ptr @list_create(i64 " + cap + ")");
             return result;
         }
     }
@@ -1127,7 +1127,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "list_destroy") {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_list_destroy(ptr " + list + ")");
+            emit_line("  call void @list_destroy(ptr " + list + ")");
         }
         return "0";
     }
@@ -1139,7 +1139,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string i32_value = gen_expr(*call.args[1]);
             std::string value = fresh_reg();
             emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
-            emit_line("  call void @tml_list_push(ptr " + list + ", i64 " + value + ")");
+            emit_line("  call void @list_push(ptr " + list + ", i64 " + value + ")");
         }
         return "0";
     }
@@ -1149,7 +1149,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_list_pop(ptr " + list + ")");
+            emit_line("  " + i64_result + " = call i64 @list_pop(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1165,7 +1165,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string index = fresh_reg();
             emit_line("  " + index + " = sext i32 " + i32_index + " to i64");
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_list_get(ptr " + list + ", i64 " + index + ")");
+            emit_line("  " + i64_result + " = call i64 @list_get(ptr " + list + ", i64 " + index + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1183,7 +1183,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string i32_value = gen_expr(*call.args[2]);
             std::string value = fresh_reg();
             emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
-            emit_line("  call void @tml_list_set(ptr " + list + ", i64 " + index + ", i64 " + value + ")");
+            emit_line("  call void @list_set(ptr " + list + ", i64 " + index + ", i64 " + value + ")");
         }
         return "0";
     }
@@ -1193,7 +1193,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_list_len(ptr " + list + ")");
+            emit_line("  " + i64_result + " = call i64 @list_len(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1206,7 +1206,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_list_capacity(ptr " + list + ")");
+            emit_line("  " + i64_result + " = call i64 @list_capacity(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1218,7 +1218,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "list_clear") {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_list_clear(ptr " + list + ")");
+            emit_line("  call void @list_clear(ptr " + list + ")");
         }
         return "0";
     }
@@ -1228,7 +1228,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string list = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_list_is_empty(ptr " + list + ")");
+            emit_line("  " + result + " = call i32 @list_is_empty(ptr " + list + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -1242,14 +1242,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "hashmap_create") {
         if (call.args.empty()) {
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_hashmap_create(i64 16)");
+            emit_line("  " + result + " = call ptr @hashmap_create(i64 16)");
             return result;
         } else {
             std::string i32_cap = gen_expr(*call.args[0]);
             std::string cap = fresh_reg();
             emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_hashmap_create(i64 " + cap + ")");
+            emit_line("  " + result + " = call ptr @hashmap_create(i64 " + cap + ")");
             return result;
         }
     }
@@ -1258,7 +1258,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "hashmap_destroy") {
         if (!call.args.empty()) {
             std::string map = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_hashmap_destroy(ptr " + map + ")");
+            emit_line("  call void @hashmap_destroy(ptr " + map + ")");
         }
         return "0";
     }
@@ -1273,7 +1273,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string i32_value = gen_expr(*call.args[2]);
             std::string value = fresh_reg();
             emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
-            emit_line("  call void @tml_hashmap_set(ptr " + map + ", i64 " + key + ", i64 " + value + ")");
+            emit_line("  call void @hashmap_set(ptr " + map + ", i64 " + key + ", i64 " + value + ")");
         }
         return "0";
     }
@@ -1286,7 +1286,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string key = fresh_reg();
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_hashmap_get(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + i64_result + " = call i64 @hashmap_get(ptr " + map + ", i64 " + key + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1302,7 +1302,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string key = fresh_reg();
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @tml_hashmap_has(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + result + " = call i1 @hashmap_has(ptr " + map + ", i64 " + key + ")");
             return result;
         }
         return "0";
@@ -1316,7 +1316,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string key = fresh_reg();
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @tml_hashmap_remove(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + map + ", i64 " + key + ")");
             return result;
         }
         return "0";
@@ -1327,7 +1327,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string map = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_hashmap_len(ptr " + map + ")");
+            emit_line("  " + i64_result + " = call i64 @hashmap_len(ptr " + map + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1339,7 +1339,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "hashmap_clear") {
         if (!call.args.empty()) {
             std::string map = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_hashmap_clear(ptr " + map + ")");
+            emit_line("  call void @hashmap_clear(ptr " + map + ")");
         }
         return "0";
     }
@@ -1350,14 +1350,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "buffer_create") {
         if (call.args.empty()) {
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_buffer_create(i64 16)");
+            emit_line("  " + result + " = call ptr @buffer_create(i64 16)");
             return result;
         } else {
             std::string i32_cap = gen_expr(*call.args[0]);
             std::string cap = fresh_reg();
             emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @tml_buffer_create(i64 " + cap + ")");
+            emit_line("  " + result + " = call ptr @buffer_create(i64 " + cap + ")");
             return result;
         }
     }
@@ -1366,7 +1366,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "buffer_destroy") {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_buffer_destroy(ptr " + buf + ")");
+            emit_line("  call void @buffer_destroy(ptr " + buf + ")");
         }
         return "0";
     }
@@ -1376,7 +1376,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (call.args.size() >= 2) {
             std::string buf = gen_expr(*call.args[0]);
             std::string byte = gen_expr(*call.args[1]);
-            emit_line("  call void @tml_buffer_write_byte(ptr " + buf + ", i32 " + byte + ")");
+            emit_line("  call void @buffer_write_byte(ptr " + buf + ", i32 " + byte + ")");
         }
         return "0";
     }
@@ -1386,7 +1386,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (call.args.size() >= 2) {
             std::string buf = gen_expr(*call.args[0]);
             std::string value = gen_expr(*call.args[1]);
-            emit_line("  call void @tml_buffer_write_i32(ptr " + buf + ", i32 " + value + ")");
+            emit_line("  call void @buffer_write_i32(ptr " + buf + ", i32 " + value + ")");
         }
         return "0";
     }
@@ -1396,7 +1396,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_buffer_read_byte(ptr " + buf + ")");
+            emit_line("  " + result + " = call i32 @buffer_read_byte(ptr " + buf + ")");
             return result;
         }
         return "0";
@@ -1407,7 +1407,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_buffer_read_i32(ptr " + buf + ")");
+            emit_line("  " + result + " = call i32 @buffer_read_i32(ptr " + buf + ")");
             return result;
         }
         return "0";
@@ -1418,7 +1418,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_buffer_len(ptr " + buf + ")");
+            emit_line("  " + i64_result + " = call i64 @buffer_len(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1431,7 +1431,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_buffer_capacity(ptr " + buf + ")");
+            emit_line("  " + i64_result + " = call i64 @buffer_capacity(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1444,7 +1444,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @tml_buffer_remaining(ptr " + buf + ")");
+            emit_line("  " + i64_result + " = call i64 @buffer_remaining(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -1456,7 +1456,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "buffer_clear") {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_buffer_clear(ptr " + buf + ")");
+            emit_line("  call void @buffer_clear(ptr " + buf + ")");
         }
         return "0";
     }
@@ -1465,7 +1465,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (fn_name == "buffer_reset_read") {
         if (!call.args.empty()) {
             std::string buf = gen_expr(*call.args[0]);
-            emit_line("  call void @tml_buffer_reset_read(ptr " + buf + ")");
+            emit_line("  call void @buffer_reset_read(ptr " + buf + ")");
         }
         return "0";
     }
@@ -1477,7 +1477,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string s = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_str_len(ptr " + s + ")");
+            emit_line("  " + result + " = call i32 @str_len(ptr " + s + ")");
             return result;
         }
         return "0";
@@ -1488,7 +1488,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (!call.args.empty()) {
             std::string s = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_str_hash(ptr " + s + ")");
+            emit_line("  " + result + " = call i32 @str_hash(ptr " + s + ")");
             return result;
         }
         return "0";
@@ -1500,7 +1500,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string a = gen_expr(*call.args[0]);
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @tml_str_eq(ptr " + a + ", ptr " + b + ")");
+            emit_line("  " + result + " = call i32 @str_eq(ptr " + a + ", ptr " + b + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -1632,8 +1632,30 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             emit_line("  " + fn_ptr + " = load ptr, ptr " + local_it->second.reg);
         }
 
-        // Generate arguments
+        // Generate arguments - first add captured variables if this is a closure with captures
         std::vector<std::pair<std::string, std::string>> arg_vals;
+
+        // Prepend captured variables if present
+        if (local_it->second.closure_captures.has_value()) {
+            const auto& captures = local_it->second.closure_captures.value();
+            for (size_t i = 0; i < captures.captured_names.size(); ++i) {
+                const std::string& cap_name = captures.captured_names[i];
+                const std::string& cap_type = captures.captured_types[i];
+
+                // Look up the captured variable and load its value
+                auto cap_it = locals_.find(cap_name);
+                if (cap_it != locals_.end()) {
+                    std::string cap_val = fresh_reg();
+                    emit_line("  " + cap_val + " = load " + cap_type + ", ptr " + cap_it->second.reg);
+                    arg_vals.push_back({cap_val, cap_type});
+                } else {
+                    // Captured variable not found - this shouldn't happen but handle gracefully
+                    arg_vals.push_back({"0", cap_type});
+                }
+            }
+        }
+
+        // Add regular call arguments
         for (size_t i = 0; i < call.args.size(); ++i) {
             std::string val = gen_expr(*call.args[i]);
             arg_vals.push_back({val, last_expr_type_});

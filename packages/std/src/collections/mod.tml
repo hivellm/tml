@@ -1,0 +1,218 @@
+// TML Standard Library - Collections Module
+// Provides: List[T], HashMap[K, V], Buffer
+
+// ============================================================================
+// List[T] - Generic dynamic array
+// ============================================================================
+
+/// Dynamic list that grows automatically
+pub type List[T] {
+    handle: *Unit
+}
+
+impl[T] List[T] {
+    /// Create a new list with initial capacity
+    pub func new(initial_capacity: I64) -> List[T] {
+        let h: *Unit = lowlevel { list_create(initial_capacity) }
+        List[T] { handle: h }
+    }
+
+    /// Create a new list with default capacity (8)
+    pub func default() -> List[T] {
+        List[T].new(8)
+    }
+
+    /// Push a value to the end of the list
+    pub func push(this, value: T) {
+        lowlevel { list_push(this.handle, value) }
+    }
+
+    /// Pop and return the last value from the list
+    pub func pop(this) -> T {
+        lowlevel { list_pop(this.handle) }
+    }
+
+    /// Get value at index
+    pub func get(this, index: I64) -> T {
+        lowlevel { list_get(this.handle, index) }
+    }
+
+    /// Set value at index
+    pub func set(this, index: I64, value: T) {
+        lowlevel { list_set(this.handle, index, value) }
+    }
+
+    /// Get the number of elements in the list
+    pub func len(this) -> I64 {
+        lowlevel { list_len(this.handle) }
+    }
+
+    /// Get the current capacity of the list
+    pub func capacity(this) -> I64 {
+        lowlevel { list_capacity(this.handle) }
+    }
+
+    /// Check if the list is empty
+    pub func is_empty(this) -> Bool {
+        lowlevel { list_is_empty(this.handle) }
+    }
+
+    /// Get first element
+    pub func first(this) -> T {
+        this.get(0)
+    }
+
+    /// Get last element
+    pub func last(this) -> T {
+        this.get(this.len() - 1)
+    }
+
+    /// Remove all elements from the list
+    pub func clear(this) {
+        lowlevel { list_clear(this.handle) }
+    }
+
+    /// Destroy the list and free memory
+    pub func destroy(this) {
+        lowlevel { list_destroy(this.handle) }
+    }
+}
+
+// ============================================================================
+// HashMap[K, V] - Generic key-value store
+// ============================================================================
+
+/// Hash map with generic keys and values
+pub type HashMap[K, V] {
+    handle: *Unit
+}
+
+impl[K, V] HashMap[K, V] {
+    /// Create a new hashmap with initial capacity
+    pub func new(initial_capacity: I64) -> HashMap[K, V] {
+        let h: *Unit = lowlevel { hashmap_create(initial_capacity) }
+        HashMap[K, V] { handle: h }
+    }
+
+    /// Create a new hashmap with default capacity (16)
+    pub func default() -> HashMap[K, V] {
+        HashMap[K, V].new(16)
+    }
+
+    /// Set a key-value pair in the hashmap
+    pub func set(this, key: K, value: V) {
+        lowlevel { hashmap_set(this.handle, key, value) }
+    }
+
+    /// Get the value for a key (returns default if not found)
+    pub func get(this, key: K) -> V {
+        lowlevel { hashmap_get(this.handle, key) }
+    }
+
+    /// Check if a key exists in the hashmap
+    pub func has(this, key: K) -> Bool {
+        lowlevel { hashmap_has(this.handle, key) }
+    }
+
+    /// Remove a key from the hashmap (returns true if found)
+    pub func remove(this, key: K) -> Bool {
+        lowlevel { hashmap_remove(this.handle, key) }
+    }
+
+    /// Get the number of entries in the hashmap
+    pub func len(this) -> I64 {
+        lowlevel { hashmap_len(this.handle) }
+    }
+
+    /// Remove all entries from the hashmap
+    pub func clear(this) {
+        lowlevel { hashmap_clear(this.handle) }
+    }
+
+    /// Destroy the hashmap and free memory
+    pub func destroy(this) {
+        lowlevel { hashmap_destroy(this.handle) }
+    }
+}
+
+// ============================================================================
+// Buffer - Byte buffer for binary data
+// ============================================================================
+
+/// Byte buffer for reading and writing binary data
+pub type Buffer {
+    handle: *Unit
+}
+
+impl Buffer {
+    /// Create a new buffer with initial capacity
+    pub func new(initial_capacity: I64) -> Buffer {
+        let h: *Unit = lowlevel { buffer_create(initial_capacity) }
+        Buffer { handle: h }
+    }
+
+    /// Create a new buffer with default capacity (64)
+    pub func default() -> Buffer {
+        Buffer.new(64)
+    }
+
+    /// Write a single byte to the buffer
+    pub func write_byte(this, byte: I32) {
+        lowlevel { buffer_write_byte(this.handle, byte) }
+    }
+
+    /// Write an I32 to the buffer (little-endian)
+    pub func write_i32(this, value: I32) {
+        lowlevel { buffer_write_i32(this.handle, value) }
+    }
+
+    /// Write an I64 to the buffer (little-endian)
+    pub func write_i64(this, value: I64) {
+        lowlevel { buffer_write_i64(this.handle, value) }
+    }
+
+    /// Read a single byte from the buffer (-1 if EOF)
+    pub func read_byte(this) -> I32 {
+        lowlevel { buffer_read_byte(this.handle) }
+    }
+
+    /// Read an I32 from the buffer (little-endian)
+    pub func read_i32(this) -> I32 {
+        lowlevel { buffer_read_i32(this.handle) }
+    }
+
+    /// Read an I64 from the buffer (little-endian)
+    pub func read_i64(this) -> I64 {
+        lowlevel { buffer_read_i64(this.handle) }
+    }
+
+    /// Get the number of bytes written to the buffer
+    pub func len(this) -> I64 {
+        lowlevel { buffer_len(this.handle) }
+    }
+
+    /// Get the current capacity of the buffer
+    pub func capacity(this) -> I64 {
+        lowlevel { buffer_capacity(this.handle) }
+    }
+
+    /// Get the number of bytes remaining to read
+    pub func remaining(this) -> I64 {
+        lowlevel { buffer_remaining(this.handle) }
+    }
+
+    /// Clear the buffer (reset length and read position)
+    pub func clear(this) {
+        lowlevel { buffer_clear(this.handle) }
+    }
+
+    /// Reset the read position to the beginning
+    pub func reset_read(this) {
+        lowlevel { buffer_reset_read(this.handle) }
+    }
+
+    /// Destroy the buffer and free memory
+    pub func destroy(this) {
+        lowlevel { buffer_destroy(this.handle) }
+    }
+}

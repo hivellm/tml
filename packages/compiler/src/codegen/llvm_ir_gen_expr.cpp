@@ -64,6 +64,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_method_call(expr.as<parser::MethodCallExpr>());
     } else if (expr.is<parser::ClosureExpr>()) {
         return gen_closure(expr.as<parser::ClosureExpr>());
+    } else if (expr.is<parser::LowlevelExpr>()) {
+        return gen_lowlevel(expr.as<parser::LowlevelExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);
@@ -352,8 +354,11 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
     }
 
+    // Check if either operand is Bool (i1)
+    bool is_bool = (left_type == "i1" || right_type == "i1");
+
     // Determine the integer type to use
-    std::string int_type = is_i64 ? "i64" : "i32";
+    std::string int_type = is_bool ? "i1" : (is_i64 ? "i64" : "i32");
 
     switch (bin.op) {
         case parser::BinaryOp::Add:
@@ -586,15 +591,23 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
 }
 
 auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
-    // TODO: Closures with captured variables need proper environment structs
-    // For now, we only support closures without captures
-    if (!closure.captured_vars.empty()) {
-        report_error("Closures with captured variables are not yet fully supported", closure.span);
-        return "0";
-    }
+    // Clear previous closure capture info
+    last_closure_captures_ = std::nullopt;
 
     // Generate a unique function name
     std::string closure_name = "tml_closure_" + std::to_string(closure_counter_++);
+
+    // Collect capture info if there are captured variables
+    if (!closure.captured_vars.empty()) {
+        ClosureCaptureInfo capture_info;
+        for (const auto& captured_name : closure.captured_vars) {
+            auto it = locals_.find(captured_name);
+            std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
+            capture_info.captured_names.push_back(captured_name);
+            capture_info.captured_types.push_back(captured_type);
+        }
+        last_closure_captures_ = capture_info;
+    }
 
     // Build parameter types string, including captured variables as first parameters
     std::string param_types_str;
@@ -673,7 +686,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca i32");
         emit_line("  store i32 %" + param_names[i] + ", ptr " + alloca_reg);
-        locals_[param_names[i]] = VarInfo{alloca_reg, "i32"};
+        locals_[param_names[i]] = VarInfo{alloca_reg, "i32", nullptr};
     }
 
     // Generate body
@@ -704,6 +717,25 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // For now, return the function name as a "function pointer"
     // This is simplified - full support would need actual function pointers
     return "@" + closure_name;
+}
+
+
+auto LLVMIRGen::gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string {
+    // Lowlevel blocks are generated like regular blocks
+    // but without borrow checking (which is handled at type check level)
+    std::string result = "void";
+
+    // Generate each statement
+    for (const auto& stmt : lowlevel.stmts) {
+        gen_stmt(*stmt);
+    }
+
+    // Generate trailing expression if present
+    if (lowlevel.expr) {
+        result = gen_expr(**lowlevel.expr);
+    }
+
+    return result;
 }
 
 } // namespace tml::codegen

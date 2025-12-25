@@ -36,6 +36,7 @@ private:
     TypePtr current_return_type_ = nullptr;
     TypePtr current_self_type_ = nullptr;  // For resolving 'This' in impl blocks
     int loop_depth_ = 0;
+    bool in_lowlevel_ = false;  // When true, & returns pointer instead of reference
 
     // Declaration registration (first pass)
     void register_struct_decl(const parser::StructDecl& decl);
@@ -77,6 +78,7 @@ private:
     auto check_try(const parser::TryExpr& try_expr) -> TypePtr;
     auto check_path(const parser::PathExpr& path, SourceSpan span) -> TypePtr;
     auto check_range(const parser::RangeExpr& range) -> TypePtr;
+    auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

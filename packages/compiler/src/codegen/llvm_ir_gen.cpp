@@ -533,45 +533,40 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // TML runtime functions
     emit_line("; TML runtime functions");
-    emit_line("declare void @tml_panic(ptr) noreturn");
+    emit_line("declare void @panic(ptr) noreturn");
     emit_line("");
 
-    // TML test assertion functions
-    emit_line("; TML test assertions");
-    emit_line("declare void @tml_assert(i1, ptr)");
-    emit_line("declare void @tml_assert_eq_i32(i32, i32, ptr)");
-    emit_line("declare void @tml_assert_ne_i32(i32, i32, ptr)");
-    emit_line("declare void @tml_assert_eq_str(ptr, ptr, ptr)");
-    emit_line("declare void @tml_assert_eq_bool(i1, i1, ptr)");
+    // Note: TML test assertions are now provided by the test module's TML code
+    // They call panic() internally and don't need external declarations
     emit_line("");
 
     // TML code coverage functions
     emit_line("; TML code coverage");
-    emit_line("declare void @tml_cover_func(ptr)");
-    emit_line("declare void @tml_cover_line(ptr, i32)");
-    emit_line("declare void @tml_cover_branch(ptr, i32, i32)");
-    emit_line("declare void @tml_print_coverage_report()");
-    emit_line("declare i32 @tml_get_covered_func_count()");
-    emit_line("declare i32 @tml_get_covered_line_count()");
-    emit_line("declare i32 @tml_get_covered_branch_count()");
-    emit_line("declare void @tml_reset_coverage()");
-    emit_line("declare i32 @tml_is_func_covered(ptr)");
-    emit_line("declare i32 @tml_get_coverage_percent()");
+    emit_line("declare void @cover_func(ptr)");
+    emit_line("declare void @cover_line(ptr, i32)");
+    emit_line("declare void @cover_branch(ptr, i32, i32)");
+    emit_line("declare void @print_coverage_report()");
+    emit_line("declare i32 @get_covered_func_count()");
+    emit_line("declare i32 @get_covered_line_count()");
+    emit_line("declare i32 @get_covered_branch_count()");
+    emit_line("declare void @reset_coverage()");
+    emit_line("declare i32 @is_func_covered(ptr)");
+    emit_line("declare i32 @get_coverage_percent()");
     emit_line("");
 
     // Threading runtime declarations
     emit_line("; Threading runtime (tml_runtime.c)");
-    emit_line("declare ptr @tml_thread_spawn(ptr, ptr)");
-    emit_line("declare void @tml_thread_join(ptr)");
-    emit_line("declare void @tml_thread_yield()");
-    emit_line("declare void @tml_thread_sleep(i32)");
-    emit_line("declare i32 @tml_thread_id()");
+    emit_line("declare ptr @thread_spawn(ptr, ptr)");
+    emit_line("declare void @thread_join(ptr)");
+    emit_line("declare void @thread_yield()");
+    emit_line("declare void @thread_sleep(i32)");
+    emit_line("declare i32 @thread_id()");
     emit_line("");
 
     // I/O functions (print, println) - polymorphic, accept any type
     emit_line("; I/O functions");
-    emit_line("declare void @tml_print(ptr)");
-    emit_line("declare void @tml_println(ptr)");
+    emit_line("declare void @print(ptr)");
+    emit_line("declare void @println(ptr)");
     emit_line("");
 
     // NOTE: Math functions moved to core::math module
@@ -580,143 +575,151 @@ void LLVMIRGen::emit_runtime_decls() {
     // NOTE: Assertion functions moved to test module
     // Import with: use test
     emit_line("; Black box (prevent optimization)");
-    emit_line("declare i32 @tml_black_box_i32(i32)");
-    emit_line("declare i64 @tml_black_box_i64(i64)");
+    emit_line("declare i32 @black_box_i32(i32)");
+    emit_line("declare i64 @black_box_i64(i64)");
     emit_line("; SIMD operations (auto-vectorized)");
-    emit_line("declare i64 @tml_simd_sum_i32(ptr, i64)");
-    emit_line("declare i64 @tml_simd_sum_i64(ptr, i64)");
-    emit_line("declare double @tml_simd_sum_f64(ptr, i64)");
-    emit_line("declare double @tml_simd_dot_f64(ptr, ptr, i64)");
-    emit_line("declare void @tml_simd_fill_i32(ptr, i32, i64)");
-    emit_line("declare void @tml_simd_add_i32(ptr, ptr, ptr, i64)");
-    emit_line("declare void @tml_simd_mul_i32(ptr, ptr, ptr, i64)");
+    emit_line("declare i64 @simd_sum_i32(ptr, i64)");
+    emit_line("declare i64 @simd_sum_i64(ptr, i64)");
+    emit_line("declare double @simd_sum_f64(ptr, i64)");
+    emit_line("declare double @simd_dot_f64(ptr, ptr, i64)");
+    emit_line("declare void @simd_fill_i32(ptr, i32, i64)");
+    emit_line("declare void @simd_add_i32(ptr, ptr, ptr, i64)");
+    emit_line("declare void @simd_mul_i32(ptr, ptr, ptr, i64)");
     emit_line("");
 
     // Float functions
     emit_line("; Float functions");
-    emit_line("declare ptr @tml_float_to_fixed(double, i32)");
-    emit_line("declare ptr @tml_float_to_precision(double, i32)");
-    emit_line("declare ptr @tml_float_to_string(double)");
-    emit_line("declare double @tml_int_to_float(i32)");
-    emit_line("declare double @tml_i64_to_float(i64)");
-    emit_line("declare i32 @tml_float_to_int(double)");
-    emit_line("declare i64 @tml_float_to_i64(double)");
-    emit_line("declare i32 @tml_float_round(double)");
-    emit_line("declare i32 @tml_float_floor(double)");
-    emit_line("declare i32 @tml_float_ceil(double)");
-    emit_line("declare double @tml_float_abs(double)");
-    emit_line("declare double @tml_float_sqrt(double)");
-    emit_line("declare double @tml_float_pow(double, i32)");
+    emit_line("declare ptr @float_to_fixed(double, i32)");
+    emit_line("declare ptr @float_to_precision(double, i32)");
+    emit_line("declare ptr @float_to_string(double)");
+    emit_line("declare double @int_to_float(i32)");
+    emit_line("declare double @i64_to_float(i64)");
+    emit_line("declare i32 @float_to_int(double)");
+    emit_line("declare i64 @float_to_i64(double)");
+    emit_line("declare i32 @float_round(double)");
+    emit_line("declare i32 @float_floor(double)");
+    emit_line("declare i32 @float_ceil(double)");
+    emit_line("declare double @float_abs(double)");
+    emit_line("declare double @float_sqrt(double)");
+    emit_line("declare double @float_pow(double, i32)");
+    emit_line("");
+
+    // Overloaded abs functions
+    emit_line("; Overloaded abs");
+    emit_line("declare i32 @abs_i32(i32)");
+    emit_line("declare double @abs_f64(double)");
     emit_line("");
 
     // Bit manipulation runtime declarations
     emit_line("; Bit manipulation runtime");
-    emit_line("declare i32 @tml_float32_bits(float)");
-    emit_line("declare float @tml_float32_from_bits(i32)");
-    emit_line("declare i64 @tml_float64_bits(double)");
-    emit_line("declare double @tml_float64_from_bits(i64)");
+    emit_line("declare i32 @float32_bits(float)");
+    emit_line("declare float @float32_from_bits(i32)");
+    emit_line("declare i64 @float64_bits(double)");
+    emit_line("declare double @float64_from_bits(i64)");
     emit_line("");
 
     // Special float value runtime declarations
     emit_line("; Special float values runtime");
-    emit_line("declare double @tml_infinity(i32)");
-    emit_line("declare double @tml_nan()");
-    emit_line("declare i32 @tml_is_inf(double, i32)");
-    emit_line("declare i32 @tml_is_nan(double)");
+    emit_line("declare double @infinity(i32)");
+    emit_line("declare double @nan()");
+    emit_line("declare i32 @is_inf(double, i32)");
+    emit_line("declare i32 @is_nan(double)");
     emit_line("");
 
     // Nextafter runtime declarations
     emit_line("; Nextafter runtime");
-    emit_line("declare double @tml_nextafter(double, double)");
-    emit_line("declare float @tml_nextafter32(float, float)");
+    emit_line("declare double @nextafter(double, double)");
+    emit_line("declare float @nextafter32(float, float)");
     emit_line("");
 
     // Channel runtime declarations
     emit_line("; Channel runtime (Go-style)");
-    emit_line("declare ptr @tml_channel_create()");
-    emit_line("declare i32 @tml_channel_send(ptr, i32)");
-    emit_line("declare i32 @tml_channel_recv(ptr, ptr)");
-    emit_line("declare i32 @tml_channel_try_send(ptr, i32)");
-    emit_line("declare i32 @tml_channel_try_recv(ptr, ptr)");
-    emit_line("declare void @tml_channel_close(ptr)");
-    emit_line("declare void @tml_channel_destroy(ptr)");
-    emit_line("declare i32 @tml_channel_len(ptr)");
+    emit_line("declare ptr @channel_create()");
+    emit_line("declare i32 @channel_send(ptr, i32)");
+    emit_line("declare i32 @channel_recv(ptr, ptr)");
+    emit_line("declare i32 @channel_try_send(ptr, i32)");
+    emit_line("declare i32 @channel_try_recv(ptr, ptr)");
+    emit_line("declare void @channel_close(ptr)");
+    emit_line("declare void @channel_destroy(ptr)");
+    emit_line("declare i32 @channel_len(ptr)");
     emit_line("");
 
     // Mutex runtime declarations
     emit_line("; Mutex runtime");
-    emit_line("declare ptr @tml_mutex_create()");
-    emit_line("declare void @tml_mutex_lock(ptr)");
-    emit_line("declare void @tml_mutex_unlock(ptr)");
-    emit_line("declare i32 @tml_mutex_try_lock(ptr)");
-    emit_line("declare void @tml_mutex_destroy(ptr)");
+    emit_line("declare ptr @mutex_create()");
+    emit_line("declare void @mutex_lock(ptr)");
+    emit_line("declare void @mutex_unlock(ptr)");
+    emit_line("declare i32 @mutex_try_lock(ptr)");
+    emit_line("declare void @mutex_destroy(ptr)");
     emit_line("");
 
     // WaitGroup runtime declarations
     emit_line("; WaitGroup runtime (Go-style)");
-    emit_line("declare ptr @tml_waitgroup_create()");
-    emit_line("declare void @tml_waitgroup_add(ptr, i32)");
-    emit_line("declare void @tml_waitgroup_done(ptr)");
-    emit_line("declare void @tml_waitgroup_wait(ptr)");
-    emit_line("declare void @tml_waitgroup_destroy(ptr)");
+    emit_line("declare ptr @waitgroup_create()");
+    emit_line("declare void @waitgroup_add(ptr, i32)");
+    emit_line("declare void @waitgroup_done(ptr)");
+    emit_line("declare void @waitgroup_wait(ptr)");
+    emit_line("declare void @waitgroup_destroy(ptr)");
     emit_line("");
 
     // Atomic counter runtime declarations
     emit_line("; Atomic counter runtime");
-    emit_line("declare ptr @tml_atomic_counter_create(i32)");
-    emit_line("declare i32 @tml_atomic_counter_inc(ptr)");
-    emit_line("declare i32 @tml_atomic_counter_dec(ptr)");
-    emit_line("declare i32 @tml_atomic_counter_get(ptr)");
-    emit_line("declare void @tml_atomic_counter_set(ptr, i32)");
-    emit_line("declare void @tml_atomic_counter_destroy(ptr)");
+    emit_line("declare ptr @atomic_counter_create(i32)");
+    emit_line("declare i32 @atomic_counter_inc(ptr)");
+    emit_line("declare i32 @atomic_counter_dec(ptr)");
+    emit_line("declare i32 @atomic_counter_get(ptr)");
+    emit_line("declare void @atomic_counter_set(ptr, i32)");
+    emit_line("declare void @atomic_counter_destroy(ptr)");
     emit_line("");
 
     // List runtime declarations
     emit_line("; List (dynamic array) runtime");
-    emit_line("declare ptr @tml_list_create(i64)");
-    emit_line("declare void @tml_list_destroy(ptr)");
-    emit_line("declare void @tml_list_push(ptr, i64)");
-    emit_line("declare i64 @tml_list_pop(ptr)");
-    emit_line("declare i64 @tml_list_get(ptr, i64)");
-    emit_line("declare void @tml_list_set(ptr, i64, i64)");
-    emit_line("declare i64 @tml_list_len(ptr)");
-    emit_line("declare i64 @tml_list_capacity(ptr)");
-    emit_line("declare void @tml_list_clear(ptr)");
-    emit_line("declare i32 @tml_list_is_empty(ptr)");
+    emit_line("declare ptr @list_create(i64)");
+    emit_line("declare void @list_destroy(ptr)");
+    emit_line("declare void @list_push(ptr, i64)");
+    emit_line("declare i64 @list_pop(ptr)");
+    emit_line("declare i64 @list_get(ptr, i64)");
+    emit_line("declare void @list_set(ptr, i64, i64)");
+    emit_line("declare i64 @list_len(ptr)");
+    emit_line("declare i64 @list_capacity(ptr)");
+    emit_line("declare void @list_clear(ptr)");
+    emit_line("declare i32 @list_is_empty(ptr)");
     emit_line("");
 
     // HashMap runtime declarations
     emit_line("; HashMap runtime");
-    emit_line("declare ptr @tml_hashmap_create(i64)");
-    emit_line("declare void @tml_hashmap_destroy(ptr)");
-    emit_line("declare void @tml_hashmap_set(ptr, i64, i64)");
-    emit_line("declare i64 @tml_hashmap_get(ptr, i64)");
-    emit_line("declare i1 @tml_hashmap_has(ptr, i64)");
-    emit_line("declare i1 @tml_hashmap_remove(ptr, i64)");
-    emit_line("declare i64 @tml_hashmap_len(ptr)");
-    emit_line("declare void @tml_hashmap_clear(ptr)");
+    emit_line("declare ptr @hashmap_create(i64)");
+    emit_line("declare void @hashmap_destroy(ptr)");
+    emit_line("declare void @hashmap_set(ptr, i64, i64)");
+    emit_line("declare i64 @hashmap_get(ptr, i64)");
+    emit_line("declare i1 @hashmap_has(ptr, i64)");
+    emit_line("declare i1 @hashmap_remove(ptr, i64)");
+    emit_line("declare i64 @hashmap_len(ptr)");
+    emit_line("declare void @hashmap_clear(ptr)");
     emit_line("");
 
     // Buffer runtime declarations
     emit_line("; Buffer runtime");
-    emit_line("declare ptr @tml_buffer_create(i64)");
-    emit_line("declare void @tml_buffer_destroy(ptr)");
-    emit_line("declare void @tml_buffer_write_byte(ptr, i32)");
-    emit_line("declare void @tml_buffer_write_i32(ptr, i32)");
-    emit_line("declare i32 @tml_buffer_read_byte(ptr)");
-    emit_line("declare i32 @tml_buffer_read_i32(ptr)");
-    emit_line("declare i64 @tml_buffer_len(ptr)");
-    emit_line("declare i64 @tml_buffer_capacity(ptr)");
-    emit_line("declare i64 @tml_buffer_remaining(ptr)");
-    emit_line("declare void @tml_buffer_clear(ptr)");
-    emit_line("declare void @tml_buffer_reset_read(ptr)");
+    emit_line("declare ptr @buffer_create(i64)");
+    emit_line("declare void @buffer_destroy(ptr)");
+    emit_line("declare void @buffer_write_byte(ptr, i32)");
+    emit_line("declare void @buffer_write_i32(ptr, i32)");
+    emit_line("declare void @buffer_write_i64(ptr, i64)");
+    emit_line("declare i32 @buffer_read_byte(ptr)");
+    emit_line("declare i32 @buffer_read_i32(ptr)");
+    emit_line("declare i64 @buffer_read_i64(ptr)");
+    emit_line("declare i64 @buffer_len(ptr)");
+    emit_line("declare i64 @buffer_capacity(ptr)");
+    emit_line("declare i64 @buffer_remaining(ptr)");
+    emit_line("declare void @buffer_clear(ptr)");
+    emit_line("declare void @buffer_reset_read(ptr)");
     emit_line("");
 
     // String utilities
     emit_line("; String utilities");
-    emit_line("declare i32 @tml_str_len(ptr)");
-    emit_line("declare i32 @tml_str_hash(ptr)");
-    emit_line("declare i32 @tml_str_eq(ptr, ptr)");
+    emit_line("declare i32 @str_len(ptr)");
+    emit_line("declare i32 @str_hash(ptr)");
+    emit_line("declare i32 @str_eq(ptr, ptr)");
     emit_line("");
 
     // Time functions - only declare if not imported from core::time module
@@ -724,9 +727,9 @@ void LLVMIRGen::emit_runtime_decls() {
     bool has_time_module = env_.module_registry() && env_.module_registry()->has_module("core::time");
     if (!has_time_module) {
         emit_line("; Time functions");
-        emit_line("declare i32 @tml_time_ms()");
-        emit_line("declare i64 @tml_time_us()");
-        emit_line("declare i64 @tml_time_ns()");
+        emit_line("declare i32 @time_ms()");
+        emit_line("declare i64 @time_us()");
+        emit_line("declare i64 @time_ns()");
         emit_line("");
     }
 
@@ -816,11 +819,28 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             continue;  // Skip modules with parse errors
         }
 
-        const auto& parsed_module = std::get<parser::Module>(parse_result);
+        // Store the AST persistently so that pending_generic_funcs_ pointers remain valid
+        imported_module_asts_.push_back(std::get<parser::Module>(std::move(parse_result)));
+        const auto& parsed_module = imported_module_asts_.back();
 
         emit_line("; Module: " + module_name);
 
-        // Generate code for each public function
+        // First pass: register struct/enum declarations (including generic ones)
+        for (const auto& decl : parsed_module.decls) {
+            if (decl->is<parser::StructDecl>()) {
+                const auto& s = decl->as<parser::StructDecl>();
+                if (s.vis == parser::Visibility::Public) {
+                    gen_struct_decl(s);  // This registers generic structs in pending_generic_structs_
+                }
+            } else if (decl->is<parser::EnumDecl>()) {
+                const auto& e = decl->as<parser::EnumDecl>();
+                if (e.vis == parser::Visibility::Public) {
+                    gen_enum_decl(e);  // This registers generic enums in pending_generic_enums_
+                }
+            }
+        }
+
+        // Second pass: generate code for each public function
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
@@ -894,6 +914,10 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         } else if (decl->is<parser::ImplDecl>()) {
             // Register impl block for vtable generation
             register_impl(&decl->as<parser::ImplDecl>());
+        } else if (decl->is<parser::TraitDecl>()) {
+            // Register trait/behavior declaration for default implementations
+            const auto& trait_decl = decl->as<parser::TraitDecl>();
+            trait_decls_[trait_decl.name] = &trait_decl;
         }
     }
 
@@ -999,7 +1023,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         std::string alloca_reg = fresh_reg();
                         emit_line("  " + alloca_reg + " = alloca " + param_type);
                         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-                        locals_[param_name] = VarInfo{alloca_reg, param_type};
+                        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
                     }
 
                     // Generate body
@@ -1021,6 +1045,122 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                     }
                     emit_line("}");
                     current_impl_type_.clear();  // Clear impl type context
+                }
+
+                // Generate default implementations for missing methods
+                if (impl.trait_path && !impl.trait_path->segments.empty()) {
+                    std::string trait_name = impl.trait_path->segments.back();
+                    auto trait_it = trait_decls_.find(trait_name);
+                    if (trait_it != trait_decls_.end()) {
+                        const auto* trait_decl = trait_it->second;
+
+                        // Collect method names that impl provides
+                        std::set<std::string> impl_method_names;
+                        for (const auto& m : impl.methods) {
+                            impl_method_names.insert(m.name);
+                        }
+
+                        // Generate default implementations for missing methods
+                        for (const auto& trait_method : trait_decl->methods) {
+                            // Skip if impl provides this method
+                            if (impl_method_names.count(trait_method.name) > 0) continue;
+
+                            // Skip if trait method has no default implementation
+                            if (!trait_method.body.has_value()) continue;
+
+                            // Generate default implementation with type substitution
+                            std::string method_name = type_name + "_" + trait_method.name;
+                            current_func_ = method_name;
+                            current_impl_type_ = type_name;
+                            locals_.clear();
+                            block_terminated_ = false;
+
+                            // Determine return type
+                            std::string ret_type = "void";
+                            if (trait_method.return_type.has_value()) {
+                                ret_type = llvm_type_ptr(*trait_method.return_type);
+                                // Substitute 'This' with actual type
+                                if (ret_type.find("This") != std::string::npos) {
+                                    ret_type = "%struct." + type_name;
+                                }
+                            }
+                            current_ret_type_ = ret_type;
+
+                            // Build parameter list
+                            std::string params;
+                            std::string param_types;
+                            for (size_t i = 0; i < trait_method.params.size(); ++i) {
+                                if (i > 0) {
+                                    params += ", ";
+                                    param_types += ", ";
+                                }
+                                std::string param_type = llvm_type_ptr(trait_method.params[i].type);
+                                std::string param_name;
+                                if (trait_method.params[i].pattern && trait_method.params[i].pattern->is<parser::IdentPattern>()) {
+                                    param_name = trait_method.params[i].pattern->as<parser::IdentPattern>().name;
+                                } else {
+                                    param_name = "_anon";
+                                }
+                                // Substitute 'This' type with ptr for 'this' param
+                                if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                                    param_type = "ptr";
+                                }
+                                params += param_type + " %" + param_name;
+                                param_types += param_type;
+                            }
+
+                            // Register function
+                            std::string func_type = ret_type + " (" + param_types + ")";
+                            functions_[method_name] = FuncInfo{
+                                "@tml_" + method_name,
+                                func_type,
+                                ret_type
+                            };
+
+                            // Generate function
+                            emit_line("");
+                            emit_line("; Default implementation from behavior " + trait_name);
+                            emit_line("define internal " + ret_type + " @tml_" + method_name + "(" + params + ") #0 {");
+                            emit_line("entry:");
+
+                            // Register params in locals
+                            for (size_t i = 0; i < trait_method.params.size(); ++i) {
+                                std::string param_type = llvm_type_ptr(trait_method.params[i].type);
+                                std::string param_name;
+                                if (trait_method.params[i].pattern && trait_method.params[i].pattern->is<parser::IdentPattern>()) {
+                                    param_name = trait_method.params[i].pattern->as<parser::IdentPattern>().name;
+                                } else {
+                                    param_name = "_anon";
+                                }
+
+                                // Create semantic type for this parameter
+                                types::TypePtr semantic_type = nullptr;
+                                if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                                    param_type = "ptr";
+                                    // Create semantic type as the concrete impl type
+                                    semantic_type = std::make_shared<types::Type>();
+                                    semantic_type->kind = types::NamedType{type_name, "", {}};
+                                }
+
+                                std::string alloca_reg = fresh_reg();
+                                emit_line("  " + alloca_reg + " = alloca " + param_type);
+                                emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+                                locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+                            }
+
+                            // Generate body
+                            gen_block(*trait_method.body);
+                            if (!block_terminated_) {
+                                if (ret_type == "void") {
+                                    emit_line("  ret void");
+                                } else {
+                                    emit_line("  ret " + ret_type + " 0");
+                                }
+                            }
+                            emit_line("}");
+                            current_impl_type_.clear();
+                        }
+                    }
                 }
             }
         }
@@ -1093,7 +1233,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
             // Get start time
             std::string start_time = "%bench_start_" + std::to_string(bench_num);
-            emit_line("  " + start_time + " = call i64 @tml_time_us()");
+            emit_line("  " + start_time + " = call i64 @time_us()");
 
             // Run benchmark 1000 iterations
             std::string iter_var = "%bench_iter_" + std::to_string(bench_num);
@@ -1119,7 +1259,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
             // Get end time and calculate duration
             std::string end_time = "%bench_end_" + std::to_string(bench_num);
             std::string duration = "%bench_duration_" + std::to_string(bench_num);
-            emit_line("  " + end_time + " = call i64 @tml_time_us()");
+            emit_line("  " + end_time + " = call i64 @time_us()");
             emit_line("  " + duration + " = sub i64 " + end_time + ", " + start_time);
 
             // Calculate average (duration / 1000)
@@ -1135,43 +1275,25 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         emit_line("}");
     } else if (!test_functions.empty()) {
         // Generate test runner main
+        // @test functions return Unit (void) - assertions call exit(1) on failure
+        // If a test function returns, it passed
         emit_line("; Auto-generated test runner");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");
 
-        int test_num = 0;
         for (const auto& test_name : test_functions) {
-            std::string result_var = "%test_result_" + std::to_string(test_num);
             std::string test_fn = "@tml_" + test_name;
-
-            // Call test function
-            emit_line("  " + result_var + " = call i32 " + test_fn + "()");
-
-            // Check if test failed (non-zero return)
-            std::string cmp_var = "%test_cmp_" + std::to_string(test_num);
-            emit_line("  " + cmp_var + " = icmp ne i32 " + result_var + ", 0");
-
-            // If failed, return the error code
-            std::string fail_label = "test_fail_" + std::to_string(test_num);
-            std::string next_label = "test_next_" + std::to_string(test_num);
-            emit_line("  br i1 " + cmp_var + ", label %" + fail_label + ", label %" + next_label);
-
-            // Failure path
-            emit_line(fail_label + ":");
-            emit_line("  ret i32 " + result_var);
-
-            // Success path - continue to next test
-            emit_line(next_label + ":");
-
-test_num++;
+            // Call test function (void return) - if it returns, test passed
+            // Assertions inside will call exit(1) on failure
+            emit_line("  call void " + test_fn + "()");
         }
 
         // Print coverage report if enabled
         if (options_.coverage_enabled) {
-            emit_line("  call void @tml_print_coverage_report()");
+            emit_line("  call void @print_coverage_report()");
         }
 
-        // All tests passed
+        // All tests passed (if we got here, no assertion failed)
         emit_line("  ret i32 0");
         emit_line("}");
     } else if (has_user_main) {

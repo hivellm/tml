@@ -1,0 +1,178 @@
+// Tests for std::file
+use test
+use std::file
+
+// ============================================================================
+// File Tests
+// ============================================================================
+
+@test
+func test_file_write_read_all() -> I32 {
+    let path: Str = "test_file_rw.txt"
+    let content: Str = "Hello, TML!"
+
+    // Write
+    let success: Bool = File.write_all(path, content)
+    assert(success, "write_all should succeed")
+
+    // Read
+    let read_content: Str = File.read_all(path)
+    assert(str_eq(read_content, content), "read content should match written content")
+
+    // Cleanup
+    Path.remove(path)
+    0
+}
+
+@test
+func test_file_append() -> I32 {
+    let path: Str = "test_file_append.txt"
+
+    File.write_all(path, "Line 1\n")
+    File.append_all(path, "Line 2\n")
+
+    let content: Str = File.read_all(path)
+    assert_eq(str_len(content), 14, "appended content should have correct length")
+
+    Path.remove(path)
+    0
+}
+
+@test
+func test_file_object() -> I32 {
+    let path: Str = "test_file_obj.txt"
+
+    // Write using file object
+    let f: File = File.open_write(path)
+    assert(f.is_open(), "file should be open")
+    f.write_str("Test content")
+    f.close()
+
+    // Verify
+    let content: Str = File.read_all(path)
+    assert(str_eq(content, "Test content"), "content should match")
+
+    Path.remove(path)
+    0
+}
+
+// ============================================================================
+// Path Tests
+// ============================================================================
+
+@test
+func test_path_exists() -> I32 {
+    let path: Str = "test_exists.txt"
+
+    assert(not Path.exists(path), "file should not exist initially")
+
+    File.write_all(path, "test")
+    assert(Path.exists(path), "file should exist after writing")
+
+    Path.remove(path)
+    assert(not Path.exists(path), "file should not exist after removal")
+    0
+}
+
+@test
+func test_path_is_file_dir() -> I32 {
+    let file_path: Str = "test_is_file.txt"
+    let dir_path: Str = "test_is_dir"
+
+    // Create file
+    File.write_all(file_path, "test")
+    assert(Path.is_file(file_path), "should be a file")
+    assert(not Path.is_dir(file_path), "should not be a directory")
+
+    // Create directory
+    Path.create_dir(dir_path)
+    assert(Path.is_dir(dir_path), "should be a directory")
+    assert(not Path.is_file(dir_path), "should not be a file")
+
+    // Cleanup
+    Path.remove(file_path)
+    Path.remove_dir(dir_path)
+    0
+}
+
+@test
+func test_path_create_dir() -> I32 {
+    let path: Str = "test_mkdir"
+
+    assert(not Path.exists(path), "dir should not exist initially")
+
+    let success: Bool = Path.create_dir(path)
+    assert(success, "create_dir should succeed")
+    assert(Path.exists(path), "dir should exist after creation")
+    assert(Path.is_dir(path), "should be a directory")
+
+    Path.remove_dir(path)
+    0
+}
+
+@test
+func test_path_rename() -> I32 {
+    let old_path: Str = "test_rename_old.txt"
+    let new_path: Str = "test_rename_new.txt"
+
+    File.write_all(old_path, "content")
+    assert(Path.exists(old_path), "old file should exist")
+
+    let success: Bool = Path.rename(old_path, new_path)
+    assert(success, "rename should succeed")
+    assert(not Path.exists(old_path), "old file should not exist")
+    assert(Path.exists(new_path), "new file should exist")
+
+    let content: Str = File.read_all(new_path)
+    assert(str_eq(content, "content"), "content should be preserved")
+
+    Path.remove(new_path)
+    0
+}
+
+@test
+func test_path_copy() -> I32 {
+    let src: Str = "test_copy_src.txt"
+    let dst: Str = "test_copy_dst.txt"
+
+    File.write_all(src, "copy me")
+
+    let success: Bool = Path.copy(src, dst)
+    assert(success, "copy should succeed")
+    assert(Path.exists(src), "source should still exist")
+    assert(Path.exists(dst), "destination should exist")
+
+    let content: Str = File.read_all(dst)
+    assert(str_eq(content, "copy me"), "copied content should match")
+
+    Path.remove(src)
+    Path.remove(dst)
+    0
+}
+
+@test
+func test_path_join() -> I32 {
+    let base: Str = "dir"
+    let child: Str = "file.txt"
+
+    let joined: Str = Path.join(base, child)
+    // Note: separator is platform-dependent
+    assert_eq(str_len(joined), 12, "joined path should have correct length")
+    0
+}
+
+@test
+func test_path_filename() -> I32 {
+    let path: Str = "/path/to/file.txt"
+    let name: Str = Path.filename(path)
+    assert(str_eq(name, "file.txt"), "filename should be 'file.txt'")
+    0
+}
+
+@test
+func test_path_extension() -> I32 {
+    let path: Str = "/path/to/file.txt"
+    let ext: Str = Path.extension(path)
+    assert(str_eq(ext, ".txt"), "extension should be '.txt'")
+    0
+}

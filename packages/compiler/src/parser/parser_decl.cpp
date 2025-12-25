@@ -499,33 +499,63 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
     auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for behavior body");
     if (is_err(lbrace)) return unwrap_err(lbrace);
     
+    std::vector<AssociatedType> associated_types;
     std::vector<FuncDecl> methods;
     skip_newlines();
-    
+
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
-        // Parse method signature or default implementation
+        // Parse method signature, default implementation, or associated type
         auto method_vis = parse_visibility();
-        
-        auto func_result = parse_func_decl(method_vis);
-        if (is_err(func_result)) return func_result;
-        
-        auto& func = unwrap(func_result)->as<FuncDecl>();
-        methods.push_back(std::move(func));
-        
+
+        // Check for associated type: type Name or type Name: Bounds
+        if (check(lexer::TokenKind::KwType)) {
+            auto type_span = peek().span;
+            advance();  // consume 'type'
+
+            auto type_name_result = expect(lexer::TokenKind::Identifier, "Expected associated type name");
+            if (is_err(type_name_result)) return unwrap_err(type_name_result);
+            auto type_name = std::string(unwrap(type_name_result).lexeme);
+
+            // Optional bounds: type Item: Display + Debug
+            std::vector<TypePath> bounds;
+            if (match(lexer::TokenKind::Colon)) {
+                do {
+                    skip_newlines();
+                    auto bound_path = parse_type_path();
+                    if (is_err(bound_path)) return unwrap_err(bound_path);
+                    bounds.push_back(std::move(unwrap(bound_path)));
+                    skip_newlines();
+                } while (match(lexer::TokenKind::Plus));
+            }
+
+            associated_types.push_back(AssociatedType{
+                .name = std::move(type_name),
+                .bounds = std::move(bounds),
+                .span = type_span
+            });
+        } else {
+            auto func_result = parse_func_decl(method_vis);
+            if (is_err(func_result)) return func_result;
+
+            auto& func = unwrap(func_result)->as<FuncDecl>();
+            methods.push_back(std::move(func));
+        }
+
         skip_newlines();
     }
-    
+
     auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after behavior body");
     if (is_err(rbrace)) return unwrap_err(rbrace);
-    
+
     auto end_span = previous().span;
-    
+
     auto trait_decl = TraitDecl{
         .decorators = std::move(decorators),
         .vis = vis,
         .name = std::move(name),
         .generics = std::move(generics),
         .super_traits = std::move(super_traits),
+        .associated_types = std::move(associated_types),
         .methods = std::move(methods),
         .where_clause = std::nullopt,
         .span = SourceSpan::merge(start_span, end_span)
@@ -582,31 +612,55 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
     skip_newlines();
     auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{' for impl body");
     if (is_err(lbrace)) return unwrap_err(lbrace);
-    
+
+    std::vector<AssociatedTypeBinding> type_bindings;
     std::vector<FuncDecl> methods;
     skip_newlines();
-    
+
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
         auto method_vis = parse_visibility();
-        
-        auto func_result = parse_func_decl(method_vis);
-        if (is_err(func_result)) return func_result;
-        
-        auto& func = unwrap(func_result)->as<FuncDecl>();
-        methods.push_back(std::move(func));
-        
+
+        // Check for associated type binding: type Name = ConcreteType
+        if (check(lexer::TokenKind::KwType)) {
+            auto type_span = peek().span;
+            advance();  // consume 'type'
+
+            auto type_name_result = expect(lexer::TokenKind::Identifier, "Expected associated type name");
+            if (is_err(type_name_result)) return unwrap_err(type_name_result);
+            auto type_name = std::string(unwrap(type_name_result).lexeme);
+
+            auto eq_result = expect(lexer::TokenKind::Assign, "Expected '=' after associated type name");
+            if (is_err(eq_result)) return unwrap_err(eq_result);
+
+            auto concrete_type = parse_type();
+            if (is_err(concrete_type)) return unwrap_err(concrete_type);
+
+            type_bindings.push_back(AssociatedTypeBinding{
+                .name = std::move(type_name),
+                .type = std::move(unwrap(concrete_type)),
+                .span = type_span
+            });
+        } else {
+            auto func_result = parse_func_decl(method_vis);
+            if (is_err(func_result)) return func_result;
+
+            auto& func = unwrap(func_result)->as<FuncDecl>();
+            methods.push_back(std::move(func));
+        }
+
         skip_newlines();
     }
-    
+
     auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after impl body");
     if (is_err(rbrace)) return unwrap_err(rbrace);
-    
+
     auto end_span = previous().span;
-    
+
     auto impl_decl = ImplDecl{
         .generics = std::move(generics),
         .trait_path = std::move(trait_path),
         .self_type = std::move(self_type),
+        .type_bindings = std::move(type_bindings),
         .methods = std::move(methods),
         .where_clause = std::nullopt,
         .span = SourceSpan::merge(start_span, end_span)

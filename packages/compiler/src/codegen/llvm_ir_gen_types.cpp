@@ -24,6 +24,10 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         const auto& ident = expr.as<parser::IdentExpr>();
         auto it = locals_.find(ident.name);
         if (it != locals_.end()) {
+            // Use semantic type if available (for complex types like Ptr[T])
+            if (it->second.semantic_type) {
+                return it->second.semantic_type;
+            }
             // Map LLVM type back to semantic type
             const std::string& ty = it->second.type;
             if (ty == "i32") return types::make_i32();
@@ -568,13 +572,13 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         // Create list with initial capacity
         size_t capacity = count > 0 ? count : 4;
         std::string list_ptr = fresh_reg();
-        emit_line("  " + list_ptr + " = call ptr @tml_list_create(i32 " + std::to_string(capacity) + ")");
+        emit_line("  " + list_ptr + " = call ptr @list_create(i32 " + std::to_string(capacity) + ")");
 
         // Push each element
         for (const auto& elem : elements) {
             std::string val = gen_expr(*elem);
             std::string call_result = fresh_reg();
-            emit_line("  " + call_result + " = call i32 @tml_list_push(ptr " + list_ptr + ", i32 " + val + ")");
+            emit_line("  " + call_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " + val + ")");
         }
 
         return list_ptr;
@@ -586,7 +590,7 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
 
         // Create list with capacity from count
         std::string list_ptr = fresh_reg();
-        emit_line("  " + list_ptr + " = call ptr @tml_list_create(i32 " + count_val + ")");
+        emit_line("  " + list_ptr + " = call ptr @list_create(i32 " + count_val + ")");
 
         // Loop to push init_val count times
         std::string label_cond = fresh_label("arr.cond");
@@ -609,7 +613,7 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
 
         emit_line(label_body + ":");
         std::string push_result = fresh_reg();
-        emit_line("  " + push_result + " = call i32 @tml_list_push(ptr " + list_ptr + ", i32 " + init_val + ")");
+        emit_line("  " + push_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " + init_val + ")");
 
         std::string next_counter = fresh_reg();
         emit_line("  " + next_counter + " = add nsw i32 " + counter_val + ", 1");
@@ -629,7 +633,7 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
     std::string index_val = gen_expr(*idx.index);
 
     std::string result = fresh_reg();
-    emit_line("  " + result + " = call i32 @tml_list_get(ptr " + arr_ptr + ", i32 " + index_val + ")");
+    emit_line("  " + result + " = call i32 @list_get(ptr " + arr_ptr + ", i32 " + index_val + ")");
 
     return result;
 }
@@ -678,17 +682,181 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
 }
 
 auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::string {
-    // Generate receiver (the object the method is called on)
-    std::string receiver = gen_expr(*call.receiver);
     const std::string& method = call.method;
 
-    // Map method names to runtime functions
-    // List methods
+    // Check for static method calls on type names (e.g., List.new(16), HashMap.default())
+    // These occur when receiver is an IdentExpr or PathExpr that names a type, not a variable
+
+    // Extract type name from either IdentExpr or PathExpr (for generic types like List[I32])
+    std::string type_name;
+    bool has_type_name = false;
+
+    if (call.receiver->is<parser::IdentExpr>()) {
+        type_name = call.receiver->as<parser::IdentExpr>().name;
+        has_type_name = true;
+    } else if (call.receiver->is<parser::PathExpr>()) {
+        const auto& path_expr = call.receiver->as<parser::PathExpr>();
+        if (path_expr.path.segments.size() == 1) {
+            type_name = path_expr.path.segments[0];
+            has_type_name = true;
+        }
+    }
+
+    if (has_type_name) {
+        // Check if this is a known struct type (not a variable)
+        bool is_type_name = struct_types_.count(type_name) > 0 ||
+                           type_name == "List" || type_name == "HashMap" || type_name == "Buffer";
+
+        // Also check it's not a local variable
+        if (is_type_name && locals_.count(type_name) == 0) {
+            // This is a static method call on a type
+
+            // List static methods
+            if (type_name == "List") {
+                if (method == "new") {
+                    std::string cap = call.args.empty() ? "8" : gen_expr(*call.args[0]);
+                    // Convert i32 to i64 if needed
+                    std::string cap_i64 = fresh_reg();
+                    emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @list_create(i64 " + cap_i64 + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "default") {
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @list_create(i64 8)");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+            }
+
+            // HashMap static methods
+            if (type_name == "HashMap") {
+                if (method == "new") {
+                    std::string cap = call.args.empty() ? "16" : gen_expr(*call.args[0]);
+                    std::string cap_i64 = fresh_reg();
+                    emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @hashmap_create(i64 " + cap_i64 + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "default") {
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @hashmap_create(i64 16)");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+            }
+
+            // Buffer static methods
+            if (type_name == "Buffer") {
+                if (method == "new") {
+                    std::string cap = call.args.empty() ? "64" : gen_expr(*call.args[0]);
+                    std::string cap_i64 = fresh_reg();
+                    emit_line("  " + cap_i64 + " = sext i32 " + cap + " to i64");
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @buffer_create(i64 " + cap_i64 + ")");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+                if (method == "default") {
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @buffer_create(i64 64)");
+                    last_expr_type_ = "ptr";
+                    return result;
+                }
+            }
+
+            // Unknown static method - report error
+            report_error("Unknown static method: " + type_name + "." + method, call.span);
+            return "0";
+        }
+    }
+
+    // Generate receiver (the object the method is called on)
+    std::string receiver = gen_expr(*call.receiver);
+
+    // Handle Ptr[T] methods
+    types::TypePtr receiver_type = infer_expr_type(*call.receiver);
+    if (receiver_type && receiver_type->is<types::PtrType>()) {
+        const auto& ptr_type = receiver_type->as<types::PtrType>();
+        std::string inner_llvm_type = llvm_type_from_semantic(ptr_type.inner);
+
+        // .read() -> T - dereference pointer
+        if (method == "read") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + receiver);
+            last_expr_type_ = inner_llvm_type;
+            return result;
+        }
+
+        // .write(value: T) -> Unit - write value to pointer
+        if (method == "write") {
+            if (call.args.empty()) {
+                report_error("Ptr.write() requires a value argument", call.span);
+                return "void";
+            }
+            std::string val = gen_expr(*call.args[0]);
+            emit_line("  store " + inner_llvm_type + " " + val + ", ptr " + receiver);
+            return "void";
+        }
+
+        // .offset(n: I64) -> Ptr[T] - pointer arithmetic
+        if (method == "offset") {
+            if (call.args.empty()) {
+                report_error("Ptr.offset() requires an offset argument", call.span);
+                return receiver;
+            }
+            std::string offset = gen_expr(*call.args[0]);
+            // Convert offset to i64 (getelementptr requires i64 index)
+            std::string offset_i64 = fresh_reg();
+            emit_line("  " + offset_i64 + " = sext i32 " + offset + " to i64");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + inner_llvm_type + ", ptr " + receiver + ", i64 " + offset_i64);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // .is_null() -> Bool - check if pointer is null
+        if (method == "is_null") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp eq ptr " + receiver + ", null");
+            last_expr_type_ = "i1";
+            return result;
+        }
+    }
+
+    // Determine receiver type name for type-aware method dispatch
+    std::string receiver_type_name;
+    if (receiver_type && receiver_type->is<types::NamedType>()) {
+        receiver_type_name = receiver_type->as<types::NamedType>().name;
+    }
+
+    // Type-aware len method - calls different runtime functions based on type
     if (method == "len" || method == "length") {
+        if (receiver_type_name == "HashMap") {
+            std::string result_i64 = fresh_reg();
+            emit_line("  " + result_i64 + " = call i64 @hashmap_len(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
+            return result;
+        }
+        if (receiver_type_name == "Buffer") {
+            std::string result_i64 = fresh_reg();
+            emit_line("  " + result_i64 + " = call i64 @buffer_len(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
+            return result;
+        }
+        // Default: List
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_list_len(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i32 @list_len(ptr " + receiver + ")");
         return result;
     }
+
+    // List methods
     if (method == "push") {
         if (call.args.empty()) {
             report_error("push requires an argument", call.span);
@@ -696,58 +864,86 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         std::string val = gen_expr(*call.args[0]);
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_list_push(ptr " + receiver + ", i32 " + val + ")");
+        emit_line("  " + result + " = call i32 @list_push(ptr " + receiver + ", i32 " + val + ")");
         return result;
     }
     if (method == "pop") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_list_pop(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i32 @list_pop(ptr " + receiver + ")");
         return result;
     }
+    // Type-aware get method - different behavior for List vs HashMap
     if (method == "get") {
         if (call.args.empty()) {
-            report_error("get requires an index argument", call.span);
+            report_error("get requires an argument", call.span);
             return "0";
         }
-        std::string idx = gen_expr(*call.args[0]);
+        std::string arg = gen_expr(*call.args[0]);
+
+        if (receiver_type_name == "HashMap") {
+            // HashMap: get(key: I64) -> I64
+            std::string key_i64 = fresh_reg();
+            emit_line("  " + key_i64 + " = sext i32 " + arg + " to i64");
+            std::string result_i64 = fresh_reg();
+            emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + receiver + ", i64 " + key_i64 + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
+            return result;
+        }
+        // Default: List - get(index: I32) -> I32
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_list_get(ptr " + receiver + ", i32 " + idx + ")");
+        emit_line("  " + result + " = call i32 @list_get(ptr " + receiver + ", i32 " + arg + ")");
         return result;
     }
+    // Type-aware set method
     if (method == "set") {
         if (call.args.size() < 2) {
-            report_error("set requires index and value arguments", call.span);
-            return "0";
+            report_error("set requires two arguments", call.span);
+            return "void";
         }
-        std::string idx = gen_expr(*call.args[0]);
-        std::string val = gen_expr(*call.args[1]);
-        emit_line("  call void @tml_list_set(ptr " + receiver + ", i32 " + idx + ", i32 " + val + ")");
+        std::string arg1 = gen_expr(*call.args[0]);
+        std::string arg2 = gen_expr(*call.args[1]);
+
+        if (receiver_type_name == "HashMap") {
+            // HashMap: set(key: I64, value: I64) -> Unit
+            std::string key_i64 = fresh_reg();
+            std::string val_i64 = fresh_reg();
+            emit_line("  " + key_i64 + " = sext i32 " + arg1 + " to i64");
+            emit_line("  " + val_i64 + " = sext i32 " + arg2 + " to i64");
+            emit_line("  call void @hashmap_set(ptr " + receiver + ", i64 " + key_i64 + ", i64 " + val_i64 + ")");
+            return "void";
+        }
+        // Default: List - set(index: I32, value: I32) -> Unit
+        emit_line("  call void @list_set(ptr " + receiver + ", i32 " + arg1 + ", i32 " + arg2 + ")");
         return "void";
     }
     if (method == "clear") {
-        emit_line("  call void @tml_list_clear(ptr " + receiver + ")");
+        emit_line("  call void @list_clear(ptr " + receiver + ")");
         return "void";
     }
     if (method == "is_empty" || method == "isEmpty") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @tml_list_is_empty(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i1 @list_is_empty(ptr " + receiver + ")");
         return result;
     }
     if (method == "capacity") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_list_capacity(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i32 @list_capacity(ptr " + receiver + ")");
         return result;
     }
 
-    // HashMap methods
+    // HashMap-specific methods (has, remove)
+    // NOTE: get/set are handled above with type-aware dispatching
     if (method == "has" || method == "contains") {
         if (call.args.empty()) {
             report_error("has requires a key argument", call.span);
             return "0";
         }
         std::string key = gen_expr(*call.args[0]);
+        std::string key_i64 = fresh_reg();
+        emit_line("  " + key_i64 + " = sext i32 " + key + " to i64");
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @tml_hashmap_has(ptr " + receiver + ", i32 " + key + ")");
+        emit_line("  " + result + " = call i1 @hashmap_has(ptr " + receiver + ", i64 " + key_i64 + ")");
         return result;
     }
     if (method == "remove") {
@@ -756,8 +952,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             return "0";
         }
         std::string key = gen_expr(*call.args[0]);
+        std::string key_i64 = fresh_reg();
+        emit_line("  " + key_i64 + " = sext i32 " + key + " to i64");
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @tml_hashmap_remove(ptr " + receiver + ", i32 " + key + ")");
+        emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + receiver + ", i64 " + key_i64 + ")");
         return result;
     }
 
@@ -768,23 +966,72 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             return "0";
         }
         std::string val = gen_expr(*call.args[0]);
-        emit_line("  call void @tml_buffer_write_byte(ptr " + receiver + ", i32 " + val + ")");
+        emit_line("  call void @buffer_write_byte(ptr " + receiver + ", i32 " + val + ")");
         return "void";
     }
     if (method == "read_byte") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_buffer_read_byte(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i32 @buffer_read_byte(ptr " + receiver + ")");
         return result;
     }
     if (method == "remaining") {
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @tml_buffer_remaining(ptr " + receiver + ")");
+        emit_line("  " + result + " = call i32 @buffer_remaining(ptr " + receiver + ")");
         return result;
+    }
+    if (method == "write_i32") {
+        if (call.args.empty()) {
+            report_error("write_i32 requires a value argument", call.span);
+            return "void";
+        }
+        std::string val = gen_expr(*call.args[0]);
+        emit_line("  call void @buffer_write_i32(ptr " + receiver + ", i32 " + val + ")");
+        return "void";
+    }
+    if (method == "write_i64") {
+        if (call.args.empty()) {
+            report_error("write_i64 requires a value argument", call.span);
+            return "void";
+        }
+        std::string val = gen_expr(*call.args[0]);
+        // Convert i32 to i64 if needed
+        std::string val_i64 = fresh_reg();
+        emit_line("  " + val_i64 + " = sext i32 " + val + " to i64");
+        emit_line("  call void @buffer_write_i64(ptr " + receiver + ", i64 " + val_i64 + ")");
+        return "void";
+    }
+    if (method == "read_i32") {
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = call i32 @buffer_read_i32(ptr " + receiver + ")");
+        return result;
+    }
+    if (method == "read_i64") {
+        std::string result_i64 = fresh_reg();
+        emit_line("  " + result_i64 + " = call i64 @buffer_read_i64(ptr " + receiver + ")");
+        // Truncate to i32 for now
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
+        return result;
+    }
+    if (method == "reset_read") {
+        emit_line("  call void @buffer_reset_read(ptr " + receiver + ")");
+        return "void";
+    }
+    if (method == "destroy") {
+        // Type-aware destroy - different for List, HashMap, Buffer
+        if (receiver_type_name == "HashMap") {
+            emit_line("  call void @hashmap_destroy(ptr " + receiver + ")");
+        } else if (receiver_type_name == "Buffer") {
+            emit_line("  call void @buffer_destroy(ptr " + receiver + ")");
+        } else {
+            // Default: List
+            emit_line("  call void @list_destroy(ptr " + receiver + ")");
+        }
+        return "void";
     }
 
     // Try to find impl method using type inference
-    // Get receiver type from type environment
-    types::TypePtr receiver_type = infer_expr_type(*call.receiver);
+    // receiver_type already computed above for Ptr handling
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named = receiver_type->as<types::NamedType>();
         std::string qualified_name = named.name + "::" + method;
@@ -800,7 +1047,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 const auto& ident = call.receiver->as<parser::IdentExpr>();
                 auto it = locals_.find(ident.name);
                 if (it != locals_.end()) {
-                    receiver_ptr = it->second.reg;  // Use alloca pointer directly
+                    // If the variable stores a pointer (like 'this' parameter),
+                    // we need to load it to get the actual pointer value
+                    if (it->second.type == "ptr") {
+                        receiver_ptr = receiver;  // Use the loaded value
+                    } else {
+                        receiver_ptr = it->second.reg;  // Use alloca pointer directly
+                    }
                 } else {
                     receiver_ptr = receiver;  // Fall back to generated value
                 }

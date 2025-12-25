@@ -1,0 +1,95 @@
+use test
+
+// ============ Coverage Tracking Tests ============
+
+func add(a: I32, b: I32) -> I32 {
+    cover_func("add")
+    return a + b
+}
+
+func multiply(a: I32, b: I32) -> I32 {
+    cover_func("multiply")
+    return a * b
+}
+
+func subtract(a: I32, b: I32) -> I32 {
+    cover_func("subtract")
+    return a - b
+}
+
+@test
+func test_coverage_tracking() -> I32 {
+    // Reset any previous coverage data
+    reset_coverage()
+
+    // Initially, no functions should be covered
+    assert_eq(get_covered_func_count(), 0, "initially no functions covered")
+
+    // Call some functions
+    let result1: I32 = add(2, 3)
+    assert_eq(result1, 5, "add(2, 3) should equal 5")
+
+    // Now one function should be covered
+    assert_eq(get_covered_func_count(), 1, "one function should be covered")
+
+    // Call another function
+    let result2: I32 = multiply(4, 5)
+    assert_eq(result2, 20, "multiply(4, 5) should equal 20")
+
+    // Now two functions should be covered
+    assert_eq(get_covered_func_count(), 2, "two functions should be covered")
+
+    // Call add again (should not increase count)
+    let result3: I32 = add(10, 20)
+    assert_eq(result3, 30, "add(10, 20) should equal 30")
+
+    // Still two unique functions covered
+    assert_eq(get_covered_func_count(), 2, "still two functions covered")
+
+    // Call the third function
+    let result4: I32 = subtract(10, 3)
+    assert_eq(result4, 7, "subtract(10, 3) should equal 7")
+
+    // Now three functions covered
+    assert_eq(get_covered_func_count(), 3, "three functions should be covered")
+
+    return 0
+}
+
+@test
+func test_coverage_percent() -> I32 {
+    reset_coverage()
+
+    // Track some functions manually
+    cover_func("func_a")
+    cover_func("func_b")
+    cover_func("func_c")
+    cover_func("func_d")  // 4 functions tracked
+
+    // Call only 2 of them (by marking them covered again)
+    // Actually, all 4 are covered by the calls above
+    // So coverage should be 100%
+
+    let percent: I32 = get_coverage_percent()
+    assert_eq(percent, 100, "all tracked functions are covered")
+
+    return 0
+}
+
+@test
+func test_is_func_covered() -> I32 {
+    reset_coverage()
+
+    // Track a function
+    cover_func("my_function")
+
+    // Check if it's covered
+    let covered: Bool = is_func_covered("my_function")
+    assert(covered, "my_function should be covered")
+
+    // Check a function that wasn't covered
+    let not_covered: Bool = is_func_covered("other_function")
+    assert_eq(not_covered, false, "other_function should not be covered")
+
+    return 0
+}

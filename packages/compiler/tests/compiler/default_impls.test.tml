@@ -1,0 +1,110 @@
+// Test default implementations in behaviors
+// Tests that impl blocks can inherit default methods from behaviors
+
+// Test behavior with default implementation
+behavior Describable {
+    func describe(this) -> I32
+
+    // Default implementation - calls describe and adds 1
+    func describe_plus_one(this) -> I32 {
+        return this.describe() + 1
+    }
+}
+
+type Counter {
+    value: I32,
+}
+
+impl Describable for Counter {
+    // Only implement describe, use default for describe_plus_one
+    func describe(this) -> I32 {
+        return this.value
+    }
+}
+
+// Test behavior with multiple default implementations
+behavior Stringifiable {
+    func as_number(this) -> I32
+
+    func double_it(this) -> I32 {
+        return this.as_number() * 2
+    }
+
+    func triple_it(this) -> I32 {
+        return this.as_number() * 3
+    }
+}
+
+type Amount {
+    num: I32,
+}
+
+impl Stringifiable for Amount {
+    // Only implement as_number, use defaults for double_it and triple_it
+    func as_number(this) -> I32 {
+        return this.num
+    }
+}
+
+// Test overriding a default implementation
+type SpecialAmount {
+    num: I32,
+}
+
+impl Stringifiable for SpecialAmount {
+    func as_number(this) -> I32 {
+        return this.num
+    }
+
+    // Override the default implementation
+    func double_it(this) -> I32 {
+        return this.num * 4  // Not actually doubling!
+    }
+    // triple_it uses default
+}
+
+func main() -> I32 {
+    // Test 1: Basic default implementation
+    let c: Counter = Counter { value: 10 }
+    let result: I32 = c.describe_plus_one()
+    if result != 11 {
+        print("FAIL: describe_plus_one should return 11")
+        return 1
+    }
+
+    // Test 2: Verify describe works
+    let val: I32 = c.describe()
+    if val != 10 {
+        print("FAIL: describe should return 10")
+        return 2
+    }
+
+    // Test 3: Multiple default implementations
+    let a: Amount = Amount { num: 5 }
+    let doubled: I32 = a.double_it()
+    let tripled: I32 = a.triple_it()
+    if doubled != 10 {
+        print("FAIL: double_it should return 10")
+        return 3
+    }
+    if tripled != 15 {
+        print("FAIL: triple_it should return 15")
+        return 4
+    }
+
+    // Test 4: Override default implementation
+    let s: SpecialAmount = SpecialAmount { num: 10 }
+    let s_doubled: I32 = s.double_it()
+    let s_tripled: I32 = s.triple_it()
+    if s_doubled != 40 {
+        print("FAIL: overridden double_it should return 40")
+        return 5
+    }
+    if s_tripled != 30 {
+        print("FAIL: default triple_it should return 30")
+        return 6
+    }
+
+    print("PASS: All default implementation tests passed!")
+    return 0
+}

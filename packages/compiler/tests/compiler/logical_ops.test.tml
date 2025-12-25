@@ -1,0 +1,198 @@
+use test
+
+// ============ AND Truth Table ============
+
+@test
+func test_and_truth_table() -> I32 {
+    // Complete AND truth table
+    assert(true and true, "T and T = T")
+    assert_eq(true and false, false, "T and F = F")
+    assert_eq(false and true, false, "F and T = F")
+    assert_eq(false and false, false, "F and F = F")
+
+    return 0
+}
+
+// ============ OR Truth Table ============
+
+@test
+func test_or_truth_table() -> I32 {
+    // Complete OR truth table
+    assert(true or true, "T or T = T")
+    assert(true or false, "T or F = T")
+    assert(false or true, "F or T = T")
+    assert_eq(false or false, false, "F or F = F")
+
+    return 0
+}
+
+// ============ NOT Operations ============
+
+@test
+func test_not_operations() -> I32 {
+    assert(not false, "not F = T")
+    assert_eq(not true, false, "not T = F")
+
+    // Double negation
+    assert(not not true, "not not T = T")
+    assert_eq(not not false, false, "not not F = F")
+
+    return 0
+}
+
+// ============ Combined Logic ============
+
+@test
+func test_combined_logic() -> I32 {
+    // De Morgan's laws
+    // not (A and B) = (not A) or (not B)
+    let a: Bool = true
+    let b: Bool = false
+
+    let lhs1: Bool = not (a and b)
+    let rhs1: Bool = (not a) or (not b)
+    assert_eq(lhs1, rhs1, "De Morgan 1")
+
+    // not (A or B) = (not A) and (not B)
+    let lhs2: Bool = not (a or b)
+    let rhs2: Bool = (not a) and (not b)
+    assert_eq(lhs2, rhs2, "De Morgan 2")
+
+    return 0
+}
+
+// ============ Short-Circuit Evaluation ============
+
+func always_true() -> Bool {
+    return true
+}
+
+func always_false() -> Bool {
+    return false
+}
+
+@test
+func test_short_circuit() -> I32 {
+    // OR short-circuits when first is true
+    let r1: Bool = always_true() or always_false()
+    assert(r1, "T or F (short circuit)")
+
+    // AND short-circuits when first is false
+    let r2: Bool = always_false() and always_true()
+    assert_eq(r2, false, "F and T (short circuit)")
+
+    return 0
+}
+
+// ============ Logic with Comparisons ============
+
+@test
+func test_comparison_logic() -> I32 {
+    let x: I32 = 5
+    let y: I32 = 10
+
+    // Combined comparisons with AND
+    assert(x > 0 and y > 0, "both positive")
+    assert(x < y and y < 20, "x < y < 20")
+
+    // Combined comparisons with OR
+    assert(x == 5 or y == 5, "one equals 5")
+    assert_eq(x > 10 or y < 5, false, "neither condition")
+
+    return 0
+}
+
+// ============ Implication ============
+
+// A implies B  is equivalent to  (not A) or B
+func implies(a: Bool, b: Bool) -> Bool {
+    return (not a) or b
+}
+
+@test
+func test_implication() -> I32 {
+    // Truth table for implication
+    assert(implies(false, false), "F -> F = T")
+    assert(implies(false, true), "F -> T = T")
+    assert_eq(implies(true, false), false, "T -> F = F")
+    assert(implies(true, true), "T -> T = T")
+
+    return 0
+}
+
+// ============ Equivalence ============
+
+func equivalent(a: Bool, b: Bool) -> Bool {
+    return (a and b) or ((not a) and (not b))
+}
+
+@test
+func test_equivalence() -> I32 {
+    assert(equivalent(true, true), "T <-> T = T")
+    assert_eq(equivalent(true, false), false, "T <-> F = F")
+    assert_eq(equivalent(false, true), false, "F <-> T = F")
+    assert(equivalent(false, false), "F <-> F = T")
+
+    return 0
+}
+
+// ============ XOR ============
+
+func xor(a: Bool, b: Bool) -> Bool {
+    return (a or b) and (not (a and b))
+}
+
+@test
+func test_xor() -> I32 {
+    assert_eq(xor(false, false), false, "F xor F = F")
+    assert(xor(false, true), "F xor T = T")
+    assert(xor(true, false), "T xor F = T")
+    assert_eq(xor(true, true), false, "T xor T = F")
+
+    return 0
+}
+
+// ============ Complex Boolean Expressions ============
+
+@test
+func test_complex_expressions() -> I32 {
+    let a: Bool = true
+    let b: Bool = false
+    let c: Bool = true
+
+    // (A and B) or C
+    let r1: Bool = (a and b) or c
+    assert(r1, "(T and F) or T")
+
+    // A and (B or C)
+    let r2: Bool = a and (b or c)
+    assert(r2, "T and (F or T)")
+
+    // not (A and B and C)
+    let r3: Bool = not (a and b and c)
+    assert(r3, "not (T and F and T)")
+
+    return 0
+}
+
+// ============ Boolean from Arithmetic ============
+
+@test
+func test_bool_from_arithmetic() -> I32 {
+    let x: I32 = 10
+    let y: I32 = 5
+
+    // Comparison results
+    let gt: Bool = x > y
+    let lt: Bool = x < y
+    let eq: Bool = x == y
+
+    assert(gt, "10 > 5")
+    assert_eq(lt, false, "10 < 5 is false")
+    assert_eq(eq, false, "10 == 5 is false")
+
+    // Use in logic
+    assert(gt and (not lt), "gt and not lt")
+
+    return 0
+}

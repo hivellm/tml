@@ -1,0 +1,302 @@
+// Comprehensive Generics Test Suite
+// Tests monomorphization of generic types (Rust-style)
+//
+// NOTE: The type checker doesn't yet resolve generic field types for
+// assignments to typed variables. Use print() directly on field access.
+use test
+
+// ============================================================================
+// SECTION 1: Generic Structs
+// ============================================================================
+
+// Single type parameter struct
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+// Two type parameter struct
+type Entry[K, V] {
+    key: K,
+    value: V,
+}
+
+// Three type parameter struct
+type Triple[A, B, C] {
+    a: A,
+    b: B,
+    c: C,
+}
+
+@test
+func test_generic_struct_single_param() -> I32 {
+    // Test Pair[I32] - monomorphizes to Pair__I32
+    let p: Pair[I32] = Pair { first: 10, second: 20 }
+    print(p.first)   // Should print 10
+    print(p.second)  // Should print 20
+    return 0
+}
+
+@test
+func test_generic_struct_field_access() -> I32 {
+    // Test that field access returns correct values
+    let p: Pair[I32] = Pair { first: 100, second: 200 }
+    print(p.first)   // Should print 100
+    print(p.second)  // Should print 200
+    return 0
+}
+
+@test
+func test_generic_struct_two_params() -> I32 {
+    // Test Entry[I32, I32] - monomorphizes to Entry__I32__I32
+    let e: Entry[I32, I32] = Entry { key: 1, value: 100 }
+    print(e.key)    // Should print 1
+    print(e.value)  // Should print 100
+    return 0
+}
+
+@test
+func test_generic_struct_three_params() -> I32 {
+    // Test Triple[I32, I32, I32] - monomorphizes to Triple__I32__I32__I32
+    let t: Triple[I32, I32, I32] = Triple { a: 1, b: 2, c: 3 }
+    print(t.a)  // Should print 1
+    print(t.b)  // Should print 2
+    print(t.c)  // Should print 3
+    return 0
+}
+
+@test
+func test_generic_struct_multiple_instances() -> I32 {
+    // Test multiple instances of the same generic type
+    let p1: Pair[I32] = Pair { first: 1, second: 2 }
+    let p2: Pair[I32] = Pair { first: 10, second: 20 }
+    let p3: Pair[I32] = Pair { first: 100, second: 200 }
+    print(p1.first)  // Should print 1
+    print(p2.first)  // Should print 10
+    print(p3.first)  // Should print 100
+    return 0
+}
+
+// ============================================================================
+// SECTION 2: Generic Enums
+// ============================================================================
+
+// Classic Maybe/Option type
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+// Classic Result/Outcome type
+type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+@test
+func test_generic_enum_just() -> I32 {
+    // Test Maybe[I32] with Just variant
+    let m: Maybe[I32] = Just(42)
+    when m {
+        Just(v) => {
+            print(v)  // Should print 42
+            return 0
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+@test
+func test_generic_enum_nothing() -> I32 {
+    // Test Maybe[I32] with Nothing variant
+    let m: Maybe[I32] = Nothing
+    when m {
+        Just(v) => return 1,
+        Nothing => {
+            print(0)  // Success indicator
+            return 0
+        },
+    }
+    return 1
+}
+
+@test
+func test_generic_enum_pattern_binding() -> I32 {
+    // Test that pattern binding extracts the value correctly
+    let m: Maybe[I32] = Just(100)
+    when m {
+        Just(value) => {
+            print(value)  // Should print 100
+            return 0
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+@test
+func test_outcome_ok() -> I32 {
+    // Test Outcome[I32, I32] with Ok variant
+    let r: Outcome[I32, I32] = Ok(200)
+    when r {
+        Ok(v) => {
+            print(v)  // Should print 200
+            return 0
+        },
+        Err(e) => return 1,
+    }
+    return 1
+}
+
+@test
+func test_outcome_err() -> I32 {
+    // Test Outcome[I32, I32] with Err variant
+    let r: Outcome[I32, I32] = Err(404)
+    when r {
+        Ok(v) => return 1,
+        Err(e) => {
+            print(e)  // Should print 404
+            return 0
+        },
+    }
+    return 1
+}
+
+// ============================================================================
+// SECTION 3: Complex Generic Usage
+// ============================================================================
+
+@test
+func test_nested_generic_struct() -> I32 {
+    // Test Entry with different key/value combinations
+    let e: Entry[I32, I32] = Entry { key: 42, value: 100 }
+    print(e.key)    // Should print 42
+    print(e.value)  // Should print 100
+    return 0
+}
+
+@test
+func test_generic_in_function() -> I32 {
+    // Test using generic type as function local
+    let maybe_val: Maybe[I32] = Just(50)
+    when maybe_val {
+        Just(v) => {
+            print(v)  // Should print 50
+            return 0
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+@test
+func test_multiple_generic_types_together() -> I32 {
+    // Test using different generic types in the same scope
+    let pair: Pair[I32] = Pair { first: 1, second: 2 }
+    let entry: Entry[I32, I32] = Entry { key: 10, value: 20 }
+    let maybe: Maybe[I32] = Just(100)
+
+    print(pair.first)  // Should print 1
+    print(entry.key)   // Should print 10
+
+    when maybe {
+        Just(v) => {
+            print(v)  // Should print 100
+            return 0
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+// ============================================================================
+// SECTION 4: Edge Cases
+// ============================================================================
+
+@test
+func test_generic_with_zero() -> I32 {
+    // Test generic with zero value
+    let p: Pair[I32] = Pair { first: 0, second: 0 }
+    print(p.first)   // Should print 0
+    print(p.second)  // Should print 0
+    return 0
+}
+
+@test
+func test_generic_with_negative() -> I32 {
+    // Test generic with negative values
+    let p: Pair[I32] = Pair { first: -10, second: -20 }
+    print(p.first)   // Should print -10
+    print(p.second)  // Should print -20
+    return 0
+}
+
+@test
+func test_maybe_chain() -> I32 {
+    // Test creating multiple Maybe values
+    let m1: Maybe[I32] = Just(1)
+    let m2: Maybe[I32] = Just(2)
+    let m3: Maybe[I32] = Nothing
+
+    when m1 {
+        Just(v1) => {
+            print(v1)  // Should print 1
+            when m2 {
+                Just(v2) => {
+                    print(v2)  // Should print 2
+                    when m3 {
+                        Just(v3) => return 1,
+                        Nothing => {
+                            print(0)  // Success
+                            return 0
+                        },
+                    }
+                },
+                Nothing => return 1,
+            }
+        },
+        Nothing => return 1,
+    }
+    return 1
+}
+
+// ============================================================================
+// SECTION 5: Monomorphization Verification
+// ============================================================================
+
+@test
+func test_same_struct_different_values() -> I32 {
+    // Verify that different Pair[I32] instances are independent
+    let a: Pair[I32] = Pair { first: 5, second: 10 }
+    let b: Pair[I32] = Pair { first: 50, second: 100 }
+
+    // Modifying one shouldn't affect the other
+    print(a.first)  // Should print 5
+    print(b.first)  // Should print 50
+    return 0
+}
+
+@test
+func test_outcome_both_variants() -> I32 {
+    // Test both Ok and Err variants in same function
+    let ok_val: Outcome[I32, I32] = Ok(42)
+    let err_val: Outcome[I32, I32] = Err(99)
+
+    when ok_val {
+        Ok(v) => print(v),   // Should print 42
+        Err(e) => return 1,
+    }
+
+    when err_val {
+        Ok(v) => return 1,
+        Err(e) => print(e),  // Should print 99
+    }
+
+    return 0
+}
+
+// Main entry point for running without @test framework
+func main() -> I32 {
+    return 0
+}

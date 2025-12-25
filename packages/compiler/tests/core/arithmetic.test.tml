@@ -1,0 +1,375 @@
+use test
+
+// ============================================================================
+// Comprehensive Arithmetic Tests
+// Tests all arithmetic operations for I32, I64, F64
+// ============================================================================
+
+// ============================================================================
+// Basic Integer Arithmetic (I32)
+// ============================================================================
+
+@test
+func test_i32_addition() -> I32 {
+    let a: I32 = 10
+    let b: I32 = 20
+    let result: I32 = a + b
+    assert_eq(result, 30, "10 + 20 should equal 30")
+    return 0
+}
+
+@test
+func test_i32_subtraction() -> I32 {
+    let a: I32 = 50
+    let b: I32 = 20
+    let result: I32 = a - b
+    assert_eq(result, 30, "50 - 20 should equal 30")
+    return 0
+}
+
+@test
+func test_i32_multiplication() -> I32 {
+    let a: I32 = 6
+    let b: I32 = 7
+    let result: I32 = a * b
+    assert_eq(result, 42, "6 * 7 should equal 42")
+    return 0
+}
+
+@test
+func test_i32_division() -> I32 {
+    let a: I32 = 100
+    let b: I32 = 4
+    let result: I32 = a / b
+    assert_eq(result, 25, "100 / 4 should equal 25")
+    return 0
+}
+
+@test
+func test_i32_modulo() -> I32 {
+    let a: I32 = 17
+    let b: I32 = 5
+    let result: I32 = a % b
+    assert_eq(result, 2, "17 % 5 should equal 2")
+    return 0
+}
+
+@test
+func test_i32_negation() -> I32 {
+    let a: I32 = 42
+    let result: I32 = -a
+    assert_eq(result, -42, "-42 should equal -42")
+    return 0
+}
+
+@test
+func test_i32_double_negation() -> I32 {
+    let a: I32 = -42
+    let result: I32 = -a
+    assert_eq(result, 42, "--42 should equal 42")
+    return 0
+}
+
+// ============================================================================
+// Complex I32 Expressions
+// ============================================================================
+
+@test
+func test_i32_operator_precedence() -> I32 {
+    // 2 + 3 * 4 should be 2 + 12 = 14
+    let result: I32 = 2 + 3 * 4
+    assert_eq(result, 14, "2 + 3 * 4 should equal 14")
+    return 0
+}
+
+@test
+func test_i32_parentheses() -> I32 {
+    // (2 + 3) * 4 should be 5 * 4 = 20
+    let result: I32 = (2 + 3) * 4
+    assert_eq(result, 20, "(2 + 3) * 4 should equal 20")
+    return 0
+}
+
+@test
+func test_i32_complex_expression() -> I32 {
+    // ((10 - 2) * 3 + 4) / 2 = (8 * 3 + 4) / 2 = (24 + 4) / 2 = 28 / 2 = 14
+    let result: I32 = ((10 - 2) * 3 + 4) / 2
+    assert_eq(result, 14, "((10 - 2) * 3 + 4) / 2 should equal 14")
+    return 0
+}
+
+@test
+func test_i32_multiple_operations() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 3
+    let c: I32 = 2
+    let d: I32 = 4
+    // a * b - c + d = 15 - 2 + 4 = 17
+    let result: I32 = a * b - c + d
+    assert_eq(result, 17, "5 * 3 - 2 + 4 should equal 17")
+    return 0
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+@test
+func test_i32_zero_addition() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a + 0
+    assert_eq(result, 42, "42 + 0 should equal 42")
+    return 0
+}
+
+@test
+func test_i32_zero_multiplication() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a * 0
+    assert_eq(result, 0, "42 * 0 should equal 0")
+    return 0
+}
+
+@test
+func test_i32_one_multiplication() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a * 1
+    assert_eq(result, 42, "42 * 1 should equal 42")
+    return 0
+}
+
+@test
+func test_i32_divide_by_one() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a / 1
+    assert_eq(result, 42, "42 / 1 should equal 42")
+    return 0
+}
+
+@test
+func test_i32_self_subtraction() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a - a
+    assert_eq(result, 0, "a - a should equal 0")
+    return 0
+}
+
+@test
+func test_i32_self_division() -> I32 {
+    let a: I32 = 42
+    let result: I32 = a / a
+    assert_eq(result, 1, "a / a should equal 1")
+    return 0
+}
+
+// ============================================================================
+// Negative Numbers
+// ============================================================================
+
+@test
+func test_i32_add_negative() -> I32 {
+    let a: I32 = 10
+    let b: I32 = -3
+    let result: I32 = a + b
+    assert_eq(result, 7, "10 + (-3) should equal 7")
+    return 0
+}
+
+@test
+func test_i32_subtract_negative() -> I32 {
+    let a: I32 = 10
+    let b: I32 = -3
+    let result: I32 = a - b
+    assert_eq(result, 13, "10 - (-3) should equal 13")
+    return 0
+}
+
+@test
+func test_i32_multiply_negatives() -> I32 {
+    let a: I32 = -5
+    let b: I32 = -4
+    let result: I32 = a * b
+    assert_eq(result, 20, "-5 * -4 should equal 20")
+    return 0
+}
+
+@test
+func test_i32_divide_negative() -> I32 {
+    let a: I32 = -20
+    let b: I32 = 4
+    let result: I32 = a / b
+    assert_eq(result, -5, "-20 / 4 should equal -5")
+    return 0
+}
+
+// ============================================================================
+// Compound Assignment (if supported)
+// ============================================================================
+
+@test
+func test_i32_increment_pattern() -> I32 {
+    let mut x: I32 = 0
+    x = x + 1
+    x = x + 1
+    x = x + 1
+    assert_eq(x, 3, "incrementing 3 times should equal 3")
+    return 0
+}
+
+@test
+func test_i32_accumulation() -> I32 {
+    let mut sum: I32 = 0
+    sum = sum + 10
+    sum = sum + 20
+    sum = sum + 30
+    assert_eq(sum, 60, "10 + 20 + 30 should equal 60")
+    return 0
+}
+
+// ============================================================================
+// Bitwise Operations (I32)
+// ============================================================================
+
+@test
+func test_i32_bitwise_and() -> I32 {
+    let a: I32 = 0b1100
+    let b: I32 = 0b1010
+    let result: I32 = a & b
+    assert_eq(result, 0b1000, "1100 & 1010 should equal 1000")
+    return 0
+}
+
+@test
+func test_i32_bitwise_or() -> I32 {
+    let a: I32 = 0b1100
+    let b: I32 = 0b1010
+    let result: I32 = a | b
+    assert_eq(result, 0b1110, "1100 | 1010 should equal 1110")
+    return 0
+}
+
+@test
+func test_i32_bitwise_xor() -> I32 {
+    let a: I32 = 0b1100
+    let b: I32 = 0b1010
+    let result: I32 = a ^ b
+    assert_eq(result, 0b0110, "1100 ^ 1010 should equal 0110")
+    return 0
+}
+
+@test
+func test_i32_left_shift() -> I32 {
+    let a: I32 = 1
+    let result: I32 = a << 4
+    assert_eq(result, 16, "1 << 4 should equal 16")
+    return 0
+}
+
+@test
+func test_i32_right_shift() -> I32 {
+    let a: I32 = 16
+    let result: I32 = a >> 2
+    assert_eq(result, 4, "16 >> 2 should equal 4")
+    return 0
+}
+
+// ============================================================================
+// Comparison Operations
+// ============================================================================
+
+@test
+func test_i32_equals() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 42
+    let result: Bool = a == b
+    assert_eq(result, true, "42 == 42 should be true")
+    return 0
+}
+
+@test
+func test_i32_not_equals() -> I32 {
+    let a: I32 = 42
+    let b: I32 = 43
+    let result: Bool = a != b
+    assert_eq(result, true, "42 != 43 should be true")
+    return 0
+}
+
+@test
+func test_i32_less_than() -> I32 {
+    let result: Bool = 5 < 10
+    assert_eq(result, true, "5 < 10 should be true")
+    return 0
+}
+
+@test
+func test_i32_less_than_equal() -> I32 {
+    let result1: Bool = 5 <= 5
+    let result2: Bool = 5 <= 10
+    assert_eq(result1, true, "5 <= 5 should be true")
+    assert_eq(result2, true, "5 <= 10 should be true")
+    return 0
+}
+
+@test
+func test_i32_greater_than() -> I32 {
+    let result: Bool = 10 > 5
+    assert_eq(result, true, "10 > 5 should be true")
+    return 0
+}
+
+@test
+func test_i32_greater_than_equal() -> I32 {
+    let result1: Bool = 10 >= 10
+    let result2: Bool = 10 >= 5
+    assert_eq(result1, true, "10 >= 10 should be true")
+    assert_eq(result2, true, "10 >= 5 should be true")
+    return 0
+}
+
+// ============================================================================
+// Boolean Logical Operations
+// ============================================================================
+
+@test
+func test_bool_and() -> I32 {
+    let result1: Bool = true and true
+    let result2: Bool = true and false
+    let result3: Bool = false and true
+    let result4: Bool = false and false
+    assert_eq(result1, true, "true and true should be true")
+    assert_eq(result2, false, "true and false should be false")
+    assert_eq(result3, false, "false and true should be false")
+    assert_eq(result4, false, "false and false should be false")
+    return 0
+}
+
+@test
+func test_bool_or() -> I32 {
+    let result1: Bool = true or true
+    let result2: Bool = true or false
+    let result3: Bool = false or true
+    let result4: Bool = false or false
+    assert_eq(result1, true, "true or true should be true")
+    assert_eq(result2, true, "true or false should be true")
+    assert_eq(result3, true, "false or true should be true")
+    assert_eq(result4, false, "false or false should be false")
+    return 0
+}
+
+@test
+func test_bool_not() -> I32 {
+    let result1: Bool = not true
+    let result2: Bool = not false
+    assert_eq(result1, false, "not true should be false")
+    assert_eq(result2, true, "not false should be true")
+    return 0
+}
+
+@test
+func test_bool_complex_expression() -> I32 {
+    // (true and false) or (not false and true) = false or (true and true) = false or true = true
+    let result: Bool = (true and false) or (not false and true)
+    assert_eq(result, true, "complex bool expression should be true")
+    return 0
+}

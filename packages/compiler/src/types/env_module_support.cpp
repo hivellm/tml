@@ -92,6 +92,37 @@ auto TypeEnv::resolve_imported_symbol(const std::string& name) const
     return std::nullopt;
 }
 
+// Helper to parse a single TML file and extract public functions
+static std::optional<std::pair<std::vector<parser::DeclPtr>, std::string>>
+parse_tml_file(const std::string& file_path) {
+    std::ifstream file(file_path);
+    if (!file) {
+        return std::nullopt;
+    }
+
+    std::string source_code((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    auto source = lexer::Source::from_string(source_code, file_path);
+    lexer::Lexer lex(source);
+    auto tokens = lex.tokenize();
+
+    if (lex.has_errors()) {
+        return std::nullopt;
+    }
+
+    parser::Parser parser(std::move(tokens));
+    auto module_name = std::filesystem::path(file_path).stem().string();
+    auto parse_result = parser.parse_module(module_name);
+
+    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+        return std::nullopt;
+    }
+
+    auto parsed_module = std::get<parser::Module>(std::move(parse_result));
+    return std::make_pair(std::move(parsed_module.decls), source_code);
+}
+
 bool TypeEnv::load_module_from_file(const std::string& module_path, const std::string& file_path) {
     if (!module_registry_) {
         return false;
@@ -102,43 +133,45 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         return true;  // Already loaded
     }
 
-    // Read the TML file
-    std::ifstream file(file_path);
-    if (!file) {
-        TML_DEBUG_LN("[MODULE] Failed to open: " << file_path);
-        return false;
-    }
+    // Collect all declarations to process
+    std::vector<std::pair<std::vector<parser::DeclPtr>, std::string>> all_parsed;
 
-    std::string source_code((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
+    // Check if this is a mod.tml file - if so, load all sibling .tml files
+    auto fs_path = std::filesystem::path(file_path);
+    std::cerr << "[DEBUG] load_module_from_file: " << file_path << " (stem: " << fs_path.stem() << ")\n";
+    if (fs_path.stem() == "mod") {
+        auto dir = fs_path.parent_path();
+        std::cerr << "[DEBUG] Loading directory module from: " << dir << "\n";
 
-    // Lex and parse the module
-    auto source = lexer::Source::from_string(source_code, file_path);
-    lexer::Lexer lex(source);
-    auto tokens = lex.tokenize();
-
-    if (lex.has_errors()) {
-        TML_DEBUG_LN("[MODULE] Lexer errors in " << file_path << ":");
-        for (const auto& error : lex.errors()) {
-            TML_DEBUG_LN("  " << error.message);
+        // Load all .tml files in the directory (except mod.tml itself)
+        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".tml") {
+                auto entry_path = entry.path().string();
+                std::cerr << "[DEBUG]   Parsing: " << entry.path().filename() << "\n";
+                auto parsed = parse_tml_file(entry_path);
+                if (parsed) {
+                    std::cerr << "[DEBUG]   OK: " << entry.path().filename() << "\n";
+                    all_parsed.push_back(std::move(*parsed));
+                } else {
+                    std::cerr << "[DEBUG]   FAILED: " << entry.path().filename() << "\n";
+                }
+            }
         }
-        return false;
-    }
-
-    parser::Parser parser(std::move(tokens));
-    auto module_name = std::filesystem::path(file_path).stem().string();
-    auto parse_result = parser.parse_module(module_name);
-
-    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-        TML_DEBUG_LN("[MODULE] Parse errors in " << file_path << ":");
-        const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
-        for (const auto& error : errors) {
-            TML_DEBUG_LN("  " << error.message);
+    } else {
+        // Single file module
+        auto parsed = parse_tml_file(file_path);
+        if (!parsed) {
+            TML_DEBUG_LN("[MODULE] Failed to parse: " << file_path);
+            return false;
         }
-        return false;
+        all_parsed.push_back(std::move(*parsed));
     }
 
-    const auto& parsed_module = std::get<parser::Module>(parse_result);
+    if (all_parsed.empty()) {
+        std::cerr << "[DEBUG] No valid files found for: " << module_path << "\n";
+        return false;
+    }
+    std::cerr << "[DEBUG] Parsed " << all_parsed.size() << " files for module: " << module_path << "\n";
 
     // Create module structure and extract declarations
     Module mod;
@@ -187,69 +220,212 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         return make_primitive(PrimitiveKind::I32);
     };
 
-    // Extract public function declarations (especially lowlevel functions)
-    for (const auto& decl : parsed_module.decls) {
-        if (decl->is<parser::FuncDecl>()) {
-            const auto& func = decl->as<parser::FuncDecl>();
+    // Extract public declarations from all parsed files
+    for (const auto& [decls, source_code] : all_parsed) {
+        for (const auto& decl : decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func = decl->as<parser::FuncDecl>();
 
-            // Only include public functions
-            if (func.vis != parser::Visibility::Public) {
-                continue;
+                // Only include public functions
+                if (func.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Convert parameter types
+                std::vector<types::TypePtr> param_types;
+                for (const auto& param : func.params) {
+                    if (param.type) {
+                        param_types.push_back(resolve_simple_type(*param.type));
+                    }
+                }
+
+                // Convert return type
+                types::TypePtr return_type;
+                if (func.return_type.has_value()) {
+                    const auto& type_ptr = func.return_type.value();
+                    return_type = resolve_simple_type(*type_ptr);
+                } else {
+                    return_type = make_unit();
+                }
+
+                // Create function signature
+                FuncSig sig{
+                    func.name,
+                    param_types,
+                    return_type,
+                    {},     // type_params
+                    false,  // is_async
+                    builtin_span,
+                    StabilityLevel::Stable,
+                    "",     // deprecated_message
+                    "1.0",  // since_version
+                    {},     // where_constraints
+                    func.is_unsafe  // is_lowlevel
+                };
+
+                mod.functions[func.name] = sig;
             }
+            else if (decl->is<parser::StructDecl>()) {
+                const auto& struct_decl = decl->as<parser::StructDecl>();
 
-            // Convert parameter types
-            std::vector<types::TypePtr> param_types;
-            for (const auto& param : func.params) {
-                // param.type is parser::TypePtr (std::unique_ptr<parser::Type>)
-                if (param.type) {
-                    param_types.push_back(resolve_simple_type(*param.type));
+                // Only include public structs
+                if (struct_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Convert fields
+                std::vector<std::pair<std::string, TypePtr>> fields;
+                for (const auto& field : struct_decl.fields) {
+                    if (field.type) {
+                        fields.emplace_back(field.name, resolve_simple_type(*field.type));
+                    }
+                }
+
+                // Extract type params
+                std::vector<std::string> type_params;
+                for (const auto& param : struct_decl.generics) {
+                    type_params.push_back(param.name);
+                }
+
+                // Create struct definition
+                StructDef struct_def{
+                    struct_decl.name,
+                    std::move(type_params),
+                    std::move(fields),
+                    struct_decl.span
+                };
+
+                mod.structs[struct_decl.name] = std::move(struct_def);
+                std::cerr << "[DEBUG] Registered struct: " << struct_decl.name << " in module " << module_path << "\n";
+            }
+            else if (decl->is<parser::EnumDecl>()) {
+                const auto& enum_decl = decl->as<parser::EnumDecl>();
+
+                // Only include public enums
+                if (enum_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Convert variants
+                std::vector<std::pair<std::string, std::vector<TypePtr>>> variants;
+                for (const auto& variant : enum_decl.variants) {
+                    std::vector<TypePtr> payload_types;
+                    // Handle tuple fields (e.g., Some(T))
+                    if (variant.tuple_fields.has_value()) {
+                        for (const auto& type_ptr : variant.tuple_fields.value()) {
+                            payload_types.push_back(resolve_simple_type(*type_ptr));
+                        }
+                    }
+                    // Handle struct fields (e.g., Point { x: I32, y: I32 })
+                    if (variant.struct_fields.has_value()) {
+                        for (const auto& field : variant.struct_fields.value()) {
+                            if (field.type) {
+                                payload_types.push_back(resolve_simple_type(*field.type));
+                            }
+                        }
+                    }
+                    variants.emplace_back(variant.name, std::move(payload_types));
+                }
+
+                // Extract type params
+                std::vector<std::string> type_params;
+                for (const auto& param : enum_decl.generics) {
+                    type_params.push_back(param.name);
+                }
+
+                // Create enum definition
+                EnumDef enum_def{
+                    enum_decl.name,
+                    std::move(type_params),
+                    std::move(variants),
+                    enum_decl.span
+                };
+
+                mod.enums[enum_decl.name] = std::move(enum_def);
+                std::cerr << "[DEBUG] Registered enum: " << enum_decl.name << " in module " << module_path << "\n";
+            }
+            else if (decl->is<parser::ImplDecl>()) {
+                const auto& impl_decl = decl->as<parser::ImplDecl>();
+
+                // Get the type name being implemented from self_type
+                std::string type_name;
+                if (impl_decl.self_type && impl_decl.self_type->is<parser::NamedType>()) {
+                    const auto& named = impl_decl.self_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        type_name = named.path.segments.back();
+                    }
+                }
+
+                if (type_name.empty()) {
+                    continue;  // Skip if we couldn't determine the type name
+                }
+
+                // Extract methods from impl block (methods is std::vector<FuncDecl>)
+                for (const auto& func : impl_decl.methods) {
+                    // Only include public methods
+                    if (func.vis != parser::Visibility::Public) {
+                        continue;
+                    }
+
+                    // Convert parameter types
+                    std::vector<types::TypePtr> param_types;
+                    for (const auto& param : func.params) {
+                        if (param.type) {
+                            param_types.push_back(resolve_simple_type(*param.type));
+                        }
+                    }
+
+                    // Convert return type
+                    types::TypePtr return_type;
+                    if (func.return_type.has_value()) {
+                        return_type = resolve_simple_type(*func.return_type.value());
+                    } else {
+                        return_type = make_unit();
+                    }
+
+                    // Create qualified function name: Type::method
+                    std::string qualified_name = type_name + "::" + func.name;
+
+                    FuncSig sig{
+                        qualified_name,
+                        param_types,
+                        return_type,
+                        {},     // type_params
+                        false,  // is_async
+                        builtin_span,
+                        StabilityLevel::Stable,
+                        "",     // deprecated_message
+                        "1.0",  // since_version
+                        {},     // where_constraints
+                        func.is_unsafe  // is_lowlevel
+                    };
+
+                    mod.functions[qualified_name] = sig;
+                    std::cerr << "[DEBUG] Registered impl method: " << qualified_name << " in module " << module_path << "\n";
                 }
             }
-
-            // Convert return type
-            types::TypePtr return_type;
-            if (func.return_type.has_value()) {
-                // func.return_type is std::optional<parser::TypePtr>
-                const auto& type_ptr = func.return_type.value();
-                return_type = resolve_simple_type(*type_ptr);
-            } else {
-                return_type = make_unit();
-            }
-
-            // Create function signature
-            FuncSig sig{
-                func.name,
-                param_types,
-                return_type,
-                {},     // type_params
-                false,  // is_async
-                builtin_span,
-                StabilityLevel::Stable,
-                "",     // deprecated_message
-                "1.0",  // since_version
-                {},     // where_constraints
-                func.is_unsafe  // is_lowlevel (lowlevel keyword maps to is_unsafe in parser)
-            };
-
-            mod.functions[func.name] = sig;
         }
-        // TODO: Extract structs, enums, type aliases, etc.
     }
 
-    // Check if module has any pure TML functions (non-lowlevel)
-    for (const auto& decl : parsed_module.decls) {
-        if (decl->is<parser::FuncDecl>()) {
-            const auto& func = decl->as<parser::FuncDecl>();
-            if (func.vis == parser::Visibility::Public && !func.is_unsafe && func.body.has_value()) {
-                mod.has_pure_tml_functions = true;
-                break;
+    // Check if module has any pure TML functions and collect source code
+    std::string combined_source;
+    for (const auto& [decls, src] : all_parsed) {
+        for (const auto& decl : decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func = decl->as<parser::FuncDecl>();
+                if (func.vis == parser::Visibility::Public && !func.is_unsafe && func.body.has_value()) {
+                    mod.has_pure_tml_functions = true;
+                }
             }
+        }
+        if (!src.empty()) {
+            combined_source += src + "\n";
         }
     }
 
     // Store source code if module has pure TML functions (for re-parsing in codegen)
     if (mod.has_pure_tml_functions) {
-        mod.source_code = source_code;
+        mod.source_code = combined_source;
         mod.file_path = file_path;
     }
 
@@ -270,10 +446,26 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         return true;  // Already loaded
     }
 
-    // Special case: test module (keeps hardcoded init for now)
+    // Test module - load from packages/test/
+    // Note: We prioritize assertions/mod.tml since mod.tml uses `pub use` re-exports
+    // which aren't fully supported yet
     if (module_path == "test") {
-        init_test_module();
-        return true;
+        std::vector<std::filesystem::path> search_paths = {
+            std::filesystem::path("packages") / "test" / "src" / "assertions" / "mod.tml",
+            std::filesystem::path("packages") / "test" / "src" / "mod.tml",
+            std::filesystem::path("..") / ".." / "test" / "src" / "assertions" / "mod.tml",  // From build/
+            std::filesystem::path("..") / "packages" / "test" / "src" / "assertions" / "mod.tml",  // From tests/
+        };
+
+        for (const auto& module_file : search_paths) {
+            if (std::filesystem::exists(module_file)) {
+                TML_DEBUG_LN("[MODULE] Found test module at: " << module_file);
+                return load_module_from_file(module_path, module_file.string());
+            }
+        }
+
+        std::cerr << "error: Test module file not found\n";
+        return false;
     }
 
     // Core library modules - load from filesystem
@@ -283,7 +475,8 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
         // Try multiple possible paths for the module file
         std::vector<std::filesystem::path> search_paths = {
-            std::filesystem::path("packages") / "core" / "src" / (module_name + ".tml"),  // From project root
+            std::filesystem::path("packages") / "core" / "src" / (module_name + ".tml"),
+            std::filesystem::path("packages") / "core" / "src" / module_name / "mod.tml",
             std::filesystem::path("..") / ".." / "core" / "src" / (module_name + ".tml"),  // From build/
             std::filesystem::path("..") / "packages" / "core" / "src" / (module_name + ".tml"),  // From tests/
             std::filesystem::path("core") / "src" / (module_name + ".tml")  // From packages/
@@ -308,21 +501,30 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
         // Try multiple possible paths for the module file
         std::vector<std::filesystem::path> search_paths = {
-            std::filesystem::path("packages") / "std" / "src" / (module_name + ".tml"),  // From project root
+            std::filesystem::path("packages") / "std" / "src" / (module_name + ".tml"),
+            std::filesystem::path("packages") / "std" / "src" / module_name / "mod.tml",
             std::filesystem::path("..") / ".." / "std" / "src" / (module_name + ".tml"),  // From build/
+            std::filesystem::path("..") / ".." / "std" / "src" / module_name / "mod.tml",  // From build/
             std::filesystem::path("..") / "packages" / "std" / "src" / (module_name + ".tml"),  // From tests/
-            std::filesystem::path("std") / "src" / (module_name + ".tml")  // From packages/
+            std::filesystem::path("..") / "packages" / "std" / "src" / module_name / "mod.tml",  // From tests/
+            std::filesystem::path("std") / "src" / (module_name + ".tml"),  // From packages/
+            std::filesystem::path("std") / "src" / module_name / "mod.tml",  // From packages/
+            // Absolute fallback
+            std::filesystem::path("F:/Node/hivellm/tml/packages/std/src") / (module_name + ".tml"),
+            std::filesystem::path("F:/Node/hivellm/tml/packages/std/src") / module_name / "mod.tml",
         };
 
+        std::cerr << "[DEBUG] Looking for std module: " << module_path << " (name: " << module_name << ")\n";
         for (const auto& module_file : search_paths) {
+            std::cerr << "[DEBUG]   Checking: " << module_file << "\n";
             if (std::filesystem::exists(module_file)) {
-                TML_DEBUG_LN("[MODULE] Found module at: " << module_file);
+                std::cerr << "[DEBUG]   FOUND!\n";
                 return load_module_from_file(module_path, module_file.string());
             }
         }
 
-        // Module file not found - this is a real error, not debug
-        std::cerr << "error: Module file not found: " << module_path << "\n";
+        // Module file not found
+        std::cerr << "error: std module file not found: " << module_path << "\n";
         return false;
     }
 

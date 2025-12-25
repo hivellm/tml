@@ -159,6 +159,7 @@ struct Type {
 [[nodiscard]] auto make_func(std::vector<TypePtr> params, TypePtr ret) -> TypePtr;
 [[nodiscard]] auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<CapturedVar> captures = {}) -> TypePtr;
 [[nodiscard]] auto make_ref(TypePtr inner, bool is_mut = false) -> TypePtr;
+[[nodiscard]] auto make_ptr(TypePtr inner, bool is_mut = false) -> TypePtr;
 [[nodiscard]] auto make_array(TypePtr element, size_t size) -> TypePtr;
 [[nodiscard]] auto make_slice(TypePtr element) -> TypePtr;
 

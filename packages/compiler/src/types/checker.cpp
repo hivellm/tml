@@ -2,6 +2,7 @@
 #include "tml/lexer/token.hpp"
 #include <algorithm>
 #include <iostream>
+#include <set>
 
 namespace tml::types {
 
@@ -180,6 +181,8 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
 
 void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
     std::vector<FuncSig> methods;
+    std::set<std::string> methods_with_defaults;
+
     for (const auto& method : decl.methods) {
         std::vector<TypePtr> params;
         for (const auto& p : method.params) {
@@ -194,6 +197,11 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
             .is_async = method.is_async,
             .span = method.span
         });
+
+        // Track methods with default implementations
+        if (method.body.has_value()) {
+            methods_with_defaults.insert(method.name);
+        }
     }
 
     std::vector<std::string> type_params;
@@ -206,6 +214,7 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
         .type_params = std::move(type_params),
         .methods = std::move(methods),
         .super_behaviors = {},
+        .methods_with_defaults = std::move(methods_with_defaults),
         .span = decl.span
     });
 }
@@ -416,6 +425,12 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     // Get the type name from self_type
     std::string type_name = type_to_string(resolve_type(*impl.self_type));
 
+    // Collect method names that impl provides
+    std::set<std::string> impl_method_names;
+    for (const auto& method : impl.methods) {
+        impl_method_names.insert(method.name);
+    }
+
     // Register all methods in the impl block
     for (const auto& method : impl.methods) {
         std::string qualified_name = type_name + "::" + method.name;
@@ -432,6 +447,55 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
             .is_async = method.is_async,
             .span = method.span
         });
+    }
+
+    // Register default implementations from the behavior
+    if (impl.trait_path && !impl.trait_path->segments.empty()) {
+        std::string behavior_name = impl.trait_path->segments.back();
+        auto behavior_def = env_.lookup_behavior(behavior_name);
+        if (behavior_def) {
+            for (const auto& behavior_method : behavior_def->methods) {
+                // Skip if impl provides this method
+                if (impl_method_names.count(behavior_method.name) > 0) continue;
+
+                // Skip if this method doesn't have a default implementation
+                if (behavior_def->methods_with_defaults.count(behavior_method.name) == 0) continue;
+
+                // Register default implementation
+                std::string qualified_name = type_name + "::" + behavior_method.name;
+
+                // Substitute 'This' type with the concrete type
+                std::vector<TypePtr> params;
+                for (const auto& p : behavior_method.params) {
+                    TypePtr param_type = p;
+                    // Handle 'This' type substitution
+                    if (param_type->is<NamedType>() && param_type->as<NamedType>().name == "This") {
+                        auto self_type = std::make_shared<types::Type>();
+                        self_type->kind = NamedType{type_name, {}};
+                        params.push_back(self_type);
+                    } else {
+                        params.push_back(param_type);
+                    }
+                }
+
+                TypePtr ret = behavior_method.return_type;
+                // Handle 'This' return type substitution
+                if (ret->is<NamedType>() && ret->as<NamedType>().name == "This") {
+                    auto self_type = std::make_shared<types::Type>();
+                    self_type->kind = NamedType{type_name, {}};
+                    ret = self_type;
+                }
+
+                env_.define_func(FuncSig{
+                    .name = qualified_name,
+                    .params = std::move(params),
+                    .return_type = ret,
+                    .type_params = {},
+                    .is_async = behavior_method.is_async,
+                    .span = behavior_method.span
+                });
+            }
+        }
     }
 }
 
@@ -575,6 +639,49 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
                         enum_type->kind = NamedType{enum_name, "", {}};
                         return make_func(payload_types, enum_type);
                     }
+                }
+            }
+        }
+
+        // Check if it's a type name (for static method calls like List.new())
+        // First check local structs
+        auto struct_def = env_.lookup_struct(ident.name);
+        if (struct_def) {
+            auto type = std::make_shared<Type>();
+            type->kind = NamedType{ident.name, "", {}};
+            return type;
+        }
+
+        // Check local enums
+        auto enum_def = env_.lookup_enum(ident.name);
+        if (enum_def) {
+            auto type = std::make_shared<Type>();
+            type->kind = NamedType{ident.name, "", {}};
+            return type;
+        }
+
+        // Check imported types from modules
+        auto imported_path = env_.resolve_imported_symbol(ident.name);
+        if (imported_path.has_value()) {
+            std::string module_path;
+            size_t pos = imported_path->rfind("::");
+            if (pos != std::string::npos) {
+                module_path = imported_path->substr(0, pos);
+            }
+
+            auto module = env_.get_module(module_path);
+            if (module) {
+                // Check if it's a struct in the module
+                if (module->structs.find(ident.name) != module->structs.end()) {
+                    auto type = std::make_shared<Type>();
+                    type->kind = NamedType{ident.name, module_path, {}};
+                    return type;
+                }
+                // Check if it's an enum in the module
+                if (module->enums.find(ident.name) != module->enums.end()) {
+                    auto type = std::make_shared<Type>();
+                    type->kind = NamedType{ident.name, module_path, {}};
+                    return type;
                 }
             }
         }
@@ -828,9 +935,40 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
     if (receiver_type->is<NamedType>()) {
         auto& named = receiver_type->as<NamedType>();
         std::string qualified = named.name + "::" + call.method;
+
+        // First try local lookup
         auto func = env_.lookup_func(qualified);
         if (func) {
             return func->return_type;
+        }
+
+        // If type came from a module, look up method in that module
+        if (!named.module_path.empty()) {
+            auto module = env_.get_module(named.module_path);
+            if (module) {
+                auto func_it = module->functions.find(qualified);
+                if (func_it != module->functions.end()) {
+                    return func_it->second.return_type;
+                }
+            }
+        }
+
+        // Also try looking up the method via imported symbols
+        auto imported_path = env_.resolve_imported_symbol(named.name);
+        if (imported_path.has_value()) {
+            std::string module_path;
+            size_t pos = imported_path->rfind("::");
+            if (pos != std::string::npos) {
+                module_path = imported_path->substr(0, pos);
+            }
+
+            auto module = env_.get_module(module_path);
+            if (module) {
+                auto func_it = module->functions.find(qualified);
+                if (func_it != module->functions.end()) {
+                    return func_it->second.return_type;
+                }
+            }
         }
     }
 
@@ -1431,6 +1569,77 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
         if (func) {
             return make_func(func->params, func->return_type);
         }
+
+        // Check if this is a type name (for static method calls like List[T].new())
+        // First check local structs/enums
+        auto struct_def = env_.lookup_struct(segments[0]);
+        if (struct_def) {
+            auto type = std::make_shared<Type>();
+            // Apply generic arguments if provided
+            std::vector<TypePtr> type_args;
+            if (path_expr.generics) {
+                for (const auto& arg : path_expr.generics->args) {
+                    type_args.push_back(resolve_type(*arg));
+                }
+            }
+            type->kind = NamedType{segments[0], "", std::move(type_args)};
+            return type;
+        }
+
+        auto enum_def = env_.lookup_enum(segments[0]);
+        if (enum_def) {
+            auto type = std::make_shared<Type>();
+            std::vector<TypePtr> type_args;
+            if (path_expr.generics) {
+                for (const auto& arg : path_expr.generics->args) {
+                    type_args.push_back(resolve_type(*arg));
+                }
+            }
+            type->kind = NamedType{segments[0], "", std::move(type_args)};
+            return type;
+        }
+
+        // Check imported types from modules
+        auto imported_path = env_.resolve_imported_symbol(segments[0]);
+        if (imported_path.has_value()) {
+            std::string module_path;
+            size_t pos = imported_path->rfind("::");
+            if (pos != std::string::npos) {
+                module_path = imported_path->substr(0, pos);
+            }
+
+            auto module = env_.get_module(module_path);
+            if (module) {
+                // Check if it's a struct
+                auto struct_it = module->structs.find(segments[0]);
+                if (struct_it != module->structs.end()) {
+                    auto type = std::make_shared<Type>();
+                    std::vector<TypePtr> type_args;
+                    if (path_expr.generics) {
+                        for (const auto& arg : path_expr.generics->args) {
+                            type_args.push_back(resolve_type(*arg));
+                        }
+                    }
+                    type->kind = NamedType{segments[0], module_path, std::move(type_args)};
+                    return type;
+                }
+
+                // Check if it's an enum
+                auto enum_it = module->enums.find(segments[0]);
+                if (enum_it != module->enums.end()) {
+                    auto type = std::make_shared<Type>();
+                    std::vector<TypePtr> type_args;
+                    if (path_expr.generics) {
+                        for (const auto& arg : path_expr.generics->args) {
+                            type_args.push_back(resolve_type(*arg));
+                        }
+                    }
+                    type->kind = NamedType{segments[0], module_path, std::move(type_args)};
+                    return type;
+                }
+            }
+        }
+
         error("Undefined: " + segments[0], span);
     }
 
@@ -1571,6 +1780,38 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
         auto type = std::make_shared<Type>();
         type->kind = NamedType{name, "", {}};
         return type;
+    }
+
+    // Check if this is an imported symbol from a module
+    auto imported_path = env_.resolve_imported_symbol(name);
+    if (imported_path.has_value()) {
+        // Extract module path and symbol name
+        std::string module_path;
+        std::string symbol_name = name;
+        size_t pos = imported_path->rfind("::");
+        if (pos != std::string::npos) {
+            module_path = imported_path->substr(0, pos);
+        }
+
+        // Look up the struct/enum in the module
+        auto module = env_.get_module(module_path);
+        if (module) {
+            // Check if it's a struct in the module
+            auto struct_it = module->structs.find(symbol_name);
+            if (struct_it != module->structs.end()) {
+                auto type = std::make_shared<Type>();
+                type->kind = NamedType{symbol_name, module_path, {}};
+                return type;
+            }
+
+            // Check if it's an enum in the module
+            auto enum_it = module->enums.find(symbol_name);
+            if (enum_it != module->enums.end()) {
+                auto type = std::make_shared<Type>();
+                type->kind = NamedType{symbol_name, module_path, {}};
+                return type;
+            }
+        }
     }
 
     auto type = std::make_shared<Type>();

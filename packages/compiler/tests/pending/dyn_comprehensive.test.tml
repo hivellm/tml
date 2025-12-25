@@ -1,0 +1,105 @@
+// Polymorphic assertions
+func assert_eq[T](left: T, right: T, message: Str) {
+    if left != right {
+        panic(message)
+    }
+}
+
+func assert(condition: Bool, message: Str) {
+    if not condition {
+        panic(message)
+    }
+}
+
+// ============ Basic Dyn Usage ============
+
+behavior Stringify {
+    func to_string(self) -> Str
+}
+
+type IntWrapper {
+    value: I32,
+}
+
+impl Stringify for IntWrapper {
+    func to_string(self) -> Str {
+        return "IntWrapper"
+    }
+}
+
+type BoolWrapper {
+    value: Bool,
+}
+
+impl Stringify for BoolWrapper {
+    func to_string(self) -> Str {
+        return "BoolWrapper"
+    }
+}
+
+@test
+func test_dyn_basic() {
+    let iw: IntWrapper = IntWrapper { value: 42 }
+    let bw: BoolWrapper = BoolWrapper { value: true }
+
+    let d1: dyn Stringify = iw
+    let d2: dyn Stringify = bw
+
+    assert_eq(d1.to_string(), "IntWrapper", "IntWrapper should stringify")
+    assert_eq(d2.to_string(), "BoolWrapper", "BoolWrapper should stringify")
+}
+
+// ============ Dyn in Functions ============
+
+func stringify_it(obj: dyn Stringify) -> Str {
+    return obj.to_string()
+}
+
+@test
+func test_dyn_as_parameter() {
+    let iw: IntWrapper = IntWrapper { value: 100 }
+    let result: Str = stringify_it(iw)
+    assert_eq(result, "IntWrapper", "dyn parameter should work")
+}
+
+// ============ Multiple Behaviors ============
+
+behavior Describe {
+    func describe(self) -> Str
+}
+
+type Person {
+    name: Str,
+    age: I32,
+}
+
+impl Stringify for Person {
+    func to_string(self) -> Str {
+        return self.name
+    }
+}
+
+impl Describe for Person {
+    func describe(self) -> Str {
+        return "A person"
+    }
+}
+
+@test
+func test_multiple_behaviors() {
+    let p: Person = Person { name: "Alice", age: 30 }
+
+    let s: dyn Stringify = p
+    let d: dyn Describe = p
+
+    assert_eq(s.to_string(), "Alice", "Stringify should return name")
+    assert_eq(d.describe(), "A person", "Describe should return description")
+}
+
+func main() -> I32 {
+    test_dyn_basic()
+    test_dyn_as_parameter()
+    test_multiple_behaviors()
+    print("PASS: All tests passed!")
+    return 0
+}

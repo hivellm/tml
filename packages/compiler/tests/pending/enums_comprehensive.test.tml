@@ -30,7 +30,7 @@ func direction_to_int(d: Direction) -> I32 {
 func test_simple_enum_north() -> I32 {
     let d: Direction = North
     let result: I32 = direction_to_int(d)
-    assert_eq_i32(result, 0, "North should map to 0")
+    assert_eq(result, 0, "North should map to 0")
     return 0
 }
 
@@ -38,7 +38,7 @@ func test_simple_enum_north() -> I32 {
 func test_simple_enum_south() -> I32 {
     let d: Direction = South
     let result: I32 = direction_to_int(d)
-    assert_eq_i32(result, 1, "South should map to 1")
+    assert_eq(result, 1, "South should map to 1")
     return 0
 }
 
@@ -46,7 +46,7 @@ func test_simple_enum_south() -> I32 {
 func test_simple_enum_east() -> I32 {
     let d: Direction = East
     let result: I32 = direction_to_int(d)
-    assert_eq_i32(result, 2, "East should map to 2")
+    assert_eq(result, 2, "East should map to 2")
     return 0
 }
 
@@ -54,7 +54,7 @@ func test_simple_enum_east() -> I32 {
 func test_simple_enum_west() -> I32 {
     let d: Direction = West
     let result: I32 = direction_to_int(d)
-    assert_eq_i32(result, 3, "West should map to 3")
+    assert_eq(result, 3, "West should map to 3")
     return 0
 }
 
@@ -81,7 +81,7 @@ func maybei32_or_default(m: MaybeI32, default_val: I32) -> I32 {
 func test_maybe_just() -> I32 {
     let m: MaybeI32 = JustI32(42)
     let result: I32 = maybei32_or_default(m, 0)
-    assert_eq_i32(result, 42, "JustI32(42) should return 42")
+    assert_eq(result, 42, "JustI32(42) should return 42")
     return 0
 }
 
@@ -89,7 +89,7 @@ func test_maybe_just() -> I32 {
 func test_maybe_nothing() -> I32 {
     let m: MaybeI32 = NothingI32
     let result: I32 = maybei32_or_default(m, 99)
-    assert_eq_i32(result, 99, "NothingI32 should return default 99")
+    assert_eq(result, 99, "NothingI32 should return default 99")
     return 0
 }
 
@@ -105,8 +105,8 @@ func is_justi32(m: MaybeI32) -> Bool {
 func test_maybe_is_just() -> I32 {
     let just: MaybeI32 = JustI32(1)
     let nothing: MaybeI32 = NothingI32
-    assert_eq_bool(is_justi32(just), true, "JustI32 should be is_justi32")
-    assert_eq_bool(is_justi32(nothing), false, "NothingI32 should not be is_justi32")
+    assert_eq(is_justi32(just), true, "JustI32 should be is_justi32")
+    assert_eq(is_justi32(nothing), false, "NothingI32 should not be is_justi32")
     return 0
 }
 
@@ -131,7 +131,7 @@ func outcomei32_ok_value(o: OutcomeI32) -> I32 {
 func test_outcome_ok() -> I32 {
     let o: OutcomeI32 = OkI32(100)
     let result: I32 = outcomei32_ok_value(o)
-    assert_eq_i32(result, 100, "OkI32(100) should return 100")
+    assert_eq(result, 100, "OkI32(100) should return 100")
     return 0
 }
 
@@ -139,7 +139,7 @@ func test_outcome_ok() -> I32 {
 func test_outcome_err() -> I32 {
     let o: OutcomeI32 = ErrI32(500)
     let result: I32 = outcomei32_ok_value(o)
-    assert_eq_i32(result, -1, "ErrI32 should return -1")
+    assert_eq(result, -1, "ErrI32 should return -1")
     return 0
 }
 
@@ -155,8 +155,8 @@ func outcomei32_is_ok(o: OutcomeI32) -> Bool {
 func test_outcome_is_ok() -> I32 {
     let ok: OutcomeI32 = OkI32(1)
     let err: OutcomeI32 = ErrI32(2)
-    assert_eq_bool(outcomei32_is_ok(ok), true, "OkI32 should be is_ok")
-    assert_eq_bool(outcomei32_is_ok(err), false, "ErrI32 should not be is_ok")
+    assert_eq(outcomei32_is_ok(ok), true, "OkI32 should be is_ok")
+    assert_eq(outcomei32_is_ok(err), false, "ErrI32 should not be is_ok")
     return 0
 }
 
@@ -183,7 +183,7 @@ func color_code(c: Color) -> I32 {
 func test_color_red() -> I32 {
     let c: Color = Red
     let code: I32 = color_code(c)
-    assert_eq_i32(code, 0xFF0000, "Red should be 0xFF0000")
+    assert_eq(code, 0xFF0000, "Red should be 0xFF0000")
     return 0
 }
 
@@ -191,7 +191,7 @@ func test_color_red() -> I32 {
 func test_color_green() -> I32 {
     let c: Color = Green
     let code: I32 = color_code(c)
-    assert_eq_i32(code, 0x00FF00, "Green should be 0x00FF00")
+    assert_eq(code, 0x00FF00, "Green should be 0x00FF00")
     return 0
 }
 
@@ -199,7 +199,7 @@ func test_color_green() -> I32 {
 func test_color_blue() -> I32 {
     let c: Color = Blue
     let code: I32 = color_code(c)
-    assert_eq_i32(code, 0x0000FF, "Blue should be 0x0000FF")
+    assert_eq(code, 0x0000FF, "Blue should be 0x0000FF")
     return 0
 }
 
@@ -219,8 +219,8 @@ func is_nothingi32(m: MaybeI32) -> Bool {
 func test_wildcard_pattern() -> I32 {
     let nothing: MaybeI32 = NothingI32
     let just: MaybeI32 = JustI32(42)
-    assert_eq_bool(is_nothingi32(nothing), true, "NothingI32 should match")
-    assert_eq_bool(is_nothingi32(just), false, "JustI32 should not match NothingI32")
+    assert_eq(is_nothingi32(nothing), true, "NothingI32 should match")
+    assert_eq(is_nothingi32(just), false, "JustI32 should not match NothingI32")
     return 0
 }
 
@@ -240,14 +240,14 @@ func safe_divide(a: I32, b: I32) -> MaybeI32 {
 func test_safe_divide_success() -> I32 {
     let result: MaybeI32 = safe_divide(100, 5)
     let value: I32 = maybei32_or_default(result, -1)
-    assert_eq_i32(value, 20, "100 / 5 should be JustI32(20)")
+    assert_eq(value, 20, "100 / 5 should be JustI32(20)")
     return 0
 }
 
 @test
 func test_safe_divide_by_zero() -> I32 {
     let result: MaybeI32 = safe_divide(100, 0)
-    assert_eq_bool(is_justi32(result), false, "division by zero should return NothingI32")
+    assert_eq(is_justi32(result), false, "division by zero should return NothingI32")
     return 0
 }
 
@@ -284,11 +284,11 @@ func test_state_machine() -> I32 {
     let running: State = Running(42)
     let stopped: State = Stopped
 
-    assert_eq_i32(state_value(initial), 0, "Initial should have value 0")
-    assert_eq_i32(state_value(running), 42, "Running(42) should have value 42")
-    assert_eq_i32(state_value(stopped), -1, "Stopped should have value -1")
+    assert_eq(state_value(initial), 0, "Initial should have value 0")
+    assert_eq(state_value(running), 42, "Running(42) should have value 42")
+    assert_eq(state_value(stopped), -1, "Stopped should have value -1")
 
-    assert_eq_bool(state_is_active(running), true, "Running should be active")
-    assert_eq_bool(state_is_active(stopped), false, "Stopped should not be active")
+    assert_eq(state_is_active(running), true, "Running should be active")
+    assert_eq(state_is_active(stopped), false, "Stopped should not be active")
     return 0
 }

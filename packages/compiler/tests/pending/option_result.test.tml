@@ -1,0 +1,178 @@
+// Polymorphic assertions
+func assert_eq[T](left: T, right: T, message: Str) {
+    if left != right {
+        panic(message)
+    }
+}
+
+func assert(condition: Bool, message: Str) {
+    if not condition {
+        panic(message)
+    }
+}
+
+// ============ Maybe Type Tests ============
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func is_just[T](opt: Maybe[T]) -> Bool {
+    when opt {
+        Just(_) => true,
+        Nothing => false
+    }
+}
+
+func is_nothing[T](opt: Maybe[T]) -> Bool {
+    when opt {
+        Just(_) => false,
+        Nothing => true
+    }
+}
+
+func unwrap_or[T](opt: Maybe[T], default: T) -> T {
+    when opt {
+        Just(v) => v,
+        Nothing => default
+    }
+}
+
+@test
+func test_maybe_creation() {
+    let some: Maybe[I32] = Just(42)
+    let none: Maybe[I32] = Nothing
+
+    assert(is_just(some), "Just should be just")
+    assert(is_nothing(none), "Nothing should be nothing")
+}
+
+@test
+func test_maybe_unwrap() {
+    let some: Maybe[I32] = Just(100)
+    let none: Maybe[I32] = Nothing
+
+    assert_eq(unwrap_or(some, 0), 100, "unwrap Just returns value")
+    assert_eq(unwrap_or(none, -1), -1, "unwrap Nothing returns default")
+}
+
+func safe_divide(a: I32, b: I32) -> Maybe[I32] {
+    if b == 0 then {
+        return Nothing
+    }
+    return Just(a / b)
+}
+
+@test
+func test_maybe_safe_divide() {
+    let good: Maybe[I32] = safe_divide(10, 2)
+    let bad: Maybe[I32] = safe_divide(10, 0)
+
+    assert_eq(unwrap_or(good, 0), 5, "10/2 = 5")
+    assert(is_nothing(bad), "division by zero returns Nothing")
+}
+
+// ============ Outcome Type Tests ============
+
+type Outcome[T, E] {
+    Ok(T),
+    Err(E),
+}
+
+func is_ok[T, E](res: Outcome[T, E]) -> Bool {
+    when res {
+        Ok(_) => true,
+        Err(_) => false
+    }
+}
+
+func is_err[T, E](res: Outcome[T, E]) -> Bool {
+    when res {
+        Ok(_) => false,
+        Err(_) => true
+    }
+}
+
+func unwrap_outcome[T, E](res: Outcome[T, E], default: T) -> T {
+    when res {
+        Ok(v) => v,
+        Err(_) => default
+    }
+}
+
+@test
+func test_outcome_creation() {
+    let ok: Outcome[I32, Str] = Ok(42)
+    let err: Outcome[I32, Str] = Err("error message")
+
+    assert(is_ok(ok), "Ok should be ok")
+    assert(is_err(err), "Err should be err")
+}
+
+@test
+func test_outcome_unwrap() {
+    let ok: Outcome[I32, Str] = Ok(100)
+    let err: Outcome[I32, Str] = Err("failed")
+
+    assert_eq(unwrap_outcome(ok, 0), 100, "unwrap Ok returns value")
+    assert_eq(unwrap_outcome(err, -1), -1, "unwrap Err returns default")
+}
+
+func parse_positive(s: Str) -> Outcome[I32, Str] {
+    // Simplified: just check for known strings
+    if str_eq(s, "42") then {
+        return Ok(42)
+    }
+    if str_eq(s, "100") then {
+        return Ok(100)
+    }
+    return Err("invalid input")
+}
+
+@test
+func test_outcome_parsing() {
+    let good: Outcome[I32, Str] = parse_positive("42")
+    let bad: Outcome[I32, Str] = parse_positive("xyz")
+
+    assert(is_ok(good), "42 should parse")
+    assert(is_err(bad), "xyz should fail")
+    assert_eq(unwrap_outcome(good, 0), 42, "parsed value should be 42")
+}
+
+// ============ Chaining Operations ============
+
+func map_maybe[T, U](opt: Maybe[T], f: func(T) -> U) -> Maybe[U] {
+    when opt {
+        Just(v) => Just(f(v)),
+        Nothing => Nothing
+    }
+}
+
+func double(x: I32) -> I32 {
+    return x * 2
+}
+
+@test
+func test_maybe_map() {
+    let some: Maybe[I32] = Just(21)
+    let none: Maybe[I32] = Nothing
+
+    let doubled: Maybe[I32] = map_maybe(some, double)
+    let doubled_none: Maybe[I32] = map_maybe(none, double)
+
+    assert_eq(unwrap_or(doubled, 0), 42, "map Just(21) with double = 42")
+    assert(is_nothing(doubled_none), "map Nothing should be Nothing")
+}
+
+func main() -> I32 {
+    test_maybe_creation()
+    test_maybe_unwrap()
+    test_maybe_safe_divide()
+    test_outcome_creation()
+    test_outcome_unwrap()
+    test_outcome_parsing()
+    test_maybe_map()
+    print("PASS: All tests passed!")
+    return 0
+}

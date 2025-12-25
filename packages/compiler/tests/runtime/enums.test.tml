@@ -1,0 +1,138 @@
+use test// Enum Tests
+
+// Simple enum (no data)
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
+type Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+type Status {
+    Pending,
+    Active,
+    Completed,
+    Failed
+}
+
+@test
+func test_color() -> I32 {
+    let red: Color = Color::Red
+    let green: Color = Color::Green
+    let blue: Color = Color::Blue
+
+    // Test pattern matching
+    let is_red: Bool = when red {
+        Color::Red => true,
+        _ => false
+    }
+    assert_eq(is_red, true, "Color::Red pattern match should succeed")
+
+    let is_green: Bool = when green {
+        Color::Green => true,
+        _ => false
+    }
+    assert_eq(is_green, true, "Color::Green pattern match should succeed")
+
+    let is_blue: Bool = when blue {
+        Color::Blue => true,
+        _ => false
+    }
+    assert_eq(is_blue, true, "Color::Blue pattern match should succeed")
+
+    // Test enum comparison
+    assert(red == Color::Red, "red should equal Color::Red")
+    assert(green != Color::Red, "green should not equal Color::Red")
+
+    return 0
+}
+
+@test
+func test_direction() -> I32 {
+    let north: Direction = Direction::North
+    let south: Direction = Direction::South
+    let east: Direction = Direction::East
+    let west: Direction = Direction::West
+
+    // Test pattern matching
+    let match_north: Bool = when north {
+        Direction::North => true,
+        _ => false
+    }
+    assert_eq(match_north, true, "Direction::North pattern match should succeed")
+
+    let match_south: Bool = when south {
+        Direction::South => true,
+        _ => false
+    }
+    assert_eq(match_south, true, "Direction::South pattern match should succeed")
+
+    let match_east: Bool = when east {
+        Direction::East => true,
+        _ => false
+    }
+    assert_eq(match_east, true, "Direction::East pattern match should succeed")
+
+    let match_west: Bool = when west {
+        Direction::West => true,
+        _ => false
+    }
+    assert_eq(match_west, true, "Direction::West pattern match should succeed")
+
+    // Test comparison
+    let dir: Direction = Direction::East
+    assert(dir == Direction::East, "dir should be East")
+
+    return 0
+}
+
+@test
+func test_status() -> I32 {
+    let pending: Status = Status::Pending
+    let active: Status = Status::Active
+    let completed: Status = Status::Completed
+    let failed: Status = Status::Failed
+
+    // Test pattern matching
+    let match_pending: Bool = when pending {
+        Status::Pending => true,
+        _ => false
+    }
+    assert_eq(match_pending, true, "Status::Pending pattern match should succeed")
+
+    let match_active: Bool = when active {
+        Status::Active => true,
+        _ => false
+    }
+    assert_eq(match_active, true, "Status::Active pattern match should succeed")
+
+    let match_completed: Bool = when completed {
+        Status::Completed => true,
+        _ => false
+    }
+    assert_eq(match_completed, true, "Status::Completed pattern match should succeed")
+
+    let match_failed: Bool = when failed {
+        Status::Failed => true,
+        _ => false
+    }
+    assert_eq(match_failed, true, "Status::Failed pattern match should succeed")
+
+    // Test assignment and comparison
+    let mut status: Status = Status::Pending
+    assert(status == Status::Pending, "Initial status should be Pending")
+
+    status = Status::Active
+    assert(status == Status::Active, "Status should be Active after assignment")
+
+    status = Status::Completed
+    assert(status == Status::Completed, "Status should be Completed after assignment")
+
+    return 0
+}

@@ -64,10 +64,18 @@ private:
     std::string expected_enum_type_;  // e.g., "%struct.Outcome__I32__I32"
 
 public:
+    // Closure capture info for closures with captured variables
+    struct ClosureCaptureInfo {
+        std::vector<std::string> captured_names;  // Names of captured variables
+        std::vector<std::string> captured_types;  // LLVM types of captured variables
+    };
+
     // Variable name to LLVM register/type mapping (public for is_bool_expr helper)
     struct VarInfo {
         std::string reg;
         std::string type;
+        types::TypePtr semantic_type;  // Full semantic type for complex types like Ptr[T]
+        std::optional<ClosureCaptureInfo> closure_captures;  // Present if this is a closure with captures
     };
 
 private:
@@ -101,6 +109,7 @@ private:
     // Closure support
     std::vector<std::string> module_functions_;  // Generated closure functions
     uint32_t closure_counter_ = 0;                // For unique closure names
+    std::optional<ClosureCaptureInfo> last_closure_captures_;  // Capture info from last gen_closure call
 
     // ============ Vtable Support for Trait Objects ============
     // Tracks behavior implementations and generates vtables for dyn dispatch
@@ -113,6 +122,9 @@ private:
 
     // Pending impl blocks to process
     std::vector<const parser::ImplDecl*> pending_impls_;
+
+    // Behavior/trait declarations (for default implementations)
+    std::unordered_map<std::string, const parser::TraitDecl*> trait_decls_;
 
     // Dyn type definitions (emitted once per behavior)
     std::set<std::string> emitted_dyn_types_;
@@ -150,6 +162,9 @@ private:
     std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
     std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+
+    // Storage for imported module ASTs (keeps AST alive so pointers in pending_generic_* remain valid)
+    std::vector<parser::Module> imported_module_asts_;
 
     // Helper methods
     auto fresh_reg() -> std::string;
@@ -234,6 +249,7 @@ private:
     auto gen_path(const parser::PathExpr& path) -> std::string;
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
+    auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format,

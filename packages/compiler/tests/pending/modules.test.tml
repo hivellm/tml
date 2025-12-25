@@ -1,0 +1,190 @@
+use test
+use core::mem
+
+// ============================================================================
+// Module Import Tests
+// Tests that module imports work correctly
+// ============================================================================
+
+// ============================================================================
+// Core Memory Module (core::mem)
+// Functions: alloc, dealloc, read_i32, write_i32, ptr_offset
+// ============================================================================
+
+@test
+func test_mem_alloc_dealloc() -> I32 {
+    // Allocate memory for 10 i32 values
+    let ptr: mut ref I32 = alloc(10)
+
+    // Write a value
+    write_i32(ptr, 42)
+
+    // Read it back
+    let value: I32 = read_i32(ptr)
+    assert_eq(value, 42, "read value should be 42")
+
+    // Free the memory
+    dealloc(ptr)
+
+    return 0
+}
+
+@test
+func test_mem_multiple_writes() -> I32 {
+    let ptr: mut ref I32 = alloc(5)
+
+    // Write value at base
+    write_i32(ptr, 100)
+
+    // Read back
+    let val: I32 = read_i32(ptr)
+    assert_eq(val, 100, "value should be 100")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_mem_ptr_offset() -> I32 {
+    let ptr: mut ref I32 = alloc(10)
+
+    // Write at base
+    write_i32(ptr, 10)
+
+    // Get offset pointer and write
+    let ptr1: mut ref I32 = ptr_offset(ptr, 1)
+    write_i32(ptr1, 20)
+
+    let ptr2: mut ref I32 = ptr_offset(ptr, 2)
+    write_i32(ptr2, 30)
+
+    // Read back all values
+    assert_eq(read_i32(ptr), 10, "base value should be 10")
+    assert_eq(read_i32(ptr1), 20, "offset 1 should be 20")
+    assert_eq(read_i32(ptr2), 30, "offset 2 should be 30")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_mem_negative_values() -> I32 {
+    let ptr: mut ref I32 = alloc(1)
+
+    write_i32(ptr, -100)
+    let val: I32 = read_i32(ptr)
+    assert_eq(val, -100, "negative value should work")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_mem_zero_value() -> I32 {
+    let ptr: mut ref I32 = alloc(1)
+
+    write_i32(ptr, 0)
+    let val: I32 = read_i32(ptr)
+    assert_eq(val, 0, "zero value should work")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Test Module (use test)
+// ============================================================================
+
+// The 'use test' import gives us assert, assert_eq, etc.
+
+@test
+func test_test_module_assert() -> I32 {
+    assert(true, "true should pass assert")
+    return 0
+}
+
+@test
+func test_test_module_assert_eq() -> I32 {
+    assert_eq(42, 42, "42 should equal 42")
+    return 0
+}
+
+@test
+func test_test_module_assert_eq() -> I32 {
+    assert_eq(true, true, "true should equal true")
+    assert_eq(false, false, "false should equal false")
+    return 0
+}
+
+@test
+func test_test_module_assert_ne() -> I32 {
+    assert_ne(1, 2, "1 should not equal 2")
+    return 0
+}
+
+// ============================================================================
+// Combined Module Usage
+// ============================================================================
+
+@test
+func test_combined_module_usage() -> I32 {
+    // Use both test and core::mem modules together
+    let ptr: mut ref I32 = alloc(1)
+    write_i32(ptr, 999)
+
+    let val: I32 = read_i32(ptr)
+    assert_eq(val, 999, "combined usage should work")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Array-like Usage Pattern
+// ============================================================================
+
+@test
+func test_array_pattern() -> I32 {
+    // Simulate an array of 5 elements
+    let arr: mut ref I32 = alloc(5)
+
+    // Write values 0, 10, 20, 30, 40
+    write_i32(arr, 0)
+    write_i32(ptr_offset(arr, 1), 10)
+    write_i32(ptr_offset(arr, 2), 20)
+    write_i32(ptr_offset(arr, 3), 30)
+    write_i32(ptr_offset(arr, 4), 40)
+
+    // Sum all values
+    let mut sum: I32 = 0
+    sum = sum + read_i32(arr)
+    sum = sum + read_i32(ptr_offset(arr, 1))
+    sum = sum + read_i32(ptr_offset(arr, 2))
+    sum = sum + read_i32(ptr_offset(arr, 3))
+    sum = sum + read_i32(ptr_offset(arr, 4))
+
+    assert_eq(sum, 100, "sum should be 0+10+20+30+40=100")
+
+    dealloc(arr)
+    return 0
+}
+
+@test
+func test_overwrite_values() -> I32 {
+    let ptr: mut ref I32 = alloc(1)
+
+    // Write initial value
+    write_i32(ptr, 1)
+    assert_eq(read_i32(ptr), 1, "first write")
+
+    // Overwrite
+    write_i32(ptr, 2)
+    assert_eq(read_i32(ptr), 2, "second write")
+
+    // Overwrite again
+    write_i32(ptr, 3)
+    assert_eq(read_i32(ptr), 3, "third write")
+
+    dealloc(ptr)
+    return 0
+}

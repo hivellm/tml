@@ -99,10 +99,62 @@ void TypeEnv::init_builtins() {
         "",
         "1.0"
     });
-}
 
-void TypeEnv::init_test_module() {
-    // Empty - test module will be implemented in packages/test
+    // String utility functions (builtins with tml_ prefix in runtime)
+    functions_["str_len"].push_back(FuncSig{
+        "str_len",
+        {make_primitive(PrimitiveKind::Str)},
+        make_primitive(PrimitiveKind::I32),
+        {},
+        false,
+        builtin_span
+    });
+
+    functions_["str_eq"].push_back(FuncSig{
+        "str_eq",
+        {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str)},
+        make_primitive(PrimitiveKind::Bool),
+        {},
+        false,
+        builtin_span
+    });
+
+    functions_["str_hash"].push_back(FuncSig{
+        "str_hash",
+        {make_primitive(PrimitiveKind::Str)},
+        make_primitive(PrimitiveKind::I32),
+        {},
+        false,
+        builtin_span
+    });
+
+    // Time functions
+    functions_["time_ms"].push_back(FuncSig{
+        "time_ms",
+        {},
+        make_primitive(PrimitiveKind::I32),
+        {},
+        false,
+        builtin_span
+    });
+
+    functions_["time_us"].push_back(FuncSig{
+        "time_us",
+        {},
+        make_primitive(PrimitiveKind::I64),
+        {},
+        false,
+        builtin_span
+    });
+
+    functions_["time_ns"].push_back(FuncSig{
+        "time_ns",
+        {},
+        make_primitive(PrimitiveKind::I64),
+        {},
+        false,
+        builtin_span
+    });
 }
 
 } // namespace tml::types

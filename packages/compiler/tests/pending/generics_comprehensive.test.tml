@@ -1,0 +1,135 @@
+// Polymorphic assertions
+func assert_eq[T](left: T, right: T, message: Str) {
+    if left != right {
+        panic(message)
+    }
+}
+
+func assert(condition: Bool, message: Str) {
+    if not condition {
+        panic(message)
+    }
+}
+
+// ============ Generic Functions ============
+
+func identity[T](x: T) -> T {
+    return x
+}
+
+func first[T, U](a: T, b: U) -> T {
+    return a
+}
+
+func second[T, U](a: T, b: U) -> U {
+    return b
+}
+
+@test
+func test_generic_identity() {
+    assert_eq(identity(42), 42, "identity(42)")
+    assert_eq(identity(true), true, "identity(true)")
+    assert_eq(identity("hello"), "hello", "identity(hello)")
+}
+
+@test
+func test_generic_pair() {
+    assert_eq(first(1, "a"), 1, "first(1, a)")
+    assert_eq(second(1, "a"), "a", "second(1, a)")
+}
+
+// ============ Generic Types ============
+
+type Pair[T, U] {
+    first: T,
+    second: U,
+}
+
+type Box[T] {
+    value: T,
+}
+
+@test
+func test_generic_struct() {
+    let p: Pair[I32, Str] = Pair { first: 42, second: "answer" }
+    assert_eq(p.first, 42, "pair first")
+    assert_eq(p.second, "answer", "pair second")
+
+    let b: Box[I32] = Box { value: 100 }
+    assert_eq(b.value, 100, "box value")
+}
+
+// ============ Generic Enums ============
+
+type Maybe[T] {
+    Just(T),
+    Nothing,
+}
+
+func unwrap_or[T](opt: Maybe[T], default: T) -> T {
+    when opt {
+        Just(v) => v,
+        Nothing => default
+    }
+}
+
+@test
+func test_generic_enum() {
+    let some_val: Maybe[I32] = Just(42)
+    let no_val: Maybe[I32] = Nothing
+
+    assert_eq(unwrap_or(some_val, 0), 42, "unwrap Just")
+    assert_eq(unwrap_or(no_val, -1), -1, "unwrap Nothing")
+}
+
+// ============ Nested Generics ============
+
+type Nested[T] {
+    inner: Box[T],
+}
+
+@test
+func test_nested_generics() {
+    let b: Box[I32] = Box { value: 10 }
+    let n: Nested[I32] = Nested { inner: b }
+    assert_eq(n.inner.value, 10, "nested generic value")
+}
+
+// ============ Generic with Constraints ============
+
+behavior Addable {
+    func add(self, other: Self) -> Self
+}
+
+func sum_two[T: Addable](a: T, b: T) -> T {
+    return a.add(b)
+}
+
+type Number {
+    value: I32,
+}
+
+impl Addable for Number {
+    func add(self, other: Number) -> Number {
+        return Number { value: self.value + other.value }
+    }
+}
+
+@test
+func test_generic_constraints() {
+    let a: Number = Number { value: 10 }
+    let b: Number = Number { value: 20 }
+    let c: Number = sum_two(a, b)
+    assert_eq(c.value, 30, "sum_two should add numbers")
+}
+
+func main() -> I32 {
+    test_generic_identity()
+    test_generic_pair()
+    test_generic_struct()
+    test_generic_enum()
+    test_nested_generics()
+    test_generic_constraints()
+    print("PASS: All tests passed!")
+    return 0
+}

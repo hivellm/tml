@@ -1,0 +1,14 @@
+// Minimal test for generic struct field access
+use test
+
+type Pair[T] {
+    first: T,
+    second: T,
+}
+
+func main() -> I32 {
+    let p: Pair[I32] = Pair { first: 10, second: 20 }
+    print(p.first)
+    print(p.second)
+    return 0
+}

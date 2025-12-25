@@ -320,9 +320,10 @@ struct ArrayExpr {
     SourceSpan span;
 };
 
-// Struct expression: Point { x: 1, y: 2 }
+// Struct expression: Point { x: 1, y: 2 } or Point[T] { x: 1, y: 2 }
 struct StructExpr {
     TypePath path;
+    std::optional<GenericArgs> generics;  // Generic arguments like [I32]
     std::vector<std::pair<std::string, ExprPtr>> fields;
     std::optional<ExprPtr> base; // ..base for struct update
     SourceSpan span;
@@ -457,9 +458,17 @@ struct AwaitExpr {
     SourceSpan span;
 };
 
-// Path expression: std::io::stdout
+// Path expression: std::io::stdout or List[I32]
 struct PathExpr {
     TypePath path;
+    std::optional<GenericArgs> generics;  // Generic arguments like [I32]
+    SourceSpan span;
+};
+
+// Lowlevel (unsafe) block expression: lowlevel { ... }
+struct LowlevelExpr {
+    std::vector<StmtPtr> stmts;
+    std::optional<ExprPtr> expr; // trailing expression (no semicolon)
     SourceSpan span;
 };
 
@@ -493,7 +502,8 @@ struct Expr {
         CastExpr,
         TryExpr,
         AwaitExpr,
-        PathExpr
+        PathExpr,
+        LowlevelExpr
     > kind;
     SourceSpan span;
 
@@ -655,6 +665,20 @@ struct EnumDecl {
     SourceSpan span;
 };
 
+// Associated type declaration in behavior: type Item
+struct AssociatedType {
+    std::string name;
+    std::vector<TypePath> bounds;  // Optional trait bounds: type Item: Display
+    SourceSpan span;
+};
+
+// Associated type binding in impl: type Item = I32
+struct AssociatedTypeBinding {
+    std::string name;
+    TypePtr type;
+    SourceSpan span;
+};
+
 // Trait declaration
 struct TraitDecl {
     std::vector<Decorator> decorators;
@@ -662,6 +686,7 @@ struct TraitDecl {
     std::string name;
     std::vector<GenericParam> generics;
     std::vector<TypePath> super_traits;
+    std::vector<AssociatedType> associated_types;  // Associated types
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
     SourceSpan span;
@@ -672,6 +697,7 @@ struct ImplDecl {
     std::vector<GenericParam> generics;
     std::optional<TypePath> trait_path;
     TypePtr self_type;
+    std::vector<AssociatedTypeBinding> type_bindings;  // Associated type bindings
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
     SourceSpan span;

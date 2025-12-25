@@ -193,7 +193,7 @@ packages/test/
 The test package is designed to work with the TML compiler's test infrastructure:
 
 1. **Test Discovery**: Compiler finds `@test` decorated functions
-2. **Builtin Assertions**: Compiler provides `assert_eq_i32`, etc.
+2. **Builtin Assertions**: Compiler provides `assert_eq`, etc.
 3. **Test Execution**: `tml test` command uses this package's utilities
 4. **Timing**: Package uses compiler's builtin timing functions
 
