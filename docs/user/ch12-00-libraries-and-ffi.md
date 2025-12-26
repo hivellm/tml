@@ -45,7 +45,7 @@ Only functions marked with `pub` (public) are exported from your library. Privat
 To build a static library:
 
 ```bash
-tml build math.tml --crate-type lib
+tml build math.tml --crate-type=lib
 ```
 
 This creates:
@@ -57,7 +57,7 @@ This creates:
 To build a dynamic library:
 
 ```bash
-tml build math.tml --crate-type dylib
+tml build math.tml --crate-type=dylib
 ```
 
 This creates:
@@ -65,15 +65,41 @@ This creates:
 - **Linux**: `build/debug/libmath.so`
 - **macOS**: `build/debug/libmath.dylib`
 
+### Custom Output Directory
+
+By default, TML saves build artifacts to `build/debug/`. You can specify a custom output directory with `--out-dir`:
+
+```bash
+tml build math.tml --crate-type=lib --out-dir=examples/ffi
+```
+
+This creates the library in the specified directory instead:
+- **Windows**: `examples/ffi/math.lib`
+- **Linux/macOS**: `examples/ffi/libmath.a`
+
+This is particularly useful when creating examples or when you want to keep the library alongside its source code.
+
 ## Auto-Generating C Headers
 
 TML can automatically create a C header file for your library, making it easy to use from C/C++ programs:
 
 ```bash
-tml build math.tml --crate-type lib --emit-header
+tml build math.tml --crate-type=lib --emit-header
 ```
 
 This generates both the library and a header file `build/debug/math.h`:
+
+Or with a custom output directory:
+
+```bash
+tml build math.tml --crate-type=lib --emit-header --out-dir=examples/ffi
+```
+
+This generates both files in `examples/ffi/`:
+- Library: `examples/ffi/math.lib` (Windows) or `examples/ffi/libmath.a` (Linux/macOS)
+- Header: `examples/ffi/math.h`
+
+**Generated header:**
 
 ```c
 #ifndef TML_MATH_H
@@ -107,12 +133,21 @@ Notice that:
 
 ## Using Your TML Library from C
 
-Here's how to use your TML library from a C program:
+Here's how to use your TML library from a C program.
 
-**main.c:**
+### Using with Custom Output Directory
+
+If you built with `--out-dir`:
+
+```bash
+# Build the library and header
+tml build math.tml --crate-type=lib --emit-header --out-dir=examples/ffi
+```
+
+**main.c (in examples/ffi/):**
 ```c
 #include <stdio.h>
-#include "build/debug/math.h"
+#include "math.h"
 
 int main() {
     int32_t sum = tml_add(5, 3);
@@ -128,7 +163,34 @@ int main() {
 }
 ```
 
-Compile and link your C program:
+Compile and link:
+
+```bash
+# Navigate to examples/ffi
+cd examples/ffi
+
+# Windows
+clang main.c -o main.exe math.lib
+
+# Linux/macOS
+clang main.c -o main libmath.a
+```
+
+### Using with Default Build Directory
+
+If you built without `--out-dir`:
+
+**main.c:**
+```c
+#include <stdio.h>
+#include "build/debug/math.h"
+
+int main() {
+    // Same code as above
+}
+```
+
+Compile and link:
 
 ```bash
 # Windows
@@ -198,13 +260,13 @@ pub func string_compare(a: Str, b: Str) -> Bool {
 
 Build with header:
 ```bash
-tml build stringutils.tml --crate-type lib --emit-header
+tml build stringutils.tml --crate-type=lib --emit-header --out-dir=examples/string
 ```
 
-Use from C:
+Use from C (examples/string/main.c):
 ```c
 #include <stdio.h>
-#include "build/debug/stringutils.h"
+#include "stringutils.h"
 
 int main() {
     const char* hello = "Hello, World!";
@@ -216,6 +278,13 @@ int main() {
 
     return 0;
 }
+```
+
+Compile:
+```bash
+cd examples/string
+clang main.c -o main.exe stringutils.lib  # Windows
+clang main.c -o main libstringutils.a     # Linux/macOS
 ```
 
 ## Best Practices
@@ -234,10 +303,11 @@ int main() {
 
 In this chapter, you learned:
 
-- How to build static and dynamic libraries with `--crate-type lib` and `--crate-type dylib`
+- How to build static and dynamic libraries with `--crate-type=lib` and `--crate-type=dylib`
 - How to auto-generate C headers with `--emit-header`
+- How to customize the output directory with `--out-dir`
 - How to use TML libraries from C programs
 - Which TML types convert cleanly to C types
 - Best practices for creating C-compatible libraries
 
-This opens up many possibilities: you can write performance-critical code in TML and use it from existing C/C++ projects, or create new libraries that work across language boundaries.
+This opens up many possibilities: you can write performance-critical code in TML and use it from existing C/C++ projects, or create new libraries that work across language boundaries. The `--out-dir` option makes it easy to organize your examples and keep libraries alongside their source code.

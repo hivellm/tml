@@ -62,12 +62,18 @@ tml build --target wasm32
 tml build --target x86_64-linux
 
 # Library types
-tml build --crate-type lib       # Static library (.lib/.a)
-tml build --crate-type dylib     # Dynamic library (.dll/.so/.dylib)
-tml build --crate-type rlib      # TML library format (future)
+tml build --crate-type=lib       # Static library (.lib/.a)
+tml build --crate-type=dylib     # Dynamic library (.dll/.so/.dylib)
+tml build --crate-type=rlib      # TML library format (future)
 
 # C header generation for FFI
 tml build --emit-header          # Generate .h file from public functions
+
+# Custom output directory
+tml build --out-dir=path/to/dir  # Save build artifacts to custom directory
+
+# Combined example: Library + header in custom directory
+tml build mylib.tml --crate-type=lib --emit-header --out-dir=examples/ffi
 
 # With features
 tml build --features "async,serde"
@@ -85,17 +91,18 @@ Output:
 
 Library build output:
 ```bash
-# Static library
-$ tml build mylib.tml --crate-type lib
+# Static library (default output directory)
+$ tml build mylib.tml --crate-type=lib
 build: f:/path/to/build/debug/mylib.lib
 
 # Dynamic library
-$ tml build mylib.tml --crate-type dylib
+$ tml build mylib.tml --crate-type=dylib
 build: f:/path/to/build/debug/mylib.dll
 
-# With C header
-$ tml build mylib.tml --emit-header
-emit-header: f:/path/to/build/debug/mylib.h
+# Static library + header in custom directory
+$ tml build mylib.tml --crate-type=lib --emit-header --out-dir=examples/ffi
+build: examples/ffi/mylib.lib
+emit-header: examples/ffi/mylib.h
 ```
 
 ### 2.3 tml run — Execute

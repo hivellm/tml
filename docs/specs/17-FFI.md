@@ -39,7 +39,7 @@ func helper(n: I32) -> I32 {
 
 **Static Library:**
 ```bash
-tml build mylib.tml --crate-type lib
+tml build mylib.tml --crate-type=lib
 # Generates:
 #   - build/debug/mylib.lib (Windows)
 #   - build/debug/libmylib.a (Linux/macOS)
@@ -47,7 +47,7 @@ tml build mylib.tml --crate-type lib
 
 **Dynamic Library:**
 ```bash
-tml build mylib.tml --crate-type dylib
+tml build mylib.tml --crate-type=dylib
 # Generates:
 #   - build/debug/mylib.dll + mylib.lib (Windows)
 #   - build/debug/libmylib.so (Linux)
@@ -56,10 +56,18 @@ tml build mylib.tml --crate-type dylib
 
 **With Auto-Generated C Header:**
 ```bash
-tml build mylib.tml --crate-type lib --emit-header
+tml build mylib.tml --crate-type=lib --emit-header
 # Generates:
 #   - build/debug/mylib.lib + mylib.h (Windows)
 #   - build/debug/libmylib.a + mylib.h (Linux/macOS)
+```
+
+**Custom Output Directory:**
+```bash
+tml build mylib.tml --crate-type=lib --emit-header --out-dir=examples/ffi
+# Generates:
+#   - examples/ffi/mylib.lib + mylib.h (Windows)
+#   - examples/ffi/libmylib.a + mylib.h (Linux/macOS)
 ```
 
 ### 2.3 Auto-Generated C Headers
@@ -132,13 +140,13 @@ Public function types are automatically mapped:
 
 **Compile TML library:**
 ```bash
-tml build mylib.tml --crate-type lib --emit-header
+tml build mylib.tml --crate-type=lib --emit-header --out-dir=examples/ffi
 ```
 
-**C program (main.c):**
+**C program (main.c in examples/ffi/):**
 ```c
 #include <stdio.h>
-#include "build/debug/mylib.h"
+#include "mylib.h"
 
 int main() {
     int32_t result = tml_add(5, 3);
@@ -153,11 +161,32 @@ int main() {
 
 **Compile C program:**
 ```bash
+# Navigate to examples/ffi directory
+cd examples/ffi
+
 # Windows
-clang main.c -o main.exe build/debug/mylib.lib
+clang main.c -o main.exe mylib.lib
 
 # Linux/macOS
-clang main.c -o main build/debug/libmylib.a
+clang main.c -o main libmylib.a
+```
+
+**Or using default build directory:**
+```bash
+# Compile TML library
+tml build mylib.tml --crate-type=lib --emit-header
+
+# C program (main.c)
+#include <stdio.h>
+#include "build/debug/mylib.h"
+
+int main() {
+    // ...
+}
+
+# Compile
+clang main.c -o main.exe build/debug/mylib.lib  # Windows
+clang main.c -o main build/debug/libmylib.a      # Linux/macOS
 ```
 
 ### 2.6 Naming Convention
