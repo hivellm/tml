@@ -191,9 +191,9 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
     // Run test directly (parallelism is handled at the outer level)
     // Note: timeout is not enforced here - tests should complete reasonably fast
     if (opts.nocapture) {
-        result.exit_code = run_run(test_file, empty_args, false);
+        result.exit_code = run_run(test_file, empty_args, opts.release);
     } else {
-        result.exit_code = run_run_quiet(test_file, empty_args, false, &captured_output);
+        result.exit_code = run_run_quiet(test_file, empty_args, opts.release, &captured_output);
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();

@@ -50,7 +50,7 @@ func test_list() -> I32 {
 }
 
 @test
-func test_hashmap() -> I32 {
+func test_hashmap() {
     // Create hashmap with capacity 16
     let map: HashMap = hashmap_create(16)
 
@@ -93,8 +93,6 @@ func test_hashmap() -> I32 {
 
     // Clean up
     hashmap_destroy(map)
-
-    return 0
 }
 
 @test
