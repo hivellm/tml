@@ -17,21 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See [BUGS.md](BUGS.md) for technical details
 
 ### Completed
-- **Object File Build System** (2025-12-26) - 87% complete (133/153 tasks) ✅
-  - ✅ Phases 1-6 COMPLETE: Object files, build cache, static/dynamic/RLIB libraries, C header generation
-  - ✅ Phase 7 IN PROGRESS: tml.toml manifest specification complete, parser implementation in progress
+- **Object File Build System** (2025-12-26) - 93% complete (143/153 tasks) ✅
+  - ✅ Phases 1-7 MOSTLY COMPLETE: Object files, build cache, static/dynamic/RLIB libraries, C header generation, manifest system
   - ✅ Phases 8-10: Documentation, examples, testing, performance optimization
   - ✅ **Phase 6 (RLIB Format)**: Full implementation complete
     - TML native library format (.rlib) with JSON metadata
     - Archive creation/extraction using lib.exe (Windows) / ar (Linux)
     - CLI commands: `tml rlib info`, `tml rlib exports`, `tml rlib validate`
     - Build integration: `tml build --crate-type=rlib`
+    - Content-based hashing for dependency tracking
     - Complete specification: [docs/specs/18-RLIB-FORMAT.md](docs/specs/18-RLIB-FORMAT.md)
-  - ✅ **Phase 7 (Manifest)**: Specification and design complete
+  - ✅ **Phase 7 (Manifest)**: Specification, parser, and init command complete!
     - tml.toml manifest format specification
-    - Data structures for PackageInfo, LibConfig, BinConfig, Dependencies, BuildSettings
+    - Complete TOML parser (SimpleTomlParser) supporting:
+      - [package], [lib], [[bin]], [dependencies], [build], [profile.*] sections
+      - Semver version constraints (^1.2.0, ~1.2.3, >=1.0.0)
+      - Path dependencies and inline tables
+    - `tml init` command to generate new projects:
+      - `tml init --lib`: Create library project
+      - `tml init --bin`: Create binary project
+      - Auto-generates tml.toml + src/ directory + sample code
+    - Data structures: PackageInfo, LibConfig, BinConfig, Dependency, BuildSettings, ProfileConfig
     - Complete specification: [docs/specs/19-MANIFEST.md](docs/specs/19-MANIFEST.md)
-    - TOML parser implementation pending
+    - Build integration pending (Phase 7.4)
   - ✅ Unit tests for object_compiler (6 tests passing)
   - ✅ Integration test infrastructure for cache and FFI workflows
   - ✅ Cache management: size limit (1GB default), LRU eviction, `cache clean/info` commands

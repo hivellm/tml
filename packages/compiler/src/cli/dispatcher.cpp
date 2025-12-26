@@ -5,6 +5,7 @@
 #include "cmd_test.hpp"
 #include "cmd_cache.hpp"
 #include "cmd_rlib.hpp"
+#include "cmd_init.hpp"
 #include "tml/common.hpp"
 #include <iostream>
 #include <string>
@@ -153,10 +154,8 @@ int tml_main(int argc, char* argv[]) {
         return run_rlib(argc, argv);
     }
 
-    if (command == "new") {
-        std::cerr << "Error: 'new' command not yet implemented\n";
-        std::cerr << "The compiler is still in early development.\n";
-        return 1;
+    if (command == "init") {
+        return run_init(argc, argv);
     }
 
     std::cerr << "Error: Unknown command '" << command << "'\n";

@@ -1,11 +1,11 @@
 # Tasks: Object File Build System
 
-## Progress: 87% (133/153 tasks complete)
+## Progress: 93% (143/153 tasks complete)
 
-**Latest Update (2025-12-26):** ✅ **Phases 1-6 COMPLETE, Phase 7 IN PROGRESS!**
+**Latest Update (2025-12-26):** ✅ **Phases 1-7 MOSTLY COMPLETE!**
 - Object file compilation, build cache with LRU eviction, static/dynamic libraries, C header generation, FFI integration all working
-- **Phase 6 (RLIB format)**: Full implementation complete with metadata, archive creation, CLI commands
-- **Phase 7 (tml.toml manifest)**: Specification complete, implementation in progress
+- **Phase 6 (RLIB format)**: Full implementation complete with metadata, archive creation, CLI commands ✅
+- **Phase 7 (tml.toml manifest)**: Specification, TOML parser, and `tml init` command complete! Integration pending
 - Unit tests passing, comprehensive documentation written (18-RLIB-FORMAT.md, 19-MANIFEST.md)
 
 ## Phase 1: Object File Generation (Foundation) ✅ COMPLETE
@@ -188,32 +188,38 @@
 - [x] 6.4.3 Add to dispatcher ✅ (Integrated into main CLI)
 - [x] 6.4.4 Update CMakeLists.txt ✅ (Build system integration)
 
-## Phase 7: Package Manifest (tml.toml) - IN PROGRESS
+## Phase 7: Package Manifest (tml.toml) - MOSTLY COMPLETE
 
-**Status**: Specification complete, implementation in progress (2025-12-26).
+**Status**: Specification, parser, and init command complete! Only build integration pending (2025-12-26).
 
 ### 7.1 Specification and Design ✅
-- [x] 7.1.1 Define manifest format specification ✅ (docs/specs/19-MANIFEST.md)
+- [x] 7.1.1 Define manifest format specification ✅ (docs/specs/19-MANIFEST.md - 686 lines)
 - [x] 7.1.2 Design data structures ✅ (PackageInfo, LibConfig, BinConfig, Dependency, BuildSettings)
 - [x] 7.1.3 Create `src/cli/build_config.hpp` ✅ (Manifest, SimpleTomlParser classes)
-- [ ] 7.1.4 Create `src/cli/build_config.cpp` - **IN PROGRESS** (TOML parser implementation)
+- [x] 7.1.4 Create `src/cli/build_config.cpp` ✅ (Complete TOML parser implementation)
 
-### 7.2 Manifest Parsing - PENDING
-- [ ] 7.2.1 Implement SimpleTomlParser class - **PENDING**
-- [ ] 7.2.2 Parse [package] section - **PENDING**
-- [ ] 7.2.3 Parse [lib] section - **PENDING**
-- [ ] 7.2.4 Parse [[bin]] sections - **PENDING**
-- [ ] 7.2.5 Parse [dependencies] section - **PENDING**
-- [ ] 7.2.6 Parse [build] and [profile.*] sections - **PENDING**
-- [ ] 7.2.7 Add manifest validation - **PENDING**
+### 7.2 Manifest Parsing ✅
+- [x] 7.2.1 Implement SimpleTomlParser class ✅ (Full TOML subset parser)
+- [x] 7.2.2 Parse [package] section ✅ (name, version, authors, edition, description, license, repository)
+- [x] 7.2.3 Parse [lib] section ✅ (path, crate-type, name, emit-header)
+- [x] 7.2.4 Parse [[bin]] sections ✅ (Multiple binary targets)
+- [x] 7.2.5 Parse [dependencies] section ✅ (Version and path dependencies)
+- [x] 7.2.6 Parse [build] and [profile.*] sections ✅ (Build settings, debug/release profiles)
+- [x] 7.2.7 Add manifest validation ✅ (Semver validation, package name validation)
 
-### 7.3 Manifest Integration - PENDING
-- [ ] 7.3.1 Integrate with cmd_build.cpp - **PENDING**
-- [ ] 7.3.2 Command-line flag override logic - **PENDING**
-- [ ] 7.3.3 Create `cmd_init.hpp` - **PENDING**
-- [ ] 7.3.4 Implement `tml init` command - **PENDING**
-- [ ] 7.3.5 Add to CMakeLists.txt - **PENDING**
-- [ ] 7.3.6 Test with sample projects - **PENDING**
+### 7.3 Init Command ✅
+- [x] 7.3.1 Create `cmd_init.hpp` ✅
+- [x] 7.3.2 Implement `tml init` command ✅ (Generate tml.toml, create src/ directory)
+- [x] 7.3.3 Add to dispatcher ✅ (Integrated into CLI)
+- [x] 7.3.4 Add to CMakeLists.txt ✅ (Build system integration)
+- [x] 7.3.5 Support --lib and --bin flags ✅
+- [x] 7.3.6 Generate sample source files ✅
+
+### 7.4 Build Integration - PENDING
+- [ ] 7.4.1 Integrate Manifest::load() in cmd_build.cpp - **PENDING**
+- [ ] 7.4.2 Apply manifest settings to build options - **PENDING**
+- [ ] 7.4.3 Command-line flag override logic - **PENDING**
+- [ ] 7.4.4 Test with sample projects - **PENDING**
 
 ## Phase 8: Documentation and Examples ✅ MOSTLY COMPLETE
 
