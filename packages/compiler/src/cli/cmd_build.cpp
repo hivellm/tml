@@ -2,6 +2,7 @@
 #include "utils.hpp"
 #include "compiler_setup.hpp"
 #include "object_compiler.hpp"
+#include "rlib.hpp"
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
@@ -436,17 +437,61 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 #endif
             link_output_type = LinkOptions::OutputType::DynamicLib;
             break;
+        case BuildOutputType::RlibLib:
+            final_output = build_dir / (module_name + ".rlib");
+            // RLIB doesn't use standard linking - we'll create it separately
+            break;
     }
 
-    // Link all object files
-    LinkOptions link_options;
-    link_options.output_type = link_output_type;
-    link_options.verbose = verbose;
+    // For RLIB: Create RLIB archive instead of linking
+    if (output_type == BuildOutputType::RlibLib) {
+        // Create metadata
+        RlibMetadata metadata;
+        metadata.format_version = "1.0";
+        metadata.library.name = module_name;
+        metadata.library.version = "0.1.0";  // TODO: Read from manifest
+        metadata.library.tml_version = "0.1.0";
 
-    auto link_result = link_objects(object_files, final_output, clang, link_options);
-    if (!link_result.success) {
-        std::cerr << "error: " << link_result.error_message << "\n";
-        return 1;
+        // Add module information
+        RlibModule rlib_module;
+        rlib_module.name = module_name;
+        rlib_module.file = object_files[0].filename().string();
+        rlib_module.hash = calculate_file_hash(fs::path(path));
+
+        // Extract exports from the module
+        // For now, we'll export all public functions
+        // TODO: Parse module to get actual exports with type information
+        for (const auto& [name, func] : module->functions) {
+            RlibExport exp;
+            exp.name = name;
+            exp.symbol = "tml_" + name;  // Simple mangling
+            exp.type = "func";  // TODO: Add full type signature
+            exp.is_public = true;  // TODO: Check actual visibility
+            rlib_module.exports.push_back(exp);
+        }
+
+        metadata.modules.push_back(rlib_module);
+
+        // Create RLIB
+        RlibCreateOptions rlib_opts;
+        rlib_opts.verbose = verbose;
+
+        auto rlib_result = create_rlib(object_files, metadata, final_output, rlib_opts);
+        if (!rlib_result.success) {
+            std::cerr << "error: " << rlib_result.message << "\n";
+            return rlib_result.exit_code;
+        }
+    } else {
+        // Standard linking for executables and libraries
+        LinkOptions link_options;
+        link_options.output_type = link_output_type;
+        link_options.verbose = verbose;
+
+        auto link_result = link_objects(object_files, final_output, clang, link_options);
+        if (!link_result.success) {
+            std::cerr << "error: " << link_result.error_message << "\n";
+            return 1;
+        }
     }
 
     // Clean up .ll file (keep .o file in cache for potential reuse)

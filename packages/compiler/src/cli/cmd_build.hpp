@@ -8,7 +8,8 @@ namespace tml::cli {
 enum class BuildOutputType {
     Executable,
     StaticLib,
-    DynamicLib
+    DynamicLib,
+    RlibLib      // TML native library format
 };
 
 // Build commands

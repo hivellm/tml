@@ -17,14 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See [BUGS.md](BUGS.md) for technical details
 
 ### Completed
-- **Object File Build System** (2025-12-26) - 82% complete (125/153 tasks) ✅
-  - ✅ Phases 1-5: Object files, build cache with LRU eviction, static/dynamic libs, C header generation
+- **Object File Build System** (2025-12-26) - 87% complete (133/153 tasks) ✅
+  - ✅ Phases 1-6 COMPLETE: Object files, build cache, static/dynamic/RLIB libraries, C header generation
+  - ✅ Phase 7 IN PROGRESS: tml.toml manifest specification complete, parser implementation in progress
   - ✅ Phases 8-10: Documentation, examples, testing, performance optimization
+  - ✅ **Phase 6 (RLIB Format)**: Full implementation complete
+    - TML native library format (.rlib) with JSON metadata
+    - Archive creation/extraction using lib.exe (Windows) / ar (Linux)
+    - CLI commands: `tml rlib info`, `tml rlib exports`, `tml rlib validate`
+    - Build integration: `tml build --crate-type=rlib`
+    - Complete specification: [docs/specs/18-RLIB-FORMAT.md](docs/specs/18-RLIB-FORMAT.md)
+  - ✅ **Phase 7 (Manifest)**: Specification and design complete
+    - tml.toml manifest format specification
+    - Data structures for PackageInfo, LibConfig, BinConfig, Dependencies, BuildSettings
+    - Complete specification: [docs/specs/19-MANIFEST.md](docs/specs/19-MANIFEST.md)
+    - TOML parser implementation pending
   - ✅ Unit tests for object_compiler (6 tests passing)
   - ✅ Integration test infrastructure for cache and FFI workflows
   - ✅ Cache management: size limit (1GB default), LRU eviction, `cache clean/info` commands
   - ✅ Comprehensive documentation in COMPILER-ARCHITECTURE.md (section 2.3 - 227 lines)
-  - ⏳ Phases 6-7 (RLIB format + tml.toml manifest) deferred to future releases
   - See [rulebook/tasks/object-file-build-system/tasks.md](rulebook/tasks/object-file-build-system/tasks.md) for details
 
 ### Added

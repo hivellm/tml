@@ -4,6 +4,7 @@
 #include "cmd_format.hpp"
 #include "cmd_test.hpp"
 #include "cmd_cache.hpp"
+#include "cmd_rlib.hpp"
 #include "tml/common.hpp"
 #include <iostream>
 #include <string>
@@ -67,7 +68,7 @@ int tml_main(int argc, char* argv[]) {
     if (command == "build") {
         if (argc < 3) {
             std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--emit-header] [--verbose] [--no-cache] [--crate-type=<type>] [--out-dir=<dir>]\n";
-            std::cerr << "  Crate types: bin (default), lib, dylib\n";
+            std::cerr << "  Crate types: bin (default), lib, dylib, rlib\n";
             return 1;
         }
         bool emit_ir_only = false;
@@ -92,9 +93,11 @@ int tml_main(int argc, char* argv[]) {
                     output_type = BuildOutputType::StaticLib;
                 } else if (crate_type == "dylib" || crate_type == "cdylib") {
                     output_type = BuildOutputType::DynamicLib;
+                } else if (crate_type == "rlib") {
+                    output_type = BuildOutputType::RlibLib;
                 } else {
                     std::cerr << "error: unknown crate type '" << crate_type << "'\n";
-                    std::cerr << "  valid types: bin, dylib\n";
+                    std::cerr << "  valid types: bin, lib, dylib, rlib\n";
                     return 1;
                 }
             } else if (arg.starts_with("--out-dir=")) {
@@ -144,6 +147,10 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "cache") {
         return run_cache(argc, argv);
+    }
+
+    if (command == "rlib") {
+        return run_rlib(argc, argv);
     }
 
     if (command == "new") {
