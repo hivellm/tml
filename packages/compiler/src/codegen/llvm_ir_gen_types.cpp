@@ -2,6 +2,7 @@
 // Handles: struct expressions, fields, arrays, indexing, paths, method calls, format print
 
 #include "tml/codegen/llvm_ir_gen.hpp"
+#include "tml/types/module.hpp"
 #include <algorithm>
 #include <cctype>
 
@@ -22,6 +23,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     }
     if (expr.is<parser::IdentExpr>()) {
         const auto& ident = expr.as<parser::IdentExpr>();
+
+        // Special handling for 'this' in impl methods
+        if (ident.name == "this" && !current_impl_type_.empty()) {
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::NamedType{current_impl_type_, "", {}};
+            return result;
+        }
+
         auto it = locals_.find(ident.name);
         if (it != locals_.end()) {
             // Use semantic type if available (for complex types like Ptr[T])
@@ -142,6 +151,30 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             auto result = std::make_shared<types::Type>();
             result->kind = types::NamedType{base_name, "", {}};
             return result;
+        }
+    }
+    // Handle field access expressions
+    if (expr.is<parser::FieldExpr>()) {
+        const auto& field = expr.as<parser::FieldExpr>();
+        // Get the type of the object
+        types::TypePtr obj_type = infer_expr_type(*field.object);
+        if (obj_type && obj_type->is<types::NamedType>()) {
+            const auto& named = obj_type->as<types::NamedType>();
+            // Look up field type in struct definition
+            std::string field_llvm_type = get_field_type(named.name, field.field);
+            // Convert LLVM type back to semantic type
+            if (field_llvm_type == "i32") return types::make_i32();
+            if (field_llvm_type == "i64") return types::make_i64();
+            if (field_llvm_type == "i1") return types::make_bool();
+            if (field_llvm_type == "float") return types::make_primitive(types::PrimitiveKind::F32);
+            if (field_llvm_type == "double") return types::make_f64();
+            if (field_llvm_type == "ptr") return types::make_str();
+            if (field_llvm_type.starts_with("%struct.")) {
+                std::string struct_name = field_llvm_type.substr(8);
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{struct_name, "", {}};
+                return result;
+            }
         }
     }
     // Default: I32
@@ -436,6 +469,7 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
     std::string result = fresh_reg();
     emit_line("  " + result + " = load " + field_type + ", ptr " + field_ptr);
+    last_expr_type_ = field_type;
     return result;
 }
 
@@ -1092,8 +1126,67 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         return result;
     }
 
-    // List methods
-    if (method == "push") {
+    // Check if there's a user-defined impl method BEFORE falling through to built-ins
+    // This allows user types to define methods like get(), push(), etc.
+    if (receiver_type && receiver_type->is<types::NamedType>()) {
+        const auto& named = receiver_type->as<types::NamedType>();
+        std::string qualified_name = named.name + "::" + method;
+        auto func_sig = env_.lookup_func(qualified_name);
+        if (func_sig) {
+            // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
+            std::string fn_name = "@tml_" + named.name + "_" + method;
+
+            // Get receiver pointer
+            std::string impl_receiver_ptr;
+            if (call.receiver->is<parser::IdentExpr>()) {
+                const auto& ident = call.receiver->as<parser::IdentExpr>();
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    if (it->second.type == "ptr") {
+                        impl_receiver_ptr = receiver;
+                    } else {
+                        impl_receiver_ptr = it->second.reg;
+                    }
+                } else {
+                    impl_receiver_ptr = receiver;
+                }
+            } else {
+                impl_receiver_ptr = receiver;
+            }
+
+            // Build argument list: self (receiver ptr) + args
+            std::vector<std::pair<std::string, std::string>> typed_args;
+            typed_args.push_back({"ptr", impl_receiver_ptr});
+
+            for (const auto& arg : call.args) {
+                std::string val = gen_expr(*arg);
+                std::string arg_type = "i32";  // default
+                typed_args.push_back({arg_type, val});
+            }
+
+            std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+
+            std::string args_str;
+            for (size_t i = 0; i < typed_args.size(); ++i) {
+                if (i > 0) args_str += ", ";
+                args_str += typed_args[i].first + " " + typed_args[i].second;
+            }
+
+            std::string result = fresh_reg();
+            if (ret_type == "void") {
+                emit_line("  call void " + fn_name + "(" + args_str + ")");
+                last_expr_type_ = "void";
+                return "void";
+            } else {
+                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
+                last_expr_type_ = ret_type;
+                return result;
+            }
+        }
+    }
+
+    // List methods (only for List type)
+    if (receiver_type_name == "List" && method == "push") {
         if (call.args.empty()) {
             report_error("push requires an argument", call.span);
             return "0";
@@ -1103,13 +1196,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         emit_line("  " + result + " = call i32 @list_push(ptr " + receiver + ", i32 " + val + ")");
         return result;
     }
-    if (method == "pop") {
+    if (receiver_type_name == "List" && method == "pop") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i32 @list_pop(ptr " + receiver + ")");
         return result;
     }
-    // Type-aware get method - different behavior for List vs HashMap
-    if (method == "get") {
+    // Type-aware get method - only for List/HashMap collection types
+    if ((receiver_type_name == "List" || receiver_type_name == "HashMap") && method == "get") {
         if (call.args.empty()) {
             report_error("get requires an argument", call.span);
             return "0";
@@ -1131,8 +1224,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         emit_line("  " + result + " = call i32 @list_get(ptr " + receiver + ", i32 " + arg + ")");
         return result;
     }
-    // Type-aware set method
-    if (method == "set") {
+    // Type-aware set method (only for List/HashMap collection types)
+    if ((receiver_type_name == "List" || receiver_type_name == "HashMap") && method == "set") {
         if (call.args.size() < 2) {
             report_error("set requires two arguments", call.span);
             return "void";
@@ -1272,6 +1365,33 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         const auto& named = receiver_type->as<types::NamedType>();
         std::string qualified_name = named.name + "::" + method;
         auto func_sig = env_.lookup_func(qualified_name);
+
+        // If not found locally, try looking in the module the type is from
+        if (!func_sig) {
+            std::string module_path = named.module_path;
+
+            // If module_path is empty, try to resolve via imported symbol
+            if (module_path.empty()) {
+                auto import_path = env_.resolve_imported_symbol(named.name);
+                if (import_path) {
+                    auto pos = import_path->rfind("::");
+                    if (pos != std::string::npos) {
+                        module_path = import_path->substr(0, pos);
+                    }
+                }
+            }
+
+            // Look up in the module
+            if (!module_path.empty()) {
+                auto module = env_.get_module(module_path);
+                if (module) {
+                    auto func_it = module->functions.find(qualified_name);
+                    if (func_it != module->functions.end()) {
+                        func_sig = func_it->second;
+                    }
+                }
+            }
+        }
         if (func_sig) {
             // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
             std::string fn_name = "@tml_" + named.name + "_" + method;
@@ -1302,10 +1422,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::vector<std::pair<std::string, std::string>> typed_args;
             typed_args.push_back({"ptr", impl_receiver_ptr});  // self reference
 
-            for (const auto& arg : call.args) {
-                std::string val = gen_expr(*arg);
-                // Infer arg type from func signature
+            for (size_t i = 0; i < call.args.size(); ++i) {
+                std::string val = gen_expr(*call.args[i]);
+                // Get arg type from func signature (skip 'this' at index 0)
                 std::string arg_type = "i32";  // default
+                if (i + 1 < func_sig->params.size()) {
+                    arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                }
                 typed_args.push_back({arg_type, val});
             }
 
@@ -1322,9 +1445,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string result = fresh_reg();
             if (ret_type == "void") {
                 emit_line("  call void " + fn_name + "(" + args_str + ")");
+                last_expr_type_ = "void";
                 return "void";
             } else {
                 emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
+                last_expr_type_ = ret_type;  // Set expression type for when/match expressions
                 return result;
             }
         }

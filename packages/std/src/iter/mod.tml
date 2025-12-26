@@ -22,7 +22,7 @@ pub behavior Iterator {
 
     /// Advances the iterator and returns the next value.
     /// Returns Nothing when iteration is complete.
-    func next(this) -> Maybe[This::Item]
+    func next(mut this) -> Maybe[This::Item]
 }
 
 // ============================================================================
@@ -53,16 +53,20 @@ pub type Range {
 impl Iterator for Range {
     type Item = I32
 
-    func next(this) -> Maybe[I32] {
+    pub func next(mut this) -> Maybe[I32] {
         if this.inclusive {
             if this.current <= this.end {
-                return Just(this.current)
+                let value: I32 = this.current
+                this.current = this.current + this.step
+                return Just(value)
             } else {
                 return Nothing
             }
         } else {
             if this.current < this.end {
-                return Just(this.current)
+                let value: I32 = this.current
+                this.current = this.current + this.step
+                return Just(value)
             } else {
                 return Nothing
             }
@@ -84,3 +88,66 @@ pub func range_inclusive(start: I32, end: I32) -> Range {
 pub func range_step(start: I32, end: I32, step: I32) -> Range {
     return Range { current: start, end: end, step: step, inclusive: false }
 }
+
+// ============================================================================
+// Simple Range Helpers (don't call other methods)
+// ============================================================================
+
+impl Range {
+    /// Takes the first n elements from the iterator.
+    /// Returns a new Range limited to n elements.
+    pub func take(this, n: I32) -> Range {
+        let actual_end: I32 = this.current + (n * this.step)
+        let capped_end: I32 = if actual_end < this.end then actual_end else this.end
+        return Range {
+            current: this.current,
+            end: capped_end,
+            step: this.step,
+            inclusive: false
+        }
+    }
+
+    /// Skips the first n elements from the iterator.
+    /// Returns a new Range starting n elements ahead.
+    pub func skip(this, n: I32) -> Range {
+        let new_current: I32 = this.current + (n * this.step)
+        return Range {
+            current: new_current,
+            end: this.end,
+            step: this.step,
+            inclusive: this.inclusive
+        }
+    }
+
+    /// Sums all elements in the iterator.
+    pub func sum(mut this) -> I32 {
+        let mut total: I32 = 0
+        loop {
+            when this.next() {
+                Just(value) => total = total + value,
+                Nothing => break
+            }
+        }
+        return total
+    }
+
+    /// Counts the number of elements in the iterator.
+    pub func count(mut this) -> I32 {
+        let mut n: I32 = 0
+        loop {
+            when this.next() {
+                Just(_) => n = n + 1,
+                Nothing => break
+            }
+        }
+        return n
+    }
+
+    // Note: fold, any, and all are temporarily disabled due to closure type inference bugs
+    // They will be re-enabled when the codegen properly handles function pointer types
+}
+
+// Disabled combinators that use closures:
+// - fold(init, f): requires function pointer type inference
+// - any(predicate): requires function pointer type inference
+// - all(predicate): requires function pointer type inference

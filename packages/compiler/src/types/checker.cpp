@@ -991,6 +991,11 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr {
     auto obj_type = check_expr(*field.object);
 
+    // Handle references (ref T, mut ref T) - auto-deref to access inner type's fields
+    if (obj_type->is<RefType>()) {
+        obj_type = obj_type->as<RefType>().inner;
+    }
+
     if (obj_type->is<NamedType>()) {
         auto& named = obj_type->as<NamedType>();
         auto struct_def = env_.lookup_struct(named.name);

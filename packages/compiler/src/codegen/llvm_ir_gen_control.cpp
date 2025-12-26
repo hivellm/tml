@@ -78,6 +78,14 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         }
     }
 
+    // If both branches are terminated (by return/break/continue), don't emit end block
+    // This can happen with nested if-else where all paths return
+    if (then_terminated && else_terminated) {
+        block_terminated_ = true;  // Mark the overall if as terminated
+        last_expr_type_ = "void";
+        return "0";
+    }
+
     // End block
     emit_line(label_end + ":");
     block_terminated_ = false;
@@ -703,7 +711,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         }
 
         // Store arm value to result (with type conversion if needed)
-        if (!block_terminated_) {
+        // Don't store void types - they don't produce values
+        if (!block_terminated_ && arm_type != "void") {
             std::string store_value = arm_value;
             std::string store_type = arm_type;
 
@@ -717,6 +726,9 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
             emit_line("  store " + store_type + " " + store_value + ", ptr " + result_ptr);
             emit_line("  br label %" + label_end);
+        } else if (!block_terminated_) {
+            // Void arm - just branch to end
+            emit_line("  br label %" + label_end);
         }
 
         // Next check label (if not last arm)
@@ -729,6 +741,12 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     // End label
     emit_line(label_end + ":");
     block_terminated_ = false;
+
+    // If result type is void, don't load anything
+    if (result_type == "void") {
+        last_expr_type_ = "void";
+        return "0";
+    }
 
     // Load result (and convert back if needed)
     std::string result = fresh_reg();

@@ -1,0 +1,54 @@
+// Test basic iterator combinators without closures
+use std::iter
+
+func main() -> I32 {
+    // Test 1: sum
+    let mut r1: Range = range(1, 5)
+    let sum_result: I32 = r1.sum()
+    if sum_result != 10 {
+        print("FAIL: range(1,5).sum() should be 10\n")
+        return 1
+    }
+    print("PASS: sum works\n")
+
+    // Test 2: count
+    let mut r2: Range = range(0, 10)
+    let count_result: I32 = r2.count()
+    if count_result != 10 {
+        print("FAIL: range(0,10).count() should be 10\n")
+        return 2
+    }
+    print("PASS: count works\n")
+
+    // Test 3: take + sum
+    let r3: Range = range(0, 100)
+    let mut taken: Range = r3.take(3)
+    let take_sum: I32 = taken.sum()
+    if take_sum != 3 {
+        print("FAIL: range(0,100).take(3).sum() should be 3\n")
+        return 3
+    }
+    print("PASS: take + sum works\n")
+
+    // Test 4: skip + sum
+    let r4: Range = range(0, 10)
+    let mut skipped: Range = r4.skip(7)
+    let skip_sum: I32 = skipped.sum()
+    if skip_sum != 24 {
+        print("FAIL: range(0,10).skip(7).sum() should be 24\n")
+        return 4
+    }
+    print("PASS: skip + sum works\n")
+
+    // Test 5: range_inclusive + sum
+    let mut r5: Range = range_inclusive(1, 5)
+    let incl_sum: I32 = r5.sum()
+    if incl_sum != 15 {
+        print("FAIL: range_inclusive(1,5).sum() should be 15\n")
+        return 5
+    }
+    print("PASS: range_inclusive + sum works\n")
+
+    print("\nAll iterator combinator tests passed!\n")
+    return 0
+}

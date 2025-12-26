@@ -2,6 +2,18 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.3.1] - 2025-12-26
+
+### Changed
+- Updated to support latest TML compiler features
+  - Iterator combinators (`sum`, `count`, `take`, `skip`)
+  - Module method resolution improvements
+  - Better support for standard library patterns
+
+### Documentation
+- Updated README to reflect compiler improvements
+- Added examples for iterator usage
+
 ## [0.1.0] - 2024-12-23
 
 ### Added

@@ -1,6 +1,6 @@
 # Tasks: Bootstrap Stdlib Core
 
-## Progress: 55% (21/38 tasks complete)
+## Progress: 58% (22/38 tasks complete)
 
 ## 1. Setup Phase
 - [x] 1.1 Create `runtime/` directory structure (C runtime)
@@ -33,14 +33,14 @@
 - [x] 4.2 Implement is_just, is_nothing
 - [ ] 4.3 Implement unwrap, expect (requires Never type for panic)
 - [x] 4.4 Implement unwrap_or, unwrap_or_else
-- [ ] 4.5 Implement map, and_then (requires mut this)
+- [ ] 4.5 Implement map, and_then (**UNBLOCKED**: mut this now implemented)
 - [ ] 4.6 Implement ok_or, ok_or_else
 
 ## 5. Result Type Phase (Outcome[T, E]) ✅ PARTIAL
 - [x] 5.1 Define Outcome[T, E] enum (Ok, Err)
 - [x] 5.2 Implement is_ok, is_err
 - [ ] 5.3 Implement unwrap, expect, unwrap_err (requires Never type)
-- [ ] 5.4 Implement map, map_err (requires mut this)
+- [ ] 5.4 Implement map, map_err (**UNBLOCKED**: mut this now implemented)
 - [ ] 5.5 Implement and_then, or_else
 - [ ] 5.6 Implement ! operator support
 
@@ -50,7 +50,7 @@
 - [x] 6.3 Implement list_push, list_pop
 - [x] 6.4 Implement list_len, list_is_empty, list_capacity
 - [x] 6.5 Implement list_get, list_set, index access
-- [ ] 6.6 Implement iter, iter_mut
+- [ ] 6.6 Implement iter, iter_mut (PARTIAL: Range iterator with basic combinators working)
 - [x] 6.7 Implement list_destroy for deallocation
 - [x] 6.8 Implement method syntax (.len(), .push(), .pop(), .get(), .set())
 - [x] 6.9 Implement array literal syntax `[1, 2, 3]`
@@ -96,4 +96,4 @@
 
 ## 11. Documentation Phase
 - [x] 11.1 Document collections in user docs (ch08-00-collections.md)
-- [ ] 11.2 Update CHANGELOG.md with stdlib implementation
+- [x] 11.2 Update CHANGELOG.md with stdlib implementation (2025-12-26: Iterator combinators documented)

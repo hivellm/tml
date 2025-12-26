@@ -227,6 +227,7 @@ private:
     // Declaration generation
     void gen_decl(const parser::Decl& decl);
     void gen_func_decl(const parser::FuncDecl& func);
+    void gen_impl_method(const std::string& type_name, const parser::FuncDecl& method);
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
 

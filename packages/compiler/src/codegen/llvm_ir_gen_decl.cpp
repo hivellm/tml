@@ -397,6 +397,109 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     current_ret_type_.clear();
 }
 
+void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
+    // Skip generic methods for now (they will be instantiated when called)
+    if (!method.generics.empty()) {
+        return;
+    }
+
+    std::string method_name = type_name + "_" + method.name;
+    current_func_ = method_name;
+    current_impl_type_ = type_name;  // Set impl type for 'this' field access
+    locals_.clear();
+    block_terminated_ = false;
+
+    // Determine return type
+    std::string ret_type = "void";
+    if (method.return_type.has_value()) {
+        ret_type = llvm_type_ptr(*method.return_type);
+    }
+    current_ret_type_ = ret_type;
+
+    // Build parameter list - methods have an implicit 'this' parameter
+    std::string params;
+    std::string param_types = "ptr";  // 'this' is always a pointer
+
+    // Check if first param is 'this' or 'mut this'
+    bool has_explicit_this = false;
+    size_t param_start = 0;
+    if (!method.params.empty()) {
+        const auto& first_param = method.params[0];
+        std::string first_name = get_param_name(first_param);
+        if (first_name == "this") {
+            has_explicit_this = true;
+            param_start = 1;  // Skip 'this' in param loop since we handle it specially
+        }
+    }
+
+    // Add 'this' pointer as first parameter
+    params = "ptr %this";
+
+    // Add remaining parameters
+    for (size_t i = param_start; i < method.params.size(); ++i) {
+        params += ", ";
+        param_types += ", ";
+        std::string param_type = llvm_type_ptr(method.params[i].type);
+        std::string param_name = get_param_name(method.params[i]);
+        params += param_type + " %" + param_name;
+        param_types += param_type;
+    }
+
+    // Function signature
+    std::string func_llvm_name = "tml_" + type_name + "_" + method.name;
+    emit_line("");
+    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
+    emit_line("entry:");
+
+    // Register 'this' in locals - it's already a pointer, don't store it
+    locals_["this"] = VarInfo{"%this", "ptr", nullptr};
+
+    // Register other parameters in locals by creating allocas
+    for (size_t i = param_start; i < method.params.size(); ++i) {
+        std::string param_type = llvm_type_ptr(method.params[i].type);
+        std::string param_name = get_param_name(method.params[i]);
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + param_type);
+        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+    }
+
+    // Generate method body
+    if (method.body) {
+        for (const auto& stmt : method.body->stmts) {
+            if (block_terminated_) break;
+            gen_stmt(*stmt);
+        }
+
+        // Handle trailing expression
+        if (method.body->expr.has_value() && !block_terminated_) {
+            std::string result = gen_expr(*method.body->expr.value());
+            if (ret_type != "void" && !block_terminated_) {
+                emit_line("  ret " + ret_type + " " + result);
+                block_terminated_ = true;
+            }
+        }
+    }
+
+    // Add implicit return if needed
+    if (!block_terminated_) {
+        if (ret_type == "void") {
+            emit_line("  ret void");
+        } else if (ret_type == "i32") {
+            emit_line("  ret i32 0");
+        } else if (ret_type == "i1") {
+            emit_line("  ret i1 false");
+        } else {
+            emit_line("  ret " + ret_type + " zeroinitializer");
+        }
+    }
+
+    emit_line("}");
+    current_func_.clear();
+    current_ret_type_.clear();
+    current_impl_type_.clear();
+}
+
 // Generate a specialized version of a generic function
 void LLVMIRGen::gen_func_instantiation(
     const parser::FuncDecl& func,

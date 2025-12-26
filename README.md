@@ -221,7 +221,8 @@ Source (.tml)
 | Borrow Checker | 🟡 Basic | ~60% (lifetime tracking) |
 | LLVM Backend | ✅ Complete | 100% (via text IR) |
 | Test Framework | ✅ Complete | 100% (@test, @bench) |
-| Standard Library | 🟡 In Progress | ~30% |
+| Module System | ✅ Complete | 100% (imports, method lookup) |
+| Standard Library | 🟡 In Progress | ~35% (iter basics working) |
 
 ### Test Results
 - **23 tests passing** (90%+ pass rate)
@@ -229,8 +230,10 @@ Source (.tml)
 - Runtime tests: ✅ Most passing (1 known issue)
 
 ### Recent Features (Dec 2024)
-- ✅ **Trait Objects** - `dyn Behavior` with vtable dispatch
-- ✅ **Module System** - `use` imports working
+- ✅ **Iterator Combinators** (Dec 26) - `sum()`, `count()`, `take()`, `skip()` working
+- ✅ **Module Method Lookup** (Dec 26) - Imported type methods now resolve correctly
+- ✅ **Trait Objects** (Dec 24) - `dyn Behavior` with vtable dispatch
+- ✅ **Module System** (Dec 23) - `use` imports working
 - ✅ **Pattern Matching** - Full `when` expression support
 - ✅ **Generics** - Structs and enums with monomorphization
 - ✅ **Test Framework** - @test decorator, parallel execution

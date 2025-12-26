@@ -95,6 +95,22 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                 return module_registry_->lookup_function(module_path, symbol_name);
             }
         }
+        // If name contains "::" (like "Range::next"), try to resolve the type first
+        auto method_pos = name.find("::");
+        if (method_pos != std::string::npos) {
+            std::string type_name = name.substr(0, method_pos);
+            std::string method_name = name.substr(method_pos + 2);
+            // Try to resolve the type to its module
+            auto type_import_path = resolve_imported_symbol(type_name);
+            if (type_import_path) {
+                auto pos = type_import_path->rfind("::");
+                if (pos != std::string::npos) {
+                    std::string module_path = type_import_path->substr(0, pos);
+                    // Lookup "Type::method" in the module
+                    return module_registry_->lookup_function(module_path, name);
+                }
+            }
+        }
     }
     return std::nullopt;
 }
@@ -168,6 +184,16 @@ auto TypeEnv::all_enums() const -> const std::unordered_map<std::string, EnumDef
 auto TypeEnv::get_module(const std::string &module_path) const -> std::optional<Module> {
     if (!module_registry_) return std::nullopt;
     return module_registry_->get_module(module_path);
+}
+
+auto TypeEnv::get_all_modules() const -> std::vector<std::pair<std::string, Module>> {
+    std::vector<std::pair<std::string, Module>> result;
+    if (module_registry_) {
+        for (const auto& [path, mod] : module_registry_->get_all_modules()) {
+            result.emplace_back(path, mod);
+        }
+    }
+    return result;
 }
 
 void TypeEnv::register_impl(const std::string& type_name, const std::string& behavior_name) {

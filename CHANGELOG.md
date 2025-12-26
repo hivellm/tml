@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Iterator Combinators** (2025-12-26) - Functional iterator methods for std::iter
+  - Core combinators: `sum()`, `count()`, `take()`, `skip()`
+  - Lazy evaluation with zero-cost abstractions
+  - Working with Range type and basic iteration
+  - Note: `fold()`, `any()`, `all()` disabled temporarily (closure type inference bugs)
+  - Example: `range(0, 100).take(10).sum()` → 45
+- **Module Method Codegen Fix** (2025-12-26) - Methods from imported modules now work correctly
+  - Fixed `lookup_func()` to resolve `Type::method` → `module::Type::method`
+  - Fixed `last_expr_type_` tracking for method calls returning structs/enums
+  - Module impl methods now generate proper LLVM IR
+  - Example: `Range::next()` from `std::iter` now compiles and runs
 - **Trait Objects** (2025-12-24) - Dynamic dispatch with `dyn Behavior` syntax
   - Vtable generation for behavior implementations
   - Method resolution through vtables
@@ -109,6 +120,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known Limitations
 See [COMPILER_MISSING_FEATURES.md](./docs/COMPILER_MISSING_FEATURES.md) for comprehensive details:
 - ✅ **Pattern binding in when expressions** - Now working! `Just(v)` unwraps correctly
+- ✅ **Module method lookup** - Now working! `Type::method` from imported modules resolved correctly
+- ⚠️ **Function pointer types** - Type inference for closures incomplete (blocks `fold`, `any`, `all`)
+- ⚠️ **Generic enum redefinition** - Types like `Maybe__I32` emitted multiple times in LLVM IR
 - ⚠️ **Closure capture** - Basic closures work, but captured variables not yet implemented
 - ⚠️ **Generic where clauses** - Parsed but not enforced by type checker
 - ❌ **Tuple types** - Not yet implemented

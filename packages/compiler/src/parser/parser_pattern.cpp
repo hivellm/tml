@@ -43,15 +43,21 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
         return make_wildcard_pattern(start_span);
     }
 
-    // Mutable binding: mut x
+    // Mutable binding: mut x or mut this
     if (match(lexer::TokenKind::KwMut)) {
+        // Check for 'mut this' (mutable self receiver)
+        if (match(lexer::TokenKind::KwThis)) {
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_ident_pattern("this", true, span);
+        }
+        // Regular mutable binding: mut x
         auto name_result = expect(lexer::TokenKind::Identifier, "Expected identifier after 'mut'");
         if (is_err(name_result)) return unwrap_err(name_result);
         auto span = SourceSpan::merge(start_span, unwrap(name_result).span);
         return make_ident_pattern(std::string(unwrap(name_result).lexeme), true, span);
     }
 
-    // this pattern (for method receivers)
+    // this pattern (for immutable method receivers)
     if (match(lexer::TokenKind::KwThis)) {
         return make_ident_pattern("this", false, start_span);
     }

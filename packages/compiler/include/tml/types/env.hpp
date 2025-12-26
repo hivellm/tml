@@ -155,6 +155,7 @@ namespace tml::types
 
         // Module lookup
         [[nodiscard]] auto get_module(const std::string &module_path) const -> std::optional<Module>;
+        [[nodiscard]] auto get_all_modules() const -> std::vector<std::pair<std::string, Module>>;
 
         // Load native module on demand
         bool load_native_module(const std::string& module_path);

@@ -999,6 +999,62 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     gen_func_decl(func);
                 }
             }
+            // Also handle impl blocks - generate methods for imported types
+            else if (decl->is<parser::ImplDecl>()) {
+                const auto& impl = decl->as<parser::ImplDecl>();
+
+                // Get the type name for the impl
+                std::string type_name;
+                if (impl.self_type && impl.self_type->is<parser::NamedType>()) {
+                    const auto& named = impl.self_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        type_name = named.path.segments.back();
+                    }
+                }
+
+                if (!type_name.empty()) {
+                    // First pass: pre-instantiate generic types used in method signatures
+                    for (const auto& method : impl.methods) {
+                        if (method.return_type.has_value()) {
+                            const auto& ret_type = *method.return_type;
+                            if (ret_type->is<parser::NamedType>()) {
+                                const auto& named = ret_type->as<parser::NamedType>();
+                                if (named.generics.has_value() && !named.generics->args.empty()) {
+                                    // Check if this is a pending generic enum
+                                    std::string base_name;
+                                    if (!named.path.segments.empty()) {
+                                        base_name = named.path.segments.back();
+                                    }
+                                    auto it = pending_generic_enums_.find(base_name);
+                                    if (it != pending_generic_enums_.end()) {
+                                        // Convert parser type args to semantic types
+                                        std::vector<types::TypePtr> type_args;
+                                        for (const auto& arg : named.generics->args) {
+                                            type_args.push_back(resolve_parser_type_with_subs(*arg, {}));
+                                        }
+                                        // Check if already instantiated
+                                        std::string mangled = mangle_struct_name(base_name, type_args);
+                                        if (struct_types_.find(mangled) == struct_types_.end()) {
+                                            gen_enum_instantiation(*it->second, type_args);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Second pass: generate the methods
+                    for (const auto& method : impl.methods) {
+                        // Generate code for public, non-lowlevel methods with bodies
+                        if (method.vis == parser::Visibility::Public &&
+                            !method.is_unsafe &&
+                            method.body.has_value()) {
+                            // Generate impl method with qualified name
+                            gen_impl_method(type_name, method);
+                        }
+                    }
+                }
+            }
         }
     }
 

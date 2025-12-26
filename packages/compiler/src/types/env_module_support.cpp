@@ -213,13 +213,31 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             if (name == "File") return std::make_shared<Type>(Type{NamedType{"File", "std::file", {}}});
             if (name == "Path") return std::make_shared<Type>(Type{NamedType{"Path", "std::file", {}}});
 
-            // Other non-primitive types - assume they're from the current module
-            return std::make_shared<Type>(Type{NamedType{name, "", {}}});
+            // Other non-primitive types - resolve any generic type arguments
+            std::vector<TypePtr> type_args;
+            if (named.generics.has_value()) {
+                for (const auto& arg : named.generics->args) {
+                    type_args.push_back(resolve_simple_type(*arg));
+                }
+            }
+            return std::make_shared<Type>(Type{NamedType{name, "", std::move(type_args)}});
         }
         else if (type.is<parser::RefType>()) {
             const auto& ref = type.as<parser::RefType>();
             auto inner = resolve_simple_type(*ref.inner);
             return std::make_shared<Type>(Type{RefType{ref.is_mut, inner}});
+        }
+        else if (type.is<parser::FuncType>()) {
+            const auto& func_type = type.as<parser::FuncType>();
+            std::vector<TypePtr> param_types;
+            for (const auto& param : func_type.params) {
+                param_types.push_back(resolve_simple_type(*param));
+            }
+            TypePtr return_type = make_unit();
+            if (func_type.return_type) {
+                return_type = resolve_simple_type(*func_type.return_type);
+            }
+            return std::make_shared<Type>(Type{FuncType{std::move(param_types), return_type}});
         }
 
         // Fallback: return I32 for unknown types

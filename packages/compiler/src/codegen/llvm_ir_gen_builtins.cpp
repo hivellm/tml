@@ -1942,8 +1942,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             arg_vals.push_back({val, last_expr_type_});
         }
 
-        // Generate indirect call - assume i32 return type for now
-        std::string ret_type = "i32";
+        // Determine return type from semantic type if available
+        std::string ret_type = "i32";  // Default fallback
+        if (local_it->second.semantic_type && local_it->second.semantic_type->is<types::FuncType>()) {
+            const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
+            ret_type = llvm_type_from_semantic(func_type.return_type);
+        }
+
         std::string result = fresh_reg();
         emit("  " + result + " = call " + ret_type + " " + fn_ptr + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {

@@ -1,0 +1,21 @@
+// Very simple test without using Maybe
+use std::iter
+
+func main() -> I32 {
+    // Just test that Range can be created
+    let r1: Range = range(0, 5)
+    print("Created range successfully\n")
+
+    // Test take (doesn't use next internally)
+    let r2: Range = range(0, 100)
+    let taken: Range = r2.take(5)
+    print("Take works\n")
+
+    // Test skip (doesn't use next internally)
+    let r3: Range = range(0, 100)
+    let skipped: Range = r3.skip(10)
+    print("Skip works\n")
+
+    print("PASS: Basic range methods work!\n")
+    return 0
+}

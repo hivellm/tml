@@ -956,22 +956,41 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
     if (is_err(pattern_result)) return unwrap_err(pattern_result);
     auto pattern = std::move(unwrap(pattern_result));
 
-    // Special case: 'this' parameter doesn't require a type annotation
+    // Special case: 'this' or 'mut this' parameter doesn't require a type annotation
     bool is_this_param = pattern->is<IdentPattern>() &&
                          pattern->as<IdentPattern>().name == "this";
 
     if (is_this_param && !check(lexer::TokenKind::Colon)) {
-        // 'this' without type - use This type implicitly
         auto span = pattern->span;
-        auto this_type = make_box<Type>(Type{
-            .kind = NamedType{TypePath{{"This"}, span}, {}, span},
-            .span = span
-        });
-        return FuncParam{
-            .pattern = std::move(pattern),
-            .type = std::move(this_type),
-            .span = span
-        };
+        bool is_mut_this = pattern->as<IdentPattern>().is_mut;
+
+        if (is_mut_this) {
+            // 'mut this' without type - use 'mut ref This' type implicitly
+            auto this_named = make_box<Type>(Type{
+                .kind = NamedType{TypePath{{"This"}, span}, {}, span},
+                .span = span
+            });
+            auto this_type = make_box<Type>(Type{
+                .kind = RefType{true, std::move(this_named), span},
+                .span = span
+            });
+            return FuncParam{
+                .pattern = std::move(pattern),
+                .type = std::move(this_type),
+                .span = span
+            };
+        } else {
+            // 'this' without type - use This type implicitly (immutable, passed by value/ref)
+            auto this_type = make_box<Type>(Type{
+                .kind = NamedType{TypePath{{"This"}, span}, {}, span},
+                .span = span
+            });
+            return FuncParam{
+                .pattern = std::move(pattern),
+                .type = std::move(this_type),
+                .span = span
+            };
+        }
     }
 
     auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after parameter name");

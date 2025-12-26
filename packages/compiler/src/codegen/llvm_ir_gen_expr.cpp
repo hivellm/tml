@@ -127,6 +127,7 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     }
 
     // Check if it's an enum unit variant (variant without payload)
+    // First check local enums
     for (const auto& [enum_name, enum_def] : env_.all_enums()) {
         for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
             const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
@@ -165,6 +166,46 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         }
     }
 
+    // Also check module enums for variants
+    for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+        for (const auto& [enum_name, enum_def] : mod.enums) {
+            for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
+                const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
+
+                if (variant_name == ident.name && payload_types.empty()) {
+                    // Found unit variant in module - create enum value with just the tag
+                    std::string enum_type = "%struct." + enum_name;
+
+                    // For generic enums, try to infer the correct mangled type from context
+                    if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
+                        std::string prefix = "%struct." + enum_name + "__";
+                        if (current_ret_type_.starts_with(prefix) ||
+                            current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                            enum_type = current_ret_type_;
+                        }
+                    }
+                    std::string result = fresh_reg();
+                    std::string enum_val = fresh_reg();
+
+                    // Create enum value on stack
+                    emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                    // Set tag
+                    std::string tag_ptr = fresh_reg();
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                    // No payload to set
+
+                    // Load the complete enum value
+                    emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                    last_expr_type_ = enum_type;
+                    return result;
+                }
+            }
+        }
+    }
+
     report_error("Unknown variable: " + ident.name, ident.span);
     last_expr_type_ = "i32";
     return "0";
@@ -187,6 +228,46 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // Get the pointer (not the dereferenced value!)
                 std::string ptr = gen_expr(*unary.operand);
                 emit_line("  store i32 " + right + ", ptr " + ptr);
+            }
+        } else if (bin.left->is<parser::FieldExpr>()) {
+            // Field assignment: obj.field = value or this.field = value
+            const auto& field = bin.left->as<parser::FieldExpr>();
+            std::string struct_type;
+            std::string struct_ptr;
+
+            if (field.object->is<parser::IdentExpr>()) {
+                const auto& ident = field.object->as<parser::IdentExpr>();
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    struct_type = it->second.type;
+                    struct_ptr = it->second.reg;
+
+                    // Special handling for 'this' in impl methods
+                    if (ident.name == "this" && !current_impl_type_.empty()) {
+                        struct_type = "%struct." + current_impl_type_;
+                        // Load the actual 'this' pointer from the alloca
+                        std::string loaded_this = fresh_reg();
+                        emit_line("  " + loaded_this + " = load ptr, ptr " + struct_ptr);
+                        struct_ptr = loaded_this;
+                    }
+                }
+            }
+
+            if (!struct_type.empty() && !struct_ptr.empty()) {
+                // Get the struct type name for field lookup
+                std::string type_name = struct_type;
+                if (type_name.starts_with("%struct.")) {
+                    type_name = type_name.substr(8);
+                }
+
+                // Get field pointer
+                int field_idx = get_field_index(type_name, field.field);
+                std::string field_type = get_field_type(type_name, field.field);
+                std::string field_ptr = fresh_reg();
+                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+
+                // Store value to field
+                emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
             }
         }
         return right;
@@ -653,8 +734,11 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         param_types_str += " %" + param_names.back();
     }
 
-    // Determine return type (simplified to i32 for now)
+    // Determine return type from closure annotation or default to i32
     std::string ret_type = "i32";
+    if (closure.return_type.has_value()) {
+        ret_type = llvm_type(*closure.return_type.value());
+    }
 
     // Save information about captured variables before clearing locals
     std::vector<std::pair<std::string, std::string>> captured_info;  // (name, type)
