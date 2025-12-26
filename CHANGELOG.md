@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CRITICAL: Generic Functions + Closures** (2025-12-26) - Generic functions accepting closures now work correctly
+  - Fixed `gen_closure()` to set `last_expr_type_ = "ptr"` for closure expressions
+  - Closures now correctly passed as function pointers (`ptr`) instead of integers (`i32`)
+  - Unblocks stdlib functional programming: `map()`, `filter()`, `fold()`, `and_then()`, `or_else()`
+  - Example: `func apply[T](x: T, f: func(T) -> T) -> T` now works with closure arguments
+  - Tests: `closure_simple.test.tml` ✅, `generic_closure_simple.test.tml` ✅
+  - See [BUGS.md](BUGS.md) for technical details
+
 ### Added
+- **Maybe[T] and Outcome[T,E] Combinators** (2025-12-26) - Functional programming patterns for stdlib
+  - Maybe[T]: `map()`, `and_then()`, `filter()`, `or_else()`
+  - Outcome[T,E]: `map_ok()`, `map_err()`, `and_then_ok()`, `or_else_ok()`
+  - Implemented in `packages/std/src/types/mod.tml`
+  - Requires explicit type annotations on closure parameters (type inference WIP)
 - **Iterator Combinators** (2025-12-26) - Functional iterator methods for std::iter
   - Core combinators: `sum()`, `count()`, `take()`, `skip()`
   - Lazy evaluation with zero-cost abstractions

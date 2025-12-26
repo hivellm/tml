@@ -1,6 +1,8 @@
 # Tasks: Bootstrap Stdlib Core
 
-## Progress: 58% (22/38 tasks complete)
+## Progress: 66% (25/38 tasks complete)
+
+**Latest Update (2025-12-26):** ✅ CRITICAL BUG FIX: Generic functions + closures now work! This unblocks stdlib functional programming patterns (map, filter, fold, etc). See [BUGS.md](../../../BUGS.md) for details.
 
 ## 1. Setup Phase
 - [x] 1.1 Create `runtime/` directory structure (C runtime)
@@ -33,15 +35,15 @@
 - [x] 4.2 Implement is_just, is_nothing
 - [ ] 4.3 Implement unwrap, expect (requires Never type for panic)
 - [x] 4.4 Implement unwrap_or, unwrap_or_else
-- [ ] 4.5 Implement map, and_then (**UNBLOCKED**: mut this now implemented)
+- [x] 4.5 Implement map, and_then, filter, or_else (**FIXED 2025-12-26**: Generic closures bug resolved!)
 - [ ] 4.6 Implement ok_or, ok_or_else
 
 ## 5. Result Type Phase (Outcome[T, E]) ✅ PARTIAL
 - [x] 5.1 Define Outcome[T, E] enum (Ok, Err)
 - [x] 5.2 Implement is_ok, is_err
 - [ ] 5.3 Implement unwrap, expect, unwrap_err (requires Never type)
-- [ ] 5.4 Implement map, map_err (**UNBLOCKED**: mut this now implemented)
-- [ ] 5.5 Implement and_then, or_else
+- [x] 5.4 Implement map_ok, map_err (**FIXED 2025-12-26**: Generic closures bug resolved!)
+- [x] 5.5 Implement and_then_ok, or_else_ok
 - [ ] 5.6 Implement ! operator support
 
 ## 6. List Type Phase
