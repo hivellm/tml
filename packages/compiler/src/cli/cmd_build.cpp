@@ -255,7 +255,7 @@ static fs::path get_run_cache_dir() {
     return cache;
 }
 
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type, bool emit_header) {
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type, bool emit_header, const std::string& output_dir) {
     (void)no_cache; // TODO: Implement cache control for build command
 
     std::string source_code;
@@ -319,33 +319,6 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
-    // Generate C header if requested
-    if (emit_header) {
-        codegen::CHeaderGenOptions header_opts;
-        codegen::CHeaderGen header_gen(env, header_opts);
-        auto header_result = header_gen.generate(module);
-
-        if (!header_result.success) {
-            std::cerr << "error: Header generation failed: " << header_result.error_message << "\n";
-            return 1;
-        }
-
-        // Write header file
-        fs::path build_dir = get_build_dir(false /* debug */);
-        fs::path header_output = build_dir / (module_name + ".h");
-
-        std::ofstream header_file(header_output);
-        if (!header_file) {
-            std::cerr << "error: Cannot write to " << header_output << "\n";
-            return 1;
-        }
-        header_file << header_result.header_content;
-        header_file.close();
-
-        std::cout << "emit-header: " << header_output << "\n";
-        return 0;
-    }
-
     codegen::LLVMGenOptions options;
     options.emit_comments = verbose;
 #ifdef _WIN32
@@ -368,7 +341,10 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
     // Use build directory structure (like Rust's target/)
-    fs::path build_dir = get_build_dir(false /* debug */);
+    // If output_dir is specified, use it; otherwise use default build directory
+    fs::path build_dir = output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
+    fs::create_directories(build_dir);  // Ensure custom output directory exists
+
     fs::path ll_output = build_dir / (module_name + ".ll");
     fs::path exe_output = build_dir / module_name;
 #ifdef _WIN32
@@ -477,6 +453,32 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     fs::remove(ll_output);
 
     std::cout << "build: " << to_forward_slashes(final_output.string()) << "\n";
+
+    // Generate C header if requested (after successful build)
+    if (emit_header) {
+        codegen::CHeaderGenOptions header_opts;
+        codegen::CHeaderGen header_gen(env, header_opts);
+        auto header_result = header_gen.generate(module);
+
+        if (!header_result.success) {
+            std::cerr << "error: Header generation failed: " << header_result.error_message << "\n";
+            return 1;
+        }
+
+        // Write header file to same directory as the library/executable
+        fs::path header_output = build_dir / (module_name + ".h");
+
+        std::ofstream header_file(header_output);
+        if (!header_file) {
+            std::cerr << "error: Cannot write to " << header_output << "\n";
+            return 1;
+        }
+        header_file << header_result.header_content;
+        header_file.close();
+
+        std::cout << "emit-header: " << to_forward_slashes(header_output.string()) << "\n";
+    }
+
     return 0;
 }
 

@@ -66,7 +66,7 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "build") {
         if (argc < 3) {
-            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--emit-header] [--verbose] [--no-cache] [--crate-type=<type>]\n";
+            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--emit-header] [--verbose] [--no-cache] [--crate-type=<type>] [--out-dir=<dir>]\n";
             std::cerr << "  Crate types: bin (default), lib, dylib\n";
             return 1;
         }
@@ -74,6 +74,7 @@ int tml_main(int argc, char* argv[]) {
         bool emit_header = false;
         bool no_cache = false;
         BuildOutputType output_type = BuildOutputType::Executable;
+        std::string output_dir = "";  // Empty means use default (build/debug)
 
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
@@ -93,12 +94,14 @@ int tml_main(int argc, char* argv[]) {
                     output_type = BuildOutputType::DynamicLib;
                 } else {
                     std::cerr << "error: unknown crate type '" << crate_type << "'\n";
-                    std::cerr << "  valid types: bin, lib, dylib\n";
+                    std::cerr << "  valid types: bin, dylib\n";
                     return 1;
                 }
+            } else if (arg.starts_with("--out-dir=")) {
+                output_dir = arg.substr(10);
             }
         }
-        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header);
+        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header, output_dir);
     }
 
     if (command == "fmt") {
