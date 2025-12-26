@@ -108,9 +108,10 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     if (it != locals_.end()) {
         const VarInfo& var = it->second;
         last_expr_type_ = var.type;
-        // Check if it's an alloca (starts with %t) that needs loading
+        // Check if it's an alloca (starts with %t and has digit after) that needs loading
+        // But skip %this which is a direct parameter, not an alloca
         // This includes ptr types - we load the pointer value from the alloca
-        if (var.reg[0] == '%' && var.reg[1] == 't') {
+        if (var.reg[0] == '%' && var.reg[1] == 't' && var.reg.length() > 2 && std::isdigit(var.reg[2])) {
             std::string reg = fresh_reg();
             emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
             return reg;
@@ -245,10 +246,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     // Special handling for 'this' in impl methods
                     if (ident.name == "this" && !current_impl_type_.empty()) {
                         struct_type = "%struct." + current_impl_type_;
-                        // Load the actual 'this' pointer from the alloca
-                        std::string loaded_this = fresh_reg();
-                        emit_line("  " + loaded_this + " = load ptr, ptr " + struct_ptr);
-                        struct_ptr = loaded_this;
+                        // 'this' is already a pointer parameter, not an alloca - use it directly
+                        // struct_ptr is already "%this" which is the direct pointer
                     }
                 }
             }

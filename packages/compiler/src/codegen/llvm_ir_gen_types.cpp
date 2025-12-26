@@ -409,10 +409,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             if (ident.name == "this" && !current_impl_type_.empty()) {
                 // 'this' is a pointer to the impl type
                 struct_type = "%struct." + current_impl_type_;
-                // Load the actual 'this' pointer from the alloca
-                std::string loaded_this = fresh_reg();
-                emit_line("  " + loaded_this + " = load ptr, ptr " + struct_ptr);
-                struct_ptr = loaded_this;
+                // 'this' is already a pointer parameter, not an alloca - use it directly
+                // struct_ptr is already "%this" which is the direct pointer
             }
         }
     } else if (field.object->is<parser::FieldExpr>()) {

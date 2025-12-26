@@ -1223,10 +1223,16 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         if (param_name == "this" && param_type.find("This") != std::string::npos) {
                             param_type = "ptr";
                         }
-                        std::string alloca_reg = fresh_reg();
-                        emit_line("  " + alloca_reg + " = alloca " + param_type);
-                        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-                        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+
+                        // 'this' is already a pointer parameter, don't create alloca for it
+                        if (param_name == "this") {
+                            locals_[param_name] = VarInfo{"%" + param_name, param_type, nullptr};
+                        } else {
+                            std::string alloca_reg = fresh_reg();
+                            emit_line("  " + alloca_reg + " = alloca " + param_type);
+                            emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+                            locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+                        }
                     }
 
                     // Generate body
@@ -1345,10 +1351,15 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                                     semantic_type->kind = types::NamedType{type_name, "", {}};
                                 }
 
-                                std::string alloca_reg = fresh_reg();
-                                emit_line("  " + alloca_reg + " = alloca " + param_type);
-                                emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-                                locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+                                // 'this' is already a pointer parameter, don't create alloca for it
+                                if (param_name == "this") {
+                                    locals_[param_name] = VarInfo{"%" + param_name, param_type, semantic_type};
+                                } else {
+                                    std::string alloca_reg = fresh_reg();
+                                    emit_line("  " + alloca_reg + " = alloca " + param_type);
+                                    emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+                                    locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+                                }
                             }
 
                             // Generate body

@@ -1954,8 +1954,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
+        // Build function type signature for indirect call using argument types
+        // Use the types of the arguments being passed, not the semantic type params
+        std::string func_type_sig = ret_type + " (";
+        for (size_t i = 0; i < arg_vals.size(); ++i) {
+            if (i > 0) func_type_sig += ", ";
+            func_type_sig += arg_vals[i].second;  // Use the type from arg_vals
+        }
+        func_type_sig += ")";
+
         std::string result = fresh_reg();
-        emit("  " + result + " = call " + ret_type + " " + fn_ptr + "(");
+        emit("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
             if (i > 0) emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
