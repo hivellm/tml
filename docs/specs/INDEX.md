@@ -68,6 +68,8 @@
 | [10-TESTING.md](./10-TESTING.md) | Native testing framework |
 | [11-DEBUG.md](./11-DEBUG.md) | Debug and structured messages |
 | [12-ERRORS.md](./12-ERRORS.md) | Error catalog |
+| [18-RLIB-FORMAT.md](./18-RLIB-FORMAT.md) | RLIB library format and metadata |
+| [19-MANIFEST.md](./19-MANIFEST.md) | Package manifest (tml.toml) |
 
 ### Reference
 

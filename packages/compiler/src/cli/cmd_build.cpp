@@ -474,13 +474,18 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
         // Extract exports from the module
         // For now, we'll export all public functions
         // TODO: Parse module to get actual exports with type information
-        for (const auto& [name, func] : module->functions) {
-            RlibExport exp;
-            exp.name = name;
-            exp.symbol = "tml_" + name;  // Simple mangling
-            exp.type = "func";  // TODO: Add full type signature
-            exp.is_public = true;  // TODO: Check actual visibility
-            rlib_module.exports.push_back(exp);
+        for (const auto& decl : module.decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func_decl = decl->as<parser::FuncDecl>();
+                if (func_decl.vis == parser::Visibility::Public) {
+                    RlibExport exp;
+                    exp.name = func_decl.name;
+                    exp.symbol = "tml_" + func_decl.name;  // Simple mangling
+                    exp.type = "func";  // TODO: Add full type signature
+                    exp.is_public = true;
+                    rlib_module.exports.push_back(exp);
+                }
+            }
         }
 
         metadata.modules.push_back(rlib_module);

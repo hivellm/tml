@@ -19,7 +19,8 @@ std::string get_default_project_name() {
     std::string name = current.filename().string();
 
     // Convert to lowercase and replace spaces with underscores
-    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::replace(name.begin(), name.end(), ' ', '_');
 
     // Remove invalid characters

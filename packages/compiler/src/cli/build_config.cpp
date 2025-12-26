@@ -1,6 +1,6 @@
 #include "build_config.hpp"
 #include <fstream>
-<parameter name="sstream">
+#include <sstream>
 #include <algorithm>
 #include <cctype>
 #include <regex>

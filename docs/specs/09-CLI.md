@@ -15,37 +15,44 @@ tml --help
 #     tml <COMMAND> [OPTIONS]
 #
 # COMMANDS:
-#     new         Create a new project
-#     build       Compile the project
-#     run         Build and execute
-#     test        Run tests
-#     check       Check for errors without compiling
-#     fmt         Format source code
-#     lint        Run linter
-#     doc         Generate documentation
-#     repl        Interactive REPL
-#     ir          Generate IR
-#     clean       Remove build artifacts
+#     init        Initialize a new project (IMPLEMENTED)
+#     build       Compile the project (IMPLEMENTED)
+#     run         Build and execute (IMPLEMENTED)
+#     test        Run tests (IMPLEMENTED)
+#     check       Check for errors without compiling (IMPLEMENTED)
+#     fmt         Format source code (IMPLEMENTED)
+#     cache       Manage build cache (IMPLEMENTED)
+#     rlib        Inspect RLIB libraries (IMPLEMENTED)
+#     lint        Run linter (FUTURE)
+#     doc         Generate documentation (FUTURE)
+#     repl        Interactive REPL (FUTURE)
+#     clean       Remove build artifacts (FUTURE)
 ```
 
 ## 2. Main Commands
 
-### 2.1 tml new — Create Project
+### 2.1 tml init — Initialize Project
 
 ```bash
-tml new myproject
+# Initialize in current directory
+tml init
 
 # Structure created:
-# myproject/
+# ./
 # ├── tml.toml
 # ├── src/
-# │   └── lib.tml
-# └── tests/
-#     └── lib_test.tml
+# │   └── main.tml (for binary) or lib.tml (for library)
+# └── build/
 
 # Options
-tml new myproject --bin      # executable (src/main.tml)
-tml new myproject --lib      # library (default)
+tml init --bin               # Create binary project (default)
+tml init --lib               # Create library project
+tml init --name myproject    # Set project name (default: directory name)
+tml init --no-src            # Don't create src/ or source files
+
+# Examples
+tml init --lib --name my_library
+tml init --bin --name my_app
 ```
 
 ### 2.2 tml build — Compile
@@ -64,10 +71,16 @@ tml build --target x86_64-linux
 # Library types
 tml build --crate-type=lib       # Static library (.lib/.a)
 tml build --crate-type=dylib     # Dynamic library (.dll/.so/.dylib)
-tml build --crate-type=rlib      # TML library format (future)
+tml build --crate-type=rlib      # TML library format (.rlib with metadata)
 
 # C header generation for FFI
 tml build --emit-header          # Generate .h file from public functions
+
+# Other options
+tml build --emit-ir              # Emit LLVM IR (.ll files)
+tml build --no-cache             # Disable build cache
+tml build --out-dir=path         # Specify output directory
+tml build --verbose              # Show detailed build output
 
 # Custom output directory
 tml build --out-dir=path/to/dir  # Save build artifacts to custom directory
@@ -254,11 +267,74 @@ tml ir src/lib.tml --format json
 tml ir src/lib.tml --output lib.tml.ir
 ```
 
-### 2.11 tml clean — Cleanup
+### 2.11 tml cache — Build Cache Management
 
 ```bash
-tml clean           # remove target/
-tml clean --all     # remove everything including cache
+# Show cache information
+tml cache info
+# Output:
+#   Cache location: build/debug/.run-cache
+#   Object files: 15
+#   Executable files: 8
+#   Total size: 245.67 MB
+
+# Show detailed cache contents
+tml cache info --verbose
+
+# Clean old cache files (7+ days)
+tml cache clean
+
+# Clean all cache files
+tml cache clean --all
+
+# Clean files older than N days
+tml cache clean --days 14
+
+# Cache features:
+# - Content-based hashing (cache hit if source unchanged)
+# - LRU eviction (removes oldest files when cache > 1GB)
+# - Two-level cache: object files + executables
+# - 91% speedup for unchanged code
+```
+
+### 2.12 tml rlib — RLIB Library Inspection
+
+```bash
+# Show library information
+tml rlib info mylib.rlib
+# Output:
+#   TML Library: mylib v1.0.0
+#   TML Version: 0.1.0
+#   Modules: 1
+#   Dependencies: 2
+
+# List public exports
+tml rlib exports mylib.rlib
+# Output:
+#   func add(I32, I32) -> I32
+#   func multiply(I32, I32) -> I32
+#   struct Point { x: I32, y: I32 }
+
+# Validate RLIB format
+tml rlib validate mylib.rlib
+# Output:
+#   ✓ Valid archive format
+#   ✓ Found metadata.json
+#   ✓ Valid metadata format
+#   ✓ All modules present
+
+# RLIB features:
+# - Type information for safe linking
+# - Dependency tracking
+# - Content-based hashing
+# - JSON metadata format
+```
+
+### 2.13 tml clean — Cleanup
+
+```bash
+tml clean           # remove build/ (FUTURE)
+tml clean --all     # remove everything including cache (FUTURE)
 ```
 
 ## 3. Dependencies
