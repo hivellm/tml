@@ -43,7 +43,11 @@
 - [x] 5.5 Implement call expression type checking
 - [x] 5.6 Implement field access type checking
 - [x] 5.7 Implement index expression type checking
-- [ ] 5.8 Implement closure type inference
+- [x] 5.8 Implement closure type inference ✅ PARTIAL (2025-12-26)
+  - **IMPLEMENTED**: Closure return type inference (Bool/I32)
+  - **IMPLEMENTED**: Function pointer parameter type resolution
+  - **STATUS**: Simple closures working, combinators compile successfully
+  - **NOTE**: Runtime segfault in fold/any/all needs investigation
 - [x] 5.9 Implement if/when expression type checking
 
 ## 6. Statement Type Checking Phase
@@ -105,7 +109,7 @@
 
 **Known Issues**:
 - ⚠️ 7 failing tests related to array/closure type inference
-- ⚠️ Missing closure type inference (5.8) - **CRITICAL**: Blocks fold(), any(), all() combinators
+- ⚠️ Closure runtime segfault: fold(), any(), all() compile but crash at runtime (needs debugging)
 - ⚠️ Missing let-polymorphism generalization (4.7)
 - ⚠️ Missing where clause checking (7.7)
 - ⚠️ Missing orphan rule checking (8.4)
