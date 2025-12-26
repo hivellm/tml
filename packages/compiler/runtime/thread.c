@@ -413,3 +413,71 @@ int64_t atomic_sub(AtomicCounter* a, int64_t delta) {
 void atomic_free(AtomicCounter* a) {
     free(a);
 }
+
+// ============ WRAPPER FUNCTIONS (for codegen compatibility) ============
+
+// thread_sleep(ms: I32) -> Unit - Wrapper for thread_sleep_ms
+void thread_sleep(int32_t ms) {
+    thread_sleep_ms((int64_t)ms);
+}
+
+// thread_id() -> I32 - Get current thread ID
+#ifdef _WIN32
+int32_t thread_id(void) {
+    return (int32_t)GetCurrentThreadId();
+}
+#else
+#include <sys/types.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
+int32_t thread_id(void) {
+#if defined(__linux__) && defined(SYS_gettid)
+    return (int32_t)syscall(SYS_gettid);
+#else
+    return (int32_t)(intptr_t)pthread_self();
+#endif
+}
+#endif
+
+// ============ CHANNEL WRAPPERS ============
+
+// channel_create() -> Channel* - Wrapper for channel_new with default capacity
+Channel* channel_create(void) {
+    return channel_new(16);
+}
+
+// channel_destroy(ch) -> Unit - Wrapper for channel_free
+void channel_destroy(Channel* ch) {
+    channel_free(ch);
+}
+
+// channel_len(ch) -> I32 - Get number of items in channel
+int32_t channel_len(Channel* ch) {
+    if (!ch) return 0;
+    return (int32_t)ch->count;
+}
+
+// ============ MUTEX WRAPPERS ============
+
+// mutex_create() -> Mutex* - Wrapper for mutex_new
+Mutex* mutex_create(void) {
+    return mutex_new();
+}
+
+// mutex_destroy(m) -> Unit - Wrapper for mutex_free
+void mutex_destroy(Mutex* m) {
+    mutex_free(m);
+}
+
+// ============ WAITGROUP WRAPPERS ============
+
+// waitgroup_create() -> WaitGroup* - Wrapper for waitgroup_new
+WaitGroup* waitgroup_create(void) {
+    return waitgroup_new();
+}
+
+// waitgroup_destroy(wg) -> Unit - Wrapper for waitgroup_free
+void waitgroup_destroy(WaitGroup* wg) {
+    waitgroup_free(wg);
+}

@@ -106,3 +106,43 @@ int64_t elapsed_us(int64_t start) {
 int64_t elapsed_ns(int64_t start) {
     return time_ns() - start;
 }
+
+// ============ Elapsed Seconds (formatted string) ============
+
+#include <stdio.h>
+
+static char elapsed_buffer[32];
+
+// elapsed_secs(start_ms: I32) -> Str - Returns "X.XXX" format
+const char* elapsed_secs(int32_t start_ms) {
+    int32_t elapsed = time_ms() - start_ms;
+    double secs = elapsed / 1000.0;
+    snprintf(elapsed_buffer, sizeof(elapsed_buffer), "%.3f", secs);
+    return elapsed_buffer;
+}
+
+// ============ Instant API (like Rust's std::time::Instant) ============
+
+// instant_now() -> I64 - Get current instant in nanoseconds
+int64_t instant_now(void) {
+    return time_ns();
+}
+
+// instant_elapsed(start: I64) -> I64 - Get elapsed duration in nanoseconds
+int64_t instant_elapsed(int64_t start) {
+    return time_ns() - start;
+}
+
+// ============ Duration API ============
+
+// duration_as_millis_f64(duration_ns: I64) -> F64
+double duration_as_millis_f64(int64_t duration_ns) {
+    return duration_ns / 1000000.0;
+}
+
+// duration_format_secs(duration_ns: I64) -> Str - Returns "X.XXXXXX" format
+const char* duration_format_secs(int64_t duration_ns) {
+    double secs = duration_ns / 1000000000.0;
+    snprintf(elapsed_buffer, sizeof(elapsed_buffer), "%.6f", secs);
+    return elapsed_buffer;
+}

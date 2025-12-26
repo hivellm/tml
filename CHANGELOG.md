@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Runtime Functions Complete** (2025-12-26) - All codegen builtins now have runtime implementations
+  - New runtime file: `runtime/math.c` - Math functions for codegen
+  - Updated `runtime/time.c` - Added Instant/Duration API functions
+  - Updated `runtime/thread.c` - Added wrapper functions for codegen compatibility
+  - Updated `runtime/essential.c` - Consolidated all essential runtime functions
+  - New functions implemented:
+    - Math: `black_box_i32/i64`, `simd_sum_i32/f64`, `simd_dot_f64`, `float_to_fixed/precision/string`, `float_round/floor/ceil/abs/sqrt/pow`, `float32/64_bits`, `float32/64_from_bits`, `infinity`, `nan_val`, `is_inf`, `is_nan`, `nextafter32`
+    - Time: `elapsed_secs`, `instant_now`, `instant_elapsed`, `duration_as_millis_f64`, `duration_format_secs`
+    - Sync: `thread_sleep`, `thread_id`, `channel_create/destroy/len`, `mutex_create/destroy`, `waitgroup_create/destroy`
+
 - **Codegen Builtins Refactoring** (2025-12-26) - Split monolithic builtin handler for maintainability
   - Moved from single 2165-line `llvm_ir_gen_builtins.cpp` to modular structure
   - New files in `src/codegen/builtins/`:
