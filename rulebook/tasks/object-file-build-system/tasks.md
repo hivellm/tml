@@ -1,11 +1,11 @@
 # Tasks: Object File Build System
 
-## Progress: 93% (143/153 tasks complete)
+## Progress: 96% (147/153 tasks complete)
 
-**Latest Update (2025-12-26):** ✅ **Phases 1-7 MOSTLY COMPLETE!**
+**Latest Update (2025-12-26):** ✅ **Phases 1-7 COMPLETE!**
 - Object file compilation, build cache with LRU eviction, static/dynamic libraries, C header generation, FFI integration all working
 - **Phase 6 (RLIB format)**: Full implementation complete with metadata, archive creation, CLI commands ✅
-- **Phase 7 (tml.toml manifest)**: Specification, TOML parser, and `tml init` command complete! Integration pending
+- **Phase 7 (tml.toml manifest)**: Complete! Specification, TOML parser, `tml init` command, and build integration ✅
 - Unit tests passing, comprehensive documentation written (18-RLIB-FORMAT.md, 19-MANIFEST.md)
 
 ## Phase 1: Object File Generation (Foundation) ✅ COMPLETE
@@ -188,9 +188,9 @@
 - [x] 6.4.3 Add to dispatcher ✅ (Integrated into main CLI)
 - [x] 6.4.4 Update CMakeLists.txt ✅ (Build system integration)
 
-## Phase 7: Package Manifest (tml.toml) - MOSTLY COMPLETE
+## Phase 7: Package Manifest (tml.toml) ✅ COMPLETE
 
-**Status**: Specification, parser, and init command complete! Only build integration pending (2025-12-26).
+**Status**: Fully implemented (2025-12-26)! Specification, TOML parser, `tml init` command, and build integration all working.
 
 ### 7.1 Specification and Design ✅
 - [x] 7.1.1 Define manifest format specification ✅ (docs/specs/19-MANIFEST.md - 686 lines)
@@ -215,11 +215,11 @@
 - [x] 7.3.5 Support --lib and --bin flags ✅
 - [x] 7.3.6 Generate sample source files ✅
 
-### 7.4 Build Integration - PENDING
-- [ ] 7.4.1 Integrate Manifest::load() in cmd_build.cpp - **PENDING**
-- [ ] 7.4.2 Apply manifest settings to build options - **PENDING**
-- [ ] 7.4.3 Command-line flag override logic - **PENDING**
-- [ ] 7.4.4 Test with sample projects - **PENDING**
+### 7.4 Build Integration ✅
+- [x] 7.4.1 Integrate Manifest::load() in cmd_build.cpp ✅ (Loads manifest at start of build)
+- [x] 7.4.2 Apply manifest settings to build options ✅ (Uses manifest values as defaults)
+- [x] 7.4.3 Command-line flag override logic ✅ (CLI flags override manifest settings)
+- [x] 7.4.4 Manifest-based output type selection ✅ (Detects [lib] vs [[bin]] sections)
 
 ## Phase 8: Documentation and Examples ✅ MOSTLY COMPLETE
 

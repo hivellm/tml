@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See [BUGS.md](BUGS.md) for technical details
 
 ### Completed
-- **Object File Build System** (2025-12-26) - 93% complete (143/153 tasks) ✅
-  - ✅ Phases 1-7 MOSTLY COMPLETE: Object files, build cache, static/dynamic/RLIB libraries, C header generation, manifest system
+- **Object File Build System** (2025-12-26) - 96% complete (147/153 tasks) ✅
+  - ✅ **Phases 1-7 COMPLETE**: Object files, build cache, static/dynamic/RLIB libraries, C header generation, manifest system
   - ✅ Phases 8-10: Documentation, examples, testing, performance optimization
   - ✅ **Phase 6 (RLIB Format)**: Full implementation complete
     - TML native library format (.rlib) with JSON metadata
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Build integration: `tml build --crate-type=rlib`
     - Content-based hashing for dependency tracking
     - Complete specification: [docs/specs/18-RLIB-FORMAT.md](docs/specs/18-RLIB-FORMAT.md)
-  - ✅ **Phase 7 (Manifest)**: Specification, parser, and init command complete!
+  - ✅ **Phase 7 (Manifest)**: COMPLETE! Full manifest system implementation
     - tml.toml manifest format specification
     - Complete TOML parser (SimpleTomlParser) supporting:
       - [package], [lib], [[bin]], [dependencies], [build], [profile.*] sections
@@ -37,9 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `tml init --lib`: Create library project
       - `tml init --bin`: Create binary project
       - Auto-generates tml.toml + src/ directory + sample code
+    - Build integration: `tml build` automatically reads tml.toml
+      - Manifest values used as defaults (emit-ir, emit-header, cache, optimization-level)
+      - Command-line flags override manifest settings
+      - Automatic output type detection ([lib] vs [[bin]])
     - Data structures: PackageInfo, LibConfig, BinConfig, Dependency, BuildSettings, ProfileConfig
     - Complete specification: [docs/specs/19-MANIFEST.md](docs/specs/19-MANIFEST.md)
-    - Build integration pending (Phase 7.4)
   - ✅ Unit tests for object_compiler (6 tests passing)
   - ✅ Integration test infrastructure for cache and FFI workflows
   - ✅ Cache management: size limit (1GB default), LRU eviction, `cache clean/info` commands

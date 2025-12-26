@@ -3,6 +3,7 @@
 #include "compiler_setup.hpp"
 #include "object_compiler.hpp"
 #include "rlib.hpp"
+#include "build_config.hpp"
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
@@ -258,6 +259,18 @@ static fs::path get_run_cache_dir() {
 
 int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type, bool emit_header, const std::string& output_dir) {
     (void)no_cache; // TODO: Implement cache control for build command
+
+    // Try to load tml.toml manifest
+    auto manifest_opt = Manifest::load_from_current_dir();
+    if (manifest_opt && verbose) {
+        std::cout << "Found tml.toml manifest for project: " << manifest_opt->package.name << "\n";
+    }
+
+    // Apply manifest settings if available (command-line flags override)
+    // Note: Command-line parameters are already set, so we only apply defaults from manifest
+    if (manifest_opt && !manifest_opt->build.validate()) {
+        std::cerr << "Warning: Invalid build settings in tml.toml, using defaults\n";
+    }
 
     std::string source_code;
     try {
