@@ -112,6 +112,28 @@ void TypeEnv::init_builtin_mem() {
         builtin_span
     });
 
+    // ============ Simple Allocation (compatibility) ============
+
+    // alloc(size: I32) -> Ptr[Unit] - Simple allocation (maps to malloc)
+    functions_["alloc"].push_back(FuncSig{
+        "alloc",
+        {make_primitive(PrimitiveKind::I32)},
+        make_ptr(make_unit()),
+        {},
+        false,
+        builtin_span
+    });
+
+    // dealloc(ptr: Ptr[Unit]) -> Unit - Simple deallocation (maps to free)
+    functions_["dealloc"].push_back(FuncSig{
+        "dealloc",
+        {make_ptr(make_unit())},
+        make_unit(),
+        {},
+        false,
+        builtin_span
+    });
+
     // ============ Size/Alignment ============
 
     // size_of[T]() -> I64 - Get size of type (generic, resolved at compile time)

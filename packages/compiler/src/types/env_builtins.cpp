@@ -11,6 +11,8 @@ void TypeEnv::init_builtins() {
     init_builtin_string();  // str_len, str_eq, str_hash, etc.
     init_builtin_time();    // time_ms, time_us, time_ns, sleep, elapsed
     init_builtin_mem();     // mem_alloc, mem_free, mem_copy, etc.
+    init_builtin_atomic();  // atomic_load, atomic_store, atomic_add, fence, etc.
+    init_builtin_sync();    // spin_lock, spin_unlock, spin_trylock, etc.
 }
 
 } // namespace tml::types

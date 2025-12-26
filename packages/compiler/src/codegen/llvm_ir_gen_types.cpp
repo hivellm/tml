@@ -99,9 +99,22 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         }
     }
     if (expr.is<parser::BinaryExpr>()) {
-        // Binary expressions: infer from left operand
         const auto& bin = expr.as<parser::BinaryExpr>();
-        return infer_expr_type(*bin.left);
+        // Comparison and logical operators return Bool
+        switch (bin.op) {
+            case parser::BinaryOp::Eq:
+            case parser::BinaryOp::Ne:
+            case parser::BinaryOp::Lt:
+            case parser::BinaryOp::Gt:
+            case parser::BinaryOp::Le:
+            case parser::BinaryOp::Ge:
+            case parser::BinaryOp::And:
+            case parser::BinaryOp::Or:
+                return types::make_bool();
+            default:
+                // Arithmetic/other operators: infer from left operand
+                return infer_expr_type(*bin.left);
+        }
     }
     if (expr.is<parser::UnaryExpr>()) {
         const auto& unary = expr.as<parser::UnaryExpr>();
@@ -174,6 +187,98 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 auto result = std::make_shared<types::Type>();
                 result->kind = types::NamedType{struct_name, "", {}};
                 return result;
+            }
+        }
+    }
+    // Handle closure expressions
+    if (expr.is<parser::ClosureExpr>()) {
+        const auto& closure = expr.as<parser::ClosureExpr>();
+
+        // Build parameter types
+        std::vector<types::TypePtr> param_types;
+        for (const auto& [pattern, type_opt] : closure.params) {
+            if (type_opt.has_value()) {
+                // Use explicit type annotation
+                param_types.push_back(resolve_parser_type_with_subs(**type_opt, {}));
+            } else {
+                // No type annotation - use I32 as default
+                param_types.push_back(types::make_i32());
+            }
+        }
+
+        // Determine return type
+        types::TypePtr return_type;
+        if (closure.return_type.has_value()) {
+            // Use explicit return type
+            return_type = resolve_parser_type_with_subs(**closure.return_type, {});
+        } else {
+            // Infer from body expression
+            return_type = infer_expr_type(*closure.body);
+        }
+
+        // Create FuncType
+        auto result = std::make_shared<types::Type>();
+        result->kind = types::FuncType{std::move(param_types), return_type};
+        return result;
+    }
+    // Handle ternary expressions (condition ? true_value : false_value): infer from true_value branch
+    if (expr.is<parser::TernaryExpr>()) {
+        const auto& ternary = expr.as<parser::TernaryExpr>();
+        return infer_expr_type(*ternary.true_value);
+    }
+    // Handle if expressions (if condition then expr else expr): infer from then branch
+    if (expr.is<parser::IfExpr>()) {
+        const auto& if_expr = expr.as<parser::IfExpr>();
+        return infer_expr_type(*if_expr.then_branch);
+    }
+    // Handle call expressions (including enum constructors like Just, Ok, Err)
+    if (expr.is<parser::CallExpr>()) {
+        const auto& call = expr.as<parser::CallExpr>();
+        if (call.callee->is<parser::IdentExpr>()) {
+            const auto& callee_ident = call.callee->as<parser::IdentExpr>();
+            // Check if it's a generic enum constructor
+            for (const auto& [enum_name, enum_decl] : pending_generic_enums_) {
+                for (size_t var_idx = 0; var_idx < enum_decl->variants.size(); ++var_idx) {
+                    const auto& variant = enum_decl->variants[var_idx];
+                    if (variant.name == callee_ident.name) {
+                        // Found enum constructor
+                        // Build type args for each generic parameter
+                        std::vector<types::TypePtr> type_args;
+
+                        // For each generic parameter, check if this variant uses it
+                        for (size_t g = 0; g < enum_decl->generics.size(); ++g) {
+                            const std::string& generic_name = enum_decl->generics[g].name;
+                            types::TypePtr inferred_type = nullptr;
+
+                            // Check if variant's tuple_fields reference this generic
+                            if (variant.tuple_fields.has_value()) {
+                                for (size_t f = 0; f < variant.tuple_fields->size() && f < call.args.size(); ++f) {
+                                    const auto& field_type = (*variant.tuple_fields)[f];
+                                    // Check if this field is the generic parameter
+                                    if (field_type->is<parser::NamedType>()) {
+                                        const auto& named = field_type->as<parser::NamedType>();
+                                        if (!named.path.segments.empty() &&
+                                            named.path.segments.back() == generic_name) {
+                                            // This field uses the generic - infer from argument
+                                            inferred_type = infer_expr_type(*call.args[f]);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // If we couldn't infer this generic, use Unit as placeholder
+                            if (!inferred_type) {
+                                inferred_type = types::make_unit();
+                            }
+                            type_args.push_back(inferred_type);
+                        }
+
+                        auto result = std::make_shared<types::Type>();
+                        result->kind = types::NamedType{enum_name, "", std::move(type_args)};
+                        return result;
+                    }
+                }
             }
         }
     }

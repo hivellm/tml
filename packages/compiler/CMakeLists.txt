@@ -100,6 +100,8 @@ add_library(tml_types STATIC
     src/types/env_builtins_string.cpp
     src/types/env_builtins_time.cpp
     src/types/env_builtins_mem.cpp
+    src/types/env_builtins_atomic.cpp
+    src/types/env_builtins_sync.cpp
     src/types/env_definitions.cpp
     src/types/env_lookups.cpp
     src/types/module.cpp

@@ -128,18 +128,76 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     }
 
     // Check if it's an enum unit variant (variant without payload)
-    // First check local enums
+    // First check pending generic enums (locally defined generic enums)
+    for (const auto& [enum_name, enum_decl] : pending_generic_enums_) {
+        for (size_t variant_idx = 0; variant_idx < enum_decl->variants.size(); ++variant_idx) {
+            const auto& variant = enum_decl->variants[variant_idx];
+            // Unit variant: no tuple_fields or struct_fields
+            bool is_unit = (!variant.tuple_fields.has_value() || variant.tuple_fields->empty()) &&
+                           (!variant.struct_fields.has_value() || variant.struct_fields->empty());
+
+            if (variant.name == ident.name && is_unit) {
+                // Found unit variant - create enum value with just the tag
+                std::string enum_type;
+
+                // Use expected_enum_type_ if available (set by caller like generic function call)
+                if (!expected_enum_type_.empty()) {
+                    enum_type = expected_enum_type_;
+                }
+                // Or try to infer from function return type
+                else if (!current_ret_type_.empty()) {
+                    std::string prefix = "%struct." + enum_name + "__";
+                    if (current_ret_type_.starts_with(prefix) ||
+                        current_ret_type_.find(enum_name + "__") != std::string::npos) {
+                        enum_type = current_ret_type_;
+                    }
+                }
+
+                // If we still don't have a type, we can't properly instantiate
+                // Default to I32 as the type parameter
+                if (enum_type.empty()) {
+                    std::vector<types::TypePtr> default_args = {types::make_i32()};
+                    std::string mangled = require_enum_instantiation(enum_name, default_args);
+                    enum_type = "%struct." + mangled;
+                }
+
+                std::string result = fresh_reg();
+                std::string enum_val = fresh_reg();
+
+                // Create enum value on stack
+                emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                // Set tag
+                std::string tag_ptr = fresh_reg();
+                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
+
+                // No payload to set
+
+                // Load the complete enum value
+                emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                last_expr_type_ = enum_type;
+                return result;
+            }
+        }
+    }
+
+    // Also check local enums (non-generic)
     for (const auto& [enum_name, enum_def] : env_.all_enums()) {
         for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
             const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
 
-                        if (variant_name == ident.name && payload_types.empty()) {
+            if (variant_name == ident.name && payload_types.empty()) {
                 // Found unit variant - create enum value with just the tag
                 std::string enum_type = "%struct." + enum_name;
 
                 // For generic enums, try to infer the correct mangled type from context
-                // If we're in a function with a return type like Maybe__I32, use that
-                if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
+                // Use expected_enum_type_ first if available
+                if (!expected_enum_type_.empty()) {
+                    enum_type = expected_enum_type_;
+                }
+                // Or try to infer from function return type
+                else if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
                     std::string prefix = "%struct." + enum_name + "__";
                     if (current_ret_type_.starts_with(prefix) ||
                         current_ret_type_.find(enum_name + "__") != std::string::npos) {
@@ -177,8 +235,12 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
                     // Found unit variant in module - create enum value with just the tag
                     std::string enum_type = "%struct." + enum_name;
 
-                    // For generic enums, try to infer the correct mangled type from context
-                    if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
+                    // For generic enums, use expected_enum_type_ first if available
+                    if (!expected_enum_type_.empty()) {
+                        enum_type = expected_enum_type_;
+                    }
+                    // Or try to infer from function return type
+                    else if (!enum_def.type_params.empty() && !current_ret_type_.empty()) {
                         std::string prefix = "%struct." + enum_name + "__";
                         if (current_ret_type_.starts_with(prefix) ||
                             current_ret_type_.find(enum_name + "__") != std::string::npos) {
@@ -733,10 +795,16 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         param_types_str += " %" + param_names.back();
     }
 
-    // Determine return type from closure annotation or default to i32
+    // Determine return type from closure annotation or infer from body
     std::string ret_type = "i32";
     if (closure.return_type.has_value()) {
         ret_type = llvm_type(*closure.return_type.value());
+    } else if (closure.body) {
+        // Infer return type from closure body expression
+        types::TypePtr inferred = infer_expr_type(*closure.body);
+        if (inferred) {
+            ret_type = llvm_type_from_semantic(inferred);
+        }
     }
 
     // Save information about captured variables before clearing locals

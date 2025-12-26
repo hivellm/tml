@@ -391,9 +391,120 @@ size_of[T]()         // size in bytes
 align_of[T]()        // alignment
 drop(value)          // explicitly destroys value
 forget(value)        // doesn't call destructor
+
+// Low-level allocation (maps to malloc/free)
+alloc(size: I32) -> *Unit       // Allocate size bytes
+dealloc(ptr: *Unit) -> Unit     // Free allocated memory
+
+// Higher-level memory functions
+mem_alloc(size: I64) -> *Unit           // Allocate with I64 size
+mem_alloc_zeroed(size: I64) -> *Unit    // Allocate zeroed memory
+mem_realloc(ptr: *Unit, size: I64) -> *Unit  // Reallocate
+mem_free(ptr: *Unit) -> Unit            // Free memory
+mem_copy(dest: *Unit, src: *Unit, size: I64) -> Unit   // Copy memory
+mem_move(dest: *Unit, src: *Unit, size: I64) -> Unit   // Move memory (overlapping safe)
+mem_set(ptr: *Unit, value: I32, size: I64) -> Unit     // Fill memory
+mem_zero(ptr: *Unit, size: I64) -> Unit                // Zero memory
+mem_compare(a: *Unit, b: *Unit, size: I64) -> I32      // Compare memory
+mem_eq(a: *Unit, b: *Unit, size: I64) -> Bool          // Memory equality
 ```
 
-### 7.5 String Utilities
+### 7.5 Atomic Operations
+
+Thread-safe atomic operations for lock-free programming. All atomic operations use sequentially consistent ordering by default.
+
+```tml
+// Load and Store
+atomic_load(ptr: *Unit) -> I32           // Thread-safe read
+atomic_store(ptr: *Unit, val: I32) -> Unit  // Thread-safe write
+
+// Arithmetic (fetch-and-op, returns old value)
+atomic_add(ptr: *Unit, val: I32) -> I32  // Atomic addition
+atomic_sub(ptr: *Unit, val: I32) -> I32  // Atomic subtraction
+
+// Exchange
+atomic_exchange(ptr: *Unit, val: I32) -> I32  // Atomic swap
+
+// Compare-and-Swap
+atomic_cas(ptr: *Unit, expected: I32, new: I32) -> Bool
+// Returns true if swap succeeded (value was expected)
+// Returns false if swap failed (value was not expected)
+
+// Bitwise operations (fetch-and-op, returns old value)
+atomic_and(ptr: *Unit, val: I32) -> I32  // Atomic AND
+atomic_or(ptr: *Unit, val: I32) -> I32   // Atomic OR
+atomic_xor(ptr: *Unit, val: I32) -> I32  // Atomic XOR
+```
+
+**Example:**
+
+```tml
+let counter: *Unit = alloc(4)
+atomic_store(counter, 0)
+
+// Increment atomically
+let old: I32 = atomic_add(counter, 1)
+println("Old value: {}", old)  // 0
+
+// Compare-and-swap
+let success: Bool = atomic_cas(counter, 1, 10)
+if success {
+    println("Swapped 1 -> 10")
+}
+
+dealloc(counter)
+```
+
+### 7.6 Memory Fences
+
+Memory barriers for controlling memory ordering between threads.
+
+```tml
+fence() -> Unit          // Full memory barrier (SeqCst)
+fence_acquire() -> Unit  // Acquire barrier (loads/stores after can't move before)
+fence_release() -> Unit  // Release barrier (loads/stores before can't move after)
+```
+
+### 7.7 Spinlock Primitives
+
+Low-level spinlock operations for building synchronization primitives.
+
+```tml
+spin_lock(lock: *Unit) -> Unit     // Acquire lock (spins until acquired)
+spin_unlock(lock: *Unit) -> Unit   // Release lock
+spin_trylock(lock: *Unit) -> Bool  // Try to acquire (returns immediately)
+```
+
+**Example:**
+
+```tml
+let lock: *Unit = alloc(4)
+atomic_store(lock, 0)  // Initialize to unlocked
+
+// Try to acquire
+if spin_trylock(lock) {
+    // Critical section
+    spin_unlock(lock)
+}
+
+// Blocking acquire
+spin_lock(lock)
+// Critical section
+spin_unlock(lock)
+
+dealloc(lock)
+```
+
+### 7.8 Thread Primitives
+
+Basic thread management functions.
+
+```tml
+thread_yield() -> Unit   // Yield execution to other threads
+thread_id() -> I64       // Get current thread ID
+```
+
+### 7.9 String Utilities
 
 These are low-level string utility functions available as global builtins:
 
@@ -418,7 +529,7 @@ assert(str_hash("test") == str_hash("test"))
 
 **Note:** For most string operations, prefer using the `String` type methods (see section 1.5). These low-level functions are provided for cases where you need direct, simple operations without the overhead of method calls.
 
-### 7.6 Time and Benchmarking
+### 7.10 Time and Benchmarking
 
 ```tml
 // ⚠️ DEPRECATED: Use Instant API instead

@@ -25,7 +25,7 @@ TML uses a **layered architecture**:
 
 | RFC | Title | Status | Summary |
 |-----|-------|--------|---------|
-| [RFC-0001](./RFC-0001-CORE.md) | Core Language | Draft | Types, effects, ownership, IR |
+| [RFC-0001](./RFC-0001-CORE.md) | Core Language | **Active** | Types, effects, ownership, IR, concurrency |
 | [RFC-0002](./RFC-0002-SYNTAX.md) | Surface Syntax | Draft | Human syntax + desugaring rules |
 | [RFC-0003](./RFC-0003-CONTRACTS.md) | Contracts | Draft | pre/post/forall/exists, static vs runtime |
 | [RFC-0004](./RFC-0004-ERRORS.md) | Error Handling | Draft | Outcome, ! operator, error propagation |
@@ -89,6 +89,8 @@ Related work, inspiration, prior art.
 ## Implementation Priority
 
 1. **RFC-0001** (Core) - Foundation, must be solid first
+   - ✅ Types, ownership, generics
+   - ✅ **Concurrency primitives** (v0.6.0) - Atomics, fences, spinlocks
 2. **RFC-0007** (IR) - ✅ Implemented in v0.1.0 - Canonical format
 3. **RFC-0008** (Generics) - ✅ Implemented in v0.4.0 - Monomorphization
 4. **RFC-0010** (Testing) - ✅ Implemented - @test decorator

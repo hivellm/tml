@@ -2,6 +2,20 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.4.0] - 2025-12-26
+
+### Added
+- **Concurrency Primitives Support** - Syntax highlighting for new atomic and sync builtins
+  - Atomic operations: `atomic_load`, `atomic_store`, `atomic_add`, `atomic_sub`, `atomic_exchange`, `atomic_cas`, `atomic_and`, `atomic_or`, `atomic_xor`
+  - Memory fences: `fence`, `fence_acquire`, `fence_release`
+  - Spinlock primitives: `spin_lock`, `spin_unlock`, `spin_trylock`
+  - Thread primitives: `thread_yield`, `thread_id`
+- Memory builtins: `alloc`, `dealloc`, `mem_alloc`, `mem_free`, `mem_copy`, `mem_move`, `mem_set`, `mem_zero`
+
+### Changed
+- Updated syntax grammar to recognize builtin functions as `support.function.builtin.tml`
+- Improved function call highlighting
+
 ## [0.3.1] - 2025-12-26
 
 ### Changed

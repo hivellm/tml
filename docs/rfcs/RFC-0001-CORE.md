@@ -17,6 +17,7 @@ Active (v0.5.0)
 | Bounds/Constraints | ❌ Not Started | `T: Addable` syntax |
 | Effects | ❌ Not Started | `with io, panic` |
 | Ownership | ✅ Basic | Move semantics, no borrow checker |
+| **Concurrency** | ✅ Complete | Atomics, fences, spinlocks |
 
 ## Summary
 
@@ -213,18 +214,103 @@ let u = t.duplicate()  // t still valid
 
 ---
 
-## 4. Canonical IR
+## 4. Concurrency Primitives
+
+TML provides low-level concurrency primitives for building lock-free data structures and synchronization mechanisms.
+
+### 4.1 Atomic Operations
+
+All atomic operations use sequentially consistent (SeqCst) ordering by default.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `atomic_load` | `(ptr: *Unit) -> I32` | Thread-safe read |
+| `atomic_store` | `(ptr: *Unit, val: I32) -> Unit` | Thread-safe write |
+| `atomic_add` | `(ptr: *Unit, val: I32) -> I32` | Fetch-and-add, returns old value |
+| `atomic_sub` | `(ptr: *Unit, val: I32) -> I32` | Fetch-and-subtract, returns old value |
+| `atomic_exchange` | `(ptr: *Unit, val: I32) -> I32` | Swap, returns old value |
+| `atomic_cas` | `(ptr: *Unit, expected: I32, new: I32) -> Bool` | Compare-and-swap |
+| `atomic_and` | `(ptr: *Unit, val: I32) -> I32` | Bitwise AND, returns old value |
+| `atomic_or` | `(ptr: *Unit, val: I32) -> I32` | Bitwise OR, returns old value |
+| `atomic_xor` | `(ptr: *Unit, val: I32) -> I32` | Bitwise XOR, returns old value |
+
+### 4.2 Memory Fences
+
+| Function | Description |
+|----------|-------------|
+| `fence()` | Full memory barrier (SeqCst) |
+| `fence_acquire()` | Acquire barrier - loads/stores after cannot move before |
+| `fence_release()` | Release barrier - loads/stores before cannot move after |
+
+### 4.3 Spinlock Primitives
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `spin_lock` | `(lock: *Unit) -> Unit` | Acquire lock, spins until acquired |
+| `spin_unlock` | `(lock: *Unit) -> Unit` | Release lock |
+| `spin_trylock` | `(lock: *Unit) -> Bool` | Try to acquire, returns immediately |
+
+### 4.4 Thread Primitives
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `thread_yield` | `() -> Unit` | Yield execution to other threads |
+| `thread_id` | `() -> I64` | Get current thread ID |
+
+### 4.5 Example: Lock-Free Counter
+
+```tml
+func increment_counter(counter: *Unit) -> I32 {
+    atomic_add(counter, 1)
+}
+
+func main() {
+    let counter: *Unit = alloc(4)
+    atomic_store(counter, 0)
+
+    // Increment atomically
+    let old: I32 = increment_counter(counter)
+    println("Incremented from {} to {}", old, old + 1)
+
+    dealloc(counter)
+}
+```
+
+### 4.6 Example: Spinlock Usage
+
+```tml
+func with_lock(lock: *Unit, critical_section: func() -> Unit) {
+    spin_lock(lock)
+    critical_section()
+    spin_unlock(lock)
+}
+
+func main() {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 0)  // Initialize unlocked
+
+    with_lock(lock, do() {
+        println("In critical section")
+    })
+
+    dealloc(lock)
+}
+```
+
+---
+
+## 5. Canonical IR
 
 The IR is the single source of truth. All tools consume/produce IR.
 
-### 4.1 Design Goals
+### 5.1 Design Goals
 
 1. **Stable IDs** - Every node has a content-addressable ID
 2. **Round-trip** - Parse → IR → Unparse = semantically identical
 3. **Diffable** - Patches are minimal JSON operations
 4. **Versionable** - Schema version in every IR document
 
-### 4.2 IR Schema (JSON)
+### 5.2 IR Schema (JSON)
 
 ```json
 {
@@ -255,7 +341,7 @@ The IR is the single source of truth. All tools consume/produce IR.
 }
 ```
 
-### 4.3 Stable ID Generation
+### 5.3 Stable ID Generation
 
 IDs are generated from content hash:
 
@@ -268,7 +354,7 @@ This means:
 - Rename refactoring changes ID (intentional—semantics changed)
 - Whitespace/comments don't affect ID
 
-### 4.4 IR Node Kinds
+### 5.4 IR Node Kinds
 
 ```
 ItemKind ::= 'func_def' | 'type_def' | 'const_def' | 'behavior_def' | 'impl_block'
@@ -284,7 +370,7 @@ PatternKind ::= 'ident' | 'wildcard' | 'literal' | 'tuple' | 'struct'
               | 'variant' | 'or' | 'guard'
 ```
 
-### 4.5 Protobuf Schema
+### 5.5 Protobuf Schema
 
 For binary serialization (10x smaller, 5x faster):
 
@@ -330,9 +416,9 @@ message Expr {
 
 ---
 
-## 5. Examples
+## 6. Examples
 
-### 5.1 Simple Function
+### 6.1 Simple Function
 
 **Surface:**
 ```tml
@@ -376,7 +462,7 @@ func factorial(n: U64) -> U64 {
 }
 ```
 
-### 5.2 Generic with Effects
+### 6.2 Generic with Effects
 
 **Surface:**
 ```tml
@@ -428,7 +514,7 @@ func read_json[T: Deserialize](path: String) -> Outcome[T, Error] with io {
 
 ---
 
-## 6. Compatibility
+## 7. Compatibility
 
 - **RFC-0002**: Surface syntax desugars to this core
 - **RFC-0003**: Contracts compile to runtime checks + static hints
@@ -438,30 +524,30 @@ func read_json[T: Deserialize](path: String) -> Outcome[T, Error] with io {
 
 ---
 
-## 7. Alternatives Rejected
+## 8. Alternatives Rejected
 
-### 7.1 Explicit Lifetimes
+### 8.1 Explicit Lifetimes
 
 Rust requires `'a` annotations. We rejected this because:
 - LLMs struggle with lifetime syntax
 - Most code works with inference
 - Complex cases are rare and can be restructured
 
-### 7.2 Subtyping
+### 8.2 Subtyping
 
 Java-style inheritance was rejected:
 - Complicates type inference
 - Variance rules confuse LLMs
 - Composition via behaviors is simpler
 
-### 7.3 Exceptions
+### 8.3 Exceptions
 
 Traditional try/catch was rejected:
 - Hidden control flow
 - Non-local reasoning required
 - `Outcome` with `!` is explicit and local
 
-### 7.4 Null
+### 8.4 Null
 
 `null` was rejected in favor of `Maybe[T]`:
 - Billion-dollar mistake
@@ -470,7 +556,7 @@ Traditional try/catch was rejected:
 
 ---
 
-## 8. References
+## 9. References
 
 - [Rust Reference: Type System](https://doc.rust-lang.org/reference/types.html)
 - [Effect Systems Survey](https://arxiv.org/abs/1903.08049)

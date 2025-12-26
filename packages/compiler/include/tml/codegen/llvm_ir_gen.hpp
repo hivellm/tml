@@ -41,6 +41,7 @@ private:
     const types::TypeEnv& env_;
     LLVMGenOptions options_;
     std::stringstream output_;
+    std::stringstream type_defs_buffer_;  // Buffer for generic type definitions (emitted before functions)
     int temp_counter_ = 0;
     int label_counter_ = 0;
     std::vector<LLVMGenError> errors_;
@@ -178,7 +179,8 @@ private:
     auto llvm_type(const parser::Type& type) -> std::string;
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;
     auto llvm_type_name(const std::string& name) -> std::string;
-    auto llvm_type_from_semantic(const types::TypePtr& type) -> std::string;
+    // for_data=true: use "{}" for Unit (when used as data field), false: use "void" (for return types)
+    auto llvm_type_from_semantic(const types::TypePtr& type, bool for_data = false) -> std::string;
 
     // Generic type mangling
     auto mangle_type(const types::TypePtr& type) -> std::string;

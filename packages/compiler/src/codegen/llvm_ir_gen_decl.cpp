@@ -65,14 +65,14 @@ void LLVMIRGen::gen_struct_instantiation(
         fields.push_back({decl.fields[i].name, static_cast<int>(i), ft});
     }
 
-    // 4. Emit struct type definition
+    // 4. Emit struct type definition to type_defs_buffer_ (ensures types before functions)
     std::string def = type_name + " = type { ";
     for (size_t i = 0; i < field_types.size(); ++i) {
         if (i > 0) def += ", ";
         def += field_types[i];
     }
     def += " }";
-    emit_line(def);
+    type_defs_buffer_ << def << "\n";
 
     // 5. Register for later use
     struct_types_[mangled] = type_name;
@@ -80,6 +80,7 @@ void LLVMIRGen::gen_struct_instantiation(
 }
 
 // Request instantiation of a generic struct - returns mangled name
+// Immediately generates the type definition to type_defs_buffer_ if not already generated
 auto LLVMIRGen::require_struct_instantiation(
     const std::string& base_name,
     const std::vector<types::TypePtr>& type_args
@@ -93,16 +94,15 @@ auto LLVMIRGen::require_struct_instantiation(
         return mangled;  // Already queued or generated
     }
 
-    // Register new instantiation
+    // Register new instantiation (mark as generated since we'll generate immediately)
     struct_instantiations_[mangled] = GenericInstantiation{
         base_name,
         type_args,
         mangled,
-        false  // Not yet generated
+        true  // Mark as generated since we'll generate it immediately
     };
 
-    // Also register field info immediately so it's available during code generation
-    // (struct_fields_ is used before generate_pending_instantiations runs)
+    // Register field info and generate type definition immediately
     auto decl_it = pending_generic_structs_.find(base_name);
     if (decl_it != pending_generic_structs_.end()) {
         const parser::StructDecl* decl = decl_it->second;
@@ -121,6 +121,9 @@ auto LLVMIRGen::require_struct_instantiation(
             fields.push_back({decl->fields[i].name, static_cast<int>(i), ft});
         }
         struct_fields_[mangled] = fields;
+
+        // Generate type definition immediately to type_defs_buffer_
+        gen_struct_instantiation(*decl, type_args);
     }
 
     return mangled;
@@ -234,7 +237,8 @@ void LLVMIRGen::gen_enum_instantiation(
 
     if (!has_data) {
         // Simple enum - just a tag
-        emit_line(type_name + " = type { i32 }");
+        // Emit to type_defs_buffer_ instead of output_ to ensure type is defined before use
+        type_defs_buffer_ << type_name << " = type { i32 }\n";
         struct_types_[mangled] = type_name;
 
         int tag = 0;
@@ -245,14 +249,16 @@ void LLVMIRGen::gen_enum_instantiation(
     } else {
         // Complex enum with data
         // Calculate max size with substituted types
+        // Use for_data=true since these are data fields (Unit -> "{}" not "void")
         size_t max_size = 0;
         for (const auto& variant : decl.variants) {
             size_t size = 0;
             if (variant.tuple_fields.has_value()) {
                 for (const auto& field_type : *variant.tuple_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field_type, subs);
-                    std::string ty = llvm_type_from_semantic(resolved);
-                    if (ty == "i8") size += 1;
+                    std::string ty = llvm_type_from_semantic(resolved, true);
+                    if (ty == "{}" || ty == "void") size += 0;  // Unit type has zero size
+                    else if (ty == "i8") size += 1;
                     else if (ty == "i16") size += 2;
                     else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
                     else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
@@ -262,8 +268,9 @@ void LLVMIRGen::gen_enum_instantiation(
             if (variant.struct_fields.has_value()) {
                 for (const auto& field : *variant.struct_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field.type, subs);
-                    std::string ty = llvm_type_from_semantic(resolved);
-                    if (ty == "i8") size += 1;
+                    std::string ty = llvm_type_from_semantic(resolved, true);
+                    if (ty == "{}" || ty == "void") size += 0;  // Unit type has zero size
+                    else if (ty == "i8") size += 1;
                     else if (ty == "i16") size += 2;
                     else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
                     else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
@@ -276,7 +283,8 @@ void LLVMIRGen::gen_enum_instantiation(
         // Ensure at least 8 bytes for data
         if (max_size == 0) max_size = 8;
 
-        emit_line(type_name + " = type { i32, [" + std::to_string(max_size) + " x i8] }");
+        // Emit to type_defs_buffer_ instead of output_ to ensure type is defined before use
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size) << " x i8] }\n";
         struct_types_[mangled] = type_name;
 
         int tag = 0;
@@ -551,7 +559,13 @@ void LLVMIRGen::gen_func_instantiation(
     // 4. Build parameter list with substituted types
     std::string params;
     std::string param_types;
-    std::vector<std::pair<std::string, std::string>> param_info;  // name -> type
+    // Store name, llvm_type, and semantic_type for each parameter
+    struct ParamInfo {
+        std::string name;
+        std::string llvm_type;
+        types::TypePtr semantic_type;
+    };
+    std::vector<ParamInfo> param_info;
 
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {
@@ -565,7 +579,7 @@ void LLVMIRGen::gen_func_instantiation(
 
         params += param_type + " %" + param_name;
         param_types += param_type;
-        param_info.push_back({param_name, param_type});
+        param_info.push_back({param_name, param_type, resolved_param});
     }
 
     // 5. Register function for first-class function support
@@ -590,11 +604,11 @@ void LLVMIRGen::gen_func_instantiation(
     emit_line("entry:");
 
     // 7. Register parameters in locals_
-    for (const auto& [param_name, param_type] : param_info) {
+    for (const auto& p : param_info) {
         std::string alloca_reg = fresh_reg();
-        emit_line("  " + alloca_reg + " = alloca " + param_type);
-        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+        emit_line("  " + alloca_reg + " = alloca " + p.llvm_type);
+        emit_line("  store " + p.llvm_type + " %" + p.name + ", ptr " + alloca_reg);
+        locals_[p.name] = VarInfo{alloca_reg, p.llvm_type, p.semantic_type};
     }
 
     // 8. Generate function body

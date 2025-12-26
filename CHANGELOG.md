@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Atomic Operations & Synchronization Primitives** (2025-12-26) - Full type checker support for concurrency builtins
+  - Atomic operations now registered as builtins in type checker:
+    - `atomic_load(ptr: *Unit) -> I32` - Thread-safe read
+    - `atomic_store(ptr: *Unit, val: I32) -> Unit` - Thread-safe write
+    - `atomic_add(ptr: *Unit, val: I32) -> I32` - Atomic fetch-and-add
+    - `atomic_sub(ptr: *Unit, val: I32) -> I32` - Atomic fetch-and-subtract
+    - `atomic_exchange(ptr: *Unit, val: I32) -> I32` - Atomic swap
+    - `atomic_cas(ptr: *Unit, expected: I32, new: I32) -> Bool` - Compare-and-swap
+    - `atomic_and(ptr: *Unit, val: I32) -> I32` - Atomic bitwise AND
+    - `atomic_or(ptr: *Unit, val: I32) -> I32` - Atomic bitwise OR
+    - `atomic_xor(ptr: *Unit, val: I32) -> I32` - Atomic bitwise XOR
+  - Memory fences for ordering guarantees:
+    - `fence() -> Unit` - Full memory barrier (SeqCst)
+    - `fence_acquire() -> Unit` - Acquire barrier
+    - `fence_release() -> Unit` - Release barrier
+  - Spinlock primitives:
+    - `spin_lock(lock: *Unit) -> Unit` - Acquire spinlock (blocking)
+    - `spin_unlock(lock: *Unit) -> Unit` - Release spinlock
+    - `spin_trylock(lock: *Unit) -> Bool` - Try to acquire (non-blocking)
+  - Thread primitives:
+    - `thread_yield() -> Unit` - Yield to other threads
+    - `thread_id() -> I64` - Get current thread ID
+  - New source files: `env_builtins_atomic.cpp`, `env_builtins_sync.cpp`
+  - Test: `atomic.test.tml` moved from pending to core tests (all 11 tests passing)
+
 ### Fixed
 - **CRITICAL: Generic Functions + Closures** (2025-12-26) - Generic functions accepting closures now work correctly
   - Fixed `gen_closure()` to set `last_expr_type_ = "ptr"` for closure expressions

@@ -22,6 +22,9 @@
       "include": "#operators"
     },
     {
+      "include": "#builtins"
+    },
+    {
       "include": "#functions"
     },
     {
@@ -275,6 +278,42 @@
         {
           "name": "keyword.operator.access.tml",
           "match": "\\."
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.atomic.tml",
+          "match": "\\b(atomic_load|atomic_store|atomic_add|atomic_sub|atomic_exchange|atomic_cas|atomic_and|atomic_or|atomic_xor)\\b"
+        },
+        {
+          "name": "support.function.builtin.fence.tml",
+          "match": "\\b(fence|fence_acquire|fence_release)\\b"
+        },
+        {
+          "name": "support.function.builtin.sync.tml",
+          "match": "\\b(spin_lock|spin_unlock|spin_trylock|thread_yield|thread_id)\\b"
+        },
+        {
+          "name": "support.function.builtin.memory.tml",
+          "match": "\\b(alloc|dealloc|mem_alloc|mem_alloc_zeroed|mem_realloc|mem_free|mem_copy|mem_move|mem_set|mem_zero|mem_compare|mem_eq)\\b"
+        },
+        {
+          "name": "support.function.builtin.io.tml",
+          "match": "\\b(print|println|eprint|eprintln|panic|assert|assert_eq|assert_ne|dbg)\\b"
+        },
+        {
+          "name": "support.function.builtin.string.tml",
+          "match": "\\b(str_len|str_eq|str_hash)\\b"
+        },
+        {
+          "name": "support.function.builtin.time.tml",
+          "match": "\\b(time_ms|time_us|time_ns|sleep)\\b"
+        },
+        {
+          "name": "support.function.builtin.meta.tml",
+          "match": "\\b(size_of|align_of|drop|forget)\\b"
         }
       ]
     },

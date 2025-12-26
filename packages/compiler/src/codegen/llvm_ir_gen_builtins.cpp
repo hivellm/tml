@@ -32,7 +32,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             if (with_newline) {
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = call i32 @putchar(i32 10)");
+                last_expr_type_ = "i32";
+                return result;
             }
+            last_expr_type_ = "void";
             return "0";
         }
 
@@ -117,6 +120,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                 emit_line(label_end + ":");
                 block_terminated_ = false;
+                last_expr_type_ = "i32";  // Bool print returns i32
                 return "0";
             }
             case PrintArgType::I64: {
@@ -149,6 +153,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 break;
             }
         }
+        last_expr_type_ = "i32";  // print/println return i32
         return result;
     }
 
@@ -166,8 +171,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Memory allocation: alloc(size) -> ptr
-    // Only use builtin if not imported from core::mem module
-    if (fn_name == "alloc" && !env_.lookup_func("alloc").has_value()) {
+    // Always inline as malloc call (registered as builtin for type checking)
+    if (fn_name == "alloc") {
         if (!call.args.empty()) {
             std::string size = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -181,7 +186,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Memory deallocation: dealloc(ptr)
-    if (fn_name == "dealloc" && !env_.lookup_func("dealloc").has_value()) {
+    // Always inline as free call (registered as builtin for type checking)
+    if (fn_name == "dealloc") {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
             emit_line("  call void @free(ptr " + ptr + ")");
@@ -2023,10 +2029,20 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             ret_type = llvm_type_from_semantic(subbed_ret);
         }
 
-        // Generate arguments
+        // Generate arguments with expected type context for generic enum constructors
         std::vector<std::pair<std::string, std::string>> arg_vals;
         for (size_t i = 0; i < call.args.size(); ++i) {
+            // Set expected enum type for this argument based on parameter type with substitutions
+            if (i < gen_func.params.size()) {
+                types::TypePtr param_type = resolve_parser_type_with_subs(*gen_func.params[i].type, subs);
+                std::string llvm_param_type = llvm_type_from_semantic(param_type);
+                // Set expected type context for generic enum constructors like Nothing
+                if (llvm_param_type.find("%struct.") == 0 && llvm_param_type.find("__") != std::string::npos) {
+                    expected_enum_type_ = llvm_param_type;
+                }
+            }
             std::string val = gen_expr(*call.args[i]);
+            expected_enum_type_.clear();  // Clear after generating argument
             std::string arg_type = last_expr_type_;
             arg_vals.push_back({val, arg_type});
         }

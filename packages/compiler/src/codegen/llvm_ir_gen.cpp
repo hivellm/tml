@@ -142,8 +142,8 @@ auto LLVMIRGen::llvm_type_ptr(const parser::TypePtr& type) -> std::string {
     return llvm_type(*type);
 }
 
-auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::string {
-    if (!type) return "void";
+auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_data) -> std::string {
+    if (!type) return for_data ? "{}" : "void";
 
     if (type->is<types::PrimitiveType>()) {
         const auto& prim = type->as<types::PrimitiveType>();
@@ -163,14 +163,21 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type) -> std::stri
             case types::PrimitiveKind::Bool: return "i1";
             case types::PrimitiveKind::Char: return "i32";
             case types::PrimitiveKind::Str: return "ptr";
-            case types::PrimitiveKind::Unit: return "void";
+            // Unit: use "{}" (empty struct) when used as data, "void" for return types
+            case types::PrimitiveKind::Unit: return for_data ? "{}" : "void";
         }
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
 
         // If it has type arguments, need to use mangled name and ensure instantiation
         if (!named.type_args.empty()) {
-            // Request instantiation (will be generated later if needed)
+            // Check if it's a generic enum (like Maybe, Outcome)
+            auto enum_it = pending_generic_enums_.find(named.name);
+            if (enum_it != pending_generic_enums_.end()) {
+                std::string mangled = require_enum_instantiation(named.name, named.type_args);
+                return "%struct." + mangled;
+            }
+            // Otherwise try as struct
             std::string mangled = require_struct_instantiation(named.name, named.type_args);
             return "%struct." + mangled;
         }
@@ -422,6 +429,19 @@ void LLVMIRGen::unify_types(
             // Check if this is a generic parameter we're looking for
             if (generics.count(pattern_name) > 0) {
                 // Found a binding: T = concrete
+                // Check if we already have a binding
+                auto existing = bindings.find(pattern_name);
+                if (existing != bindings.end()) {
+                    // Prefer existing non-Unit binding over Unit
+                    bool existing_is_unit = existing->second->is<types::PrimitiveType>() &&
+                        existing->second->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit;
+                    bool new_is_unit = concrete->is<types::PrimitiveType>() &&
+                        concrete->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit;
+                    if (!existing_is_unit && new_is_unit) {
+                        // Keep existing non-Unit binding
+                        return;
+                    }
+                }
                 bindings[pattern_name] = concrete;
                 return;
             }
@@ -492,9 +512,11 @@ void LLVMIRGen::generate_pending_instantiations() {
     const int MAX_ITERATIONS = 100;  // Prevent infinite loops
     int iterations = 0;
 
-    bool changed = true;
-    while (changed && iterations < MAX_ITERATIONS) {
-        changed = false;
+    // First pass: generate ALL type definitions (structs and enums)
+    // This must complete before any functions that use these types
+    bool types_changed = true;
+    while (types_changed && iterations < MAX_ITERATIONS) {
+        types_changed = false;
         ++iterations;
 
         // Generate pending struct instantiations
@@ -506,7 +528,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                 auto it = pending_generic_structs_.find(inst.base_name);
                 if (it != pending_generic_structs_.end()) {
                     gen_struct_instantiation(*it->second, inst.type_args);
-                    changed = true;
+                    types_changed = true;
                 }
             }
         }
@@ -519,10 +541,18 @@ void LLVMIRGen::generate_pending_instantiations() {
                 auto it = pending_generic_enums_.find(inst.base_name);
                 if (it != pending_generic_enums_.end()) {
                     gen_enum_instantiation(*it->second, inst.type_args);
-                    changed = true;
+                    types_changed = true;
                 }
             }
         }
+    }
+
+    // Second pass: generate functions (may discover new types, so we loop)
+    iterations = 0;
+    bool changed = true;
+    while (changed && iterations < MAX_ITERATIONS) {
+        changed = false;
+        ++iterations;
 
         // Generate pending function instantiations
         for (auto& [key, inst] : func_instantiations_) {
@@ -536,10 +566,36 @@ void LLVMIRGen::generate_pending_instantiations() {
                 }
             }
         }
+
+        // If new types were discovered during function generation, emit them now
+        // before continuing with more functions
+        bool new_types = false;
+        for (auto& [key, inst] : struct_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+                auto it = pending_generic_structs_.find(inst.base_name);
+                if (it != pending_generic_structs_.end()) {
+                    gen_struct_instantiation(*it->second, inst.type_args);
+                    new_types = true;
+                }
+            }
+        }
+        for (auto& [key, inst] : enum_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+                auto it = pending_generic_enums_.find(inst.base_name);
+                if (it != pending_generic_enums_.end()) {
+                    gen_enum_instantiation(*it->second, inst.type_args);
+                    new_types = true;
+                }
+            }
+        }
+        if (new_types) changed = true;
     }
 }
 
 // Request enum instantiation - returns mangled name
+// Immediately generates the type definition to type_defs_buffer_ if not already generated
 auto LLVMIRGen::require_enum_instantiation(
     const std::string& base_name,
     const std::vector<types::TypePtr>& type_args
@@ -555,11 +611,10 @@ auto LLVMIRGen::require_enum_instantiation(
         base_name,
         type_args,
         mangled,
-        false
+        true  // Mark as generated since we'll generate it immediately
     };
 
-    // Also register enum variants immediately so they're available during code generation
-    // (enum_variants_ is used before generate_pending_instantiations runs)
+    // Register enum variants and generate type definition immediately
     auto decl_it = pending_generic_enums_.find(base_name);
     if (decl_it != pending_generic_enums_.end()) {
         const parser::EnumDecl* decl = decl_it->second;
@@ -570,6 +625,9 @@ auto LLVMIRGen::require_enum_instantiation(
             std::string key = mangled + "::" + variant.name;
             enum_variants_[key] = tag++;
         }
+
+        // Generate type definition immediately to type_defs_buffer_
+        gen_enum_instantiation(*decl, type_args);
     }
 
     return mangled;
@@ -1086,6 +1144,7 @@ void LLVMIRGen::emit_string_constants() {
 auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, std::vector<LLVMGenError>> {
     errors_.clear();
     output_.str("");
+    type_defs_buffer_.str("");  // Clear type definitions buffer
     string_literals_.clear();
     temp_counter_ = 0;
     label_counter_ = 0;
@@ -1093,7 +1152,32 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     emit_header();
     emit_runtime_decls();
     emit_module_lowlevel_decls();
-    emit_module_pure_tml_functions();  // Generate code for pure TML imported functions (like std::math)
+
+    // Save headers before generating imported module code
+    std::string headers = output_.str();
+    output_.str("");
+
+    // Generate code for pure TML imported functions (like std::math)
+    // This may add types to type_defs_buffer_
+    emit_module_pure_tml_functions();
+
+    // Save imported module code (functions)
+    std::string imported_func_code = output_.str();
+    output_.str("");
+
+    // Now reassemble with types before functions
+    output_ << headers;
+
+    // Emit any generic types discovered during imported module processing
+    std::string imported_type_defs = type_defs_buffer_.str();
+    if (!imported_type_defs.empty()) {
+        emit_line("; Generic types from imported modules");
+        output_ << imported_type_defs;
+    }
+    type_defs_buffer_.str("");  // Clear for main module processing
+
+    // Emit imported module functions AFTER their type dependencies
+    output_ << imported_func_code;
 
     // First pass: collect const declarations and struct/enum declarations
     for (const auto& decl : module.decls) {
@@ -1380,20 +1464,35 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         }
     }
 
-    // Save function code
+    // Save function code (non-generic functions)
     func_output.str(output_.str());
     output_.str("");
 
-    // Restore header output
+    // Generate pending generic instantiations (types go to type_defs_buffer_, funcs go to output_)
+    generate_pending_instantiations();
+
+    // Save generic function code
+    std::stringstream generic_func_output;
+    generic_func_output.str(output_.str());
+    output_.str("");
+
+    // Now reassemble in correct order: headers + types + all functions
+    // 1. Headers
     output_ << saved_output.str();
 
-    // Now emit any generic instantiations discovered during function codegen
-    // These will appear BEFORE function code
-    generate_pending_instantiations();
+    // 2. Type definitions (from type_defs_buffer_) - MUST come before functions
+    std::string type_defs = type_defs_buffer_.str();
+    if (!type_defs.empty()) {
+        emit_line("; Generic type instantiations");
+        output_ << type_defs;
+    }
     emit_line("");
 
-    // Now append function code
+    // 3. Non-generic functions
     output_ << func_output.str();
+
+    // 4. Generic functions (instantiated functions)
+    output_ << generic_func_output.str();
 
     // Emit generated closure functions
     for (const auto& closure_func : module_functions_) {

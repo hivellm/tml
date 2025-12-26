@@ -1,0 +1,178 @@
+use test
+
+// ============================================================================
+// Atomic Operations Tests
+// Tests atomic_load, atomic_store, atomic_add, atomic_sub, atomic_exchange,
+// atomic_cas, atomic_and, atomic_or, fence, spin_lock, spin_unlock, spin_trylock
+// ============================================================================
+
+// ============================================================================
+// Atomic Store/Load
+// ============================================================================
+
+@test
+func test_atomic_store_load() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 42)
+    let value: I32 = atomic_load(ptr)
+    assert_eq(value, 42, "atomic_store/load should work")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic Add
+// ============================================================================
+
+@test
+func test_atomic_add() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 10)
+    let old: I32 = atomic_add(ptr, 5)
+    let new_val: I32 = atomic_load(ptr)
+    assert_eq(old, 10, "atomic_add should return old value")
+    assert_eq(new_val, 15, "atomic_add should increment value")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic Sub
+// ============================================================================
+
+@test
+func test_atomic_sub() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 20)
+    let old: I32 = atomic_sub(ptr, 7)
+    let new_val: I32 = atomic_load(ptr)
+    assert_eq(old, 20, "atomic_sub should return old value")
+    assert_eq(new_val, 13, "atomic_sub should decrement value")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic Exchange
+// ============================================================================
+
+@test
+func test_atomic_exchange() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 100)
+    let old: I32 = atomic_exchange(ptr, 200)
+    let new_val: I32 = atomic_load(ptr)
+    assert_eq(old, 100, "atomic_exchange should return old value")
+    assert_eq(new_val, 200, "atomic_exchange should set new value")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic Compare-and-Swap (Success)
+// ============================================================================
+
+@test
+func test_atomic_cas_success() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 50)
+    let success: Bool = atomic_cas(ptr, 50, 100)
+    let value: I32 = atomic_load(ptr)
+    assert(success, "atomic_cas should succeed when expected matches")
+    assert_eq(value, 100, "atomic_cas should set new value on success")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic Compare-and-Swap (Failure)
+// ============================================================================
+
+@test
+func test_atomic_cas_failure() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 50)
+    let fail: Bool = atomic_cas(ptr, 99, 100)
+    let value: I32 = atomic_load(ptr)
+    assert_eq(fail, false, "atomic_cas should fail when expected doesn't match")
+    assert_eq(value, 50, "atomic_cas should not change value on failure")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic AND
+// ============================================================================
+
+@test
+func test_atomic_and() -> I32 {
+    let ptr: *Unit = alloc(4)
+    // Test AND: 15 (1111) & 7 (0111) = 7
+    atomic_store(ptr, 15)
+    let old: I32 = atomic_and(ptr, 7)
+    let new_val: I32 = atomic_load(ptr)
+    assert_eq(old, 15, "atomic_and should return old value")
+    assert_eq(new_val, 7, "atomic_and should compute bitwise AND")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Atomic OR
+// ============================================================================
+
+@test
+func test_atomic_or() -> I32 {
+    let ptr: *Unit = alloc(4)
+    // Test OR: 8 (1000) | 4 (0100) = 12 (1100)
+    atomic_store(ptr, 8)
+    let old: I32 = atomic_or(ptr, 4)
+    let new_val: I32 = atomic_load(ptr)
+    assert_eq(old, 8, "atomic_or should return old value")
+    assert_eq(new_val, 12, "atomic_or should compute bitwise OR")
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Memory Fences
+// ============================================================================
+
+@test
+func test_fence_operations() -> I32 {
+    // Just verify fence operations don't crash
+    fence()
+    fence_acquire()
+    fence_release()
+    return 0
+}
+
+// ============================================================================
+// Spinlock Try Lock
+// ============================================================================
+
+@test
+func test_spin_trylock() -> I32 {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 0)
+    let acquired: Bool = spin_trylock(lock)
+    assert(acquired, "spin_trylock should acquire unlocked lock")
+    spin_unlock(lock)
+    dealloc(lock)
+    return 0
+}
+
+// ============================================================================
+// Spinlock Lock/Unlock
+// ============================================================================
+
+@test
+func test_spin_lock_unlock() -> I32 {
+    let lock: *Unit = alloc(4)
+    atomic_store(lock, 0)
+    spin_lock(lock)
+    spin_unlock(lock)
+    // If we get here without deadlock, the test passed
+    dealloc(lock)
+    return 0
+}
