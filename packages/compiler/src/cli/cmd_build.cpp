@@ -49,6 +49,26 @@ static std::string generate_content_hash(const std::string& content) {
     return oss.str();
 }
 
+// Generate a combined hash for executable caching (source + all object files)
+static std::string generate_exe_hash(const std::string& source_hash, const std::vector<fs::path>& obj_files) {
+    std::hash<std::string> hasher;
+    size_t combined_hash = hasher(source_hash);
+
+    // Combine hashes of all object file paths and timestamps
+    for (const auto& obj : obj_files) {
+        if (fs::exists(obj)) {
+            // Include file path and last write time
+            combined_hash ^= hasher(obj.string()) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
+            auto ftime = fs::last_write_time(obj).time_since_epoch().count();
+            combined_hash ^= std::hash<decltype(ftime)>{}(ftime) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
+        }
+    }
+
+    std::ostringstream oss;
+    oss << std::hex << std::setw(16) << std::setfill('0') << combined_hash;
+    return oss.str();
+}
+
 // Find the project root by looking for markers like .git, CLAUDE.md, etc.
 static fs::path find_project_root() {
     fs::path current = fs::current_path();
@@ -524,14 +544,57 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
     object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
-    // Link all object files to create executable
-    LinkOptions link_options;
-    link_options.output_type = LinkOptions::OutputType::Executable;
-    link_options.verbose = verbose;
+    // Generate hash for executable caching (source + all object files)
+    std::string exe_hash = generate_exe_hash(content_hash, object_files);
+    fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 
-    auto link_result = link_objects(object_files, exe_output, clang, link_options);
-    if (!link_result.success) {
-        std::cerr << "error: " << link_result.error_message << "\n";
+    // Check if we have a cached executable
+    bool use_cached_exe = fs::exists(cached_exe);
+
+    if (use_cached_exe) {
+        if (verbose) {
+            std::cout << "Using cached executable: " << cached_exe << "\n";
+        }
+    } else {
+        // Link all object files to create executable
+        LinkOptions link_options;
+        link_options.output_type = LinkOptions::OutputType::Executable;
+        link_options.verbose = verbose;
+
+        // Link to temporary location first
+        fs::path temp_exe = cache_dir / (exe_hash + "_link_temp.exe");
+
+        auto link_result = link_objects(object_files, temp_exe, clang, link_options);
+        if (!link_result.success) {
+            std::cerr << "error: " << link_result.error_message << "\n";
+            return 1;
+        }
+
+        if (verbose) {
+            std::cout << "Linked executable: " << temp_exe << "\n";
+        }
+
+        // Try to move to cached location (atomic on same filesystem)
+        try {
+            if (!fs::exists(cached_exe)) {
+                fs::rename(temp_exe, cached_exe);
+            } else {
+                // Another process created it first
+                fs::remove(temp_exe);
+            }
+        } catch (...) {
+            // Clean up temp file on error
+            if (fs::exists(temp_exe)) {
+                fs::remove(temp_exe);
+            }
+        }
+    }
+
+    // Copy cached exe to final location
+    try {
+        fs::copy_file(cached_exe, exe_output, fs::copy_options::overwrite_existing);
+    } catch (const std::exception& e) {
+        std::cerr << "error: Failed to copy cached exe: " << e.what() << "\n";
         return 1;
     }
 
@@ -719,14 +782,50 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
     object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
-    // Link all object files to create executable
-    LinkOptions link_options;
-    link_options.output_type = LinkOptions::OutputType::Executable;
-    link_options.verbose = false;  // Always quiet for tests
+    // Generate hash for executable caching (source + all object files)
+    std::string exe_hash = generate_exe_hash(content_hash, object_files);
+    fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 
-    auto link_result = link_objects(object_files, exe_output, clang, link_options);
-    if (!link_result.success) {
-        if (output) *output = "error: " + link_result.error_message;
+    // Check if we have a cached executable
+    bool use_cached_exe = fs::exists(cached_exe);
+
+    if (!use_cached_exe) {
+        // Link all object files to create executable
+        LinkOptions link_options;
+        link_options.output_type = LinkOptions::OutputType::Executable;
+        link_options.verbose = false;  // Always quiet for tests
+
+        // Link to a unique temporary location (avoid race conditions)
+        std::string temp_key = generate_cache_key(path);
+        fs::path temp_exe = cache_dir / (exe_hash + "_" + temp_key + "_temp.exe");
+
+        auto link_result = link_objects(object_files, temp_exe, clang, link_options);
+        if (!link_result.success) {
+            if (output) *output = "error: " + link_result.error_message;
+            return 1;
+        }
+
+        // Try to move to cached location (may fail if another thread already did it)
+        try {
+            if (!fs::exists(cached_exe)) {
+                fs::rename(temp_exe, cached_exe);
+            } else {
+                // Another thread created it first, just remove our temp
+                fs::remove(temp_exe);
+            }
+        } catch (...) {
+            // Race condition - another thread created it, clean up our temp
+            if (fs::exists(temp_exe)) {
+                fs::remove(temp_exe);
+            }
+        }
+    }
+
+    // Copy cached exe to final unique location (for parallel test execution)
+    try {
+        fs::copy_file(cached_exe, exe_output, fs::copy_options::overwrite_existing);
+    } catch (const std::exception& e) {
+        if (output) *output = std::string("error: Failed to copy cached exe: ") + e.what();
         return 1;
     }
 
