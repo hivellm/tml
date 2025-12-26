@@ -1,37 +1,37 @@
 # Tasks: Create VSCode Extension for TML
 
-## Progress: 0% (0/42 tasks complete)
+## Progress: 33% (14/42 tasks complete)
 
-## 1. Setup Phase
-- [ ] 1.1 Create `tools/vscode-tml/` directory structure
-- [ ] 1.2 Initialize npm package with VSCode extension template
-- [ ] 1.3 Configure TypeScript and build tools
-- [ ] 1.4 Set up development environment with VSCode
+## 1. Setup Phase ✅
+- [x] 1.1 Create `vscode-tml/` directory structure
+- [x] 1.2 Initialize npm package with VSCode extension template
+- [x] 1.3 Configure TypeScript and build tools
+- [x] 1.4 Set up development environment with VSCode
 
-## 2. Extension Manifest Phase
-- [ ] 2.1 Create `package.json` with extension metadata
-- [ ] 2.2 Configure activation events for `.tml` files
-- [ ] 2.3 Define extension capabilities (syntax highlighting, language server)
-- [ ] 2.4 Set up publishing configuration
+## 2. Extension Manifest Phase ✅
+- [x] 2.1 Create `package.json` with extension metadata
+- [x] 2.2 Configure activation events for `.tml` files
+- [x] 2.3 Define extension capabilities (syntax highlighting)
+- [x] 2.4 Set up publishing configuration
 
-## 3. Syntax Highlighting Phase
-- [ ] 3.1 Create TextMate grammar file (`syntaxes/tml.tmLanguage.json`)
-- [ ] 3.2 Implement keyword patterns (28 keywords from spec)
-- [ ] 3.3 Implement operator patterns (arithmetic, comparison, logical)
-- [ ] 3.4 Implement literal patterns (strings, numbers, characters)
-- [ ] 3.5 Implement comment patterns (single-line `//`, multi-line `/* */`, doc `///`)
-- [ ] 3.6 Implement identifier and stable ID patterns (`@xxxxxxxx`)
-- [ ] 3.7 Implement generic syntax with `[]` brackets
-- [ ] 3.8 Implement effect and capability declarations
-- [ ] 3.9 Test syntax highlighting with example files
+## 3. Syntax Highlighting Phase ✅
+- [x] 3.1 Create TextMate grammar file (`syntaxes/tml.tmLanguage.json`)
+- [x] 3.2 Implement keyword patterns (32 keywords from spec)
+- [x] 3.3 Implement operator patterns (arithmetic, comparison, logical)
+- [x] 3.4 Implement literal patterns (strings, numbers, characters)
+- [x] 3.5 Implement comment patterns (single-line `//`, multi-line `/* */`, doc `///`)
+- [x] 3.6 Implement identifier and stable ID patterns (`@xxxxxxxx`)
+- [x] 3.7 Implement generic syntax with `[]` brackets
+- [x] 3.8 Implement behavior and effect declarations
+- [x] 3.9 Test syntax highlighting with example files
 
-## 4. Language Configuration Phase
-- [ ] 4.1 Create `language-configuration.json`
-- [ ] 4.2 Configure comments (line and block)
-- [ ] 4.3 Configure brackets (`()`, `[]`, `{}`)
-- [ ] 4.4 Configure auto-closing pairs
-- [ ] 4.5 Configure indentation rules
-- [ ] 4.6 Configure word patterns for double-click selection
+## 4. Language Configuration Phase ✅
+- [x] 4.1 Create `language-configuration.json`
+- [x] 4.2 Configure comments (line and block)
+- [x] 4.3 Configure brackets (`()`, `[]`, `{}`)
+- [x] 4.4 Configure auto-closing pairs
+- [x] 4.5 Configure indentation rules
+- [x] 4.6 Configure word patterns for double-click selection
 
 ## 5. Basic Language Server Phase
 - [ ] 5.1 Implement Language Server Protocol (LSP) client
@@ -89,19 +89,45 @@
 - [ ] 12.5 Test error reporting accuracy
 - [ ] 12.6 Perform cross-platform testing (Windows, macOS, Linux)
 
-## 13. Documentation Phase
-- [ ] 13.1 Create README.md for the extension
-- [ ] 13.2 Document installation and setup
-- [ ] 13.3 Create usage guide and examples
-- [ ] 13.4 Document extension features and limitations
-- [ ] 13.5 Create changelog and release notes
+## 13. Documentation Phase ⏳ (80% complete)
+- [x] 13.1 Create README.md for the extension
+- [x] 13.2 Document installation and setup
+- [x] 13.3 Create usage guide and examples
+- [x] 13.4 Document extension features and limitations
+- [x] 13.5 Create changelog and release notes (v0.3.1 - 2025-12-26)
 
-## 14. Publishing Phase
+## 14. Publishing Phase ⏸️
 - [ ] 14.1 Prepare extension for marketplace submission
 - [ ] 14.2 Test extension in clean VSCode environment
 - [ ] 14.3 Create marketplace listing with screenshots
 - [ ] 14.4 Submit to VSCode marketplace
 - [ ] 14.5 Set up automated publishing pipeline
+
+## Current Status (2025-12-26)
+
+**Version**: 0.3.1
+
+**Implemented Features**:
+- ✅ Syntax highlighting for all TML keywords and constructs
+- ✅ Language configuration (brackets, comments, indentation)
+- ✅ VSIX packaging for local installation
+- ✅ Support for .tml file extension
+- ✅ Documentation and examples
+
+**Not Yet Implemented**:
+- ⏸️ Language Server Protocol (LSP) integration
+- ⏸️ IntelliSense and autocompletion
+- ⏸️ Syntax validation and diagnostics
+- ⏸️ Go-to-definition and hover information
+- ⏸️ Semantic highlighting
+- ⏸️ Build task integration
+- ⏸️ Marketplace publishing
+
+**Next Steps**:
+1. Implement LSP client/server (Phase 5)
+2. Add syntax validation (Phase 6)
+3. Implement autocompletion (Phase 7)
+4. Publish to VSCode Marketplace (Phase 14)
 
 
 

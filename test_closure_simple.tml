@@ -1,0 +1,13 @@
+// Simple closure test
+func test_closure(f: func(I32) -> I32) -> I32 {
+    return f(5)
+}
+
+func main() -> I32 {
+    let result: I32 = test_closure(do(x: I32) -> I32 x * 2)
+    if result == 10 {
+        return 0
+    } else {
+        return 1
+    }
+}

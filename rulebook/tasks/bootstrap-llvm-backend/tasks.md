@@ -41,6 +41,7 @@
 - [x] 5.3 Implement function attribute handling
 - [x] 5.4 Implement calling convention handling
 - [x] 5.5 Implement method call syntax (.len(), .push(), etc.)
+- [x] 5.6 Fix return type tracking for method calls (2025-12-26: Set last_expr_type_ correctly)
 
 ## 6. Optimization Phase
 - [ ] 6.1 Implement optimization pipeline configuration

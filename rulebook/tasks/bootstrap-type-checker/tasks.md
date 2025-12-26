@@ -63,7 +63,7 @@
 
 ## 8. Trait Resolution Phase
 - [x] 8.1 Implement trait bound checking
-- [x] 8.2 Implement method resolution
+- [x] 8.2 Implement method resolution (2025-12-26: Fixed module method lookup for Type::method)
 - [x] 8.3 Implement associated type resolution
 - [ ] 8.4 Implement orphan rule checking
 
@@ -97,9 +97,15 @@
 - ✅ Reference and pointer types
 - ✅ Stability annotation system (@stable/@deprecated)
 
+**Recent Improvements (2025-12-26)**:
+- ✅ Fixed module method lookup (`Type::method` → `module::Type::method`)
+  - Now resolves methods from imported modules correctly
+  - Enables iterator combinators and other module methods
+  - Fixed in `env_lookups.cpp` lines 98-113
+
 **Known Issues**:
 - ⚠️ 7 failing tests related to array/closure type inference
-- ⚠️ Missing closure type inference (5.8)
+- ⚠️ Missing closure type inference (5.8) - **CRITICAL**: Blocks fold(), any(), all() combinators
 - ⚠️ Missing let-polymorphism generalization (4.7)
 - ⚠️ Missing where clause checking (7.7)
 - ⚠️ Missing orphan rule checking (8.4)

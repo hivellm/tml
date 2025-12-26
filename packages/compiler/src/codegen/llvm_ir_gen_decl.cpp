@@ -217,6 +217,12 @@ void LLVMIRGen::gen_enum_instantiation(
     std::string mangled = mangle_struct_name(decl.name, type_args);
     std::string type_name = "%struct." + mangled;
 
+    // Check if this type has already been emitted
+    if (struct_types_.find(mangled) != struct_types_.end()) {
+        // Type already emitted, skip
+        return;
+    }
+
     // Check if any variant has data
     bool has_data = false;
     for (const auto& variant : decl.variants) {
@@ -348,10 +354,12 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     for (size_t i = 0; i < func.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(func.params[i].type);
         std::string param_name = get_param_name(func.params[i]);
+        // Resolve semantic type for the parameter
+        types::TypePtr semantic_type = resolve_parser_type_with_subs(*func.params[i].type, {});
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
     }
 
     // Coverage instrumentation - inject call at function entry
@@ -458,10 +466,12 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     for (size_t i = param_start; i < method.params.size(); ++i) {
         std::string param_type = llvm_type_ptr(method.params[i].type);
         std::string param_name = get_param_name(method.params[i]);
+        // Resolve semantic type for the parameter
+        types::TypePtr semantic_type = resolve_parser_type_with_subs(*method.params[i].type, {});
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
     }
 
     // Generate method body

@@ -1,0 +1,14 @@
+use std::iter
+
+func main() -> I32 {
+    let mut r: Range = range(1, 5)
+    let result: I32 = r.fold(1, do(acc: I32, x: I32) -> I32 acc * x)
+    if result == 24 {
+        print("PASS: fold works")
+        return 0
+    } else {
+        print("FAIL: expected 24, got:")
+        print(result)
+        return 1
+    }
+}

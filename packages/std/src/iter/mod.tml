@@ -143,11 +143,48 @@ impl Range {
         return n
     }
 
-    // Note: fold, any, and all are temporarily disabled due to closure type inference bugs
-    // They will be re-enabled when the codegen properly handles function pointer types
-}
+    /// Folds (reduces) the iterator using an accumulator function.
+    /// Takes an initial value and a closure that combines the accumulator with each element.
+    pub func fold(mut this, init: I32, f: func(I32, I32) -> I32) -> I32 {
+        let mut acc: I32 = init
+        loop {
+            when this.next() {
+                Just(value) => acc = f(acc, value),
+                Nothing => break
+            }
+        }
+        return acc
+    }
 
-// Disabled combinators that use closures:
-// - fold(init, f): requires function pointer type inference
-// - any(predicate): requires function pointer type inference
-// - all(predicate): requires function pointer type inference
+    /// Tests if any element satisfies the predicate.
+    /// Returns true if at least one element matches, false otherwise.
+    pub func any(mut this, predicate: func(I32) -> Bool) -> Bool {
+        loop {
+            when this.next() {
+                Just(value) => {
+                    if predicate(value) {
+                        return true
+                    }
+                },
+                Nothing => break
+            }
+        }
+        return false
+    }
+
+    /// Tests if all elements satisfy the predicate.
+    /// Returns true only if all elements match, false otherwise.
+    pub func all(mut this, predicate: func(I32) -> Bool) -> Bool {
+        loop {
+            when this.next() {
+                Just(value) => {
+                    if not predicate(value) {
+                        return false
+                    }
+                },
+                Nothing => break
+            }
+        }
+        return true
+    }
+}
