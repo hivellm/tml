@@ -144,6 +144,7 @@ add_library(tml_codegen STATIC
     src/codegen/llvm_ir_gen_builtins.cpp
     src/codegen/llvm_ir_gen_control.cpp
     src/codegen/llvm_ir_gen_types.cpp
+    src/codegen/c_header_gen.cpp
     # src/codegen/c_gen.cpp  # Removed - using LLVM backend only
 )
 target_link_libraries(tml_codegen PUBLIC tml_ir)

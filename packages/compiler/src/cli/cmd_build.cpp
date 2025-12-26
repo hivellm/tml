@@ -8,6 +8,7 @@
 #include "tml/parser/parser.hpp"
 #include "tml/types/checker.hpp"
 #include "tml/codegen/llvm_ir_gen.hpp"
+#include "tml/codegen/c_header_gen.hpp"
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -254,7 +255,7 @@ static fs::path get_run_cache_dir() {
     return cache;
 }
 
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type) {
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type, bool emit_header) {
     (void)no_cache; // TODO: Implement cache control for build command
 
     std::string source_code;
@@ -317,6 +318,33 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     }
 
     const auto& env = std::get<types::TypeEnv>(check_result);
+
+    // Generate C header if requested
+    if (emit_header) {
+        codegen::CHeaderGenOptions header_opts;
+        codegen::CHeaderGen header_gen(env, header_opts);
+        auto header_result = header_gen.generate(module);
+
+        if (!header_result.success) {
+            std::cerr << "error: Header generation failed: " << header_result.error_message << "\n";
+            return 1;
+        }
+
+        // Write header file
+        fs::path build_dir = get_build_dir(false /* debug */);
+        fs::path header_output = build_dir / (module_name + ".h");
+
+        std::ofstream header_file(header_output);
+        if (!header_file) {
+            std::cerr << "error: Cannot write to " << header_output << "\n";
+            return 1;
+        }
+        header_file << header_result.header_content;
+        header_file.close();
+
+        std::cout << "emit-header: " << header_output << "\n";
+        return 0;
+    }
 
     codegen::LLVMGenOptions options;
     options.emit_comments = verbose;

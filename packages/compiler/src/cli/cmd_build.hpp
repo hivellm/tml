@@ -13,7 +13,7 @@ enum class BuildOutputType {
 
 // Build commands
 int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache = false,
-              BuildOutputType output_type = BuildOutputType::Executable);
+              BuildOutputType output_type = BuildOutputType::Executable, bool emit_header = false);
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false);
 

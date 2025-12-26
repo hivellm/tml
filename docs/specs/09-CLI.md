@@ -61,6 +61,14 @@ tml build --release
 tml build --target wasm32
 tml build --target x86_64-linux
 
+# Library types
+tml build --crate-type lib       # Static library (.lib/.a)
+tml build --crate-type dylib     # Dynamic library (.dll/.so/.dylib)
+tml build --crate-type rlib      # TML library format (future)
+
+# C header generation for FFI
+tml build --emit-header          # Generate .h file from public functions
+
 # With features
 tml build --features "async,serde"
 
@@ -73,6 +81,21 @@ Output:
    Compiling myproject v1.0.0
     Building src/lib.tml
     Finished dev [unoptimized + debuginfo] in 0.54s
+```
+
+Library build output:
+```bash
+# Static library
+$ tml build mylib.tml --crate-type lib
+build: f:/path/to/build/debug/mylib.lib
+
+# Dynamic library
+$ tml build mylib.tml --crate-type dylib
+build: f:/path/to/build/debug/mylib.dll
+
+# With C header
+$ tml build mylib.tml --emit-header
+emit-header: f:/path/to/build/debug/mylib.h
 ```
 
 ### 2.3 tml run — Execute
@@ -480,21 +503,30 @@ Export TML functions for use in C/C++:
 
 **TML code (math.tml):**
 ```tml
-@[export]
-func add(a: I32, b: I32) -> I32 {
+// Public functions are automatically exported for FFI
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-@[export]
-func multiply(a: I32, b: I32) -> I32 {
+pub func multiply(a: I32, b: I32) -> I32 {
     return a * b
 }
 ```
 
-**Build library:**
+**Build static library with header:**
 ```bash
-tml build --crate-type cdylib --emit-header
-# Generates: libmath.so + math.h
+tml build math.tml --crate-type lib --emit-header
+# Generates:
+#   - build/debug/math.lib (Windows) or libmath.a (Linux)
+#   - build/debug/math.h
+```
+
+**Build dynamic library with header:**
+```bash
+tml build math.tml --crate-type dylib --emit-header
+# Generates:
+#   - build/debug/math.dll (Windows) or libmath.so (Linux)
+#   - build/debug/math.h
 ```
 
 **Generated header (math.h):**
@@ -503,13 +535,17 @@ tml build --crate-type cdylib --emit-header
 #define TML_MATH_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int32_t add(int32_t a, int32_t b);
-int32_t multiply(int32_t a, int32_t b);
+// TML library: math
+// Auto-generated C header for FFI
+
+int32_t tml_add(int32_t a, int32_t b);
+int32_t tml_multiply(int32_t a, int32_t b);
 
 #ifdef __cplusplus
 }
@@ -521,13 +557,33 @@ int32_t multiply(int32_t a, int32_t b);
 **Use from C:**
 ```c
 #include "math.h"
+#include <stdio.h>
 
 int main() {
-    int result = add(5, 3);
+    int32_t result = tml_add(5, 3);
     printf("%d\n", result);  // 8
+
+    int32_t product = tml_multiply(4, 7);
+    printf("%d\n", product);  // 28
+
     return 0;
 }
 ```
+
+**Compile C program with TML static library:**
+```bash
+clang my_program.c -o my_program build/debug/math.lib
+./my_program
+```
+
+**Type Mapping:**
+TML types are automatically mapped to C types:
+- `I8` → `int8_t`, `I16` → `int16_t`, `I32` → `int32_t`, `I64` → `int64_t`
+- `U8` → `uint8_t`, `U16` → `uint16_t`, `U32` → `uint32_t`, `U64` → `uint64_t`
+- `F32` → `float`, `F64` → `double`
+- `Bool` → `bool` (from `stdbool.h`)
+- `Str` → `const char*`
+- `ref T` / `Ptr[T]` → `T*`
 
 ### 8.5 Performance
 

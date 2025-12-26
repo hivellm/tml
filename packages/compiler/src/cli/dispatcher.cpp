@@ -66,11 +66,12 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "build") {
         if (argc < 3) {
-            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--verbose] [--no-cache] [--crate-type=<type>]\n";
+            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--emit-header] [--verbose] [--no-cache] [--crate-type=<type>]\n";
             std::cerr << "  Crate types: bin (default), lib, dylib\n";
             return 1;
         }
         bool emit_ir_only = false;
+        bool emit_header = false;
         bool no_cache = false;
         BuildOutputType output_type = BuildOutputType::Executable;
 
@@ -78,6 +79,8 @@ int tml_main(int argc, char* argv[]) {
             std::string arg = argv[i];
             if (arg == "--emit-ir" || arg == "--emit-c") {
                 emit_ir_only = true;
+            } else if (arg == "--emit-header") {
+                emit_header = true;
             } else if (arg == "--no-cache") {
                 no_cache = true;
             } else if (arg.starts_with("--crate-type=")) {
@@ -95,7 +98,7 @@ int tml_main(int argc, char* argv[]) {
                 }
             }
         }
-        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type);
+        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header);
     }
 
     if (command == "fmt") {
