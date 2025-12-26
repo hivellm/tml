@@ -1,0 +1,117 @@
+use test
+
+// ============ Basic Dyn Usage ============
+
+behavior Valuable {
+    func get_value(this) -> I32
+}
+
+type IntWrapper {
+    value: I32,
+}
+
+impl Valuable for IntWrapper {
+    func get_value(this) -> I32 {
+        return this.value
+    }
+}
+
+type DoubleWrapper {
+    value: I32,
+}
+
+impl Valuable for DoubleWrapper {
+    func get_value(this) -> I32 {
+        return this.value * 2
+    }
+}
+
+@test
+func test_dyn_basic_int() -> I32 {
+    let iw: IntWrapper = IntWrapper { value: 42 }
+    let d: dyn Valuable = iw
+    let result: I32 = d.get_value()
+    assert_eq(result, 42, "IntWrapper dyn should return 42")
+    return 0
+}
+
+@test
+func test_dyn_basic_double() -> I32 {
+    let dw: DoubleWrapper = DoubleWrapper { value: 21 }
+    let d: dyn Valuable = dw
+    let result: I32 = d.get_value()
+    assert_eq(result, 42, "DoubleWrapper dyn should return 42 (21*2)")
+    return 0
+}
+
+// ============ Dyn in Functions ============
+
+func get_value_from_dyn(obj: dyn Valuable) -> I32 {
+    return obj.get_value()
+}
+
+@test
+func test_dyn_as_parameter() -> I32 {
+    let iw: IntWrapper = IntWrapper { value: 100 }
+    let d: dyn Valuable = iw
+    let result: I32 = get_value_from_dyn(d)
+    assert_eq(result, 100, "dyn parameter should work")
+    return 0
+}
+
+@test
+func test_dyn_as_parameter_double() -> I32 {
+    let dw: DoubleWrapper = DoubleWrapper { value: 50 }
+    let d: dyn Valuable = dw
+    let result: I32 = get_value_from_dyn(d)
+    assert_eq(result, 100, "dyn parameter with double should work")
+    return 0
+}
+
+// ============ Multiple Behaviors on Same Type ============
+
+behavior Countable {
+    func count(this) -> I32
+}
+
+type Counter {
+    value: I32,
+    step: I32,
+}
+
+impl Valuable for Counter {
+    func get_value(this) -> I32 {
+        return this.value
+    }
+}
+
+impl Countable for Counter {
+    func count(this) -> I32 {
+        return this.step
+    }
+}
+
+@test
+func test_multiple_behaviors_same_type() -> I32 {
+    let c: Counter = Counter { value: 10, step: 5 }
+
+    let v: dyn Valuable = c
+    let n: dyn Countable = c
+
+    let val: I32 = v.get_value()
+    let cnt: I32 = n.count()
+
+    assert_eq(val, 10, "Valuable should return value")
+    assert_eq(cnt, 5, "Countable should return step")
+    return 0
+}
+
+// ============ Impl Method Direct Call ============
+
+@test
+func test_impl_method_direct() -> I32 {
+    let iw: IntWrapper = IntWrapper { value: 77 }
+    let result: I32 = iw.get_value()
+    assert_eq(result, 77, "Direct impl call should work")
+    return 0
+}

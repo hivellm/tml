@@ -1705,9 +1705,11 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
 void LLVMIRGen::register_impl(const parser::ImplDecl* impl) {
     pending_impls_.push_back(impl);
 
-    // Eagerly populate behavior_method_order_ for dyn dispatch
+    // Eagerly populate behavior_method_order_ and vtables_ for dyn dispatch
     if (impl->trait_path && !impl->trait_path->segments.empty()) {
         std::string behavior_name = impl->trait_path->segments.back();
+
+        // Populate behavior_method_order_ only once per behavior
         if (behavior_method_order_.find(behavior_name) == behavior_method_order_.end()) {
             auto behavior_def = env_.lookup_behavior(behavior_name);
             if (behavior_def) {
@@ -1716,22 +1718,21 @@ void LLVMIRGen::register_impl(const parser::ImplDecl* impl) {
                     methods.push_back(m.name);
                 }
                 behavior_method_order_[behavior_name] = methods;
-
-                // Also eagerly register vtable name
-                // Get type name
-                std::string type_name;
-                if (impl->self_type->kind.index() == 0) {
-                    const auto& named = std::get<parser::NamedType>(impl->self_type->kind);
-                    if (!named.path.segments.empty()) {
-                        type_name = named.path.segments.back();
-                    }
-                }
-                if (!type_name.empty()) {
-                    std::string vtable_name = "@vtable." + type_name + "." + behavior_name;
-                    std::string key = type_name + "::" + behavior_name;
-                    vtables_[key] = vtable_name;
-                }
             }
+        }
+
+        // Register vtable for EVERY impl (not just the first per behavior)
+        std::string type_name;
+        if (impl->self_type->kind.index() == 0) {
+            const auto& named = std::get<parser::NamedType>(impl->self_type->kind);
+            if (!named.path.segments.empty()) {
+                type_name = named.path.segments.back();
+            }
+        }
+        if (!type_name.empty()) {
+            std::string vtable_name = "@vtable." + type_name + "." + behavior_name;
+            std::string key = type_name + "::" + behavior_name;
+            vtables_[key] = vtable_name;
         }
     }
 }
