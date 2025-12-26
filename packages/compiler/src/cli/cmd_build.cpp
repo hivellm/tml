@@ -254,7 +254,9 @@ static fs::path get_run_cache_dir() {
     return cache;
 }
 
-int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache) {
+    (void)no_cache; // TODO: Implement cache control for build command
+
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -413,7 +415,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     return 0;
 }
 
-int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose, bool coverage) {
+int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose, bool coverage, bool no_cache) {
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -571,8 +573,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     std::string exe_hash = generate_exe_hash(content_hash, object_files);
     fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 
-    // Check if we have a cached executable
-    bool use_cached_exe = fs::exists(cached_exe);
+    // Check if we have a cached executable (skip if --no-cache)
+    bool use_cached_exe = !no_cache && fs::exists(cached_exe);
 
     if (use_cached_exe) {
         if (verbose) {
@@ -656,7 +658,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 }
 
 int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
-                  bool verbose, std::string* output, bool coverage) {
+                  bool verbose, std::string* output, bool coverage, bool no_cache) {
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -807,8 +809,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     std::string exe_hash = generate_exe_hash(content_hash, object_files);
     fs::path cached_exe = cache_dir / (exe_hash + ".exe");
 
-    // Check if we have a cached executable
-    bool use_cached_exe = fs::exists(cached_exe);
+    // Check if we have a cached executable (skip if --no-cache)
+    bool use_cached_exe = !no_cache && fs::exists(cached_exe);
 
     if (!use_cached_exe) {
         // Link all object files to create executable

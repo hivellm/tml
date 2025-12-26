@@ -124,6 +124,8 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.release = true;
         } else if (arg == "--no-color") {
             opts.no_color = true;
+        } else if (arg == "--no-cache") {
+            opts.no_cache = true;
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--timeout=")) {
@@ -228,9 +230,9 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
     // Run test directly (parallelism is handled at the outer level)
     // Note: timeout is not enforced here - tests should complete reasonably fast
     if (opts.nocapture) {
-        result.exit_code = run_run(test_file, empty_args, opts.release);
+        result.exit_code = run_run(test_file, empty_args, opts.release, false, opts.no_cache);
     } else {
-        result.exit_code = run_run_quiet(test_file, empty_args, opts.release, &captured_output);
+        result.exit_code = run_run_quiet(test_file, empty_args, opts.release, &captured_output, false, opts.no_cache);
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();

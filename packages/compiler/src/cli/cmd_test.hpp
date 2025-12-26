@@ -57,6 +57,7 @@ struct TestOptions {
     std::string test_binary;              // Path to test binary (if provided)
     int timeout_seconds = 20;             // Test timeout in seconds (default: 20s)
     bool no_color = false;                // Disable colored output
+    bool no_cache = false;                // Disable build cache
 };
 
 // Parse test command arguments

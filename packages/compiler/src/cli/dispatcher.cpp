@@ -66,16 +66,20 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "build") {
         if (argc < 3) {
-            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--verbose]\n";
+            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--verbose] [--no-cache]\n";
             return 1;
         }
         bool emit_ir_only = false;
+        bool no_cache = false;
         for (int i = 3; i < argc; ++i) {
-            if (std::string(argv[i]) == "--emit-ir" || std::string(argv[i]) == "--emit-c") {
+            std::string arg = argv[i];
+            if (arg == "--emit-ir" || arg == "--emit-c") {
                 emit_ir_only = true;
+            } else if (arg == "--no-cache") {
+                no_cache = true;
             }
         }
-        return run_build(argv[2], verbose, emit_ir_only);
+        return run_build(argv[2], verbose, emit_ir_only, no_cache);
     }
 
     if (command == "fmt") {
@@ -94,17 +98,22 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "run") {
         if (argc < 3) {
-            std::cerr << "Usage: tml run <file.tml> [args...] [--verbose]\n";
+            std::cerr << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache]\n";
             return 1;
         }
         std::vector<std::string> program_args;
+        bool no_cache = false;
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
-            if (arg != "--verbose" && arg != "-v") {
+            if (arg == "--verbose" || arg == "-v") {
+                // Already handled
+            } else if (arg == "--no-cache") {
+                no_cache = true;
+            } else {
                 program_args.push_back(arg);
             }
         }
-        return run_run(argv[2], program_args, verbose);
+        return run_run(argv[2], program_args, verbose, false, no_cache);
     }
 
     if (command == "test") {

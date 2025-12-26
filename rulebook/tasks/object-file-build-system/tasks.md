@@ -1,6 +1,6 @@
 # Tasks: Object File Build System
 
-## Progress: 50% (30/60 tasks complete)
+## Progress: 52% (31/60 tasks complete)
 
 ## Phase 1: Object File Generation (Foundation) ✅ COMPLETE
 
@@ -64,7 +64,7 @@
 - [x] 2.3.3 Add `tml cache clean` command
 - [x] 2.3.4 Add `tml cache info` command
   - Show cache size, hit rate, entries
-- [ ] 2.3.5 Add `--no-cache` flag to disable caching
+- [x] 2.3.5 Add `--no-cache` flag to disable caching
 
 ### 2.4 Integration and Testing ✅
 - [x] 2.4.1 Integrate cache into build pipeline (run_build, run_run, run_test)
