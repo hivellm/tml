@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Codegen Builtins Refactoring** (2025-12-26) - Split monolithic builtin handler for maintainability
+  - Moved from single 2165-line `llvm_ir_gen_builtins.cpp` to modular structure
+  - New files in `src/codegen/builtins/`:
+    - `io.cpp` - print, println, panic
+    - `mem.cpp` - alloc, dealloc, mem_*
+    - `atomic.cpp` - atomic_*, fence_*
+    - `sync.cpp` - spinlock, threading, channels, mutex, waitgroup
+    - `time.cpp` - time_*, elapsed_*, Instant::*, Duration::*
+    - `math.cpp` - float_*, sqrt, pow, SIMD, black_box
+    - `collections.cpp` - list_*, hashmap_*, buffer_*
+    - `string.cpp` - str_* functions
+  - Each handler returns `std::optional<std::string>` for clean dispatch
+  - Main `gen_call` now dispatches to handlers, keeping enum/generic/user-defined call logic
+  - Updated CLAUDE.md with build instructions
+
 ### Added
 - **Atomic Operations & Synchronization Primitives** (2025-12-26) - Full type checker support for concurrency builtins
   - Atomic operations now registered as builtins in type checker:

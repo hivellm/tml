@@ -4,13 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**TML (To Machine Language)** is a programming language specification designed specifically for LLM code generation and analysis. This repository contains the complete language specification documentation.
+**TML (To Machine Language)** is a programming language designed specifically for LLM code generation and analysis. This repository contains:
+- Complete language specification documentation in `/docs/`
+- Full compiler implementation in `/packages/compiler/`
 
-**Status**: Specification only (no implementation yet)
+**Status**: Compiler implementation with LLVM IR backend
+
+## Build Commands
+
+**IMPORTANT**: Always use the build scripts, not cmake directly!
+
+```bash
+# Windows - from project root (f:\Node\hivellm\tml)
+scripts\build.bat              # Debug build (default)
+scripts\build.bat release      # Release build
+scripts\build.bat --clean      # Clean build
+scripts\build.bat --no-tests   # Skip tests
+
+# Run tests
+scripts\test.bat
+
+# Clean
+scripts\clean.bat
+```
+
+Output directories:
+- `build/debug/tml.exe` - Debug compiler
+- `build/release/tml.exe` - Release compiler
+- `build/debug/tml_tests.exe` - Test executable
 
 ## What This Project Is
 
-This is a **language specification project**, not an implementation. The `/docs/` directory contains the complete TML v1.0 specification:
+The `/docs/` directory contains the complete TML v1.0 specification:
 
 - Grammar (EBNF, LL(1) parser-friendly)
 - Type system (I8-I128, U8-U128, F32, F64)

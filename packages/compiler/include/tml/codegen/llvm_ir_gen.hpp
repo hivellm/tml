@@ -271,6 +271,18 @@ private:
                           size_t start_idx,
                           bool with_newline) -> std::string;
 
+    // ============ Builtin Function Handlers ============
+    // Each returns std::optional<std::string> - if handled, returns the result register
+    // If not handled, returns std::nullopt to fall through to user-defined functions
+    auto try_gen_builtin_io(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_mem(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_atomic(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_sync(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_math(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_collections(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string>;
+
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
 

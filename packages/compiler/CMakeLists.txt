@@ -147,6 +147,15 @@ add_library(tml_codegen STATIC
     src/codegen/llvm_ir_gen_control.cpp
     src/codegen/llvm_ir_gen_types.cpp
     src/codegen/c_header_gen.cpp
+    # Builtin function codegen (split for maintainability)
+    src/codegen/builtins/io.cpp
+    src/codegen/builtins/mem.cpp
+    src/codegen/builtins/atomic.cpp
+    src/codegen/builtins/sync.cpp
+    src/codegen/builtins/time.cpp
+    src/codegen/builtins/math.cpp
+    src/codegen/builtins/collections.cpp
+    src/codegen/builtins/string.cpp
     # src/codegen/c_gen.cpp  # Removed - using LLVM backend only
 )
 target_link_libraries(tml_codegen PUBLIC tml_ir)
