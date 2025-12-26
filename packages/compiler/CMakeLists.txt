@@ -170,6 +170,7 @@ add_library(tml_cli STATIC
     src/cli/cmd_build.cpp
     src/cli/cmd_format.cpp
     src/cli/cmd_test.cpp
+    src/cli/cmd_cache.cpp
     src/cli/dispatcher.cpp
     src/cli/object_compiler.cpp
     src/cli/parallel_build.cpp

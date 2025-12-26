@@ -3,6 +3,7 @@
 #include "cmd_build.hpp"
 #include "cmd_format.hpp"
 #include "cmd_test.hpp"
+#include "cmd_cache.hpp"
 #include "tml/common.hpp"
 #include <iostream>
 #include <string>
@@ -108,6 +109,10 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "test") {
         return run_test(argc, argv, verbose);
+    }
+
+    if (command == "cache") {
+        return run_cache(argc, argv);
     }
 
     if (command == "new") {
