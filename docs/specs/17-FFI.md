@@ -2,15 +2,176 @@
 
 ## 1. Overview
 
-TML FFI enables interoperability with C and other native libraries. This is essential for:
+TML FFI enables bidirectional interoperability with C and other native libraries. This is essential for:
+- **Importing**: Using C/C++ libraries from TML code
+- **Exporting**: Creating C-compatible libraries from TML code
 - System calls and OS APIs
-- Existing C/C++ libraries
 - Performance-critical native code
 - Platform-specific functionality
 
-## 2. Extern Declarations
+## 2. Exporting TML to C
 
-### 2.1 Extern Functions
+### 2.1 Public Functions
+
+Public functions are automatically exported with C linkage:
+
+```tml
+// math.tml
+module math
+
+// Exported as: int32_t tml_add(int32_t a, int32_t b)
+pub func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// Exported as: int32_t tml_multiply(int32_t x, int32_t y)
+pub func multiply(x: I32, y: I32) -> I32 {
+    return x * y
+}
+
+// Not exported (private)
+func helper(n: I32) -> I32 {
+    return n * 2
+}
+```
+
+### 2.2 Building C-Compatible Libraries
+
+**Static Library:**
+```bash
+tml build mylib.tml --crate-type lib
+# Generates:
+#   - build/debug/mylib.lib (Windows)
+#   - build/debug/libmylib.a (Linux/macOS)
+```
+
+**Dynamic Library:**
+```bash
+tml build mylib.tml --crate-type dylib
+# Generates:
+#   - build/debug/mylib.dll + mylib.lib (Windows)
+#   - build/debug/libmylib.so (Linux)
+#   - build/debug/libmylib.dylib (macOS)
+```
+
+**With Auto-Generated C Header:**
+```bash
+tml build mylib.tml --crate-type lib --emit-header
+# Generates:
+#   - build/debug/mylib.lib + mylib.h (Windows)
+#   - build/debug/libmylib.a + mylib.h (Linux/macOS)
+```
+
+### 2.3 Auto-Generated C Headers
+
+The `--emit-header` flag generates C-compatible headers:
+
+**TML code (math.tml):**
+```tml
+module math
+
+pub func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+pub func factorial(n: I32) -> I32 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+```
+
+**Generated header (math.h):**
+```c
+#ifndef TML_MATH_H
+#define TML_MATH_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// TML library: math
+// Auto-generated C header for FFI
+
+int32_t tml_add(int32_t a, int32_t b);
+int32_t tml_factorial(int32_t n);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // TML_MATH_H
+```
+
+### 2.4 Type Mapping (TML → C)
+
+Public function types are automatically mapped:
+
+| TML Type | C Type | Header Type |
+|----------|--------|-------------|
+| `I8` | `int8_t` | `#include <stdint.h>` |
+| `I16` | `int16_t` | `#include <stdint.h>` |
+| `I32` | `int32_t` | `#include <stdint.h>` |
+| `I64` | `int64_t` | `#include <stdint.h>` |
+| `U8` | `uint8_t` | `#include <stdint.h>` |
+| `U16` | `uint16_t` | `#include <stdint.h>` |
+| `U32` | `uint32_t` | `#include <stdint.h>` |
+| `U64` | `uint64_t` | `#include <stdint.h>` |
+| `F32` | `float` | Built-in |
+| `F64` | `double` | Built-in |
+| `Bool` | `bool` | `#include <stdbool.h>` |
+| `Str` | `const char*` | Built-in |
+| `ref T` | `T*` | Built-in |
+| `Ptr[T]` | `T*` | Built-in |
+
+### 2.5 Using TML Libraries from C
+
+**Compile TML library:**
+```bash
+tml build mylib.tml --crate-type lib --emit-header
+```
+
+**C program (main.c):**
+```c
+#include <stdio.h>
+#include "build/debug/mylib.h"
+
+int main() {
+    int32_t result = tml_add(5, 3);
+    printf("5 + 3 = %d\n", result);
+
+    int32_t fact = tml_factorial(5);
+    printf("5! = %d\n", fact);
+
+    return 0;
+}
+```
+
+**Compile C program:**
+```bash
+# Windows
+clang main.c -o main.exe build/debug/mylib.lib
+
+# Linux/macOS
+clang main.c -o main build/debug/libmylib.a
+```
+
+### 2.6 Naming Convention
+
+All exported TML functions use the `tml_` prefix to avoid naming conflicts:
+
+```tml
+pub func add(a: I32, b: I32) -> I32  // Exported as: tml_add
+pub func process_data(x: F64) -> F64  // Exported as: tml_process_data
+```
+
+## 3. Importing C into TML
+
+### 3.1 Extern Functions
 
 ```tml
 module native
@@ -29,7 +190,7 @@ extern "C" from "kernel32" func GetLastError() -> U32
 extern "C" from "kernel32" func SetLastError(code: U32)
 ```
 
-### 2.2 Extern Types
+### 3.2 Extern Types
 
 ```tml
 // Opaque type (size unknown, only used via pointer)
@@ -47,7 +208,7 @@ extern type timespec {
 }
 ```
 
-### 2.3 Extern Variables
+### 3.3 Extern Variables
 
 ```tml
 // Global C variables
@@ -57,9 +218,9 @@ extern "C" var stdout: *mut FILE
 extern "C" var stderr: *mut FILE
 ```
 
-## 3. Calling Conventions
+## 4. Calling Conventions
 
-### 3.1 Supported Conventions
+### 4.1 Supported Conventions
 
 | Convention | Syntax | Platform |
 |------------|--------|----------|
@@ -80,7 +241,7 @@ extern "stdcall" func WindowProc(
 ) -> I64
 ```
 
-### 3.2 Variadic Functions
+### 4.2 Variadic Functions
 
 ```tml
 // C variadic functions
@@ -93,9 +254,9 @@ lowlevel {
 }
 ```
 
-## 4. Raw Pointers
+## 5. Raw Pointers
 
-### 4.1 Pointer Types
+### 5.1 Pointer Types
 
 ```tml
 *const T    // immutable raw pointer
@@ -104,7 +265,7 @@ lowlevel {
 *mut Void   // mutable void pointer
 ```
 
-### 4.2 Pointer Operations
+### 5.2 Pointer Operations
 
 ```tml
 lowlevel func pointer_ops() {
@@ -134,7 +295,7 @@ lowlevel func pointer_ops() {
 }
 ```
 
-### 4.3 Pointer Methods
+### 5.3 Pointer Methods
 
 ```tml
 extend *const T {
@@ -158,9 +319,9 @@ extend *mut T {
 }
 ```
 
-## 5. Unsafe Blocks
+## 6. Unsafe Blocks
 
-### 5.1 Lowlevel Keyword
+### 6.1 Lowlevel Keyword
 
 ```tml
 func safe_wrapper() -> I32 {
@@ -180,7 +341,7 @@ func safe_wrapper() -> I32 {
 }
 ```
 
-### 5.2 Lowlevel Functions
+### 6.2 Lowlevel Functions
 
 ```tml
 // Entire function is lowlevel
@@ -201,7 +362,7 @@ func caller() {
 }
 ```
 
-### 5.3 What Requires Lowlevel
+### 6.3 What Requires Lowlevel
 
 | Operation | Lowlevel Required |
 |-----------|-------------------|
@@ -213,9 +374,9 @@ func caller() {
 | Union field access | Yes |
 | Inline assembly | Yes |
 
-## 6. C String Interop
+## 7. C String Interop
 
-### 6.1 C String Literals
+### 7.1 C String Literals
 
 ```tml
 // Null-terminated C string literal
@@ -225,7 +386,7 @@ let msg: *const U8 = c"Hello, World!"
 let bytes: *const U8 = b"binary data\x00\xFF"
 ```
 
-### 6.2 CString Type
+### 7.2 CString Type
 
 ```tml
 import std.ffi.CString
@@ -250,7 +411,7 @@ lowlevel func from_c(ptr: *const U8) -> String {
 }
 ```
 
-### 6.3 CStr (borrowed)
+### 7.3 CStr (borrowed)
 
 ```tml
 import std.ffi.CStr
@@ -273,9 +434,9 @@ lowlevel func process_c_string(ptr: *const U8) {
 }
 ```
 
-## 7. Type Mappings
+## 8. Type Mappings (C → TML)
 
-### 7.1 Primitive Type Mapping
+### 8.1 Primitive Type Mapping
 
 | TML Type | C Type | Size |
 |----------|--------|------|
@@ -295,7 +456,7 @@ lowlevel func process_c_string(ptr: *const U8) {
 | `*const Void` | `const void*` | ptr |
 | `*mut Void` | `void*` | ptr |
 
-### 7.2 Platform-Specific Types
+### 8.2 Platform-Specific Types
 
 ```tml
 import std.ffi.c.*
@@ -311,7 +472,7 @@ type c_char = I8      // or U8 on some platforms
 type c_wchar = I32    // or U16 on Windows
 ```
 
-### 7.3 Struct Layout
+### 8.3 Struct Layout
 
 ```tml
 // C-compatible struct layout
@@ -335,9 +496,9 @@ type AlignedData {
 }
 ```
 
-## 8. Unions
+## 9. Unions
 
-### 8.1 Union Declaration
+### 9.1 Union Declaration
 
 ```tml
 // C-style union
@@ -360,7 +521,7 @@ func use_union() {
 }
 ```
 
-### 8.2 Tagged Union Pattern
+### 9.2 Tagged Union Pattern
 
 ```tml
 @repr(C)
@@ -389,9 +550,9 @@ func get_int(tv: ref TaggedValue) -> Maybe[I64] {
 }
 ```
 
-## 9. Callbacks
+## 10. Callbacks
 
-### 9.1 Function Pointers
+### 10.1 Function Pointers
 
 ```tml
 // Function pointer type
@@ -428,7 +589,7 @@ func sort_array() {
 }
 ```
 
-### 9.2 Closures to C
+### 10.2 Closures to C
 
 ```tml
 // Closures cannot be directly passed to C
@@ -462,9 +623,9 @@ func trampoline[F: Fn()](user_data: *mut Void) {
 }
 ```
 
-## 10. Library Linking
+## 11. Library Linking
 
-### 10.1 Link Directives
+### 11.1 Link Directives
 
 ```tml
 // Link to system library
@@ -493,7 +654,7 @@ extern "C" {
 }
 ```
 
-### 10.2 Build Configuration
+### 11.2 Build Configuration
 
 ```toml
 # tml.toml
@@ -518,9 +679,9 @@ links = ["kernel32", "user32"]
 frameworks = ["Foundation", "Security"]
 ```
 
-## 11. Inline Assembly
+## 12. Inline Assembly
 
-### 11.1 Basic Assembly
+### 12.1 Basic Assembly
 
 ```tml
 // Inline assembly (platform-specific)
@@ -538,7 +699,7 @@ lowlevel func get_cpu_id() -> U32 {
 }
 ```
 
-### 11.2 Assembly Syntax
+### 12.2 Assembly Syntax
 
 ```tml
 asm! {
@@ -561,9 +722,9 @@ nostack              // doesn't use stack
 preserves_flags      // doesn't modify flags
 ```
 
-## 12. Platform Conditionals
+## 13. Platform Conditionals
 
-### 12.1 Conditional Compilation
+### 13.1 Conditional Compilation
 
 ```tml
 @when(target_os = "linux")
@@ -592,7 +753,7 @@ func optimized_routine() {
 }
 ```
 
-### 12.2 Platform Modules
+### 13.2 Platform Modules
 
 ```tml
 module mylib.platform
@@ -614,9 +775,9 @@ public behavior Platform {
 }
 ```
 
-## 13. Safety Guidelines
+## 14. Safety Guidelines
 
-### 13.1 Safe Wrappers
+### 14.1 Safe Wrappers
 
 ```tml
 // Always provide safe wrappers for FFI
@@ -640,7 +801,7 @@ public func safe_alloc(size: U64) -> Outcome[Heap[U8], AllocError] {
 }
 ```
 
-### 13.2 RAII for FFI Resources
+### 14.2 RAII for FFI Resources
 
 ```tml
 // Wrap C resources in RAII types

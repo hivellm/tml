@@ -45,6 +45,10 @@
 - [Standard Library](ch10-00-standard-library.md)
 - [Testing](ch11-00-testing.md)
 
+## Interoperability
+
+- [Building Libraries and C Interoperability](ch12-00-libraries-and-ffi.md)
+
 ## Appendix
 
 - [Appendix](appendix-00.md)
