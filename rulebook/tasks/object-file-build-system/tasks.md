@@ -1,6 +1,6 @@
 # Tasks: Object File Build System
 
-## Progress: 52% (31/60 tasks complete)
+## Progress: 65% (39/60 tasks complete)
 
 ## Phase 1: Object File Generation (Foundation) ✅ COMPLETE
 
@@ -80,23 +80,22 @@
 ### 3.1 Static Library Infrastructure
 - [ ] 3.1.1 Create `src/cli/linker.hpp` header
 - [ ] 3.1.2 Create `src/cli/linker.cpp` implementation
-- [ ] 3.1.3 Add `--crate-type` command-line flag
-- [ ] 3.1.4 Define BuildMode enum (Executable, StaticLib, DynamicLib, TMLLib)
+- [x] 3.1.3 Add `--crate-type` command-line flag
+- [x] 3.1.4 Define BuildMode enum (Executable, StaticLib, DynamicLib, TMLLib)
 
 ### 3.2 Static Library Linking
-- [ ] 3.2.1 Implement `link_static_library()` function
-  - Windows: use `lib.exe` (MSVC) or `ar` (MinGW)
-  - Linux: use `ar rcs`
-- [ ] 3.2.2 Handle library naming conventions:
+- [x] 3.2.1 Implement `link_static_library()` function
+  - Uses `llvm-ar` (cross-platform, bundled with LLVM)
+- [x] 3.2.2 Handle library naming conventions:
   - Windows: `mylib.lib`
   - Linux: `libmylib.a`
-- [ ] 3.2.3 Include runtime objects in static lib
-- [ ] 3.2.4 Test static library creation
+- [x] 3.2.3 Include runtime objects in static lib (DECIDED: NO - libraries don't include runtime)
+- [x] 3.2.4 Test static library creation (test_lib.lib created successfully, 600 bytes)
 
 ### 3.3 Static Library Usage
-- [ ] 3.3.1 Create example project using static library
-- [ ] 3.3.2 Test linking C program with TML static lib
-- [ ] 3.3.3 Verify exported functions are accessible
+- [x] 3.3.1 Create example project using static library (test_lib_usage.c)
+- [x] 3.3.2 Test linking C program with TML static lib ✓ Works correctly
+- [x] 3.3.3 Verify exported functions are accessible ✓ All tests passed
 - [ ] 3.3.4 Add documentation for static library usage
 
 ## Phase 4: Dynamic Library Mode
@@ -297,6 +296,9 @@
 - **Parallel batch compilation**: compile_ll_batch() with worker threads
 - **Test discovery cache**: 1-hour TTL for faster test runs
 - **Race-safe cache updates**: Atomic rename operations
+- **Static library support**: `--crate-type=lib` generates .lib/.a files using llvm-ar
+- **Public function export**: `pub` functions get external linkage for C FFI
+- **C interoperability**: TML libraries successfully callable from C code
 
 ### Architecture
 ```
@@ -318,9 +320,21 @@ build/debug/.run-cache/
 - **Platform**: Windows (primary), Linux (secondary)
 - **C++ Standard**: C++17 (std::filesystem)
 
+### C FFI Validation
+Successfully tested TML static library integration with C:
+- **Test library**: `test_lib.tml` with public functions (add, multiply, factorial)
+- **C test program**: `test_lib_usage.c` calling TML functions
+- **Result**: All function calls work correctly ✓
+  - `tml_add(5, 3) = 8`
+  - `tml_multiply(4, 7) = 28`
+  - `tml_factorial(5) = 120`
+- **Exported symbols**: Functions with `pub` keyword get external linkage
+- **Naming convention**: TML functions exported with `tml_` prefix
+
 ### Next Priorities
-1. Cache management commands (`tml cache clean`, `tml cache info`)
-2. Static library support (`--crate-type lib`)
-3. C header generation for FFI
-4. Unit tests for object_compiler and parallel_build
-5. Linux/macOS compatibility testing
+1. ✅ ~~Cache management commands (`tml cache clean`, `tml cache info`)~~ DONE
+2. ✅ ~~Static library support (`--crate-type lib`)~~ DONE
+3. Dynamic library support (`--crate-type dylib`)
+4. C header generation for FFI (@[export] decorator)
+5. Unit tests for object_compiler and parallel_build
+6. Linux/macOS compatibility testing

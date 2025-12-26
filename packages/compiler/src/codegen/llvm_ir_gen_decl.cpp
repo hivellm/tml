@@ -340,7 +340,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
     std::string func_llvm_name = "tml_" + func.name;
-    std::string linkage = (func.name == "main") ? "" : "internal ";
+    // Public functions and main get external linkage for library export
+    std::string linkage = (func.name == "main" || func.vis == parser::Visibility::Public) ? "" : "internal ";
     // Optimization attributes:
     // - nounwind: function doesn't throw exceptions
     // - mustprogress: function will eventually return (enables loop optimizations)
@@ -572,8 +573,10 @@ void LLVMIRGen::gen_func_instantiation(
 
     // 6. Emit function definition
     std::string attrs = " #0";
+    // Public functions get external linkage for library export
+    std::string linkage = (func.vis == parser::Visibility::Public) ? "" : "internal ";
     emit_line("");
-    emit_line("define internal " + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
+    emit_line("define " + linkage + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
     emit_line("entry:");
 
     // 7. Register parameters in locals_

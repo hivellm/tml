@@ -254,7 +254,7 @@ static fs::path get_run_cache_dir() {
     return cache;
 }
 
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache) {
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type) {
     (void)no_cache; // TODO: Implement cache control for build command
 
     std::string source_code;
@@ -393,16 +393,49 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     std::vector<fs::path> object_files;
     object_files.push_back(obj_result.object_file);
 
-    // Add runtime object files
-    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
-    object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+    // Add runtime object files only for executables (not for libraries)
+    if (output_type == BuildOutputType::Executable) {
+        auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+        object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+    }
 
-    // Step 3: Link all object files to create executable
+    // Step 3: Determine output file extension based on output type
+    fs::path final_output;
+    LinkOptions::OutputType link_output_type = LinkOptions::OutputType::Executable;
+
+    switch (output_type) {
+        case BuildOutputType::Executable:
+            final_output = exe_output;  // Already has .exe extension
+            link_output_type = LinkOptions::OutputType::Executable;
+            break;
+        case BuildOutputType::StaticLib:
+#ifdef _WIN32
+            final_output = build_dir / (module_name + ".lib");
+#else
+            final_output = build_dir / ("lib" + module_name + ".a");
+#endif
+            link_output_type = LinkOptions::OutputType::StaticLib;
+            break;
+        case BuildOutputType::DynamicLib:
+#ifdef _WIN32
+            final_output = build_dir / (module_name + ".dll");
+#else
+#ifdef __APPLE__
+            final_output = build_dir / ("lib" + module_name + ".dylib");
+#else
+            final_output = build_dir / ("lib" + module_name + ".so");
+#endif
+#endif
+            link_output_type = LinkOptions::OutputType::DynamicLib;
+            break;
+    }
+
+    // Link all object files
     LinkOptions link_options;
-    link_options.output_type = LinkOptions::OutputType::Executable;
+    link_options.output_type = link_output_type;
     link_options.verbose = verbose;
 
-    auto link_result = link_objects(object_files, exe_output, clang, link_options);
+    auto link_result = link_objects(object_files, final_output, clang, link_options);
     if (!link_result.success) {
         std::cerr << "error: " << link_result.error_message << "\n";
         return 1;
@@ -411,7 +444,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     // Clean up .ll file (keep .o file in cache for potential reuse)
     fs::remove(ll_output);
 
-    std::cout << "build: " << to_forward_slashes(exe_output.string()) << "\n";
+    std::cout << "build: " << to_forward_slashes(final_output.string()) << "\n";
     return 0;
 }
 

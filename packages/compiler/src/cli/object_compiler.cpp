@@ -181,25 +181,23 @@ LinkResult link_objects(
         }
 
         case LinkOptions::OutputType::StaticLib: {
+            // Use llvm-ar for cross-platform static library creation
+            // llvm-ar is bundled with LLVM and works on all platforms
+            fs::path clang_dir = fs::path(clang_path).parent_path();
+            fs::path llvm_ar = clang_dir / "llvm-ar";
 #ifdef _WIN32
-            // Windows: use lib.exe or llvm-ar
-            cmd << "lib.exe /OUT:\"" << to_forward_slashes(output_file) << "\"";
-            for (const auto& obj : object_files) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-            for (const auto& obj : options.additional_objects) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-#else
-            // Unix: use ar
-            cmd << "ar rcs \"" << to_forward_slashes(output_file) << "\"";
-            for (const auto& obj : object_files) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-            for (const auto& obj : options.additional_objects) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
+            llvm_ar += ".exe";
 #endif
+
+            cmd << to_forward_slashes(llvm_ar.string());
+            cmd << " rcs \"" << to_forward_slashes(output_file) << "\"";
+
+            for (const auto& obj : object_files) {
+                cmd << " \"" << to_forward_slashes(obj) << "\"";
+            }
+            for (const auto& obj : options.additional_objects) {
+                cmd << " \"" << to_forward_slashes(obj) << "\"";
+            }
             break;
         }
 

@@ -66,20 +66,36 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "build") {
         if (argc < 3) {
-            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--verbose] [--no-cache]\n";
+            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--verbose] [--no-cache] [--crate-type=<type>]\n";
+            std::cerr << "  Crate types: bin (default), lib, dylib\n";
             return 1;
         }
         bool emit_ir_only = false;
         bool no_cache = false;
+        BuildOutputType output_type = BuildOutputType::Executable;
+
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--emit-ir" || arg == "--emit-c") {
                 emit_ir_only = true;
             } else if (arg == "--no-cache") {
                 no_cache = true;
+            } else if (arg.starts_with("--crate-type=")) {
+                std::string crate_type = arg.substr(13);
+                if (crate_type == "bin") {
+                    output_type = BuildOutputType::Executable;
+                } else if (crate_type == "lib" || crate_type == "staticlib") {
+                    output_type = BuildOutputType::StaticLib;
+                } else if (crate_type == "dylib" || crate_type == "cdylib") {
+                    output_type = BuildOutputType::DynamicLib;
+                } else {
+                    std::cerr << "error: unknown crate type '" << crate_type << "'\n";
+                    std::cerr << "  valid types: bin, lib, dylib\n";
+                    return 1;
+                }
             }
         }
-        return run_build(argv[2], verbose, emit_ir_only, no_cache);
+        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type);
     }
 
     if (command == "fmt") {

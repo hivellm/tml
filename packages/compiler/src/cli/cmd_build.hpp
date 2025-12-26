@@ -4,8 +4,16 @@
 
 namespace tml::cli {
 
+// Build output types
+enum class BuildOutputType {
+    Executable,
+    StaticLib,
+    DynamicLib
+};
+
 // Build commands
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache = false);
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache = false,
+              BuildOutputType output_type = BuildOutputType::Executable);
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage = false, bool no_cache = false);
 
