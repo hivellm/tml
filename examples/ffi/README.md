@@ -4,7 +4,7 @@ This directory contains examples of using TML's Foreign Function Interface (FFI)
 
 ## Examples
 
-### 1. Math Library (`math_lib.tml`)
+### 1. Math Library - Static Linking (`math_lib.tml`)
 
 A comprehensive math library demonstrating:
 - Basic arithmetic operations (add, subtract, multiply, divide)
@@ -36,9 +36,54 @@ clang use_math_lib.c -o use_math_lib libmath_lib.a
 ./use_math_lib
 ```
 
-**Run:**
+**Output:**
+```
+=== TML Math Library Test ===
+
+Arithmetic Operations:
+  10 + 5 = 15
+  ...
+
+6/6 tests passed
+All tests passed! ✓
+```
+
+### 2. Math Library - Dynamic Linking (`math_lib.tml`)
+
+Same library as above, but built as a dynamic library (DLL/SO).
+
+**Build the DLL:**
 ```bash
-./use_math_lib
+tml build examples/ffi/math_lib.tml --crate-type=dylib --emit-header --out-dir=examples/ffi
+```
+
+This generates:
+- **Windows**: `examples/ffi/math_lib.dll` + `math_lib.lib` + `math_lib.h`
+- **Linux**: `examples/ffi/libmath_lib.so` + `math_lib.h`
+
+**Use from C (`use_math_dll.c`):**
+```bash
+cd examples/ffi
+
+# Windows
+clang use_math_dll.c -o use_math_dll.exe math_lib.lib
+./use_math_dll.exe
+
+# Linux
+clang use_math_dll.c -o use_math_dll -L. -lmath_lib
+LD_LIBRARY_PATH=. ./use_math_dll
+```
+
+**Output:**
+```
+=== TML Math Library DLL Test ===
+
+Dynamic Library Usage:
+  This program links to math_lib.dll at runtime
+  The DLL must be in the same directory or in PATH
+
+9/9 tests passed
+All DLL functions working correctly! ✓
 ```
 
 ## Auto-Generated Headers
@@ -98,12 +143,33 @@ TML types are automatically mapped to C types:
 - Code is linked into executable at compile time
 - No runtime dependencies
 
-### Dynamic Library (`--crate-type dylib`)
+### Dynamic Library (`--crate-type=dylib`)
 - **Windows**: `.dll` + `.lib` (import library)
 - **Linux**: `.so`
 - **macOS**: `.dylib`
 - Code is loaded at runtime
 - Smaller executables, shared between programs
+
+**Build dynamic library:**
+```bash
+tml build examples/ffi/math_lib.tml --crate-type=dylib --emit-header --out-dir=examples/ffi
+```
+
+**Use from C (`use_math_dll.c`):**
+```bash
+# Windows
+clang use_math_dll.c -o use_math_dll.exe math_lib.lib
+
+# Linux (requires -L. to find the .so at runtime)
+clang use_math_dll.c -o use_math_dll -L. -lmath_lib
+LD_LIBRARY_PATH=. ./use_math_dll
+```
+
+**Key differences from static libraries:**
+- The DLL/SO must be available at runtime (same directory or in system PATH/LD_LIBRARY_PATH)
+- Multiple programs can share the same DLL, reducing disk space
+- You can update the DLL without recompiling programs that use it
+- Slightly slower startup time due to dynamic linking
 
 ## Best Practices
 
