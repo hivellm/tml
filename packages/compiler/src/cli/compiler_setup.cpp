@@ -4,10 +4,18 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
+#include <mutex>
+#include <map>
+#include <thread>
+#include <chrono>
 
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+// Thread-safe compilation mutex (per-file basis)
+static std::mutex compilation_mutex;
+static std::map<std::string, bool> compilation_in_progress;
 
 #ifdef _WIN32
 MSVCInfo find_msvc() {
@@ -173,27 +181,55 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     obj_path += ".o";
 #endif
 
-    bool needs_compile = !fs::exists(obj_path);
-    if (!needs_compile) {
-        auto c_time = fs::last_write_time(c_path);
-        auto obj_time = fs::last_write_time(obj_path);
-        needs_compile = (c_time > obj_time);
+    std::string obj_path_str = to_forward_slashes(obj_path.string());
+
+    // Thread-safe check and compilation
+    bool should_compile = false;
+    {
+        std::lock_guard<std::mutex> lock(compilation_mutex);
+
+        // If another thread is compiling, wait by checking if file exists after lock
+        bool needs_compile = !fs::exists(obj_path);
+        if (!needs_compile) {
+            auto c_time = fs::last_write_time(c_path);
+            auto obj_time = fs::last_write_time(obj_path);
+            needs_compile = (c_time > obj_time);
+        }
+
+        if (needs_compile && !compilation_in_progress[obj_path_str]) {
+            compilation_in_progress[obj_path_str] = true;
+            should_compile = true;
+        }
     }
 
-    if (needs_compile) {
+    if (should_compile) {
         if (verbose) {
             std::cout << "Compiling: " << c_path.filename().string() << " -> " << obj_path.filename().string() << "\n";
         }
         std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                                  to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+                                  obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
+
+        // Mark compilation as done
+        {
+            std::lock_guard<std::mutex> lock(compilation_mutex);
+            compilation_in_progress.erase(obj_path_str);
+        }
+
         if (ret != 0) {
             // Fallback to returning .c path on compile failure
             return c_path_str;
         }
+    } else {
+        // Another thread compiled or is compiling - wait for file to exist
+        int retries = 0;
+        while (!fs::exists(obj_path) && retries < 100) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            retries++;
+        }
     }
 
-    return to_forward_slashes(obj_path.string());
+    return obj_path_str;
 }
 
 }

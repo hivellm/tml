@@ -5,6 +5,7 @@
 #include "utils.hpp"
 #include "tml/common.hpp"
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <algorithm>
 #include <cstdlib>
@@ -140,6 +141,31 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
 }
 
 std::vector<std::string> discover_test_files(const std::string& root_dir) {
+    // Try to use cached test list (valid for 1 hour)
+    fs::path cache_file = fs::path(root_dir) / "build" / "debug" / ".test-cache";
+
+    if (fs::exists(cache_file)) {
+        auto cache_time = fs::last_write_time(cache_file);
+        auto now = fs::file_time_type::clock::now();
+        auto age = std::chrono::duration_cast<std::chrono::seconds>(now - cache_time);
+
+        // Use cache if less than 1 hour old
+        if (age.count() < 3600) {
+            std::vector<std::string> test_files;
+            std::ifstream cache_in(cache_file);
+            std::string line;
+            while (std::getline(cache_in, line)) {
+                if (!line.empty() && fs::exists(line)) {
+                    test_files.push_back(line);
+                }
+            }
+            if (!test_files.empty()) {
+                return test_files;
+            }
+        }
+    }
+
+    // Scan filesystem
     std::vector<std::string> test_files;
 
     try {
@@ -173,6 +199,17 @@ std::vector<std::string> discover_test_files(const std::string& root_dir) {
     // Remove duplicates and sort
     std::sort(test_files.begin(), test_files.end());
     test_files.erase(std::unique(test_files.begin(), test_files.end()), test_files.end());
+
+    // Write to cache
+    try {
+        fs::create_directories(cache_file.parent_path());
+        std::ofstream cache_out(cache_file);
+        for (const auto& file : test_files) {
+            cache_out << file << "\n";
+        }
+    } catch (...) {
+        // Ignore cache write errors
+    }
 
     return test_files;
 }

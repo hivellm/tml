@@ -69,6 +69,29 @@ static std::string generate_exe_hash(const std::string& source_hash, const std::
     return oss.str();
 }
 
+// Fast file copy using hard links when possible, falls back to regular copy
+// Hard links are much faster because they don't copy data, just create a new directory entry
+static bool fast_copy_file(const fs::path& from, const fs::path& to) {
+    try {
+        // Remove destination if it exists
+        if (fs::exists(to)) {
+            fs::remove(to);
+        }
+
+        // Try hard link first (instant, no data copy)
+        try {
+            fs::create_hard_link(from, to);
+            return true;
+        } catch (...) {
+            // Hard link failed (maybe cross-device), fall back to copy
+            fs::copy_file(from, to, fs::copy_options::overwrite_existing);
+            return true;
+        }
+    } catch (...) {
+        return false;
+    }
+}
+
 // Find the project root by looking for markers like .git, CLAUDE.md, etc.
 static fs::path find_project_root() {
     fs::path current = fs::current_path();
@@ -590,11 +613,9 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         }
     }
 
-    // Copy cached exe to final location
-    try {
-        fs::copy_file(cached_exe, exe_output, fs::copy_options::overwrite_existing);
-    } catch (const std::exception& e) {
-        std::cerr << "error: Failed to copy cached exe: " << e.what() << "\n";
+    // Copy cached exe to final location (use hard link for speed)
+    if (!fast_copy_file(cached_exe, exe_output)) {
+        std::cerr << "error: Failed to copy cached exe to " << exe_output << "\n";
         return 1;
     }
 
@@ -821,11 +842,9 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
     }
 
-    // Copy cached exe to final unique location (for parallel test execution)
-    try {
-        fs::copy_file(cached_exe, exe_output, fs::copy_options::overwrite_existing);
-    } catch (const std::exception& e) {
-        if (output) *output = std::string("error: Failed to copy cached exe: ") + e.what();
+    // Copy cached exe to final unique location (use hard link for speed in parallel tests)
+    if (!fast_copy_file(cached_exe, exe_output)) {
+        if (output) *output = "error: Failed to copy cached exe";
         return 1;
     }
 
