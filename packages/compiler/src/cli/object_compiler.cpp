@@ -206,7 +206,17 @@ LinkResult link_objects(
             cmd << clang_path;  // Don't quote clang path
             cmd << " -shared";
 
-#ifndef _WIN32
+#ifdef _WIN32
+            // Windows: use LLD linker for consistent GNU-style flag support
+            cmd << " -fuse-ld=lld";
+            // Export all symbols from DLL
+            cmd << " -Wl,--export-all-symbols";
+            // Create import library alongside DLL
+            fs::path lib_file = output_file;
+            lib_file.replace_extension(".lib");
+            cmd << " -Wl,--out-implib=" << to_forward_slashes(lib_file);
+#else
+            // Unix: position-independent code required for shared libraries
             cmd << " -fPIC";
 #endif
 

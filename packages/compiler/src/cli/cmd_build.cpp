@@ -320,6 +320,10 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 
     codegen::LLVMGenOptions options;
     options.emit_comments = verbose;
+#ifdef _WIN32
+    // Enable DLL export for dynamic libraries on Windows
+    options.dll_export = (output_type == BuildOutputType::DynamicLib);
+#endif
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);

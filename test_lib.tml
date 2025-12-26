@@ -1,4 +1,4 @@
-// Test library for static library compilation
+// Test library for static/dynamic library compilation
 pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }

@@ -23,6 +23,7 @@ struct LLVMGenError {
 struct LLVMGenOptions {
     bool emit_comments = true;
     bool coverage_enabled = false;  // Inject coverage instrumentation
+    bool dll_export = false;        // Add dllexport for public functions (Windows DLL)
     std::string target_triple = "x86_64-pc-windows-msvc";
     std::string source_file;  // Source file path for coverage tracking
 };

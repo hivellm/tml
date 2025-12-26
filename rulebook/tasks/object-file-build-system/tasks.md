@@ -1,6 +1,6 @@
 # Tasks: Object File Build System
 
-## Progress: 65% (39/60 tasks complete)
+## Progress: 75% (45/60 tasks complete)
 
 ## Phase 1: Object File Generation (Foundation) ✅ COMPLETE
 
@@ -101,21 +101,23 @@
 ## Phase 4: Dynamic Library Mode
 
 ### 4.1 Dynamic Library Infrastructure
-- [ ] 4.1.1 Implement `link_dynamic_library()` function
-  - Windows: use `link.exe /DLL` or `clang -shared`
+- [x] 4.1.1 Implement `link_dynamic_library()` function
+  - Windows: use `clang -shared` with LLD linker
   - Linux: use `clang -shared -fPIC`
-- [ ] 4.1.2 Handle library naming conventions:
+- [x] 4.1.2 Handle library naming conventions:
   - Windows: `mylib.dll`
   - Linux: `libmylib.so`
   - macOS: `libmylib.dylib`
-- [ ] 4.1.3 Add position-independent code (PIC) flag for shared libs
-- [ ] 4.1.4 Handle symbol visibility (export all public functions)
+- [x] 4.1.3 Add position-independent code (PIC) flag for shared libs
+- [x] 4.1.4 Handle symbol visibility (export all public functions)
+  - Added `dllexport` attribute in LLVM IR for Windows
+  - Public functions automatically exported
 
 ### 4.2 Dynamic Library Testing
-- [ ] 4.2.1 Create example TML library
-- [ ] 4.2.2 Test loading .dll/.so from C program
-- [ ] 4.2.3 Test function calls across library boundary
-- [ ] 4.2.4 Test library on Windows
+- [x] 4.2.1 Create example TML library (test_lib.tml)
+- [x] 4.2.2 Test loading .dll/.so from C program (test_dll_usage.c)
+- [x] 4.2.3 Test function calls across library boundary ✓ All tests passed
+- [x] 4.2.4 Test library on Windows ✓ Working correctly
 - [ ] 4.2.5 Test library on Linux (if available)
 
 ## Phase 5: C Header Generation
@@ -321,6 +323,8 @@ build/debug/.run-cache/
 - **C++ Standard**: C++17 (std::filesystem)
 
 ### C FFI Validation
+
+**Static Library (.lib/.a):**
 Successfully tested TML static library integration with C:
 - **Test library**: `test_lib.tml` with public functions (add, multiply, factorial)
 - **C test program**: `test_lib_usage.c` calling TML functions
@@ -331,10 +335,23 @@ Successfully tested TML static library integration with C:
 - **Exported symbols**: Functions with `pub` keyword get external linkage
 - **Naming convention**: TML functions exported with `tml_` prefix
 
+**Dynamic Library (.dll/.so):**
+Successfully tested TML dynamic library integration with C:
+- **Test library**: `test_lib.tml` compiled with `--crate-type=dylib`
+- **C test program**: `test_dll_usage.c` loading TML DLL
+- **Result**: All function calls work correctly ✓
+  - `tml_add(10, 20) = 30`
+  - `tml_multiply(6, 9) = 54`
+  - `tml_factorial(6) = 720`
+- **Windows implementation**:
+  - Uses `dllexport` attribute in LLVM IR for public functions
+  - LLD linker creates import library (.lib) alongside DLL
+  - Public functions automatically exported from DLL
+
 ### Next Priorities
 1. ✅ ~~Cache management commands (`tml cache clean`, `tml cache info`)~~ DONE
 2. ✅ ~~Static library support (`--crate-type lib`)~~ DONE
-3. Dynamic library support (`--crate-type dylib`)
+3. ✅ ~~Dynamic library support (`--crate-type dylib`)~~ DONE
 4. C header generation for FFI (@[export] decorator)
 5. Unit tests for object_compiler and parallel_build
 6. Linux/macOS compatibility testing

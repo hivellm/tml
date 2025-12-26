@@ -342,13 +342,18 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     std::string func_llvm_name = "tml_" + func.name;
     // Public functions and main get external linkage for library export
     std::string linkage = (func.name == "main" || func.vis == parser::Visibility::Public) ? "" : "internal ";
+    // Windows DLL export for public functions
+    std::string dll_linkage = "";
+    if (options_.dll_export && func.vis == parser::Visibility::Public && func.name != "main") {
+        dll_linkage = "dllexport ";
+    }
     // Optimization attributes:
     // - nounwind: function doesn't throw exceptions
     // - mustprogress: function will eventually return (enables loop optimizations)
     // - willreturn: function will return (helps with dead code elimination)
     std::string attrs = " #0";
     emit_line("");
-    emit_line("define " + linkage + ret_type + " @" + func_llvm_name + "(" + params + ")" + attrs + " {");
+    emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params + ")" + attrs + " {");
     emit_line("entry:");
 
     // Register function parameters in locals_ by creating allocas
@@ -575,8 +580,13 @@ void LLVMIRGen::gen_func_instantiation(
     std::string attrs = " #0";
     // Public functions get external linkage for library export
     std::string linkage = (func.vis == parser::Visibility::Public) ? "" : "internal ";
+    // Windows DLL export for public functions
+    std::string dll_linkage = "";
+    if (options_.dll_export && func.vis == parser::Visibility::Public) {
+        dll_linkage = "dllexport ";
+    }
     emit_line("");
-    emit_line("define " + linkage + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
+    emit_line("define " + dll_linkage + linkage + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
     emit_line("entry:");
 
     // 7. Register parameters in locals_
