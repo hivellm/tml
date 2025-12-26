@@ -1,0 +1,38 @@
+// Simple Outcome[T, E] combinator test with non-generic helpers
+
+type Outcome[T, E] {
+    Ok(T),
+    Err(E)
+}
+
+// Non-generic helpers for I32
+func map_ok_i32(o: Outcome[I32, I32], f: func(I32) -> I32) -> Outcome[I32, I32] {
+    when o {
+        Ok(val) => return Ok(f(val)),
+        Err(e) => return Err(e)
+    }
+}
+
+func main() {
+    println("=== Simple Outcome[I32, I32] Test ===")
+
+    // Test map_ok on Ok value
+    let x: Outcome[I32, I32] = Ok(5)
+    let y: Outcome[I32, I32] = map_ok_i32(x, do(val: I32) val * 2)
+
+    when y {
+        Ok(v) => println("map_ok(Ok(5), *2) = Ok({})", v),
+        Err(_) => println("ERROR: Expected Ok(10), got Err")
+    }
+
+    // Test map_ok on Err value
+    let a: Outcome[I32, I32] = Err(42)
+    let b: Outcome[I32, I32] = map_ok_i32(a, do(val: I32) val * 2)
+
+    when b {
+        Ok(_) => println("ERROR: Expected Err(42), got Ok"),
+        Err(e) => println("map_ok(Err(42), *2) = Err({})", e)
+    }
+
+    println("Test completed!")
+}

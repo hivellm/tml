@@ -13,7 +13,6 @@ func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
         Ok(val) => return Ok(f(val)),
         Err(e) => return Err(e)
     }
-    return Err(e)
 }
 
 func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
@@ -21,7 +20,6 @@ func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
         Ok(val) => return Ok(val),
         Err(e) => return Err(f(e))
     }
-    return Err(f(e))
 }
 
 func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> Outcome[U, E] {
@@ -29,7 +27,6 @@ func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> Outc
         Ok(val) => return f(val),
         Err(e) => return Err(e)
     }
-    return Err(e)
 }
 
 func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[T, E] {
@@ -37,7 +34,6 @@ func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[
         Ok(val) => return Ok(val),
         Err(e) => return f(e)
     }
-    return f(e)
 }
 
 func main() {
@@ -47,29 +43,29 @@ func main() {
     // Test map_ok
     println("Testing map_ok:")
     let x: Outcome[I32, I32] = Ok(5)
-    let y: Outcome[I32, I32] = map_ok(x, do(val) val * 2)
+    let y: Outcome[I32, I32] = map_ok(x, do(val: I32) val * 2)
     when y {
         Ok(v) => println("  map_ok(Ok(5), *2) = Ok({})", v),
         Err(_) => println("  ERROR: Expected Ok(10), got Err")
     }
 
-    let z: Outcome[I32, I32] = map_ok(Err(42), do(val) val * 2)
+    let z: Outcome[I32, I32] = map_ok(Err(42), do(val: I32) val * 2)
     when z {
         Ok(_) => println("  ERROR: Expected Err(42), got Ok"),
-        Err(e) => println("  map_ok(Err(42), *2) = Err({})", e)
+        Err(err) => println("  map_ok(Err(42), *2) = Err({})", err)
     }
 
     // Test map_err
     println("")
     println("Testing map_err:")
     let a: Outcome[I32, I32] = Err(5)
-    let b: Outcome[I32, I32] = map_err(a, do(e) e * 2)
+    let b: Outcome[I32, I32] = map_err(a, do(err: I32) err * 2)
     when b {
         Ok(_) => println("  ERROR: Expected Err(10), got Ok"),
-        Err(e) => println("  map_err(Err(5), *2) = Err({})", e)
+        Err(err) => println("  map_err(Err(5), *2) = Err({})", err)
     }
 
-    let c: Outcome[I32, I32] = map_err(Ok(42), do(e) e * 2)
+    let c: Outcome[I32, I32] = map_err(Ok(42), do(err: I32) err * 2)
     when c {
         Ok(v) => println("  map_err(Ok(42), *2) = Ok({})", v),
         Err(_) => println("  ERROR: Expected Ok(42), got Err")
@@ -79,36 +75,36 @@ func main() {
     println("")
     println("Testing and_then_ok:")
     let d: Outcome[I32, I32] = Ok(5)
-    let e: Outcome[I32, I32] = and_then_ok(d, do(val) if val > 0 then Ok(val * 2) else Err(999))
-    when e {
+    let e1: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 0 then Ok(val * 2) else Err(999))
+    when e1 {
         Ok(v) => println("  and_then_ok(Ok(5), check>0) = Ok({})", v),
         Err(_) => println("  ERROR: Expected Ok(10), got Err")
     }
 
-    let f: Outcome[I32, I32] = and_then_ok(d, do(val) if val > 10 then Ok(val * 2) else Err(999))
+    let f: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 10 then Ok(val * 2) else Err(999))
     when f {
         Ok(_) => println("  ERROR: Expected Err(999), got Ok"),
-        Err(e) => println("  and_then_ok(Ok(5), check>10) = Err({})", e)
+        Err(err) => println("  and_then_ok(Ok(5), check>10) = Err({})", err)
     }
 
-    let g: Outcome[I32, I32] = and_then_ok(Err(100), do(val) Ok(val * 2))
+    let g: Outcome[I32, I32] = and_then_ok(Err(100), do(val: I32) Ok(val * 2))
     when g {
         Ok(_) => println("  ERROR: Expected Err(100), got Ok"),
-        Err(e) => println("  and_then_ok(Err(100), f) = Err({})", e)
+        Err(err) => println("  and_then_ok(Err(100), f) = Err({})", err)
     }
 
     // Test or_else_ok
     println("")
     println("Testing or_else_ok:")
     let h: Outcome[I32, I32] = Err(5)
-    let i: Outcome[I32, I32] = or_else_ok(h, do(e) Ok(0))
+    let i: Outcome[I32, I32] = or_else_ok(h, do(err: I32) Ok(0))
     when i {
         Ok(v) => println("  or_else_ok(Err(5), Ok(0)) = Ok({})", v),
         Err(_) => println("  ERROR: Expected Ok(0), got Err")
     }
 
     let j: Outcome[I32, I32] = Ok(42)
-    let k: Outcome[I32, I32] = or_else_ok(j, do(e) Ok(0))
+    let k: Outcome[I32, I32] = or_else_ok(j, do(err: I32) Ok(0))
     when k {
         Ok(v) => println("  or_else_ok(Ok(42), Ok(0)) = Ok({})", v),
         Err(_) => println("  ERROR: Expected Ok(42), got Err")
