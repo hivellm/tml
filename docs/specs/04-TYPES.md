@@ -349,7 +349,41 @@ func infinite() -> Never {
 
 ## 6. Memory Types
 
-### 6.1 Heap[T]
+### 6.1 Ptr[T] (Raw Pointer)
+
+Raw pointer type for low-level memory operations. Only usable inside `lowlevel` blocks.
+
+```tml
+lowlevel {
+    let mut x: I32 = 42
+    let p: *I32 = &x           // Pointer to I32
+
+    // Read value through pointer
+    let value: I32 = p.read()  // 42
+
+    // Write value through pointer
+    p.write(100)               // x is now 100
+
+    // Pointer arithmetic
+    let next: *I32 = p.offset(1)
+
+    // Null check
+    let valid: Bool = not p.is_null()
+}
+```
+
+**Pointer Methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `read` | `func read(this) -> T` | Read value at pointer location |
+| `write` | `func write(this, value: T)` | Write value to pointer location |
+| `offset` | `func offset(this, n: I64) -> *T` | Return pointer offset by n elements |
+| `is_null` | `func is_null(this) -> Bool` | Check if pointer is null |
+
+**Note:** See [06-MEMORY.md](./06-MEMORY.md#9-low-level-operations) for complete lowlevel and pointer documentation.
+
+### 6.2 Heap[T]
 
 Heap-allocated, single owner.
 
@@ -357,7 +391,7 @@ Heap-allocated, single owner.
 let data: Heap[LargeStruct] = Heap.new(create_large())
 ```
 
-### 6.2 Shared[T]
+### 6.3 Shared[T]
 
 Reference-counted, shared ownership (single-threaded).
 
@@ -366,7 +400,7 @@ let cache: Shared[Map[String, Data]] = Shared.new(Map.new())
 let copy: Shared[Map[String, Data]] = cache.duplicate()  // increments ref count
 ```
 
-### 6.3 Sync[T]
+### 6.4 Sync[T]
 
 Atomic reference-counted, thread-safe shared ownership.
 
@@ -642,7 +676,67 @@ extend Point with Default {
 }
 ```
 
-### 10.3 Automatic Generation
+### 10.3 Associated Types
+
+Behaviors can declare associated types that implementors must define:
+
+```tml
+behavior Iterator {
+    type Item                    // Associated type declaration
+
+    func next(mut ref this) -> Maybe[This::Item]
+}
+
+behavior Container {
+    type Element
+    type Index
+
+    func get(this, idx: This::Index) -> Maybe[This::Element]
+    func len(this) -> I32
+}
+```
+
+Implementations provide concrete types:
+
+```tml
+impl Iterator for NumberRange {
+    type Item = I32              // Associated type binding
+
+    func next(mut ref this) -> Maybe[I32] {
+        if this.current >= this.end {
+            return Nothing
+        }
+        let val: I32 = this.current
+        this.current = this.current + 1
+        return Just(val)
+    }
+}
+
+impl Container for List[T] {
+    type Element = T
+    type Index = I32
+
+    func get(this, idx: I32) -> Maybe[T] {
+        // ...
+    }
+
+    func len(this) -> I32 {
+        return this.length
+    }
+}
+```
+
+Associated types with bounds:
+
+```tml
+behavior Sortable {
+    type Item: Ordered           // Must implement Ordered behavior
+
+    func sort(mut ref this) -> Unit
+}
+```
+
+### 10.4 Automatic Generation
 
 ```tml
 @auto(equal, duplicate, default, debug)

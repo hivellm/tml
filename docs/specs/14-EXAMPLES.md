@@ -790,7 +790,146 @@ func simple_ops() -> I32 {
 }
 ```
 
-## 9. CLI Application
+## 9. Low-Level Memory Operations
+
+This section demonstrates TML's lowlevel blocks and pointer operations.
+
+### 9.1 Basic Pointer Operations
+
+```tml
+module pointer_basics
+
+// Swap two values using pointers
+func swap_values() -> (I32, I32) {
+    let mut a: I32 = 10
+    let mut b: I32 = 20
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+
+        // Read both values
+        let temp: I32 = pa.read()
+
+        // Swap using pointer writes
+        pa.write(pb.read())
+        pb.write(temp)
+    }
+
+    return (a, b)  // Returns (20, 10)
+}
+
+@test
+func test_swap() {
+    let (a, b) = swap_values()
+    assert_eq(a, 20)
+    assert_eq(b, 10)
+}
+```
+
+### 9.2 Pointer Arithmetic
+
+```tml
+module pointer_arithmetic
+
+// Sum an array using pointer arithmetic
+func sum_array() -> I32 {
+    let mut arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let mut total: I32 = 0
+
+    lowlevel {
+        let base: *I32 = &arr[0]
+        let mut i: I64 = 0
+
+        loop {
+            if i >= 5 then break
+
+            let current: *I32 = base.offset(i)
+            total = total + current.read()
+            i = i + 1
+        }
+    }
+
+    return total  // 15
+}
+
+@test
+func test_sum() {
+    assert_eq(sum_array(), 15)
+}
+```
+
+### 9.3 Memory Manipulation
+
+```tml
+module memory_ops
+caps: [system.lowlevel]
+
+// Zero out a buffer using pointers
+func zero_buffer(size: I32) {
+    let mut buffer: [U8; 256] = [0xFF; 256]
+
+    lowlevel {
+        let ptr: *U8 = &buffer[0]
+        let mut i: I64 = 0
+
+        loop {
+            if i >= size as I64 then break
+
+            let current: *U8 = ptr.offset(i)
+            current.write(0)
+            i = i + 1
+        }
+    }
+
+    // First 'size' bytes are now zero
+}
+
+// Check if pointer is valid before use
+func safe_read(ptr: *I32) -> Maybe[I32] {
+    lowlevel {
+        if ptr.is_null() {
+            return Nothing
+        }
+        return Just(ptr.read())
+    }
+}
+```
+
+### 9.4 FFI Integration Pattern
+
+```tml
+module ffi_example
+caps: [system.ffi, system.lowlevel]
+
+// Example: Calling a C function that takes a buffer
+// (Conceptual - actual FFI syntax may vary)
+
+type CBuffer {
+    data: *U8,
+    len: I64,
+}
+
+func process_with_c_lib(input: ref [U8; 1024]) -> Outcome[I32, Error] {
+    lowlevel {
+        let ptr: *U8 = &input[0]
+
+        // Create C-compatible buffer struct
+        let c_buf: CBuffer = CBuffer {
+            data: ptr,
+            len: 1024,
+        }
+
+        // Call external C function (hypothetical)
+        // let result: I32 = c_process_buffer(&c_buf)
+        // return Ok(result)
+
+        return Ok(0)
+    }
+}
+```
+
+## 10. CLI Application
 
 ```tml
 module cli
