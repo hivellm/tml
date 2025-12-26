@@ -2,6 +2,10 @@
 #include <iostream>
 #include <sstream>
 #include <cstdlib>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -252,6 +256,76 @@ LinkResult link_objects(
 
     result.success = true;
     result.output_file = output_file;
+    return result;
+}
+
+// ============================================================================
+// Batch Compilation
+// ============================================================================
+
+BatchCompileResult compile_ll_batch(
+    const std::vector<fs::path>& ll_files,
+    const std::string& clang_path,
+    const ObjectCompileOptions& options,
+    int num_threads
+) {
+    BatchCompileResult result;
+    result.success = true;
+
+    if (ll_files.empty()) {
+        return result;
+    }
+
+    // Determine number of threads
+    if (num_threads == 0) {
+        num_threads = std::thread::hardware_concurrency();
+        if (num_threads == 0) num_threads = 4;
+    }
+
+    // Limit threads to number of files
+    if (ll_files.size() < static_cast<size_t>(num_threads)) {
+        num_threads = static_cast<int>(ll_files.size());
+    }
+
+    // Thread-safe result collection
+    std::mutex result_mutex;
+    std::atomic<size_t> current_index{0};
+
+    // Worker function
+    auto worker = [&]() {
+        while (true) {
+            size_t index = current_index.fetch_add(1);
+            if (index >= ll_files.size()) {
+                break;
+            }
+
+            const auto& ll_file = ll_files[index];
+
+            // Compile this file
+            auto compile_result = compile_ll_to_object(ll_file, std::nullopt, clang_path, options);
+
+            // Store result
+            std::lock_guard<std::mutex> lock(result_mutex);
+            if (compile_result.success) {
+                result.object_files.push_back(compile_result.object_file);
+            } else {
+                result.success = false;
+                result.errors.push_back(compile_result.error_message);
+            }
+        }
+    };
+
+    // Launch worker threads
+    std::vector<std::thread> workers;
+    for (int i = 0; i < num_threads; ++i) {
+        workers.emplace_back(worker);
+    }
+
+    // Wait for completion
+    for (auto& thread : workers) {
+        thread.join();
+    }
+
     return result;
 }
 

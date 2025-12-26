@@ -172,6 +172,7 @@ add_library(tml_cli STATIC
     src/cli/cmd_test.cpp
     src/cli/dispatcher.cpp
     src/cli/object_compiler.cpp
+    src/cli/parallel_build.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)

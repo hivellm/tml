@@ -70,6 +70,31 @@ ObjectCompileResult compile_ll_to_object(
 );
 
 /**
+ * Batch compilation result
+ */
+struct BatchCompileResult {
+    bool success;
+    std::vector<fs::path> object_files;
+    std::vector<std::string> errors;
+};
+
+/**
+ * Compile multiple LLVM IR files in parallel
+ *
+ * @param ll_files Paths to LLVM IR files
+ * @param clang_path Path to clang executable
+ * @param options Compilation options
+ * @param num_threads Number of parallel threads (0 = auto)
+ * @return Batch compilation result
+ */
+BatchCompileResult compile_ll_batch(
+    const std::vector<fs::path>& ll_files,
+    const std::string& clang_path,
+    const ObjectCompileOptions& options,
+    int num_threads = 0
+);
+
+/**
  * Link object files to create final output
  *
  * @param object_files List of .o/.obj files to link
