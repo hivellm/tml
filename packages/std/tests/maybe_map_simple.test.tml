@@ -1,0 +1,38 @@
+// Simple test for Maybe map combinator
+
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
+    when m {
+        Just(val) => return Just(f(val)),
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+func main() {
+    println("=== Simple Maybe map Test ===")
+
+    // Test 1: map on Just
+    let x: Maybe[I32] = Just(5)
+    let y: Maybe[I32] = map(x, do(val: I32) val * 2)
+
+    when y {
+        Just(v) => println("map(Just(5), *2) = Just({})", v),
+        Nothing => println("ERROR: got Nothing")
+    }
+
+    // Test 2: map on Nothing
+    let n: Maybe[I32] = Nothing
+    let z: Maybe[I32] = map(n, do(val: I32) val * 2)
+
+    when z {
+        Just(_) => println("ERROR: expected Nothing"),
+        Nothing => println("map(Nothing, *2) = Nothing")
+    }
+
+    println("Test completed!")
+}

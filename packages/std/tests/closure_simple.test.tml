@@ -1,0 +1,14 @@
+// Very simple closure test
+
+func apply(x: I32, f: func(I32) -> I32) -> I32 {
+    return f(x)
+}
+
+func main() {
+    println("=== Simple Closure Test ===")
+
+    let result: I32 = apply(5, do(val: I32) val * 2)
+    println("apply(5, *2) = {}", result)
+
+    println("Test completed!")
+}

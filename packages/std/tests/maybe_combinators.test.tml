@@ -1,0 +1,118 @@
+// Tests for Maybe[T] combinators
+// Tests: map, and_then, filter, or_else
+
+// Define types locally (until enum variant import is fixed)
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+// Combinator functions
+func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
+    when m {
+        Just(val) => return Just(f(val)),
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
+    when m {
+        Just(val) => return f(val),
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+func filter[T](m: Maybe[T], predicate: func(T) -> Bool) -> Maybe[T] {
+    when m {
+        Just(val) => {
+            if predicate(val) then {
+                return Just(val)
+            }
+            return Nothing
+        },
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
+    when m {
+        Just(val) => return Just(val),
+        Nothing => return f()
+    }
+    return f()
+}
+
+func main() {
+    println("=== Maybe[T] Combinators Test ===")
+    println("")
+
+    // Test map
+    println("Testing map:")
+    let x: Maybe[I32] = Just(5)
+    let y: Maybe[I32] = map(x, do(val: I32) val * 2)
+    when y {
+        Just(v) => println("  map(Just(5), *2) = Just({})", v),
+        Nothing => println("  ERROR: Expected Just(10), got Nothing")
+    }
+
+    let z: Maybe[I32] = map(Nothing, do(val: I32) val * 2)
+    when z {
+        Just(_) => println("  ERROR: Expected Nothing, got Just"),
+        Nothing => println("  map(Nothing, *2) = Nothing")
+    }
+
+    // Test and_then
+    println("")
+    println("Testing and_then:")
+    let a: Maybe[I32] = Just(5)
+    let b: Maybe[I32] = and_then(a, do(val: I32) if val > 0 then Just(val * 2) else Nothing)
+    when b {
+        Just(v) => println("  and_then(Just(5), check>0) = Just({})", v),
+        Nothing => println("  ERROR: Expected Just(10), got Nothing")
+    }
+
+    let c: Maybe[I32] = and_then(a, do(val: I32) if val > 10 then Just(val * 2) else Nothing)
+    when c {
+        Just(_) => println("  ERROR: Expected Nothing, got Just"),
+        Nothing => println("  and_then(Just(5), check>10) = Nothing")
+    }
+
+    // Test filter
+    println("")
+    println("Testing filter:")
+    let d: Maybe[I32] = Just(5)
+    let e: Maybe[I32] = filter(d, do(val: I32) val > 3)
+    when e {
+        Just(v) => println("  filter(Just(5), >3) = Just({})", v),
+        Nothing => println("  ERROR: Expected Just(5), got Nothing")
+    }
+
+    let f: Maybe[I32] = filter(d, do(val: I32) val > 10)
+    when f {
+        Just(_) => println("  ERROR: Expected Nothing, got Just"),
+        Nothing => println("  filter(Just(5), >10) = Nothing")
+    }
+
+    // Test or_else
+    println("")
+    println("Testing or_else:")
+    let g: Maybe[I32] = Nothing
+    let h: Maybe[I32] = or_else(g, do() Just(42))
+    when h {
+        Just(v) => println("  or_else(Nothing, Just(42)) = Just({})", v),
+        Nothing => println("  ERROR: Expected Just(42), got Nothing")
+    }
+
+    let i: Maybe[I32] = Just(10)
+    let j: Maybe[I32] = or_else(i, do() Just(42))
+    when j {
+        Just(v) => println("  or_else(Just(10), Just(42)) = Just({})", v),
+        Nothing => println("  ERROR: Expected Just(10), got Nothing")
+    }
+
+    println("")
+    println("All Maybe[T] combinator tests completed!")
+}

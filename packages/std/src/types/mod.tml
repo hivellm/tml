@@ -49,6 +49,73 @@ pub func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
     return default_val
 }
 
+/// Maps a Maybe[T] to Maybe[U] by applying a function to the contained value
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let y: Maybe[I32] = map(x, do(val) val * 2)  // Just(10)
+/// let z: Maybe[I32] = map(Nothing, do(val) val * 2)  // Nothing
+/// ```
+pub func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
+    when m {
+        Just(val) => return Just(f(val)),
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+/// Applies a function that returns a Maybe to the contained value (flatMap/bind)
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let y: Maybe[I32] = and_then(x, do(val) if val > 0 then Just(val * 2) else Nothing)
+/// ```
+pub func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
+    when m {
+        Just(val) => return f(val),
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+/// Filters a Maybe based on a predicate function
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let y: Maybe[I32] = filter(x, do(val) val > 3)  // Just(5)
+/// let z: Maybe[I32] = filter(x, do(val) val > 10)  // Nothing
+/// ```
+pub func filter[T](m: Maybe[T], predicate: func(T) -> Bool) -> Maybe[T] {
+    when m {
+        Just(val) => {
+            if predicate(val) then {
+                return Just(val)
+            }
+            return Nothing
+        },
+        Nothing => return Nothing
+    }
+    return Nothing
+}
+
+/// Returns this Maybe if it contains a value, otherwise returns the alternative
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Nothing
+/// let y: Maybe[I32] = or_else(x, do() Just(42))  // Just(42)
+/// ```
+pub func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
+    when m {
+        Just(val) => return Just(val),
+        Nothing => return f()
+    }
+    return f()
+}
+
 // ============================================================================
 // Outcome[T, E] - Result type for error handling
 // ============================================================================
@@ -105,4 +172,66 @@ pub func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
         Err(e) => return e
     }
     return default_val
+}
+
+/// Maps an Outcome[T, E] to Outcome[U, E] by applying a function to the Ok value
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Ok(5)
+/// let y: Outcome[I32, Str] = map_ok(x, do(val) val * 2)  // Ok(10)
+/// let z: Outcome[I32, Str] = map_ok(Err("error"), do(val) val * 2)  // Err("error")
+/// ```
+pub func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
+    when o {
+        Ok(val) => return Ok(f(val)),
+        Err(e) => return Err(e)
+    }
+    return Err(e)
+}
+
+/// Maps an Outcome[T, E] to Outcome[T, F] by applying a function to the Err value
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, I32] = Err(5)
+/// let y: Outcome[I32, I32] = map_err(x, do(e) e * 2)  // Err(10)
+/// let z: Outcome[I32, I32] = map_err(Ok(42), do(e) e * 2)  // Ok(42)
+/// ```
+pub func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
+    when o {
+        Ok(val) => return Ok(val),
+        Err(e) => return Err(f(e))
+    }
+    return Err(f(e))
+}
+
+/// Applies a function that returns an Outcome to the Ok value (flatMap/bind)
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Ok(5)
+/// let y: Outcome[I32, Str] = and_then_ok(x, do(val) if val > 0 then Ok(val * 2) else Err("negative"))
+/// ```
+pub func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> Outcome[U, E] {
+    when o {
+        Ok(val) => return f(val),
+        Err(e) => return Err(e)
+    }
+    return Err(e)
+}
+
+/// Returns this Outcome if it's Ok, otherwise returns the result of calling f with the error
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Err("error")
+/// let y: Outcome[I32, Str] = or_else_ok(x, do(e) Ok(0))  // Ok(0)
+/// ```
+pub func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[T, E] {
+    when o {
+        Ok(val) => return Ok(val),
+        Err(e) => return f(e)
+    }
+    return f(e)
 }
