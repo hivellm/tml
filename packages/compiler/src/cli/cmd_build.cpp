@@ -38,14 +38,32 @@ static std::string generate_cache_key(const std::string& path) {
     return oss.str();
 }
 
+// Find the project root by looking for markers like .git, CLAUDE.md, etc.
+static fs::path find_project_root() {
+    fs::path current = fs::current_path();
+
+    // Walk up the directory tree looking for project markers
+    while (!current.empty() && current != current.parent_path()) {
+        // Check for common project markers
+        if (fs::exists(current / ".git") ||
+            fs::exists(current / "CLAUDE.md") ||
+            fs::exists(current / "packages")) {
+            return current;
+        }
+        current = current.parent_path();
+    }
+
+    // Fallback to current working directory
+    return fs::current_path();
+}
+
 // Find or create build directory for a TML project
 // Returns: project_root/build/debug or project_root/build/release
-static fs::path get_build_dir(const fs::path& source_file, bool release = false) {
-    // For now, use the source file's directory as project root
-    // In the future, we could look for tml.toml or similar
-    fs::path project_root = source_file.parent_path();
+static fs::path get_build_dir(bool release = false) {
+    // Always use the project root, never create build dirs next to source files
+    fs::path project_root = find_project_root();
 
-    // Create build directory structure
+    // Create build directory structure in project root
     fs::path build_dir = project_root / "build" / (release ? "release" : "debug");
     fs::create_directories(build_dir);
 
@@ -166,40 +184,18 @@ static std::string link_runtimes_cached(
 
 // Get the global deps cache directory
 static fs::path get_deps_cache_dir() {
-    // Use a global cache in the TML installation or current working directory
-    std::vector<std::string> cache_search = {
-        "build/debug/deps",
-        "F:/Node/hivellm/tml/build/debug/deps",
-    };
-    for (const auto& p : cache_search) {
-        fs::path dir = p;
-        if (fs::exists(dir.parent_path())) {
-            fs::create_directories(dir);
-            return dir;
-        }
-    }
-    // Fallback to local build/debug/deps
-    fs::path deps = fs::current_path() / "build" / "debug" / "deps";
+    // Always use project root for deps cache
+    fs::path project_root = find_project_root();
+    fs::path deps = project_root / "build" / "debug" / "deps";
     fs::create_directories(deps);
     return deps;
 }
 
 // Get the global run cache directory (for tml run temporary files)
 static fs::path get_run_cache_dir() {
-    // Use a global cache - not local to each file
-    std::vector<std::string> cache_search = {
-        "build/debug/.run-cache",
-        "F:/Node/hivellm/tml/build/debug/.run-cache",
-    };
-    for (const auto& p : cache_search) {
-        fs::path dir = p;
-        if (fs::exists(dir.parent_path().parent_path())) {
-            fs::create_directories(dir);
-            return dir;
-        }
-    }
-    // Fallback to current directory
-    fs::path cache = fs::current_path() / "build" / "debug" / ".run-cache";
+    // Always use project root for run cache
+    fs::path project_root = find_project_root();
+    fs::path cache = project_root / "build" / "debug" / ".run-cache";
     fs::create_directories(cache);
     return cache;
 }
@@ -283,10 +279,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
 
-    fs::path input_path = fs::absolute(path);
-
     // Use build directory structure (like Rust's target/)
-    fs::path build_dir = get_build_dir(input_path, false /* debug */);
+    fs::path build_dir = get_build_dir(false /* debug */);
     fs::path ll_output = build_dir / (module_name + ".ll");
     fs::path exe_output = build_dir / module_name;
 #ifdef _WIN32
@@ -498,12 +492,12 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     int run_ret = std::system(run_cmd.c_str());
 
-    // Keep cache files for faster re-runs (in build/.cache/)
-    // Only clean up .ll files, keep .exe for potential caching
-    if (!verbose) {
-        fs::remove(ll_output);  // Remove intermediate .ll file
-    } else {
-        std::cout << "Build cache at: " << cache_dir << "\n";
+    // Clean up temporary files after run (user requested this behavior)
+    fs::remove(ll_output);   // Remove intermediate .ll file
+    fs::remove(exe_output);  // Remove executable after running
+
+    if (verbose) {
+        std::cout << "Cleaned up temporary build files\n";
     }
 
 #ifdef _WIN32
