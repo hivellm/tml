@@ -1,6 +1,7 @@
 #include "cmd_build.hpp"
 #include "utils.hpp"
 #include "compiler_setup.hpp"
+#include "object_compiler.hpp"
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
@@ -35,6 +36,16 @@ static std::string generate_cache_key(const std::string& path) {
 
     std::ostringstream oss;
     oss << std::hex << std::setw(8) << std::setfill('0') << (combined & 0xFFFFFFFF);
+    return oss.str();
+}
+
+// Generate a content hash for caching compiled object files
+static std::string generate_content_hash(const std::string& content) {
+    std::hash<std::string> hasher;
+    size_t hash = hasher(content);
+
+    std::ostringstream oss;
+    oss << std::hex << std::setw(16) << std::setfill('0') << hash;
     return oss.str();
 }
 
@@ -85,23 +96,23 @@ static bool has_bench_functions(const parser::Module& module) {
     return false;
 }
 
-// Helper to link runtime files with caching
-// Returns the additional arguments to pass to clang
-static std::string link_runtimes_cached(
+// Helper to get runtime object files as a vector
+// Returns a vector of compiled runtime object file paths
+static std::vector<fs::path> get_runtime_objects(
     const std::shared_ptr<types::ModuleRegistry>& registry,
     const parser::Module& module,
     const std::string& deps_cache,
     const std::string& clang,
     bool verbose
 ) {
-    std::string result;
+    std::vector<fs::path> objects;
 
     // Helper to find and compile runtime with caching
-    auto link_runtime = [&](const std::vector<std::string>& search_paths, const std::string& name) {
+    auto add_runtime = [&](const std::vector<std::string>& search_paths, const std::string& name) {
         for (const auto& path : search_paths) {
             if (fs::exists(path)) {
                 std::string obj = ensure_c_compiled(to_forward_slashes(fs::absolute(path).string()), deps_cache, clang, verbose);
-                result += " \"" + obj + "\"";
+                objects.push_back(fs::path(obj));
                 if (verbose) {
                     std::cout << "Including " << name << ": " << obj << "\n";
                 }
@@ -114,7 +125,7 @@ static std::string link_runtimes_cached(
     std::string runtime_path = find_runtime();
     if (!runtime_path.empty()) {
         std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
-        result += " \"" + obj + "\"";
+        objects.push_back(fs::path(obj));
         if (verbose) {
             std::cout << "Including runtime: " << obj << "\n";
         }
@@ -122,7 +133,7 @@ static std::string link_runtimes_cached(
 
     // Link core module runtimes if they were imported
     if (registry->has_module("core::mem")) {
-        link_runtime({
+        add_runtime({
             "packages/core/runtime/mem.c",
             "../../../core/runtime/mem.c",
             "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
@@ -131,7 +142,7 @@ static std::string link_runtimes_cached(
 
     // Link time runtime if core::time is imported OR if @bench decorators are present
     if (registry->has_module("core::time") || has_bench_functions(module)) {
-        link_runtime({
+        add_runtime({
             "packages/core/runtime/time.c",
             "../../../core/runtime/time.c",
             "F:/Node/hivellm/tml/packages/core/runtime/time.c",
@@ -139,7 +150,7 @@ static std::string link_runtimes_cached(
     }
 
     if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
-        link_runtime({
+        add_runtime({
             "packages/core/runtime/thread.c",
             "../../../core/runtime/thread.c",
             "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
@@ -147,14 +158,14 @@ static std::string link_runtimes_cached(
     }
 
     if (registry->has_module("test")) {
-        link_runtime({
+        add_runtime({
             "packages/test/runtime/test.c",
             "../../../test/runtime/test.c",
             "F:/Node/hivellm/tml/packages/test/runtime/test.c",
         }, "test");
 
         // Also link coverage runtime (part of test module)
-        link_runtime({
+        add_runtime({
             "packages/test/runtime/coverage.c",
             "../../../test/runtime/coverage.c",
             "F:/Node/hivellm/tml/packages/test/runtime/coverage.c",
@@ -163,7 +174,7 @@ static std::string link_runtimes_cached(
 
     // Link std::collections runtime if imported
     if (registry->has_module("std::collections")) {
-        link_runtime({
+        add_runtime({
             "packages/std/runtime/collections.c",
             "../../../std/runtime/collections.c",
             "F:/Node/hivellm/tml/packages/std/runtime/collections.c",
@@ -172,14 +183,14 @@ static std::string link_runtimes_cached(
 
     // Link std::file runtime if imported
     if (registry->has_module("std::file")) {
-        link_runtime({
+        add_runtime({
             "packages/std/runtime/file.c",
             "../../../std/runtime/file.c",
             "F:/Node/hivellm/tml/packages/std/runtime/file.c",
         }, "std::file");
     }
 
-    return result;
+    return objects;
 }
 
 // Get the global deps cache directory
@@ -305,33 +316,57 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     }
 
     std::string clang = find_clang();
-    std::string ll_path = to_forward_slashes(ll_output.string());
-    std::string exe_path = to_forward_slashes(exe_output.string());
 
     // Create deps cache directory for precompiled runtimes
     fs::path deps_dir = build_dir / "deps";
     fs::create_directories(deps_dir);
     std::string deps_cache = to_forward_slashes(deps_dir.string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                              exe_path + "\" \"" + ll_path + "\"";
+    // Create .cache directory for object files
+    fs::path cache_dir = build_dir / ".cache";
+    fs::create_directories(cache_dir);
 
-    // Link all runtimes with caching
-    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
+    // Step 1: Compile LLVM IR (.ll) to object file (.o/.obj)
+    ObjectCompileOptions obj_options;
+    obj_options.optimization_level = 3;  // -O3
+    obj_options.debug_info = false;      // No debug info in release mode
+    obj_options.verbose = verbose;
 
-    if (verbose) {
-        std::cout << "Running: " << compile_cmd << "\n";
-    }
+    fs::path obj_output = cache_dir / (module_name + get_object_extension());
 
-    int ret = std::system(compile_cmd.c_str());
-    if (ret != 0) {
-        std::cerr << "error: LLVM compilation failed\n";
+    auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+    if (!obj_result.success) {
+        std::cerr << "error: " << obj_result.error_message << "\n";
         return 1;
     }
 
+    if (verbose) {
+        std::cout << "Generated: " << obj_result.object_file << "\n";
+    }
+
+    // Step 2: Collect all object files to link (main .o + runtime .o files)
+    std::vector<fs::path> object_files;
+    object_files.push_back(obj_result.object_file);
+
+    // Add runtime object files
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+
+    // Step 3: Link all object files to create executable
+    LinkOptions link_options;
+    link_options.output_type = LinkOptions::OutputType::Executable;
+    link_options.verbose = verbose;
+
+    auto link_result = link_objects(object_files, exe_output, clang, link_options);
+    if (!link_result.success) {
+        std::cerr << "error: " << link_result.error_message << "\n";
+        return 1;
+    }
+
+    // Clean up .ll file (keep .o file in cache for potential reuse)
     fs::remove(ll_output);
 
-    std::cout << "build: " << exe_path << "\n";
+    std::cout << "build: " << to_forward_slashes(exe_output.string()) << "\n";
     return 0;
 }
 
@@ -419,58 +454,88 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     // Use centralized run cache - NEVER create files inside packages
     fs::path cache_dir = get_run_cache_dir();
 
-    fs::path ll_output = cache_dir / (module_name + ".ll");
+    // Calculate content hash for caching
+    std::string content_hash = generate_content_hash(source_code);
+
+    fs::path ll_output = cache_dir / (content_hash + ".ll");
+    fs::path obj_output = cache_dir / (content_hash + get_object_extension());
     fs::path exe_output = cache_dir / module_name;
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
 
-    std::ofstream ll_file(ll_output);
-    if (!ll_file) {
-        std::cerr << "error: Cannot write to " << ll_output << "\n";
-        return 1;
-    }
-    ll_file << llvm_ir;
-    ll_file.close();
-
-    if (verbose) {
-        std::cout << "Generated: " << ll_output << "\n";
-    }
-
     std::string clang = find_clang();
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
         std::cerr << "error: clang not found.\n";
         std::cerr << "Please install LLVM/clang\n";
-        fs::remove(ll_output);  // Clean up .ll file
         return 1;
     }
-
-    if (verbose) {
-        std::cout << "Using compiler: " << clang << "\n";
-    }
-
-    std::string ll_path = to_forward_slashes(ll_output.string());
-    std::string exe_path = to_forward_slashes(exe_output.string());
 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                              exe_path + "\" \"" + ll_path + "\"";
+    // Check if we have a cached object file
+    bool use_cached_obj = fs::exists(obj_output);
 
-    // Link all runtimes with caching
-    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
+    if (use_cached_obj) {
+        if (verbose) {
+            std::cout << "Using cached object: " << obj_output << "\n";
+        }
+    } else {
+        // Write LLVM IR to file
+        std::ofstream ll_file(ll_output);
+        if (!ll_file) {
+            std::cerr << "error: Cannot write to " << ll_output << "\n";
+            return 1;
+        }
+        ll_file << llvm_ir;
+        ll_file.close();
 
-    if (verbose) {
-        std::cout << "Compiling: " << compile_cmd << "\n";
+        if (verbose) {
+            std::cout << "Generated: " << ll_output << "\n";
+        }
+
+        // Compile LLVM IR to object file
+        ObjectCompileOptions obj_options;
+        obj_options.optimization_level = 3;  // -O3
+        obj_options.debug_info = false;
+        obj_options.verbose = verbose;
+
+        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        if (!obj_result.success) {
+            std::cerr << "error: " << obj_result.error_message << "\n";
+            fs::remove(ll_output);
+            return 1;
+        }
+
+        if (verbose) {
+            std::cout << "Compiled to: " << obj_result.object_file << "\n";
+        }
+
+        // Clean up .ll file (keep .obj for caching)
+        fs::remove(ll_output);
     }
 
-    int compile_ret = std::system(compile_cmd.c_str());
-    if (compile_ret != 0) {
-        std::cerr << "error: LLVM compilation failed\n";
+    // Collect all object files to link
+    std::vector<fs::path> object_files;
+    object_files.push_back(obj_output);
+
+    // Add runtime object files
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+
+    // Link all object files to create executable
+    LinkOptions link_options;
+    link_options.output_type = LinkOptions::OutputType::Executable;
+    link_options.verbose = verbose;
+
+    auto link_result = link_objects(object_files, exe_output, clang, link_options);
+    if (!link_result.success) {
+        std::cerr << "error: " << link_result.error_message << "\n";
         return 1;
     }
 
+    std::string exe_path = to_forward_slashes(exe_output.string());
     std::string run_cmd;
 #ifdef _WIN32
     // Windows: use cmd /c to properly handle relative paths with forward slashes
@@ -492,12 +557,11 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     int run_ret = std::system(run_cmd.c_str());
 
-    // Clean up temporary files after run (user requested this behavior)
-    fs::remove(ll_output);   // Remove intermediate .ll file
-    fs::remove(exe_output);  // Remove executable after running
+    // Clean up temporary executable (keep .obj in cache for reuse)
+    fs::remove(exe_output);
 
     if (verbose) {
-        std::cout << "Cleaned up temporary build files\n";
+        std::cout << "Cleaned up temporary executable\n";
     }
 
 #ifdef _WIN32
@@ -593,24 +657,20 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     // Use centralized run cache - NEVER create files inside packages
     fs::path cache_dir = get_run_cache_dir();
 
-    // Generate unique file names using path hash + thread ID to avoid race conditions
+    // Calculate content hash for caching (unique per source content)
+    std::string content_hash = generate_content_hash(source_code);
+
+    // Generate unique file names using cache key + thread ID for exe/output (to avoid race conditions)
     std::string cache_key = generate_cache_key(path);
     std::string unique_name = module_name + "_" + cache_key;
 
-    fs::path ll_output = cache_dir / (unique_name + ".ll");
+    fs::path ll_output = cache_dir / (content_hash + ".ll");
+    fs::path obj_output = cache_dir / (content_hash + get_object_extension());
     fs::path exe_output = cache_dir / unique_name;
     fs::path out_file = cache_dir / (unique_name + "_output.txt");
 #ifdef _WIN32
     exe_output += ".exe";
 #endif
-
-    std::ofstream ll_file(ll_output);
-    if (!ll_file) {
-        if (output) *output = "error: Cannot write to " + ll_output.string();
-        return 1;
-    }
-    ll_file << llvm_ir;
-    ll_file.close();
 
     std::string clang = find_clang();
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
@@ -618,29 +678,55 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         return 1;
     }
 
-    std::string ll_path = to_forward_slashes(ll_output.string());
-    std::string exe_path = to_forward_slashes(exe_output.string());
-
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                              exe_path + "\" \"" + ll_path + "\"";
+    // Check if we have a cached object file
+    bool use_cached_obj = fs::exists(obj_output);
 
-    // Link all runtimes with caching
-    compile_cmd += link_runtimes_cached(registry, module, deps_cache, clang, verbose);
+    if (!use_cached_obj) {
+        // Write LLVM IR to file
+        std::ofstream ll_file(ll_output);
+        if (!ll_file) {
+            if (output) *output = "error: Cannot write to " + ll_output.string();
+            return 1;
+        }
+        ll_file << llvm_ir;
+        ll_file.close();
 
-    // Redirect compile output to null (only stderr, keep stdout for errors)
-#ifdef _WIN32
-    compile_cmd += " 2>nul";
-#else
-    compile_cmd += " 2>/dev/null";
-#endif
+        // Compile LLVM IR to object file
+        ObjectCompileOptions obj_options;
+        obj_options.optimization_level = 3;  // -O3
+        obj_options.debug_info = false;
+        obj_options.verbose = false;  // Always quiet for tests
 
-    int compile_ret = std::system(compile_cmd.c_str());
-    if (compile_ret != 0) {
-        if (output) *output = "error: LLVM compilation failed";
-        fs::remove(ll_output);  // Clean up .ll file
+        auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+        if (!obj_result.success) {
+            if (output) *output = "error: " + obj_result.error_message;
+            fs::remove(ll_output);
+            return 1;
+        }
+
+        // Clean up .ll file (keep .obj for caching)
+        fs::remove(ll_output);
+    }
+
+    // Collect all object files to link
+    std::vector<fs::path> object_files;
+    object_files.push_back(obj_output);
+
+    // Add runtime object files
+    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
+    object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
+
+    // Link all object files to create executable
+    LinkOptions link_options;
+    link_options.output_type = LinkOptions::OutputType::Executable;
+    link_options.verbose = false;  // Always quiet for tests
+
+    auto link_result = link_objects(object_files, exe_output, clang, link_options);
+    if (!link_result.success) {
+        if (output) *output = "error: " + link_result.error_message;
         return 1;
     }
 
@@ -675,10 +761,9 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
                               std::istreambuf_iterator<char>());
     }
 
-    // Clean up all intermediate files (unique names per thread, no caching benefit)
-    fs::remove(ll_output);
+    // Clean up temporary files (keep .obj in cache for reuse)
     fs::remove(out_file);
-    fs::remove(exe_output);  // Also remove exe since it has unique thread-specific name
+    fs::remove(exe_output);
 
 #ifdef _WIN32
     return run_ret;
