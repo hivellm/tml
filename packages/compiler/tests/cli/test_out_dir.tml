@@ -1,0 +1,19 @@
+// Test for --out-dir parameter
+// This file tests that the --out-dir parameter correctly places build artifacts
+// in the specified directory
+
+pub func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+pub func multiply(x: I32, y: I32) -> I32 {
+    return x * y
+}
+
+func main() {
+    let result: I32 = add(10, 20)
+    println("10 + 20 = {}", result)
+
+    let product: I32 = multiply(5, 6)
+    println("5 * 6 = {}", product)
+}
