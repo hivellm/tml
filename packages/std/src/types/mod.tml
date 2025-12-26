@@ -1,0 +1,108 @@
+// TML Standard Library - Core Types
+// Provides: Maybe[T], Outcome[T, E], and utility functions
+
+// ============================================================================
+// Maybe[T] - Optional values
+// ============================================================================
+
+/// Optional value type - represents a value that may or may not exist.
+/// Use Maybe instead of null pointers for safe optional handling.
+///
+/// Example:
+/// ```tml
+/// func find_user(id: I32) -> Maybe[User] {
+///     if id > 0 {
+///         return Just(get_user(id))
+///     }
+///     return Nothing
+/// }
+/// ```
+pub type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+/// Returns true if the Maybe contains a value
+pub func is_just[T](m: Maybe[T]) -> Bool {
+    when m {
+        Just(_) => return true,
+        Nothing => return false
+    }
+    return false
+}
+
+/// Returns true if the Maybe is empty
+pub func is_nothing[T](m: Maybe[T]) -> Bool {
+    when m {
+        Just(_) => return false,
+        Nothing => return true
+    }
+    return true
+}
+
+/// Unwraps the value or returns a default
+pub func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
+    when m {
+        Just(val) => return val,
+        Nothing => return default_val
+    }
+    return default_val
+}
+
+// ============================================================================
+// Outcome[T, E] - Result type for error handling
+// ============================================================================
+
+/// Result type for operations that can fail.
+/// Use Outcome instead of exceptions for explicit error handling.
+///
+/// Example:
+/// ```tml
+/// func parse_int(s: Str) -> Outcome[I32, Str] {
+///     // parsing logic...
+///     if success {
+///         return Ok(value)
+///     }
+///     return Err("invalid number")
+/// }
+/// ```
+pub type Outcome[T, E] {
+    Ok(T),
+    Err(E)
+}
+
+/// Returns true if the Outcome is Ok
+pub func is_ok[T, E](o: Outcome[T, E]) -> Bool {
+    when o {
+        Ok(_) => return true,
+        Err(_) => return false
+    }
+    return false
+}
+
+/// Returns true if the Outcome is Err
+pub func is_err[T, E](o: Outcome[T, E]) -> Bool {
+    when o {
+        Ok(_) => return false,
+        Err(_) => return true
+    }
+    return true
+}
+
+/// Unwraps the Ok value or returns a default
+pub func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
+    when o {
+        Ok(val) => return val,
+        Err(_) => return default_val
+    }
+    return default_val
+}
+
+/// Unwraps the Err value or returns a default
+pub func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
+    when o {
+        Ok(_) => return default_val,
+        Err(e) => return e
+    }
+    return default_val
+}

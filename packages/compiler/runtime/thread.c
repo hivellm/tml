@@ -31,7 +31,7 @@ static DWORD WINAPI thread_wrapper(LPVOID arg) {
     return 0;
 }
 
-void* tml_thread_spawn(ThreadFunc func, void* arg) {
+void* thread_spawn(ThreadFunc func, void* arg) {
     ThreadArgs* args = (ThreadArgs*)malloc(sizeof(ThreadArgs));
     args->func = func;
     args->arg = arg;
@@ -39,16 +39,16 @@ void* tml_thread_spawn(ThreadFunc func, void* arg) {
     return (void*)handle;
 }
 
-void tml_thread_join(void* handle) {
+void thread_join(void* handle) {
     WaitForSingleObject((HANDLE)handle, INFINITE);
     CloseHandle((HANDLE)handle);
 }
 
-void tml_thread_yield(void) {
+void thread_yield(void) {
     SwitchToThread();
 }
 
-void tml_thread_sleep_ms(int64_t ms) {
+void thread_sleep_ms(int64_t ms) {
     Sleep((DWORD)ms);
 }
 #else
@@ -59,7 +59,7 @@ static void* thread_wrapper(void* arg) {
     return NULL;
 }
 
-void* tml_thread_spawn(ThreadFunc func, void* arg) {
+void* thread_spawn(ThreadFunc func, void* arg) {
     ThreadArgs* args = (ThreadArgs*)malloc(sizeof(ThreadArgs));
     args->func = func;
     args->arg = arg;
@@ -68,16 +68,16 @@ void* tml_thread_spawn(ThreadFunc func, void* arg) {
     return thread;
 }
 
-void tml_thread_join(void* handle) {
+void thread_join(void* handle) {
     pthread_join(*(pthread_t*)handle, NULL);
     free(handle);
 }
 
-void tml_thread_yield(void) {
+void thread_yield(void) {
     sched_yield();
 }
 
-void tml_thread_sleep_ms(int64_t ms) {
+void thread_sleep_ms(int64_t ms) {
     usleep((useconds_t)(ms * 1000));
 }
 #endif
@@ -102,7 +102,7 @@ typedef struct Channel {
 #endif
 } Channel;
 
-Channel* tml_channel_new(int64_t capacity) {
+Channel* channel_new(int64_t capacity) {
     Channel* ch = (Channel*)malloc(sizeof(Channel));
     ch->capacity = capacity > 0 ? capacity : 1;
     ch->buffer = (void**)malloc(sizeof(void*) * (size_t)ch->capacity);
@@ -122,7 +122,7 @@ Channel* tml_channel_new(int64_t capacity) {
     return ch;
 }
 
-void tml_channel_send(Channel* ch, void* data) {
+void channel_send(Channel* ch, void* data) {
 #ifdef _WIN32
     EnterCriticalSection(&ch->lock);
     while (ch->count == ch->capacity && !ch->closed) {
@@ -150,7 +150,7 @@ void tml_channel_send(Channel* ch, void* data) {
 #endif
 }
 
-void* tml_channel_recv(Channel* ch) {
+void* channel_recv(Channel* ch) {
     void* data = NULL;
 #ifdef _WIN32
     EnterCriticalSection(&ch->lock);
@@ -180,7 +180,7 @@ void* tml_channel_recv(Channel* ch) {
     return data;
 }
 
-int tml_channel_try_send(Channel* ch, void* data) {
+int channel_try_send(Channel* ch, void* data) {
     int success = 0;
 #ifdef _WIN32
     EnterCriticalSection(&ch->lock);
@@ -206,7 +206,7 @@ int tml_channel_try_send(Channel* ch, void* data) {
     return success;
 }
 
-void* tml_channel_try_recv(Channel* ch) {
+void* channel_try_recv(Channel* ch) {
     void* data = NULL;
 #ifdef _WIN32
     EnterCriticalSection(&ch->lock);
@@ -230,7 +230,7 @@ void* tml_channel_try_recv(Channel* ch) {
     return data;
 }
 
-void tml_channel_close(Channel* ch) {
+void channel_close(Channel* ch) {
 #ifdef _WIN32
     EnterCriticalSection(&ch->lock);
     ch->closed = 1;
@@ -246,11 +246,11 @@ void tml_channel_close(Channel* ch) {
 #endif
 }
 
-int tml_channel_is_closed(Channel* ch) {
+int channel_is_closed(Channel* ch) {
     return ch->closed;
 }
 
-void tml_channel_free(Channel* ch) {
+void channel_free(Channel* ch) {
 #ifdef _WIN32
     DeleteCriticalSection(&ch->lock);
 #else
@@ -272,7 +272,7 @@ typedef struct Mutex {
 #endif
 } Mutex;
 
-Mutex* tml_mutex_new(void) {
+Mutex* mutex_new(void) {
     Mutex* m = (Mutex*)malloc(sizeof(Mutex));
 #ifdef _WIN32
     InitializeCriticalSection(&m->cs);
@@ -282,7 +282,7 @@ Mutex* tml_mutex_new(void) {
     return m;
 }
 
-void tml_mutex_lock(Mutex* m) {
+void mutex_lock(Mutex* m) {
 #ifdef _WIN32
     EnterCriticalSection(&m->cs);
 #else
@@ -290,7 +290,7 @@ void tml_mutex_lock(Mutex* m) {
 #endif
 }
 
-void tml_mutex_unlock(Mutex* m) {
+void mutex_unlock(Mutex* m) {
 #ifdef _WIN32
     LeaveCriticalSection(&m->cs);
 #else
@@ -298,7 +298,7 @@ void tml_mutex_unlock(Mutex* m) {
 #endif
 }
 
-int tml_mutex_try_lock(Mutex* m) {
+int mutex_try_lock(Mutex* m) {
 #ifdef _WIN32
     return TryEnterCriticalSection(&m->cs);
 #else
@@ -306,7 +306,7 @@ int tml_mutex_try_lock(Mutex* m) {
 #endif
 }
 
-void tml_mutex_free(Mutex* m) {
+void mutex_free(Mutex* m) {
 #ifdef _WIN32
     DeleteCriticalSection(&m->cs);
 #else
@@ -328,7 +328,7 @@ typedef struct WaitGroup {
 #endif
 } WaitGroup;
 
-WaitGroup* tml_waitgroup_new(void) {
+WaitGroup* waitgroup_new(void) {
     WaitGroup* wg = (WaitGroup*)malloc(sizeof(WaitGroup));
     atomic_init(&wg->count, 0);
 #ifdef _WIN32
@@ -341,11 +341,11 @@ WaitGroup* tml_waitgroup_new(void) {
     return wg;
 }
 
-void tml_waitgroup_add(WaitGroup* wg, int64_t delta) {
+void waitgroup_add(WaitGroup* wg, int64_t delta) {
     atomic_fetch_add(&wg->count, delta);
 }
 
-void tml_waitgroup_done(WaitGroup* wg) {
+void waitgroup_done(WaitGroup* wg) {
     int64_t old = atomic_fetch_sub(&wg->count, 1);
     if (old == 1) {
 #ifdef _WIN32
@@ -356,7 +356,7 @@ void tml_waitgroup_done(WaitGroup* wg) {
     }
 }
 
-void tml_waitgroup_wait(WaitGroup* wg) {
+void waitgroup_wait(WaitGroup* wg) {
 #ifdef _WIN32
     EnterCriticalSection(&wg->lock);
     while (atomic_load(&wg->count) > 0) {
@@ -372,7 +372,7 @@ void tml_waitgroup_wait(WaitGroup* wg) {
 #endif
 }
 
-void tml_waitgroup_free(WaitGroup* wg) {
+void waitgroup_free(WaitGroup* wg) {
 #ifdef _WIN32
     DeleteCriticalSection(&wg->lock);
 #else
@@ -388,28 +388,28 @@ typedef struct AtomicCounter {
     atomic_int_fast64_t value;
 } AtomicCounter;
 
-AtomicCounter* tml_atomic_new(int64_t initial) {
+AtomicCounter* atomic_new(int64_t initial) {
     AtomicCounter* a = (AtomicCounter*)malloc(sizeof(AtomicCounter));
     atomic_init(&a->value, initial);
     return a;
 }
 
-int64_t tml_atomic_load(AtomicCounter* a) {
+int64_t atomic_load(AtomicCounter* a) {
     return atomic_load(&a->value);
 }
 
-void tml_atomic_store(AtomicCounter* a, int64_t value) {
+void atomic_store(AtomicCounter* a, int64_t value) {
     atomic_store(&a->value, value);
 }
 
-int64_t tml_atomic_add(AtomicCounter* a, int64_t delta) {
+int64_t atomic_add(AtomicCounter* a, int64_t delta) {
     return atomic_fetch_add(&a->value, delta);
 }
 
-int64_t tml_atomic_sub(AtomicCounter* a, int64_t delta) {
+int64_t atomic_sub(AtomicCounter* a, int64_t delta) {
     return atomic_fetch_sub(&a->value, delta);
 }
 
-void tml_atomic_free(AtomicCounter* a) {
+void atomic_free(AtomicCounter* a) {
     free(a);
 }

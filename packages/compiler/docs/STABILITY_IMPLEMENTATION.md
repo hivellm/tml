@@ -52,7 +52,7 @@ functions_["print_i32"] = FuncSig{
     false,
     span,
     StabilityLevel::Deprecated,                                    // NEW
-    "Use toString(value) + print() instead",                      // NEW
+    "Use polymorphic print() instead (e.g., print(42))",                      // NEW
     "1.2"                                                          // NEW
 };
 ```

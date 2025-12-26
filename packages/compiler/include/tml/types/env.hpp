@@ -184,6 +184,11 @@ namespace tml::types
         std::unordered_map<std::string, ImportedSymbol> imported_symbols_; // local_name -> import info
 
         void init_builtins();
+        void init_builtin_types();
+        void init_builtin_io();
+        void init_builtin_string();
+        void init_builtin_time();
+        void init_builtin_mem();
 
         // NOTE: init_std_*_module() functions removed - modules now load from .tml files
     };

@@ -1,7 +1,9 @@
 # RFC-0004: Error Handling
 
 ## Status
-Draft
+Partial (v0.4.0)
+
+> `Maybe[T]` and `Outcome[T, E]` types implemented with pattern matching. The `!` propagation operator pending.
 
 ## Summary
 

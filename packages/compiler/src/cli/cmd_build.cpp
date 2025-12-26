@@ -143,6 +143,24 @@ static std::string link_runtimes_cached(
         }, "test::coverage");
     }
 
+    // Link std::collections runtime if imported
+    if (registry->has_module("std::collections")) {
+        link_runtime({
+            "packages/std/runtime/collections.c",
+            "../../../std/runtime/collections.c",
+            "F:/Node/hivellm/tml/packages/std/runtime/collections.c",
+        }, "std::collections");
+    }
+
+    // Link std::file runtime if imported
+    if (registry->has_module("std::file")) {
+        link_runtime({
+            "packages/std/runtime/file.c",
+            "../../../std/runtime/file.c",
+            "F:/Node/hivellm/tml/packages/std/runtime/file.c",
+        }, "std::file");
+    }
+
     return result;
 }
 
@@ -301,7 +319,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only) {
     fs::create_directories(deps_dir);
     std::string deps_cache = to_forward_slashes(deps_dir.string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
     // Link all runtimes with caching
@@ -443,7 +461,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
     // Link all runtimes with caching
@@ -612,7 +630,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
 
-    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+    std::string compile_cmd = clang + " -Wno-override-module -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
                               exe_path + "\" \"" + ll_path + "\"";
 
     // Link all runtimes with caching

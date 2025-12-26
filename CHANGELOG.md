@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Trait Objects** (2025-12-24) - Dynamic dispatch with `dyn Behavior` syntax
+  - Vtable generation for behavior implementations
+  - Method resolution through vtables
+  - Example: `func print_any(obj: dyn Display) { obj.display() }`
+- **Build Scripts** (2025-12-23) - Cross-platform build automation
+  - `scripts/build.sh` and `scripts/build.bat` for building
+  - `scripts/test.sh` and `scripts/test.bat` for running tests
+  - `scripts/clean.sh` and `scripts/clean.bat` for cleaning
+  - Target triple-based build directories (like Rust's `target/`)
+- **Vitest-like Test Output** (2025-12-23) - Modern test runner UI
+  - Colored output with ANSI codes
+  - Test groups organized by directory
+  - Beautiful summary with timing
+- **Test Timeout** (2025-12-23) - Prevent infinite loops in tests
+  - Default 20 second timeout per test
+  - Configurable via `--timeout=N` CLI flag
+- **Parallel Test Execution** (2025-12-23) - Multi-threaded test runner
+  - Auto-detection of CPU cores
+  - `--test-threads=N` flag for manual control
+- **Benchmarking** (2025-12-23) - Performance testing with `@bench` decorator
+  - Automatic 1000-iteration execution
+  - Microsecond timing with `tml_time_us()`
+- **Polymorphic print()** (2025-12-23) - Single print function for all types
+  - Accepts I32, Bool, Str, F64, etc.
+  - Compiler resolves correct runtime function
+- **Module System** (2025-12-23) - Full `use` declaration support
+  - Module imports working (`use test`, `use core::mem`)
+  - Module registry and resolution
 - **Const Declarations** (2025-12-22) - Global constants with full compiler support
   - Parser: `parse_const_decl()` in `parser_decl.cpp`
   - Type Checker: `check_const_decl()` in `checker.cpp`
@@ -67,8 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compiler warning - Suppressed `-Wno-override-module` flag
 
 ### Deprecated
-- `print_i32()` - Use `toString(value) + print()` instead (since v1.2)
-- `print_bool()` - Use `toString(value) + print()` instead (since v1.2)
+- `print_i32()` - Use `polymorphic print()` instead (since v1.2)
+- `print_bool()` - Use `polymorphic print()` instead (since v1.2)
 
 ### Documentation
 - 18 language specification documents in docs/specs/
@@ -80,15 +108,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known Limitations
 See [COMPILER_MISSING_FEATURES.md](./docs/COMPILER_MISSING_FEATURES.md) for comprehensive details:
-- ❌ **Pattern binding in when expressions** - Cannot unwrap enum payloads (e.g., `Just(v)`)
-- ❌ **If-let pattern matching** - `if let` syntax not supported
-- ❌ **Generic where clauses** - Type constraints not enforced
-- ❌ **Function types** - Cannot use `func() -> Type` in type aliases
-- ❌ **Named tuple fields** - Enum variants must use positional fields only
-- ❌ **Use statement groups** - `use path::{a, b, c}` not supported
+- ✅ **Pattern binding in when expressions** - Now working! `Just(v)` unwraps correctly
+- ⚠️ **Closure capture** - Basic closures work, but captured variables not yet implemented
+- ⚠️ **Generic where clauses** - Parsed but not enforced by type checker
+- ❌ **Tuple types** - Not yet implemented
+- ❌ **Struct patterns** - Pattern matching for struct destructuring pending
 - ❌ **String interpolation** - Manual concatenation required
-- ❌ **Closures** - `do(x) expr` syntax not implemented
-- ⚠️ **LLVM runtime linking** - panic() needs linking configuration
+- ⚠️ **I64 comparisons** - Type mismatch bug in codegen (blocks string operations)
+- ⚠️ **Pointer references** - `mut ref I32` codegen issue (blocks memory operations)
 
 ## [0.1.0] - 2025-12-22
 

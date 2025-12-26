@@ -1,6 +1,6 @@
 # TML — To Machine Language
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.20+-green.svg)](https://cmake.org/)
 
@@ -211,23 +211,31 @@ Source (.tml)
 
 ## 🛠️ Current Status
 
-**Bootstrap Phase** - Active Development
+**Bootstrap Compiler** - Production Ready for Core Features
 
 | Component | Status | Progress |
 |-----------|--------|----------|
-| Lexer | 🟡 In Progress | 0% (0/24 tasks) |
-| Parser | 🟡 Planned | 0% (0/32 tasks) |
-| Type Checker | 🟡 Planned | 0% |
-| Borrow Checker | 🟡 Planned | 0% |
-| LLVM Backend | 🟡 Planned | 0% |
-| Standard Library | 🟡 Planned | 0% |
+| Lexer | ✅ Complete | 100% |
+| Parser | ✅ Complete | 100% (LL(1) compliant) |
+| Type Checker | ✅ Complete | 100% (generics, modules) |
+| Borrow Checker | 🟡 Basic | ~60% (lifetime tracking) |
+| LLVM Backend | ✅ Complete | 100% (via text IR) |
+| Test Framework | ✅ Complete | 100% (@test, @bench) |
+| Standard Library | 🟡 In Progress | ~30% |
 
-### Development Tasks
-- ✅ Project setup and architecture
-- 🔄 Bootstrap lexer implementation
-- ⏳ Bootstrap parser implementation
-- ⏳ Self-hosting compiler
-- ⏳ Standard library development
+### Test Results
+- **23 tests passing** (90%+ pass rate)
+- Compiler tests: ✅ All passing
+- Runtime tests: ✅ Most passing (1 known issue)
+
+### Recent Features (Dec 2024)
+- ✅ **Trait Objects** - `dyn Behavior` with vtable dispatch
+- ✅ **Module System** - `use` imports working
+- ✅ **Pattern Matching** - Full `when` expression support
+- ✅ **Generics** - Structs and enums with monomorphization
+- ✅ **Test Framework** - @test decorator, parallel execution
+- ✅ **Benchmarking** - @bench decorator with timing
+- ✅ **Cross-platform** - Windows (MSVC) and Linux (GCC)
 
 ## 📋 Prerequisites
 
@@ -250,30 +258,35 @@ Source (.tml)
 git clone https://github.com/your-org/tml.git
 cd tml
 
-# Configure and build
-cmake -B build -S packages/compiler
-cmake --build build
+# Build using scripts (recommended)
+./scripts/build.sh debug    # Linux/Mac
+scripts\build.bat debug     # Windows
 
-# Run tests (when available)
-ctest --test-dir build
+# Or manually with CMake
+cmake -B build/debug -S packages/compiler -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug --config Debug
+
+# Run tests
+./build/debug/tml test      # Linux/Mac
+build\debug\Debug\tml.exe test  # Windows
 ```
 
 ### Hello World Example
 
 ```tml
 // Save as hello.tml
-module hello
-
-public func main() {
+func main() -> I32 {
     println("Hello, TML!")
+    return 0
 }
 ```
 
 ```bash
-# Compile (future command)
-tmlc hello.tml -o hello
+# Run directly
+./build/debug/tml run hello.tml
 
-# Run
+# Or compile and execute
+./build/debug/tml build hello.tml -o hello
 ./hello
 # Output: Hello, TML!
 ```
@@ -356,7 +369,7 @@ ctest --test-dir build-cov
 
 ## 📄 License
 
-**MIT License** - see [LICENSE](LICENSE) file for details.
+**Apache License 2.0** - see [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

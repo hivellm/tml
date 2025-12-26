@@ -10,6 +10,10 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
+#include <limits.h>
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
 #define stat _stat
 #define mkdir(path, mode) _mkdir(path)
 #define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
@@ -17,6 +21,9 @@
 #else
 #include <unistd.h>
 #include <dirent.h>
+#ifndef MAX_PATH
+#define MAX_PATH 4096
+#endif
 #endif
 
 // ============================================================================
@@ -55,6 +62,19 @@ TmlFile* file_open(const char* path, int32_t mode) {
     file->is_open = true;
 
     return file;
+}
+
+// Convenience wrappers for codegen (open with specific mode)
+TmlFile* file_open_read(const char* path) {
+    return file_open(path, TML_FILE_READ);
+}
+
+TmlFile* file_open_write(const char* path) {
+    return file_open(path, TML_FILE_WRITE);
+}
+
+TmlFile* file_open_append(const char* path) {
+    return file_open(path, TML_FILE_APPEND);
 }
 
 void file_close(TmlFile* file) {

@@ -146,7 +146,7 @@ name = "myproject"
 version = "1.0.0"
 edition = "2024"
 authors = ["Alice <alice@example.com>"]
-license = "MIT"
+license = "Apache-2.0"
 description = "My awesome project"
 repository = "https://github.com/alice/myproject"
 

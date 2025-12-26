@@ -106,7 +106,7 @@ version = "0.1.0"                # Semantic version (required)
 edition = "2025"                 # TML edition
 authors = ["Name <email@example.com>"]
 description = "A brief description"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/user/repo"
 homepage = "https://example.com"
 documentation = "https://docs.example.com"
@@ -743,7 +743,7 @@ myapp/
 name = "math-utils"
 version = "0.1.0"
 authors = ["Alice <alice@example.com>"]
-license = "MIT"
+license = "Apache-2.0"
 
 [lib]
 path = "src/mod.tml"

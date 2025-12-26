@@ -291,24 +291,119 @@ func process_batch(items: List[Data]) {
 
 ## 9. Low-Level Operations
 
-For low-level operations:
+### 9.1 Lowlevel Blocks
+
+The `lowlevel` keyword creates a block where raw pointer operations are allowed:
 
 ```tml
-@lowlevel
 func raw_pointer_example() {
-    let x: I32 = 42
-    let ptr: ptr I32 = ref x as ptr I32
+    let mut x: I32 = 42
 
-    // Manual dereference
-    let value: T = ptr.read()  // lowlevel!
+    lowlevel {
+        // Inside lowlevel, & returns a pointer (*T) instead of a reference (ref T)
+        let ptr: *I32 = &x
+
+        // Read value through pointer
+        let value: I32 = ptr.read()
+
+        // Write value through pointer
+        ptr.write(100)
+    }
+
+    // x is now 100
 }
 ```
 
-Low-level operations:
-- Raw pointer dereference
+### 9.2 Pointer Type (*T)
+
+The pointer type `*T` represents a raw pointer to a value of type `T`:
+
+```tml
+lowlevel {
+    let mut value: I32 = 42
+    let p: *I32 = &value    // Pointer to I32
+
+    let mut flag: Bool = true
+    let q: *Bool = &flag    // Pointer to Bool
+}
+```
+
+### 9.3 Pointer Methods
+
+Pointers have the following methods:
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `read` | `func read(this) -> T` | Read the value at the pointer location |
+| `write` | `func write(this, value: T)` | Write a value to the pointer location |
+| `offset` | `func offset(this, n: I64) -> *T` | Return a pointer offset by n elements |
+| `is_null` | `func is_null(this) -> Bool` | Check if pointer is null |
+
+Example:
+
+```tml
+func pointer_operations() {
+    let mut a: I32 = 100
+    let mut b: I32 = 200
+
+    lowlevel {
+        let pa: *I32 = &a
+        let pb: *I32 = &b
+
+        // Read values
+        let val_a: I32 = pa.read()  // 100
+        let val_b: I32 = pb.read()  // 200
+
+        // Swap using pointers
+        let temp: I32 = pa.read()
+        pa.write(pb.read())
+        pb.write(temp)
+
+        // Check for null
+        let not_null: Bool = pa.is_null()  // false
+
+        // Pointer arithmetic
+        let next: *I32 = pa.offset(1)  // Pointer to next I32
+    }
+
+    // a is now 200, b is now 100
+}
+```
+
+### 9.4 When to Use Lowlevel
+
+Lowlevel blocks are needed for:
+- Raw pointer operations
+- FFI (Foreign Function Interface) calls
+- Implementing unsafe behaviors
+- Memory-mapped I/O
+- Custom allocators
+
+```tml
+// FFI example
+lowlevel {
+    // Calling a C function that takes a pointer
+    let buffer: *U8 = allocate_buffer(1024)
+    external_c_function(buffer)
+    free_buffer(buffer)
+}
+```
+
+### 9.5 Safety Considerations
+
+Inside `lowlevel` blocks:
+- The borrow checker is not enforced for pointer operations
+- Dangling pointers are possible
+- Null pointer dereference is possible
+- Buffer overflows are possible
+
+Always minimize the scope of `lowlevel` blocks and validate pointer operations carefully.
+
+### 9.6 Other Low-Level Operations
+
 - FFI calls
 - Access to static mut
-- Implement lowlevel behaviors
+- Implementing lowlevel behaviors
 
 ## 10. Optimizations
 

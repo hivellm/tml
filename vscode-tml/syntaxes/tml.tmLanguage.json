@@ -3,15 +3,33 @@
   "name": "TML",
   "scopeName": "source.tml",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#directives" },
-    { "include": "#keywords" },
-    { "include": "#types" },
-    { "include": "#literals" },
-    { "include": "#operators" },
-    { "include": "#functions" },
-    { "include": "#constants" },
-    { "include": "#variables" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#directives"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#literals"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#variables"
+    }
   ],
   "repository": {
     "comments": {
@@ -20,7 +38,9 @@
           "name": "comment.line.documentation.ai.tml",
           "match": "//\\s*@ai:(context|intent|invariant|warning|example):.*$",
           "captures": {
-            "0": { "name": "comment.line.documentation.ai.tml" }
+            "0": {
+              "name": "comment.line.documentation.ai.tml"
+            }
           }
         },
         {
@@ -40,7 +60,9 @@
           "begin": "/\\*",
           "end": "\\*/",
           "patterns": [
-            { "include": "#comments" }
+            {
+              "include": "#comments"
+            }
           ]
         }
       ]
@@ -49,9 +71,11 @@
       "patterns": [
         {
           "name": "meta.directive.tml",
-          "match": "@(test|benchmark|when|unless|auto|hint|deprecated|lowlevel|export|doc)\\b",
+          "match": "@(test|bench|benchmark|when|unless|auto|hint|deprecated|stable|unstable|lowlevel|export|doc)\\b",
           "captures": {
-            "1": { "name": "storage.modifier.directive.tml" }
+            "1": {
+              "name": "storage.modifier.directive.tml"
+            }
           }
         },
         {
@@ -59,18 +83,26 @@
           "begin": "@(test|when|unless|auto|hint|deprecated|doc)\\s*\\(",
           "end": "\\)",
           "beginCaptures": {
-            "1": { "name": "storage.modifier.directive.tml" }
+            "1": {
+              "name": "storage.modifier.directive.tml"
+            }
           },
           "patterns": [
-            { "include": "#literals" },
-            { "include": "#keywords" }
+            {
+              "include": "#literals"
+            },
+            {
+              "include": "#keywords"
+            }
           ]
         },
         {
           "name": "meta.stable-id.tml",
           "match": "@[0-9a-fA-F]{8}\\b",
           "captures": {
-            "0": { "name": "constant.numeric.stable-id.tml" }
+            "0": {
+              "name": "constant.numeric.stable-id.tml"
+            }
           }
         }
       ]
@@ -91,7 +123,7 @@
         },
         {
           "name": "keyword.other.tml",
-          "match": "\\b(this|This|ref|mut|lowlevel|async|await|with|quote|as)\\b"
+          "match": "\\b(this|This|ref|mut|dyn|lowlevel|async|await|with|quote|as)\\b"
         },
         {
           "name": "keyword.control.range.tml",
@@ -103,11 +135,20 @@
       "patterns": [
         {
           "name": "storage.type.primitive.tml",
-          "match": "\\b(Bool|I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|String|Char|Unit)\\b"
+          "match": "\\b(Bool|I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|String|Str|Char|Unit|Never)\\b"
         },
         {
           "name": "storage.type.builtin.tml",
-          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync)\\b"
+          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration)\\b"
+        },
+        {
+          "name": "constant.language.enum-variant.tml",
+          "match": "\\b(Just|Nothing|Ok|Err)\\b"
+        },
+        {
+          "name": "storage.type.pointer.tml",
+          "match": "\\*\\s*[A-Z][a-zA-Z0-9_]*",
+          "comment": "Pointer type: *I32, *Bool, *CustomType"
         },
         {
           "name": "entity.name.type.tml",
@@ -146,7 +187,9 @@
           "begin": "\"\"\"",
           "end": "\"\"\"",
           "patterns": [
-            { "include": "#string-escapes" }
+            {
+              "include": "#string-escapes"
+            }
           ]
         },
         {
@@ -160,7 +203,9 @@
           "begin": "\"",
           "end": "\"",
           "patterns": [
-            { "include": "#string-escapes" }
+            {
+              "include": "#string-escapes"
+            }
           ]
         },
         {
@@ -168,7 +213,9 @@
           "begin": "b\"",
           "end": "\"",
           "patterns": [
-            { "include": "#string-escapes" }
+            {
+              "include": "#string-escapes"
+            }
           ]
         },
         {
@@ -176,7 +223,9 @@
           "begin": "'",
           "end": "'",
           "patterns": [
-            { "include": "#string-escapes" }
+            {
+              "include": "#string-escapes"
+            }
           ]
         }
       ]
@@ -235,8 +284,12 @@
           "name": "meta.function.declaration.tml",
           "match": "\\b(func)\\s+([a-z_][a-zA-Z0-9_]*)\\b",
           "captures": {
-            "1": { "name": "keyword.declaration.function.tml" },
-            "2": { "name": "entity.name.function.tml" }
+            "1": {
+              "name": "keyword.declaration.function.tml"
+            },
+            "2": {
+              "name": "entity.name.function.tml"
+            }
           }
         },
         {

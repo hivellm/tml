@@ -208,6 +208,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             if (name == "List") return std::make_shared<Type>(Type{NamedType{"List", "", {}}});
             if (name == "HashMap") return std::make_shared<Type>(Type{NamedType{"HashMap", "", {}}});
             if (name == "Buffer") return std::make_shared<Type>(Type{NamedType{"Buffer", "", {}}});
+
+            // std::file types
+            if (name == "File") return std::make_shared<Type>(Type{NamedType{"File", "std::file", {}}});
+            if (name == "Path") return std::make_shared<Type>(Type{NamedType{"Path", "std::file", {}}});
+
+            // Other non-primitive types - assume they're from the current module
+            return std::make_shared<Type>(Type{NamedType{name, "", {}}});
         }
         else if (type.is<parser::RefType>()) {
             const auto& ref = type.as<parser::RefType>();

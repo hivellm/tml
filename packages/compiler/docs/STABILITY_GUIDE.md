@@ -70,7 +70,7 @@ functions_["print_i32"] = FuncSig{
     false,
     builtin_span,
     StabilityLevel::Deprecated,
-    "Use toString(value) + print() instead for better type safety",
+    "Use polymorphic print() instead (e.g., print(42))",
     "1.2"
 };
 ```
@@ -116,7 +116,7 @@ functions_["print_i32"] = FuncSig{
 print_i32(42)
 
 // New (stable)
-print(toString(42))
+print(42)  // print() is polymorphic
 ```
 
 ### From `time_ms()` to `Instant::now()`:
@@ -144,7 +144,7 @@ warning: function 'print_i32' is deprecated since v1.2
  5 | print_i32(42)
    | ^^^^^^^^^^^^ deprecated function call
    |
-   = note: Use toString(value) + print() instead for better type safety
+   = note: Use polymorphic print() instead (e.g., print(42))
    = help: This function will be removed in v2.0
 ```
 

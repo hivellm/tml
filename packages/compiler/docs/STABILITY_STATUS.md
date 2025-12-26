@@ -62,7 +62,7 @@ functions_["print_i32"] = FuncSig{
     false,
     builtin_span,
     StabilityLevel::Deprecated,                                    // ← Deprecated
-    "Use toString(value) + print() instead for better type safety", // ← Migration guide
+    "Use polymorphic print() instead (e.g., print(42))", // ← Migration guide
     "1.2"                                                           // ← Deprecated since v1.2
 };
 ```
@@ -89,8 +89,8 @@ if (func_sig && func_sig->is_deprecated()) {
 ### Deprecated Functions (2)
 | Function | Since | Replacement |
 |----------|-------|-------------|
-| `print_i32(n)` | v1.2 | `print(toString(n))` |
-| `print_bool(b)` | v1.2 | `print(toString(b))` |
+| `print_i32(n)` | v1.2 | `print(n)` (polymorphic) |
+| `print_bool(b)` | v1.2 | `print(b)` (polymorphic) |
 
 ### Unstable Functions (~100+)
 All other builtin functions default to `Unstable`:
@@ -157,7 +157,7 @@ warning: function 'print_i32' is deprecated since v1.2
  5 |     print_i32(42)
    |     ^^^^^^^^^^^^ deprecated function call
    |
-   = note: Use toString(value) + print() instead for better type safety
+   = note: Use polymorphic print() instead (e.g., print(42))
    = help: This function will be removed in v2.0
 ```
 

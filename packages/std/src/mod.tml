@@ -1,5 +1,7 @@
 // TML Standard Library
 // Re-exports all standard library modules
 
-pub mod collections
-pub mod file
+pub mod types       // Maybe[T], Outcome[T, E]
+pub mod collections // List, HashMap, Buffer
+pub mod file        // File I/O
+pub mod iter        // Iterator, Range

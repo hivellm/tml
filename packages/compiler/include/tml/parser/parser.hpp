@@ -111,6 +111,7 @@ private:
     // Expression parsing (Pratt parser)
     auto parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, ParseError>;
     auto parse_primary_expr() -> Result<ExprPtr, ParseError>;
+    auto parse_primary_with_postfix() -> Result<ExprPtr, ParseError>;
     auto parse_prefix_expr() -> Result<ExprPtr, ParseError>;
     auto parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError>;
     auto parse_infix_expr(ExprPtr left, int precedence) -> Result<ExprPtr, ParseError>;

@@ -189,6 +189,120 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
+    // ============ MEM_* FUNCTIONS (matches runtime/mem.c) ============
+
+    // mem_alloc(size: I64) -> *Unit
+    if (fn_name == "mem_alloc") {
+        if (!call.args.empty()) {
+            std::string size = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @mem_alloc(i64 " + size + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // mem_alloc_zeroed(size: I64) -> *Unit
+    if (fn_name == "mem_alloc_zeroed") {
+        if (!call.args.empty()) {
+            std::string size = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @mem_alloc_zeroed(i64 " + size + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // mem_realloc(ptr: *Unit, new_size: I64) -> *Unit
+    if (fn_name == "mem_realloc") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string size = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @mem_realloc(ptr " + ptr + ", i64 " + size + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // mem_free(ptr: *Unit) -> Unit
+    if (fn_name == "mem_free") {
+        if (!call.args.empty()) {
+            std::string ptr = gen_expr(*call.args[0]);
+            emit_line("  call void @mem_free(ptr " + ptr + ")");
+        }
+        return "";
+    }
+
+    // mem_copy(dest: *Unit, src: *Unit, size: I64) -> Unit
+    if (fn_name == "mem_copy") {
+        if (call.args.size() >= 3) {
+            std::string dest = gen_expr(*call.args[0]);
+            std::string src = gen_expr(*call.args[1]);
+            std::string size = gen_expr(*call.args[2]);
+            emit_line("  call void @mem_copy(ptr " + dest + ", ptr " + src + ", i64 " + size + ")");
+        }
+        return "";
+    }
+
+    // mem_move(dest: *Unit, src: *Unit, size: I64) -> Unit
+    if (fn_name == "mem_move") {
+        if (call.args.size() >= 3) {
+            std::string dest = gen_expr(*call.args[0]);
+            std::string src = gen_expr(*call.args[1]);
+            std::string size = gen_expr(*call.args[2]);
+            emit_line("  call void @mem_move(ptr " + dest + ", ptr " + src + ", i64 " + size + ")");
+        }
+        return "";
+    }
+
+    // mem_set(ptr: *Unit, value: I32, size: I64) -> Unit
+    if (fn_name == "mem_set") {
+        if (call.args.size() >= 3) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string val = gen_expr(*call.args[1]);
+            std::string size = gen_expr(*call.args[2]);
+            emit_line("  call void @mem_set(ptr " + ptr + ", i32 " + val + ", i64 " + size + ")");
+        }
+        return "";
+    }
+
+    // mem_zero(ptr: *Unit, size: I64) -> Unit
+    if (fn_name == "mem_zero") {
+        if (call.args.size() >= 2) {
+            std::string ptr = gen_expr(*call.args[0]);
+            std::string size = gen_expr(*call.args[1]);
+            emit_line("  call void @mem_zero(ptr " + ptr + ", i64 " + size + ")");
+        }
+        return "";
+    }
+
+    // mem_compare(a: *Unit, b: *Unit, size: I64) -> I32
+    if (fn_name == "mem_compare") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string size = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @mem_compare(ptr " + a + ", ptr " + b + ", i64 " + size + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // mem_eq(a: *Unit, b: *Unit, size: I64) -> Bool (I32)
+    if (fn_name == "mem_eq") {
+        if (call.args.size() >= 3) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string size = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @mem_eq(ptr " + a + ", ptr " + b + ", i64 " + size + ")");
+            return result;
+        }
+        return "0";
+    }
+
     // Read from memory: read_i32(ptr) -> I32
     if (fn_name == "read_i32" && !env_.lookup_func("read_i32").has_value()) {
         if (!call.args.empty()) {
@@ -486,6 +600,46 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             return result;
         }
         return "0";
+    }
+
+    // elapsed_us(start_us: I64) -> I64 - Elapsed microseconds
+    if (fn_name == "elapsed_us") {
+        if (!call.args.empty()) {
+            std::string start = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @elapsed_us(i64 " + start + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // elapsed_ns(start_ns: I64) -> I64 - Elapsed nanoseconds
+    if (fn_name == "elapsed_ns") {
+        if (!call.args.empty()) {
+            std::string start = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @elapsed_ns(i64 " + start + ")");
+            return result;
+        }
+        return "0";
+    }
+
+    // sleep_ms(ms: I32) -> Unit - Sleep for milliseconds
+    if (fn_name == "sleep_ms") {
+        if (!call.args.empty()) {
+            std::string ms = gen_expr(*call.args[0]);
+            emit_line("  call void @sleep_ms(i32 " + ms + ")");
+        }
+        return "";
+    }
+
+    // sleep_us(us: I64) -> Unit - Sleep for microseconds
+    if (fn_name == "sleep_us") {
+        if (!call.args.empty()) {
+            std::string us = gen_expr(*call.args[0]);
+            emit_line("  call void @sleep_us(i64 " + us + ")");
+        }
+        return "";
     }
 
     // ============ INSTANT API (like Rust's std::time::Instant) ============
@@ -1507,6 +1661,124 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             last_expr_type_ = "i1";
             return bool_result;
+        }
+        return "0";
+    }
+
+    // str_concat(a, b) -> Str
+    if (fn_name == "str_concat") {
+        if (call.args.size() >= 2) {
+            std::string a = gen_expr(*call.args[0]);
+            std::string b = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_concat(ptr " + a + ", ptr " + b + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // str_substring(s, start, len) -> Str
+    if (fn_name == "str_substring") {
+        if (call.args.size() >= 3) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string start = gen_expr(*call.args[1]);
+            std::string len = gen_expr(*call.args[2]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_substring(ptr " + s + ", i32 " + start + ", i32 " + len + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // str_contains(haystack, needle) -> Bool
+    if (fn_name == "str_contains") {
+        if (call.args.size() >= 2) {
+            std::string h = gen_expr(*call.args[0]);
+            std::string n = gen_expr(*call.args[1]);
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @str_contains(ptr " + h + ", ptr " + n + ")");
+            // Convert i32 to i1 (Bool)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // str_starts_with(s, prefix) -> Bool
+    if (fn_name == "str_starts_with") {
+        if (call.args.size() >= 2) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string p = gen_expr(*call.args[1]);
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @str_starts_with(ptr " + s + ", ptr " + p + ")");
+            // Convert i32 to i1 (Bool)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // str_ends_with(s, suffix) -> Bool
+    if (fn_name == "str_ends_with") {
+        if (call.args.size() >= 2) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string suffix = gen_expr(*call.args[1]);
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @str_ends_with(ptr " + s + ", ptr " + suffix + ")");
+            // Convert i32 to i1 (Bool)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + i32_result + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+        return "0";
+    }
+
+    // str_to_upper(s) -> Str
+    if (fn_name == "str_to_upper") {
+        if (!call.args.empty()) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_to_upper(ptr " + s + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // str_to_lower(s) -> Str
+    if (fn_name == "str_to_lower") {
+        if (!call.args.empty()) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_to_lower(ptr " + s + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // str_trim(s) -> Str
+    if (fn_name == "str_trim") {
+        if (!call.args.empty()) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_trim(ptr " + s + ")");
+            return result;
+        }
+        return "null";
+    }
+
+    // str_char_at(s, index) -> Char (I32)
+    if (fn_name == "str_char_at") {
+        if (call.args.size() >= 2) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string idx = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @str_char_at(ptr " + s + ", i32 " + idx + ")");
+            return result;
         }
         return "0";
     }

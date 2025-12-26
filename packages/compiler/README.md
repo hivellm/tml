@@ -90,7 +90,8 @@ packages/compiler/
 | Module System | ✅ Complete |
 | Pattern Matching | ✅ Complete |
 | Enum Support | ✅ Complete |
-| Borrow Checker | ✅ Basic |
+| Trait Objects | ✅ Complete |
+| Borrow Checker | 🟡 Basic |
 | IR Generator | ✅ Complete |
 | LLVM Backend | ✅ Complete |
 | CLI | ✅ Complete |
@@ -99,15 +100,17 @@ packages/compiler/
 ## Features
 
 ### Language Features
-- ✅ Basic types (I32, I64, Bool, Str, etc.)
+- ✅ Basic types (I32, I64, Bool, Str, F64, etc.)
 - ✅ Functions with type parameters
-- ✅ Structs with generics
-- ✅ Enums (simple and with data)
+- ✅ Structs with generics (monomorphization)
+- ✅ Enums (simple and with data variants)
 - ✅ Pattern matching (when expressions)
+- ✅ Trait objects (`dyn Behavior`) with vtables
 - ✅ Closures (basic, without capture)
-- ✅ Operators (arithmetic, comparison, logical)
+- ✅ Operators (arithmetic, comparison, logical, bitwise)
 - ✅ Control flow (if/else, loop, for, while)
 - ✅ Module system (use declarations)
+- ✅ Time API (Instant::now(), Duration)
 
 ### Compiler Features
 - ✅ Full lexical analysis
@@ -115,26 +118,17 @@ packages/compiler/
 - ✅ Type checking with inference
 - ✅ Module registry and imports
 - ✅ LLVM IR code generation
-- ✅ Enum codegen (struct-based)
+- ✅ Enum codegen (struct-based tagged unions)
 - ✅ Pattern matching codegen
-- ✅ Test framework integration
+- ✅ Trait object vtable generation
+- ✅ Test framework integration (@test, @bench)
+- ✅ Parallel test execution
 
 ### Test Results
 
-Current status: **9/10 tests passing (90%)**
+Current status: **34/34 tests passing (100%)**
 
-```
-✅ basics.test.tml
-✅ closures.test.tml
-✅ features.test.tml
-✅ patterns.test.tml
-✅ enums.test.tml
-✅ enums_comparison.test.tml
-✅ structs.test.tml
-✅ demo_assertions.test.tml
-✅ simple_demo.test.tml
-❌ collections.test.tml (known runtime bug)
-```
+All compiler and test framework tests pass with polymorphic assertions.
 
 ## Module System
 
@@ -145,7 +139,7 @@ use test  // Import test module
 
 @test
 func my_test() -> I32 {
-    assert_eq_i32(2 + 2, 4, "math works")
+    assert_eq(2 + 2, 4, "math works")
     return 0
 }
 ```
@@ -154,12 +148,23 @@ Modules are registered in the `ModuleRegistry` and resolved during type checking
 
 ## Recent Updates
 
+### v0.5.0 (2025-12-24)
+- **Trait Objects** - `dyn Behavior` syntax for dynamic dispatch
+- Vtable generation for behavior implementations
+- Method resolution through generated vtables
+
+### v0.4.0 (2025-12-23)
+- **Build System** - Cross-platform build scripts
+- Target triple-based build directories (like Rust)
+- Linux/GCC compatibility fixes
+- Vitest-like test output with colors
+
 ### v0.3.0 (2025-12-23)
-- Implemented full module system with `use test` support
+- Full module system with `use test` support
 - Fixed enum pattern matching in `when` expressions
-- Added proper enum value creation and comparison
-- Removed global assertion functions (now module-scoped)
-- All tests updated to use `use test`
+- Parallel test execution with thread pool
+- Test timeout support (default 20s)
+- Benchmarking with `@bench` decorator
 
 ### v0.2.0 (2025-12-23)
 - Complete test framework with @test decorator
@@ -167,6 +172,12 @@ Modules are registered in the `ModuleRegistry` and resolved during type checking
 - Type-specific assertion functions
 - Test discovery and execution
 
+## Known Issues
+
+- **I64 comparisons** - Type mismatch in LLVM IR (blocks string operations)
+- **Pointer references** - `mut ref I32` codegen issue (blocks memory/atomic operations)
+- **Closure capture** - Basic closures work, environment capture not implemented
+
 ## License
 
-MIT
+Apache 2.0

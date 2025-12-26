@@ -135,7 +135,27 @@ auto Parser::parse_prefix_expr() -> Result<ExprPtr, ParseError> {
         return make_unary_expr(*op, std::move(unwrap(operand)), span);
     }
 
-    return parse_primary_expr();
+    return parse_primary_with_postfix();
+}
+
+// Parse a primary expression followed by all postfix operators (calls, field access, etc.)
+// This is used for unary operands to ensure correct precedence: not x.y means not (x.y)
+auto Parser::parse_primary_with_postfix() -> Result<ExprPtr, ParseError> {
+    auto result = parse_primary_expr();
+    if (is_err(result)) return result;
+
+    // Loop to handle all postfix operators
+    while (check(lexer::TokenKind::LParen) ||
+           check(lexer::TokenKind::LBracket) ||
+           check(lexer::TokenKind::Dot) ||
+           check(lexer::TokenKind::Bang) ||
+           check(lexer::TokenKind::PlusPlus) ||
+           check(lexer::TokenKind::MinusMinus)) {
+        result = parse_postfix_expr(std::move(unwrap(result)));
+        if (is_err(result)) return result;
+    }
+
+    return result;
 }
 
 auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {

@@ -1,6 +1,6 @@
 # Tasks: Bootstrap Stdlib Core
 
-## Progress: 45% (17/38 tasks complete)
+## Progress: 55% (21/38 tasks complete)
 
 ## 1. Setup Phase
 - [x] 1.1 Create `runtime/` directory structure (C runtime)
@@ -28,19 +28,19 @@
 - [ ] 3.5 Implement Char operations (Unicode)
 - [ ] 3.6 Implement trait impls for all primitives
 
-## 4. Option Type Phase (Maybe[T])
-- [ ] 4.1 Define Maybe[T] enum (Just, Nothing)
-- [ ] 4.2 Implement is_just, is_nothing
-- [ ] 4.3 Implement unwrap, expect
-- [ ] 4.4 Implement unwrap_or, unwrap_or_else
-- [ ] 4.5 Implement map, and_then
+## 4. Option Type Phase (Maybe[T]) ✅ PARTIAL
+- [x] 4.1 Define Maybe[T] enum (Just, Nothing)
+- [x] 4.2 Implement is_just, is_nothing
+- [ ] 4.3 Implement unwrap, expect (requires Never type for panic)
+- [x] 4.4 Implement unwrap_or, unwrap_or_else
+- [ ] 4.5 Implement map, and_then (requires mut this)
 - [ ] 4.6 Implement ok_or, ok_or_else
 
-## 5. Result Type Phase (Outcome[T, E])
-- [ ] 5.1 Define Outcome[T, E] enum (Ok, Err)
-- [ ] 5.2 Implement is_ok, is_err
-- [ ] 5.3 Implement unwrap, expect, unwrap_err
-- [ ] 5.4 Implement map, map_err
+## 5. Result Type Phase (Outcome[T, E]) ✅ PARTIAL
+- [x] 5.1 Define Outcome[T, E] enum (Ok, Err)
+- [x] 5.2 Implement is_ok, is_err
+- [ ] 5.3 Implement unwrap, expect, unwrap_err (requires Never type)
+- [ ] 5.4 Implement map, map_err (requires mut this)
 - [ ] 5.5 Implement and_then, or_else
 - [ ] 5.6 Implement ! operator support
 
@@ -86,8 +86,8 @@
 ## 10. Testing Phase
 - [ ] 10.1 Write tests for core traits
 - [x] 10.2 Write tests for primitives
-- [ ] 10.3 Write tests for Maybe
-- [ ] 10.4 Write tests for Outcome
+- [x] 10.3 Write tests for Maybe (packages/std/tests/types.test.tml)
+- [x] 10.4 Write tests for Outcome (packages/std/tests/types.test.tml)
 - [x] 10.5 Write tests for List (test_19, test_20, test_22, test_23)
 - [x] 10.6 Write tests for String
 - [x] 10.7 Write tests for HashMap (test_19, test_23)

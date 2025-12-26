@@ -240,9 +240,14 @@ auto Parser::parse_type_path() -> Result<TypePath, ParseError> {
     std::vector<std::string> segments;
     auto start_span = peek().span;
 
-    auto first = expect(lexer::TokenKind::Identifier, "Expected type name");
-    if (is_err(first)) return unwrap_err(first);
-    segments.push_back(std::string(unwrap(first).lexeme));
+    // Accept 'This' keyword as first segment (for This::Item associated type syntax)
+    if (match(lexer::TokenKind::KwThisType)) {
+        segments.push_back("This");
+    } else {
+        auto first = expect(lexer::TokenKind::Identifier, "Expected type name");
+        if (is_err(first)) return unwrap_err(first);
+        segments.push_back(std::string(unwrap(first).lexeme));
+    }
 
     while (match(lexer::TokenKind::ColonColon)) {
         auto segment = expect(lexer::TokenKind::Identifier, "Expected identifier after '::'");

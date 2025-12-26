@@ -9,29 +9,35 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (35 reserved words)
+## 2. Keywords (41 reserved words)
 
 ```
 // Declarations
-module    import    public    private
-func      type      behavior  extend
-let       var       const     where
+func      type      behavior  impl
+mod       use       pub       let
+const     decorator where
 
 // Control flow
 if        then      else      when
-loop      in        while     break
-continue  return    catch     do
+loop      while     for       in
+to        through   break     continue
+return    do
 
 // Logical operators (words, not symbols)
 and       or        not
 
-// Values and references
-true      false     this      This
-ref       lowlevel
+// Types and references
+this      This      as        dyn
+mut       ref       lowlevel
 
-// Range keywords
-to        through
+// Modules
+crate     super     with
+
+// Async (reserved for future)
+async     await     quote
 ```
+
+> **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.
 
 ### Why Words Over Symbols
 

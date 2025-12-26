@@ -1,0 +1,175 @@
+use test
+
+// ============================================================================
+// Comprehensive Memory Builtin Tests
+// Tests: mem_alloc, mem_free, mem_alloc_zeroed, mem_copy, mem_set, mem_zero,
+// mem_compare, mem_eq
+// ============================================================================
+
+// Note: These tests use the low-level memory builtins
+// For safety, we only test basic allocation patterns
+
+// ============================================================================
+// Basic Allocation Tests
+// ============================================================================
+
+@test
+func test_mem_alloc_basic() -> I32 {
+    // Allocate 64 bytes
+    let ptr: *Unit = mem_alloc(64)
+    // Free immediately
+    mem_free(ptr)
+    return 0
+}
+
+@test
+func test_mem_alloc_zeroed() -> I32 {
+    // Allocate 64 zeroed bytes
+    let ptr: *Unit = mem_alloc_zeroed(64)
+    // Free immediately
+    mem_free(ptr)
+    return 0
+}
+
+// ============================================================================
+// Memory Operations Tests
+// ============================================================================
+
+@test
+func test_mem_set_and_compare() -> I32 {
+    let ptr1: *Unit = mem_alloc(16)
+    let ptr2: *Unit = mem_alloc(16)
+    
+    // Set both to same value
+    mem_set(ptr1, 42, 16)
+    mem_set(ptr2, 42, 16)
+    
+    // Compare should be equal
+    let eq: Bool = mem_eq(ptr1, ptr2, 16)
+    
+    mem_free(ptr1)
+    mem_free(ptr2)
+    
+    assert_eq(eq, true, "same memory contents should be equal")
+    return 0
+}
+
+@test
+func test_mem_copy() -> I32 {
+    let src: *Unit = mem_alloc(16)
+    let dst: *Unit = mem_alloc(16)
+    
+    // Set source to known pattern
+    mem_set(src, 99, 16)
+    
+    // Copy to destination
+    mem_copy(dst, src, 16)
+    
+    // Should be equal
+    let eq: Bool = mem_eq(src, dst, 16)
+    
+    mem_free(src)
+    mem_free(dst)
+    
+    assert_eq(eq, true, "copied memory should be equal")
+    return 0
+}
+
+@test
+func test_mem_zero() -> I32 {
+    let ptr1: *Unit = mem_alloc(16)
+    let ptr2: *Unit = mem_alloc_zeroed(16)
+    
+    // Set ptr1 to some value, then zero it
+    mem_set(ptr1, 255, 16)
+    mem_zero(ptr1, 16)
+    
+    // Should equal the pre-zeroed allocation
+    let eq: Bool = mem_eq(ptr1, ptr2, 16)
+    
+    mem_free(ptr1)
+    mem_free(ptr2)
+    
+    assert_eq(eq, true, "zeroed memory should equal alloc_zeroed")
+    return 0
+}
+
+@test
+func test_mem_compare_different() -> I32 {
+    let ptr1: *Unit = mem_alloc(16)
+    let ptr2: *Unit = mem_alloc(16)
+    
+    // Set to different values
+    mem_set(ptr1, 10, 16)
+    mem_set(ptr2, 20, 16)
+    
+    // Compare should show difference
+    let cmp: I32 = mem_compare(ptr1, ptr2, 16)
+    let different: Bool = cmp != 0
+    
+    mem_free(ptr1)
+    mem_free(ptr2)
+    
+    assert_eq(different, true, "different memory should compare != 0")
+    return 0
+}
+
+@test
+func test_mem_eq_false() -> I32 {
+    let ptr1: *Unit = mem_alloc(16)
+    let ptr2: *Unit = mem_alloc(16)
+    
+    // Set to different values
+    mem_set(ptr1, 10, 16)
+    mem_set(ptr2, 20, 16)
+    
+    // Should not be equal
+    let eq: Bool = mem_eq(ptr1, ptr2, 16)
+    
+    mem_free(ptr1)
+    mem_free(ptr2)
+    
+    assert_eq(eq, false, "different memory should not be equal")
+    return 0
+}
+
+// ============================================================================
+// Memory Workflow Tests
+// ============================================================================
+
+@test
+func test_alloc_write_read_free() -> I32 {
+    // Simulate a simple buffer workflow
+    let size: I64 = 32
+    let buffer: *Unit = mem_alloc(size)
+    
+    // Fill with pattern
+    mem_set(buffer, 123, size)
+    
+    // Verify with another buffer
+    let expected: *Unit = mem_alloc(size)
+    mem_set(expected, 123, size)
+    
+    let match: Bool = mem_eq(buffer, expected, size)
+    
+    mem_free(buffer)
+    mem_free(expected)
+    
+    assert_eq(match, true, "buffer should match expected")
+    return 0
+}
+
+@test
+func test_realloc_basic() -> I32 {
+    // Allocate initial size
+    let ptr: *Unit = mem_alloc(16)
+    mem_set(ptr, 42, 16)
+    
+    // Reallocate to larger size
+    let new_ptr: *Unit = mem_realloc(ptr, 32)
+    
+    // Free the new pointer (old is invalid after realloc)
+    mem_free(new_ptr)
+    
+    return 0
+}

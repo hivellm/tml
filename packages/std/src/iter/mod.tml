@@ -1,0 +1,86 @@
+// TML Standard Library - Iterator Module
+// Provides: Iterator behavior and Range type
+
+// ============================================================================
+// Maybe Type (until core types are available via imports)
+// ============================================================================
+
+/// Optional value type
+pub type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+// ============================================================================
+// Iterator Behavior
+// ============================================================================
+
+/// The core iteration trait. Types that implement Iterator can be used in for-in loops.
+pub behavior Iterator {
+    /// The type of elements being iterated
+    type Item
+
+    /// Advances the iterator and returns the next value.
+    /// Returns Nothing when iteration is complete.
+    func next(this) -> Maybe[This::Item]
+}
+
+// ============================================================================
+// IntoIterator Behavior
+// ============================================================================
+
+/// Types that can be converted into an Iterator.
+pub behavior IntoIterator {
+    /// The type of iterator this converts into
+    type Iter
+
+    /// Converts this value into an iterator
+    func into_iter(this) -> This::Iter
+}
+
+// ============================================================================
+// Range Iterator
+// ============================================================================
+
+/// An iterator over a range of integers
+pub type Range {
+    current: I32,
+    end: I32,
+    step: I32,
+    inclusive: Bool
+}
+
+impl Iterator for Range {
+    type Item = I32
+
+    func next(this) -> Maybe[I32] {
+        if this.inclusive {
+            if this.current <= this.end {
+                return Just(this.current)
+            } else {
+                return Nothing
+            }
+        } else {
+            if this.current < this.end {
+                return Just(this.current)
+            } else {
+                return Nothing
+            }
+        }
+    }
+}
+
+/// Creates a range from start to end (exclusive)
+pub func range(start: I32, end: I32) -> Range {
+    return Range { current: start, end: end, step: 1, inclusive: false }
+}
+
+/// Creates a range from start through end (inclusive)
+pub func range_inclusive(start: I32, end: I32) -> Range {
+    return Range { current: start, end: end, step: 1, inclusive: true }
+}
+
+/// Creates a range with custom step
+pub func range_step(start: I32, end: I32, step: I32) -> Range {
+    return Range { current: start, end: end, step: step, inclusive: false }
+}

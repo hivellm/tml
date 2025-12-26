@@ -1,7 +1,9 @@
 # RFC-0005: Modules and Capabilities
 
 ## Status
-Draft
+Partial (v0.3.0)
+
+> Basic `use` declarations implemented. Visibility rules and capability system pending.
 
 ## Summary
 

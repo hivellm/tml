@@ -1,160 +1,16 @@
+// Main builtin initialization
+// Delegates to specialized files for organization
 #include "tml/types/env.hpp"
-#include "tml/types/module.hpp"
 
 namespace tml::types {
 
 void TypeEnv::init_builtins() {
-    // Builtin types
-    builtins_["I8"] = make_primitive(PrimitiveKind::I8);
-    builtins_["I16"] = make_primitive(PrimitiveKind::I16);
-    builtins_["I32"] = make_primitive(PrimitiveKind::I32);
-    builtins_["I64"] = make_primitive(PrimitiveKind::I64);
-    builtins_["I128"] = make_primitive(PrimitiveKind::I128);
-    builtins_["U8"] = make_primitive(PrimitiveKind::U8);
-    builtins_["U16"] = make_primitive(PrimitiveKind::U16);
-    builtins_["U32"] = make_primitive(PrimitiveKind::U32);
-    builtins_["U64"] = make_primitive(PrimitiveKind::U64);
-    builtins_["U128"] = make_primitive(PrimitiveKind::U128);
-    builtins_["F32"] = make_primitive(PrimitiveKind::F32);
-    builtins_["F64"] = make_primitive(PrimitiveKind::F64);
-    builtins_["Bool"] = make_primitive(PrimitiveKind::Bool);
-    builtins_["Char"] = make_primitive(PrimitiveKind::Char);
-    builtins_["Str"] = make_primitive(PrimitiveKind::Str);
-    builtins_["Unit"] = make_unit();
-
-    // Register builtin behavior implementations for primitive types
-    std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128", "U8", "U16", "U32", "U64", "U128"};
-    std::vector<std::string> integer_behaviors = {"Eq", "Ord", "Numeric", "Hash", "Display", "Debug", "Default", "Duplicate"};
-    for (const auto& type : integer_types) {
-        for (const auto& behavior : integer_behaviors) {
-            register_impl(type, behavior);
-        }
-    }
-
-    std::vector<std::string> float_types = {"F32", "F64"};
-    std::vector<std::string> float_behaviors = {"Eq", "Ord", "Numeric", "Display", "Debug", "Default", "Duplicate"};
-    for (const auto& type : float_types) {
-        for (const auto& behavior : float_behaviors) {
-            register_impl(type, behavior);
-        }
-    }
-
-    register_impl("Bool", "Eq");
-    register_impl("Bool", "Ord");
-    register_impl("Bool", "Hash");
-    register_impl("Bool", "Display");
-    register_impl("Bool", "Debug");
-    register_impl("Bool", "Default");
-    register_impl("Bool", "Duplicate");
-
-    register_impl("Char", "Eq");
-    register_impl("Char", "Ord");
-    register_impl("Char", "Hash");
-    register_impl("Char", "Display");
-    register_impl("Char", "Debug");
-    register_impl("Char", "Duplicate");
-
-    register_impl("Str", "Eq");
-    register_impl("Str", "Ord");
-    register_impl("Str", "Hash");
-    register_impl("Str", "Display");
-    register_impl("Str", "Debug");
-    register_impl("Str", "Duplicate");
-
-    // ONLY print, println, panic - everything else goes in std
-    SourceSpan builtin_span{};
-
-    functions_["print"].push_back(FuncSig{
-        "print",
-        {make_primitive(PrimitiveKind::Str)},
-        make_unit(),
-        {},
-        false,
-        builtin_span,
-        StabilityLevel::Stable,
-        "",
-        "1.0"
-    });
-
-    functions_["println"].push_back(FuncSig{
-        "println",
-        {make_primitive(PrimitiveKind::Str)},
-        make_unit(),
-        {},
-        false,
-        builtin_span,
-        StabilityLevel::Stable,
-        "",
-        "1.0"
-    });
-
-    functions_["panic"].push_back(FuncSig{
-        "panic",
-        {make_primitive(PrimitiveKind::Str)},
-        make_unit(),
-        {},
-        false,
-        builtin_span,
-        StabilityLevel::Stable,
-        "",
-        "1.0"
-    });
-
-    // String utility functions (builtins with tml_ prefix in runtime)
-    functions_["str_len"].push_back(FuncSig{
-        "str_len",
-        {make_primitive(PrimitiveKind::Str)},
-        make_primitive(PrimitiveKind::I32),
-        {},
-        false,
-        builtin_span
-    });
-
-    functions_["str_eq"].push_back(FuncSig{
-        "str_eq",
-        {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str)},
-        make_primitive(PrimitiveKind::Bool),
-        {},
-        false,
-        builtin_span
-    });
-
-    functions_["str_hash"].push_back(FuncSig{
-        "str_hash",
-        {make_primitive(PrimitiveKind::Str)},
-        make_primitive(PrimitiveKind::I32),
-        {},
-        false,
-        builtin_span
-    });
-
-    // Time functions
-    functions_["time_ms"].push_back(FuncSig{
-        "time_ms",
-        {},
-        make_primitive(PrimitiveKind::I32),
-        {},
-        false,
-        builtin_span
-    });
-
-    functions_["time_us"].push_back(FuncSig{
-        "time_us",
-        {},
-        make_primitive(PrimitiveKind::I64),
-        {},
-        false,
-        builtin_span
-    });
-
-    functions_["time_ns"].push_back(FuncSig{
-        "time_ns",
-        {},
-        make_primitive(PrimitiveKind::I64),
-        {},
-        false,
-        builtin_span
-    });
+    // Initialize builtins from specialized files
+    init_builtin_types();   // Primitive types and behavior impls
+    init_builtin_io();      // print, println, panic, assert
+    init_builtin_string();  // str_len, str_eq, str_hash, etc.
+    init_builtin_time();    // time_ms, time_us, time_ns, sleep, elapsed
+    init_builtin_mem();     // mem_alloc, mem_free, mem_copy, etc.
 }
 
 } // namespace tml::types

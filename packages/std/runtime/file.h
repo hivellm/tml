@@ -30,6 +30,9 @@ typedef struct {
 
 // Open/Close
 TmlFile* file_open(const char* path, int32_t mode);
+TmlFile* file_open_read(const char* path);   // Convenience wrapper
+TmlFile* file_open_write(const char* path);  // Convenience wrapper
+TmlFile* file_open_append(const char* path); // Convenience wrapper
 void file_close(TmlFile* file);
 bool file_is_open(TmlFile* file);
 

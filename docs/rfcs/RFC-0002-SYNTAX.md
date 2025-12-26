@@ -1,7 +1,7 @@
 # RFC-0002: Surface Syntax
 
 ## Status
-Draft
+Implemented (v0.5.0)
 
 ## Summary
 
@@ -19,31 +19,42 @@ LLMs process code as text. The surface syntax should:
 
 ## 1. Lexical Structure
 
-### 1.1 Keywords (36 total)
+### 1.1 Keywords (41 total)
 
 ```
-and         as          async       await       behavior
-break       const       continue    do          else
-enum        false       for         func        if
-impl        in          let         loop        mod
-mut         not         or          pub         ref
-return      then        this        through     to
-true        type        when        where       while
-with
+// Declarations
+func      type      behavior  impl
+mod       use       pub       let
+const     decorator where
+
+// Control flow
+if        then      else      when
+loop      while     for       in
+to        through   break     continue
+return    do
+
+// Logical operators
+and       or        not
+
+// Types and references
+this      This      as        dyn
+mut       ref       lowlevel
+
+// Modules
+crate     super     with
+
+// Reserved for future
+async     await     quote
 ```
 
-### 1.2 Additional Keywords
+> **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.
 
-```
-decorator   quote
-```
-
-### 1.3 Reserved (future use)
+### 1.2 Reserved (future use)
 
 ```
 class       state       macro       yield       effect
-dyn         box         move        try         catch
-throw       virtual     override    super
+box         move        try         catch       throw
+virtual     override
 ```
 
 ### 1.4 Operators

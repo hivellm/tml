@@ -1,7 +1,7 @@
 # RFC-0001: Core Language
 
 ## Status
-Draft
+Active (v0.5.0)
 
 ## Implementation Status
 

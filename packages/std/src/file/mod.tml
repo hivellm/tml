@@ -1,14 +1,9 @@
 // TML Standard Library - File I/O Module
-// Provides: File object and Path utilities
+// Provides: File handle and Path utilities
 
 // ============================================================================
 // File Handle
 // ============================================================================
-
-/// File open modes
-pub const FILE_READ: I32 = 1
-pub const FILE_WRITE: I32 = 2
-pub const FILE_APPEND: I32 = 4
 
 /// File handle for reading and writing
 pub type File {
@@ -16,76 +11,46 @@ pub type File {
 }
 
 impl File {
-    /// Open a file with the specified mode
-    /// Modes: FILE_READ, FILE_WRITE, FILE_APPEND (can be combined with |)
-    pub func open(path: Str, mode: I32) -> File {
-        let handle: *Unit = lowlevel { file_open(path, mode) }
-        File { handle: handle }
-    }
-
     /// Open a file for reading
     pub func open_read(path: Str) -> File {
-        File.open(path, FILE_READ)
+        let h: *Unit = lowlevel { file_open_read(path) }
+        File { handle: h }
     }
 
     /// Open a file for writing (creates or truncates)
     pub func open_write(path: Str) -> File {
-        File.open(path, FILE_WRITE)
+        let h: *Unit = lowlevel { file_open_write(path) }
+        File { handle: h }
     }
 
     /// Open a file for appending
     pub func open_append(path: Str) -> File {
-        File.open(path, FILE_APPEND)
+        let h: *Unit = lowlevel { file_open_append(path) }
+        File { handle: h }
     }
 
     /// Check if the file is open
     pub func is_open(this) -> Bool {
-        lowlevel { file_is_open(this.handle) }
-    }
-
-    /// Read up to `size` bytes into a buffer, returns bytes read
-    pub func read(this, buffer: *U8, size: I64) -> I64 {
-        lowlevel { file_read(this.handle, buffer, size) }
+        let r: Bool = lowlevel { file_is_open(this.handle) }
+        return r
     }
 
     /// Read a single line from the file
     pub func read_line(this) -> Str {
-        lowlevel { file_read_line(this.handle) }
-    }
-
-    /// Write bytes to the file, returns bytes written
-    pub func write(this, data: *U8, size: I64) -> I64 {
-        lowlevel { file_write(this.handle, data, size) }
+        let r: Str = lowlevel { file_read_line(this.handle) }
+        return r
     }
 
     /// Write a string to the file
     pub func write_str(this, content: Str) -> Bool {
-        lowlevel { file_write_str(this.handle, content) }
+        let r: Bool = lowlevel { file_write_str(this.handle, content) }
+        return r
     }
 
     /// Get the size of the file in bytes
     pub func size(this) -> I64 {
-        lowlevel { file_size(this.handle) }
-    }
-
-    /// Get the current position in the file
-    pub func position(this) -> I64 {
-        lowlevel { file_position(this.handle) }
-    }
-
-    /// Seek to a specific position in the file
-    pub func seek(this, position: I64) -> Bool {
-        lowlevel { file_seek(this.handle, position) }
-    }
-
-    /// Seek to the end of the file
-    pub func seek_end(this) -> Bool {
-        lowlevel { file_seek_end(this.handle) }
-    }
-
-    /// Seek to the beginning of the file
-    pub func rewind(this) {
-        lowlevel { file_rewind(this.handle) }
+        let r: I64 = lowlevel { file_size(this.handle) }
+        return r
     }
 
     /// Close the file
@@ -97,17 +62,20 @@ impl File {
 
     /// Read entire file contents as a string
     pub func read_all(path: Str) -> Str {
-        lowlevel { file_read_all(path) }
+        let r: Str = lowlevel { file_read_all(path) }
+        return r
     }
 
     /// Write content to a file (overwrites if exists)
     pub func write_all(path: Str, content: Str) -> Bool {
-        lowlevel { file_write_all(path, content) }
+        let r: Bool = lowlevel { file_write_all(path, content) }
+        return r
     }
 
     /// Append content to a file
     pub func append_all(path: Str, content: Str) -> Bool {
-        lowlevel { file_append_all(path, content) }
+        let r: Bool = lowlevel { file_append_all(path, content) }
+        return r
     }
 }
 
@@ -116,76 +84,92 @@ impl File {
 // ============================================================================
 
 /// Path utilities (all static functions)
-pub type Path {}
+pub type Path {
+    dummy: I32
+}
 
 impl Path {
     /// Check if a path exists
     pub func exists(path: Str) -> Bool {
-        lowlevel { path_exists(path) }
+        let r: Bool = lowlevel { path_exists(path) }
+        return r
     }
 
     /// Check if path is a file
     pub func is_file(path: Str) -> Bool {
-        lowlevel { path_is_file(path) }
+        let r: Bool = lowlevel { path_is_file(path) }
+        return r
     }
 
     /// Check if path is a directory
     pub func is_dir(path: Str) -> Bool {
-        lowlevel { path_is_dir(path) }
+        let r: Bool = lowlevel { path_is_dir(path) }
+        return r
     }
 
     /// Create a directory
     pub func create_dir(path: Str) -> Bool {
-        lowlevel { path_create_dir(path) }
+        let r: Bool = lowlevel { path_create_dir(path) }
+        return r
     }
 
     /// Create a directory and all parent directories
     pub func create_dir_all(path: Str) -> Bool {
-        lowlevel { path_create_dir_all(path) }
+        let r: Bool = lowlevel { path_create_dir_all(path) }
+        return r
     }
 
     /// Remove a file
     pub func remove(path: Str) -> Bool {
-        lowlevel { path_remove(path) }
+        let r: Bool = lowlevel { path_remove(path) }
+        return r
     }
 
     /// Remove an empty directory
     pub func remove_dir(path: Str) -> Bool {
-        lowlevel { path_remove_dir(path) }
+        let r: Bool = lowlevel { path_remove_dir(path) }
+        return r
     }
 
     /// Rename/move a file or directory
-    pub func rename(from: Str, to: Str) -> Bool {
-        lowlevel { path_rename(from, to) }
+    pub func rename(src_path: Str, dst_path: Str) -> Bool {
+        let r: Bool = lowlevel { path_rename(src_path, dst_path) }
+        return r
     }
 
     /// Copy a file
-    pub func copy(from: Str, to: Str) -> Bool {
-        lowlevel { path_copy(from, to) }
+    pub func copy(src_path: Str, dst_path: Str) -> Bool {
+        let r: Bool = lowlevel { path_copy(src_path, dst_path) }
+        return r
     }
 
     /// Join two path components
-    pub func join(base: Str, child: Str) -> Str {
-        lowlevel { path_join(base, child) }
+    pub func join(base_path: Str, child_path: Str) -> Str {
+        let r: Str = lowlevel { path_join(base_path, child_path) }
+        return r
     }
 
     /// Get the parent directory of a path
     pub func parent(path: Str) -> Str {
-        lowlevel { path_parent(path) }
+        let r: Str = lowlevel { path_parent(path) }
+        return r
     }
 
     /// Get the filename from a path
     pub func filename(path: Str) -> Str {
-        lowlevel { path_filename(path) }
+        let r: Str = lowlevel { path_filename(path) }
+        return r
     }
 
     /// Get the file extension (including dot)
     pub func extension(path: Str) -> Str {
-        lowlevel { path_extension(path) }
+        let r: Str = lowlevel { path_extension(path) }
+        return r
     }
 
     /// Get the absolute path
     pub func absolute(path: Str) -> Str {
-        lowlevel { path_absolute(path) }
+        let r: Str = lowlevel { path_absolute(path) }
+        return r
     }
 }

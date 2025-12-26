@@ -351,9 +351,25 @@ tml fmt                # format code
 
 | Version | Status | Features |
 |---------|--------|----------|
-| v0.1 | In development | Core specification |
-| v1.0 | Planned | Reference implementation |
+| v0.1 | ✅ Complete | Core specification |
+| v0.5 | ✅ Active | Bootstrap compiler with LLVM backend |
+| v1.0 | 🔄 In Progress | Self-hosted compiler |
+
+### Implementation Status (Dec 2024)
+
+| Feature | Status |
+|---------|--------|
+| Lexer | ✅ Complete |
+| Parser | ✅ Complete (LL(1)) |
+| Type Checker | ✅ Complete |
+| Pattern Matching | ✅ Complete |
+| Module System | ✅ Complete |
+| Trait Objects | ✅ Complete |
+| Generics | ✅ Complete (monomorphization) |
+| LLVM Backend | ✅ Complete |
+| Test Framework | ✅ Complete |
+| Borrow Checker | 🟡 Basic |
 
 ## License
 
-MIT License
+Apache License 2.0

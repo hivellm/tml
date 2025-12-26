@@ -111,11 +111,11 @@ std::string find_clang() {
 
 std::string find_runtime() {
     std::vector<std::string> runtime_search = {
-        "packages/compiler/runtime/tml_essential.c",
-        "runtime/tml_essential.c",
-        "../runtime/tml_essential.c",
-        "../../runtime/tml_essential.c",
-        "F:/Node/hivellm/tml/packages/compiler/runtime/tml_essential.c",
+        "packages/compiler/runtime/essential.c",
+        "runtime/essential.c",
+        "../runtime/essential.c",
+        "../../runtime/essential.c",
+        "F:/Node/hivellm/tml/packages/compiler/runtime/essential.c",
     };
     for (const auto& rp : runtime_search) {
         if (fs::exists(rp)) {
@@ -127,7 +127,7 @@ std::string find_runtime() {
 
 std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang, bool verbose) {
     fs::path c_path = runtime_c_path;
-    fs::path obj_path = c_path.parent_path() / "tml_essential";
+    fs::path obj_path = c_path.parent_path() / "essential";
 #ifdef _WIN32
     obj_path += ".obj";
 #else
@@ -145,7 +145,7 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
         if (verbose) {
             std::cout << "Pre-compiling runtime: " << c_path << "\n";
         }
-        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
                                   to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
         if (ret != 0) {
@@ -184,7 +184,7 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
         if (verbose) {
             std::cout << "Compiling: " << c_path.filename().string() << " -> " << obj_path.filename().string() << "\n";
         }
-        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -ffast-math -fomit-frame-pointer -funroll-loops -o \"" +
+        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
                                   to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
         if (ret != 0) {

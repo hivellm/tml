@@ -664,7 +664,7 @@ from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout
 class YourProjectConan(ConanFile):
     name = "your-project"
     version = "1.0.0"
-    license = "MIT"
+    license = "Apache-2.0"
     author = "Your Name your.email@example.com"
     url = "https://github.com/your-org/your-project"
     description = "Short description"
@@ -712,7 +712,7 @@ class YourProjectConan(ConanFile):
   "version": "1.0.0",
   "description": "Short description",
   "homepage": "https://github.com/your-org/your-project",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": [
     {
       "name": "vcpkg-cmake",

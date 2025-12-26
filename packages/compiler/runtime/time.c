@@ -1,85 +1,108 @@
-// TML Core Runtime - Time Functions (Higher-level APIs)
-// NOTE: Basic time_ms, time_us, time_ns are in essential.c
-// This file provides higher-level time utilities (Instant, Duration, etc.)
+// TML Runtime - Time Functions
+// Matches: env_builtins_time.cpp
 
 #include <stdint.h>
-#include <stdio.h>
 
-// Forward declarations for essential runtime functions
-extern int32_t tml_time_ms(void);
-extern int64_t tml_time_us(void);
-extern int64_t tml_time_ns(void);
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+#endif
 
-static char elapsed_buffer[64];
+// ============ Time Reading ============
 
-const char* tml_elapsed_secs(int32_t start_ms) {
-    int32_t now = tml_time_ms();
-    double elapsed = (double)(now - start_ms) / 1000.0;
-    snprintf(elapsed_buffer, sizeof(elapsed_buffer), "%.3f", elapsed);
-    return elapsed_buffer;
+// time_ms() -> I32
+#ifdef _WIN32
+int32_t time_ms(void) {
+    return (int32_t)GetTickCount();
+}
+#else
+int32_t time_ms(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int32_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
+}
+#endif
+
+// time_us() -> I64
+#ifdef _WIN32
+int64_t time_us(void) {
+    LARGE_INTEGER freq, count;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&count);
+    return (int64_t)(count.QuadPart * 1000000 / freq.QuadPart);
+}
+#else
+int64_t time_us(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)(tv.tv_sec * 1000000LL + tv.tv_usec);
+}
+#endif
+
+// time_ns() -> I64
+#ifdef _WIN32
+int64_t time_ns(void) {
+    LARGE_INTEGER freq, count;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&count);
+    return (int64_t)(count.QuadPart * 1000000000 / freq.QuadPart);
+}
+#else
+int64_t time_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)(ts.tv_sec * 1000000000LL + ts.tv_nsec);
+}
+#endif
+
+// ============ Sleep ============
+
+// sleep_ms(ms: I32) -> Unit
+#ifdef _WIN32
+void sleep_ms(int32_t ms) {
+    Sleep((DWORD)ms);
+}
+#else
+void sleep_ms(int32_t ms) {
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+}
+#endif
+
+// sleep_us(us: I64) -> Unit
+#ifdef _WIN32
+void sleep_us(int64_t us) {
+    DWORD ms = (DWORD)(us / 1000);
+    if (ms == 0 && us > 0) ms = 1;
+    Sleep(ms);
+}
+#else
+void sleep_us(int64_t us) {
+    struct timespec ts;
+    ts.tv_sec = us / 1000000;
+    ts.tv_nsec = (us % 1000000) * 1000;
+    nanosleep(&ts, NULL);
+}
+#endif
+
+// ============ Elapsed Time ============
+
+// elapsed_ms(start: I32) -> I32
+int32_t elapsed_ms(int32_t start) {
+    return time_ms() - start;
 }
 
-int32_t tml_elapsed_ms(int32_t start_ms) {
-    return tml_time_ms() - start_ms;
+// elapsed_us(start: I64) -> I64
+int64_t elapsed_us(int64_t start) {
+    return time_us() - start;
 }
 
-// ============ INSTANT API (like Rust's std::time::Instant) ============
-
-int64_t tml_instant_now(void) {
-    return tml_time_us();
-}
-
-int64_t tml_instant_elapsed(int64_t start_us) {
-    return tml_time_us() - start_us;
-}
-
-double tml_duration_as_secs_f64(int64_t duration_us) {
-    return (double)duration_us / 1000000.0;
-}
-
-double tml_duration_as_millis_f64(int64_t duration_us) {
-    return (double)duration_us / 1000.0;
-}
-
-int64_t tml_duration_as_millis(int64_t duration_us) {
-    return duration_us / 1000;
-}
-
-int64_t tml_duration_as_secs(int64_t duration_us) {
-    return duration_us / 1000000;
-}
-
-const char* tml_duration_format_ms(int64_t duration_us) {
-    double ms = (double)duration_us / 1000.0;
-    snprintf(elapsed_buffer, sizeof(elapsed_buffer), "%.3f", ms);
-    return elapsed_buffer;
-}
-
-const char* tml_duration_format_secs(int64_t duration_us) {
-    double secs = (double)duration_us / 1000000.0;
-    snprintf(elapsed_buffer, sizeof(elapsed_buffer), "%.6f", secs);
-    return elapsed_buffer;
-}
-
-// ============ FLOAT FUNCTIONS ============
-
-static char float_buffer[64];
-
-const char* tml_float_to_fixed(double value, int32_t decimals) {
-    if (decimals < 0) decimals = 0;
-    if (decimals > 20) decimals = 20;
-    snprintf(float_buffer, sizeof(float_buffer), "%.*f", decimals, value);
-    return float_buffer;
-}
-
-const char* tml_float_to_precision(double value, int32_t precision) {
-    if (precision < 1) precision = 1;
-    if (precision > 21) precision = 21;
-    snprintf(float_buffer, sizeof(float_buffer), "%.*g", precision, value);
-    return float_buffer;
-}
-
-const char* tml_float_to_string(double value) {
-    snprintf(float_buffer, sizeof(float_buffer), "%g", value);
-    return float_buffer;
+// elapsed_ns(start: I64) -> I64
+int64_t elapsed_ns(int64_t start) {
+    return time_ns() - start;
 }

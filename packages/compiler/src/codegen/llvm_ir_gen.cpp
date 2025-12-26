@@ -838,23 +838,47 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @path_absolute(ptr)");
     emit_line("");
 
-    // String utilities
+    // String utilities (matches runtime/string.c)
     emit_line("; String utilities");
     emit_line("declare i32 @str_len(ptr)");
-    emit_line("declare i32 @str_hash(ptr)");
     emit_line("declare i32 @str_eq(ptr, ptr)");
+    emit_line("declare i32 @str_hash(ptr)");
+    emit_line("declare ptr @str_concat(ptr, ptr)");
+    emit_line("declare ptr @str_substring(ptr, i32, i32)");
+    emit_line("declare i32 @str_contains(ptr, ptr)");
+    emit_line("declare i32 @str_starts_with(ptr, ptr)");
+    emit_line("declare i32 @str_ends_with(ptr, ptr)");
+    emit_line("declare ptr @str_to_upper(ptr)");
+    emit_line("declare ptr @str_to_lower(ptr)");
+    emit_line("declare ptr @str_trim(ptr)");
+    emit_line("declare i32 @str_char_at(ptr, i32)");
     emit_line("");
 
-    // Time functions - only declare if not imported from core::time module
-    // (core::time module declares its own lowlevel functions)
-    bool has_time_module = env_.module_registry() && env_.module_registry()->has_module("core::time");
-    if (!has_time_module) {
-        emit_line("; Time functions");
-        emit_line("declare i32 @time_ms()");
-        emit_line("declare i64 @time_us()");
-        emit_line("declare i64 @time_ns()");
-        emit_line("");
-    }
+    // Time functions (matches runtime/time.c)
+    emit_line("; Time functions");
+    emit_line("declare i32 @time_ms()");
+    emit_line("declare i64 @time_us()");
+    emit_line("declare i64 @time_ns()");
+    emit_line("declare void @sleep_ms(i32)");
+    emit_line("declare void @sleep_us(i64)");
+    emit_line("declare i32 @elapsed_ms(i32)");
+    emit_line("declare i64 @elapsed_us(i64)");
+    emit_line("declare i64 @elapsed_ns(i64)");
+    emit_line("");
+
+    // Memory functions (matches runtime/mem.c)
+    emit_line("; Memory functions");
+    emit_line("declare ptr @mem_alloc(i64)");
+    emit_line("declare ptr @mem_alloc_zeroed(i64)");
+    emit_line("declare ptr @mem_realloc(ptr, i64)");
+    emit_line("declare void @mem_free(ptr)");
+    emit_line("declare void @mem_copy(ptr, ptr, i64)");
+    emit_line("declare void @mem_move(ptr, ptr, i64)");
+    emit_line("declare void @mem_set(ptr, i32, i64)");
+    emit_line("declare void @mem_zero(ptr, i64)");
+    emit_line("declare i32 @mem_compare(ptr, ptr, i64)");
+    emit_line("declare i32 @mem_eq(ptr, ptr, i64)");
+    emit_line("");
 
     // Format strings for print/println
     // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)

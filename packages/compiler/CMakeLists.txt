@@ -95,6 +95,11 @@ add_library(tml_types STATIC
     src/types/env_scope.cpp
     src/types/env_core.cpp
     src/types/env_builtins.cpp
+    src/types/env_builtins_types.cpp
+    src/types/env_builtins_io.cpp
+    src/types/env_builtins_string.cpp
+    src/types/env_builtins_time.cpp
+    src/types/env_builtins_mem.cpp
     src/types/env_definitions.cpp
     src/types/env_lookups.cpp
     src/types/module.cpp

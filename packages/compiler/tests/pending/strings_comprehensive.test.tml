@@ -1,0 +1,254 @@
+use test
+
+// ============================================================================
+// Comprehensive String Builtin Tests
+// Tests all string functions: str_len, str_eq, str_hash, str_concat,
+// str_substring, str_contains, str_starts_with, str_ends_with,
+// str_to_upper, str_to_lower, str_trim, str_char_at
+// ============================================================================
+
+// ============================================================================
+// str_concat Tests
+// ============================================================================
+
+@test
+func test_str_concat_basic() -> I32 {
+    let result: Str = str_concat("Hello", " World")
+    assert(str_eq(result, "Hello World"), "concat should join strings")
+    return 0
+}
+
+@test
+func test_str_concat_empty_left() -> I32 {
+    let result: Str = str_concat("", "World")
+    assert(str_eq(result, "World"), "concat with empty left should return right")
+    return 0
+}
+
+@test
+func test_str_concat_empty_right() -> I32 {
+    let result: Str = str_concat("Hello", "")
+    assert(str_eq(result, "Hello"), "concat with empty right should return left")
+    return 0
+}
+
+@test
+func test_str_concat_both_empty() -> I32 {
+    let result: Str = str_concat("", "")
+    assert_eq(str_len(result), 0, "concat of two empty strings should be empty")
+    return 0
+}
+
+// ============================================================================
+// str_substring Tests
+// ============================================================================
+
+@test
+func test_str_substring_middle() -> I32 {
+    let result: Str = str_substring("Hello World", 6, 5)
+    assert(str_eq(result, "World"), "substring should extract middle")
+    return 0
+}
+
+@test
+func test_str_substring_start() -> I32 {
+    let result: Str = str_substring("Hello World", 0, 5)
+    assert(str_eq(result, "Hello"), "substring should extract start")
+    return 0
+}
+
+@test
+func test_str_substring_single_char() -> I32 {
+    let result: Str = str_substring("Hello", 1, 1)
+    assert(str_eq(result, "e"), "substring of 1 char should work")
+    return 0
+}
+
+// ============================================================================
+// str_contains Tests
+// ============================================================================
+
+@test
+func test_str_contains_found() -> I32 {
+    let result: Bool = str_contains("Hello World", "World")
+    assert_eq(result, true, "should find contained substring")
+    return 0
+}
+
+@test
+func test_str_contains_not_found() -> I32 {
+    let result: Bool = str_contains("Hello World", "Foo")
+    assert_eq(result, false, "should not find missing substring")
+    return 0
+}
+
+@test
+func test_str_contains_empty_needle() -> I32 {
+    let result: Bool = str_contains("Hello", "")
+    assert_eq(result, true, "empty string should be found in any string")
+    return 0
+}
+
+@test
+func test_str_contains_at_start() -> I32 {
+    let result: Bool = str_contains("Hello World", "Hello")
+    assert_eq(result, true, "should find at start")
+    return 0
+}
+
+@test
+func test_str_contains_at_end() -> I32 {
+    let result: Bool = str_contains("Hello World", "World")
+    assert_eq(result, true, "should find at end")
+    return 0
+}
+
+// ============================================================================
+// str_starts_with Tests
+// ============================================================================
+
+@test
+func test_str_starts_with_true() -> I32 {
+    let result: Bool = str_starts_with("Hello World", "Hello")
+    assert_eq(result, true, "should detect prefix")
+    return 0
+}
+
+@test
+func test_str_starts_with_false() -> I32 {
+    let result: Bool = str_starts_with("Hello World", "World")
+    assert_eq(result, false, "World is not a prefix")
+    return 0
+}
+
+@test
+func test_str_starts_with_empty() -> I32 {
+    let result: Bool = str_starts_with("Hello", "")
+    assert_eq(result, true, "empty string is prefix of anything")
+    return 0
+}
+
+@test
+func test_str_starts_with_full_match() -> I32 {
+    let result: Bool = str_starts_with("Hello", "Hello")
+    assert_eq(result, true, "full match should be prefix")
+    return 0
+}
+
+// ============================================================================
+// str_ends_with Tests
+// ============================================================================
+
+@test
+func test_str_ends_with_true() -> I32 {
+    let result: Bool = str_ends_with("Hello World", "World")
+    assert_eq(result, true, "should detect suffix")
+    return 0
+}
+
+@test
+func test_str_ends_with_false() -> I32 {
+    let result: Bool = str_ends_with("Hello World", "Hello")
+    assert_eq(result, false, "Hello is not a suffix")
+    return 0
+}
+
+@test
+func test_str_ends_with_empty() -> I32 {
+    let result: Bool = str_ends_with("Hello", "")
+    assert_eq(result, true, "empty string is suffix of anything")
+    return 0
+}
+
+// ============================================================================
+// str_to_upper Tests
+// ============================================================================
+
+@test
+func test_str_to_upper_lowercase() -> I32 {
+    let result: Str = str_to_upper("hello")
+    assert(str_eq(result, "HELLO"), "should convert to uppercase")
+    return 0
+}
+
+@test
+func test_str_to_upper_mixed() -> I32 {
+    let result: Str = str_to_upper("Hello World")
+    assert(str_eq(result, "HELLO WORLD"), "should convert mixed case")
+    return 0
+}
+
+@test
+func test_str_to_upper_already_upper() -> I32 {
+    let result: Str = str_to_upper("HELLO")
+    assert(str_eq(result, "HELLO"), "already upper should stay same")
+    return 0
+}
+
+// ============================================================================
+// str_to_lower Tests
+// ============================================================================
+
+@test
+func test_str_to_lower_uppercase() -> I32 {
+    let result: Str = str_to_lower("HELLO")
+    assert(str_eq(result, "hello"), "should convert to lowercase")
+    return 0
+}
+
+@test
+func test_str_to_lower_mixed() -> I32 {
+    let result: Str = str_to_lower("Hello World")
+    assert(str_eq(result, "hello world"), "should convert mixed case")
+    return 0
+}
+
+// ============================================================================
+// str_trim Tests
+// ============================================================================
+
+@test
+func test_str_trim_spaces() -> I32 {
+    let result: Str = str_trim("  hello  ")
+    assert(str_eq(result, "hello"), "should trim leading and trailing spaces")
+    return 0
+}
+
+@test
+func test_str_trim_no_spaces() -> I32 {
+    let result: Str = str_trim("hello")
+    assert(str_eq(result, "hello"), "no trim needed")
+    return 0
+}
+
+@test
+func test_str_trim_only_spaces() -> I32 {
+    let result: Str = str_trim("   ")
+    assert_eq(str_len(result), 0, "all spaces should result in empty")
+    return 0
+}
+
+// ============================================================================
+// str_char_at Tests
+// ============================================================================
+
+@test
+func test_str_char_at_first() -> I32 {
+    let result: Char = str_char_at("Hello", 0)
+    assert_eq(result as I32, 72, "H should be ASCII 72")
+    return 0
+}
+
+@test
+func test_str_char_at_middle() -> I32 {
+    let result: Char = str_char_at("Hello", 2)
+    assert_eq(result as I32, 108, "l should be ASCII 108")
+    return 0
+}
+
+@test
+func test_str_char_at_last() -> I32 {
+    let result: Char = str_char_at("Hello", 4)
+    assert_eq(result as I32, 111, "o should be ASCII 111")
+    return 0
+}

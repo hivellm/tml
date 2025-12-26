@@ -5,12 +5,13 @@ Syntax highlighting and language support for TML (To Machine Language).
 ## Features
 
 - **Syntax Highlighting**: Full syntax highlighting for TML language
-  - Keywords (func, type, behavior, extend, etc.)
-  - Types (I32, U64, F64, String, Bool, etc.)
+  - Keywords (func, type, behavior, impl, dyn, etc.)
+  - Types (I32, U64, F64, Str, Bool, Instant, Duration, etc.)
   - Operators (and, or, not, +, -, *, /, etc.)
   - Literals (integers, floats, strings, characters)
   - Comments (line, block, doc, AI comments)
-  - Directives (@test, @when, @auto, etc.)
+  - Directives (@test, @bench, @stable, @deprecated, etc.)
+  - Enum variants (Just, Nothing, Ok, Err)
 
 - **Language Configuration**:
   - Auto-closing brackets, quotes, and parentheses
@@ -68,6 +69,19 @@ func linux_only() {
 }
 ```
 
+### Lowlevel and Pointers
+```tml
+func pointer_example() {
+    let mut x: I32 = 42
+
+    lowlevel {
+        let p: *I32 = &x      // Pointer type (*T)
+        let val: I32 = p.read()
+        p.write(100)
+    }
+}
+```
+
 ## Installation
 
 ### From Source
@@ -94,6 +108,21 @@ None at this time.
 
 ## Release Notes
 
+### 0.3.0
+
+- Added pointer type syntax highlighting (`*I32`, `*Bool`, etc.)
+- Added lowlevel block documentation
+- Improved support for low-level programming features
+
+### 0.2.0
+
+- Added `dyn` keyword for trait objects
+- Added `@bench`, `@stable`, `@unstable` directives
+- Added `Str`, `Never` primitive types
+- Added `Instant`, `Duration` time types
+- Added `Just`, `Nothing`, `Ok`, `Err` enum variant highlighting
+- Updated license to Apache 2.0
+
 ### 0.1.0
 
 - Initial release
@@ -106,7 +135,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT
+Apache 2.0
 
 ## About TML
 
