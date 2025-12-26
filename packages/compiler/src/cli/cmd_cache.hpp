@@ -28,6 +28,16 @@ int run_cache_info(bool verbose = false);
 int run_cache_clean(bool clean_all = false, int max_age_days = 7, bool verbose = false);
 
 /**
+ * Enforce cache size limit using LRU eviction
+ * If cache size exceeds max_size_mb, removes oldest files until under limit
+ *
+ * @param max_size_mb Maximum cache size in megabytes (default: 1024 = 1GB)
+ * @param verbose Print information about evicted files
+ * @return Number of files removed
+ */
+int enforce_cache_limit(uintmax_t max_size_mb = 1024, bool verbose = false);
+
+/**
  * Main cache command dispatcher
  * Handles: tml cache info, tml cache clean
  *

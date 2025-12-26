@@ -232,6 +232,234 @@ struct Token {
 // 4. Insert runtime calls (alloc, drop)
 ```
 
+### 2.3 Object File and Build Pipeline
+
+The TML compiler uses a modern build system with content-based caching and parallel compilation.
+
+#### Build Stages
+
+```
+Source (.tml) → LLVM IR (.ll) → Object File (.obj/.o) → Executable/Library
+     │                │                  │                      │
+     │                │                  │                      │
+     ▼                ▼                  ▼                      ▼
+  Compiler        Compiler           Clang                  Linker
+  Frontend        Backend                              (clang/lld/link)
+```
+
+#### Object File Generation
+
+```cpp
+// Compile LLVM IR to object file
+ObjectCompileResult compile_ll_to_object(
+    const fs::path& ll_file,          // Input: LLVM IR file
+    const std::optional<fs::path>& output_file,  // Output: .obj/.o
+    const std::string& clang_path,
+    const ObjectCompileOptions& options
+);
+
+struct ObjectCompileOptions {
+    int optimization_level = 3;        // 0-3 (-O0 to -O3)
+    bool debug_info = false;           // Include debug symbols
+    bool position_independent = false; // -fPIC for shared libs
+    bool verbose = false;              // Print commands
+};
+```
+
+**Platform-Specific Extensions:**
+- Windows: `.obj` (COFF format)
+- Unix/Linux: `.o` (ELF format)
+- macOS: `.o` (Mach-O format)
+
+#### Build Cache System
+
+The compiler implements a two-level cache for fast incremental builds:
+
+**Level 1: Object File Cache**
+```
+build/debug/.run-cache/<content-hash>.obj
+```
+- Content-based hashing of LLVM IR
+- Instant reuse if IR unchanged
+- Shared across all builds
+
+**Level 2: Executable Cache**
+```
+build/debug/.run-cache/<combined-hash>.exe
+```
+- Combined hash of all object files
+- Skips linking if nothing changed
+- Includes runtime libraries in hash
+
+**Cache Hit Performance:**
+- Full rebuild: ~3 seconds (compile + link)
+- Cache hit (object files): ~0.5 seconds (link only)
+- Cache hit (executable): ~0.075 seconds (no work)
+- **91% speedup** for `tml run` on unchanged code
+- **52% speedup** for `tml test` with parallel compilation
+
+**File Organization:**
+```
+build/
+├── debug/
+│   ├── .run-cache/           # Cached artifacts
+│   │   ├── a1b2c3d4.obj      # Object files (content hash)
+│   │   ├── e5f6g7h8.obj
+│   │   └── 9i0j1k2l.exe      # Executables (combined hash)
+│   ├── tml.exe               # Main compiler
+│   └── tml_tests.exe         # Test executable
+└── cache/
+    └── x86_64-pc-windows-msvc/
+        └── debug/            # CMake build cache
+```
+
+#### Parallel Compilation
+
+For test suites and multi-file projects, the compiler supports parallel object file generation:
+
+```cpp
+BatchCompileResult compile_ll_batch(
+    const std::vector<fs::path>& ll_files,
+    const std::string& clang_path,
+    const ObjectCompileOptions& options,
+    int num_threads = 0  // 0 = auto-detect (hardware_concurrency)
+);
+```
+
+**Implementation Details:**
+- Uses `std::thread` for parallelism
+- Auto-detects CPU cores with `std::thread::hardware_concurrency()`
+- Thread-safe compilation with mutex-protected shared state
+- Each thread compiles independent `.ll` files
+- Achieves 52% speedup for test suite compilation
+
+#### Linking Strategies
+
+The linker supports three output types:
+
+```cpp
+enum class OutputType {
+    Executable,     // .exe (Windows) / no extension (Unix)
+    StaticLib,      // .lib (Windows) / .a (Unix)
+    DynamicLib      // .dll (Windows) / .so (Unix)
+};
+
+LinkResult link_objects(
+    const std::vector<fs::path>& object_files,
+    const fs::path& output_file,
+    const std::string& clang_path,
+    const LinkOptions& options
+);
+```
+
+**Static Libraries:**
+```bash
+# Windows
+lib.exe /OUT:mylib.lib file1.obj file2.obj
+
+# Unix
+ar rcs libmylib.a file1.o file2.o
+```
+
+**Dynamic Libraries:**
+```bash
+# Windows
+clang -shared -o mylib.dll file1.obj file2.obj
+
+# Unix
+clang -shared -fPIC -o libmylib.so file1.o file2.o
+```
+
+**Executables:**
+```bash
+clang -o myapp.exe file1.obj file2.obj essential.obj -lruntime
+```
+
+#### FFI Integration
+
+For C interoperability, the build system supports:
+
+1. **Header Generation:**
+   - `--emit-header` flag generates C header from TML code
+   - Maps TML types to C types
+   - Preserves function signatures with `@[export]`
+
+2. **Symbol Export:**
+   ```tml
+   @[export]
+   func add(a: I32, b: I32) -> I32 {
+       return a + b
+   }
+   // Generates: int32_t tml_add(int32_t a, int32_t b);
+   ```
+
+3. **Calling Convention:**
+   - Uses C calling convention by default
+   - Compatible with MSVC (Windows) and GCC/Clang (Unix)
+   - No name mangling for exported functions
+
+4. **Build Modes:**
+   ```bash
+   # Static library + header
+   tml build --crate-type staticlib --emit-header
+
+   # Dynamic library + header
+   tml build --crate-type dylib --emit-header
+   ```
+
+**Integration Example:**
+```c
+// C code using TML library
+#include "mylib.h"
+
+int main() {
+    int32_t result = tml_add(5, 3);  // Calls TML function
+    printf("Result: %d\n", result);
+    return 0;
+}
+```
+
+**Build Commands:**
+```bash
+# Compile TML to library
+tml build mylib.tml --crate-type dylib --emit-header --out-dir .
+
+# Compile C code
+clang use_mylib.c mylib.dll -o use_mylib.exe
+
+# Run
+./use_mylib.exe
+```
+
+#### Build Optimization Techniques
+
+**Hard Link Optimization:**
+- Cache uses hard links instead of file copies
+- Zero data duplication for cached artifacts
+- Instant "copy" operation (metadata only)
+- Supported on Windows NTFS, Linux ext4, macOS APFS
+
+**Incremental Linking:**
+- Detects which object files changed
+- Only recompiles modified modules
+- Reuses cached objects for unchanged code
+- Combined hash prevents unnecessary relinking
+
+**Compiler Flags:**
+```bash
+# Debug build (default)
+tml build main.tml              # -O0, keep .ll files
+
+# Release build
+tml build main.tml --release    # -O3, delete intermediates
+
+# Custom optimization
+tml build main.tml --opt-level 2  # -O2
+
+# Verbose mode
+tml build main.tml --verbose    # Print all commands
+```
+
 ## 3. Type System Implementation
 
 ### 3.1 Type Representation

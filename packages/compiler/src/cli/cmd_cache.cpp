@@ -254,6 +254,90 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
     return 0;
 }
 
+int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
+    fs::path cache_dir = get_cache_dir();
+
+    if (!fs::exists(cache_dir)) {
+        return 0; // No cache, nothing to do
+    }
+
+    // Convert MB to bytes
+    uintmax_t max_size_bytes = max_size_mb * 1024 * 1024;
+
+    // Collect all cache files with their sizes and timestamps
+    struct FileInfo {
+        fs::path path;
+        uintmax_t size;
+        fs::file_time_type last_access;
+    };
+
+    std::vector<FileInfo> files;
+    uintmax_t total_size = 0;
+
+    try {
+        for (const auto& entry : fs::directory_iterator(cache_dir)) {
+            if (!fs::is_regular_file(entry.path())) {
+                continue;
+            }
+
+            uintmax_t size = fs::file_size(entry.path());
+            auto last_write = fs::last_write_time(entry.path());
+
+            files.push_back({entry.path(), size, last_write});
+            total_size += size;
+        }
+    } catch (const std::exception&) {
+        return 0; // Ignore errors during iteration
+    }
+
+    // Check if we need to evict
+    if (total_size <= max_size_bytes) {
+        return 0; // Under limit, nothing to do
+    }
+
+    if (verbose) {
+        std::cout << "Cache size (" << format_size(total_size)
+                  << ") exceeds limit (" << format_size(max_size_bytes)
+                  << "), evicting old files...\n";
+    }
+
+    // Sort files by last access time (oldest first) - LRU eviction
+    std::sort(files.begin(), files.end(), [](const FileInfo& a, const FileInfo& b) {
+        return a.last_access < b.last_access;
+    });
+
+    // Remove files until under limit
+    int removed_count = 0;
+    uintmax_t removed_size = 0;
+
+    for (const auto& file_info : files) {
+        if (total_size <= max_size_bytes) {
+            break; // Under limit now
+        }
+
+        try {
+            if (verbose) {
+                std::cout << "  Evicting: " << file_info.path.filename().string()
+                          << " (" << format_size(file_info.size) << ")\n";
+            }
+
+            fs::remove(file_info.path);
+            removed_count++;
+            removed_size += file_info.size;
+            total_size -= file_info.size;
+        } catch (const std::exception&) {
+            // Ignore removal errors
+        }
+    }
+
+    if (verbose && removed_count > 0) {
+        std::cout << "Evicted " << removed_count << " files (" << format_size(removed_size)
+                  << "), cache size now: " << format_size(total_size) << "\n";
+    }
+
+    return removed_count;
+}
+
 int run_cache(int argc, char* argv[]) {
     if (argc < 3) {
         std::cerr << "Usage: tml cache <subcommand> [options]\n";

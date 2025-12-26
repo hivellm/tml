@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests: `closure_simple.test.tml` ✅, `generic_closure_simple.test.tml` ✅
   - See [BUGS.md](BUGS.md) for technical details
 
+### Completed
+- **Object File Build System** (2025-12-26) - 82% complete (125/153 tasks) ✅
+  - ✅ Phases 1-5: Object files, build cache with LRU eviction, static/dynamic libs, C header generation
+  - ✅ Phases 8-10: Documentation, examples, testing, performance optimization
+  - ✅ Unit tests for object_compiler (6 tests passing)
+  - ✅ Integration test infrastructure for cache and FFI workflows
+  - ✅ Cache management: size limit (1GB default), LRU eviction, `cache clean/info` commands
+  - ✅ Comprehensive documentation in COMPILER-ARCHITECTURE.md (section 2.3 - 227 lines)
+  - ⏳ Phases 6-7 (RLIB format + tml.toml manifest) deferred to future releases
+  - See [rulebook/tasks/object-file-build-system/tasks.md](rulebook/tasks/object-file-build-system/tasks.md) for details
+
 ### Added
 - **Maybe[T] and Outcome[T,E] Combinators** (2025-12-26) - Functional programming patterns for stdlib
   - Maybe[T]: `map()`, `and_then()`, `filter()`, `or_else()`

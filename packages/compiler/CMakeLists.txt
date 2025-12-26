@@ -205,6 +205,9 @@ if(TML_BUILD_TESTS)
         tests/ir_test.cpp
         tests/format_test.cpp
         tests/codegen_test.cpp
+        tests/cli/object_compiler_test.cpp
+        tests/integration/cache_test.cpp
+        tests/integration/ffi_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli
