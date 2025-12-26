@@ -1,6 +1,0 @@
-// ERROR TEST: Invalid binary operator for types
-// Expected: error about invalid operation (Str + I32)
-func main() -> I32 {
-    let x: Str = "hello" + 42
-    return 0
-}

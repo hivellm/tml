@@ -138,22 +138,22 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     // Check if this is a mod.tml file - if so, load all sibling .tml files
     auto fs_path = std::filesystem::path(file_path);
-    std::cerr << "[DEBUG] load_module_from_file: " << file_path << " (stem: " << fs_path.stem() << ")\n";
+    TML_DEBUG_LN("[MODULE] load_module_from_file: " << file_path << " (stem: " << fs_path.stem() << ")");
     if (fs_path.stem() == "mod") {
         auto dir = fs_path.parent_path();
-        std::cerr << "[DEBUG] Loading directory module from: " << dir << "\n";
+        TML_DEBUG_LN("[MODULE] Loading directory module from: " << dir);
 
         // Load all .tml files in the directory (except mod.tml itself)
         for (const auto& entry : std::filesystem::directory_iterator(dir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".tml") {
                 auto entry_path = entry.path().string();
-                std::cerr << "[DEBUG]   Parsing: " << entry.path().filename() << "\n";
+                TML_DEBUG_LN("[MODULE]   Parsing: " << entry.path().filename());
                 auto parsed = parse_tml_file(entry_path);
                 if (parsed) {
-                    std::cerr << "[DEBUG]   OK: " << entry.path().filename() << "\n";
+                    TML_DEBUG_LN("[MODULE]   OK: " << entry.path().filename());
                     all_parsed.push_back(std::move(*parsed));
                 } else {
-                    std::cerr << "[DEBUG]   FAILED: " << entry.path().filename() << "\n";
+                    TML_DEBUG_LN("[MODULE]   FAILED: " << entry.path().filename());
                 }
             }
         }
@@ -168,10 +168,10 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     }
 
     if (all_parsed.empty()) {
-        std::cerr << "[DEBUG] No valid files found for: " << module_path << "\n";
+        TML_DEBUG_LN("[MODULE] No valid files found for: " << module_path);
         return false;
     }
-    std::cerr << "[DEBUG] Parsed " << all_parsed.size() << " files for module: " << module_path << "\n";
+    TML_DEBUG_LN("[MODULE] Parsed " << all_parsed.size() << " files for module: " << module_path);
 
     // Create module structure and extract declarations
     Module mod;
@@ -321,7 +321,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 };
 
                 mod.structs[struct_decl.name] = std::move(struct_def);
-                std::cerr << "[DEBUG] Registered struct: " << struct_decl.name << " in module " << module_path << "\n";
+                TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module " << module_path);
             }
             else if (decl->is<parser::EnumDecl>()) {
                 const auto& enum_decl = decl->as<parser::EnumDecl>();
@@ -367,7 +367,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 };
 
                 mod.enums[enum_decl.name] = std::move(enum_def);
-                std::cerr << "[DEBUG] Registered enum: " << enum_decl.name << " in module " << module_path << "\n";
+                TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module " << module_path);
             }
             else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl_decl = decl->as<parser::ImplDecl>();
@@ -426,7 +426,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     };
 
                     mod.functions[qualified_name] = sig;
-                    std::cerr << "[DEBUG] Registered impl method: " << qualified_name << " in module " << module_path << "\n";
+                    TML_DEBUG_LN("[MODULE] Registered impl method: " << qualified_name << " in module " << module_path);
                 }
             }
         }
@@ -539,11 +539,11 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
             std::filesystem::path("F:/Node/hivellm/tml/packages/std/src") / module_name / "mod.tml",
         };
 
-        std::cerr << "[DEBUG] Looking for std module: " << module_path << " (name: " << module_name << ")\n";
+        TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path << " (name: " << module_name << ")");
         for (const auto& module_file : search_paths) {
-            std::cerr << "[DEBUG]   Checking: " << module_file << "\n";
+            TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
-                std::cerr << "[DEBUG]   FOUND!\n";
+                TML_DEBUG_LN("[MODULE]   FOUND!");
                 return load_module_from_file(module_path, module_file.string());
             }
         }

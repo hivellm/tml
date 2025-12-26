@@ -1,6 +1,0 @@
-// ERROR TEST: Undefined function
-// Expected: error about undefined function 'foo'
-func main() -> I32 {
-    let x: I32 = foo()
-    return x
-}

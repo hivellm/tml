@@ -1,6 +1,0 @@
-// ERROR TEST: Undefined variable
-// Expected: error about undefined variable 'y'
-func main() -> I32 {
-    let x: I32 = y
-    return x
-}

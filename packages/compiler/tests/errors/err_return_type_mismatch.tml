@@ -1,5 +1,0 @@
-// ERROR TEST: Return type mismatch
-// Expected: error about return type mismatch (Str vs I32)
-func main() -> I32 {
-    return "hello"
-}

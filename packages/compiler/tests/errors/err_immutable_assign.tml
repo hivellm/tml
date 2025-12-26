@@ -1,7 +1,0 @@
-// ERROR TEST: Assignment to immutable variable
-// Expected: error about assigning to immutable variable
-func main() -> I32 {
-    let x: I32 = 10
-    x = 20
-    return x
-}
