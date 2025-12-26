@@ -367,6 +367,181 @@ Features:
 }
 ```
 
+## 8. Build System
+
+### 8.1 Build Modes (Crate Types)
+
+TML supports multiple output formats for libraries and executables:
+
+```bash
+# Executable (default)
+tml build
+tml build --crate-type bin
+
+# Static library (C-compatible)
+tml build --crate-type staticlib
+# Output: libmylib.a (Linux), mylib.lib (Windows)
+# Also generates: mylib.h (C header)
+
+# Dynamic library (C-compatible)
+tml build --crate-type cdylib
+# Output: libmylib.so (Linux), mylib.dll (Windows)
+# Also generates: mylib.h (C header)
+
+# TML library (with metadata)
+tml build --crate-type rlib
+# Output: libmylib.rlib (archive with objects + metadata)
+```
+
+**Configuration in tml.toml:**
+```toml
+[package]
+name = "mylib"
+version = "1.0.0"
+
+[lib]
+crate-type = ["rlib", "cdylib"]  # Multiple outputs
+
+[[bin]]
+name = "myapp"
+path = "src/main.tml"
+```
+
+### 8.2 Build Cache
+
+TML uses incremental compilation with hash-based caching:
+
+```bash
+# Build with cache (default)
+tml build
+
+# Rebuild without cache
+tml build --no-cache
+
+# Clean cache
+tml cache clean
+
+# Show cache statistics
+tml cache info
+# Output:
+# Cache: build/debug/.cache/
+# Size: 45.2 MB
+# Entries: 127
+# Hit rate: 87%
+# Last cleaned: 2025-01-15
+```
+
+**How it works:**
+1. Hash = `hash(source_content + compiler_version + flags)`
+2. Check if `build/debug/.cache/{hash}.o` exists
+3. If exists → reuse (cache hit, ~10x faster)
+4. If not → compile and cache
+
+**Cache location:**
+- Debug: `build/debug/.cache/`
+- Release: `build/release/.cache/`
+- Shared deps: `build/debug/deps/`
+
+### 8.3 Object Files and Linking
+
+TML compiles through object files for faster incremental builds:
+
+```
+Pipeline:
+  .tml → Parse → Type Check → LLVM IR (.ll)
+                                  ↓
+                          Object File (.o)
+                                  ↓
+                         Link (based on mode)
+                                  ↓
+                    Output (.exe, .dll, .a, .rlib)
+```
+
+**Build artifacts:**
+```
+build/debug/
+├── .cache/              # Object file cache
+│   ├── abc123.o        # Cached object
+│   ├── abc123.meta     # Metadata
+│   └── index.json      # Cache index
+├── deps/               # Compiled dependencies
+│   ├── essential.obj
+│   └── std.rlib
+├── myapp.exe           # Executable
+├── libmylib.a          # Static library
+├── mylib.dll           # Dynamic library
+├── mylib.h             # C header
+└── mylib.rlib          # TML library
+```
+
+### 8.4 C FFI Export
+
+Export TML functions for use in C/C++:
+
+**TML code (math.tml):**
+```tml
+@[export]
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+@[export]
+func multiply(a: I32, b: I32) -> I32 {
+    return a * b
+}
+```
+
+**Build library:**
+```bash
+tml build --crate-type cdylib --emit-header
+# Generates: libmath.so + math.h
+```
+
+**Generated header (math.h):**
+```c
+#ifndef TML_MATH_H
+#define TML_MATH_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int32_t add(int32_t a, int32_t b);
+int32_t multiply(int32_t a, int32_t b);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // TML_MATH_H
+```
+
+**Use from C:**
+```c
+#include "math.h"
+
+int main() {
+    int result = add(5, 3);
+    printf("%d\n", result);  // 8
+    return 0;
+}
+```
+
+### 8.5 Performance
+
+**Typical build times:**
+- Full build (no cache): 5-10 seconds
+- Incremental (1 file changed): <1 second (10x faster)
+- Test suite (45 tests): 3 seconds (with cache)
+
+**Cache benefits:**
+- ✅ Reuse compiled modules
+- ✅ Skip unchanged dependencies
+- ✅ Parallel compilation (future)
+- ✅ Faster CI/CD pipelines
+
 ---
 
 *Previous: [08-IR.md](./08-IR.md)*
