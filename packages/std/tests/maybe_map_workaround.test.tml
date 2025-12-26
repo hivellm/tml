@@ -1,0 +1,49 @@
+// Maybe map test with explicit type annotations to avoid Maybe__Unit bug
+
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+// Helper to create Nothing with explicit type
+func nothing_i32() -> Maybe[I32] {
+    return Nothing
+}
+
+// Helper to create Just[I32]
+func just_i32(val: I32) -> Maybe[I32] {
+    return Just(val)
+}
+
+// Map combinator for I32
+func map_i32(m: Maybe[I32], f: func(I32) -> I32) -> Maybe[I32] {
+    when m {
+        Just(val) => return just_i32(f(val)),
+        Nothing => return nothing_i32()
+    }
+    return nothing_i32()
+}
+
+func main() {
+    println("=== Maybe[I32] Map Test (Workaround) ===")
+
+    // Test 1: map on Just
+    let x: Maybe[I32] = Just(5)
+    let y: Maybe[I32] = map_i32(x, do(val: I32) val * 2)
+
+    when y {
+        Just(v) => println("map(Just(5), *2) = Just({})", v),
+        Nothing => println("ERROR: got Nothing")
+    }
+
+    // Test 2: map on Nothing
+    let n: Maybe[I32] = Nothing
+    let z: Maybe[I32] = map_i32(n, do(val: I32) val * 2)
+
+    when z {
+        Just(_) => println("ERROR: expected Nothing"),
+        Nothing => println("map(Nothing, *2) = Nothing")
+    }
+
+    println("Test completed!")
+}

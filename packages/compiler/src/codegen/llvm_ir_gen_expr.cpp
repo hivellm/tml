@@ -809,6 +809,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Return function pointer
     // For now, return the function name as a "function pointer"
     // This is simplified - full support would need actual function pointers
+    last_expr_type_ = "ptr";  // Closures are function pointers
     return "@" + closure_name;
 }
 

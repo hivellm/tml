@@ -2,14 +2,15 @@
 
 ## Compiler Issues
 
-### 1. Generic Functions + Closures (CRITICAL)
+### 1. Generic Functions + Closures (FIXED ✅)
 
-**Status**: BLOCKING stdlib combinators
+**Status**: FIXED
 **Discovered**: 2025-12-26
-**Severity**: HIGH
+**Fixed**: 2025-12-26
+**Severity**: HIGH (was blocking stdlib combinators)
 
 **Description**:
-Generic functions that accept closures as parameters generate invalid LLVM IR. The closure is incorrectly passed as a primitive type instead of a function pointer.
+Generic functions that accept closures as parameters were generating invalid LLVM IR. The closure was incorrectly passed as a primitive type instead of a function pointer.
 
 **Example**:
 ```tml
@@ -18,50 +19,23 @@ func apply[T](x: T, f: func(T) -> T) -> T {
 }
 
 func main() {
-    // This fails to compile
-    let result: I32 = apply(5, do(val: I32) val * 2)
+    let result: I32 = apply(5, do(val: I32) val * 2)  // Now works! ✅
 }
-```
-
-**Error**:
-```
-error: global variable reference must have pointer type
-  %t4 = call i32 @tml_apply__I32(i32 5, i32 @tml_closure_0)
-                                            ^
 ```
 
 **Root Cause**:
-When monomorphizing generic functions, the type of closure parameters is incorrectly lowered to the wrong LLVM type (i32 instead of function pointer).
+The `gen_closure` function in `llvm_ir_gen_expr.cpp` was not setting `last_expr_type_` to `"ptr"` after generating a closure. When generic function call code used `last_expr_type_` to determine argument types, it used stale type information.
 
-**Workaround**:
-Use non-generic helper functions:
-```tml
-func map_i32(m: Maybe[I32], f: func(I32) -> I32) -> Maybe[I32] {
-    when m {
-        Just(val) => return Just(f(val)),
-        Nothing => return Nothing
-    }
-}
-```
+**Fix**:
+Added `last_expr_type_ = "ptr"` before returning from `gen_closure` function.
 
-**Impact**:
-- ❌ Cannot implement generic combinators (map, filter, fold)
-- ❌ Blocks stdlib Maybe[T] and Outcome[T,E] combinator functions
-- ❌ Limits functional programming patterns
+**Changed File**:
+- `packages/compiler/src/codegen/llvm_ir_gen_expr.cpp` line 812
 
 **Tests**:
-- `packages/std/tests/closure_simple.test.tml` ✓ (non-generic closures work)
-- `packages/std/tests/generic_closure_simple.test.tml` ✗ (generic closures fail)
-- `packages/std/tests/maybe_map_simple.test.tml` ✗ (Maybe[T] map fails)
-
-**Related Files**:
-- `packages/compiler/src/codegen/llvm_ir_gen.cpp` - Closure code generation
-- `packages/compiler/src/types/checker.cpp` - Generic instantiation
-
-**Next Steps**:
-1. Investigate closure type lowering in LLVM IR generator
-2. Fix monomorphization to correctly handle function pointer types
-3. Add regression tests for generic + closure combinations
+- `packages/std/tests/closure_simple.test.tml` ✅ (non-generic closures work)
+- `packages/std/tests/generic_closure_simple.test.tml` ✅ (generic closures now work!)
+- `packages/std/tests/maybe_map_simple.test.tml` ❌ (blocked by Bug #2: Maybe__Unit)
 
 ---
 
