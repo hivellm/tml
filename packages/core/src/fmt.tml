@@ -1,0 +1,251 @@
+// TML Core Library - Formatting Module
+// Provides: Display and Debug behaviors for string formatting
+
+// ============================================================================
+// Display Behavior
+// ============================================================================
+
+/// Behavior for user-facing string formatting.
+/// Used by println() and string interpolation.
+pub behavior Display {
+    /// Formats the value for display to end users.
+    func to_string(this) -> Str
+}
+
+// ============================================================================
+// Debug Behavior
+// ============================================================================
+
+/// Behavior for programmer-facing debug output.
+/// Shows more verbose/structural representation for debugging.
+pub behavior Debug {
+    /// Formats the value for debugging purposes.
+    func debug_string(this) -> Str
+}
+
+// ============================================================================
+// Display implementations for primitives
+// ============================================================================
+
+impl Display for I8 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i8_to_string(this) }
+    }
+}
+
+impl Display for I16 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i16_to_string(this) }
+    }
+}
+
+impl Display for I32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i32_to_string(this) }
+    }
+}
+
+impl Display for I64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i64_to_string(this) }
+    }
+}
+
+impl Display for U8 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u8_to_string(this) }
+    }
+}
+
+impl Display for U16 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u16_to_string(this) }
+    }
+}
+
+impl Display for U32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u32_to_string(this) }
+    }
+}
+
+impl Display for U64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u64_to_string(this) }
+    }
+}
+
+impl Display for F32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { f32_to_string(this) }
+    }
+}
+
+impl Display for F64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { f64_to_string(this) }
+    }
+}
+
+impl Display for Bool {
+    pub func to_string(this) -> Str {
+        if this {
+            return "true"
+        }
+        return "false"
+    }
+}
+
+impl Display for Str {
+    pub func to_string(this) -> Str {
+        return this
+    }
+}
+
+// ============================================================================
+// Debug implementations for primitives
+// ============================================================================
+
+impl Debug for I8 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i8_to_string(this) }
+    }
+}
+
+impl Debug for I16 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i16_to_string(this) }
+    }
+}
+
+impl Debug for I32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i32_to_string(this) }
+    }
+}
+
+impl Debug for I64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i64_to_string(this) }
+    }
+}
+
+impl Debug for U8 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u8_to_string(this) }
+    }
+}
+
+impl Debug for U16 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u16_to_string(this) }
+    }
+}
+
+impl Debug for U32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u32_to_string(this) }
+    }
+}
+
+impl Debug for U64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u64_to_string(this) }
+    }
+}
+
+impl Debug for F32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { f32_to_string(this) }
+    }
+}
+
+impl Debug for F64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { f64_to_string(this) }
+    }
+}
+
+impl Debug for Bool {
+    pub func debug_string(this) -> Str {
+        if this {
+            return "true"
+        }
+        return "false"
+    }
+}
+
+impl Debug for Str {
+    pub func debug_string(this) -> Str {
+        // Debug output includes quotes
+        return "\"" + this + "\""
+    }
+}
+
+// ============================================================================
+// Display and Debug for Maybe[T]
+// ============================================================================
+
+impl[T: Display] Display for Maybe[T] {
+    pub func to_string(this) -> Str {
+        when this {
+            Just(val) => return "Just(" + val.to_string() + ")",
+            Nothing => return "Nothing",
+        }
+    }
+}
+
+impl[T: Debug] Debug for Maybe[T] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Just(val) => return "Just(" + val.debug_string() + ")",
+            Nothing => return "Nothing",
+        }
+    }
+}
+
+// ============================================================================
+// Display and Debug for Outcome[T, E]
+// ============================================================================
+
+impl[T: Display, E: Display] Display for Outcome[T, E] {
+    pub func to_string(this) -> Str {
+        when this {
+            Ok(val) => return "Ok(" + val.to_string() + ")",
+            Err(e) => return "Err(" + e.to_string() + ")",
+        }
+    }
+}
+
+impl[T: Debug, E: Debug] Debug for Outcome[T, E] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Ok(val) => return "Ok(" + val.debug_string() + ")",
+            Err(e) => return "Err(" + e.debug_string() + ")",
+        }
+    }
+}
+
+// ============================================================================
+// Display for Ordering
+// ============================================================================
+
+impl Display for Ordering {
+    pub func to_string(this) -> Str {
+        when this {
+            Ordering::Less => return "Less",
+            Ordering::Equal => return "Equal",
+            Ordering::Greater => return "Greater",
+        }
+    }
+}
+
+impl Debug for Ordering {
+    pub func debug_string(this) -> Str {
+        when this {
+            Ordering::Less => return "Ordering::Less",
+            Ordering::Equal => return "Ordering::Equal",
+            Ordering::Greater => return "Ordering::Greater",
+        }
+    }
+}

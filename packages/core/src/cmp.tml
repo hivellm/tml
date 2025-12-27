@@ -1,0 +1,423 @@
+// TML Core Library - Comparison Module
+// Provides: Ordering, PartialEq, Eq, PartialOrd, Ord
+
+// ============================================================================
+// Ordering Type
+// ============================================================================
+// Represents the result of a comparison between two values.
+
+/// The result of a comparison between two values.
+pub type Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+impl Ordering {
+    /// Returns true if the ordering is Less.
+    pub func is_less(this) -> Bool {
+        when this {
+            Ordering::Less => return true,
+            _ => return false,
+        }
+    }
+
+    /// Returns true if the ordering is Equal.
+    pub func is_equal(this) -> Bool {
+        when this {
+            Ordering::Equal => return true,
+            _ => return false,
+        }
+    }
+
+    /// Returns true if the ordering is Greater.
+    pub func is_greater(this) -> Bool {
+        when this {
+            Ordering::Greater => return true,
+            _ => return false,
+        }
+    }
+
+    /// Reverses the ordering: Less becomes Greater, Greater becomes Less.
+    pub func reverse(this) -> Ordering {
+        when this {
+            Ordering::Less => return Ordering::Greater,
+            Ordering::Equal => return Ordering::Equal,
+            Ordering::Greater => return Ordering::Less,
+        }
+    }
+
+    /// Chains two orderings: returns this ordering if not Equal,
+    /// otherwise returns the other ordering.
+    pub func then(this, other: Ordering) -> Ordering {
+        when this {
+            Ordering::Equal => return other,
+            _ => return this,
+        }
+    }
+}
+
+// ============================================================================
+// PartialEq Behavior
+// ============================================================================
+// Partial equality - may not be reflexive (e.g., NaN != NaN for floats)
+
+/// Behavior for partial equality comparisons.
+/// Types implementing PartialEq can use == and != operators.
+pub behavior PartialEq {
+    /// Tests for equality between two values.
+    func eq(this, other: ref Self) -> Bool
+
+    /// Tests for inequality between two values.
+    /// Default implementation uses !eq().
+    func ne(this, other: ref Self) -> Bool {
+        return not this.eq(other)
+    }
+}
+
+// ============================================================================
+// Eq Behavior
+// ============================================================================
+// Full equality - reflexive, symmetric, transitive
+
+/// Behavior for full equality.
+/// Types implementing Eq guarantee that a == a is always true.
+pub behavior Eq: PartialEq {
+    // Inherits eq and ne from PartialEq
+    // Marker behavior indicating reflexivity
+}
+
+// ============================================================================
+// PartialOrd Behavior
+// ============================================================================
+// Partial ordering - may have incomparable values (e.g., floats with NaN)
+
+/// Behavior for partial ordering comparisons.
+/// Types implementing PartialOrd can use <, <=, >, >= operators.
+pub behavior PartialOrd: PartialEq {
+    /// Returns an ordering between self and other, or Nothing if they cannot be compared.
+    func partial_cmp(this, other: ref Self) -> Maybe[Ordering]
+
+    /// Tests if self is less than other.
+    func lt(this, other: ref Self) -> Bool {
+        when this.partial_cmp(other) {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => return true,
+                    _ => return false,
+                }
+            },
+            Nothing => return false,
+        }
+    }
+
+    /// Tests if self is less than or equal to other.
+    func le(this, other: ref Self) -> Bool {
+        when this.partial_cmp(other) {
+            Just(ord) => {
+                when ord {
+                    Ordering::Less => return true,
+                    Ordering::Equal => return true,
+                    Ordering::Greater => return false,
+                }
+            },
+            Nothing => return false,
+        }
+    }
+
+    /// Tests if self is greater than other.
+    func gt(this, other: ref Self) -> Bool {
+        when this.partial_cmp(other) {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => return true,
+                    _ => return false,
+                }
+            },
+            Nothing => return false,
+        }
+    }
+
+    /// Tests if self is greater than or equal to other.
+    func ge(this, other: ref Self) -> Bool {
+        when this.partial_cmp(other) {
+            Just(ord) => {
+                when ord {
+                    Ordering::Greater => return true,
+                    Ordering::Equal => return true,
+                    Ordering::Less => return false,
+                }
+            },
+            Nothing => return false,
+        }
+    }
+}
+
+// ============================================================================
+// Ord Behavior
+// ============================================================================
+// Total ordering - all values are comparable
+
+/// Behavior for total ordering.
+/// Types implementing Ord have a total order: any two values can be compared.
+pub behavior Ord: Eq + PartialOrd {
+    /// Returns the ordering between self and other.
+    func cmp(this, other: ref Self) -> Ordering
+
+    /// Returns an ordering, wrapped in Just.
+    /// Overrides PartialOrd::partial_cmp with a guaranteed result.
+    func partial_cmp(this, other: ref Self) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+
+    /// Returns the maximum of self and other.
+    func max(this, other: Self) -> Self {
+        when this.cmp(ref other) {
+            Ordering::Less => return other,
+            _ => return this,
+        }
+    }
+
+    /// Returns the minimum of self and other.
+    func min(this, other: Self) -> Self {
+        when this.cmp(ref other) {
+            Ordering::Greater => return other,
+            _ => return this,
+        }
+    }
+
+    /// Clamps self to be within the range [min, max].
+    func clamp(this, min_val: Self, max_val: Self) -> Self {
+        when this.cmp(ref min_val) {
+            Ordering::Less => return min_val,
+            _ => {
+                when this.cmp(ref max_val) {
+                    Ordering::Greater => return max_val,
+                    _ => return this,
+                }
+            },
+        }
+    }
+}
+
+// ============================================================================
+// PartialEq implementations for primitives
+// ============================================================================
+
+impl PartialEq for I8 {
+    pub func eq(this, other: ref I8) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for I16 {
+    pub func eq(this, other: ref I16) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for I32 {
+    pub func eq(this, other: ref I32) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for I64 {
+    pub func eq(this, other: ref I64) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for U8 {
+    pub func eq(this, other: ref U8) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for U16 {
+    pub func eq(this, other: ref U16) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for U32 {
+    pub func eq(this, other: ref U32) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for U64 {
+    pub func eq(this, other: ref U64) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for F32 {
+    pub func eq(this, other: ref F32) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for F64 {
+    pub func eq(this, other: ref F64) -> Bool {
+        return this == *other
+    }
+}
+
+impl PartialEq for Bool {
+    pub func eq(this, other: ref Bool) -> Bool {
+        return this == *other
+    }
+}
+
+// ============================================================================
+// Eq implementations for primitives (marker only)
+// ============================================================================
+// Note: F32 and F64 are NOT Eq because NaN != NaN
+
+impl Eq for I8 {}
+impl Eq for I16 {}
+impl Eq for I32 {}
+impl Eq for I64 {}
+impl Eq for U8 {}
+impl Eq for U16 {}
+impl Eq for U32 {}
+impl Eq for U64 {}
+impl Eq for Bool {}
+
+// ============================================================================
+// Ord implementations for integer primitives
+// ============================================================================
+
+impl PartialOrd for I32 {
+    pub func partial_cmp(this, other: ref I32) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for I32 {
+    pub func cmp(this, other: ref I32) -> Ordering {
+        let o: I32 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl PartialOrd for I64 {
+    pub func partial_cmp(this, other: ref I64) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for I64 {
+    pub func cmp(this, other: ref I64) -> Ordering {
+        let o: I64 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Returns the maximum of two values.
+pub func max[T: Ord](a: T, b: T) -> T {
+    return a.max(b)
+}
+
+/// Returns the minimum of two values.
+pub func min[T: Ord](a: T, b: T) -> T {
+    return a.min(b)
+}
+
+// ============================================================================
+// PartialEq for Maybe[T]
+// ============================================================================
+
+impl[T: PartialEq] PartialEq for Maybe[T] {
+    pub func eq(this, other: ref Maybe[T]) -> Bool {
+        when this {
+            Just(a) => {
+                when *other {
+                    Just(b) => return a.eq(ref b),
+                    Nothing => return false,
+                }
+            },
+            Nothing => {
+                when *other {
+                    Just(_) => return false,
+                    Nothing => return true,
+                }
+            },
+        }
+    }
+}
+
+impl[T: Eq] Eq for Maybe[T] {}
+
+// ============================================================================
+// PartialEq for Outcome[T, E]
+// ============================================================================
+
+impl[T: PartialEq, E: PartialEq] PartialEq for Outcome[T, E] {
+    pub func eq(this, other: ref Outcome[T, E]) -> Bool {
+        when this {
+            Ok(a) => {
+                when *other {
+                    Ok(b) => return a.eq(ref b),
+                    Err(_) => return false,
+                }
+            },
+            Err(e1) => {
+                when *other {
+                    Ok(_) => return false,
+                    Err(e2) => return e1.eq(ref e2),
+                }
+            },
+        }
+    }
+}
+
+impl[T: Eq, E: Eq] Eq for Outcome[T, E] {}
+
+// ============================================================================
+// Ord for Ordering (so Ordering values can be compared)
+// ============================================================================
+
+impl PartialEq for Ordering {
+    pub func eq(this, other: ref Ordering) -> Bool {
+        when this {
+            Ordering::Less => {
+                when *other {
+                    Ordering::Less => return true,
+                    _ => return false,
+                }
+            },
+            Ordering::Equal => {
+                when *other {
+                    Ordering::Equal => return true,
+                    _ => return false,
+                }
+            },
+            Ordering::Greater => {
+                when *other {
+                    Ordering::Greater => return true,
+                    _ => return false,
+                }
+            },
+        }
+    }
+}
+
+impl Eq for Ordering {}

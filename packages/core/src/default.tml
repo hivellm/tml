@@ -1,0 +1,73 @@
+// TML Core Library - Default Module
+// Provides: Default behavior for types with meaningful default values
+
+// ============================================================================
+// Default Behavior
+// ============================================================================
+
+/// Behavior for types that have a meaningful default value.
+/// Use T::default() to create a default instance of type T.
+pub behavior Default {
+    /// Creates a default value of this type.
+    func default() -> Self
+}
+
+// ============================================================================
+// Default implementations for primitives
+// ============================================================================
+
+impl Default for I8 {
+    pub func default() -> I8 { return 0 }
+}
+
+impl Default for I16 {
+    pub func default() -> I16 { return 0 }
+}
+
+impl Default for I32 {
+    pub func default() -> I32 { return 0 }
+}
+
+impl Default for I64 {
+    pub func default() -> I64 { return 0 }
+}
+
+impl Default for U8 {
+    pub func default() -> U8 { return 0 }
+}
+
+impl Default for U16 {
+    pub func default() -> U16 { return 0 }
+}
+
+impl Default for U32 {
+    pub func default() -> U32 { return 0 }
+}
+
+impl Default for U64 {
+    pub func default() -> U64 { return 0 }
+}
+
+impl Default for F32 {
+    pub func default() -> F32 { return 0.0 }
+}
+
+impl Default for F64 {
+    pub func default() -> F64 { return 0.0 }
+}
+
+impl Default for Bool {
+    pub func default() -> Bool { return false }
+}
+
+impl Default for Str {
+    pub func default() -> Str { return "" }
+}
+
+// ============================================================================
+// Default for Maybe[T]
+// ============================================================================
+
+impl[T] Default for Maybe[T] {
+    pub func default() -> Maybe[T] { return Nothing }
+}

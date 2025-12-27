@@ -1,0 +1,361 @@
+// TML Core Library - Operator Overloading Module
+// Provides: Add, Sub, Mul, Div, Rem, Neg, Not, Index, IndexMut
+
+// ============================================================================
+// Arithmetic Operators
+// ============================================================================
+
+/// Behavior for the + operator.
+/// Types implementing Add can be added together.
+pub behavior Add[Rhs = Self] {
+    /// The resulting type after applying +.
+    type Output
+
+    /// Performs the + operation.
+    func add(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the - operator.
+/// Types implementing Sub can be subtracted.
+pub behavior Sub[Rhs = Self] {
+    /// The resulting type after applying -.
+    type Output
+
+    /// Performs the - operation.
+    func sub(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the * operator.
+/// Types implementing Mul can be multiplied.
+pub behavior Mul[Rhs = Self] {
+    /// The resulting type after applying *.
+    type Output
+
+    /// Performs the * operation.
+    func mul(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the / operator.
+/// Types implementing Div can be divided.
+pub behavior Div[Rhs = Self] {
+    /// The resulting type after applying /.
+    type Output
+
+    /// Performs the / operation.
+    func div(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the % operator (modulo/remainder).
+/// Types implementing Rem can compute remainder.
+pub behavior Rem[Rhs = Self] {
+    /// The resulting type after applying %.
+    type Output
+
+    /// Performs the % operation.
+    func rem(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// Unary Operators
+// ============================================================================
+
+/// Behavior for the unary - operator.
+/// Types implementing Neg can be negated.
+pub behavior Neg {
+    /// The resulting type after applying unary -.
+    type Output
+
+    /// Performs the unary - operation.
+    func neg(this) -> This::Output
+}
+
+/// Behavior for the unary not operator.
+/// Types implementing Not can be logically negated.
+pub behavior Not {
+    /// The resulting type after applying not.
+    type Output
+
+    /// Performs the not operation.
+    func not(this) -> This::Output
+}
+
+// ============================================================================
+// Bitwise Operators
+// ============================================================================
+
+/// Behavior for the bitwise AND operator (&).
+pub behavior BitAnd[Rhs = Self] {
+    type Output
+    func bitand(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the bitwise OR operator (|).
+pub behavior BitOr[Rhs = Self] {
+    type Output
+    func bitor(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the bitwise XOR operator (^).
+pub behavior BitXor[Rhs = Self] {
+    type Output
+    func bitxor(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the left shift operator (<<).
+pub behavior Shl[Rhs = I32] {
+    type Output
+    func shl(this, rhs: Rhs) -> This::Output
+}
+
+/// Behavior for the right shift operator (>>).
+pub behavior Shr[Rhs = I32] {
+    type Output
+    func shr(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// Indexing Operators
+// ============================================================================
+
+/// Behavior for immutable indexing operations (container[index]).
+/// Types implementing Index can be indexed with [].
+pub behavior Index[Idx] {
+    /// The returned type after indexing.
+    type Output
+
+    /// Performs the indexing operation.
+    func index(this, idx: Idx) -> ref This::Output
+}
+
+/// Behavior for mutable indexing operations (container[index] = value).
+/// Types implementing IndexMut can have their elements modified via [].
+pub behavior IndexMut[Idx]: Index[Idx] {
+    /// Performs the mutable indexing operation.
+    func index_mut(mut this, idx: Idx) -> mut ref This::Output
+}
+
+// ============================================================================
+// Assignment Operators (Compound)
+// ============================================================================
+
+/// Behavior for the += operator.
+pub behavior AddAssign[Rhs = Self] {
+    func add_assign(mut this, rhs: Rhs)
+}
+
+/// Behavior for the -= operator.
+pub behavior SubAssign[Rhs = Self] {
+    func sub_assign(mut this, rhs: Rhs)
+}
+
+/// Behavior for the *= operator.
+pub behavior MulAssign[Rhs = Self] {
+    func mul_assign(mut this, rhs: Rhs)
+}
+
+/// Behavior for the /= operator.
+pub behavior DivAssign[Rhs = Self] {
+    func div_assign(mut this, rhs: Rhs)
+}
+
+/// Behavior for the %= operator.
+pub behavior RemAssign[Rhs = Self] {
+    func rem_assign(mut this, rhs: Rhs)
+}
+
+// ============================================================================
+// Add implementations for primitives
+// ============================================================================
+
+impl Add for I8 {
+    type Output = I8
+    pub func add(this, rhs: I8) -> I8 { return this + rhs }
+}
+
+impl Add for I16 {
+    type Output = I16
+    pub func add(this, rhs: I16) -> I16 { return this + rhs }
+}
+
+impl Add for I32 {
+    type Output = I32
+    pub func add(this, rhs: I32) -> I32 { return this + rhs }
+}
+
+impl Add for I64 {
+    type Output = I64
+    pub func add(this, rhs: I64) -> I64 { return this + rhs }
+}
+
+impl Add for U8 {
+    type Output = U8
+    pub func add(this, rhs: U8) -> U8 { return this + rhs }
+}
+
+impl Add for U16 {
+    type Output = U16
+    pub func add(this, rhs: U16) -> U16 { return this + rhs }
+}
+
+impl Add for U32 {
+    type Output = U32
+    pub func add(this, rhs: U32) -> U32 { return this + rhs }
+}
+
+impl Add for U64 {
+    type Output = U64
+    pub func add(this, rhs: U64) -> U64 { return this + rhs }
+}
+
+impl Add for F32 {
+    type Output = F32
+    pub func add(this, rhs: F32) -> F32 { return this + rhs }
+}
+
+impl Add for F64 {
+    type Output = F64
+    pub func add(this, rhs: F64) -> F64 { return this + rhs }
+}
+
+// ============================================================================
+// Sub implementations for primitives
+// ============================================================================
+
+impl Sub for I32 {
+    type Output = I32
+    pub func sub(this, rhs: I32) -> I32 { return this - rhs }
+}
+
+impl Sub for I64 {
+    type Output = I64
+    pub func sub(this, rhs: I64) -> I64 { return this - rhs }
+}
+
+impl Sub for F32 {
+    type Output = F32
+    pub func sub(this, rhs: F32) -> F32 { return this - rhs }
+}
+
+impl Sub for F64 {
+    type Output = F64
+    pub func sub(this, rhs: F64) -> F64 { return this - rhs }
+}
+
+// ============================================================================
+// Mul implementations for primitives
+// ============================================================================
+
+impl Mul for I32 {
+    type Output = I32
+    pub func mul(this, rhs: I32) -> I32 { return this * rhs }
+}
+
+impl Mul for I64 {
+    type Output = I64
+    pub func mul(this, rhs: I64) -> I64 { return this * rhs }
+}
+
+impl Mul for F32 {
+    type Output = F32
+    pub func mul(this, rhs: F32) -> F32 { return this * rhs }
+}
+
+impl Mul for F64 {
+    type Output = F64
+    pub func mul(this, rhs: F64) -> F64 { return this * rhs }
+}
+
+// ============================================================================
+// Div implementations for primitives
+// ============================================================================
+
+impl Div for I32 {
+    type Output = I32
+    pub func div(this, rhs: I32) -> I32 { return this / rhs }
+}
+
+impl Div for I64 {
+    type Output = I64
+    pub func div(this, rhs: I64) -> I64 { return this / rhs }
+}
+
+impl Div for F32 {
+    type Output = F32
+    pub func div(this, rhs: F32) -> F32 { return this / rhs }
+}
+
+impl Div for F64 {
+    type Output = F64
+    pub func div(this, rhs: F64) -> F64 { return this / rhs }
+}
+
+// ============================================================================
+// Rem implementations for primitives
+// ============================================================================
+
+impl Rem for I32 {
+    type Output = I32
+    pub func rem(this, rhs: I32) -> I32 { return this % rhs }
+}
+
+impl Rem for I64 {
+    type Output = I64
+    pub func rem(this, rhs: I64) -> I64 { return this % rhs }
+}
+
+// ============================================================================
+// Neg implementations for primitives
+// ============================================================================
+
+impl Neg for I32 {
+    type Output = I32
+    pub func neg(this) -> I32 { return 0 - this }
+}
+
+impl Neg for I64 {
+    type Output = I64
+    pub func neg(this) -> I64 { return 0 - this }
+}
+
+impl Neg for F32 {
+    type Output = F32
+    pub func neg(this) -> F32 { return 0.0 - this }
+}
+
+impl Neg for F64 {
+    type Output = F64
+    pub func neg(this) -> F64 { return 0.0 - this }
+}
+
+// ============================================================================
+// Not implementation for Bool
+// ============================================================================
+
+impl Not for Bool {
+    type Output = Bool
+    pub func not(this) -> Bool { return not this }
+}
+
+// ============================================================================
+// Index for List[T]
+// ============================================================================
+// Note: This requires the List type from std::collections
+
+// impl[T] Index[I64] for List[T] {
+//     type Output = T
+//     pub func index(this, idx: I64) -> ref T {
+//         return ref this.get(idx)
+//     }
+// }
+
+// ============================================================================
+// Index for Str (character access)
+// ============================================================================
+// Note: Str indexing returns a character code (I32)
+
+// impl Index[I64] for Str {
+//     type Output = I32
+//     pub func index(this, idx: I64) -> ref I32 {
+//         return ref lowlevel { str_char_at(this, idx) }
+//     }
+// }

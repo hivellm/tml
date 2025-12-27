@@ -1,0 +1,35 @@
+// Tests for core::clone module
+use test
+use core::clone
+
+@test
+func test_i32_duplicate() -> I32 {
+    let x: I32 = 42
+    let y: I32 = x.duplicate()
+    assert(y == 42, "duplicate should copy the value")
+    return 0
+}
+
+@test
+func test_i64_duplicate() -> I32 {
+    let x: I64 = 1234567890
+    let y: I64 = x.duplicate()
+    assert(y == 1234567890, "I64 duplicate should copy the value")
+    return 0
+}
+
+@test
+func test_bool_duplicate() -> I32 {
+    let x: Bool = true
+    let y: Bool = x.duplicate()
+    assert(y == true, "Bool duplicate should copy the value")
+    return 0
+}
+
+@test
+func test_f64_duplicate() -> I32 {
+    let x: F64 = 3.14159
+    let y: F64 = x.duplicate()
+    assert(y == 3.14159, "F64 duplicate should copy the value")
+    return 0
+}

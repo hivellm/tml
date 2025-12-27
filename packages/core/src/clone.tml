@@ -1,0 +1,120 @@
+// TML Core Library - Clone Module
+// Provides: Duplicate (Clone) and Copy behaviors
+
+// ============================================================================
+// Duplicate Behavior (Clone in Rust)
+// ============================================================================
+// Types that can create an explicit copy of themselves.
+// Use .duplicate() to create a copy of a value.
+
+/// Behavior for types that can be explicitly duplicated.
+/// Unlike Copy, Duplicate may involve heap allocation or deep copying.
+pub behavior Duplicate {
+    /// Create a copy of this value
+    func duplicate(this) -> Self
+}
+
+// ============================================================================
+// Copy Behavior (Marker)
+// ============================================================================
+// Types that can be trivially copied via bitwise copy.
+// All primitive types (I8-I64, U8-U64, F32, F64, Bool) are Copy.
+// Copy types are automatically Duplicate - the duplicate is just a bitwise copy.
+
+/// Marker behavior for types that can be trivially copied.
+/// Copy types don't need explicit .duplicate() - assignment copies the value.
+pub behavior Copy: Duplicate {
+    // No methods - this is a marker behavior
+    // The compiler uses this to enable implicit copying
+}
+
+// ============================================================================
+// Duplicate implementations for primitives
+// ============================================================================
+// Note: These are implicit for primitives but shown for documentation
+
+impl Duplicate for I8 {
+    pub func duplicate(this) -> I8 { return this }
+}
+
+impl Duplicate for I16 {
+    pub func duplicate(this) -> I16 { return this }
+}
+
+impl Duplicate for I32 {
+    pub func duplicate(this) -> I32 { return this }
+}
+
+impl Duplicate for I64 {
+    pub func duplicate(this) -> I64 { return this }
+}
+
+impl Duplicate for U8 {
+    pub func duplicate(this) -> U8 { return this }
+}
+
+impl Duplicate for U16 {
+    pub func duplicate(this) -> U16 { return this }
+}
+
+impl Duplicate for U32 {
+    pub func duplicate(this) -> U32 { return this }
+}
+
+impl Duplicate for U64 {
+    pub func duplicate(this) -> U64 { return this }
+}
+
+impl Duplicate for F32 {
+    pub func duplicate(this) -> F32 { return this }
+}
+
+impl Duplicate for F64 {
+    pub func duplicate(this) -> F64 { return this }
+}
+
+impl Duplicate for Bool {
+    pub func duplicate(this) -> Bool { return this }
+}
+
+// ============================================================================
+// Copy implementations for primitives (marker only)
+// ============================================================================
+
+impl Copy for I8 {}
+impl Copy for I16 {}
+impl Copy for I32 {}
+impl Copy for I64 {}
+impl Copy for U8 {}
+impl Copy for U16 {}
+impl Copy for U32 {}
+impl Copy for U64 {}
+impl Copy for F32 {}
+impl Copy for F64 {}
+impl Copy for Bool {}
+
+// ============================================================================
+// Duplicate for Maybe[T]
+// ============================================================================
+
+impl[T: Duplicate] Duplicate for Maybe[T] {
+    pub func duplicate(this) -> Maybe[T] {
+        when this {
+            Just(val) => return Just(val.duplicate()),
+            Nothing => return Nothing,
+        }
+    }
+}
+
+// ============================================================================
+// Duplicate for Outcome[T, E]
+// ============================================================================
+
+impl[T: Duplicate, E: Duplicate] Duplicate for Outcome[T, E] {
+    pub func duplicate(this) -> Outcome[T, E] {
+        when this {
+            Ok(val) => return Ok(val.duplicate()),
+            Err(e) => return Err(e.duplicate()),
+        }
+    }
+}

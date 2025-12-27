@@ -1,0 +1,15 @@
+// TML Core Library
+// Fundamental behaviors and types for the TML language
+//
+// This module provides the core building blocks that other libraries depend on:
+// - clone: Duplicate and Copy behaviors
+// - cmp: Comparison behaviors (PartialEq, Eq, PartialOrd, Ord) and Ordering type
+// - ops: Operator overloading behaviors (Add, Sub, Mul, Div, etc.)
+// - default: Default behavior for default values
+// - fmt: Display and Debug behaviors for formatting
+
+pub mod clone    // Duplicate, Copy
+pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
+pub mod ops      // Add, Sub, Mul, Div, Rem, Neg, Not, Index, etc.
+pub mod default  // Default
+pub mod fmt      // Display, Debug

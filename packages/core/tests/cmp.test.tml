@@ -1,0 +1,70 @@
+// Tests for core::cmp module
+use test
+use core::cmp
+
+@test
+func test_ordering_is_less() -> I32 {
+    let ord: Ordering = Ordering::Less
+    assert(ord.is_less() == true, "Less.is_less() should be true")
+    assert(ord.is_equal() == false, "Less.is_equal() should be false")
+    assert(ord.is_greater() == false, "Less.is_greater() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_equal() -> I32 {
+    let ord: Ordering = Ordering::Equal
+    assert(ord.is_less() == false, "Equal.is_less() should be false")
+    assert(ord.is_equal() == true, "Equal.is_equal() should be true")
+    assert(ord.is_greater() == false, "Equal.is_greater() should be false")
+    return 0
+}
+
+@test
+func test_ordering_is_greater() -> I32 {
+    let ord: Ordering = Ordering::Greater
+    assert(ord.is_less() == false, "Greater.is_less() should be false")
+    assert(ord.is_equal() == false, "Greater.is_equal() should be false")
+    assert(ord.is_greater() == true, "Greater.is_greater() should be true")
+    return 0
+}
+
+@test
+func test_ordering_reverse() -> I32 {
+    assert(Ordering::Less.reverse().is_greater() == true, "Less.reverse() should be Greater")
+    assert(Ordering::Equal.reverse().is_equal() == true, "Equal.reverse() should be Equal")
+    assert(Ordering::Greater.reverse().is_less() == true, "Greater.reverse() should be Less")
+    return 0
+}
+
+@test
+func test_ordering_then() -> I32 {
+    let ord: Ordering = Ordering::Equal.then(Ordering::Less)
+    assert(ord.is_less() == true, "Equal.then(Less) should be Less")
+
+    let ord2: Ordering = Ordering::Greater.then(Ordering::Less)
+    assert(ord2.is_greater() == true, "Greater.then(Less) should be Greater")
+    return 0
+}
+
+@test
+func test_i32_cmp() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 10
+    let c: I32 = 5
+
+    assert(a.cmp(ref b).is_less() == true, "5.cmp(10) should be Less")
+    assert(b.cmp(ref a).is_greater() == true, "10.cmp(5) should be Greater")
+    assert(a.cmp(ref c).is_equal() == true, "5.cmp(5) should be Equal")
+    return 0
+}
+
+@test
+func test_i32_max_min() -> I32 {
+    let a: I32 = 5
+    let b: I32 = 10
+
+    assert(a.max(b) == 10, "5.max(10) should be 10")
+    assert(a.min(b) == 5, "5.min(10) should be 5")
+    return 0
+}
