@@ -127,6 +127,7 @@ add_library(tml_borrow STATIC
     src/borrow/checker_stmt.cpp
     src/borrow/checker_expr.cpp
     src/borrow/checker_ops.cpp
+    src/borrow/checker_nll.cpp
 )
 target_link_libraries(tml_borrow PUBLIC tml_types)
 target_include_directories(tml_borrow PUBLIC include src)

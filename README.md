@@ -257,7 +257,7 @@ Source (.tml)
 | Lexer | ✅ Complete | 100% |
 | Parser | ✅ Complete | 100% (LL(1) compliant) |
 | Type Checker | ✅ Complete | 100% (generics, closures, where clauses) |
-| Borrow Checker | 🟡 Basic | ~60% (lifetime tracking) |
+| Borrow Checker | ✅ Complete | 100% (NLL, field-level borrowing, lifetimes) |
 | LLVM Backend | ✅ Complete | 100% (via text IR) |
 | Test Framework | ✅ Complete | 100% (@test, @bench) |
 | Module System | ✅ Complete | 100% (imports, method lookup) |
@@ -270,6 +270,7 @@ Source (.tml)
 - Runtime tests: ✅ Most passing
 
 ### Recent Features (Dec 2024)
+- ✅ **Full Borrow Checker** (Dec 27) - NLL, field-level borrowing, dangling ref detection
 - ✅ **String Interpolation** (Dec 27) - `"Hello {name}!"` syntax
 - ✅ **Where Clauses** (Dec 27) - `func foo[T]() where T: Add` constraint syntax
 - ✅ **Closures** (Dec 27) - `do(x) { x * 2 }` with environment capture

@@ -8,16 +8,69 @@
 #include <unordered_set>
 #include <vector>
 #include <optional>
+#include <set>
 
 namespace tml::borrow {
 
 // Unique identifier for a place (variable, field access, etc.)
 using PlaceId = uint64_t;
 
+// Unique identifier for a lifetime
+using LifetimeId = uint64_t;
+
 // Represents a location in the program
 struct Location {
     size_t statement_index;
     SourceSpan span;
+
+    auto operator<(const Location& other) const -> bool {
+        return statement_index < other.statement_index;
+    }
+    auto operator<=(const Location& other) const -> bool {
+        return statement_index <= other.statement_index;
+    }
+    auto operator==(const Location& other) const -> bool {
+        return statement_index == other.statement_index;
+    }
+};
+
+// Place projection - represents access path like x.field, x[i], *x
+enum class ProjectionKind {
+    Field,      // .field
+    Index,      // [i]
+    Deref,      // *ptr
+};
+
+struct Projection {
+    ProjectionKind kind;
+    std::string field_name;  // For Field projection
+};
+
+// A place with projections (e.g., x.field.subfield)
+struct Place {
+    PlaceId base;
+    std::vector<Projection> projections;
+
+    // Check if this place is a prefix of another (e.g., x is prefix of x.field)
+    auto is_prefix_of(const Place& other) const -> bool;
+    // Check if two places overlap (could conflict)
+    auto overlaps_with(const Place& other) const -> bool;
+    // Get string representation
+    auto to_string(const std::string& base_name) const -> std::string;
+};
+
+// Lifetime representation for NLL
+struct Lifetime {
+    LifetimeId id;
+    Location start;
+    std::optional<Location> end;  // None if still live
+    PlaceId borrowed_place;       // Which place this lifetime borrows
+
+    auto is_live_at(const Location& loc) const -> bool {
+        if (loc < start) return false;
+        if (!end) return true;
+        return loc <= *end;
+    }
 };
 
 // Kind of borrow
@@ -26,13 +79,17 @@ enum class BorrowKind {
     Mutable,    // mut ref T - mutable reference
 };
 
-// Represents an active borrow
+// Represents an active borrow with NLL support
 struct Borrow {
     PlaceId place;
+    Place full_place;          // Full place with projections
     BorrowKind kind;
     Location start;
-    std::optional<Location> end;  // None if still active
-    size_t scope_depth;  // Scope level where borrow was created
+    std::optional<Location> end;       // None if still active
+    std::optional<Location> last_use;  // Last use for NLL (borrow ends here, not at scope end)
+    size_t scope_depth;        // Scope level where borrow was created
+    LifetimeId lifetime;       // Associated lifetime
+    PlaceId ref_place;         // The place that holds this reference (for tracking)
 };
 
 // Ownership state of a place
@@ -69,9 +126,20 @@ struct PlaceState {
     std::optional<Location> last_use;
     // If this place is a borrow, tracks what it borrowed from and the kind
     std::optional<std::pair<PlaceId, BorrowKind>> borrowed_from;
+    // Track which fields have been partially moved (for partial move detection)
+    std::set<std::string> moved_fields;
+    // Is this place initialized?
+    bool is_initialized = true;
 };
 
-// Environment for borrow checking
+// Move state for partial moves
+enum class MoveState {
+    FullyOwned,       // All parts are owned
+    PartiallyMoved,   // Some fields moved
+    FullyMoved,       // Entire value moved
+};
+
+// Environment for borrow checking with NLL support
 class BorrowEnv {
 public:
     BorrowEnv() = default;
@@ -86,8 +154,11 @@ public:
     auto get_state(PlaceId id) const -> const PlaceState&;
     auto get_state_mut(PlaceId id) -> PlaceState&;
 
-    // Mark a place as used (for NLL)
+    // Mark a place as used (for NLL) - updates last_use and borrow tracking
     void mark_used(PlaceId id, Location loc);
+
+    // Mark a reference place as used (updates the borrow's last_use for NLL)
+    void mark_ref_used(PlaceId ref_place, Location loc);
 
     // Enter/exit scope
     void push_scope();
@@ -102,14 +173,30 @@ public:
     // Release all borrows created at the given scope depth across all places
     void release_borrows_at_depth(size_t depth, Location loc);
 
+    // NLL: Release borrows that are no longer used at given location
+    void release_dead_borrows(Location loc);
+
+    // NLL: Check if a borrow is still live at given location
+    auto is_borrow_live(const Borrow& borrow, Location loc) const -> bool;
+
     // Get all places (for releasing borrows)
     auto all_places() -> std::unordered_map<PlaceId, PlaceState>& { return places_; }
+    auto all_places() const -> const std::unordered_map<PlaceId, PlaceState>& { return places_; }
+
+    // Lifetime management
+    auto next_lifetime_id() -> LifetimeId { return next_lifetime_id_++; }
+
+    // Partial move tracking
+    void mark_field_moved(PlaceId id, const std::string& field);
+    auto get_move_state(PlaceId id) const -> MoveState;
+    auto is_field_moved(PlaceId id, const std::string& field) const -> bool;
 
 private:
     std::unordered_map<std::string, std::vector<PlaceId>> name_to_place_;
     std::unordered_map<PlaceId, PlaceState> places_;
     std::vector<std::vector<PlaceId>> scopes_;
     PlaceId next_id_ = 0;
+    LifetimeId next_lifetime_id_ = 0;
 };
 
 // Main borrow checker
@@ -171,11 +258,17 @@ private:
 
     // Borrow operations
     void create_borrow(PlaceId place, BorrowKind kind, Location loc);
+    void create_borrow_with_projection(PlaceId place, const Place& full_place,
+                                        BorrowKind kind, Location loc, PlaceId ref_place);
     void release_borrow(PlaceId place, BorrowKind kind, Location loc);
     void move_value(PlaceId place, Location loc);
+    void move_field(PlaceId place, const std::string& field, Location loc);
     void check_can_use(PlaceId place, Location loc);
+    void check_can_use_field(PlaceId place, const std::string& field, Location loc);
     void check_can_mutate(PlaceId place, Location loc);
     void check_can_borrow(PlaceId place, BorrowKind kind, Location loc);
+    void check_can_borrow_with_projection(PlaceId place, const Place& full_place,
+                                           BorrowKind kind, Location loc);
 
     // Reborrow handling: create a borrow from an existing reference
     void create_reborrow(PlaceId source, PlaceId target, BorrowKind kind, Location loc);
@@ -187,6 +280,12 @@ private:
     // Drop places at end of scope
     void drop_scope_places();
 
+    // NLL: Check for dangling references before return
+    void check_return_borrows(const parser::ReturnExpr& ret);
+
+    // NLL: Release dead borrows at current location
+    void apply_nll(Location loc);
+
     // Error reporting
     void error(const std::string& message, SourceSpan span);
     void error_with_note(const std::string& message, SourceSpan span,
@@ -194,6 +293,13 @@ private:
 
     // Helper to get current location
     auto current_location(SourceSpan span) const -> Location;
+
+    // Place projection helpers
+    auto extract_place(const parser::Expr& expr) -> std::optional<Place>;
+    auto get_place_name(const Place& place) const -> std::string;
+
+    // Track which places hold references (for NLL tracking)
+    std::unordered_map<PlaceId, PlaceId> ref_to_borrowed_;  // ref_place -> borrowed_place
 };
 
 } // namespace tml::borrow

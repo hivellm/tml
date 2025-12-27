@@ -75,8 +75,17 @@ void BorrowChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span)
     }
 
     auto loc = current_location(span);
+
+    // NLL: Apply dead borrow release before checking usage
+    apply_nll(loc);
+
     check_can_use(*place_id, loc);
     env_.mark_used(*place_id, loc);
+
+    // NLL: If this place holds a reference, update the borrow's last_use
+    if (ref_to_borrowed_.count(*place_id)) {
+        env_.mark_ref_used(*place_id, loc);
+    }
 }
 
 void BorrowChecker::check_binary(const parser::BinaryExpr& binary) {
@@ -108,11 +117,27 @@ void BorrowChecker::check_unary(const parser::UnaryExpr& unary) {
 
     // Ref and RefMut create borrows
     if (unary.op == parser::UnaryOp::Ref || unary.op == parser::UnaryOp::RefMut) {
-        if (unary.operand->template is<parser::IdentExpr>()) {
+        auto loc = current_location(unary.span);
+
+        // NLL: Apply dead borrow release before creating new borrow
+        apply_nll(loc);
+
+        // Extract full place with projections
+        auto full_place = extract_place(*unary.operand);
+
+        if (full_place) {
+            auto kind = (unary.op == parser::UnaryOp::RefMut)
+                ? BorrowKind::Mutable
+                : BorrowKind::Shared;
+
+            // Use projection-aware borrow checking
+            check_can_borrow_with_projection(full_place->base, *full_place, kind, loc);
+            create_borrow_with_projection(full_place->base, *full_place, kind, loc, 0);
+        } else if (unary.operand->template is<parser::IdentExpr>()) {
+            // Fallback for simple identifiers
             const auto& ident = unary.operand->template as<parser::IdentExpr>();
             auto place_id = env_.lookup(ident.name);
             if (place_id) {
-                auto loc = current_location(unary.span);
                 auto kind = (unary.op == parser::UnaryOp::RefMut)
                     ? BorrowKind::Mutable
                     : BorrowKind::Shared;
@@ -143,8 +168,16 @@ void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
     end_two_phase_borrow();
 }
 
-void BorrowChecker::check_field_access(const parser::FieldExpr& field) {
-    check_expr(*field.object);
+void BorrowChecker::check_field_access(const parser::FieldExpr& field_expr) {
+    check_expr(*field_expr.object);
+
+    // Check if accessing a partially moved field
+    auto base_place = extract_place(*field_expr.object);
+    if (base_place && base_place->projections.empty()) {
+        // Simple base (e.g., x.field where x is a variable)
+        auto loc = current_location(field_expr.span);
+        check_can_use_field(base_place->base, field_expr.field, loc);
+    }
 }
 
 void BorrowChecker::check_index(const parser::IndexExpr& idx) {
@@ -240,6 +273,9 @@ void BorrowChecker::check_return(const parser::ReturnExpr& ret) {
     if (ret.value) {
         check_expr(**ret.value);
     }
+
+    // NLL: Check for dangling references
+    check_return_borrows(ret);
 }
 
 void BorrowChecker::check_break(const parser::BreakExpr& brk) {

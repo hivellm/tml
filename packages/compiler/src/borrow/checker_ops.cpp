@@ -5,12 +5,19 @@ namespace tml::borrow {
 void BorrowChecker::create_borrow(PlaceId place, BorrowKind kind, Location loc) {
     auto& state = env_.get_state_mut(place);
 
+    // Create a simple place with no projections
+    Place full_place{place, {}};
+
     Borrow borrow{
         .place = place,
+        .full_place = full_place,
         .kind = kind,
         .start = loc,
         .end = std::nullopt,
-        .scope_depth = env_.scope_depth(),  // Track scope level
+        .last_use = std::nullopt,  // NLL: Will be updated when reference is used
+        .scope_depth = env_.scope_depth(),
+        .lifetime = env_.next_lifetime_id(),
+        .ref_place = 0,  // Will be set when reference is stored in a variable
     };
 
     state.active_borrows.push_back(borrow);
