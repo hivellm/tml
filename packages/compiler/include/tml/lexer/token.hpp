@@ -21,6 +21,11 @@ enum class TokenKind : uint8_t {
     CharLiteral,     // 'a', '\n', '\u{1F600}'
     BoolLiteral,     // true, false
 
+    // Interpolated string tokens: "Hello {name}!"
+    InterpStringStart,   // "Hello { - string start up to first interpolation
+    InterpStringMiddle,  // } text { - text between interpolations
+    InterpStringEnd,     // } world" - text after last interpolation to closing quote
+
     // Identifiers
     Identifier,      // foo, _bar, cafe
 

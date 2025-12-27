@@ -12,7 +12,12 @@ auto Lexer::lex_operator() -> Token {
         case '[': return make_token(TokenKind::LBracket);
         case ']': return make_token(TokenKind::RBracket);
         case '{': return make_token(TokenKind::LBrace);
-        case '}': return make_token(TokenKind::RBrace);
+        case '}':
+            // When inside an interpolated string, continue lexing the string
+            if (interp_depth_ > 0) {
+                return lex_interp_string_continue();
+            }
+            return make_token(TokenKind::RBrace);
         case ',': return make_token(TokenKind::Comma);
         case ';': return make_token(TokenKind::Semi);
         case '~': return make_token(TokenKind::BitNot);

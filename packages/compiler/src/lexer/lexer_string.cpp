@@ -4,6 +4,25 @@
 #include <system_error>
 namespace tml::lexer {
 
+// Helper to encode a Unicode codepoint as UTF-8
+static void encode_utf8(std::string& out, char32_t cp) {
+    if (cp < 0x80) {
+        out += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
 auto Lexer::lex_string() -> Token {
     // Skip opening quote
     advance();
@@ -16,27 +35,29 @@ auto Lexer::lex_string() -> Token {
             return make_error_token("Unterminated string literal");
         }
 
+        // Check for interpolation: { starts an interpolated expression
+        if (peek() == '{') {
+            // This is an interpolated string!
+            // Return InterpStringStart with the text we've collected so far
+            advance(); // consume the '{'
+            interp_depth_++;
+            in_interpolation_ = true;
+
+            auto token = make_token(TokenKind::InterpStringStart);
+            token.value = StringValue{std::move(value), false};
+            return token;
+        }
+
         if (peek() == '\\') {
             advance(); // consume backslash
+            // Check for escaped brace
+            if (peek() == '{' || peek() == '}') {
+                value += advance();
+                continue;
+            }
             auto escape_result = parse_escape_sequence();
             if (is_ok(escape_result)) {
-                // Encode as UTF-8
-                char32_t cp = unwrap(escape_result);
-                if (cp < 0x80) {
-                    value += static_cast<char>(cp);
-                } else if (cp < 0x800) {
-                    value += static_cast<char>(0xC0 | (cp >> 6));
-                    value += static_cast<char>(0x80 | (cp & 0x3F));
-                } else if (cp < 0x10000) {
-                    value += static_cast<char>(0xE0 | (cp >> 12));
-                    value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-                    value += static_cast<char>(0x80 | (cp & 0x3F));
-                } else {
-                    value += static_cast<char>(0xF0 | (cp >> 18));
-                    value += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-                    value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-                    value += static_cast<char>(0x80 | (cp & 0x3F));
-                }
+                encode_utf8(value, unwrap(escape_result));
             } else {
                 report_error(unwrap_err(escape_result));
                 has_error = true;
@@ -60,6 +81,82 @@ auto Lexer::lex_string() -> Token {
     auto token = make_token(TokenKind::StringLiteral);
     token.value = StringValue{std::move(value), false};
     return token;
+}
+
+auto Lexer::lex_interp_string_continue() -> Token {
+    // Called after parsing an interpolated expression when we see '}'
+    // We're positioned right after the '}'
+    // Continue lexing the string until we hit another '{' or '"'
+
+    std::string value;
+    bool has_error = false;
+
+    while (!is_at_end() && peek() != '"') {
+        if (peek() == '\n') {
+            return make_error_token("Unterminated string literal");
+        }
+
+        // Check for another interpolation
+        if (peek() == '{') {
+            advance(); // consume the '{'
+            // Return middle segment
+            auto token = make_token(TokenKind::InterpStringMiddle);
+            token.value = StringValue{std::move(value), false};
+            return token;
+        }
+
+        if (peek() == '\\') {
+            advance(); // consume backslash
+            // Check for escaped brace
+            if (peek() == '{' || peek() == '}') {
+                value += advance();
+                continue;
+            }
+            auto escape_result = parse_escape_sequence();
+            if (is_ok(escape_result)) {
+                encode_utf8(value, unwrap(escape_result));
+            } else {
+                report_error(unwrap_err(escape_result));
+                has_error = true;
+            }
+        } else {
+            value += advance();
+        }
+    }
+
+    if (is_at_end()) {
+        return make_error_token("Unterminated string literal");
+    }
+
+    // Skip closing quote
+    advance();
+    interp_depth_--;
+    in_interpolation_ = false;
+
+    if (has_error) {
+        return make_error_token("Invalid escape sequence in string");
+    }
+
+    auto token = make_token(TokenKind::InterpStringEnd);
+    token.value = StringValue{std::move(value), false};
+    return token;
+}
+
+auto Lexer::check_string_has_interpolation() const -> bool {
+    // Check if the current string (starting with ") contains an unescaped {
+    size_t i = pos_ + 1; // Skip opening quote
+    while (i < source_.length()) {
+        char c = source_.content()[i];
+        if (c == '"') return false; // End of string, no interpolation
+        if (c == '\n') return false; // Unterminated
+        if (c == '{') return true;   // Found interpolation
+        if (c == '\\' && i + 1 < source_.length()) {
+            i += 2; // Skip escape sequence
+        } else {
+            i++;
+        }
+    }
+    return false;
 }
 
 auto Lexer::lex_raw_string() -> Token {

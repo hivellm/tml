@@ -291,6 +291,26 @@ auto IRBuilder::build_expr(const parser::Expr& expr) -> IRExprPtr {
             await_call.args.push_back(build_expr(*e.expr));
             return make_box<IRExpr>(IRExpr{std::move(await_call)});
         }
+        else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
+            // Interpolated string: "Hello {name}!" -> string_format("Hello ", name, "!")
+            // Generate as a call to a string concatenation function
+            IRCall format_call;
+            format_call.func_name = "__string_format";
+            for (const auto& segment : e.segments) {
+                if (std::holds_alternative<std::string>(segment.content)) {
+                    // Literal string segment
+                    IRLiteral lit;
+                    lit.value = "\"" + std::get<std::string>(segment.content) + "\"";
+                    lit.type_name = "String";
+                    format_call.args.push_back(make_box<IRExpr>(IRExpr{lit}));
+                } else {
+                    // Expression segment
+                    const auto& expr_ptr = std::get<parser::ExprPtr>(segment.content);
+                    format_call.args.push_back(build_expr(*expr_ptr));
+                }
+            }
+            return make_box<IRExpr>(IRExpr{std::move(format_call)});
+        }
         else {
             // Default: empty literal
             return make_box<IRExpr>(IRExpr{IRLiteral{"()", "Unit"}});

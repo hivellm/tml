@@ -79,6 +79,7 @@ private:
     auto check_path(const parser::PathExpr& path, SourceSpan span) -> TypePtr;
     auto check_range(const parser::RangeExpr& range) -> TypePtr;
     auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
+    auto check_interp_string(const parser::InterpolatedStringExpr& interp) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

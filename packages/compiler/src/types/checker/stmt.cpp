@@ -1,0 +1,162 @@
+// Type checker statement handling
+// Handles: check_stmt, check_let, check_var, bind_pattern
+
+#include "tml/types/checker.hpp"
+#include <algorithm>
+
+namespace tml::types {
+
+// Forward declarations from helpers.cpp
+bool types_compatible(const TypePtr& expected, const TypePtr& actual);
+
+auto TypeChecker::check_stmt(const parser::Stmt& stmt) -> TypePtr {
+    return std::visit([this](const auto& s) -> TypePtr {
+        using T = std::decay_t<decltype(s)>;
+
+        if constexpr (std::is_same_v<T, parser::LetStmt>) {
+            return check_let(s);
+        }
+        else if constexpr (std::is_same_v<T, parser::VarStmt>) {
+            return check_var(s);
+        }
+        else if constexpr (std::is_same_v<T, parser::ExprStmt>) {
+            return check_expr(*s.expr);
+        }
+        else {
+            return make_unit();
+        }
+    }, stmt.kind);
+}
+
+auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
+    // TML requires explicit type annotations on all let statements
+    if (!let.type_annotation.has_value()) {
+        error("TML requires explicit type annotation on 'let' statements. Add ': Type' after the variable name.", let.span);
+        // Continue with unit type to allow further error checking
+        bind_pattern(*let.pattern, make_unit());
+        return make_unit();
+    }
+
+    TypePtr var_type = resolve_type(**let.type_annotation);
+
+    if (let.init) {
+        TypePtr init_type = check_expr(**let.init);
+        // Check that init type is compatible with declared type
+        TypePtr resolved_var = env_.resolve(var_type);
+        TypePtr resolved_init = env_.resolve(init_type);
+        if (!types_compatible(resolved_var, resolved_init)) {
+            error("Type mismatch: expected " + type_to_string(resolved_var) +
+                  ", found " + type_to_string(resolved_init), let.span);
+        }
+    }
+
+    bind_pattern(*let.pattern, var_type);
+    return make_unit();
+}
+
+auto TypeChecker::check_var(const parser::VarStmt& var) -> TypePtr {
+    // TML requires explicit type annotations on all var statements
+    if (!var.type_annotation.has_value()) {
+        error("TML requires explicit type annotation on 'var' statements. Add ': Type' after the variable name.", var.span);
+        // Continue with inferred type to allow further error checking
+        TypePtr init_type = check_expr(*var.init);
+        env_.current_scope()->define(var.name, init_type, true, SourceSpan{});
+        return make_unit();
+    }
+
+    TypePtr var_type = resolve_type(**var.type_annotation);
+    TypePtr init_type = check_expr(*var.init);
+
+    // Type compatibility is checked during expression type checking
+    env_.current_scope()->define(var.name, var_type, true, SourceSpan{});
+    return make_unit();
+}
+
+void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
+    std::visit([this, &type, &pattern](const auto& p) {
+        using T = std::decay_t<decltype(p)>;
+
+        if constexpr (std::is_same_v<T, parser::IdentPattern>) {
+            // Check for duplicate definition in current scope
+            auto existing = env_.current_scope()->lookup(p.name);
+            if (existing) {
+                error("Duplicate definition of variable '" + p.name + "'", pattern.span);
+            }
+            env_.current_scope()->define(p.name, type, p.is_mut, pattern.span);
+        }
+        else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
+            if (type->is<TupleType>()) {
+                auto& tuple = type->as<TupleType>();
+                for (size_t i = 0; i < std::min(p.elements.size(), tuple.elements.size()); ++i) {
+                    bind_pattern(*p.elements[i], tuple.elements[i]);
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
+            // Extract enum name from type
+            if (!type->is<NamedType>()) {
+                error("Pattern expects enum type, but got different type", pattern.span);
+                return;
+            }
+
+            auto& named = type->as<NamedType>();
+            std::string enum_name = named.name;
+
+            // Lookup enum definition
+            auto enum_def = env_.lookup_enum(enum_name);
+            if (!enum_def) {
+                error("Unknown enum type '" + enum_name + "' in pattern", pattern.span);
+                return;
+            }
+
+            // Build substitution map for generic type parameters
+            // e.g., for Maybe[I64], map T -> I64
+            std::unordered_map<std::string, TypePtr> type_subs;
+            for (size_t i = 0; i < enum_def->type_params.size() && i < named.type_args.size(); ++i) {
+                type_subs[enum_def->type_params[i]] = named.type_args[i];
+            }
+
+            // Find matching variant
+            std::string variant_name = p.path.segments.back();
+            auto variant_it = std::find_if(
+                enum_def->variants.begin(),
+                enum_def->variants.end(),
+                [&variant_name](const auto& v) { return v.first == variant_name; }
+            );
+
+            if (variant_it == enum_def->variants.end()) {
+                error("Unknown variant '" + variant_name + "' in enum '" + enum_name + "'", pattern.span);
+                return;
+            }
+
+            auto& variant_payload_types = variant_it->second;
+
+            // Bind payload patterns if present
+            if (p.payload) {
+                if (variant_payload_types.empty()) {
+                    error("Variant '" + variant_name + "' has no payload, but pattern expects one", pattern.span);
+                    return;
+                }
+
+                if (p.payload->size() != variant_payload_types.size()) {
+                    error("Variant '" + variant_name + "' expects " +
+                          std::to_string(variant_payload_types.size()) + " arguments, but pattern has " +
+                          std::to_string(p.payload->size()), pattern.span);
+                    return;
+                }
+
+                // Recursively bind each payload element with substituted types
+                for (size_t i = 0; i < p.payload->size(); ++i) {
+                    // Substitute generic types (e.g., T -> I64 for Maybe[I64])
+                    TypePtr payload_type = substitute_type(variant_payload_types[i], type_subs);
+                    bind_pattern(*(*p.payload)[i], payload_type);
+                }
+            } else if (!variant_payload_types.empty()) {
+                error("Variant '" + variant_name + "' has payload, but pattern doesn't bind it", pattern.span);
+                return;
+            }
+        }
+    }, pattern.kind);
+}
+
+} // namespace tml::types

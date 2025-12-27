@@ -15,6 +15,11 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         case TokenKind::CharLiteral: return "char";
         case TokenKind::BoolLiteral: return "bool";
 
+        // Interpolated string tokens
+        case TokenKind::InterpStringStart: return "interp_string_start";
+        case TokenKind::InterpStringMiddle: return "interp_string_middle";
+        case TokenKind::InterpStringEnd: return "interp_string_end";
+
         // Identifier
         case TokenKind::Identifier: return "identifier";
 
@@ -150,7 +155,8 @@ auto is_keyword(TokenKind kind) -> bool {
 }
 
 auto is_literal(TokenKind kind) -> bool {
-    return kind >= TokenKind::IntLiteral && kind <= TokenKind::BoolLiteral;
+    return (kind >= TokenKind::IntLiteral && kind <= TokenKind::BoolLiteral) ||
+           (kind >= TokenKind::InterpStringStart && kind <= TokenKind::InterpStringEnd);
 }
 
 auto is_operator(TokenKind kind) -> bool {

@@ -91,23 +91,31 @@ target_include_directories(tml_parser PUBLIC include src)
 # Type checker library
 add_library(tml_types STATIC
     src/types/type.cpp
-    src/types/checker.cpp
     src/types/env_scope.cpp
     src/types/env_core.cpp
-    src/types/env_builtins.cpp
-    src/types/env_builtins_types.cpp
-    src/types/env_builtins_io.cpp
-    src/types/env_builtins_string.cpp
-    src/types/env_builtins_time.cpp
-    src/types/env_builtins_mem.cpp
-    src/types/env_builtins_atomic.cpp
-    src/types/env_builtins_sync.cpp
-    src/types/env_builtins_math.cpp
-    src/types/env_builtins_collections.cpp
     src/types/env_definitions.cpp
     src/types/env_lookups.cpp
     src/types/module.cpp
     src/types/env_module_support.cpp
+    # Checker modules (split from checker.cpp)
+    src/types/checker/helpers.cpp
+    src/types/checker/core.cpp
+    src/types/checker/expr.cpp
+    src/types/checker/stmt.cpp
+    src/types/checker/control.cpp
+    src/types/checker/types.cpp
+    src/types/checker/resolve.cpp
+    # Builtin modules (moved from env_builtins*.cpp)
+    src/types/builtins/register.cpp
+    src/types/builtins/types.cpp
+    src/types/builtins/io.cpp
+    src/types/builtins/string.cpp
+    src/types/builtins/time.cpp
+    src/types/builtins/mem.cpp
+    src/types/builtins/atomic.cpp
+    src/types/builtins/sync.cpp
+    src/types/builtins/math.cpp
+    src/types/builtins/collections.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)

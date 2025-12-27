@@ -472,6 +472,21 @@ struct LowlevelExpr {
     SourceSpan span;
 };
 
+// Interpolated string segment: either literal text or an expression
+struct InterpolatedSegment {
+    std::variant<
+        std::string,   // Literal text segment
+        ExprPtr        // Interpolated expression: {expr}
+    > content;
+    SourceSpan span;
+};
+
+// Interpolated string expression: "Hello {name}, you are {age} years old"
+struct InterpolatedStringExpr {
+    std::vector<InterpolatedSegment> segments;
+    SourceSpan span;
+};
+
 // Expression variant
 struct Expr {
     std::variant<
@@ -503,7 +518,8 @@ struct Expr {
         TryExpr,
         AwaitExpr,
         PathExpr,
-        LowlevelExpr
+        LowlevelExpr,
+        InterpolatedStringExpr
     > kind;
     SourceSpan span;
 

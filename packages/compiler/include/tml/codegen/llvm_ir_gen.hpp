@@ -270,6 +270,7 @@ private:
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
+    auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format,

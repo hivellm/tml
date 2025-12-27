@@ -671,3 +671,48 @@ func operators() {
     EXPECT_TRUE(has_bitor);
     EXPECT_TRUE(has_bitand);
 }
+
+// ============================================================================
+// Interpolated String Tests
+// ============================================================================
+
+TEST_F(LexerTest, InterpolatedStringSimple) {
+    // "Hello {name}!" should produce:
+    // InterpStringStart("Hello ") + Identifier(name) + InterpStringEnd("!")
+    auto tokens = lex("\"Hello {name}!\"");
+
+    // Print tokens for debugging
+    for (size_t i = 0; i < tokens.size(); i++) {
+        std::cout << "Token " << i << ": " << token_kind_to_string(tokens[i].kind) << std::endl;
+    }
+
+    ASSERT_GE(tokens.size(), 3);
+    EXPECT_EQ(tokens[0].kind, TokenKind::InterpStringStart);
+    EXPECT_EQ(tokens[1].kind, TokenKind::Identifier);
+    EXPECT_EQ(tokens[2].kind, TokenKind::InterpStringEnd);
+}
+
+TEST_F(LexerTest, InterpolatedStringMultiple) {
+    // "Hello {name}, you are {age} years old"
+    auto tokens = lex("\"Hello {name}, you are {age} years old\"");
+
+    // Print tokens for debugging
+    for (size_t i = 0; i < tokens.size(); i++) {
+        std::cout << "Token " << i << ": " << token_kind_to_string(tokens[i].kind) << std::endl;
+    }
+
+    // Expected: InterpStringStart + Identifier + InterpStringMiddle + Identifier + InterpStringEnd
+    ASSERT_GE(tokens.size(), 5);
+    EXPECT_EQ(tokens[0].kind, TokenKind::InterpStringStart);
+    EXPECT_EQ(tokens[1].kind, TokenKind::Identifier);
+    EXPECT_EQ(tokens[2].kind, TokenKind::InterpStringMiddle);
+    EXPECT_EQ(tokens[3].kind, TokenKind::Identifier);
+    EXPECT_EQ(tokens[4].kind, TokenKind::InterpStringEnd);
+}
+
+TEST_F(LexerTest, RegularString) {
+    // "Hello World" - no interpolation, should be regular StringLiteral
+    auto tokens = lex("\"Hello World\"");
+    ASSERT_GE(tokens.size(), 1);
+    EXPECT_EQ(tokens[0].kind, TokenKind::StringLiteral);
+}

@@ -66,6 +66,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_closure(expr.as<parser::ClosureExpr>());
     } else if (expr.is<parser::LowlevelExpr>()) {
         return gen_lowlevel(expr.as<parser::LowlevelExpr>());
+    } else if (expr.is<parser::InterpolatedStringExpr>()) {
+        return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);
@@ -897,6 +899,76 @@ auto LLVMIRGen::gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::strin
         result = gen_expr(**lowlevel.expr);
     }
 
+    return result;
+}
+
+auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string {
+    // Generate code for interpolated string: "Hello {name}!"
+    // Strategy: Convert each segment to a string, then concatenate them all
+    // using str_concat
+
+    if (interp.segments.empty()) {
+        // Empty string
+        std::string const_name = add_string_literal("");
+        last_expr_type_ = "ptr";
+        return const_name;
+    }
+
+    std::vector<std::string> segment_strs;
+
+    for (const auto& segment : interp.segments) {
+        if (std::holds_alternative<std::string>(segment.content)) {
+            // Literal text segment - add as string constant
+            const std::string& text = std::get<std::string>(segment.content);
+            std::string const_name = add_string_literal(text);
+            segment_strs.push_back(const_name);
+        } else {
+            // Expression segment - evaluate and convert to string if needed
+            const auto& expr_ptr = std::get<parser::ExprPtr>(segment.content);
+            std::string expr_val = gen_expr(*expr_ptr);
+            std::string expr_type = last_expr_type_;
+
+            // If the expression is already a string (ptr), use it directly
+            // Otherwise, convert it to string using appropriate runtime function
+            if (expr_type == "ptr") {
+                segment_strs.push_back(expr_val);
+            } else if (expr_type == "i32" || expr_type == "i64") {
+                // Convert integer to string using i64_to_str
+                std::string str_result = fresh_reg();
+                emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + expr_val + ")");
+                segment_strs.push_back(str_result);
+            } else if (expr_type == "double" || expr_type == "float") {
+                // Convert float to string using f64_to_str
+                std::string str_result = fresh_reg();
+                emit_line("  " + str_result + " = call ptr @f64_to_str(double " + expr_val + ")");
+                segment_strs.push_back(str_result);
+            } else if (expr_type == "i1") {
+                // Convert bool to string
+                std::string str_result = fresh_reg();
+                emit_line("  " + str_result + " = select i1 " + expr_val +
+                          ", ptr @.str.true, ptr @.str.false");
+                segment_strs.push_back(str_result);
+            } else {
+                // For unknown types, use the value as-is (assume it's a string ptr)
+                segment_strs.push_back(expr_val);
+            }
+        }
+    }
+
+    // Concatenate all segments using str_concat
+    if (segment_strs.size() == 1) {
+        last_expr_type_ = "ptr";
+        return segment_strs[0];
+    }
+
+    std::string result = segment_strs[0];
+    for (size_t i = 1; i < segment_strs.size(); ++i) {
+        std::string new_result = fresh_reg();
+        emit_line("  " + new_result + " = call ptr @str_concat(ptr " + result + ", ptr " + segment_strs[i] + ")");
+        result = new_result;
+    }
+
+    last_expr_type_ = "ptr";
     return result;
 }
 

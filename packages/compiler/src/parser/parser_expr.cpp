@@ -311,6 +311,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_literal_expr();
     }
 
+    // Interpolated string: "Hello {name}!"
+    if (check(lexer::TokenKind::InterpStringStart)) {
+        return parse_interp_string_expr();
+    }
+
     // Identifier or path
     if (check(lexer::TokenKind::Identifier)) {
         return parse_ident_or_path_expr();
@@ -1137,6 +1142,92 @@ auto Parser::parse_lowlevel_expr() -> Result<ExprPtr, ParseError> {
             .span = span
         },
         .span = span
+    });
+}
+
+auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
+    // Parse interpolated string: "Hello {name}, you are {age} years old"
+    // Token sequence: InterpStringStart("Hello ") -> Identifier(name) -> InterpStringMiddle(", you are ")
+    //                 -> Identifier(age) -> InterpStringEnd(" years old")
+    //
+    // IMPORTANT: The lexer intercepts the '}' and returns InterpStringMiddle/End directly
+    // instead of returning RBrace. So after parsing the expression, we expect to see
+    // InterpStringMiddle or InterpStringEnd immediately.
+
+    auto start_span = peek().span;
+    std::vector<InterpolatedSegment> segments;
+
+    // First token is InterpStringStart (contains text before first {)
+    auto start_token = advance();
+    if (!start_token.is(lexer::TokenKind::InterpStringStart)) {
+        return ParseError{
+            .message = "Expected interpolated string start",
+            .span = start_token.span,
+            .notes = {}
+        };
+    }
+
+    // Add the initial text segment (may be empty)
+    const auto& start_str = std::get<lexer::StringValue>(start_token.value).value;
+    if (!start_str.empty()) {
+        segments.push_back(InterpolatedSegment{
+            .content = start_str,
+            .span = start_token.span
+        });
+    }
+
+    // Loop: parse expression, then check for InterpStringMiddle or InterpStringEnd
+    while (true) {
+        // Parse the interpolated expression
+        auto expr = parse_expr();
+        if (is_err(expr)) return expr;
+
+        segments.push_back(InterpolatedSegment{
+            .content = std::move(unwrap(expr)),
+            .span = previous().span
+        });
+
+        // After the expression, the lexer should have already consumed the '}'
+        // and returned the continuation token (InterpStringMiddle or InterpStringEnd)
+        if (check(lexer::TokenKind::InterpStringMiddle)) {
+            auto middle_token = advance();
+            const auto& middle_str = std::get<lexer::StringValue>(middle_token.value).value;
+            if (!middle_str.empty()) {
+                segments.push_back(InterpolatedSegment{
+                    .content = middle_str,
+                    .span = middle_token.span
+                });
+            }
+            // Continue the loop to parse next expression
+        } else if (check(lexer::TokenKind::InterpStringEnd)) {
+            auto end_token = advance();
+            const auto& end_str = std::get<lexer::StringValue>(end_token.value).value;
+            if (!end_str.empty()) {
+                segments.push_back(InterpolatedSegment{
+                    .content = end_str,
+                    .span = end_token.span
+                });
+            }
+            // Done parsing the interpolated string
+            break;
+        } else {
+            // Unexpected token
+            return ParseError{
+                .message = "Expected '}' to close interpolated expression (got " +
+                           std::string(lexer::token_kind_to_string(peek().kind)) + ")",
+                .span = peek().span,
+                .notes = {}
+            };
+        }
+    }
+
+    auto end_span = previous().span;
+    return make_box<Expr>(Expr{
+        .kind = InterpolatedStringExpr{
+            .segments = std::move(segments),
+            .span = SourceSpan::merge(start_span, end_span)
+        },
+        .span = SourceSpan::merge(start_span, end_span)
     });
 }
 

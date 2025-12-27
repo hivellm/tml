@@ -7,7 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Type Checker Refactoring** (2025-12-27) - Split monolithic checker.cpp (2151 lines) into modular components
+  - New directory: `src/types/checker/`
+  - `checker/helpers.cpp` - Shared utilities, Levenshtein distance, type compatibility
+  - `checker/core.cpp` - check_module, register_*, check_func_decl, check_impl_decl
+  - `checker/expr.cpp` - check_expr, check_literal, check_ident, check_binary, check_call
+  - `checker/stmt.cpp` - check_stmt, check_let, check_var, bind_pattern
+  - `checker/control.cpp` - check_if, check_when, check_loop, check_for, check_return, check_break
+  - `checker/types.cpp` - check_tuple, check_array, check_struct_expr, check_closure, check_path
+  - `checker/resolve.cpp` - resolve_type, resolve_type_path, block_has_return, error helpers
+  - Removed: Original `checker.cpp` (all code moved to checker/)
+
+- **Type Builtins Refactoring** (2025-12-27) - Reorganized env_builtins*.cpp files
+  - New directory: `src/types/builtins/`
+  - `builtins/register.cpp` (was `env_builtins.cpp`) - Main registration
+  - `builtins/types.cpp` - Primitive type builtins
+  - `builtins/io.cpp` - I/O builtins (print, println)
+  - `builtins/string.cpp` - String builtins
+  - `builtins/time.cpp` - Time builtins
+  - `builtins/mem.cpp` - Memory builtins
+  - `builtins/atomic.cpp` - Atomic operation builtins
+  - `builtins/sync.cpp` - Synchronization builtins
+  - `builtins/math.cpp` - Math builtins
+  - `builtins/collections.cpp` - Collection builtins
+  - Removed: Original `env_builtins*.cpp` files (all moved to builtins/)
+
 ### Added
+- **String Interpolation** (2025-12-27)
+  - Full support for interpolated strings: `"Hello {name}!"`
+  - Expressions within `{}` are evaluated and converted to strings
+  - Supports any expression inside braces including arithmetic: `"Result: {a + b}"`
+  - Escaped braces: `\{` and `\}` produce literal braces
+  - New lexer tokens: `InterpStringStart`, `InterpStringMiddle`, `InterpStringEnd`
+  - New AST node: `InterpolatedStringExpr` with `InterpolatedSegment` segments
+  - Type checker validates all interpolated expressions
+  - LLVM codegen uses `str_concat` for efficient string building
+  - Tests added: `LexerTest.Interpolated*`, `ParserTest.Interpolated*`
+  - Files modified:
+    - `include/tml/lexer/token.hpp` - Added interpolated string token types
+    - `include/tml/lexer/lexer.hpp` - Added `interp_depth_`, `in_interpolation_` state
+    - `include/tml/parser/ast.hpp` - Added `InterpolatedSegment`, `InterpolatedStringExpr`
+    - `include/tml/parser/parser.hpp` - Added `parse_interp_string_expr()` declaration
+    - `src/lexer/lexer_string.cpp` - Implemented `lex_interp_string_continue()`
+    - `src/lexer/lexer_operator.cpp` - Handle `}` in interpolation context
+    - `src/parser/parser_expr.cpp` - Implemented `parse_interp_string_expr()`
+    - `src/types/checker.cpp` - Added `check_interp_string()`
+    - `src/ir/builder_expr.cpp` - Added IR generation for interpolated strings
+    - `src/codegen/llvm_ir_gen_expr.cpp` - Added `gen_interp_string()`
+    - `tests/lexer_test.cpp`, `tests/parser_test.cpp` - Added comprehensive tests
+
 - **Where Clause Type Checking** (2025-12-27)
   - Full where clause constraint enforcement at call sites
   - Register behavior implementations via `impl Behavior for Type`

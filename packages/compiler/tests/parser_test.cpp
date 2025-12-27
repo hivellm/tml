@@ -593,3 +593,82 @@ TEST_F(ParserTest, UseDeclarationGroupedMultiple) {
     ASSERT_TRUE(use_decl.symbols.has_value());
     EXPECT_EQ(use_decl.symbols.value().size(), 5);
 }
+
+// ============================================================================
+// Interpolated String Tests
+// ============================================================================
+
+TEST_F(ParserTest, InterpolatedStringSimple) {
+    // Test: "Hello {name}!"
+    auto result = parse_expr("\"Hello {name}!\"");
+    ASSERT_TRUE(is_ok(result)) << "Failed to parse interpolated string";
+    EXPECT_TRUE(unwrap(result)->is<InterpolatedStringExpr>());
+
+    auto& interp = unwrap(result)->as<InterpolatedStringExpr>();
+    ASSERT_EQ(interp.segments.size(), 3);
+
+    // First segment: "Hello " (literal text)
+    EXPECT_TRUE(std::holds_alternative<std::string>(interp.segments[0].content));
+    EXPECT_EQ(std::get<std::string>(interp.segments[0].content), "Hello ");
+
+    // Second segment: name (expression)
+    EXPECT_TRUE(std::holds_alternative<ExprPtr>(interp.segments[1].content));
+
+    // Third segment: "!" (literal text)
+    EXPECT_TRUE(std::holds_alternative<std::string>(interp.segments[2].content));
+    EXPECT_EQ(std::get<std::string>(interp.segments[2].content), "!");
+}
+
+TEST_F(ParserTest, InterpolatedStringMultiple) {
+    // Test: "Hello {name}, you are {age} years old"
+    auto result = parse_expr("\"Hello {name}, you are {age} years old\"");
+    ASSERT_TRUE(is_ok(result)) << "Failed to parse interpolated string with multiple interpolations";
+    EXPECT_TRUE(unwrap(result)->is<InterpolatedStringExpr>());
+
+    auto& interp = unwrap(result)->as<InterpolatedStringExpr>();
+    // "Hello " + name + ", you are " + age + " years old" = 5 segments
+    ASSERT_EQ(interp.segments.size(), 5);
+}
+
+TEST_F(ParserTest, InterpolatedStringExpression) {
+    // Test: "Result: {a + b}"
+    auto result = parse_expr("\"Result: {a + b}\"");
+    ASSERT_TRUE(is_ok(result)) << "Failed to parse interpolated string with expression";
+    EXPECT_TRUE(unwrap(result)->is<InterpolatedStringExpr>());
+
+    auto& interp = unwrap(result)->as<InterpolatedStringExpr>();
+    ASSERT_GE(interp.segments.size(), 2);
+
+    // Check the expression segment is a binary expression
+    EXPECT_TRUE(std::holds_alternative<ExprPtr>(interp.segments[1].content));
+    auto& expr = std::get<ExprPtr>(interp.segments[1].content);
+    EXPECT_TRUE(expr->is<BinaryExpr>());
+}
+
+TEST_F(ParserTest, InterpolatedStringEmptyStart) {
+    // Test: "{x}" - empty text at start
+    auto result = parse_expr("\"{x}\"");
+    ASSERT_TRUE(is_ok(result)) << "Failed to parse interpolated string starting with interpolation";
+    EXPECT_TRUE(unwrap(result)->is<InterpolatedStringExpr>());
+
+    auto& interp = unwrap(result)->as<InterpolatedStringExpr>();
+    // Just the expression (empty strings are not added)
+    ASSERT_GE(interp.segments.size(), 1);
+    EXPECT_TRUE(std::holds_alternative<ExprPtr>(interp.segments[0].content));
+}
+
+TEST_F(ParserTest, RegularStringNonInterpolated) {
+    // Test: "Hello World" - no interpolation
+    auto result = parse_expr("\"Hello World\"");
+    ASSERT_TRUE(is_ok(result));
+    // Should be a regular literal, not interpolated
+    EXPECT_TRUE(unwrap(result)->is<LiteralExpr>());
+}
+
+TEST_F(ParserTest, InterpolatedStringEscapedBrace) {
+    // Test: "Use \\{braces\\}" - escaped braces should be literal
+    auto result = parse_expr("\"Use \\{braces\\}\"");
+    ASSERT_TRUE(is_ok(result));
+    // Escaped braces make this a regular string
+    EXPECT_TRUE(unwrap(result)->is<LiteralExpr>());
+}
