@@ -1,0 +1,156 @@
+// TML Core Library - Hash Module
+// Provides: Hash behavior for hashable types
+
+// ============================================================================
+// Hash Behavior
+// ============================================================================
+
+/// Behavior for types that can be hashed.
+/// Types implementing Hash can be used as keys in HashMap.
+pub behavior Hash {
+    /// Computes a hash value for this value.
+    /// The hash should be consistent: equal values must produce equal hashes.
+    func hash(this) -> I64
+}
+
+// ============================================================================
+// Hash implementations for primitives
+// ============================================================================
+
+impl Hash for I8 {
+    pub func hash(this) -> I64 {
+        return lowlevel { i8_to_i64(this) }
+    }
+}
+
+impl Hash for I16 {
+    pub func hash(this) -> I64 {
+        return lowlevel { i16_to_i64(this) }
+    }
+}
+
+impl Hash for I32 {
+    pub func hash(this) -> I64 {
+        return lowlevel { i32_to_i64(this) }
+    }
+}
+
+impl Hash for I64 {
+    pub func hash(this) -> I64 {
+        return this
+    }
+}
+
+impl Hash for U8 {
+    pub func hash(this) -> I64 {
+        return lowlevel { u8_to_i64(this) }
+    }
+}
+
+impl Hash for U16 {
+    pub func hash(this) -> I64 {
+        return lowlevel { u16_to_i64(this) }
+    }
+}
+
+impl Hash for U32 {
+    pub func hash(this) -> I64 {
+        return lowlevel { u32_to_i64(this) }
+    }
+}
+
+impl Hash for U64 {
+    pub func hash(this) -> I64 {
+        return lowlevel { u64_to_i64(this) }
+    }
+}
+
+impl Hash for Bool {
+    pub func hash(this) -> I64 {
+        if this {
+            return 1
+        }
+        return 0
+    }
+}
+
+impl Hash for Str {
+    pub func hash(this) -> I64 {
+        return lowlevel { str_hash(this) }
+    }
+}
+
+// ============================================================================
+// Hash for Maybe[T]
+// ============================================================================
+
+impl[T: Hash] Hash for Maybe[T] {
+    pub func hash(this) -> I64 {
+        when this {
+            Just(val) => {
+                // Combine discriminant (1) with value hash
+                let h: I64 = val.hash()
+                return h * 31 + 1
+            },
+            Nothing => {
+                // Use 0 for Nothing
+                return 0
+            },
+        }
+    }
+}
+
+// ============================================================================
+// Hash for Outcome[T, E]
+// ============================================================================
+
+impl[T: Hash, E: Hash] Hash for Outcome[T, E] {
+    pub func hash(this) -> I64 {
+        when this {
+            Ok(val) => {
+                // Combine discriminant (1) with value hash
+                let h: I64 = val.hash()
+                return h * 31 + 1
+            },
+            Err(e) => {
+                // Combine discriminant (2) with error hash
+                let h: I64 = e.hash()
+                return h * 31 + 2
+            },
+        }
+    }
+}
+
+// ============================================================================
+// Hasher Interface (for advanced hashing)
+// ============================================================================
+
+/// A hasher that can be fed data incrementally.
+/// This is useful for hashing composite types.
+pub behavior Hasher {
+    /// Writes bytes into this hasher.
+    func write(mut this, bytes: ref [U8])
+
+    /// Writes a single byte into this hasher.
+    func write_u8(mut this, value: U8)
+
+    /// Writes an I32 into this hasher.
+    func write_i32(mut this, value: I32)
+
+    /// Writes an I64 into this hasher.
+    func write_i64(mut this, value: I64)
+
+    /// Returns the hash value computed so far.
+    func finish(this) -> I64
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Combines two hash values into one.
+/// Useful for hashing composite types.
+pub func combine_hashes(h1: I64, h2: I64) -> I64 {
+    // Use a simple combination formula similar to boost::hash_combine
+    return h1 * 31 + h2
+}

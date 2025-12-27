@@ -1,0 +1,212 @@
+// TML Core Library - Conversion Module
+// Provides: From, Into, TryFrom, TryInto, AsRef, AsMut behaviors
+
+// ============================================================================
+// From Behavior
+// ============================================================================
+
+/// Behavior for constructing a value from another type.
+/// Implementing From[T] for U means you can convert T into U.
+pub behavior From[T] {
+    /// Performs the conversion.
+    func from(value: T) -> Self
+}
+
+// ============================================================================
+// Into Behavior
+// ============================================================================
+
+/// Behavior for converting a value into another type.
+/// This is the reciprocal of From.
+/// If From[T] is implemented for U, then Into[U] is automatically available for T.
+pub behavior Into[T] {
+    /// Performs the conversion.
+    func into(this) -> T
+}
+
+// ============================================================================
+// TryFrom Behavior
+// ============================================================================
+
+/// Fallible conversion from another type.
+/// Returns Outcome[Self, E] to indicate success or failure.
+pub behavior TryFrom[T] {
+    /// The error type for failed conversions.
+    type Error
+
+    /// Attempts to perform the conversion.
+    func try_from(value: T) -> Outcome[Self, This::Error]
+}
+
+// ============================================================================
+// TryInto Behavior
+// ============================================================================
+
+/// Fallible conversion into another type.
+/// This is the reciprocal of TryFrom.
+pub behavior TryInto[T] {
+    /// The error type for failed conversions.
+    type Error
+
+    /// Attempts to perform the conversion.
+    func try_into(this) -> Outcome[T, This::Error]
+}
+
+// ============================================================================
+// AsRef Behavior
+// ============================================================================
+
+/// Cheap reference-to-reference conversion.
+/// Used when you want to borrow as a different type.
+pub behavior AsRef[T] {
+    /// Borrows this value as a reference to T.
+    func as_ref(this) -> ref T
+}
+
+// ============================================================================
+// AsMut Behavior
+// ============================================================================
+
+/// Cheap mutable reference-to-reference conversion.
+/// Used when you want to mutably borrow as a different type.
+pub behavior AsMut[T] {
+    /// Borrows this value as a mutable reference to T.
+    func as_mut(mut this) -> mut ref T
+}
+
+// ============================================================================
+// Identity conversions
+// ============================================================================
+
+// Every type can be converted from itself
+impl[T] From[T] for T {
+    pub func from(value: T) -> T {
+        return value
+    }
+}
+
+// ============================================================================
+// Numeric conversions: smaller to larger (infallible)
+// ============================================================================
+
+impl From[I8] for I16 {
+    pub func from(value: I8) -> I16 {
+        return lowlevel { i8_to_i16(value) }
+    }
+}
+
+impl From[I8] for I32 {
+    pub func from(value: I8) -> I32 {
+        return lowlevel { i8_to_i32(value) }
+    }
+}
+
+impl From[I8] for I64 {
+    pub func from(value: I8) -> I64 {
+        return lowlevel { i8_to_i64(value) }
+    }
+}
+
+impl From[I16] for I32 {
+    pub func from(value: I16) -> I32 {
+        return lowlevel { i16_to_i32(value) }
+    }
+}
+
+impl From[I16] for I64 {
+    pub func from(value: I16) -> I64 {
+        return lowlevel { i16_to_i64(value) }
+    }
+}
+
+impl From[I32] for I64 {
+    pub func from(value: I32) -> I64 {
+        return lowlevel { i32_to_i64(value) }
+    }
+}
+
+impl From[U8] for U16 {
+    pub func from(value: U8) -> U16 {
+        return lowlevel { u8_to_u16(value) }
+    }
+}
+
+impl From[U8] for U32 {
+    pub func from(value: U8) -> U32 {
+        return lowlevel { u8_to_u32(value) }
+    }
+}
+
+impl From[U8] for U64 {
+    pub func from(value: U8) -> U64 {
+        return lowlevel { u8_to_u64(value) }
+    }
+}
+
+impl From[U16] for U32 {
+    pub func from(value: U16) -> U32 {
+        return lowlevel { u16_to_u32(value) }
+    }
+}
+
+impl From[U16] for U64 {
+    pub func from(value: U16) -> U64 {
+        return lowlevel { u16_to_u64(value) }
+    }
+}
+
+impl From[U32] for U64 {
+    pub func from(value: U32) -> U64 {
+        return lowlevel { u32_to_u64(value) }
+    }
+}
+
+impl From[F32] for F64 {
+    pub func from(value: F32) -> F64 {
+        return lowlevel { f32_to_f64(value) }
+    }
+}
+
+// ============================================================================
+// Bool conversions
+// ============================================================================
+
+impl From[Bool] for I32 {
+    pub func from(value: Bool) -> I32 {
+        if value {
+            return 1
+        }
+        return 0
+    }
+}
+
+impl From[Bool] for I64 {
+    pub func from(value: Bool) -> I64 {
+        if value {
+            return 1
+        }
+        return 0
+    }
+}
+
+// ============================================================================
+// Maybe conversions
+// ============================================================================
+
+/// Convert a value into Just(value)
+impl[T] From[T] for Maybe[T] {
+    pub func from(value: T) -> Maybe[T] {
+        return Just(value)
+    }
+}
+
+// ============================================================================
+// Outcome conversions
+// ============================================================================
+
+/// Convert an Ok value into Outcome
+impl[T, E] From[T] for Outcome[T, E] {
+    pub func from(value: T) -> Outcome[T, E] {
+        return Ok(value)
+    }
+}

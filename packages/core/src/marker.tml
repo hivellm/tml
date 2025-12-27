@@ -1,0 +1,135 @@
+// TML Core Library - Marker Behaviors Module
+// Provides: Send, Sync, Sized, Unpin marker behaviors
+
+// ============================================================================
+// Send Behavior (Marker)
+// ============================================================================
+
+/// Marker behavior for types that can be safely sent between threads.
+/// Types implementing Send can have their ownership transferred to another thread.
+///
+/// Most types are Send. Types that are NOT Send include:
+/// - Types containing raw pointers that are not thread-safe
+/// - Types with thread-local state
+pub behavior Send {
+    // No methods - this is a marker behavior
+}
+
+// ============================================================================
+// Sync Behavior (Marker)
+// ============================================================================
+
+/// Marker behavior for types that can be safely shared between threads.
+/// Types implementing Sync can have shared references (&T) used by multiple threads.
+///
+/// If T: Sync, then &T: Send
+///
+/// Most types are Sync. Types that are NOT Sync include:
+/// - Cell[T] and RefCell[T] (interior mutability without synchronization)
+/// - Raw pointers
+pub behavior Sync {
+    // No methods - this is a marker behavior
+}
+
+// ============================================================================
+// Sized Behavior (Marker)
+// ============================================================================
+
+/// Marker behavior for types with a known size at compile time.
+/// Almost all types are Sized. Only trait objects and slices are !Sized.
+pub behavior Sized {
+    // No methods - this is a marker behavior
+}
+
+// ============================================================================
+// Unpin Behavior (Marker)
+// ============================================================================
+
+/// Marker behavior for types that can be safely moved after being pinned.
+/// Most types implement Unpin. Types that do NOT implement Unpin are
+/// types containing self-referential structures.
+pub behavior Unpin {
+    // No methods - this is a marker behavior
+}
+
+// ============================================================================
+// Send implementations for primitives
+// ============================================================================
+
+impl Send for I8 {}
+impl Send for I16 {}
+impl Send for I32 {}
+impl Send for I64 {}
+impl Send for U8 {}
+impl Send for U16 {}
+impl Send for U32 {}
+impl Send for U64 {}
+impl Send for F32 {}
+impl Send for F64 {}
+impl Send for Bool {}
+impl Send for Str {}
+
+// ============================================================================
+// Sync implementations for primitives
+// ============================================================================
+
+impl Sync for I8 {}
+impl Sync for I16 {}
+impl Sync for I32 {}
+impl Sync for I64 {}
+impl Sync for U8 {}
+impl Sync for U16 {}
+impl Sync for U32 {}
+impl Sync for U64 {}
+impl Sync for F32 {}
+impl Sync for F64 {}
+impl Sync for Bool {}
+impl Sync for Str {}
+
+// ============================================================================
+// Sized implementations for primitives
+// ============================================================================
+
+impl Sized for I8 {}
+impl Sized for I16 {}
+impl Sized for I32 {}
+impl Sized for I64 {}
+impl Sized for U8 {}
+impl Sized for U16 {}
+impl Sized for U32 {}
+impl Sized for U64 {}
+impl Sized for F32 {}
+impl Sized for F64 {}
+impl Sized for Bool {}
+impl Sized for Str {}
+
+// ============================================================================
+// Unpin implementations for primitives
+// ============================================================================
+
+impl Unpin for I8 {}
+impl Unpin for I16 {}
+impl Unpin for I32 {}
+impl Unpin for I64 {}
+impl Unpin for U8 {}
+impl Unpin for U16 {}
+impl Unpin for U32 {}
+impl Unpin for U64 {}
+impl Unpin for F32 {}
+impl Unpin for F64 {}
+impl Unpin for Bool {}
+impl Unpin for Str {}
+
+// ============================================================================
+// Send/Sync for Maybe[T] and Outcome[T, E]
+// ============================================================================
+
+impl[T: Send] Send for Maybe[T] {}
+impl[T: Sync] Sync for Maybe[T] {}
+impl[T: Sized] Sized for Maybe[T] {}
+impl[T: Unpin] Unpin for Maybe[T] {}
+
+impl[T: Send, E: Send] Send for Outcome[T, E] {}
+impl[T: Sync, E: Sync] Sync for Outcome[T, E] {}
+impl[T: Sized, E: Sized] Sized for Outcome[T, E] {}
+impl[T: Unpin, E: Unpin] Unpin for Outcome[T, E] {}

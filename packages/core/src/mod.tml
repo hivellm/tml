@@ -7,9 +7,15 @@
 // - ops: Operator overloading behaviors (Add, Sub, Mul, Div, etc.)
 // - default: Default behavior for default values
 // - fmt: Display and Debug behaviors for formatting
+// - convert: From, Into, TryFrom, TryInto, AsRef, AsMut for type conversions
+// - hash: Hash behavior for hashable types
+// - marker: Send, Sync, Sized, Unpin marker behaviors
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
 pub mod ops      // Add, Sub, Mul, Div, Rem, Neg, Not, Index, etc.
 pub mod default  // Default
 pub mod fmt      // Display, Debug
+pub mod convert  // From, Into, TryFrom, TryInto, AsRef, AsMut
+pub mod hash     // Hash, Hasher
+pub mod marker   // Send, Sync, Sized, Unpin
