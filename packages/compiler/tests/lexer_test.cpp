@@ -363,3 +363,311 @@ TEST_F(LexerTest, EmptyCharLiteral) {
 
     EXPECT_EQ(token.kind, TokenKind::Error);
 }
+
+// ============================================================================
+// Integration Tests - Complete TML Programs
+// ============================================================================
+
+TEST_F(LexerTest, IntegrationCompleteFunction) {
+    // Test lexing a complete function with multiple statements
+    std::string code = R"(
+func fibonacci(n: I64) -> I64 {
+    if n <= 1 {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token at line " << token.span.start.line;
+    }
+
+    // Verify key tokens are present
+    bool has_func = false, has_if = false, has_return = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwFunc) has_func = true;
+        if (token.kind == TokenKind::KwIf) has_if = true;
+        if (token.kind == TokenKind::KwReturn) has_return = true;
+    }
+    EXPECT_TRUE(has_func);
+    EXPECT_TRUE(has_if);
+    EXPECT_TRUE(has_return);
+}
+
+TEST_F(LexerTest, IntegrationStructAndImpl) {
+    // Test lexing a struct definition with impl block
+    std::string code = R"(
+type Point {
+    x: F64,
+    y: F64
+}
+
+impl Point {
+    func new(x: F64, y: F64) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    func distance(self, other: Point) -> F64 {
+        let dx: F64 = self.x - other.x
+        let dy: F64 = self.y - other.y
+        return sqrt(dx * dx + dy * dy)
+    }
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify struct and impl keywords
+    bool has_type = false, has_impl = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwType) has_type = true;
+        if (token.kind == TokenKind::KwImpl) has_impl = true;
+    }
+    EXPECT_TRUE(has_type);
+    EXPECT_TRUE(has_impl);
+}
+
+TEST_F(LexerTest, IntegrationTypeAndWhen) {
+    // Test lexing a type (enum-style) and when expression
+    // TML uses 'type' keyword for both structs and enums
+    std::string code = R"(
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+func unwrap_or[T](opt: Maybe[T], dflt: T) -> T {
+    when (opt) {
+        Just(value) => value,
+        Nothing => dflt
+    }
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify type and when keywords
+    bool has_type = false, has_when = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwType) has_type = true;
+        if (token.kind == TokenKind::KwWhen) has_when = true;
+    }
+    EXPECT_TRUE(has_type);
+    EXPECT_TRUE(has_when);
+}
+
+TEST_F(LexerTest, IntegrationBehaviorAndImpl) {
+    // Test lexing a behavior definition with implementation
+    std::string code = R"TML(
+behavior Printable {
+    func to_string(self) -> Str
+}
+
+type Counter {
+    value: I64
+}
+
+impl Printable for Counter {
+    func to_string(self) -> Str {
+        return format("Counter: {}", self.value)
+    }
+}
+)TML";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify behavior keyword
+    bool has_behavior = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwBehavior) has_behavior = true;
+    }
+    EXPECT_TRUE(has_behavior);
+}
+
+TEST_F(LexerTest, IntegrationLoopsAndControl) {
+    // Test lexing various loop constructs
+    std::string code = R"(
+func loops_example() {
+    // For loop with range
+    for i in 0 to 10 {
+        print(i)
+    }
+
+    // While-style loop
+    var x: I64 = 0
+    loop {
+        x = x + 1
+        if x >= 10 {
+            break
+        }
+    }
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify loop-related keywords
+    bool has_for = false, has_loop = false, has_break = false, has_in = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwFor) has_for = true;
+        if (token.kind == TokenKind::KwLoop) has_loop = true;
+        if (token.kind == TokenKind::KwBreak) has_break = true;
+        if (token.kind == TokenKind::KwIn) has_in = true;
+    }
+    EXPECT_TRUE(has_for);
+    EXPECT_TRUE(has_loop);
+    EXPECT_TRUE(has_break);
+    EXPECT_TRUE(has_in);
+}
+
+TEST_F(LexerTest, IntegrationFFIDeclarations) {
+    // Test lexing FFI function declarations
+    std::string code = R"(
+@link("SDL2")
+@extern("c")
+pub func SDL_Init(flags: U32) -> I32
+
+@link("user32")
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+func main() -> I32 {
+    let result: I32 = SDL2::SDL_Init(0)
+    return result
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify @ decorator tokens
+    int at_count = 0;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::At) at_count++;
+    }
+    EXPECT_GE(at_count, 4);  // @link and @extern for each function
+}
+
+TEST_F(LexerTest, IntegrationAllLiteralTypes) {
+    // Test all literal types in a single program
+    std::string code = R"(
+func literals_test() {
+    let dec: I64 = 42
+    let hex: I64 = 0xFF
+    let bin: I64 = 0b1010
+    let oct: I64 = 0o755
+    let with_sep: I64 = 1_000_000
+
+    let simple_float: F64 = 3.14
+    let exp_float: F64 = 1.5e10
+    let neg_exp: F64 = 2.5e-3
+
+    let str1: Str = "hello world"
+    let str2: Str = "escape: \n\t"
+
+    let ch: Char = 'x'
+    let esc_ch: Char = '\n'
+
+    let t: Bool = true
+    let f: Bool = false
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Count different literal types
+    int int_count = 0, float_count = 0, str_count = 0, char_count = 0, bool_count = 0;
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+
+        if (token.kind == TokenKind::IntLiteral) int_count++;
+        if (token.kind == TokenKind::FloatLiteral) float_count++;
+        if (token.kind == TokenKind::StringLiteral) str_count++;
+        if (token.kind == TokenKind::CharLiteral) char_count++;
+        if (token.kind == TokenKind::BoolLiteral) bool_count++;
+    }
+
+    EXPECT_GE(int_count, 5);    // At least 5 integer literals
+    EXPECT_GE(float_count, 3);  // At least 3 float literals
+    EXPECT_GE(str_count, 2);    // At least 2 string literals
+    EXPECT_GE(char_count, 2);   // At least 2 char literals
+    EXPECT_EQ(bool_count, 2);   // Exactly 2 bool literals
+}
+
+TEST_F(LexerTest, IntegrationOperatorChains) {
+    // Test complex operator chains are tokenized correctly
+    std::string code = R"(
+func operators() {
+    let a: I64 = 1 + 2 * 3 - 4 / 5
+    let b: Bool = a > 0 and a < 100
+    let c: Bool = not (b or false)
+    let d: I64 = a << 2 | 0xFF
+    let e: I64 = a >> 1 & 0x0F
+}
+)";
+    auto tokens = lex(code);
+    EXPECT_FALSE(tokens.empty());
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error)
+            << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Verify key operators are present
+    bool has_plus = false, has_star = false, has_and = false, has_or = false;
+    bool has_shl = false, has_shr = false, has_bitor = false, has_bitand = false;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::Plus) has_plus = true;
+        if (token.kind == TokenKind::Star) has_star = true;
+        if (token.kind == TokenKind::KwAnd) has_and = true;
+        if (token.kind == TokenKind::KwOr) has_or = true;
+        if (token.kind == TokenKind::Shl) has_shl = true;
+        if (token.kind == TokenKind::Shr) has_shr = true;
+        if (token.kind == TokenKind::BitOr) has_bitor = true;
+        if (token.kind == TokenKind::BitAnd) has_bitand = true;
+    }
+    EXPECT_TRUE(has_plus);
+    EXPECT_TRUE(has_star);
+    EXPECT_TRUE(has_and);
+    EXPECT_TRUE(has_or);
+    EXPECT_TRUE(has_shl);
+    EXPECT_TRUE(has_shr);
+    EXPECT_TRUE(has_bitor);
+    EXPECT_TRUE(has_bitand);
+}

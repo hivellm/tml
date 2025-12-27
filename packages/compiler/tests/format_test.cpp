@@ -597,7 +597,7 @@ TEST_F(FormatterTest, MutablePattern) {
     EXPECT_TRUE(formatted.find("let mut x: I32") != std::string::npos);
 }
 
-TEST_F(FormatterTest, DISABLED_TuplePattern) {
+TEST_F(FormatterTest, TuplePattern) {
     std::string input = "func f() { let (a, b): (I32, I32) = pair }";
     std::string formatted = format(input);
     EXPECT_TRUE(formatted.find("let (a, b): (I32, I32)") != std::string::npos);

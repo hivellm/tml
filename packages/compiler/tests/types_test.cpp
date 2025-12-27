@@ -386,11 +386,11 @@ TEST_F(TypeCheckerTest, ArrayExpression) {
     )");
 }
 
-TEST_F(TypeCheckerTest, DISABLED_TupleExpression) {
+TEST_F(TypeCheckerTest, TupleExpression) {
     check_ok(R"(
         func test() {
-            let pair: (I32, I32) = (1, 2)
-            let triple: (I32, Str, Bool) = (1, "hello", true)
+            let pair: (I64, I64) = (1, 2)
+            let triple: (I64, Str, Bool) = (1, "hello", true)
         }
     )");
 }

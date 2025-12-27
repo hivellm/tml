@@ -1841,6 +1841,14 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
             type->kind = types::FuncType{param_types, ret, false};
             return type;
         }
+        else if constexpr (std::is_same_v<T, parser::TupleType>) {
+            // Convert parser TupleType to semantic TupleType
+            std::vector<TypePtr> element_types;
+            for (const auto& elem : t.elements) {
+                element_types.push_back(resolve_type(*elem));
+            }
+            return make_tuple(std::move(element_types));
+        }
         else {
             return make_unit();
         }

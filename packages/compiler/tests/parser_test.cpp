@@ -362,7 +362,7 @@ TEST_F(ParserTest, MutablePattern) {
     EXPECT_TRUE(ident.is_mut);
 }
 
-TEST_F(ParserTest, DISABLED_TuplePattern) {
+TEST_F(ParserTest, TuplePattern) {
     auto result = parse_stmt("let (a, b): (I32, I32) = pair");
     ASSERT_TRUE(is_ok(result));
 
