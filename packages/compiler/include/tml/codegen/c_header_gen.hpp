@@ -1,9 +1,9 @@
 #pragma once
 
 #include <string>
-#include <vector>
 #include <tml/parser/ast.hpp>
 #include <tml/types/env.hpp>
+#include <vector>
 
 namespace tml::codegen {
 
@@ -32,7 +32,7 @@ public:
     CHeaderGenResult generate(const parser::Module& module);
 
 private:
-    const types::TypeEnv& env_;
+    [[maybe_unused]] const types::TypeEnv& env_;
     CHeaderGenOptions options_;
 
     // Map TML type to C type
