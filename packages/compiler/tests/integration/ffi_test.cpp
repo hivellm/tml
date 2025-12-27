@@ -6,6 +6,18 @@
 
 namespace fs = std::filesystem;
 
+// Helper to check if ar/llvm-ar is available (needed for static libraries)
+static bool has_ar_tool() {
+#ifdef _WIN32
+    // Windows uses lib.exe or llvm-ar, both typically available with MSVC/LLVM
+    return true;
+#else
+    // Check for llvm-ar or ar
+    return std::system("which llvm-ar >/dev/null 2>&1") == 0 ||
+           std::system("which ar >/dev/null 2>&1") == 0;
+#endif
+}
+
 class FFIIntegrationTest : public ::testing::Test {
 protected:
     fs::path test_dir;
@@ -107,6 +119,10 @@ int main() {
 
 // Test: Build static library with header
 TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
+    if (!has_ar_tool()) {
+        GTEST_SKIP() << "Skipping: llvm-ar/ar not available for static library creation";
+    }
+
     std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
                       " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
 
@@ -128,6 +144,10 @@ TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
 
 // Test: C program can use TML static library
 TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
+    if (!has_ar_tool()) {
+        GTEST_SKIP() << "Skipping: llvm-ar/ar not available for static library creation";
+    }
+
     // Build TML library
     std::string build_cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
                             " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
@@ -182,6 +202,10 @@ TEST_F(FFIIntegrationTest, BuildDynamicLibraryWithHeader) {
 
 // Test: Header contains correct function declarations
 TEST_F(FFIIntegrationTest, HeaderContainsCorrectDeclarations) {
+    if (!has_ar_tool()) {
+        GTEST_SKIP() << "Skipping: llvm-ar/ar not available for static library creation";
+    }
+
     // Build library to generate header
     std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
                       " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
