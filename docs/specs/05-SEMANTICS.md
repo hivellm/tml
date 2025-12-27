@@ -98,8 +98,8 @@ module auto {
     // caps inferred as [io.file.read, io.network.http]
 
     func load() -> Data {
-        let local: Outcome[String, Error] = File.read("cache.txt")
-        let remote: Outcome[Response, Error] = Http.get("https://api.example.com/data")
+        let local: String = File.read("cache.txt")!
+        let remote: Response = Http.get("https://api.example.com/data")!
         return merge(local, remote)
     }
 }
@@ -280,8 +280,8 @@ effects: [state.read]  // effect from f
 // Effects inferred automatically
 func load_all() -> List[Data] {
     // inferred: [io.file.read, io.network.http]
-    let files: Outcome[List[String], Error] = File.list("data/")
-    let remote: Outcome[Response, Error] = Http.get(API_URL)
+    let files: List[String] = File.list("data/")!
+    let remote: Response = Http.get(API_URL)!
     return merge(files, remote)
 }
 ```
@@ -559,15 +559,15 @@ Every fallible call ends with `!` - highly visible error points:
 
 ```tml
 func process() -> Outcome[Data, Error] {
-    let file: Outcome[File, Error] = File.open("data.txt")!   // propagate on error
-    let content: Outcome[String, Error] = file.read()!           // propagate on error
-    let parsed: Outcome[Data, Error] = parse(content)!         // propagate on error
+    let file: File = File.open("data.txt")!       // propagate on error, unwraps to File
+    let content: String = file.read()!            // propagate on error, unwraps to String
+    let parsed: Data = parse(content)!            // propagate on error, unwraps to Data
     return Ok(parsed)
 }
 
 // In non-Outcome function, ! panics on error
 func must_load() -> Config {
-    let content: Outcome[String, Error] = File.read("config.json")!  // panic if fails
+    let content: String = File.read("config.json")!  // panic if fails, unwraps to String
     return parse(content)!
 }
 ```
@@ -576,10 +576,10 @@ func must_load() -> Config {
 
 ```tml
 // Simple default
-let port: Outcome[String, Error] = env.get("PORT")!.parse[U16]()! else 8080
+let port: U16 = env.get("PORT")!.parse[U16]()! else 8080
 
 // With error binding
-let data: Outcome[Data, Error] = fetch(url)! else |err| {
+let data: Data = fetch(url)! else |err| {
     log.warn("Fetch failed: " + err.to_string())
     load_cached()! else Data.default()
 }
@@ -596,8 +596,8 @@ let user: User = find_user(id)! else {
 func sync_data() -> Outcome[Unit, SyncError] {
     catch {
         let local: Data = load_local()!
-        let remote: Outcome[Data, Error] = fetch_remote()!
-        save(merge(local, remote)!)!
+        let remote: Data = fetch_remote()!
+        save(merge(local, remote))!
         return Ok(())
     } else |err| {
         log.error("Sync failed: " + err.to_string())

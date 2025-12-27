@@ -392,7 +392,7 @@ tml test --workspace
 [package]
 name = "myproject"
 version = "1.0.0"
-edition = "2024"
+edition = "2025"
 
 [build]
 jobs = 8

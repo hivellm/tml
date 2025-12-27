@@ -30,7 +30,7 @@ my_project/
 name = "my_project"
 version = "0.1.0"
 authors = ["Jane Doe <jane@example.com>"]
-edition = "2024"
+edition = "2025"
 
 [lib]
 path = "src/lib.tml"
@@ -63,7 +63,7 @@ Defines package metadata.
 name = "my_package"           # Package name (required)
 version = "1.0.0"              # Semver version (required)
 authors = ["Author Name <email@example.com>"]  # Optional
-edition = "2024"               # TML edition (optional, default: 2024)
+edition = "2025"               # TML edition (optional, default: 2025)
 description = "A sample TML package"  # Optional
 license = "MIT"                # Optional
 repository = "https://github.com/user/repo"  # Optional
@@ -204,7 +204,7 @@ tml build --release    # Uses release profile
 name = "web_server"
 version = "2.1.0"
 authors = ["Alice Smith <alice@example.com>", "Bob Jones <bob@example.com>"]
-edition = "2024"
+edition = "2025"
 description = "A high-performance web server written in TML"
 license = "MIT"
 repository = "https://github.com/example/web_server"

@@ -298,7 +298,7 @@ func fetch(url: String) -> Outcome[Data, Error] {
 | `@deprecated(since, removal)` | Any | With version info |
 | `@must_use` | Func/Type | Warn if result unused |
 | `@must_use(msg)` | Func/Type | Custom unused warning |
-| `@derive(...)` | Type | Auto-implement behaviors |
+| `@auto(...)` | Type | Auto-implement behaviors |
 | `@when(...)` | Any | Conditional compilation |
 | `@doc(...)` | Any | Documentation |
 | `@allow(...)` | Any | Suppress specific warnings |
@@ -347,36 +347,36 @@ func experimental_feature() -> () {
 - `@deprecated` APIs have migration period (minimum 1 minor version)
 - Compiler warns about unstable/deprecated API usage by default
 
-## 9. Derive Decorator
+## 9. Auto Decorator
 
-### 9.1 Standard Derives
+### 9.1 Standard Auto-Implementations
 
 ```tml
-@derive(Eq, Ord, Hash, Debug, Duplicate, Default)
+@auto(equal, order, hash, debug, duplicate, default)
 type Point = {
     x: F64,
     y: F64,
 }
 ```
 
-### 9.2 Available Standard Derives
+### 9.2 Available Standard Implementations
 
-| Derive | Generated |
+| Name | Generated |
 |--------|-----------|
-| `Eq` | `==`, `!=` |
-| `Ord` | `<`, `>`, `<=`, `>=`, `cmp` |
-| `Hash` | `hash()` |
-| `Debug` | `debug_fmt()` |
-| `Display` | `fmt()` |
-| `Duplicate` | `duplicate()` |
-| `Default` | `default()` |
-| `Serialize` | Serialization support |
-| `Deserialize` | Deserialization support |
+| `equal` | `==`, `!=` |
+| `order` | `<`, `>`, `<=`, `>=`, `cmp` |
+| `hash` | `hash()` |
+| `debug` | `debug_fmt()` |
+| `format` | `fmt()` |
+| `duplicate` | `duplicate()` |
+| `default` | `default()` |
+| `serialize` | Serialization support |
+| `deserialize` | Deserialization support |
 
-### 9.3 Custom Derive
+### 9.3 Custom Auto
 
 ```tml
-decorator derive_builder {
+decorator auto_builder {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
             Type(t) -> {
@@ -384,12 +384,12 @@ decorator derive_builder {
                 let builder_impl: Impl = generate_builder_impl(t)
                 DecoratorResult.AddItems([builder_type, builder_impl])
             },
-            _ -> DecoratorResult.Error("derive_builder only applies to types"),
+            _ -> DecoratorResult.Error("auto_builder only applies to types"),
         }
     }
 }
 
-@derive_builder
+@auto_builder
 type Config = {
     host: String,
     port: U16,

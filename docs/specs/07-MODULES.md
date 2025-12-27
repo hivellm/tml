@@ -206,7 +206,7 @@ let msg: I32 = user32::MessageBoxA(0, "Hi", "TML", 0)
 [package]
 name = "myproject"
 version = "1.0.0"
-edition = "2024"
+edition = "2025"
 authors = ["Alice <alice@example.com>"]
 license = "Apache-2.0"
 description = "My awesome project"
@@ -276,7 +276,7 @@ log = "0.4"
 
 [workspace.package]
 version = "1.0.0"
-edition = "2024"
+edition = "2025"
 ```
 
 ### 6.3 Member tml.toml
