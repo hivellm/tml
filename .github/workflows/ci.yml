@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install clang-format
         run: |
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
@@ -78,9 +78,9 @@ jobs:
             clang-tidy "$file" -- -std=c++17 $INCLUDE_ARGS 2>/dev/null || true
           done
 
-  # Build on multiple platforms
-  build:
-    name: Build (${{ matrix.os }})
+  # Build and test on multiple platforms
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -89,49 +89,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
-
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install ninja openssl
-
-      - name: Build (Linux/macOS)
-        if: matrix.os != 'windows-latest'
-        run: |
-          chmod +x ./scripts/build.sh
-          ./scripts/build.sh --no-tests
-
-      - name: Build (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: cmd
-        run: scripts\build.bat --no-tests
-
-      - name: Upload Compiler Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tml-${{ matrix.os }}
-          path: |
-            build/debug/tml*
-            build/Debug/tml*
-          if-no-files-found: warn
-
-  # Run C++ unit tests
-  test-cpp:
-    name: C++ Tests (${{ matrix.os }})
-    needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -170,6 +128,15 @@ jobs:
           }
         shell: pwsh
 
+      - name: Upload Compiler Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tml-${{ matrix.os }}
+          path: |
+            build/debug/tml*
+            build/Debug/tml*
+          if-no-files-found: warn
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: always()
@@ -181,39 +148,35 @@ jobs:
   # Run TML integration tests (Linux only for simplicity)
   test-tml:
     name: TML Tests
-    needs: build
+    needs: build-and-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build clang llvm libssl-dev
+          sudo apt-get install -y clang llvm
 
-      - name: Build
-        run: |
-          chmod +x ./scripts/build.sh
-          ./scripts/build.sh --no-tests
-
-      - name: Find TML Compiler
-        id: find-tml
-        run: |
-          TML_EXE=$(find build -name "tml" -type f | head -1)
-          echo "TML_EXE=$TML_EXE" >> $GITHUB_OUTPUT
-          chmod +x "$TML_EXE"
+      - name: Download TML Compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: tml-ubuntu-latest
+          path: build/debug
 
       - name: Run TML Tests
         run: |
-          TML="${{ steps.find-tml.outputs.TML_EXE }}"
+          TML_EXE="build/debug/tml"
+          chmod +x "$TML_EXE"
+          echo "Using TML compiler: $TML_EXE"
           echo "Running TML integration tests..."
 
           # Run compiler tests
           for test in packages/compiler/tests/compiler/*.test.tml; do
             if [ -f "$test" ]; then
               echo "Testing: $test"
-              "$TML" test "$test" || echo "Test failed: $test"
+              "$TML_EXE" test "$test" || echo "Test failed: $test"
             fi
           done
 
@@ -221,7 +184,7 @@ jobs:
           for test in packages/compiler/tests/runtime/*.test.tml; do
             if [ -f "$test" ]; then
               echo "Testing: $test"
-              "$TML" test "$test" || echo "Test failed: $test"
+              "$TML_EXE" test "$test" || echo "Test failed: $test"
             fi
           done
 
@@ -229,7 +192,7 @@ jobs:
           for test in packages/std/tests/*.test.tml; do
             if [ -f "$test" ]; then
               echo "Testing: $test"
-              "$TML" test "$test" || echo "Test failed: $test"
+              "$TML_EXE" test "$test" || echo "Test failed: $test"
             fi
           done
 
@@ -239,7 +202,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Codespell
         run: python -m pip install --upgrade 'codespell[toml]'
