@@ -433,7 +433,7 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
                     // Handle 'This' type substitution
                     if (param_type->is<NamedType>() && param_type->as<NamedType>().name == "This") {
                         auto self_type = std::make_shared<types::Type>();
-                        self_type->kind = NamedType{type_name, {}};
+                        self_type->kind = NamedType{type_name, "", {}};
                         params.push_back(self_type);
                     } else {
                         params.push_back(param_type);
@@ -444,7 +444,7 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
                 // Handle 'This' return type substitution
                 if (ret->is<NamedType>() && ret->as<NamedType>().name == "This") {
                     auto self_type = std::make_shared<types::Type>();
-                    self_type->kind = NamedType{type_name, {}};
+                    self_type->kind = NamedType{type_name, "", {}};
                     ret = self_type;
                 }
 

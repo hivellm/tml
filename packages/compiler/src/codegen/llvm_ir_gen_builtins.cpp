@@ -289,8 +289,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
         }
 
-        for (const auto& [k, v] : bindings) {}
-
         // Extract inferred type args in the order of generic parameters
         std::vector<types::TypePtr> inferred_type_args;
         for (const auto& g : gen_func.generics) {

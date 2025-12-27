@@ -183,7 +183,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     // Helper function to resolve simple types (primitive types for now)
     std::function<types::TypePtr(const parser::Type&)> resolve_simple_type;
-    resolve_simple_type = [this, &resolve_simple_type](const parser::Type& type) -> types::TypePtr {
+    resolve_simple_type = [&resolve_simple_type](const parser::Type& type) -> types::TypePtr {
         if (type.is<parser::NamedType>()) {
             const auto& named = type.as<parser::NamedType>();
             const std::string& name = named.path.segments.empty() ? "" : named.path.segments[0];
@@ -258,7 +258,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             if (func_type.return_type) {
                 return_type = resolve_simple_type(*func_type.return_type);
             }
-            return std::make_shared<Type>(Type{FuncType{std::move(param_types), return_type}});
+            return std::make_shared<Type>(
+                Type{FuncType{std::move(param_types), return_type, false}});
         }
 
         // Fallback: return I32 for unknown types

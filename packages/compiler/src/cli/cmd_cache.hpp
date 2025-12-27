@@ -1,6 +1,7 @@
 #ifndef TML_CLI_CMD_CACHE_HPP
 #define TML_CLI_CMD_CACHE_HPP
 
+#include <cstdint>
 #include <string>
 
 namespace tml::cli {

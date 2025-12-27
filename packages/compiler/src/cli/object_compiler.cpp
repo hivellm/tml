@@ -1,5 +1,6 @@
 #include "object_compiler.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <iostream>

@@ -44,7 +44,7 @@ std::string format_size(uintmax_t bytes) {
 /**
  * Calculate total size of directory
  */
-uintmax_t calculate_directory_size(const fs::path& dir) {
+[[maybe_unused]] uintmax_t calculate_directory_size(const fs::path& dir) {
     uintmax_t total = 0;
 
     if (!fs::exists(dir)) {

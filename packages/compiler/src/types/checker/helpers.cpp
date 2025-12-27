@@ -7,51 +7,6 @@
 
 namespace tml::types {
 
-namespace {
-
-// Convert PrimitiveKind to string name
-std::string primitive_to_string(PrimitiveKind kind) {
-    switch (kind) {
-    case PrimitiveKind::I8:
-        return "I8";
-    case PrimitiveKind::I16:
-        return "I16";
-    case PrimitiveKind::I32:
-        return "I32";
-    case PrimitiveKind::I64:
-        return "I64";
-    case PrimitiveKind::I128:
-        return "I128";
-    case PrimitiveKind::U8:
-        return "U8";
-    case PrimitiveKind::U16:
-        return "U16";
-    case PrimitiveKind::U32:
-        return "U32";
-    case PrimitiveKind::U64:
-        return "U64";
-    case PrimitiveKind::U128:
-        return "U128";
-    case PrimitiveKind::F32:
-        return "F32";
-    case PrimitiveKind::F64:
-        return "F64";
-    case PrimitiveKind::Bool:
-        return "Bool";
-    case PrimitiveKind::Char:
-        return "Char";
-    case PrimitiveKind::Str:
-        return "Str";
-    case PrimitiveKind::Unit:
-        return "Unit";
-    case PrimitiveKind::Never:
-        return "Never";
-    }
-    return "unknown";
-}
-
-} // anonymous namespace
-
 // Helper to check if a type is an integer type
 bool is_integer_type(const TypePtr& type) {
     if (!type->is<PrimitiveType>())

@@ -494,13 +494,11 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string param_types = "ptr"; // 'this' is always a pointer
 
     // Check if first param is 'this' or 'mut this'
-    bool has_explicit_this = false;
     size_t param_start = 0;
     if (!method.params.empty()) {
         const auto& first_param = method.params[0];
         std::string first_name = get_param_name(first_param);
         if (first_name == "this") {
-            has_explicit_this = true;
             param_start = 1; // Skip 'this' in param loop since we handle it specially
         }
     }

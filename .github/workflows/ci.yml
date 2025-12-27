@@ -52,15 +52,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang llvm
+          sudo apt-get install -y ninja-build clang llvm libssl-dev
 
       - name: Build TML Compiler
-        run: |
-          cmake -B build -S packages/compiler \
-            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
-            -DTML_BUILD_TESTS=OFF \
-            -G Ninja
-          cmake --build build --config $BUILD_TYPE
+        run: ./scripts/build.sh --no-tests
 
       - name: Run TML Lint
         run: |
@@ -87,45 +82,34 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            cmake_generator: Ninja
-          - os: windows-latest
-            cmake_generator: Visual Studio 17 2022
-          - os: macos-latest
-            cmake_generator: Ninja
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Ninja (Linux/macOS)
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install ninja openssl
+
+      - name: Build (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            sudo apt-get update && sudo apt-get install -y ninja-build
-          else
-            brew install ninja
-          fi
+        run: ./scripts/build.sh --no-tests
 
-      - name: Configure CMake
-        shell: bash
-        run: |
-          cmake -B build -S packages/compiler \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DTML_BUILD_TESTS=ON \
-            -G "${{ matrix.cmake_generator }}"
-
-      - name: Build
-        shell: bash
-        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: scripts\build.bat --no-tests
 
       - name: Upload Compiler Artifact
         uses: actions/upload-artifact@v4
         with:
           name: tml-${{ matrix.os }}
           path: |
-            build/${{ env.BUILD_TYPE }}/tml*
+            build/debug/tml*
             build/Debug/tml*
           if-no-files-found: warn
 
@@ -138,38 +122,27 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            cmake_generator: Ninja
-          - os: windows-latest
-            cmake_generator: Visual Studio 17 2022
-          - os: macos-latest
-            cmake_generator: Ninja
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Ninja (Linux/macOS)
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install ninja openssl
+
+      - name: Build with tests (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            sudo apt-get update && sudo apt-get install -y ninja-build
-          else
-            brew install ninja
-          fi
+        run: ./scripts/build.sh
 
-      - name: Configure CMake
-        shell: bash
-        run: |
-          cmake -B build -S packages/compiler \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DTML_BUILD_TESTS=ON \
-            -G "${{ matrix.cmake_generator }}"
-
-      - name: Build
-        shell: bash
-        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      - name: Build with tests (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: scripts\build.bat
 
       - name: Run C++ Tests (Linux/macOS)
         if: matrix.os != 'windows-latest'
@@ -209,15 +182,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build clang llvm
+          sudo apt-get install -y ninja-build clang llvm libssl-dev
 
-      - name: Configure and Build
-        run: |
-          cmake -B build -S packages/compiler \
-            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DTML_BUILD_TESTS=OFF \
-            -G Ninja
-          cmake --build build --config ${{ env.BUILD_TYPE }}
+      - name: Build
+        run: ./scripts/build.sh --no-tests
 
       - name: Find TML Compiler
         id: find-tml

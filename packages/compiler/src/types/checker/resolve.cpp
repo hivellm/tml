@@ -20,8 +20,8 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                         type_args.push_back(resolve_type(*arg));
                     }
                     // Create new type with type_args
-                    if (base_type->is<types::NamedType>()) {
-                        auto& named = base_type->as<types::NamedType>();
+                    if (base_type->template is<types::NamedType>()) {
+                        auto& named = base_type->template as<types::NamedType>();
                         auto result = std::make_shared<Type>();
                         result->kind =
                             types::NamedType{named.name, named.module_path, std::move(type_args)};

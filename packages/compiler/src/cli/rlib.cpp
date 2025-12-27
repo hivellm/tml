@@ -93,7 +93,7 @@ std::string extract_json_string(const std::string& json, const std::string& key)
 /**
  * Extract boolean value from JSON
  */
-bool extract_json_bool(const std::string& json, const std::string& key) {
+[[maybe_unused]] bool extract_json_bool(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\"";
     size_t pos = json.find(search);
     if (pos == std::string::npos)
@@ -116,7 +116,11 @@ bool extract_json_bool(const std::string& json, const std::string& key) {
  */
 std::string exec_command(const std::string& cmd) {
     std::string result;
+#ifdef _WIN32
     FILE* pipe = _popen(cmd.c_str(), "r");
+#else
+    FILE* pipe = popen(cmd.c_str(), "r");
+#endif
     if (!pipe)
         return result;
 
@@ -125,7 +129,11 @@ std::string exec_command(const std::string& cmd) {
         result += buffer;
     }
 
+#ifdef _WIN32
     _pclose(pipe);
+#else
+    pclose(pipe);
+#endif
     return result;
 }
 

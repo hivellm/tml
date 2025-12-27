@@ -216,6 +216,14 @@ add_library(tml_cli STATIC
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)
 
+# OpenSSL for SHA256 hashing (non-Windows)
+if(NOT WIN32)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        target_link_libraries(tml_cli PUBLIC OpenSSL::Crypto)
+    endif()
+endif()
+
 # Main executable
 add_executable(tml src/main.cpp)
 target_link_libraries(tml PRIVATE tml_cli)

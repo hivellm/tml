@@ -216,7 +216,7 @@ std::vector<fs::path> discover_source_files(const fs::path& root_dir) {
 int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     // Parse arguments
     int num_threads = 0;
-    bool clean = false;
+    [[maybe_unused]] bool clean = false;
 
     for (const auto& arg : args) {
         if (arg.starts_with("-j")) {

@@ -339,8 +339,8 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                 // parser::ArrayType::size is an ExprPtr, need to evaluate it
                 // For now, use a default size of 0 (will be computed elsewhere if needed)
                 size_t arr_size = 0;
-                if (t.size && t.size->is<parser::LiteralExpr>()) {
-                    const auto& lit = t.size->as<parser::LiteralExpr>();
+                if (t.size && t.size->template is<parser::LiteralExpr>()) {
+                    const auto& lit = t.size->template as<parser::LiteralExpr>();
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         arr_size = static_cast<size_t>(lit.token.int_value().value);
                     }
