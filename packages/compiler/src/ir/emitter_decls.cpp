@@ -1,4 +1,5 @@
 #include "tml/ir/ir.hpp"
+
 #include <sstream>
 
 namespace tml::ir {
@@ -26,7 +27,8 @@ void IREmitter::emit_func(std::ostringstream& out, const IRFunc& func) {
             if (!gen.bounds.empty()) {
                 out << " (bounds [";
                 for (size_t i = 0; i < gen.bounds.size(); ++i) {
-                    if (i > 0) out << " ";
+                    if (i > 0)
+                        out << " ";
                     out << gen.bounds[i];
                 }
                 out << "])";
@@ -69,7 +71,8 @@ void IREmitter::emit_func(std::ostringstream& out, const IRFunc& func) {
         emit_indent(out);
         out << "(effects [";
         for (size_t i = 0; i < func.effects.size(); ++i) {
-            if (i > 0) out << " ";
+            if (i > 0)
+                out << " ";
             out << func.effects[i];
         }
         out << "])";
@@ -119,64 +122,68 @@ void IREmitter::emit_type(std::ostringstream& out, const IRType& type) {
     }
 
     // Kind-specific content
-    std::visit([this, &out](const auto& k) {
-        using T = std::decay_t<decltype(k)>;
-        if constexpr (std::is_same_v<T, IRStructType>) {
-            emit_newline(out);
-            emit_indent(out);
-            out << "(kind struct)";
-            if (!k.fields.empty()) {
+    std::visit(
+        [this, &out](const auto& k) {
+            using T = std::decay_t<decltype(k)>;
+            if constexpr (std::is_same_v<T, IRStructType>) {
                 emit_newline(out);
                 emit_indent(out);
-                out << "(fields";
-                indent_level_++;
-                for (const auto& field : k.fields) {
+                out << "(kind struct)";
+                if (!k.fields.empty()) {
                     emit_newline(out);
                     emit_indent(out);
-                    out << "(field " << field.name << " ";
-                    emit_type_expr(out, field.type);
-                    out << " (vis " << (field.vis == Visibility::Public ? "public" : "private") << "))";
+                    out << "(fields";
+                    indent_level_++;
+                    for (const auto& field : k.fields) {
+                        emit_newline(out);
+                        emit_indent(out);
+                        out << "(field " << field.name << " ";
+                        emit_type_expr(out, field.type);
+                        out << " (vis " << (field.vis == Visibility::Public ? "public" : "private")
+                            << "))";
+                    }
+                    indent_level_--;
+                    out << ")";
                 }
-                indent_level_--;
-                out << ")";
-            }
-        } else if constexpr (std::is_same_v<T, IREnumType>) {
-            emit_newline(out);
-            emit_indent(out);
-            out << "(kind enum)";
-            if (!k.variants.empty()) {
+            } else if constexpr (std::is_same_v<T, IREnumType>) {
                 emit_newline(out);
                 emit_indent(out);
-                out << "(variants";
-                indent_level_++;
-                for (const auto& variant : k.variants) {
+                out << "(kind enum)";
+                if (!k.variants.empty()) {
                     emit_newline(out);
                     emit_indent(out);
-                    out << "(variant " << variant.name;
-                    if (!variant.fields.empty()) {
-                        out << " (";
-                        for (size_t i = 0; i < variant.fields.size(); ++i) {
-                            if (i > 0) out << " ";
-                            emit_type_expr(out, variant.fields[i]);
+                    out << "(variants";
+                    indent_level_++;
+                    for (const auto& variant : k.variants) {
+                        emit_newline(out);
+                        emit_indent(out);
+                        out << "(variant " << variant.name;
+                        if (!variant.fields.empty()) {
+                            out << " (";
+                            for (size_t i = 0; i < variant.fields.size(); ++i) {
+                                if (i > 0)
+                                    out << " ";
+                                emit_type_expr(out, variant.fields[i]);
+                            }
+                            out << ")";
                         }
                         out << ")";
                     }
+                    indent_level_--;
                     out << ")";
                 }
-                indent_level_--;
+            } else if constexpr (std::is_same_v<T, IRAliasType>) {
+                emit_newline(out);
+                emit_indent(out);
+                out << "(kind alias)";
+                emit_newline(out);
+                emit_indent(out);
+                out << "(target ";
+                emit_type_expr(out, k.target);
                 out << ")";
             }
-        } else if constexpr (std::is_same_v<T, IRAliasType>) {
-            emit_newline(out);
-            emit_indent(out);
-            out << "(kind alias)";
-            emit_newline(out);
-            emit_indent(out);
-            out << "(target ";
-            emit_type_expr(out, k.target);
-            out << ")";
-        }
-    }, type.kind);
+        },
+        type.kind);
 
     indent_level_--;
     out << ")";
@@ -326,6 +333,5 @@ void IREmitter::emit_const(std::ostringstream& out, const IRConst& cst) {
     indent_level_--;
     out << ")";
 }
-
 
 } // namespace tml::ir

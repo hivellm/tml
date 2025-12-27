@@ -1,19 +1,22 @@
 // TML Runtime - IO Functions
 // Matches: env_builtins_io.cpp
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 // print(message: Str) -> Unit
 void print(const char* message) {
-    if (message) printf("%s", message);
+    if (message)
+        printf("%s", message);
 }
 
 // println(message: Str) -> Unit
 void println(const char* message) {
-    if (message) printf("%s\n", message);
-    else printf("\n");
+    if (message)
+        printf("%s\n", message);
+    else
+        printf("\n");
 }
 
 // panic(message: Str) -> Never
@@ -31,9 +34,21 @@ void assert_tml(int32_t condition, const char* message) {
 }
 
 // Type-specific print variants (for polymorphic print)
-void print_i32(int32_t n) { printf("%d", n); }
-void print_i64(int64_t n) { printf("%lld", (long long)n); }
-void print_f32(float n) { printf("%g", n); }
-void print_f64(double n) { printf("%g", n); }
-void print_bool(int32_t b) { printf("%s", b ? "true" : "false"); }
-void print_char(int32_t c) { printf("%c", (char)c); }
+void print_i32(int32_t n) {
+    printf("%d", n);
+}
+void print_i64(int64_t n) {
+    printf("%lld", (long long)n);
+}
+void print_f32(float n) {
+    printf("%g", n);
+}
+void print_f64(double n) {
+    printf("%g", n);
+}
+void print_bool(int32_t b) {
+    printf("%s", b ? "true" : "false");
+}
+void print_char(int32_t c) {
+    printf("%c", (char)c);
+}

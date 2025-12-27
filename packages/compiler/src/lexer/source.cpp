@@ -1,4 +1,5 @@
 #include "tml/lexer/source.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -47,13 +48,11 @@ auto Source::location(size_t offset) const -> SourceLocation {
     auto line_start = *it;
     auto column = static_cast<uint32_t>(offset - line_start);
 
-    return SourceLocation{
-        .file = filename_,
-        .line = line_index + 1, // 1-indexed
-        .column = column + 1,   // 1-indexed
-        .offset = static_cast<uint32_t>(offset),
-        .length = 1
-    };
+    return SourceLocation{.file = filename_,
+                          .line = line_index + 1, // 1-indexed
+                          .column = column + 1,   // 1-indexed
+                          .offset = static_cast<uint32_t>(offset),
+                          .length = 1};
 }
 
 auto Source::line(uint32_t line_num) const -> std::string_view {

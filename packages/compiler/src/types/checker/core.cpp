@@ -1,8 +1,9 @@
 // Type checker core - module checking and declarations
 // Handles: check_module, register_*, check_func_decl, check_impl_decl
 
-#include "tml/types/checker.hpp"
 #include "tml/lexer/token.hpp"
+#include "tml/types/checker.hpp"
+
 #include <algorithm>
 #include <iostream>
 #include <set>
@@ -82,12 +83,10 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
         type_params.push_back(param.name);
     }
 
-    env_.define_struct(StructDef{
-        .name = decl.name,
-        .type_params = std::move(type_params),
-        .fields = std::move(fields),
-        .span = decl.span
-    });
+    env_.define_struct(StructDef{.name = decl.name,
+                                 .type_params = std::move(type_params),
+                                 .fields = std::move(fields),
+                                 .span = decl.span});
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
@@ -107,12 +106,10 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
         type_params.push_back(param.name);
     }
 
-    env_.define_enum(EnumDef{
-        .name = decl.name,
-        .type_params = std::move(type_params),
-        .variants = std::move(variants),
-        .span = decl.span
-    });
+    env_.define_enum(EnumDef{.name = decl.name,
+                             .type_params = std::move(type_params),
+                             .variants = std::move(variants),
+                             .span = decl.span});
 }
 
 void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
@@ -125,14 +122,12 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
-        methods.push_back(FuncSig{
-            .name = method.name,
-            .params = std::move(params),
-            .return_type = std::move(ret),
-            .type_params = {},
-            .is_async = method.is_async,
-            .span = method.span
-        });
+        methods.push_back(FuncSig{.name = method.name,
+                                  .params = std::move(params),
+                                  .return_type = std::move(ret),
+                                  .type_params = {},
+                                  .is_async = method.is_async,
+                                  .span = method.span});
 
         // Track methods with default implementations
         if (method.body.has_value()) {
@@ -145,14 +140,12 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
         type_params.push_back(param.name);
     }
 
-    env_.define_behavior(BehaviorDef{
-        .name = decl.name,
-        .type_params = std::move(type_params),
-        .methods = std::move(methods),
-        .super_behaviors = {},
-        .methods_with_defaults = std::move(methods_with_defaults),
-        .span = decl.span
-    });
+    env_.define_behavior(BehaviorDef{.name = decl.name,
+                                     .type_params = std::move(type_params),
+                                     .methods = std::move(methods),
+                                     .super_behaviors = {},
+                                     .methods_with_defaults = std::move(methods_with_defaults),
+                                     .span = decl.span});
 }
 
 void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
@@ -167,7 +160,8 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     // Build module path from segments
     std::string module_path;
     for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
-        if (i > 0) module_path += "::";
+        if (i > 0)
+            module_path += "::";
         module_path += use_decl.path.segments[i];
     }
 
@@ -180,11 +174,8 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         auto module_opt = env_.get_module(module_path);
 
         if (!module_opt.has_value()) {
-            errors_.push_back(TypeError{
-                "Module '" + module_path + "' not found",
-                use_decl.span,
-                {}
-            });
+            errors_.push_back(
+                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
             return;
         }
 
@@ -204,7 +195,8 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         // Try module path without last segment
         std::string base_module_path;
         for (size_t i = 0; i < use_decl.path.segments.size() - 1; ++i) {
-            if (i > 0) base_module_path += "::";
+            if (i > 0)
+                base_module_path += "::";
             base_module_path += use_decl.path.segments[i];
         }
 
@@ -220,11 +212,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     }
 
     if (!module_opt.has_value()) {
-        errors_.push_back(TypeError{
-            "Module '" + module_path + "' not found",
-            use_decl.span,
-            {}
-        });
+        errors_.push_back(TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
         return;
     }
 
@@ -236,24 +224,25 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
     // Validate @extern decorator if present
     if (func.extern_abi.has_value()) {
         const std::string& abi = *func.extern_abi;
-        if (abi != "c" && abi != "c++" && abi != "stdcall" &&
-            abi != "fastcall" && abi != "thiscall") {
-            error("Invalid @extern ABI '" + abi + "'. "
-                  "Valid options: \"c\", \"c++\", \"stdcall\", \"fastcall\", \"thiscall\"",
+        if (abi != "c" && abi != "c++" && abi != "stdcall" && abi != "fastcall" &&
+            abi != "thiscall") {
+            error("Invalid @extern ABI '" + abi +
+                      "'. "
+                      "Valid options: \"c\", \"c++\", \"stdcall\", \"fastcall\", \"thiscall\"",
                   func.span);
         }
 
         // @extern functions must not have a body
         if (func.body.has_value()) {
-            error("@extern function '" + func.name + "' must not have a body",
-                  func.span);
+            error("@extern function '" + func.name + "' must not have a body", func.span);
         }
     }
 
     // Validate @link paths for security (no directory traversal)
     for (const auto& lib : func.link_libs) {
         if (lib.find("..") != std::string::npos) {
-            error("@link path '" + lib + "' contains '..' which is not allowed for security reasons",
+            error("@link path '" + lib +
+                      "' contains '..' which is not allowed for security reasons",
                   func.span);
         }
     }
@@ -286,10 +275,7 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
             }
 
             if (!type_param_name.empty() && !behavior_names.empty()) {
-                where_constraints.push_back(WhereConstraint{
-                    type_param_name,
-                    behavior_names
-                });
+                where_constraints.push_back(WhereConstraint{type_param_name, behavior_names});
             }
         }
     }
@@ -306,23 +292,21 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         ffi_module = extract_ffi_module_name(func.link_libs[0]);
     }
 
-    env_.define_func(FuncSig{
-        .name = func.name,
-        .params = std::move(params),
-        .return_type = std::move(ret),
-        .type_params = std::move(func_type_params),
-        .is_async = func.is_async,
-        .span = func.span,
-        .stability = StabilityLevel::Unstable,
-        .deprecated_message = "",
-        .since_version = "",
-        .where_constraints = std::move(where_constraints),
-        .is_lowlevel = false,
-        .extern_abi = func.extern_abi,
-        .extern_name = func.extern_name,
-        .link_libs = func.link_libs,
-        .ffi_module = ffi_module
-    });
+    env_.define_func(FuncSig{.name = func.name,
+                             .params = std::move(params),
+                             .return_type = std::move(ret),
+                             .type_params = std::move(func_type_params),
+                             .is_async = func.is_async,
+                             .span = func.span,
+                             .stability = StabilityLevel::Unstable,
+                             .deprecated_message = "",
+                             .since_version = "",
+                             .where_constraints = std::move(where_constraints),
+                             .is_lowlevel = false,
+                             .extern_abi = func.extern_abi,
+                             .extern_name = func.extern_name,
+                             .link_libs = func.link_libs,
+                             .ffi_module = ffi_module});
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
@@ -339,12 +323,8 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     for (const auto& p : func.params) {
         if (p.pattern->is<parser::IdentPattern>()) {
             auto& ident = p.pattern->as<parser::IdentPattern>();
-            env_.current_scope()->define(
-                ident.name,
-                resolve_type(*p.type),
-                ident.is_mut,
-                p.pattern->span
-            );
+            env_.current_scope()->define(ident.name, resolve_type(*p.type), ident.is_mut,
+                                         p.pattern->span);
         }
     }
 
@@ -358,13 +338,15 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
             if (!return_type->is<PrimitiveType>() ||
                 return_type->as<PrimitiveType>().kind != PrimitiveKind::Unit) {
 
-                TML_DEBUG_LN("[DEBUG] Checking function '" << func.name << "' for return statement");
+                TML_DEBUG_LN("[DEBUG] Checking function '" << func.name
+                                                           << "' for return statement");
                 bool has_ret = block_has_return(*func.body);
                 TML_DEBUG_LN("[DEBUG] Has return: " << (has_ret ? "yes" : "no"));
 
                 if (!has_ret) {
                     error("Function '" + func.name + "' with return type " +
-                          type_to_string(return_type) + " must have an explicit return statement",
+                              type_to_string(return_type) +
+                              " must have an explicit return statement",
                           func.span);
                 }
             }
@@ -387,9 +369,8 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
 
     // Verify the types match
     if (!types_equal(init_type, declared_type)) {
-        error("Type mismatch in const initializer: expected " +
-              type_to_string(declared_type) + ", found " +
-              type_to_string(init_type),
+        error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
+                  ", found " + type_to_string(init_type),
               const_decl.value->span);
         return;
     }
@@ -416,14 +397,12 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
-        env_.define_func(FuncSig{
-            .name = qualified_name,
-            .params = std::move(params),
-            .return_type = std::move(ret),
-            .type_params = {},
-            .is_async = method.is_async,
-            .span = method.span
-        });
+        env_.define_func(FuncSig{.name = qualified_name,
+                                 .params = std::move(params),
+                                 .return_type = std::move(ret),
+                                 .type_params = {},
+                                 .is_async = method.is_async,
+                                 .span = method.span});
     }
 
     // Register default implementations from the behavior
@@ -437,10 +416,12 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         if (behavior_def) {
             for (const auto& behavior_method : behavior_def->methods) {
                 // Skip if impl provides this method
-                if (impl_method_names.count(behavior_method.name) > 0) continue;
+                if (impl_method_names.count(behavior_method.name) > 0)
+                    continue;
 
                 // Skip if this method doesn't have a default implementation
-                if (behavior_def->methods_with_defaults.count(behavior_method.name) == 0) continue;
+                if (behavior_def->methods_with_defaults.count(behavior_method.name) == 0)
+                    continue;
 
                 // Register default implementation
                 std::string qualified_name = type_name + "::" + behavior_method.name;
@@ -467,14 +448,12 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
                     ret = self_type;
                 }
 
-                env_.define_func(FuncSig{
-                    .name = qualified_name,
-                    .params = std::move(params),
-                    .return_type = ret,
-                    .type_params = {},
-                    .is_async = behavior_method.is_async,
-                    .span = behavior_method.span
-                });
+                env_.define_func(FuncSig{.name = qualified_name,
+                                         .params = std::move(params),
+                                         .return_type = ret,
+                                         .type_params = {},
+                                         .is_async = behavior_method.is_async,
+                                         .span = behavior_method.span});
             }
         }
     }

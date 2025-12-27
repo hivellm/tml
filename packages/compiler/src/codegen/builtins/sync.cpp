@@ -20,10 +20,12 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
             emit_line("  br label %" + label_loop);
             emit_line(label_loop + ":");
             std::string old_val = fresh_reg();
-            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock + ", i32 1 acquire, align 4");
+            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock +
+                      ", i32 1 acquire, align 4");
             std::string was_free = fresh_reg();
             emit_line("  " + was_free + " = icmp eq i32 " + old_val + ", 0");
-            emit_line("  br i1 " + was_free + ", label %" + label_acquired + ", label %" + label_loop);
+            emit_line("  br i1 " + was_free + ", label %" + label_acquired + ", label %" +
+                      label_loop);
             emit_line(label_acquired + ":");
             block_terminated_ = false;
         }
@@ -44,7 +46,8 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
         if (!call.args.empty()) {
             std::string lock = gen_expr(*call.args[0]);
             std::string old_val = fresh_reg();
-            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock + ", i32 1 acquire, align 4");
+            emit_line("  " + old_val + " = atomicrmw xchg ptr " + lock +
+                      ", i32 1 acquire, align 4");
             std::string success = fresh_reg();
             emit_line("  " + success + " = icmp eq i32 " + old_val + ", 0");
             return success;
@@ -60,7 +63,8 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
             std::string func_ptr = gen_expr(*call.args[0]);
             std::string arg_ptr = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @thread_spawn(ptr " + func_ptr + ", ptr " + arg_ptr + ")");
+            emit_line("  " + result + " = call ptr @thread_spawn(ptr " + func_ptr + ", ptr " +
+                      arg_ptr + ")");
             return result;
         }
         return "null";
@@ -112,7 +116,8 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
             std::string ch = gen_expr(*call.args[0]);
             std::string value = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @channel_send(ptr " + ch + ", i32 " + value + ")");
+            emit_line("  " + result + " = call i32 @channel_send(ptr " + ch + ", i32 " + value +
+                      ")");
             // Convert i32 to i1
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
@@ -143,7 +148,8 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
             std::string ch = gen_expr(*call.args[0]);
             std::string value = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @channel_try_send(ptr " + ch + ", i32 " + value + ")");
+            emit_line("  " + result + " = call i32 @channel_try_send(ptr " + ch + ", i32 " + value +
+                      ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;
@@ -157,7 +163,8 @@ auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::C
             std::string ch = gen_expr(*call.args[0]);
             std::string out_ptr = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @channel_try_recv(ptr " + ch + ", ptr " + out_ptr + ")");
+            emit_line("  " + result + " = call i32 @channel_try_recv(ptr " + ch + ", ptr " +
+                      out_ptr + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
             return bool_result;

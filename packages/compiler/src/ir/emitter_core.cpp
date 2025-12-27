@@ -1,4 +1,5 @@
 #include "tml/ir/ir.hpp"
+
 #include <sstream>
 
 namespace tml::ir {
@@ -17,7 +18,8 @@ auto IREmitter::emit_module(const IRModule& module) -> std::string {
         emit_indent(out);
         out << "(caps [";
         for (size_t i = 0; i < module.caps.size(); ++i) {
-            if (i > 0) out << " ";
+            if (i > 0)
+                out << " ";
             out << module.caps[i];
         }
         out << "])";
@@ -64,22 +66,23 @@ auto IREmitter::emit_module(const IRModule& module) -> std::string {
 }
 
 void IREmitter::emit_item(std::ostringstream& out, const IRItem& item) {
-    std::visit([this, &out](const auto& i) {
-        using T = std::decay_t<decltype(i)>;
-        if constexpr (std::is_same_v<T, IRConst>) {
-            emit_const(out, i);
-        } else if constexpr (std::is_same_v<T, IRType>) {
-            emit_type(out, i);
-        } else if constexpr (std::is_same_v<T, IRBehavior>) {
-            emit_behavior(out, i);
-        } else if constexpr (std::is_same_v<T, IRImpl>) {
-            emit_impl(out, i);
-        } else if constexpr (std::is_same_v<T, IRFunc>) {
-            emit_func(out, i);
-        }
-    }, item);
+    std::visit(
+        [this, &out](const auto& i) {
+            using T = std::decay_t<decltype(i)>;
+            if constexpr (std::is_same_v<T, IRConst>) {
+                emit_const(out, i);
+            } else if constexpr (std::is_same_v<T, IRType>) {
+                emit_type(out, i);
+            } else if constexpr (std::is_same_v<T, IRBehavior>) {
+                emit_behavior(out, i);
+            } else if constexpr (std::is_same_v<T, IRImpl>) {
+                emit_impl(out, i);
+            } else if constexpr (std::is_same_v<T, IRFunc>) {
+                emit_func(out, i);
+            }
+        },
+        item);
 }
-
 
 void IREmitter::emit_indent(std::ostringstream& out) {
     if (!opts_.compact) {

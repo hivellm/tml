@@ -2,15 +2,17 @@
 // Handles: generate, infer_print_type
 
 #include "tml/codegen/llvm_ir_gen.hpp"
+
 #include <iomanip>
 #include <set>
 
 namespace tml::codegen {
 
-auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, std::vector<LLVMGenError>> {
+auto LLVMIRGen::generate(const parser::Module& module)
+    -> Result<std::string, std::vector<LLVMGenError>> {
     errors_.clear();
     output_.str("");
-    type_defs_buffer_.str("");  // Clear type definitions buffer
+    type_defs_buffer_.str(""); // Clear type definitions buffer
     string_literals_.clear();
     temp_counter_ = 0;
     label_counter_ = 0;
@@ -40,7 +42,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
         emit_line("; Generic types from imported modules");
         output_ << imported_type_defs;
     }
-    type_defs_buffer_.str("");  // Clear for main module processing
+    type_defs_buffer_.str(""); // Clear for main module processing
 
     // Emit imported module functions AFTER their type dependencies
     output_ << imported_func_code;
@@ -91,8 +93,8 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
     // Buffer function code separately so we can emit type instantiations before functions
     std::stringstream func_output;
     std::stringstream saved_output;
-    saved_output.str(output_.str());  // Save current output (headers, type defs)
-    output_.str("");  // Clear for function code
+    saved_output.str(output_.str()); // Save current output (headers, type defs)
+    output_.str("");                 // Clear for function code
 
     // Second pass: generate function declarations (into temp buffer)
     for (const auto& decl : module.decls) {
@@ -102,7 +104,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
             // Generate impl methods as named functions inline
             const auto& impl = decl->as<parser::ImplDecl>();
             std::string type_name;
-            if (impl.self_type->kind.index() == 0) {  // NamedType
+            if (impl.self_type->kind.index() == 0) { // NamedType
                 const auto& named = std::get<parser::NamedType>(impl.self_type->kind);
                 if (!named.path.segments.empty()) {
                     type_name = named.path.segments.back();
@@ -113,7 +115,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                     // Generate method with mangled name TypeName_MethodName
                     std::string method_name = type_name + "_" + method.name;
                     current_func_ = method_name;
-                    current_impl_type_ = type_name;  // Track impl self type for 'this' access
+                    current_impl_type_ = type_name; // Track impl self type for 'this' access
                     locals_.clear();
                     block_terminated_ = false;
 
@@ -134,14 +136,15 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         }
                         std::string param_type = llvm_type_ptr(method.params[i].type);
                         std::string param_name;
-                        if (method.params[i].pattern && method.params[i].pattern->is<parser::IdentPattern>()) {
+                        if (method.params[i].pattern &&
+                            method.params[i].pattern->is<parser::IdentPattern>()) {
                             param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
                         } else {
                             param_name = "_anon";
                         }
                         // Substitute 'This' type with the actual impl type
                         if (param_name == "this" && param_type.find("This") != std::string::npos) {
-                            param_type = "ptr";  // 'this' is always a pointer to the struct
+                            param_type = "ptr"; // 'this' is always a pointer to the struct
                         }
                         params += param_type + " %" + param_name;
                         param_types += param_type;
@@ -149,22 +152,20 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
                     // Register function
                     std::string func_type = ret_type + " (" + param_types + ")";
-                    functions_[method_name] = FuncInfo{
-                        "@tml_" + method_name,
-                        func_type,
-                        ret_type
-                    };
+                    functions_[method_name] = FuncInfo{"@tml_" + method_name, func_type, ret_type};
 
                     // Generate function
                     emit_line("");
-                    emit_line("define internal " + ret_type + " @tml_" + method_name + "(" + params + ") #0 {");
+                    emit_line("define internal " + ret_type + " @tml_" + method_name + "(" +
+                              params + ") #0 {");
                     emit_line("entry:");
 
                     // Register params in locals
                     for (size_t i = 0; i < method.params.size(); ++i) {
                         std::string param_type = llvm_type_ptr(method.params[i].type);
                         std::string param_name;
-                        if (method.params[i].pattern && method.params[i].pattern->is<parser::IdentPattern>()) {
+                        if (method.params[i].pattern &&
+                            method.params[i].pattern->is<parser::IdentPattern>()) {
                             param_name = method.params[i].pattern->as<parser::IdentPattern>().name;
                         } else {
                             param_name = "_anon";
@@ -180,7 +181,8 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         } else {
                             std::string alloca_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
-                            emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+                            emit_line("  store " + param_type + " %" + param_name + ", ptr " +
+                                      alloca_reg);
                             locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
                         }
                     }
@@ -203,7 +205,7 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         }
                     }
                     emit_line("}");
-                    current_impl_type_.clear();  // Clear impl type context
+                    current_impl_type_.clear(); // Clear impl type context
                 }
 
                 // Generate default implementations for missing methods
@@ -222,10 +224,12 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                         // Generate default implementations for missing methods
                         for (const auto& trait_method : trait_decl->methods) {
                             // Skip if impl provides this method
-                            if (impl_method_names.count(trait_method.name) > 0) continue;
+                            if (impl_method_names.count(trait_method.name) > 0)
+                                continue;
 
                             // Skip if trait method has no default implementation
-                            if (!trait_method.body.has_value()) continue;
+                            if (!trait_method.body.has_value())
+                                continue;
 
                             // Generate default implementation with type substitution
                             std::string method_name = type_name + "_" + trait_method.name;
@@ -255,13 +259,17 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
                                 }
                                 std::string param_type = llvm_type_ptr(trait_method.params[i].type);
                                 std::string param_name;
-                                if (trait_method.params[i].pattern && trait_method.params[i].pattern->is<parser::IdentPattern>()) {
-                                    param_name = trait_method.params[i].pattern->as<parser::IdentPattern>().name;
+                                if (trait_method.params[i].pattern &&
+                                    trait_method.params[i].pattern->is<parser::IdentPattern>()) {
+                                    param_name = trait_method.params[i]
+                                                     .pattern->as<parser::IdentPattern>()
+                                                     .name;
                                 } else {
                                     param_name = "_anon";
                                 }
                                 // Substitute 'This' type with ptr for 'this' param
-                                if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                                if (param_name == "this" &&
+                                    param_type.find("This") != std::string::npos) {
                                     param_type = "ptr";
                                 }
                                 params += param_type + " %" + param_name;
@@ -270,31 +278,33 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
                             // Register function
                             std::string func_type = ret_type + " (" + param_types + ")";
-                            functions_[method_name] = FuncInfo{
-                                "@tml_" + method_name,
-                                func_type,
-                                ret_type
-                            };
+                            functions_[method_name] =
+                                FuncInfo{"@tml_" + method_name, func_type, ret_type};
 
                             // Generate function
                             emit_line("");
                             emit_line("; Default implementation from behavior " + trait_name);
-                            emit_line("define internal " + ret_type + " @tml_" + method_name + "(" + params + ") #0 {");
+                            emit_line("define internal " + ret_type + " @tml_" + method_name + "(" +
+                                      params + ") #0 {");
                             emit_line("entry:");
 
                             // Register params in locals
                             for (size_t i = 0; i < trait_method.params.size(); ++i) {
                                 std::string param_type = llvm_type_ptr(trait_method.params[i].type);
                                 std::string param_name;
-                                if (trait_method.params[i].pattern && trait_method.params[i].pattern->is<parser::IdentPattern>()) {
-                                    param_name = trait_method.params[i].pattern->as<parser::IdentPattern>().name;
+                                if (trait_method.params[i].pattern &&
+                                    trait_method.params[i].pattern->is<parser::IdentPattern>()) {
+                                    param_name = trait_method.params[i]
+                                                     .pattern->as<parser::IdentPattern>()
+                                                     .name;
                                 } else {
                                     param_name = "_anon";
                                 }
 
                                 // Create semantic type for this parameter
                                 types::TypePtr semantic_type = nullptr;
-                                if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                                if (param_name == "this" &&
+                                    param_type.find("This") != std::string::npos) {
                                     param_type = "ptr";
                                     // Create semantic type as the concrete impl type
                                     semantic_type = std::make_shared<types::Type>();
@@ -303,12 +313,15 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
 
                                 // 'this' is already a pointer parameter, don't create alloca for it
                                 if (param_name == "this") {
-                                    locals_[param_name] = VarInfo{"%" + param_name, param_type, semantic_type};
+                                    locals_[param_name] =
+                                        VarInfo{"%" + param_name, param_type, semantic_type};
                                 } else {
                                     std::string alloca_reg = fresh_reg();
                                     emit_line("  " + alloca_reg + " = alloca " + param_type);
-                                    emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-                                    locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+                                    emit_line("  store " + param_type + " %" + param_name +
+                                              ", ptr " + alloca_reg);
+                                    locals_[param_name] =
+                                        VarInfo{alloca_reg, param_type, semantic_type};
                                 }
                             }
 
@@ -423,7 +436,8 @@ auto LLVMIRGen::generate(const parser::Module& module) -> Result<std::string, st
             emit_line("  br label %" + loop_header);
             emit_line("");
             emit_line(loop_header + ":");
-            emit_line("  " + iter_var + " = phi i32 [ 0, %" + prev_block + " ], [ " + iter_var + "_next, %" + loop_body + " ]");
+            emit_line("  " + iter_var + " = phi i32 [ 0, %" + prev_block + " ], [ " + iter_var +
+                      "_next, %" + loop_body + " ]");
             std::string cmp_var = "%bench_cmp_" + std::to_string(bench_num);
             emit_line("  " + cmp_var + " = icmp slt i32 " + iter_var + ", 1000");
             emit_line("  br i1 " + cmp_var + ", label %" + loop_body + ", label %" + loop_end);
@@ -502,43 +516,49 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
     if (expr.is<parser::LiteralExpr>()) {
         const auto& lit = expr.as<parser::LiteralExpr>();
         switch (lit.token.kind) {
-            case lexer::TokenKind::IntLiteral: return PrintArgType::Int;
-            case lexer::TokenKind::FloatLiteral: return PrintArgType::Float;
-            case lexer::TokenKind::BoolLiteral: return PrintArgType::Bool;
-            case lexer::TokenKind::StringLiteral: return PrintArgType::Str;
-            default: return PrintArgType::Unknown;
+        case lexer::TokenKind::IntLiteral:
+            return PrintArgType::Int;
+        case lexer::TokenKind::FloatLiteral:
+            return PrintArgType::Float;
+        case lexer::TokenKind::BoolLiteral:
+            return PrintArgType::Bool;
+        case lexer::TokenKind::StringLiteral:
+            return PrintArgType::Str;
+        default:
+            return PrintArgType::Unknown;
         }
     }
     if (expr.is<parser::BinaryExpr>()) {
         const auto& bin = expr.as<parser::BinaryExpr>();
         switch (bin.op) {
-            case parser::BinaryOp::Add:
-            case parser::BinaryOp::Sub:
-            case parser::BinaryOp::Mul:
-            case parser::BinaryOp::Div:
-            case parser::BinaryOp::Mod:
-                // Check if operands are float
-                if (infer_print_type(*bin.left) == PrintArgType::Float ||
-                    infer_print_type(*bin.right) == PrintArgType::Float) {
-                    return PrintArgType::Float;
-                }
-                return PrintArgType::Int;
-            case parser::BinaryOp::Eq:
-            case parser::BinaryOp::Ne:
-            case parser::BinaryOp::Lt:
-            case parser::BinaryOp::Gt:
-            case parser::BinaryOp::Le:
-            case parser::BinaryOp::Ge:
-            case parser::BinaryOp::And:
-            case parser::BinaryOp::Or:
-                return PrintArgType::Bool;
-            default:
-                return PrintArgType::Int;
+        case parser::BinaryOp::Add:
+        case parser::BinaryOp::Sub:
+        case parser::BinaryOp::Mul:
+        case parser::BinaryOp::Div:
+        case parser::BinaryOp::Mod:
+            // Check if operands are float
+            if (infer_print_type(*bin.left) == PrintArgType::Float ||
+                infer_print_type(*bin.right) == PrintArgType::Float) {
+                return PrintArgType::Float;
+            }
+            return PrintArgType::Int;
+        case parser::BinaryOp::Eq:
+        case parser::BinaryOp::Ne:
+        case parser::BinaryOp::Lt:
+        case parser::BinaryOp::Gt:
+        case parser::BinaryOp::Le:
+        case parser::BinaryOp::Ge:
+        case parser::BinaryOp::And:
+        case parser::BinaryOp::Or:
+            return PrintArgType::Bool;
+        default:
+            return PrintArgType::Int;
         }
     }
     if (expr.is<parser::UnaryExpr>()) {
         const auto& un = expr.as<parser::UnaryExpr>();
-        if (un.op == parser::UnaryOp::Not) return PrintArgType::Bool;
+        if (un.op == parser::UnaryOp::Not)
+            return PrintArgType::Bool;
         if (un.op == parser::UnaryOp::Neg) {
             // Check if operand is float
             if (infer_print_type(*un.operand) == PrintArgType::Float) {

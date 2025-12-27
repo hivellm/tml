@@ -23,13 +23,10 @@ void TypeEnv::init_builtin_types() {
     builtins_["Unit"] = make_unit();
 
     // Register builtin behavior implementations for integer types
-    std::vector<std::string> integer_types = {
-        "I8", "I16", "I32", "I64", "I128",
-        "U8", "U16", "U32", "U64", "U128"
-    };
-    std::vector<std::string> integer_behaviors = {
-        "Eq", "Ord", "Numeric", "Hash", "Display", "Debug", "Default", "Duplicate"
-    };
+    std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128",
+                                              "U8", "U16", "U32", "U64", "U128"};
+    std::vector<std::string> integer_behaviors = {"Eq",      "Ord",   "Numeric", "Hash",
+                                                  "Display", "Debug", "Default", "Duplicate"};
     for (const auto& type : integer_types) {
         for (const auto& behavior : integer_behaviors) {
             register_impl(type, behavior);
@@ -38,9 +35,8 @@ void TypeEnv::init_builtin_types() {
 
     // Float types
     std::vector<std::string> float_types = {"F32", "F64"};
-    std::vector<std::string> float_behaviors = {
-        "Eq", "Ord", "Numeric", "Display", "Debug", "Default", "Duplicate"
-    };
+    std::vector<std::string> float_behaviors = {"Eq",    "Ord",     "Numeric",  "Display",
+                                                "Debug", "Default", "Duplicate"};
     for (const auto& type : float_types) {
         for (const auto& behavior : float_behaviors) {
             register_impl(type, behavior);

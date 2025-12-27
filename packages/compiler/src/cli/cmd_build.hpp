@@ -9,7 +9,7 @@ enum class BuildOutputType {
     Executable,
     StaticLib,
     DynamicLib,
-    RlibLib      // TML native library format
+    RlibLib // TML native library format
 };
 
 // Build commands
@@ -21,8 +21,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
 // Run with output capture (for test runner)
 // Returns exit code, stores stdout/stderr in output if provided
-int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
-                  bool verbose, std::string* output = nullptr, bool coverage = false,
-                  bool no_cache = false);
+int run_run_quiet(const std::string& path, const std::vector<std::string>& args, bool verbose,
+                  std::string* output = nullptr, bool coverage = false, bool no_cache = false);
 
-}
+} // namespace tml::cli

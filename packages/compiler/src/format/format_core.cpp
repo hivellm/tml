@@ -5,8 +5,7 @@
 
 namespace tml::format {
 
-Formatter::Formatter(FormatOptions options)
-    : options_(std::move(options)) {}
+Formatter::Formatter(FormatOptions options) : options_(std::move(options)) {}
 
 void Formatter::emit(const std::string& text) {
     output_ << text;
@@ -30,7 +29,8 @@ void Formatter::push_indent() {
 }
 
 void Formatter::pop_indent() {
-    if (indent_level_ > 0) --indent_level_;
+    if (indent_level_ > 0)
+        --indent_level_;
 }
 
 auto Formatter::indent_str() const -> std::string {

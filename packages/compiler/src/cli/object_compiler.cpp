@@ -1,10 +1,11 @@
 #include "object_compiler.hpp"
-#include <iostream>
-#include <sstream>
-#include <cstdlib>
-#include <thread>
-#include <mutex>
+
 #include <atomic>
+#include <cstdlib>
+#include <iostream>
+#include <mutex>
+#include <sstream>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -23,13 +24,20 @@ std::string get_object_extension() {
 
 std::string get_optimization_flag(int level) {
     switch (level) {
-        case 0: return "-O0";
-        case 1: return "-O1";
-        case 2: return "-O2";
-        case 3: return "-O3";
-        case 4: return "-Os";  // Optimize for size
-        case 5: return "-Oz";  // Optimize for size (aggressive)
-        default: return "-O3";
+    case 0:
+        return "-O0";
+    case 1:
+        return "-O1";
+    case 2:
+        return "-O2";
+    case 3:
+        return "-O3";
+    case 4:
+        return "-Os"; // Optimize for size
+    case 5:
+        return "-Oz"; // Optimize for size (aggressive)
+    default:
+        return "-O3";
     }
 }
 
@@ -40,12 +48,10 @@ static std::string to_forward_slashes(const fs::path& path) {
     return result;
 }
 
-ObjectCompileResult compile_ll_to_object(
-    const fs::path& ll_file,
-    const std::optional<fs::path>& output_file,
-    const std::string& clang_path,
-    const ObjectCompileOptions& options
-) {
+ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
+                                         const std::optional<fs::path>& output_file,
+                                         const std::string& clang_path,
+                                         const ObjectCompileOptions& options) {
     ObjectCompileResult result;
     result.success = false;
 
@@ -67,8 +73,8 @@ ObjectCompileResult compile_ll_to_object(
 
     // Build clang command
     std::ostringstream cmd;
-    cmd << clang_path;  // Don't quote clang path (no spaces in standard paths)
-    cmd << " -c";  // Compile only, don't link
+    cmd << clang_path; // Don't quote clang path (no spaces in standard paths)
+    cmd << " -c";      // Compile only, don't link
 
     // Optimization level
     cmd << " " << get_optimization_flag(options.optimization_level);
@@ -130,12 +136,8 @@ ObjectCompileResult compile_ll_to_object(
     return result;
 }
 
-LinkResult link_objects(
-    const std::vector<fs::path>& object_files,
-    const fs::path& output_file,
-    const std::string& clang_path,
-    const LinkOptions& options
-) {
+LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::path& output_file,
+                        const std::string& clang_path, const LinkOptions& options) {
     LinkResult result;
     result.success = false;
 
@@ -157,91 +159,91 @@ LinkResult link_objects(
 
     // Different linking strategies based on output type
     switch (options.output_type) {
-        case LinkOptions::OutputType::Executable: {
-            // Link executable using clang
-            cmd << clang_path;  // Don't quote clang path
+    case LinkOptions::OutputType::Executable: {
+        // Link executable using clang
+        cmd << clang_path; // Don't quote clang path
 
-            // Output file
-            cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
+        // Output file
+        cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
 
-            // All object files
-            for (const auto& obj : object_files) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-
-            // Additional objects (runtime libs)
-            for (const auto& obj : options.additional_objects) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-
-            // Additional link flags
-            for (const auto& flag : options.link_flags) {
-                cmd << " " << flag;
-            }
-
-            break;
+        // All object files
+        for (const auto& obj : object_files) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
         }
 
-        case LinkOptions::OutputType::StaticLib: {
-            // Use llvm-ar for cross-platform static library creation
-            // llvm-ar is bundled with LLVM and works on all platforms
-            fs::path clang_dir = fs::path(clang_path).parent_path();
-            fs::path llvm_ar = clang_dir / "llvm-ar";
+        // Additional objects (runtime libs)
+        for (const auto& obj : options.additional_objects) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
+        }
+
+        // Additional link flags
+        for (const auto& flag : options.link_flags) {
+            cmd << " " << flag;
+        }
+
+        break;
+    }
+
+    case LinkOptions::OutputType::StaticLib: {
+        // Use llvm-ar for cross-platform static library creation
+        // llvm-ar is bundled with LLVM and works on all platforms
+        fs::path clang_dir = fs::path(clang_path).parent_path();
+        fs::path llvm_ar = clang_dir / "llvm-ar";
 #ifdef _WIN32
-            llvm_ar += ".exe";
+        llvm_ar += ".exe";
 #endif
 
-            cmd << to_forward_slashes(llvm_ar.string());
-            cmd << " rcs \"" << to_forward_slashes(output_file) << "\"";
+        cmd << to_forward_slashes(llvm_ar.string());
+        cmd << " rcs \"" << to_forward_slashes(output_file) << "\"";
 
-            for (const auto& obj : object_files) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-            for (const auto& obj : options.additional_objects) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-            break;
+        for (const auto& obj : object_files) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
         }
+        for (const auto& obj : options.additional_objects) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
+        }
+        break;
+    }
 
-        case LinkOptions::OutputType::DynamicLib: {
-            // Shared library using clang
-            cmd << clang_path;  // Don't quote clang path
-            cmd << " -shared";
+    case LinkOptions::OutputType::DynamicLib: {
+        // Shared library using clang
+        cmd << clang_path; // Don't quote clang path
+        cmd << " -shared";
 
 #ifdef _WIN32
-            // Windows: use LLD linker for consistent GNU-style flag support
-            cmd << " -fuse-ld=lld";
-            // Export all symbols from DLL
-            cmd << " -Wl,--export-all-symbols";
-            // Create import library alongside DLL
-            fs::path lib_file = output_file;
-            lib_file.replace_extension(".lib");
-            cmd << " -Wl,--out-implib=" << to_forward_slashes(lib_file);
+        // Windows: use LLD linker for consistent GNU-style flag support
+        cmd << " -fuse-ld=lld";
+        // Export all symbols from DLL
+        cmd << " -Wl,--export-all-symbols";
+        // Create import library alongside DLL
+        fs::path lib_file = output_file;
+        lib_file.replace_extension(".lib");
+        cmd << " -Wl,--out-implib=" << to_forward_slashes(lib_file);
 #else
-            // Unix: position-independent code required for shared libraries
-            cmd << " -fPIC";
+        // Unix: position-independent code required for shared libraries
+        cmd << " -fPIC";
 #endif
 
-            // Output file
-            cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
+        // Output file
+        cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
 
-            // All object files
-            for (const auto& obj : object_files) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-
-            // Additional objects
-            for (const auto& obj : options.additional_objects) {
-                cmd << " \"" << to_forward_slashes(obj) << "\"";
-            }
-
-            // Additional link flags
-            for (const auto& flag : options.link_flags) {
-                cmd << " " << flag;
-            }
-
-            break;
+        // All object files
+        for (const auto& obj : object_files) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
         }
+
+        // Additional objects
+        for (const auto& obj : options.additional_objects) {
+            cmd << " \"" << to_forward_slashes(obj) << "\"";
+        }
+
+        // Additional link flags
+        for (const auto& flag : options.link_flags) {
+            cmd << " " << flag;
+        }
+
+        break;
+    }
     }
 
     std::string command = cmd.str();
@@ -273,12 +275,9 @@ LinkResult link_objects(
 // Batch Compilation
 // ============================================================================
 
-BatchCompileResult compile_ll_batch(
-    const std::vector<fs::path>& ll_files,
-    const std::string& clang_path,
-    const ObjectCompileOptions& options,
-    int num_threads
-) {
+BatchCompileResult compile_ll_batch(const std::vector<fs::path>& ll_files,
+                                    const std::string& clang_path,
+                                    const ObjectCompileOptions& options, int num_threads) {
     BatchCompileResult result;
     result.success = true;
 
@@ -289,7 +288,8 @@ BatchCompileResult compile_ll_batch(
     // Determine number of threads
     if (num_threads == 0) {
         num_threads = std::thread::hardware_concurrency();
-        if (num_threads == 0) num_threads = 4;
+        if (num_threads == 0)
+            num_threads = 4;
     }
 
     // Limit threads to number of files

@@ -118,7 +118,8 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name, const parser::C
         if (!call.args.empty()) {
             std::string duration = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @duration_as_millis_f64(i64 " + duration + ")");
+            emit_line("  " + result + " = call double @duration_as_millis_f64(i64 " + duration +
+                      ")");
             last_expr_type_ = "double";
             return result;
         }

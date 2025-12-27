@@ -1,8 +1,10 @@
 #include "cmd_rlib.hpp"
+
 #include "rlib.hpp"
-#include <iostream>
+
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -98,8 +100,8 @@ int run_rlib_exports(int argc, char* argv[]) {
     const auto& metadata = *metadata_opt;
 
     // Display exports
-    std::cout << "Public exports from " << metadata.library.name
-              << " v" << metadata.library.version << ":\n";
+    std::cout << "Public exports from " << metadata.library.name << " v" << metadata.library.version
+              << ":\n";
     std::cout << std::string(60, '=') << "\n";
 
     auto exports = metadata.get_all_exports();

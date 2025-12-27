@@ -11,7 +11,8 @@ auto Formatter::format_type(const parser::Type& type) -> std::string {
         if (named.generics.has_value()) {
             result += "[";
             for (size_t i = 0; i < named.generics->args.size(); ++i) {
-                if (i > 0) result += ", ";
+                if (i > 0)
+                    result += ", ";
                 result += format_type_ptr(named.generics->args[i]);
             }
             result += "]";
@@ -33,7 +34,8 @@ auto Formatter::format_type(const parser::Type& type) -> std::string {
         const auto& tuple = type.as<parser::TupleType>();
         std::string result = "(";
         for (size_t i = 0; i < tuple.elements.size(); ++i) {
-            if (i > 0) result += ", ";
+            if (i > 0)
+                result += ", ";
             result += format_type_ptr(tuple.elements[i]);
         }
         result += ")";
@@ -42,7 +44,8 @@ auto Formatter::format_type(const parser::Type& type) -> std::string {
         const auto& func = type.as<parser::FuncType>();
         std::string result = "func(";
         for (size_t i = 0; i < func.params.size(); ++i) {
-            if (i > 0) result += ", ";
+            if (i > 0)
+                result += ", ";
             result += format_type_ptr(func.params[i]);
         }
         result += ")";
@@ -58,14 +61,16 @@ auto Formatter::format_type(const parser::Type& type) -> std::string {
 }
 
 auto Formatter::format_type_ptr(const parser::TypePtr& type) -> std::string {
-    if (!type) return "_";
+    if (!type)
+        return "_";
     return format_type(*type);
 }
 
 auto Formatter::format_type_path(const parser::TypePath& path) -> std::string {
     std::string result;
     for (size_t i = 0; i < path.segments.size(); ++i) {
-        if (i > 0) result += "::";
+        if (i > 0)
+            result += "::";
         result += path.segments[i];
     }
     return result;

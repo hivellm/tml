@@ -29,9 +29,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
     if (has_type_name) {
         // Check if this is a known struct type (not a variable)
-        bool is_type_name = struct_types_.count(type_name) > 0 ||
-                           type_name == "List" || type_name == "HashMap" || type_name == "Buffer" ||
-                           type_name == "File" || type_name == "Path";
+        bool is_type_name = struct_types_.count(type_name) > 0 || type_name == "List" ||
+                            type_name == "HashMap" || type_name == "Buffer" ||
+                            type_name == "File" || type_name == "Path";
 
         // Also check it's not a local variable
         if (is_type_name && locals_.count(type_name) == 0) {
@@ -106,7 +106,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string file_ptr = fresh_reg();
                     emit_line("  " + file_ptr + " = alloca %struct.File");
                     std::string handle_field = fresh_reg();
-                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " +
+                              file_ptr + ", i32 0, i32 0");
                     emit_line("  store ptr " + handle + ", ptr " + handle_field);
                     std::string result = fresh_reg();
                     emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
@@ -122,7 +123,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string file_ptr = fresh_reg();
                     emit_line("  " + file_ptr + " = alloca %struct.File");
                     std::string handle_field = fresh_reg();
-                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " +
+                              file_ptr + ", i32 0, i32 0");
                     emit_line("  store ptr " + handle + ", ptr " + handle_field);
                     std::string result = fresh_reg();
                     emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
@@ -133,12 +135,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string path_arg = gen_expr(*call.args[0]);
                     // Call runtime to get handle
                     std::string handle = fresh_reg();
-                    emit_line("  " + handle + " = call ptr @file_open_append(ptr " + path_arg + ")");
+                    emit_line("  " + handle + " = call ptr @file_open_append(ptr " + path_arg +
+                              ")");
                     // Construct File struct with the handle
                     std::string file_ptr = fresh_reg();
                     emit_line("  " + file_ptr + " = alloca %struct.File");
                     std::string handle_field = fresh_reg();
-                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+                    emit_line("  " + handle_field + " = getelementptr %struct.File, ptr " +
+                              file_ptr + ", i32 0, i32 0");
                     emit_line("  store ptr " + handle + ", ptr " + handle_field);
                     std::string result = fresh_reg();
                     emit_line("  " + result + " = load %struct.File, ptr " + file_ptr);
@@ -156,7 +160,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string path_arg = gen_expr(*call.args[0]);
                     std::string content_arg = gen_expr(*call.args[1]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i1 @file_write_all(ptr " + path_arg + ", ptr " + content_arg + ")");
+                    emit_line("  " + result + " = call i1 @file_write_all(ptr " + path_arg +
+                              ", ptr " + content_arg + ")");
                     last_expr_type_ = "i1";
                     return result;
                 }
@@ -164,7 +169,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string path_arg = gen_expr(*call.args[0]);
                     std::string content_arg = gen_expr(*call.args[1]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i1 @file_append_all(ptr " + path_arg + ", ptr " + content_arg + ")");
+                    emit_line("  " + result + " = call i1 @file_append_all(ptr " + path_arg +
+                              ", ptr " + content_arg + ")");
                     last_expr_type_ = "i1";
                     return result;
                 }
@@ -203,7 +209,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (method == "create_dir_all") {
                     std::string path_arg = gen_expr(*call.args[0]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i1 @path_create_dir_all(ptr " + path_arg + ")");
+                    emit_line("  " + result + " = call i1 @path_create_dir_all(ptr " + path_arg +
+                              ")");
                     last_expr_type_ = "i1";
                     return result;
                 }
@@ -225,7 +232,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string from_arg = gen_expr(*call.args[0]);
                     std::string to_arg = gen_expr(*call.args[1]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i1 @path_rename(ptr " + from_arg + ", ptr " + to_arg + ")");
+                    emit_line("  " + result + " = call i1 @path_rename(ptr " + from_arg + ", ptr " +
+                              to_arg + ")");
                     last_expr_type_ = "i1";
                     return result;
                 }
@@ -233,7 +241,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string from_arg = gen_expr(*call.args[0]);
                     std::string to_arg = gen_expr(*call.args[1]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i1 @path_copy(ptr " + from_arg + ", ptr " + to_arg + ")");
+                    emit_line("  " + result + " = call i1 @path_copy(ptr " + from_arg + ", ptr " +
+                              to_arg + ")");
                     last_expr_type_ = "i1";
                     return result;
                 }
@@ -241,7 +250,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string base_arg = gen_expr(*call.args[0]);
                     std::string child_arg = gen_expr(*call.args[1]);
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call ptr @path_join(ptr " + base_arg + ", ptr " + child_arg + ")");
+                    emit_line("  " + result + " = call ptr @path_join(ptr " + base_arg + ", ptr " +
+                              child_arg + ")");
                     last_expr_type_ = "ptr";
                     return result;
                 }
@@ -291,7 +301,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         const auto& ident = call.receiver->as<parser::IdentExpr>();
         auto it = locals_.find(ident.name);
         if (it != locals_.end()) {
-            receiver_ptr = it->second.reg;  // Use alloca pointer directly
+            receiver_ptr = it->second.reg; // Use alloca pointer directly
         }
     }
 
@@ -331,7 +341,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string offset_i64 = fresh_reg();
             emit_line("  " + offset_i64 + " = sext i32 " + offset + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr " + inner_llvm_type + ", ptr " + receiver + ", i64 " + offset_i64);
+            emit_line("  " + result + " = getelementptr " + inner_llvm_type + ", ptr " + receiver +
+                      ", i64 " + offset_i64);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -407,7 +418,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             for (const auto& arg : call.args) {
                 std::string val = gen_expr(*arg);
-                std::string arg_type = "i32";  // default
+                std::string arg_type = "i32"; // default
                 typed_args.push_back({arg_type, val});
             }
 
@@ -415,7 +426,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             std::string args_str;
             for (size_t i = 0; i < typed_args.size(); ++i) {
-                if (i > 0) args_str += ", ";
+                if (i > 0)
+                    args_str += ", ";
                 args_str += typed_args[i].first + " " + typed_args[i].second;
             }
 
@@ -425,7 +437,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 last_expr_type_ = "void";
                 return "void";
             } else {
-                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
+                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str +
+                          ")");
                 last_expr_type_ = ret_type;
                 return result;
             }
@@ -461,7 +474,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string key_i64 = fresh_reg();
             emit_line("  " + key_i64 + " = sext i32 " + arg + " to i64");
             std::string result_i64 = fresh_reg();
-            emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + receiver + ", i64 " + key_i64 + ")");
+            emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + receiver + ", i64 " +
+                      key_i64 + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
             return result;
@@ -486,11 +500,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string val_i64 = fresh_reg();
             emit_line("  " + key_i64 + " = sext i32 " + arg1 + " to i64");
             emit_line("  " + val_i64 + " = sext i32 " + arg2 + " to i64");
-            emit_line("  call void @hashmap_set(ptr " + receiver + ", i64 " + key_i64 + ", i64 " + val_i64 + ")");
+            emit_line("  call void @hashmap_set(ptr " + receiver + ", i64 " + key_i64 + ", i64 " +
+                      val_i64 + ")");
             return "void";
         }
         // Default: List - set(index: I32, value: I32) -> Unit
-        emit_line("  call void @list_set(ptr " + receiver + ", i32 " + arg1 + ", i32 " + arg2 + ")");
+        emit_line("  call void @list_set(ptr " + receiver + ", i32 " + arg1 + ", i32 " + arg2 +
+                  ")");
         return "void";
     }
     if (method == "clear") {
@@ -519,7 +535,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         std::string key_i64 = fresh_reg();
         emit_line("  " + key_i64 + " = sext i32 " + key + " to i64");
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @hashmap_has(ptr " + receiver + ", i64 " + key_i64 + ")");
+        emit_line("  " + result + " = call i1 @hashmap_has(ptr " + receiver + ", i64 " + key_i64 +
+                  ")");
         return result;
     }
     if (method == "remove") {
@@ -531,7 +548,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         std::string key_i64 = fresh_reg();
         emit_line("  " + key_i64 + " = sext i32 " + key + " to i64");
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + receiver + ", i64 " + key_i64 + ")");
+        emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + receiver + ", i64 " +
+                  key_i64 + ")");
         return result;
     }
 
@@ -653,12 +671,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     // If the variable stores a pointer (like 'this' parameter),
                     // we need to load it to get the actual pointer value
                     if (it->second.type == "ptr") {
-                        impl_receiver_ptr = receiver;  // Use the loaded value
+                        impl_receiver_ptr = receiver; // Use the loaded value
                     } else {
-                        impl_receiver_ptr = it->second.reg;  // Use alloca pointer directly
+                        impl_receiver_ptr = it->second.reg; // Use alloca pointer directly
                     }
                 } else {
-                    impl_receiver_ptr = receiver;  // Fall back to generated value
+                    impl_receiver_ptr = receiver; // Fall back to generated value
                 }
             } else {
                 // For other expressions, receiver is already a pointer
@@ -667,12 +685,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // Build argument list: self (receiver ptr) + args
             std::vector<std::pair<std::string, std::string>> typed_args;
-            typed_args.push_back({"ptr", impl_receiver_ptr});  // self reference
+            typed_args.push_back({"ptr", impl_receiver_ptr}); // self reference
 
             for (size_t i = 0; i < call.args.size(); ++i) {
                 std::string val = gen_expr(*call.args[i]);
                 // Get arg type from func signature (skip 'this' at index 0)
-                std::string arg_type = "i32";  // default
+                std::string arg_type = "i32"; // default
                 if (i + 1 < func_sig->params.size()) {
                     arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
                 }
@@ -685,7 +703,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             // Build call
             std::string args_str;
             for (size_t i = 0; i < typed_args.size(); ++i) {
-                if (i > 0) args_str += ", ";
+                if (i > 0)
+                    args_str += ", ";
                 args_str += typed_args[i].first + " " + typed_args[i].second;
             }
 
@@ -695,8 +714,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 last_expr_type_ = "void";
                 return "void";
             } else {
-                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
-                last_expr_type_ = ret_type;  // Set expression type for when/match expressions
+                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str +
+                          ")");
+                last_expr_type_ = ret_type; // Set expression type for when/match expressions
                 return result;
             }
         }
@@ -708,7 +728,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         auto it = locals_.find(ident.name);
         if (it != locals_.end() && it->second.type.starts_with("%dyn.")) {
             std::string dyn_type = it->second.type;
-            std::string behavior_name = dyn_type.substr(5);  // Skip "%dyn."
+            std::string behavior_name = dyn_type.substr(5); // Skip "%dyn."
             std::string dyn_ptr = it->second.reg;
 
             // Get method index in vtable
@@ -726,19 +746,22 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (method_idx >= 0) {
                     // Load data pointer from fat pointer (field 0)
                     std::string data_field = fresh_reg();
-                    emit_line("  " + data_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr + ", i32 0, i32 0");
+                    emit_line("  " + data_field + " = getelementptr " + dyn_type + ", ptr " +
+                              dyn_ptr + ", i32 0, i32 0");
                     std::string data_ptr = fresh_reg();
                     emit_line("  " + data_ptr + " = load ptr, ptr " + data_field);
 
                     // Load vtable pointer from fat pointer (field 1)
                     std::string vtable_field = fresh_reg();
-                    emit_line("  " + vtable_field + " = getelementptr " + dyn_type + ", ptr " + dyn_ptr + ", i32 0, i32 1");
+                    emit_line("  " + vtable_field + " = getelementptr " + dyn_type + ", ptr " +
+                              dyn_ptr + ", i32 0, i32 1");
                     std::string vtable_ptr = fresh_reg();
                     emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_field);
 
                     // Get function pointer from vtable
                     std::string fn_ptr_loc = fresh_reg();
-                    emit_line("  " + fn_ptr_loc + " = getelementptr { ptr }, ptr " + vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
+                    emit_line("  " + fn_ptr_loc + " = getelementptr { ptr }, ptr " + vtable_ptr +
+                              ", i32 0, i32 " + std::to_string(method_idx));
                     std::string fn_ptr = fresh_reg();
                     emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
 
@@ -753,8 +776,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
     // File instance methods - use receiver_ptr (alloca) instead of receiver (loaded value)
     // For getelementptr, we need a pointer, not a loaded struct value
-    if (method == "is_open" || method == "read_line" || method == "write_str" ||
-        method == "size" || method == "close") {
+    if (method == "is_open" || method == "read_line" || method == "write_str" || method == "size" ||
+        method == "close") {
         // Get pointer to the File struct (either from alloca or create temp)
         std::string file_ptr = receiver_ptr;
         if (file_ptr.empty()) {
@@ -766,7 +789,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
         // Get handle field from File struct
         std::string handle_field_ptr = fresh_reg();
-        emit_line("  " + handle_field_ptr + " = getelementptr %struct.File, ptr " + file_ptr + ", i32 0, i32 0");
+        emit_line("  " + handle_field_ptr + " = getelementptr %struct.File, ptr " + file_ptr +
+                  ", i32 0, i32 0");
         std::string handle = fresh_reg();
         emit_line("  " + handle + " = load ptr, ptr " + handle_field_ptr);
 
@@ -789,7 +813,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
             std::string content_arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @file_write_str(ptr " + handle + ", ptr " + content_arg + ")");
+            emit_line("  " + result + " = call i1 @file_write_str(ptr " + handle + ", ptr " +
+                      content_arg + ")");
             last_expr_type_ = "i1";
             return result;
         }

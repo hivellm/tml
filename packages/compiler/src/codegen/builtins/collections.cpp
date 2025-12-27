@@ -5,7 +5,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const parser::CallExpr& call)
+auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
+                                            const parser::CallExpr& call)
     -> std::optional<std::string> {
 
     // ============ LIST FUNCTIONS ============
@@ -68,7 +69,8 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const pa
             std::string index = fresh_reg();
             emit_line("  " + index + " = sext i32 " + i32_index + " to i64");
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @list_get(ptr " + list + ", i64 " + index + ")");
+            emit_line("  " + i64_result + " = call i64 @list_get(ptr " + list + ", i64 " + index +
+                      ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -86,7 +88,8 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const pa
             std::string i32_value = gen_expr(*call.args[2]);
             std::string value = fresh_reg();
             emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
-            emit_line("  call void @list_set(ptr " + list + ", i64 " + index + ", i64 " + value + ")");
+            emit_line("  call void @list_set(ptr " + list + ", i64 " + index + ", i64 " + value +
+                      ")");
         }
         return "0";
     }
@@ -176,7 +179,8 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const pa
             std::string i32_value = gen_expr(*call.args[2]);
             std::string value = fresh_reg();
             emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
-            emit_line("  call void @hashmap_set(ptr " + map + ", i64 " + key + ", i64 " + value + ")");
+            emit_line("  call void @hashmap_set(ptr " + map + ", i64 " + key + ", i64 " + value +
+                      ")");
         }
         return "0";
     }
@@ -189,7 +193,8 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const pa
             std::string key = fresh_reg();
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string i64_result = fresh_reg();
-            emit_line("  " + i64_result + " = call i64 @hashmap_get(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + i64_result + " = call i64 @hashmap_get(ptr " + map + ", i64 " + key +
+                      ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
             return result;
@@ -219,7 +224,8 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name, const pa
             std::string key = fresh_reg();
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + map + ", i64 " + key + ")");
+            emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + map + ", i64 " + key +
+                      ")");
             return result;
         }
         return "0";

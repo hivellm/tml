@@ -6,4 +6,4 @@ namespace tml::cli {
 // Format command
 int run_fmt(const std::string& path, bool check_only, bool verbose);
 
-}
+} // namespace tml::cli

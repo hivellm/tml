@@ -1,13 +1,15 @@
 #include "cmd_debug.hpp"
-#include "utils.hpp"
+
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/parser/parser.hpp"
 #include "tml/types/checker.hpp"
-#include <iostream>
-#include <filesystem>
 #include "tml/types/module.hpp"
+#include "utils.hpp"
+
+#include <filesystem>
+#include <iostream>
 
 namespace fs = std::filesystem;
 using namespace tml;
@@ -30,8 +32,7 @@ int run_lex(const std::string& path, bool verbose) {
     if (verbose) {
         std::cout << "Tokens (" << tokens.size() << "):\n";
         for (const auto& token : tokens) {
-            std::cout << "  " << token.span.start.line << ":"
-                      << token.span.start.column << " "
+            std::cout << "  " << token.span.start.line << ":" << token.span.start.column << " "
                       << lexer::token_kind_to_string(token.kind);
             if (token.kind == lexer::TokenKind::Identifier ||
                 token.kind == lexer::TokenKind::IntLiteral ||
@@ -45,9 +46,8 @@ int run_lex(const std::string& path, bool verbose) {
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -73,9 +73,8 @@ int run_parse(const std::string& path, bool verbose) {
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -87,9 +86,8 @@ int run_parse(const std::string& path, bool verbose) {
     if (std::holds_alternative<std::vector<parser::ParseError>>(result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -107,7 +105,8 @@ int run_parse(const std::string& path, bool verbose) {
                 const auto& func = decl->as<parser::FuncDecl>();
                 std::cout << "  func " << func.name << "(";
                 for (size_t i = 0; i < func.params.size(); ++i) {
-                    if (i > 0) std::cout << ", ";
+                    if (i > 0)
+                        std::cout << ", ";
                     const auto& param = func.params[i];
                     if (param.pattern && param.pattern->is<parser::IdentPattern>()) {
                         std::cout << param.pattern->as<parser::IdentPattern>().name;
@@ -151,9 +150,8 @@ int run_check(const std::string& path, bool verbose) {
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -165,9 +163,8 @@ int run_check(const std::string& path, bool verbose) {
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -186,9 +183,8 @@ int run_check(const std::string& path, bool verbose) {
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -209,4 +205,4 @@ int run_check(const std::string& path, bool verbose) {
     return 0;
 }
 
-}
+} // namespace tml::cli

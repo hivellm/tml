@@ -16,7 +16,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         const auto& path = call.callee->as<parser::PathExpr>().path;
         // Join segments with ::
         for (size_t i = 0; i < path.segments.size(); ++i) {
-            if (i > 0) fn_name += "::";
+            if (i > 0)
+                fn_name += "::";
             fn_name += path.segments[i];
         }
     } else {
@@ -67,14 +68,16 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
         // First check pending generic enums
         for (const auto& [gen_enum_name, gen_enum_decl] : pending_generic_enums_) {
-            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size(); ++variant_idx) {
+            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size();
+                 ++variant_idx) {
                 const auto& variant = gen_enum_decl->variants[variant_idx];
                 if (variant.name == ident.name) {
                     // Found generic enum constructor
                     std::string enum_type;
 
                     // Check if variant has payload (tuple_fields for tuple variants like Just(T))
-                    bool has_payload = variant.tuple_fields.has_value() && !variant.tuple_fields->empty();
+                    bool has_payload =
+                        variant.tuple_fields.has_value() && !variant.tuple_fields->empty();
 
                     // If we have expected type from context, use it (for multi-param generics)
                     if (!expected_enum_type_.empty()) {
@@ -95,7 +98,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             // No payload to infer from - default to I32
                             inferred_type_args.push_back(types::make_i32());
                         }
-                        std::string mangled_name = require_enum_instantiation(gen_enum_name, inferred_type_args);
+                        std::string mangled_name =
+                            require_enum_instantiation(gen_enum_name, inferred_type_args);
                         enum_type = "%struct." + mangled_name;
                     }
 
@@ -107,7 +111,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Set tag (field 0)
                     std::string tag_ptr = fresh_reg();
-                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                              enum_val + ", i32 0, i32 0");
                     emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                     // Set payload if present (stored in field 1, the [N x i8] array)
@@ -116,12 +121,15 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                         // Get pointer to payload field ([N x i8])
                         std::string payload_ptr = fresh_reg();
-                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type +
+                                  ", ptr " + enum_val + ", i32 0, i32 1");
 
                         // Cast payload to bytes and store
                         std::string payload_typed_ptr = fresh_reg();
-                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr + " to ptr");
-                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " + payload_typed_ptr);
+                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                  " to ptr");
+                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                  payload_typed_ptr);
                     }
 
                     // Load the complete enum value
@@ -148,7 +156,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                     // Set tag (field 0)
                     std::string tag_ptr = fresh_reg();
-                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                              enum_val + ", i32 0, i32 0");
                     emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                     // Set payload if present (stored in field 1, the [N x i8] array)
@@ -157,13 +166,16 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                         // Get pointer to payload field ([N x i8])
                         std::string payload_ptr = fresh_reg();
-                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+                        emit_line("  " + payload_ptr + " = getelementptr inbounds " + enum_type +
+                                  ", ptr " + enum_val + ", i32 0, i32 1");
 
                         // Cast payload to bytes and store
                         // For simplicity, bitcast the i8 array pointer to the payload type pointer
                         std::string payload_typed_ptr = fresh_reg();
-                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr + " to ptr");
-                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " + payload_typed_ptr);
+                        emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                  " to ptr");
+                        emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                  payload_typed_ptr);
                     }
 
                     // Load the complete enum value
@@ -205,7 +217,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 auto cap_it = locals_.find(cap_name);
                 if (cap_it != locals_.end()) {
                     std::string cap_val = fresh_reg();
-                    emit_line("  " + cap_val + " = load " + cap_type + ", ptr " + cap_it->second.reg);
+                    emit_line("  " + cap_val + " = load " + cap_type + ", ptr " +
+                              cap_it->second.reg);
                     arg_vals.push_back({cap_val, cap_type});
                 } else {
                     // Captured variable not found - this shouldn't happen but handle gracefully
@@ -221,7 +234,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
 
         // Determine return type from semantic type if available
-        std::string ret_type = "i32";  // Default fallback
+        std::string ret_type = "i32"; // Default fallback
         if (local_it->second.semantic_type) {
             if (local_it->second.semantic_type->is<types::FuncType>()) {
                 const auto& func_type = local_it->second.semantic_type->as<types::FuncType>();
@@ -236,15 +249,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         // Use the types of the arguments being passed, not the semantic type params
         std::string func_type_sig = ret_type + " (";
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0) func_type_sig += ", ";
-            func_type_sig += arg_vals[i].second;  // Use the type from arg_vals
+            if (i > 0)
+                func_type_sig += ", ";
+            func_type_sig += arg_vals[i].second; // Use the type from arg_vals
         }
         func_type_sig += ")";
 
         std::string result = fresh_reg();
         emit("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0) emit(", ");
+            if (i > 0)
+                emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")");
@@ -274,9 +289,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
         }
 
-        for (const auto& [k, v] : bindings) {
-
-        }
+        for (const auto& [k, v] : bindings) {}
 
         // Extract inferred type args in the order of generic parameters
         std::vector<types::TypePtr> inferred_type_args;
@@ -308,15 +321,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         for (size_t i = 0; i < call.args.size(); ++i) {
             // Set expected enum type for this argument based on parameter type with substitutions
             if (i < gen_func.params.size()) {
-                types::TypePtr param_type = resolve_parser_type_with_subs(*gen_func.params[i].type, subs);
+                types::TypePtr param_type =
+                    resolve_parser_type_with_subs(*gen_func.params[i].type, subs);
                 std::string llvm_param_type = llvm_type_from_semantic(param_type);
                 // Set expected type context for generic enum constructors like Nothing
-                if (llvm_param_type.find("%struct.") == 0 && llvm_param_type.find("__") != std::string::npos) {
+                if (llvm_param_type.find("%struct.") == 0 &&
+                    llvm_param_type.find("__") != std::string::npos) {
                     expected_enum_type_ = llvm_param_type;
                 }
             }
             std::string val = gen_expr(*call.args[i]);
-            expected_enum_type_.clear();  // Clear after generating argument
+            expected_enum_type_.clear(); // Clear after generating argument
             std::string arg_type = last_expr_type_;
             arg_vals.push_back({val, arg_type});
         }
@@ -326,7 +341,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         if (ret_type == "void") {
             emit("  call void " + func_name + "(");
             for (size_t i = 0; i < arg_vals.size(); ++i) {
-                if (i > 0) emit(", ");
+                if (i > 0)
+                    emit(", ");
                 emit(arg_vals[i].second + " " + arg_vals[i].first);
             }
             emit_line(")");
@@ -336,7 +352,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string result = fresh_reg();
             emit("  " + result + " = call " + ret_type + " " + func_name + "(");
             for (size_t i = 0; i < arg_vals.size(); ++i) {
-                if (i > 0) emit(", ");
+                if (i > 0)
+                    emit(", ");
                 emit(arg_vals[i].second + " " + arg_vals[i].first);
             }
             emit_line(")");
@@ -370,7 +387,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Determine return type
-    std::string ret_type = "i32";  // Default
+    std::string ret_type = "i32"; // Default
     if (func_it != functions_.end()) {
         // Use return type from registered function (handles @extern correctly)
         ret_type = func_it->second.ret_type;
@@ -382,8 +399,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     std::vector<std::pair<std::string, std::string>> arg_vals; // (value, type)
     for (size_t i = 0; i < call.args.size(); ++i) {
         std::string val = gen_expr(*call.args[i]);
-        std::string actual_type = last_expr_type_;  // Type of the generated value
-        std::string expected_type = "i32";  // Default
+        std::string actual_type = last_expr_type_; // Type of the generated value
+        std::string expected_type = "i32";         // Default
 
         // If we have function signature, use parameter type
         if (func_sig.has_value() && i < func_sig->params.size()) {
@@ -438,7 +455,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     if (ret_type == "void") {
         emit("  call void " + mangled + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0) emit(", ");
+            if (i > 0)
+                emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")");
@@ -448,7 +466,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         std::string result = fresh_reg();
         emit("  " + result + " = call " + ret_type + " " + mangled + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
-            if (i > 0) emit(", ");
+            if (i > 0)
+                emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
         emit_line(")");

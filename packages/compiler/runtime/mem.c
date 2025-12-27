@@ -1,8 +1,8 @@
 // TML Runtime - Memory Functions
 // Matches: env_builtins_mem.cpp
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 // ============ Allocation ============

@@ -33,7 +33,8 @@ void Formatter::format_decorators(const std::vector<parser::Decorator>& decorato
         if (!dec.args.empty()) {
             output_ << "(";
             for (size_t i = 0; i < dec.args.size(); ++i) {
-                if (i > 0) output_ << ", ";
+                if (i > 0)
+                    output_ << ", ";
                 output_ << format_expr(*dec.args[i]);
             }
             output_ << ")";
@@ -49,16 +50,19 @@ void Formatter::format_visibility(parser::Visibility vis) {
 }
 
 void Formatter::format_generics(const std::vector<parser::GenericParam>& generics) {
-    if (generics.empty()) return;
+    if (generics.empty())
+        return;
 
     output_ << "[";
     for (size_t i = 0; i < generics.size(); ++i) {
-        if (i > 0) output_ << ", ";
+        if (i > 0)
+            output_ << ", ";
         output_ << generics[i].name;
         if (!generics[i].bounds.empty()) {
             output_ << ": ";
             for (size_t j = 0; j < generics[i].bounds.size(); ++j) {
-                if (j > 0) output_ << " + ";
+                if (j > 0)
+                    output_ << " + ";
                 output_ << format_type_path(generics[i].bounds[j]);
             }
         }
@@ -67,17 +71,20 @@ void Formatter::format_generics(const std::vector<parser::GenericParam>& generic
 }
 
 void Formatter::format_where_clause(const std::optional<parser::WhereClause>& where) {
-    if (!where.has_value() || where->constraints.empty()) return;
+    if (!where.has_value() || where->constraints.empty())
+        return;
 
     output_ << "\n";
     emit_indent();
     output_ << "where ";
     for (size_t i = 0; i < where->constraints.size(); ++i) {
-        if (i > 0) output_ << ", ";
+        if (i > 0)
+            output_ << ", ";
         const auto& [type, bounds] = where->constraints[i];
         output_ << format_type_ptr(type) << ": ";
         for (size_t j = 0; j < bounds.size(); ++j) {
-            if (j > 0) output_ << " + ";
+            if (j > 0)
+                output_ << " + ";
             output_ << format_type_path(bounds[j]);
         }
     }
@@ -86,13 +93,15 @@ void Formatter::format_where_clause(const std::optional<parser::WhereClause>& wh
 auto Formatter::format_func_params(const std::vector<parser::FuncParam>& params) -> std::string {
     std::stringstream ss;
     for (size_t i = 0; i < params.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << format_pattern(*params[i].pattern);
         // Special case: 'this' doesn't need type annotation
         if (!(params[i].pattern->is<parser::IdentPattern>() &&
               params[i].pattern->as<parser::IdentPattern>().name == "this")) {
             ss << ":";
-            if (options_.space_after_colon) ss << " ";
+            if (options_.space_after_colon)
+                ss << " ";
             ss << format_type_ptr(params[i].type);
         }
     }
@@ -104,8 +113,10 @@ void Formatter::format_func_decl(const parser::FuncDecl& func) {
     emit_indent();
     format_visibility(func.vis);
 
-    if (func.is_async) output_ << "async ";
-    if (func.is_unsafe) output_ << "lowlevel ";
+    if (func.is_async)
+        output_ << "async ";
+    if (func.is_unsafe)
+        output_ << "lowlevel ";
 
     output_ << "func " << func.name;
     format_generics(func.generics);
@@ -153,9 +164,11 @@ void Formatter::format_struct_decl(const parser::StructDecl& s) {
             output_ << "pub ";
         }
         output_ << field.name << ":";
-        if (options_.space_after_colon) output_ << " ";
+        if (options_.space_after_colon)
+            output_ << " ";
         output_ << format_type_ptr(field.type);
-        if (options_.trailing_commas) output_ << ",";
+        if (options_.trailing_commas)
+            output_ << ",";
         output_ << "\n";
     }
     pop_indent();
@@ -180,7 +193,8 @@ void Formatter::format_enum_decl(const parser::EnumDecl& e) {
         if (variant.tuple_fields.has_value()) {
             output_ << "(";
             for (size_t i = 0; i < variant.tuple_fields->size(); ++i) {
-                if (i > 0) output_ << ", ";
+                if (i > 0)
+                    output_ << ", ";
                 output_ << format_type_ptr((*variant.tuple_fields)[i]);
             }
             output_ << ")";
@@ -190,9 +204,11 @@ void Formatter::format_enum_decl(const parser::EnumDecl& e) {
             for (const auto& field : *variant.struct_fields) {
                 emit_indent();
                 output_ << field.name << ":";
-                if (options_.space_after_colon) output_ << " ";
+                if (options_.space_after_colon)
+                    output_ << " ";
                 output_ << format_type_ptr(field.type);
-                if (options_.trailing_commas) output_ << ",";
+                if (options_.trailing_commas)
+                    output_ << ",";
                 output_ << "\n";
             }
             pop_indent();
@@ -200,7 +216,8 @@ void Formatter::format_enum_decl(const parser::EnumDecl& e) {
             output_ << "}";
         }
 
-        if (options_.trailing_commas) output_ << ",";
+        if (options_.trailing_commas)
+            output_ << ",";
         output_ << "\n";
     }
     pop_indent();
@@ -218,7 +235,8 @@ void Formatter::format_trait_decl(const parser::TraitDecl& t) {
     if (!t.super_traits.empty()) {
         output_ << ": ";
         for (size_t i = 0; i < t.super_traits.size(); ++i) {
-            if (i > 0) output_ << " + ";
+            if (i > 0)
+                output_ << " + ";
             output_ << format_type_path(t.super_traits[i]);
         }
     }
@@ -229,7 +247,8 @@ void Formatter::format_trait_decl(const parser::TraitDecl& t) {
     push_indent();
     for (size_t i = 0; i < t.methods.size(); ++i) {
         format_func_decl(t.methods[i]);
-        if (i + 1 < t.methods.size()) emit_newline();
+        if (i + 1 < t.methods.size())
+            emit_newline();
     }
     pop_indent();
 
@@ -253,7 +272,8 @@ void Formatter::format_impl_decl(const parser::ImplDecl& impl) {
     push_indent();
     for (size_t i = 0; i < impl.methods.size(); ++i) {
         format_func_decl(impl.methods[i]);
-        if (i + 1 < impl.methods.size()) emit_newline();
+        if (i + 1 < impl.methods.size())
+            emit_newline();
     }
     pop_indent();
 
@@ -272,7 +292,8 @@ void Formatter::format_const_decl(const parser::ConstDecl& c) {
     emit_indent();
     format_visibility(c.vis);
     output_ << "const " << c.name << ":";
-    if (options_.space_after_colon) output_ << " ";
+    if (options_.space_after_colon)
+        output_ << " ";
     output_ << format_type_ptr(c.type) << " = " << format_expr(*c.value) << "\n";
 }
 

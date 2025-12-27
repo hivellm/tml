@@ -147,9 +147,12 @@ auto Lexer::check_string_has_interpolation() const -> bool {
     size_t i = pos_ + 1; // Skip opening quote
     while (i < source_.length()) {
         char c = source_.content()[i];
-        if (c == '"') return false; // End of string, no interpolation
-        if (c == '\n') return false; // Unterminated
-        if (c == '{') return true;   // Found interpolation
+        if (c == '"')
+            return false; // End of string, no interpolation
+        if (c == '\n')
+            return false; // Unterminated
+        if (c == '{')
+            return true; // Found interpolation
         if (c == '\\' && i + 1 < source_.length()) {
             i += 2; // Skip escape sequence
         } else {
@@ -224,37 +227,45 @@ auto Lexer::parse_escape_sequence() -> Result<char32_t, std::string> {
 
     char c = advance();
     switch (c) {
-        case 'n': return char32_t('\n');
-        case 'r': return char32_t('\r');
-        case 't': return char32_t('\t');
-        case '\\': return char32_t('\\');
-        case '\'': return char32_t('\'');
-        case '"': return char32_t('"');
-        case '0': return char32_t('\0');
-        case 'x': {
-            // \xNN - two hex digits
-            if (pos_ + 2 > source_.length()) {
-                return "Expected two hex digits after \\x";
-            }
-            char h1 = advance();
-            char h2 = advance();
-            uint8_t val = 0;
-            auto result = std::from_chars(&h1, &h1 + 1, val, 16);
-            if (result.ec != std::errc{}) {
-                return "Invalid hex digit in \\x escape";
-            }
-            val <<= 4;
-            uint8_t val2 = 0;
-            result = std::from_chars(&h2, &h2 + 1, val2, 16);
-            if (result.ec != std::errc{}) {
-                return "Invalid hex digit in \\x escape";
-            }
-            val |= val2;
-            return char32_t(val);
+    case 'n':
+        return char32_t('\n');
+    case 'r':
+        return char32_t('\r');
+    case 't':
+        return char32_t('\t');
+    case '\\':
+        return char32_t('\\');
+    case '\'':
+        return char32_t('\'');
+    case '"':
+        return char32_t('"');
+    case '0':
+        return char32_t('\0');
+    case 'x': {
+        // \xNN - two hex digits
+        if (pos_ + 2 > source_.length()) {
+            return "Expected two hex digits after \\x";
         }
-        case 'u': return parse_unicode_escape();
-        default:
-            return "Unknown escape sequence: \\" + std::string(1, c);
+        char h1 = advance();
+        char h2 = advance();
+        uint8_t val = 0;
+        auto result = std::from_chars(&h1, &h1 + 1, val, 16);
+        if (result.ec != std::errc{}) {
+            return "Invalid hex digit in \\x escape";
+        }
+        val <<= 4;
+        uint8_t val2 = 0;
+        result = std::from_chars(&h2, &h2 + 1, val2, 16);
+        if (result.ec != std::errc{}) {
+            return "Invalid hex digit in \\x escape";
+        }
+        val |= val2;
+        return char32_t(val);
+    }
+    case 'u':
+        return parse_unicode_escape();
+    default:
+        return "Unknown escape sequence: \\" + std::string(1, c);
     }
 }
 
@@ -268,9 +279,7 @@ auto Lexer::parse_unicode_escape() -> Result<char32_t, std::string> {
     std::string hex_digits;
     while (!is_at_end() && peek() != '}') {
         char c = peek();
-        if ((c >= '0' && c <= '9') ||
-            (c >= 'a' && c <= 'f') ||
-            (c >= 'A' && c <= 'F')) {
+        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
             hex_digits += advance();
         } else {
             return "Invalid character in unicode escape";
@@ -292,7 +301,8 @@ auto Lexer::parse_unicode_escape() -> Result<char32_t, std::string> {
     advance(); // consume '}'
 
     uint32_t value = 0;
-    auto result = std::from_chars(hex_digits.data(), hex_digits.data() + hex_digits.size(), value, 16);
+    auto result =
+        std::from_chars(hex_digits.data(), hex_digits.data() + hex_digits.size(), value, 16);
     if (result.ec != std::errc{}) {
         return "Invalid unicode escape value";
     }
@@ -303,6 +313,5 @@ auto Lexer::parse_unicode_escape() -> Result<char32_t, std::string> {
 
     return char32_t(value);
 }
-
 
 } // namespace tml::lexer

@@ -1,4 +1,5 @@
 #include "tml/lexer/lexer.hpp"
+
 #include <unordered_map>
 
 namespace tml::lexer {

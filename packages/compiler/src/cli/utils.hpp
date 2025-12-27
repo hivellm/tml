@@ -13,4 +13,4 @@ std::string read_file(const std::string& path);
 void print_usage();
 void print_version();
 
-}
+} // namespace tml::cli

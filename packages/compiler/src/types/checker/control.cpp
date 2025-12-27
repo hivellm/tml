@@ -1,5 +1,6 @@
 // Type checker control flow expressions
-// Handles: check_if, check_ternary, check_if_let, check_when, check_loop, check_for, check_range, check_return, check_break
+// Handles: check_if, check_ternary, check_if_let, check_when, check_loop, check_for, check_range,
+// check_return, check_break
 
 #include "tml/types/checker.hpp"
 
@@ -115,14 +116,16 @@ auto TypeChecker::check_for(const parser::ForExpr& for_expr) -> TypePtr {
             // Allow iteration over integer ranges (for i in 0 to 10)
             element_type = iter_type;
         } else {
-            error("For loop requires slice or collection type, found: " + type_to_string(iter_type), for_expr.span);
+            error("For loop requires slice or collection type, found: " + type_to_string(iter_type),
+                  for_expr.span);
             element_type = make_unit();
         }
     } else if (iter_type->is<PrimitiveType>()) {
         // Allow iteration over integer ranges (for i in 0 to 10)
         element_type = iter_type;
     } else {
-        error("For loop requires slice or collection type, found: " + type_to_string(iter_type), for_expr.span);
+        error("For loop requires slice or collection type, found: " + type_to_string(iter_type),
+              for_expr.span);
         element_type = make_unit();
     }
 
@@ -176,7 +179,8 @@ auto TypeChecker::check_return(const parser::ReturnExpr& ret) -> TypePtr {
 
         if (!types_compatible(resolved_expected, resolved_actual)) {
             error("Return type mismatch: expected " + type_to_string(resolved_expected) +
-                  ", found " + type_to_string(resolved_actual), SourceSpan{});
+                      ", found " + type_to_string(resolved_actual),
+                  SourceSpan{});
         }
     }
 

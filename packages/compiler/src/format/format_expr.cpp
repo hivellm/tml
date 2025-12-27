@@ -72,36 +72,66 @@ auto Formatter::format_ident(const parser::IdentExpr& ident) -> std::string {
 
 auto Formatter::binary_op_str(parser::BinaryOp op) -> std::string {
     switch (op) {
-        case parser::BinaryOp::Add: return "+";
-        case parser::BinaryOp::Sub: return "-";
-        case parser::BinaryOp::Mul: return "*";
-        case parser::BinaryOp::Div: return "/";
-        case parser::BinaryOp::Mod: return "%";
-        case parser::BinaryOp::Eq: return "==";
-        case parser::BinaryOp::Ne: return "!=";
-        case parser::BinaryOp::Lt: return "<";
-        case parser::BinaryOp::Gt: return ">";
-        case parser::BinaryOp::Le: return "<=";
-        case parser::BinaryOp::Ge: return ">=";
-        case parser::BinaryOp::And: return "and";
-        case parser::BinaryOp::Or: return "or";
-        case parser::BinaryOp::BitAnd: return "&";
-        case parser::BinaryOp::BitOr: return "|";
-        case parser::BinaryOp::BitXor: return "^";
-        case parser::BinaryOp::Shl: return "<<";
-        case parser::BinaryOp::Shr: return ">>";
-        case parser::BinaryOp::Assign: return "=";
-        case parser::BinaryOp::AddAssign: return "+=";
-        case parser::BinaryOp::SubAssign: return "-=";
-        case parser::BinaryOp::MulAssign: return "*=";
-        case parser::BinaryOp::DivAssign: return "/=";
-        case parser::BinaryOp::ModAssign: return "%=";
-        case parser::BinaryOp::BitAndAssign: return "&=";
-        case parser::BinaryOp::BitOrAssign: return "|=";
-        case parser::BinaryOp::BitXorAssign: return "^=";
-        case parser::BinaryOp::ShlAssign: return "<<=";
-        case parser::BinaryOp::ShrAssign: return ">>=";
-        default: return "?";
+    case parser::BinaryOp::Add:
+        return "+";
+    case parser::BinaryOp::Sub:
+        return "-";
+    case parser::BinaryOp::Mul:
+        return "*";
+    case parser::BinaryOp::Div:
+        return "/";
+    case parser::BinaryOp::Mod:
+        return "%";
+    case parser::BinaryOp::Eq:
+        return "==";
+    case parser::BinaryOp::Ne:
+        return "!=";
+    case parser::BinaryOp::Lt:
+        return "<";
+    case parser::BinaryOp::Gt:
+        return ">";
+    case parser::BinaryOp::Le:
+        return "<=";
+    case parser::BinaryOp::Ge:
+        return ">=";
+    case parser::BinaryOp::And:
+        return "and";
+    case parser::BinaryOp::Or:
+        return "or";
+    case parser::BinaryOp::BitAnd:
+        return "&";
+    case parser::BinaryOp::BitOr:
+        return "|";
+    case parser::BinaryOp::BitXor:
+        return "^";
+    case parser::BinaryOp::Shl:
+        return "<<";
+    case parser::BinaryOp::Shr:
+        return ">>";
+    case parser::BinaryOp::Assign:
+        return "=";
+    case parser::BinaryOp::AddAssign:
+        return "+=";
+    case parser::BinaryOp::SubAssign:
+        return "-=";
+    case parser::BinaryOp::MulAssign:
+        return "*=";
+    case parser::BinaryOp::DivAssign:
+        return "/=";
+    case parser::BinaryOp::ModAssign:
+        return "%=";
+    case parser::BinaryOp::BitAndAssign:
+        return "&=";
+    case parser::BinaryOp::BitOrAssign:
+        return "|=";
+    case parser::BinaryOp::BitXorAssign:
+        return "^=";
+    case parser::BinaryOp::ShlAssign:
+        return "<<=";
+    case parser::BinaryOp::ShrAssign:
+        return ">>=";
+    default:
+        return "?";
     }
 }
 
@@ -116,13 +146,20 @@ auto Formatter::format_binary(const parser::BinaryExpr& bin) -> std::string {
 
 auto Formatter::unary_op_str(parser::UnaryOp op) -> std::string {
     switch (op) {
-        case parser::UnaryOp::Neg: return "-";
-        case parser::UnaryOp::Not: return "not ";
-        case parser::UnaryOp::BitNot: return "~";
-        case parser::UnaryOp::Ref: return "ref ";
-        case parser::UnaryOp::RefMut: return "mut ref ";
-        case parser::UnaryOp::Deref: return "*";
-        default: return "";
+    case parser::UnaryOp::Neg:
+        return "-";
+    case parser::UnaryOp::Not:
+        return "not ";
+    case parser::UnaryOp::BitNot:
+        return "~";
+    case parser::UnaryOp::Ref:
+        return "ref ";
+    case parser::UnaryOp::RefMut:
+        return "mut ref ";
+    case parser::UnaryOp::Deref:
+        return "*";
+    default:
+        return "";
     }
 }
 
@@ -134,7 +171,8 @@ auto Formatter::format_call(const parser::CallExpr& call) -> std::string {
     std::stringstream ss;
     ss << format_expr(*call.callee) << "(";
     for (size_t i = 0; i < call.args.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << format_expr(*call.args[i]);
     }
     ss << ")";
@@ -145,7 +183,8 @@ auto Formatter::format_method_call(const parser::MethodCallExpr& call) -> std::s
     std::stringstream ss;
     ss << format_expr(*call.receiver) << "." << call.method << "(";
     for (size_t i = 0; i < call.args.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << format_expr(*call.args[i]);
     }
     ss << ")";
@@ -273,7 +312,8 @@ auto Formatter::format_when(const parser::WhenExpr& when) -> std::string {
             ss << " if " << format_expr(*arm.guard.value());
         }
         ss << " => " << format_expr(*arm.body);
-        if (options_.trailing_commas) ss << ",";
+        if (options_.trailing_commas)
+            ss << ",";
         ss << "\n";
     }
 
@@ -312,12 +352,14 @@ auto Formatter::format_struct_expr(const parser::StructExpr& s) -> std::string {
     ss << format_type_path(s.path) << " { ";
 
     for (size_t i = 0; i < s.fields.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << s.fields[i].first << ": " << format_expr(*s.fields[i].second);
     }
 
     if (s.base.has_value()) {
-        if (!s.fields.empty()) ss << ", ";
+        if (!s.fields.empty())
+            ss << ", ";
         ss << ".." << format_expr(*s.base.value());
     }
 
@@ -329,10 +371,12 @@ auto Formatter::format_tuple(const parser::TupleExpr& tuple) -> std::string {
     std::stringstream ss;
     ss << "(";
     for (size_t i = 0; i < tuple.elements.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << format_expr(*tuple.elements[i]);
     }
-    if (tuple.elements.size() == 1) ss << ",";  // Single-element tuple needs trailing comma
+    if (tuple.elements.size() == 1)
+        ss << ","; // Single-element tuple needs trailing comma
     ss << ")";
     return ss.str();
 }
@@ -344,7 +388,8 @@ auto Formatter::format_array(const parser::ArrayExpr& arr) -> std::string {
     if (std::holds_alternative<std::vector<parser::ExprPtr>>(arr.kind)) {
         const auto& elements = std::get<std::vector<parser::ExprPtr>>(arr.kind);
         for (size_t i = 0; i < elements.size(); ++i) {
-            if (i > 0) ss << ", ";
+            if (i > 0)
+                ss << ", ";
             ss << format_expr(*elements[i]);
         }
     } else {
@@ -366,7 +411,8 @@ auto Formatter::format_closure(const parser::ClosureExpr& closure) -> std::strin
     ss << "do(";
 
     for (size_t i = 0; i < closure.params.size(); ++i) {
-        if (i > 0) ss << ", ";
+        if (i > 0)
+            ss << ", ";
         ss << format_pattern(*closure.params[i].first);
         if (closure.params[i].second.has_value()) {
             ss << ": " << format_type_ptr(closure.params[i].second.value());

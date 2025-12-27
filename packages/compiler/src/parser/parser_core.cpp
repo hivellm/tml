@@ -2,8 +2,7 @@
 
 namespace tml::parser {
 
-Parser::Parser(std::vector<lexer::Token> tokens)
-    : tokens_(std::move(tokens)) {}
+Parser::Parser(std::vector<lexer::Token> tokens) : tokens_(std::move(tokens)) {}
 
 auto Parser::peek() const -> const lexer::Token& {
     if (pos_ >= tokens_.size()) {
@@ -58,11 +57,10 @@ auto Parser::expect(lexer::TokenKind kind, const std::string& message)
     if (check(kind)) {
         return advance();
     }
-    return ParseError{
-        .message = message + ", found '" + std::string(lexer::token_kind_to_string(peek().kind)) + "'",
-        .span = peek().span,
-        .notes = {}
-    };
+    return ParseError{.message = message + ", found '" +
+                                 std::string(lexer::token_kind_to_string(peek().kind)) + "'",
+                      .span = peek().span,
+                      .notes = {}};
 }
 
 void Parser::skip_newlines() {
@@ -76,11 +74,7 @@ void Parser::report_error(const std::string& message) {
 }
 
 void Parser::report_error(const std::string& message, SourceSpan span) {
-    errors_.push_back(ParseError{
-        .message = message,
-        .span = span,
-        .notes = {}
-    });
+    errors_.push_back(ParseError{.message = message, .span = span, .notes = {}});
 }
 
 void Parser::synchronize() {
@@ -95,18 +89,18 @@ void Parser::synchronize() {
 
         // Or at declaration keywords
         switch (peek().kind) {
-            case lexer::TokenKind::KwFunc:
-            case lexer::TokenKind::KwType:
-            case lexer::TokenKind::KwBehavior:
-            case lexer::TokenKind::KwImpl:
-            case lexer::TokenKind::KwLet:
-            case lexer::TokenKind::KwConst:
-            case lexer::TokenKind::KwMod:
-            case lexer::TokenKind::KwUse:
-            case lexer::TokenKind::KwPub:
-                return;
-            default:
-                advance();
+        case lexer::TokenKind::KwFunc:
+        case lexer::TokenKind::KwType:
+        case lexer::TokenKind::KwBehavior:
+        case lexer::TokenKind::KwImpl:
+        case lexer::TokenKind::KwLet:
+        case lexer::TokenKind::KwConst:
+        case lexer::TokenKind::KwMod:
+        case lexer::TokenKind::KwUse:
+        case lexer::TokenKind::KwPub:
+            return;
+        default:
+            advance();
         }
     }
 }
@@ -138,10 +132,7 @@ auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector
 
     auto end_span = previous().span;
     return Module{
-        .name = name,
-        .decls = std::move(decls),
-        .span = SourceSpan::merge(start_span, end_span)
-    };
+        .name = name, .decls = std::move(decls), .span = SourceSpan::merge(start_span, end_span)};
 }
 
 // ============================================================================
@@ -150,146 +141,183 @@ auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector
 
 auto Parser::get_precedence(lexer::TokenKind kind) -> int {
     switch (kind) {
-        case lexer::TokenKind::Assign:
-        case lexer::TokenKind::PlusAssign:
-        case lexer::TokenKind::MinusAssign:
-        case lexer::TokenKind::StarAssign:
-        case lexer::TokenKind::SlashAssign:
-        case lexer::TokenKind::PercentAssign:
-        case lexer::TokenKind::BitAndAssign:
-        case lexer::TokenKind::BitOrAssign:
-        case lexer::TokenKind::BitXorAssign:
-        case lexer::TokenKind::ShlAssign:
-        case lexer::TokenKind::ShrAssign:
-            return precedence::ASSIGN;
+    case lexer::TokenKind::Assign:
+    case lexer::TokenKind::PlusAssign:
+    case lexer::TokenKind::MinusAssign:
+    case lexer::TokenKind::StarAssign:
+    case lexer::TokenKind::SlashAssign:
+    case lexer::TokenKind::PercentAssign:
+    case lexer::TokenKind::BitAndAssign:
+    case lexer::TokenKind::BitOrAssign:
+    case lexer::TokenKind::BitXorAssign:
+    case lexer::TokenKind::ShlAssign:
+    case lexer::TokenKind::ShrAssign:
+        return precedence::ASSIGN;
 
-        case lexer::TokenKind::Question:
-            return precedence::TERNARY;
+    case lexer::TokenKind::Question:
+        return precedence::TERNARY;
 
-        case lexer::TokenKind::KwOr:
-            return precedence::OR;
+    case lexer::TokenKind::KwOr:
+        return precedence::OR;
 
-        case lexer::TokenKind::KwAnd:
-            return precedence::AND;
+    case lexer::TokenKind::KwAnd:
+        return precedence::AND;
 
-        case lexer::TokenKind::Eq:
-        case lexer::TokenKind::Ne:
-        case lexer::TokenKind::Lt:
-        case lexer::TokenKind::Gt:
-        case lexer::TokenKind::Le:
-        case lexer::TokenKind::Ge:
-            return precedence::COMPARISON;
+    case lexer::TokenKind::Eq:
+    case lexer::TokenKind::Ne:
+    case lexer::TokenKind::Lt:
+    case lexer::TokenKind::Gt:
+    case lexer::TokenKind::Le:
+    case lexer::TokenKind::Ge:
+        return precedence::COMPARISON;
 
-        case lexer::TokenKind::BitOr:
-            return precedence::BITOR;
+    case lexer::TokenKind::BitOr:
+        return precedence::BITOR;
 
-        case lexer::TokenKind::BitXor:
-            return precedence::BITXOR;
+    case lexer::TokenKind::BitXor:
+        return precedence::BITXOR;
 
-        case lexer::TokenKind::BitAnd:
-            return precedence::BITAND;
+    case lexer::TokenKind::BitAnd:
+        return precedence::BITAND;
 
-        case lexer::TokenKind::Shl:
-        case lexer::TokenKind::Shr:
-            return precedence::SHIFT;
+    case lexer::TokenKind::Shl:
+    case lexer::TokenKind::Shr:
+        return precedence::SHIFT;
 
-        case lexer::TokenKind::Plus:
-        case lexer::TokenKind::Minus:
-            return precedence::TERM;
+    case lexer::TokenKind::Plus:
+    case lexer::TokenKind::Minus:
+        return precedence::TERM;
 
-        case lexer::TokenKind::Star:
-        case lexer::TokenKind::Slash:
-        case lexer::TokenKind::Percent:
-            return precedence::FACTOR;
+    case lexer::TokenKind::Star:
+    case lexer::TokenKind::Slash:
+    case lexer::TokenKind::Percent:
+        return precedence::FACTOR;
 
-        case lexer::TokenKind::LParen:
-        case lexer::TokenKind::LBracket:
-        case lexer::TokenKind::Dot:
-        case lexer::TokenKind::Bang:
-        case lexer::TokenKind::PlusPlus:
-        case lexer::TokenKind::MinusMinus:
-            return precedence::CALL;
+    case lexer::TokenKind::LParen:
+    case lexer::TokenKind::LBracket:
+    case lexer::TokenKind::Dot:
+    case lexer::TokenKind::Bang:
+    case lexer::TokenKind::PlusPlus:
+    case lexer::TokenKind::MinusMinus:
+        return precedence::CALL;
 
-        case lexer::TokenKind::DotDot:
-        case lexer::TokenKind::KwTo:
-        case lexer::TokenKind::KwThrough:
-            return precedence::RANGE;
+    case lexer::TokenKind::DotDot:
+    case lexer::TokenKind::KwTo:
+    case lexer::TokenKind::KwThrough:
+        return precedence::RANGE;
 
-        default:
-            return precedence::NONE;
+    default:
+        return precedence::NONE;
     }
 }
 
 auto Parser::is_right_associative(lexer::TokenKind kind) -> bool {
     // Assignment and ternary are right-associative
     switch (kind) {
-        case lexer::TokenKind::Assign:
-        case lexer::TokenKind::PlusAssign:
-        case lexer::TokenKind::MinusAssign:
-        case lexer::TokenKind::StarAssign:
-        case lexer::TokenKind::SlashAssign:
-        case lexer::TokenKind::PercentAssign:
-        case lexer::TokenKind::BitAndAssign:
-        case lexer::TokenKind::BitOrAssign:
-        case lexer::TokenKind::BitXorAssign:
-        case lexer::TokenKind::ShlAssign:
-        case lexer::TokenKind::ShrAssign:
-        case lexer::TokenKind::Question:
-            return true;
-        default:
-            return false;
+    case lexer::TokenKind::Assign:
+    case lexer::TokenKind::PlusAssign:
+    case lexer::TokenKind::MinusAssign:
+    case lexer::TokenKind::StarAssign:
+    case lexer::TokenKind::SlashAssign:
+    case lexer::TokenKind::PercentAssign:
+    case lexer::TokenKind::BitAndAssign:
+    case lexer::TokenKind::BitOrAssign:
+    case lexer::TokenKind::BitXorAssign:
+    case lexer::TokenKind::ShlAssign:
+    case lexer::TokenKind::ShrAssign:
+    case lexer::TokenKind::Question:
+        return true;
+    default:
+        return false;
     }
 }
 
 auto Parser::token_to_binary_op(lexer::TokenKind kind) -> std::optional<BinaryOp> {
     switch (kind) {
-        case lexer::TokenKind::Plus: return BinaryOp::Add;
-        case lexer::TokenKind::Minus: return BinaryOp::Sub;
-        case lexer::TokenKind::Star: return BinaryOp::Mul;
-        case lexer::TokenKind::Slash: return BinaryOp::Div;
-        case lexer::TokenKind::Percent: return BinaryOp::Mod;
+    case lexer::TokenKind::Plus:
+        return BinaryOp::Add;
+    case lexer::TokenKind::Minus:
+        return BinaryOp::Sub;
+    case lexer::TokenKind::Star:
+        return BinaryOp::Mul;
+    case lexer::TokenKind::Slash:
+        return BinaryOp::Div;
+    case lexer::TokenKind::Percent:
+        return BinaryOp::Mod;
 
-        case lexer::TokenKind::Eq: return BinaryOp::Eq;
-        case lexer::TokenKind::Ne: return BinaryOp::Ne;
-        case lexer::TokenKind::Lt: return BinaryOp::Lt;
-        case lexer::TokenKind::Gt: return BinaryOp::Gt;
-        case lexer::TokenKind::Le: return BinaryOp::Le;
-        case lexer::TokenKind::Ge: return BinaryOp::Ge;
+    case lexer::TokenKind::Eq:
+        return BinaryOp::Eq;
+    case lexer::TokenKind::Ne:
+        return BinaryOp::Ne;
+    case lexer::TokenKind::Lt:
+        return BinaryOp::Lt;
+    case lexer::TokenKind::Gt:
+        return BinaryOp::Gt;
+    case lexer::TokenKind::Le:
+        return BinaryOp::Le;
+    case lexer::TokenKind::Ge:
+        return BinaryOp::Ge;
 
-        case lexer::TokenKind::KwAnd: return BinaryOp::And;
-        case lexer::TokenKind::KwOr: return BinaryOp::Or;
+    case lexer::TokenKind::KwAnd:
+        return BinaryOp::And;
+    case lexer::TokenKind::KwOr:
+        return BinaryOp::Or;
 
-        case lexer::TokenKind::BitAnd: return BinaryOp::BitAnd;
-        case lexer::TokenKind::BitOr: return BinaryOp::BitOr;
-        case lexer::TokenKind::BitXor: return BinaryOp::BitXor;
-        case lexer::TokenKind::Shl: return BinaryOp::Shl;
-        case lexer::TokenKind::Shr: return BinaryOp::Shr;
+    case lexer::TokenKind::BitAnd:
+        return BinaryOp::BitAnd;
+    case lexer::TokenKind::BitOr:
+        return BinaryOp::BitOr;
+    case lexer::TokenKind::BitXor:
+        return BinaryOp::BitXor;
+    case lexer::TokenKind::Shl:
+        return BinaryOp::Shl;
+    case lexer::TokenKind::Shr:
+        return BinaryOp::Shr;
 
-        case lexer::TokenKind::Assign: return BinaryOp::Assign;
-        case lexer::TokenKind::PlusAssign: return BinaryOp::AddAssign;
-        case lexer::TokenKind::MinusAssign: return BinaryOp::SubAssign;
-        case lexer::TokenKind::StarAssign: return BinaryOp::MulAssign;
-        case lexer::TokenKind::SlashAssign: return BinaryOp::DivAssign;
-        case lexer::TokenKind::PercentAssign: return BinaryOp::ModAssign;
-        case lexer::TokenKind::BitAndAssign: return BinaryOp::BitAndAssign;
-        case lexer::TokenKind::BitOrAssign: return BinaryOp::BitOrAssign;
-        case lexer::TokenKind::BitXorAssign: return BinaryOp::BitXorAssign;
-        case lexer::TokenKind::ShlAssign: return BinaryOp::ShlAssign;
-        case lexer::TokenKind::ShrAssign: return BinaryOp::ShrAssign;
+    case lexer::TokenKind::Assign:
+        return BinaryOp::Assign;
+    case lexer::TokenKind::PlusAssign:
+        return BinaryOp::AddAssign;
+    case lexer::TokenKind::MinusAssign:
+        return BinaryOp::SubAssign;
+    case lexer::TokenKind::StarAssign:
+        return BinaryOp::MulAssign;
+    case lexer::TokenKind::SlashAssign:
+        return BinaryOp::DivAssign;
+    case lexer::TokenKind::PercentAssign:
+        return BinaryOp::ModAssign;
+    case lexer::TokenKind::BitAndAssign:
+        return BinaryOp::BitAndAssign;
+    case lexer::TokenKind::BitOrAssign:
+        return BinaryOp::BitOrAssign;
+    case lexer::TokenKind::BitXorAssign:
+        return BinaryOp::BitXorAssign;
+    case lexer::TokenKind::ShlAssign:
+        return BinaryOp::ShlAssign;
+    case lexer::TokenKind::ShrAssign:
+        return BinaryOp::ShrAssign;
 
-        default: return std::nullopt;
+    default:
+        return std::nullopt;
     }
 }
 
 auto Parser::token_to_unary_op(lexer::TokenKind kind) -> std::optional<UnaryOp> {
     switch (kind) {
-        case lexer::TokenKind::Minus: return UnaryOp::Neg;
-        case lexer::TokenKind::KwNot: return UnaryOp::Not;
-        case lexer::TokenKind::BitNot: return UnaryOp::BitNot;
-        case lexer::TokenKind::BitAnd: return UnaryOp::Ref;
-        case lexer::TokenKind::KwRef: return UnaryOp::Ref;  // TML uses 'ref x' syntax
-        case lexer::TokenKind::Star: return UnaryOp::Deref;
-        default: return std::nullopt;
+    case lexer::TokenKind::Minus:
+        return UnaryOp::Neg;
+    case lexer::TokenKind::KwNot:
+        return UnaryOp::Not;
+    case lexer::TokenKind::BitNot:
+        return UnaryOp::BitNot;
+    case lexer::TokenKind::BitAnd:
+        return UnaryOp::Ref;
+    case lexer::TokenKind::KwRef:
+        return UnaryOp::Ref; // TML uses 'ref x' syntax
+    case lexer::TokenKind::Star:
+        return UnaryOp::Deref;
+    default:
+        return std::nullopt;
     }
 }
 

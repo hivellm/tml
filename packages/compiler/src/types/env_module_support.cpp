@@ -1,11 +1,12 @@
-#include "tml/types/env.hpp"
-#include "tml/types/module.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/parser/parser.hpp"
+#include "tml/types/env.hpp"
+#include "tml/types/module.hpp"
+
 #include <algorithm>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 
@@ -30,7 +31,7 @@ auto TypeEnv::current_module() const -> const std::string& {
 }
 
 void TypeEnv::import_symbol(const std::string& module_path, const std::string& symbol_name,
-                           std::optional<std::string> alias) {
+                            std::optional<std::string> alias) {
     // Determine the local name (use alias if provided, otherwise original name)
     std::string local_name = alias.value_or(symbol_name);
 
@@ -39,7 +40,7 @@ void TypeEnv::import_symbol(const std::string& module_path, const std::string& s
         .original_name = symbol_name,
         .local_name = local_name,
         .module_path = module_path,
-        .visibility = parser::Visibility::Public  // Imported symbols are accessible
+        .visibility = parser::Visibility::Public // Imported symbols are accessible
     };
 
     // Store the import
@@ -48,12 +49,12 @@ void TypeEnv::import_symbol(const std::string& module_path, const std::string& s
 
 void TypeEnv::import_all_from(const std::string& module_path) {
     if (!module_registry_) {
-        return;  // No module registry available
+        return; // No module registry available
     }
 
     auto module = module_registry_->get_module(module_path);
     if (!module) {
-        return;  // Module not found
+        return; // Module not found
     }
 
     // Import all functions
@@ -82,8 +83,7 @@ void TypeEnv::import_all_from(const std::string& module_path) {
     }
 }
 
-auto TypeEnv::resolve_imported_symbol(const std::string& name) const
-    -> std::optional<std::string> {
+auto TypeEnv::resolve_imported_symbol(const std::string& name) const -> std::optional<std::string> {
     auto it = imported_symbols_.find(name);
     if (it != imported_symbols_.end()) {
         // Return the full qualified name: module_path::original_name
@@ -100,7 +100,8 @@ parse_tml_file(const std::string& file_path) {
         return std::nullopt;
     }
 
-    std::string source_code((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::string source_code((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
     file.close();
 
     auto source = lexer::Source::from_string(source_code, file_path);
@@ -130,7 +131,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     // Check if module is already registered
     if (module_registry_->has_module(module_path)) {
-        return true;  // Already loaded
+        return true; // Already loaded
     }
 
     // Collect all declarations to process
@@ -138,7 +139,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     // Check if this is a mod.tml file - if so, load all sibling .tml files
     auto fs_path = std::filesystem::path(file_path);
-    TML_DEBUG_LN("[MODULE] load_module_from_file: " << file_path << " (stem: " << fs_path.stem() << ")");
+    TML_DEBUG_LN("[MODULE] load_module_from_file: " << file_path << " (stem: " << fs_path.stem()
+                                                    << ")");
     if (fs_path.stem() == "mod") {
         auto dir = fs_path.parent_path();
         TML_DEBUG_LN("[MODULE] Loading directory module from: " << dir);
@@ -187,31 +189,52 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             const std::string& name = named.path.segments.empty() ? "" : named.path.segments[0];
 
             // Primitive types
-            if (name == "I8") return make_primitive(PrimitiveKind::I8);
-            if (name == "I16") return make_primitive(PrimitiveKind::I16);
-            if (name == "I32") return make_primitive(PrimitiveKind::I32);
-            if (name == "I64") return make_primitive(PrimitiveKind::I64);
-            if (name == "I128") return make_primitive(PrimitiveKind::I128);
-            if (name == "U8") return make_primitive(PrimitiveKind::U8);
-            if (name == "U16") return make_primitive(PrimitiveKind::U16);
-            if (name == "U32") return make_primitive(PrimitiveKind::U32);
-            if (name == "U64") return make_primitive(PrimitiveKind::U64);
-            if (name == "U128") return make_primitive(PrimitiveKind::U128);
-            if (name == "F32") return make_primitive(PrimitiveKind::F32);
-            if (name == "F64") return make_primitive(PrimitiveKind::F64);
-            if (name == "Bool") return make_primitive(PrimitiveKind::Bool);
-            if (name == "Char") return make_primitive(PrimitiveKind::Char);
-            if (name == "Str") return make_primitive(PrimitiveKind::Str);
-            if (name == "Unit") return make_unit();
+            if (name == "I8")
+                return make_primitive(PrimitiveKind::I8);
+            if (name == "I16")
+                return make_primitive(PrimitiveKind::I16);
+            if (name == "I32")
+                return make_primitive(PrimitiveKind::I32);
+            if (name == "I64")
+                return make_primitive(PrimitiveKind::I64);
+            if (name == "I128")
+                return make_primitive(PrimitiveKind::I128);
+            if (name == "U8")
+                return make_primitive(PrimitiveKind::U8);
+            if (name == "U16")
+                return make_primitive(PrimitiveKind::U16);
+            if (name == "U32")
+                return make_primitive(PrimitiveKind::U32);
+            if (name == "U64")
+                return make_primitive(PrimitiveKind::U64);
+            if (name == "U128")
+                return make_primitive(PrimitiveKind::U128);
+            if (name == "F32")
+                return make_primitive(PrimitiveKind::F32);
+            if (name == "F64")
+                return make_primitive(PrimitiveKind::F64);
+            if (name == "Bool")
+                return make_primitive(PrimitiveKind::Bool);
+            if (name == "Char")
+                return make_primitive(PrimitiveKind::Char);
+            if (name == "Str")
+                return make_primitive(PrimitiveKind::Str);
+            if (name == "Unit")
+                return make_unit();
 
             // Collection types
-            if (name == "List") return std::make_shared<Type>(Type{NamedType{"List", "", {}}});
-            if (name == "HashMap") return std::make_shared<Type>(Type{NamedType{"HashMap", "", {}}});
-            if (name == "Buffer") return std::make_shared<Type>(Type{NamedType{"Buffer", "", {}}});
+            if (name == "List")
+                return std::make_shared<Type>(Type{NamedType{"List", "", {}}});
+            if (name == "HashMap")
+                return std::make_shared<Type>(Type{NamedType{"HashMap", "", {}}});
+            if (name == "Buffer")
+                return std::make_shared<Type>(Type{NamedType{"Buffer", "", {}}});
 
             // std::file types
-            if (name == "File") return std::make_shared<Type>(Type{NamedType{"File", "std::file", {}}});
-            if (name == "Path") return std::make_shared<Type>(Type{NamedType{"Path", "std::file", {}}});
+            if (name == "File")
+                return std::make_shared<Type>(Type{NamedType{"File", "std::file", {}}});
+            if (name == "Path")
+                return std::make_shared<Type>(Type{NamedType{"Path", "std::file", {}}});
 
             // Other non-primitive types - resolve any generic type arguments
             std::vector<TypePtr> type_args;
@@ -221,13 +244,11 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
             }
             return std::make_shared<Type>(Type{NamedType{name, "", std::move(type_args)}});
-        }
-        else if (type.is<parser::RefType>()) {
+        } else if (type.is<parser::RefType>()) {
             const auto& ref = type.as<parser::RefType>();
             auto inner = resolve_simple_type(*ref.inner);
             return std::make_shared<Type>(Type{RefType{ref.is_mut, inner}});
-        }
-        else if (type.is<parser::FuncType>()) {
+        } else if (type.is<parser::FuncType>()) {
             const auto& func_type = type.as<parser::FuncType>();
             std::vector<TypePtr> param_types;
             for (const auto& param : func_type.params) {
@@ -278,19 +299,18 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     func.name,
                     param_types,
                     return_type,
-                    {},     // type_params
-                    false,  // is_async
+                    {},    // type_params
+                    false, // is_async
                     builtin_span,
                     StabilityLevel::Stable,
-                    "",     // deprecated_message
-                    "1.0",  // since_version
-                    {},     // where_constraints
-                    func.is_unsafe  // is_lowlevel
+                    "",            // deprecated_message
+                    "1.0",         // since_version
+                    {},            // where_constraints
+                    func.is_unsafe // is_lowlevel
                 };
 
                 mod.functions[func.name] = sig;
-            }
-            else if (decl->is<parser::StructDecl>()) {
+            } else if (decl->is<parser::StructDecl>()) {
                 const auto& struct_decl = decl->as<parser::StructDecl>();
 
                 // Only include public structs
@@ -313,17 +333,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 // Create struct definition
-                StructDef struct_def{
-                    struct_decl.name,
-                    std::move(type_params),
-                    std::move(fields),
-                    struct_decl.span
-                };
+                StructDef struct_def{struct_decl.name, std::move(type_params), std::move(fields),
+                                     struct_decl.span};
 
                 mod.structs[struct_decl.name] = std::move(struct_def);
-                TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module " << module_path);
-            }
-            else if (decl->is<parser::EnumDecl>()) {
+                TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module "
+                                                            << module_path);
+            } else if (decl->is<parser::EnumDecl>()) {
                 const auto& enum_decl = decl->as<parser::EnumDecl>();
 
                 // Only include public enums
@@ -359,17 +375,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 // Create enum definition
-                EnumDef enum_def{
-                    enum_decl.name,
-                    std::move(type_params),
-                    std::move(variants),
-                    enum_decl.span
-                };
+                EnumDef enum_def{enum_decl.name, std::move(type_params), std::move(variants),
+                                 enum_decl.span};
 
                 mod.enums[enum_decl.name] = std::move(enum_def);
-                TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module " << module_path);
-            }
-            else if (decl->is<parser::ImplDecl>()) {
+                TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module "
+                                                          << module_path);
+            } else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl_decl = decl->as<parser::ImplDecl>();
 
                 // Get the type name being implemented from self_type
@@ -382,7 +394,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 if (type_name.empty()) {
-                    continue;  // Skip if we couldn't determine the type name
+                    continue; // Skip if we couldn't determine the type name
                 }
 
                 // Extract methods from impl block (methods is std::vector<FuncDecl>)
@@ -415,18 +427,19 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         qualified_name,
                         param_types,
                         return_type,
-                        {},     // type_params
-                        false,  // is_async
+                        {},    // type_params
+                        false, // is_async
                         builtin_span,
                         StabilityLevel::Stable,
-                        "",     // deprecated_message
-                        "1.0",  // since_version
-                        {},     // where_constraints
-                        func.is_unsafe  // is_lowlevel
+                        "",            // deprecated_message
+                        "1.0",         // since_version
+                        {},            // where_constraints
+                        func.is_unsafe // is_lowlevel
                     };
 
                     mod.functions[qualified_name] = sig;
-                    TML_DEBUG_LN("[MODULE] Registered impl method: " << qualified_name << " in module " << module_path);
+                    TML_DEBUG_LN("[MODULE] Registered impl method: "
+                                 << qualified_name << " in module " << module_path);
                 }
             }
         }
@@ -438,7 +451,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         for (const auto& decl : decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
-                if (func.vis == parser::Visibility::Public && !func.is_unsafe && func.body.has_value()) {
+                if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
+                    func.body.has_value()) {
                     mod.has_pure_tml_functions = true;
                 }
             }
@@ -455,8 +469,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     }
 
     // Register the module
-    TML_DEBUG_LN("[MODULE] Loaded " << module_path << " from " << file_path
-              << " (" << mod.functions.size() << " functions)");
+    TML_DEBUG_LN("[MODULE] Loaded " << module_path << " from " << file_path << " ("
+                                    << mod.functions.size() << " functions)");
     module_registry_->register_module(module_path, std::move(mod));
     return true;
 }
@@ -468,7 +482,7 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
     // Check if module is already registered
     if (module_registry_->has_module(module_path)) {
-        return true;  // Already loaded
+        return true; // Already loaded
     }
 
     // Test module - load from packages/test/
@@ -478,8 +492,10 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("packages") / "test" / "src" / "assertions" / "mod.tml",
             std::filesystem::path("packages") / "test" / "src" / "mod.tml",
-            std::filesystem::path("..") / ".." / "test" / "src" / "assertions" / "mod.tml",  // From build/
-            std::filesystem::path("..") / "packages" / "test" / "src" / "assertions" / "mod.tml",  // From tests/
+            std::filesystem::path("..") / ".." / "test" / "src" / "assertions" /
+                "mod.tml", // From build/
+            std::filesystem::path("..") / "packages" / "test" / "src" / "assertions" /
+                "mod.tml", // From tests/
         };
 
         for (const auto& module_file : search_paths) {
@@ -502,9 +518,11 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("packages") / "core" / "src" / (module_name + ".tml"),
             std::filesystem::path("packages") / "core" / "src" / module_name / "mod.tml",
-            std::filesystem::path("..") / ".." / "core" / "src" / (module_name + ".tml"),  // From build/
-            std::filesystem::path("..") / "packages" / "core" / "src" / (module_name + ".tml"),  // From tests/
-            std::filesystem::path("core") / "src" / (module_name + ".tml")  // From packages/
+            std::filesystem::path("..") / ".." / "core" / "src" /
+                (module_name + ".tml"), // From build/
+            std::filesystem::path("..") / "packages" / "core" / "src" /
+                (module_name + ".tml"),                                    // From tests/
+            std::filesystem::path("core") / "src" / (module_name + ".tml") // From packages/
         };
 
         for (const auto& module_file : search_paths) {
@@ -528,18 +546,23 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("packages") / "std" / "src" / (module_name + ".tml"),
             std::filesystem::path("packages") / "std" / "src" / module_name / "mod.tml",
-            std::filesystem::path("..") / ".." / "std" / "src" / (module_name + ".tml"),  // From build/
-            std::filesystem::path("..") / ".." / "std" / "src" / module_name / "mod.tml",  // From build/
-            std::filesystem::path("..") / "packages" / "std" / "src" / (module_name + ".tml"),  // From tests/
-            std::filesystem::path("..") / "packages" / "std" / "src" / module_name / "mod.tml",  // From tests/
+            std::filesystem::path("..") / ".." / "std" / "src" /
+                (module_name + ".tml"), // From build/
+            std::filesystem::path("..") / ".." / "std" / "src" / module_name /
+                "mod.tml", // From build/
+            std::filesystem::path("..") / "packages" / "std" / "src" /
+                (module_name + ".tml"), // From tests/
+            std::filesystem::path("..") / "packages" / "std" / "src" / module_name /
+                "mod.tml",                                                  // From tests/
             std::filesystem::path("std") / "src" / (module_name + ".tml"),  // From packages/
-            std::filesystem::path("std") / "src" / module_name / "mod.tml",  // From packages/
+            std::filesystem::path("std") / "src" / module_name / "mod.tml", // From packages/
             // Absolute fallback
             std::filesystem::path("F:/Node/hivellm/tml/packages/std/src") / (module_name + ".tml"),
             std::filesystem::path("F:/Node/hivellm/tml/packages/std/src") / module_name / "mod.tml",
         };
 
-        TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path << " (name: " << module_name << ")");
+        TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path << " (name: " << module_name
+                                                         << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {

@@ -43,30 +43,33 @@ void LLVMIRGen::register_impl(const parser::ImplDecl* impl) {
 }
 
 void LLVMIRGen::emit_dyn_type(const std::string& behavior_name) {
-    if (emitted_dyn_types_.count(behavior_name)) return;
+    if (emitted_dyn_types_.count(behavior_name))
+        return;
     emitted_dyn_types_.insert(behavior_name);
 
     // Emit the dyn type as a fat pointer struct: { data_ptr, vtable_ptr }
     emit_line("%dyn." + behavior_name + " = type { ptr, ptr }");
 }
 
-auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& behavior_name) -> std::string {
+auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& behavior_name)
+    -> std::string {
     std::string key = type_name + "::" + behavior_name;
     auto it = vtables_.find(key);
     if (it != vtables_.end()) {
         return it->second;
     }
-    return "";  // No vtable found
+    return ""; // No vtable found
 }
 
 void LLVMIRGen::emit_vtables() {
     // For each registered impl block, generate a vtable
     for (const auto* impl : pending_impls_) {
-        if (!impl->trait_path) continue;  // Skip inherent impls
+        if (!impl->trait_path)
+            continue; // Skip inherent impls
 
         // Get the type name and behavior name
         std::string type_name;
-        if (impl->self_type->kind.index() == 0) {  // NamedType
+        if (impl->self_type->kind.index() == 0) { // NamedType
             const auto& named = std::get<parser::NamedType>(impl->self_type->kind);
             if (!named.path.segments.empty()) {
                 type_name = named.path.segments.back();
@@ -78,20 +81,23 @@ void LLVMIRGen::emit_vtables() {
             behavior_name = impl->trait_path->segments.back();
         }
 
-        if (type_name.empty() || behavior_name.empty()) continue;
+        if (type_name.empty() || behavior_name.empty())
+            continue;
 
         // Emit the dyn type for this behavior
         emit_dyn_type(behavior_name);
 
         // Get behavior method order
         auto behavior_def = env_.lookup_behavior(behavior_name);
-        if (!behavior_def) continue;
+        if (!behavior_def)
+            continue;
 
         // Build vtable type: array of function pointers
         std::string vtable_name = "@vtable." + type_name + "." + behavior_name;
         std::string vtable_type = "{ ";
         for (size_t i = 0; i < behavior_def->methods.size(); ++i) {
-            if (i > 0) vtable_type += ", ";
+            if (i > 0)
+                vtable_type += ", ";
             vtable_type += "ptr";
         }
         vtable_type += " }";
@@ -99,7 +105,8 @@ void LLVMIRGen::emit_vtables() {
         // Build vtable value with function pointers
         std::string vtable_value = "{ ";
         for (size_t i = 0; i < behavior_def->methods.size(); ++i) {
-            if (i > 0) vtable_value += ", ";
+            if (i > 0)
+                vtable_value += ", ";
             const auto& method = behavior_def->methods[i];
             vtable_value += "ptr @tml_" + type_name + "_" + method.name;
         }

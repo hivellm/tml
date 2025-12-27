@@ -1,4 +1,5 @@
 #include "tml/borrow/checker.hpp"
+
 #include <algorithm>
 
 namespace tml::borrow {
@@ -7,7 +8,8 @@ namespace tml::borrow {
 // BorrowEnv Implementation
 // ============================================================================
 
-auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut, Location loc) -> PlaceId {
+auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut, Location loc)
+    -> PlaceId {
     PlaceId id = next_id_++;
 
     PlaceState state{
@@ -95,8 +97,10 @@ void BorrowEnv::release_borrows_at_depth(size_t depth, Location loc) {
             bool has_active_shared = false;
             for (const auto& borrow : state.active_borrows) {
                 if (!borrow.end) {
-                    if (borrow.kind == BorrowKind::Mutable) has_active_mut = true;
-                    else has_active_shared = true;
+                    if (borrow.kind == BorrowKind::Mutable)
+                        has_active_mut = true;
+                    else
+                        has_active_shared = true;
                 }
             }
 
@@ -111,6 +115,5 @@ void BorrowEnv::release_borrows_at_depth(size_t depth, Location loc) {
         }
     }
 }
-
 
 } // namespace tml::borrow

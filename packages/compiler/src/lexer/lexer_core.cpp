@@ -1,4 +1,5 @@
 #include "tml/lexer/lexer.hpp"
+
 #include <algorithm>
 #include <unordered_map>
 
@@ -106,12 +107,10 @@ auto Lexer::make_token(TokenKind kind) -> Token {
     auto end_loc = source_.location(pos_ > 0 ? pos_ - 1 : 0);
     end_loc.length = static_cast<uint32_t>(pos_ - token_start_);
 
-    return Token{
-        .kind = kind,
-        .span = {start_loc, end_loc},
-        .lexeme = source_.slice(token_start_, pos_),
-        .value = std::monostate{}
-    };
+    return Token{.kind = kind,
+                 .span = {start_loc, end_loc},
+                 .lexeme = source_.slice(token_start_, pos_),
+                 .value = std::monostate{}};
 }
 
 auto Lexer::make_error_token(const std::string& message) -> Token {
@@ -120,47 +119,42 @@ auto Lexer::make_error_token(const std::string& message) -> Token {
     auto start_loc = source_.location(token_start_);
     auto end_loc = source_.location(pos_ > 0 ? pos_ - 1 : 0);
 
-    return Token{
-        .kind = TokenKind::Error,
-        .span = {start_loc, end_loc},
-        .lexeme = source_.slice(token_start_, pos_),
-        .value = std::monostate{}
-    };
+    return Token{.kind = TokenKind::Error,
+                 .span = {start_loc, end_loc},
+                 .lexeme = source_.slice(token_start_, pos_),
+                 .value = std::monostate{}};
 }
 
 void Lexer::report_error(const std::string& message) {
     auto start_loc = source_.location(token_start_);
     auto end_loc = source_.location(pos_);
 
-    errors_.push_back(LexerError{
-        .message = message,
-        .span = {start_loc, end_loc}
-    });
+    errors_.push_back(LexerError{.message = message, .span = {start_loc, end_loc}});
 }
 
 void Lexer::skip_whitespace() {
     while (!is_at_end()) {
         char c = peek();
         switch (c) {
-            case ' ':
-            case '\t':
-            case '\r':
-                advance();
-                break;
-            case '\n':
-                // Newlines are significant in TML for statement separation
+        case ' ':
+        case '\t':
+        case '\r':
+            advance();
+            break;
+        case '\n':
+            // Newlines are significant in TML for statement separation
+            return;
+        case '/':
+            if (peek_next() == '/') {
+                skip_line_comment();
+            } else if (peek_next() == '*') {
+                skip_block_comment();
+            } else {
                 return;
-            case '/':
-                if (peek_next() == '/') {
-                    skip_line_comment();
-                } else if (peek_next() == '*') {
-                    skip_block_comment();
-                } else {
-                    return;
-                }
-                break;
-            default:
-                return;
+            }
+            break;
+        default:
+            return;
         }
     }
 }
@@ -199,6 +193,5 @@ void Lexer::skip_block_comment() {
         report_error("Unterminated block comment");
     }
 }
-
 
 } // namespace tml::lexer

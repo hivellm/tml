@@ -62,7 +62,8 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
             std::string ptr = gen_expr(*call.args[0]);
             std::string size = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @mem_realloc(ptr " + ptr + ", i64 " + size + ")");
+            emit_line("  " + result + " = call ptr @mem_realloc(ptr " + ptr + ", i64 " + size +
+                      ")");
             return result;
         }
         return "null";
@@ -127,7 +128,8 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
             std::string b = gen_expr(*call.args[1]);
             std::string size = gen_expr(*call.args[2]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @mem_compare(ptr " + a + ", ptr " + b + ", i64 " + size + ")");
+            emit_line("  " + result + " = call i32 @mem_compare(ptr " + a + ", ptr " + b +
+                      ", i64 " + size + ")");
             return result;
         }
         return "0";
@@ -140,7 +142,8 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
             std::string b = gen_expr(*call.args[1]);
             std::string size = gen_expr(*call.args[2]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @mem_eq(ptr " + a + ", ptr " + b + ", i64 " + size + ")");
+            emit_line("  " + result + " = call i32 @mem_eq(ptr " + a + ", ptr " + b + ", i64 " +
+                      size + ")");
             return result;
         }
         return "0";

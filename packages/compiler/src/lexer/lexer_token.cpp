@@ -47,5 +47,4 @@ auto Lexer::next_token() -> Token {
     return lex_operator();
 }
 
-
 } // namespace tml::lexer

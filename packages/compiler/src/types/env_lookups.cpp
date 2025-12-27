@@ -5,7 +5,8 @@ namespace tml::types {
 
 auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<StructDef> {
     auto it = structs_.find(name);
-    if (it != structs_.end()) return it->second;
+    if (it != structs_.end())
+        return it->second;
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -22,7 +23,8 @@ auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<Stru
 
 auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDef> {
     auto it = enums_.find(name);
-    if (it != enums_.end()) return it->second;
+    if (it != enums_.end())
+        return it->second;
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -39,7 +41,8 @@ auto TypeEnv::lookup_enum(const std::string& name) const -> std::optional<EnumDe
 
 auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef> {
     auto it = behaviors_.find(name);
-    if (it != behaviors_.end()) return it->second;
+    if (it != behaviors_.end())
+        return it->second;
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -54,9 +57,11 @@ auto TypeEnv::lookup_behavior(const std::string& name) const -> std::optional<Be
     return std::nullopt;
 }
 
-bool TypeEnv::types_match(const TypePtr &a, const TypePtr &b) {
-    if (!a || !b) return false;
-    if (a->kind.index() != b->kind.index()) return false;
+bool TypeEnv::types_match(const TypePtr& a, const TypePtr& b) {
+    if (!a || !b)
+        return false;
+    if (a->kind.index() != b->kind.index())
+        return false;
     if (a->is<PrimitiveType>() && b->is<PrimitiveType>()) {
         return a->as<PrimitiveType>().kind == b->as<PrimitiveType>().kind;
     }
@@ -71,9 +76,11 @@ bool TypeEnv::types_match(const TypePtr &a, const TypePtr &b) {
     if (a->is<FuncType>() && b->is<FuncType>()) {
         const auto& func_a = a->as<FuncType>();
         const auto& func_b = b->as<FuncType>();
-        if (func_a.params.size() != func_b.params.size()) return false;
+        if (func_a.params.size() != func_b.params.size())
+            return false;
         for (size_t i = 0; i < func_a.params.size(); ++i) {
-            if (!types_match(func_a.params[i], func_b.params[i])) return false;
+            if (!types_match(func_a.params[i], func_b.params[i]))
+                return false;
         }
         return types_match(func_a.return_type, func_b.return_type);
     }
@@ -122,11 +129,14 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
     return std::nullopt;
 }
 
-auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<TypePtr>& arg_types) const -> std::optional<FuncSig> {
+auto TypeEnv::lookup_func_overload(const std::string& name,
+                                   const std::vector<TypePtr>& arg_types) const
+    -> std::optional<FuncSig> {
     auto it = functions_.find(name);
     if (it != functions_.end()) {
         for (const auto& sig : it->second) {
-            if (sig.params.size() != arg_types.size()) continue;
+            if (sig.params.size() != arg_types.size())
+                continue;
             bool matches = true;
             for (size_t i = 0; i < arg_types.size(); ++i) {
                 if (!types_match(arg_types[i], sig.params[i])) {
@@ -134,7 +144,8 @@ auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<Ty
                     break;
                 }
             }
-            if (matches) return sig;
+            if (matches)
+                return sig;
         }
     }
     if (module_registry_) {
@@ -153,7 +164,8 @@ auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<Ty
                             break;
                         }
                     }
-                    if (matches) return sig;
+                    if (matches)
+                        return sig;
                 }
             }
         }
@@ -163,13 +175,15 @@ auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<Ty
 
 auto TypeEnv::get_all_overloads(const std::string& name) const -> std::vector<FuncSig> {
     auto it = functions_.find(name);
-    if (it != functions_.end()) return it->second;
+    if (it != functions_.end())
+        return it->second;
     return {};
 }
 
 auto TypeEnv::lookup_type_alias(const std::string& name) const -> std::optional<TypePtr> {
     auto it = type_aliases_.find(name);
-    if (it != type_aliases_.end()) return it->second;
+    if (it != type_aliases_.end())
+        return it->second;
     if (module_registry_) {
         auto import_path = resolve_imported_symbol(name);
         if (import_path) {
@@ -204,8 +218,9 @@ auto TypeEnv::all_func_names() const -> std::vector<std::string> {
     return names;
 }
 
-auto TypeEnv::get_module(const std::string &module_path) const -> std::optional<Module> {
-    if (!module_registry_) return std::nullopt;
+auto TypeEnv::get_module(const std::string& module_path) const -> std::optional<Module> {
+    if (!module_registry_)
+        return std::nullopt;
     return module_registry_->get_module(module_path);
 }
 
@@ -223,9 +238,11 @@ void TypeEnv::register_impl(const std::string& type_name, const std::string& beh
     behavior_impls_[type_name].push_back(behavior_name);
 }
 
-bool TypeEnv::type_implements(const std::string& type_name, const std::string& behavior_name) const {
+bool TypeEnv::type_implements(const std::string& type_name,
+                              const std::string& behavior_name) const {
     auto it = behavior_impls_.find(type_name);
-    if (it == behavior_impls_.end()) return false;
+    if (it == behavior_impls_.end())
+        return false;
     const auto& behaviors = it->second;
     return std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end();
 }

@@ -9,11 +9,14 @@ namespace tml::borrow {
 auto Place::is_prefix_of(const Place& other) const -> bool {
     // A place is a prefix if it has the same base and its projections
     // are a prefix of the other's projections
-    if (base != other.base) return false;
-    if (projections.size() > other.projections.size()) return false;
+    if (base != other.base)
+        return false;
+    if (projections.size() > other.projections.size())
+        return false;
 
     for (size_t i = 0; i < projections.size(); ++i) {
-        if (projections[i].kind != other.projections[i].kind) return false;
+        if (projections[i].kind != other.projections[i].kind)
+            return false;
         if (projections[i].kind == ProjectionKind::Field &&
             projections[i].field_name != other.projections[i].field_name) {
             return false;
@@ -35,15 +38,15 @@ auto Place::to_string(const std::string& base_name) const -> std::string {
     std::string result = base_name;
     for (const auto& proj : projections) {
         switch (proj.kind) {
-            case ProjectionKind::Field:
-                result += "." + proj.field_name;
-                break;
-            case ProjectionKind::Index:
-                result += "[...]";
-                break;
-            case ProjectionKind::Deref:
-                result = "*" + result;
-                break;
+        case ProjectionKind::Field:
+            result += "." + proj.field_name;
+            break;
+        case ProjectionKind::Index:
+            result += "[...]";
+            break;
+        case ProjectionKind::Deref:
+            result = "*" + result;
+            break;
         }
     }
     return result;
@@ -81,13 +84,14 @@ void BorrowEnv::release_dead_borrows(Location loc) {
         bool has_active_shared = false;
         for (const auto& borrow : state.active_borrows) {
             if (!borrow.end) {
-                if (borrow.kind == BorrowKind::Mutable) has_active_mut = true;
-                else has_active_shared = true;
+                if (borrow.kind == BorrowKind::Mutable)
+                    has_active_mut = true;
+                else
+                    has_active_shared = true;
             }
         }
 
-        if (state.state == OwnershipState::Borrowed ||
-            state.state == OwnershipState::MutBorrowed) {
+        if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
             if (has_active_mut) {
                 state.state = OwnershipState::MutBorrowed;
             } else if (has_active_shared) {
@@ -103,7 +107,8 @@ auto BorrowEnv::is_borrow_live(const Borrow& borrow, Location loc) const -> bool
     // A borrow is live if:
     // 1. It hasn't ended (end is nullopt)
     // 2. AND either has no last_use OR current loc <= last_use
-    if (borrow.end) return false;
+    if (borrow.end)
+        return false;
 
     if (borrow.last_use) {
         return loc <= *borrow.last_use;
@@ -154,8 +159,8 @@ void BorrowChecker::apply_nll(Location loc) {
 }
 
 void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& full_place,
-                                                   BorrowKind kind, Location loc,
-                                                   PlaceId ref_place) {
+                                                  BorrowKind kind, Location loc,
+                                                  PlaceId ref_place) {
     auto& state = env_.get_state_mut(place);
 
     Borrow borrow{
@@ -164,7 +169,7 @@ void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& fu
         .kind = kind,
         .start = loc,
         .end = std::nullopt,
-        .last_use = std::nullopt,  // Will be updated by NLL tracking
+        .last_use = std::nullopt, // Will be updated by NLL tracking
         .scope_depth = env_.scope_depth(),
         .lifetime = env_.next_lifetime_id(),
         .ref_place = ref_place,
@@ -185,7 +190,7 @@ void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& fu
 }
 
 void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place& full_place,
-                                                      BorrowKind kind, Location loc) {
+                                                     BorrowKind kind, Location loc) {
     const auto& state = env_.get_state(place);
 
     if (state.state == OwnershipState::Moved) {
@@ -199,16 +204,15 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
         if (full_place.projections[0].kind == ProjectionKind::Field) {
             const auto& field = full_place.projections[0].field_name;
             if (env_.is_field_moved(place, field)) {
-                error("cannot borrow `" + state.name + "." + field +
-                      "` because it has been moved", loc.span);
+                error("cannot borrow `" + state.name + "." + field + "` because it has been moved",
+                      loc.span);
                 return;
             }
         }
     } else {
         // Borrowing the whole value - check if any part is moved
         if (env_.get_move_state(place) == MoveState::PartiallyMoved) {
-            error("cannot borrow `" + state.name +
-                  "` because part of it has been moved", loc.span);
+            error("cannot borrow `" + state.name + "` because part of it has been moved", loc.span);
             return;
         }
     }
@@ -217,7 +221,8 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
     bool is_reborrow = state.borrowed_from.has_value();
 
     for (const auto& existing_borrow : state.active_borrows) {
-        if (existing_borrow.end) continue;  // Borrow has ended
+        if (existing_borrow.end)
+            continue; // Borrow has ended
 
         // Check if the places overlap
         if (!existing_borrow.full_place.overlaps_with(full_place)) {
@@ -231,11 +236,13 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
             if (!is_two_phase_borrow_active_) {
                 if (existing_borrow.kind == BorrowKind::Mutable) {
                     error("cannot borrow `" + get_place_name(full_place) +
-                          "` as mutable more than once at a time", loc.span);
+                              "` as mutable more than once at a time",
+                          loc.span);
                     return;
                 } else {
                     error("cannot borrow `" + get_place_name(full_place) +
-                          "` as mutable because it is also borrowed as immutable", loc.span);
+                              "` as mutable because it is also borrowed as immutable",
+                          loc.span);
                     return;
                 }
             }
@@ -243,7 +250,8 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
             // Shared borrow conflicts with mutable borrow
             if (existing_borrow.kind == BorrowKind::Mutable && !is_two_phase_borrow_active_) {
                 error("cannot borrow `" + get_place_name(full_place) +
-                      "` as immutable because it is also borrowed as mutable", loc.span);
+                          "` as immutable because it is also borrowed as mutable",
+                      loc.span);
                 return;
             }
         }
@@ -252,14 +260,16 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
     if (kind == BorrowKind::Mutable) {
         if (!state.is_mutable && !is_reborrow) {
             error("cannot borrow `" + state.name +
-                  "` as mutable because it is not declared as mutable", loc.span);
+                      "` as mutable because it is not declared as mutable",
+                  loc.span);
             return;
         }
 
         // For reborrows from mutable references, allow creating new mutable borrows
         if (is_reborrow && state.borrowed_from->second == BorrowKind::Shared) {
             error("cannot reborrow `" + state.name +
-                  "` as mutable because it was borrowed as immutable", loc.span);
+                      "` as mutable because it was borrowed as immutable",
+                  loc.span);
             return;
         }
     }
@@ -281,16 +291,17 @@ void BorrowChecker::move_field(PlaceId place, const std::string& field, Location
     }
 
     // Check if borrowed
-    if (state.state == OwnershipState::Borrowed ||
-        state.state == OwnershipState::MutBorrowed) {
+    if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
         // Check if the borrow is on this specific field or the whole thing
         for (const auto& borrow : state.active_borrows) {
-            if (borrow.end) continue;
+            if (borrow.end)
+                continue;
 
             // If borrowing the whole value, can't move any field
             if (borrow.full_place.projections.empty()) {
-                error("cannot move out of `" + state.name + "." + field +
-                      "` because `" + state.name + "` is borrowed", loc.span);
+                error("cannot move out of `" + state.name + "." + field + "` because `" +
+                          state.name + "` is borrowed",
+                      loc.span);
                 return;
             }
 
@@ -299,7 +310,8 @@ void BorrowChecker::move_field(PlaceId place, const std::string& field, Location
                 borrow.full_place.projections[0].kind == ProjectionKind::Field &&
                 borrow.full_place.projections[0].field_name == field) {
                 error("cannot move out of `" + state.name + "." + field +
-                      "` because it is borrowed", loc.span);
+                          "` because it is borrowed",
+                      loc.span);
                 return;
             }
         }
@@ -328,7 +340,8 @@ void BorrowChecker::check_can_use_field(PlaceId place, const std::string& field,
 }
 
 void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
-    if (!ret.value) return;
+    if (!ret.value)
+        return;
 
     auto loc = current_location(ret.span);
 
@@ -351,7 +364,8 @@ void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
                     // All local variables will be dropped, so this is always an error
                     const auto& state = env_.get_state(*place_id);
                     error("cannot return reference to local variable `" + state.name +
-                          "` as it will be dropped when the function returns", loc.span);
+                              "` as it will be dropped when the function returns",
+                          loc.span);
                 }
             }
         }
@@ -371,7 +385,7 @@ void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
                 // Check if the borrowed value is a local that will be dropped
                 // (This is a simplified check - full lifetime analysis would be more complex)
                 // For now, we only error if it's obviously a local
-                bool is_local = true;  // All variables in current scope are locals
+                bool is_local = true; // All variables in current scope are locals
 
                 // Check scope depth - if borrowed value is in current function scope
                 // and not a parameter, it will be dropped
@@ -379,7 +393,8 @@ void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
                 if (is_local && borrowed_state.definition.statement_index > 0) {
                     // Local variable defined after function start - will be dropped
                     error("cannot return reference that borrows from local variable `" +
-                          borrowed_state.name + "`", loc.span);
+                              borrowed_state.name + "`",
+                          loc.span);
                 }
             }
         }
@@ -400,10 +415,7 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         const auto& field_expr = expr.as<parser::FieldExpr>();
         auto base_place = extract_place(*field_expr.object);
         if (base_place) {
-            base_place->projections.push_back(Projection{
-                ProjectionKind::Field,
-                field_expr.field
-            });
+            base_place->projections.push_back(Projection{ProjectionKind::Field, field_expr.field});
             return base_place;
         }
         return std::nullopt;
@@ -413,10 +425,7 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         const auto& index = expr.as<parser::IndexExpr>();
         auto base_place = extract_place(*index.object);
         if (base_place) {
-            base_place->projections.push_back(Projection{
-                ProjectionKind::Index,
-                ""
-            });
+            base_place->projections.push_back(Projection{ProjectionKind::Index, ""});
             return base_place;
         }
         return std::nullopt;
@@ -427,10 +436,7 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
         if (unary.op == parser::UnaryOp::Deref) {
             auto base_place = extract_place(*unary.operand);
             if (base_place) {
-                base_place->projections.push_back(Projection{
-                    ProjectionKind::Deref,
-                    ""
-                });
+                base_place->projections.push_back(Projection{ProjectionKind::Deref, ""});
                 return base_place;
             }
         }

@@ -16,13 +16,15 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         // Create list with initial capacity
         size_t capacity = count > 0 ? count : 4;
         std::string list_ptr = fresh_reg();
-        emit_line("  " + list_ptr + " = call ptr @list_create(i32 " + std::to_string(capacity) + ")");
+        emit_line("  " + list_ptr + " = call ptr @list_create(i32 " + std::to_string(capacity) +
+                  ")");
 
         // Push each element
         for (const auto& elem : elements) {
             std::string val = gen_expr(*elem);
             std::string call_result = fresh_reg();
-            emit_line("  " + call_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " + val + ")");
+            emit_line("  " + call_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " +
+                      val + ")");
         }
 
         return list_ptr;
@@ -57,7 +59,8 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
 
         emit_line(label_body + ":");
         std::string push_result = fresh_reg();
-        emit_line("  " + push_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " + init_val + ")");
+        emit_line("  " + push_result + " = call i32 @list_push(ptr " + list_ptr + ", i32 " +
+                  init_val + ")");
 
         std::string next_counter = fresh_reg();
         emit_line("  " + next_counter + " = add nsw i32 " + counter_val + ", 1");
@@ -87,7 +90,8 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
     // Join path segments with ::
     std::string full_path;
     for (size_t i = 0; i < path.path.segments.size(); ++i) {
-        if (i > 0) full_path += "::";
+        if (i > 0)
+            full_path += "::";
         full_path += path.path.segments[i];
     }
 
@@ -105,7 +109,8 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
 
         // Get pointer to the tag field (GEP with indices 0, 0)
         std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr " + struct_type + ", ptr " + alloca_reg + ", i32 0, i32 0");
+        emit_line("  " + tag_ptr + " = getelementptr " + struct_type + ", ptr " + alloca_reg +
+                  ", i32 0, i32 0");
 
         // Store the tag value
         emit_line("  store i32 " + std::to_string(it->second) + ", ptr " + tag_ptr);

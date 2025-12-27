@@ -11,12 +11,18 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     if (expr.is<parser::LiteralExpr>()) {
         const auto& lit = expr.as<parser::LiteralExpr>();
         switch (lit.token.kind) {
-            case lexer::TokenKind::IntLiteral: return types::make_i32();
-            case lexer::TokenKind::FloatLiteral: return types::make_f64();
-            case lexer::TokenKind::BoolLiteral: return types::make_bool();
-            case lexer::TokenKind::StringLiteral: return types::make_str();
-            case lexer::TokenKind::CharLiteral: return types::make_primitive(types::PrimitiveKind::Char);
-            default: return types::make_i32();
+        case lexer::TokenKind::IntLiteral:
+            return types::make_i32();
+        case lexer::TokenKind::FloatLiteral:
+            return types::make_f64();
+        case lexer::TokenKind::BoolLiteral:
+            return types::make_bool();
+        case lexer::TokenKind::StringLiteral:
+            return types::make_str();
+        case lexer::TokenKind::CharLiteral:
+            return types::make_primitive(types::PrimitiveKind::Char);
+        default:
+            return types::make_i32();
         }
     }
     if (expr.is<parser::IdentExpr>()) {
@@ -37,12 +43,18 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             }
             // Map LLVM type back to semantic type
             const std::string& ty = it->second.type;
-            if (ty == "i32") return types::make_i32();
-            if (ty == "i64") return types::make_i64();
-            if (ty == "i1") return types::make_bool();
-            if (ty == "float") return types::make_primitive(types::PrimitiveKind::F32);
-            if (ty == "double") return types::make_f64();
-            if (ty == "ptr") return types::make_str(); // Assume string for now
+            if (ty == "i32")
+                return types::make_i32();
+            if (ty == "i64")
+                return types::make_i64();
+            if (ty == "i1")
+                return types::make_bool();
+            if (ty == "float")
+                return types::make_primitive(types::PrimitiveKind::F32);
+            if (ty == "double")
+                return types::make_f64();
+            if (ty == "ptr")
+                return types::make_str(); // Assume string for now
             // For struct types, try to extract and demangle generic types
             if (ty.starts_with("%struct.")) {
                 std::string mangled = ty.substr(8);
@@ -60,18 +72,25 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     while (pos < type_args_str.size()) {
                         auto next_sep = type_args_str.find("__", pos);
                         std::string arg = (next_sep == std::string::npos)
-                            ? type_args_str.substr(pos)
-                            : type_args_str.substr(pos, next_sep - pos);
+                                              ? type_args_str.substr(pos)
+                                              : type_args_str.substr(pos, next_sep - pos);
 
                         // Create type for this arg
                         types::TypePtr arg_type;
-                        if (arg == "I32") arg_type = types::make_i32();
-                        else if (arg == "I64") arg_type = types::make_i64();
-                        else if (arg == "Bool") arg_type = types::make_bool();
-                        else if (arg == "Str") arg_type = types::make_str();
-                        else if (arg == "F32") arg_type = types::make_primitive(types::PrimitiveKind::F32);
-                        else if (arg == "F64") arg_type = types::make_f64();
-                        else if (arg == "Unit") arg_type = types::make_unit();
+                        if (arg == "I32")
+                            arg_type = types::make_i32();
+                        else if (arg == "I64")
+                            arg_type = types::make_i64();
+                        else if (arg == "Bool")
+                            arg_type = types::make_bool();
+                        else if (arg == "Str")
+                            arg_type = types::make_str();
+                        else if (arg == "F32")
+                            arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                        else if (arg == "F64")
+                            arg_type = types::make_f64();
+                        else if (arg == "Unit")
+                            arg_type = types::make_unit();
                         else {
                             // Named type without generics
                             auto t = std::make_shared<types::Type>();
@@ -80,7 +99,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                         }
                         type_args.push_back(arg_type);
 
-                        if (next_sep == std::string::npos) break;
+                        if (next_sep == std::string::npos)
+                            break;
                         pos = next_sep + 2;
                     }
 
@@ -100,18 +120,18 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         const auto& bin = expr.as<parser::BinaryExpr>();
         // Comparison and logical operators return Bool
         switch (bin.op) {
-            case parser::BinaryOp::Eq:
-            case parser::BinaryOp::Ne:
-            case parser::BinaryOp::Lt:
-            case parser::BinaryOp::Gt:
-            case parser::BinaryOp::Le:
-            case parser::BinaryOp::Ge:
-            case parser::BinaryOp::And:
-            case parser::BinaryOp::Or:
-                return types::make_bool();
-            default:
-                // Arithmetic/other operators: infer from left operand
-                return infer_expr_type(*bin.left);
+        case parser::BinaryOp::Eq:
+        case parser::BinaryOp::Ne:
+        case parser::BinaryOp::Lt:
+        case parser::BinaryOp::Gt:
+        case parser::BinaryOp::Le:
+        case parser::BinaryOp::Ge:
+        case parser::BinaryOp::And:
+        case parser::BinaryOp::Or:
+            return types::make_bool();
+        default:
+            // Arithmetic/other operators: infer from left operand
+            return infer_expr_type(*bin.left);
         }
     }
     if (expr.is<parser::UnaryExpr>()) {
@@ -139,7 +159,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     const auto& field_decl = decl->fields[fi];
                     if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
                         const auto& ftype = field_decl.type->as<parser::NamedType>();
-                        std::string ft_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                        std::string ft_name =
+                            ftype.path.segments.empty() ? "" : ftype.path.segments.back();
                         auto gen_it = inferred_generics.find(ft_name);
                         if (gen_it != inferred_generics.end() && !gen_it->second) {
                             gen_it->second = infer_expr_type(*s.fields[fi].second);
@@ -174,12 +195,18 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             // Look up field type in struct definition
             std::string field_llvm_type = get_field_type(named.name, field.field);
             // Convert LLVM type back to semantic type
-            if (field_llvm_type == "i32") return types::make_i32();
-            if (field_llvm_type == "i64") return types::make_i64();
-            if (field_llvm_type == "i1") return types::make_bool();
-            if (field_llvm_type == "float") return types::make_primitive(types::PrimitiveKind::F32);
-            if (field_llvm_type == "double") return types::make_f64();
-            if (field_llvm_type == "ptr") return types::make_str();
+            if (field_llvm_type == "i32")
+                return types::make_i32();
+            if (field_llvm_type == "i64")
+                return types::make_i64();
+            if (field_llvm_type == "i1")
+                return types::make_bool();
+            if (field_llvm_type == "float")
+                return types::make_primitive(types::PrimitiveKind::F32);
+            if (field_llvm_type == "double")
+                return types::make_f64();
+            if (field_llvm_type == "ptr")
+                return types::make_str();
             if (field_llvm_type.starts_with("%struct.")) {
                 std::string struct_name = field_llvm_type.substr(8);
                 auto result = std::make_shared<types::Type>();
@@ -219,7 +246,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         result->kind = types::FuncType{std::move(param_types), return_type};
         return result;
     }
-    // Handle ternary expressions (condition ? true_value : false_value): infer from true_value branch
+    // Handle ternary expressions (condition ? true_value : false_value): infer from true_value
+    // branch
     if (expr.is<parser::TernaryExpr>()) {
         const auto& ternary = expr.as<parser::TernaryExpr>();
         return infer_expr_type(*ternary.true_value);
@@ -250,7 +278,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
                             // Check if variant's tuple_fields reference this generic
                             if (variant.tuple_fields.has_value()) {
-                                for (size_t f = 0; f < variant.tuple_fields->size() && f < call.args.size(); ++f) {
+                                for (size_t f = 0;
+                                     f < variant.tuple_fields->size() && f < call.args.size();
+                                     ++f) {
                                     const auto& field_type = (*variant.tuple_fields)[f];
                                     // Check if this field is the generic parameter
                                     if (field_type->is<parser::NamedType>()) {

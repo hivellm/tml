@@ -1,9 +1,10 @@
 #include "build_config.hpp"
-#include <fstream>
-#include <sstream>
+
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <regex>
+#include <sstream>
 
 namespace tml::cli {
 
@@ -18,10 +19,12 @@ bool is_valid_semver(const std::string& version) {
 }
 
 bool is_valid_package_name(const std::string& name) {
-    if (name.empty()) return false;
+    if (name.empty())
+        return false;
 
     // Must start with lowercase letter
-    if (!std::islower(name[0])) return false;
+    if (!std::islower(name[0]))
+        return false;
 
     // Can contain lowercase, digits, hyphens, underscores
     for (char c : name) {
@@ -38,11 +41,16 @@ bool is_valid_package_name(const std::string& name) {
 // ============================================================================
 
 bool PackageInfo::validate() const {
-    if (name.empty()) return false;
-    if (!is_valid_package_name(name)) return false;
-    if (version.empty()) return false;
-    if (!is_valid_semver(version)) return false;
-    if (edition != "2024") return false;  // Only 2024 supported currently
+    if (name.empty())
+        return false;
+    if (!is_valid_package_name(name))
+        return false;
+    if (version.empty())
+        return false;
+    if (!is_valid_semver(version))
+        return false;
+    if (edition != "2024")
+        return false; // Only 2024 supported currently
     return true;
 }
 
@@ -51,7 +59,8 @@ bool PackageInfo::validate() const {
 // ============================================================================
 
 bool LibConfig::validate() const {
-    if (path.empty()) return false;
+    if (path.empty())
+        return false;
 
     // Validate crate types
     for (const auto& type : crate_types) {
@@ -76,15 +85,20 @@ bool BinConfig::validate() const {
 // ============================================================================
 
 bool Dependency::validate() const {
-    if (name.empty()) return false;
+    if (name.empty())
+        return false;
 
     // Must be exactly one of: version, path, or git
     int count = 0;
-    if (!version.empty()) count++;
-    if (!path.empty()) count++;
-    if (!git.empty()) count++;
+    if (!version.empty())
+        count++;
+    if (!path.empty())
+        count++;
+    if (!git.empty())
+        count++;
 
-    if (count != 1) return false;
+    if (count != 1)
+        return false;
 
     // If version dependency, validate semver constraint
     if (!version.empty()) {
@@ -110,7 +124,8 @@ bool BuildSettings::validate() const {
 // ============================================================================
 
 bool ProfileConfig::validate() const {
-    if (name != "debug" && name != "release") return false;
+    if (name != "debug" && name != "release")
+        return false;
     return settings.validate();
 }
 
@@ -119,22 +134,28 @@ bool ProfileConfig::validate() const {
 // ============================================================================
 
 bool Manifest::validate() const {
-    if (!package.validate()) return false;
+    if (!package.validate())
+        return false;
 
-    if (lib && !lib->validate()) return false;
+    if (lib && !lib->validate())
+        return false;
 
     for (const auto& bin : bins) {
-        if (!bin.validate()) return false;
+        if (!bin.validate())
+            return false;
     }
 
     for (const auto& [name, dep] : dependencies) {
-        if (!dep.validate()) return false;
+        if (!dep.validate())
+            return false;
     }
 
-    if (!build.validate()) return false;
+    if (!build.validate())
+        return false;
 
     for (const auto& [name, profile] : profiles) {
-        if (!profile.validate()) return false;
+        if (!profile.validate())
+            return false;
     }
 
     return true;
@@ -158,8 +179,7 @@ std::optional<Manifest> Manifest::load(const fs::path& path) {
         return std::nullopt;
     }
 
-    std::string content((std::istreambuf_iterator<char>(file)),
-                        std::istreambuf_iterator<char>());
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
     SimpleTomlParser parser(content);
     return parser.parse();
@@ -179,7 +199,8 @@ SimpleTomlParser::SimpleTomlParser(const std::string& content)
 
 void SimpleTomlParser::skip_whitespace() {
     while (!is_eof() && std::isspace(peek())) {
-        if (peek() == '\n') line_++;
+        if (peek() == '\n')
+            line_++;
         advance();
     }
 }
@@ -193,7 +214,8 @@ void SimpleTomlParser::skip_comment() {
 }
 
 char SimpleTomlParser::advance() {
-    if (is_eof()) return '\0';
+    if (is_eof())
+        return '\0';
     return content_[pos_++];
 }
 
@@ -210,21 +232,34 @@ std::string SimpleTomlParser::parse_string() {
         set_error("Expected string");
         return "";
     }
-    advance();  // Skip opening quote
+    advance(); // Skip opening quote
 
     std::string result;
     while (!is_eof() && peek() != '"') {
         if (peek() == '\\') {
             advance();
-            if (is_eof()) break;
+            if (is_eof())
+                break;
             char escaped = advance();
             switch (escaped) {
-                case 'n': result += '\n'; break;
-                case 't': result += '\t'; break;
-                case 'r': result += '\r'; break;
-                case '\\': result += '\\'; break;
-                case '"': result += '"'; break;
-                default: result += escaped; break;
+            case 'n':
+                result += '\n';
+                break;
+            case 't':
+                result += '\t';
+                break;
+            case 'r':
+                result += '\r';
+                break;
+            case '\\':
+                result += '\\';
+                break;
+            case '"':
+                result += '"';
+                break;
+            default:
+                result += escaped;
+                break;
             }
         } else {
             result += advance();
@@ -235,7 +270,7 @@ std::string SimpleTomlParser::parse_string() {
         set_error("Unterminated string");
         return "";
     }
-    advance();  // Skip closing quote
+    advance(); // Skip closing quote
 
     return result;
 }
@@ -260,7 +295,7 @@ std::vector<std::string> SimpleTomlParser::parse_string_array() {
         set_error("Expected array");
         return result;
     }
-    advance();  // Skip '['
+    advance(); // Skip '['
 
     skip_whitespace();
 
@@ -283,7 +318,7 @@ std::vector<std::string> SimpleTomlParser::parse_string_array() {
         set_error("Expected closing bracket");
         return result;
     }
-    advance();  // Skip ']'
+    advance(); // Skip ']'
 
     return result;
 }
@@ -302,7 +337,8 @@ std::optional<PackageInfo> SimpleTomlParser::parse_package_section() {
         skip_whitespace();
         skip_comment();
 
-        if (peek() == '[' || is_eof()) break;
+        if (peek() == '[' || is_eof())
+            break;
 
         std::string key = parse_identifier();
         skip_whitespace();
@@ -347,7 +383,8 @@ std::optional<LibConfig> SimpleTomlParser::parse_lib_section() {
         skip_whitespace();
         skip_comment();
 
-        if (peek() == '[' || is_eof()) break;
+        if (peek() == '[' || is_eof())
+            break;
 
         std::string key = parse_identifier();
         skip_whitespace();
@@ -386,7 +423,8 @@ std::optional<BinConfig> SimpleTomlParser::parse_bin_section() {
         skip_whitespace();
         skip_comment();
 
-        if (peek() == '[' || is_eof()) break;
+        if (peek() == '[' || is_eof())
+            break;
 
         std::string key = parse_identifier();
         skip_whitespace();
@@ -421,7 +459,8 @@ std::map<std::string, Dependency> SimpleTomlParser::parse_dependencies_section()
         skip_whitespace();
         skip_comment();
 
-        if (peek() == '[' || is_eof()) break;
+        if (peek() == '[' || is_eof())
+            break;
 
         std::string name = parse_identifier();
         skip_whitespace();
@@ -441,14 +480,15 @@ std::map<std::string, Dependency> SimpleTomlParser::parse_dependencies_section()
             dep.version = parse_string();
         } else if (peek() == '{') {
             // Inline table: { path = "...", version = "..." }
-            advance();  // Skip '{'
+            advance(); // Skip '{'
             skip_whitespace();
 
             while (!is_eof() && peek() != '}') {
                 std::string key = parse_identifier();
                 skip_whitespace();
 
-                if (peek() != '=') break;
+                if (peek() != '=')
+                    break;
                 advance();
                 skip_whitespace();
 
@@ -471,7 +511,8 @@ std::map<std::string, Dependency> SimpleTomlParser::parse_dependencies_section()
                 }
             }
 
-            if (peek() == '}') advance();
+            if (peek() == '}')
+                advance();
         }
 
         deps[name] = dep;
@@ -493,7 +534,8 @@ std::optional<BuildSettings> SimpleTomlParser::parse_build_section() {
         skip_whitespace();
         skip_comment();
 
-        if (peek() == '[' || is_eof()) break;
+        if (peek() == '[' || is_eof())
+            break;
 
         std::string key = parse_identifier();
         skip_whitespace();
@@ -526,12 +568,14 @@ std::optional<BuildSettings> SimpleTomlParser::parse_build_section() {
     return settings;
 }
 
-std::optional<ProfileConfig> SimpleTomlParser::parse_profile_section(const std::string& profile_name) {
+std::optional<ProfileConfig>
+SimpleTomlParser::parse_profile_section(const std::string& profile_name) {
     ProfileConfig profile;
     profile.name = profile_name;
 
     auto settings = parse_build_section();
-    if (!settings) return std::nullopt;
+    if (!settings)
+        return std::nullopt;
 
     profile.settings = *settings;
     return profile;
@@ -544,10 +588,11 @@ std::optional<Manifest> SimpleTomlParser::parse() {
         skip_whitespace();
         skip_comment();
 
-        if (is_eof()) break;
+        if (is_eof())
+            break;
 
         if (peek() == '[') {
-            advance();  // Skip '['
+            advance(); // Skip '['
 
             // Check for array section [[bin]]
             bool is_array = false;
@@ -566,14 +611,14 @@ std::optional<Manifest> SimpleTomlParser::parse() {
             }
 
             if (is_array && peek() == ']') {
-                advance();  // Skip second ']'
+                advance(); // Skip second ']'
             }
 
             if (peek() != ']') {
                 set_error("Expected ']' after section name");
                 return std::nullopt;
             }
-            advance();  // Skip ']'
+            advance(); // Skip ']'
 
             skip_whitespace();
             skip_comment();
@@ -581,25 +626,30 @@ std::optional<Manifest> SimpleTomlParser::parse() {
             // Parse section content
             if (section == "package") {
                 auto pkg = parse_package_section();
-                if (!pkg) return std::nullopt;
+                if (!pkg)
+                    return std::nullopt;
                 manifest.package = *pkg;
             } else if (section == "lib") {
                 auto lib = parse_lib_section();
-                if (!lib) return std::nullopt;
+                if (!lib)
+                    return std::nullopt;
                 manifest.lib = *lib;
             } else if (section == "bin" && is_array) {
                 auto bin = parse_bin_section();
-                if (!bin) return std::nullopt;
+                if (!bin)
+                    return std::nullopt;
                 manifest.bins.push_back(*bin);
             } else if (section == "dependencies") {
                 manifest.dependencies = parse_dependencies_section();
             } else if (section == "build") {
                 auto build = parse_build_section();
-                if (!build) return std::nullopt;
+                if (!build)
+                    return std::nullopt;
                 manifest.build = *build;
             } else if (section == "profile" && !subsection.empty()) {
                 auto profile = parse_profile_section(subsection);
-                if (!profile) return std::nullopt;
+                if (!profile)
+                    return std::nullopt;
                 manifest.profiles[subsection] = *profile;
             }
         } else {

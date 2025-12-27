@@ -1,10 +1,10 @@
 // TML Core Runtime - Threading
 // Thread, Channel, Mutex, WaitGroup
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -454,7 +454,8 @@ void channel_destroy(Channel* ch) {
 
 // channel_len(ch) -> I32 - Get number of items in channel
 int32_t channel_len(Channel* ch) {
-    if (!ch) return 0;
+    if (!ch)
+        return 0;
     return (int32_t)ch->count;
 }
 

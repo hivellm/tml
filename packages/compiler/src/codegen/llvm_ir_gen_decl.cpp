@@ -28,7 +28,8 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     // Emit struct type definition
     std::string def = type_name + " = type { ";
     for (size_t i = 0; i < field_types.size(); ++i) {
-        if (i > 0) def += ", ";
+        if (i > 0)
+            def += ", ";
         def += field_types[i];
     }
     def += " }";
@@ -40,10 +41,8 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
 }
 
 // Generate a specialized version of a generic struct
-void LLVMIRGen::gen_struct_instantiation(
-    const parser::StructDecl& decl,
-    const std::vector<types::TypePtr>& type_args
-) {
+void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
+                                         const std::vector<types::TypePtr>& type_args) {
     // 1. Create substitution map: T -> I32, K -> Str, etc.
     std::unordered_map<std::string, types::TypePtr> subs;
     for (size_t i = 0; i < decl.generics.size() && i < type_args.size(); ++i) {
@@ -68,7 +67,8 @@ void LLVMIRGen::gen_struct_instantiation(
     // 4. Emit struct type definition to type_defs_buffer_ (ensures types before functions)
     std::string def = type_name + " = type { ";
     for (size_t i = 0; i < field_types.size(); ++i) {
-        if (i > 0) def += ", ";
+        if (i > 0)
+            def += ", ";
         def += field_types[i];
     }
     def += " }";
@@ -81,25 +81,22 @@ void LLVMIRGen::gen_struct_instantiation(
 
 // Request instantiation of a generic struct - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
-auto LLVMIRGen::require_struct_instantiation(
-    const std::string& base_name,
-    const std::vector<types::TypePtr>& type_args
-) -> std::string {
+auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
+                                             const std::vector<types::TypePtr>& type_args)
+    -> std::string {
     // Generate mangled name
     std::string mangled = mangle_struct_name(base_name, type_args);
 
     // Check if already registered
     auto it = struct_instantiations_.find(mangled);
     if (it != struct_instantiations_.end()) {
-        return mangled;  // Already queued or generated
+        return mangled; // Already queued or generated
     }
 
     // Register new instantiation (mark as generated since we'll generate immediately)
     struct_instantiations_[mangled] = GenericInstantiation{
-        base_name,
-        type_args,
-        mangled,
-        true  // Mark as generated since we'll generate it immediately
+        base_name, type_args, mangled,
+        true // Mark as generated since we'll generate it immediately
     };
 
     // Register field info and generate type definition immediately
@@ -170,21 +167,31 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
                 for (const auto& field_type : *variant.tuple_fields) {
                     // Approximate size
                     std::string ty = llvm_type_ptr(field_type);
-                    if (ty == "i8") size += 1;
-                    else if (ty == "i16") size += 2;
-                    else if (ty == "i32" || ty == "float") size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
-                    else size += 8; // Default
+                    if (ty == "i8")
+                        size += 1;
+                    else if (ty == "i16")
+                        size += 2;
+                    else if (ty == "i32" || ty == "float")
+                        size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr")
+                        size += 8;
+                    else
+                        size += 8; // Default
                 }
             }
             if (variant.struct_fields.has_value()) {
                 for (const auto& field : *variant.struct_fields) {
                     std::string ty = llvm_type_ptr(field.type);
-                    if (ty == "i8") size += 1;
-                    else if (ty == "i16") size += 2;
-                    else if (ty == "i32" || ty == "float") size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
-                    else size += 8; // Default
+                    if (ty == "i8")
+                        size += 1;
+                    else if (ty == "i16")
+                        size += 2;
+                    else if (ty == "i32" || ty == "float")
+                        size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr")
+                        size += 8;
+                    else
+                        size += 8; // Default
                 }
             }
             max_size = std::max(max_size, size);
@@ -206,10 +213,8 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
 }
 
 // Generate a specialized version of a generic enum
-void LLVMIRGen::gen_enum_instantiation(
-    const parser::EnumDecl& decl,
-    const std::vector<types::TypePtr>& type_args
-) {
+void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
+                                       const std::vector<types::TypePtr>& type_args) {
     // 1. Create substitution map: T -> I32, K -> Str, etc.
     std::unordered_map<std::string, types::TypePtr> subs;
     for (size_t i = 0; i < decl.generics.size() && i < type_args.size(); ++i) {
@@ -257,34 +262,48 @@ void LLVMIRGen::gen_enum_instantiation(
                 for (const auto& field_type : *variant.tuple_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field_type, subs);
                     std::string ty = llvm_type_from_semantic(resolved, true);
-                    if (ty == "{}" || ty == "void") size += 0;  // Unit type has zero size
-                    else if (ty == "i8") size += 1;
-                    else if (ty == "i16") size += 2;
-                    else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
-                    else size += 8;
+                    if (ty == "{}" || ty == "void")
+                        size += 0; // Unit type has zero size
+                    else if (ty == "i8")
+                        size += 1;
+                    else if (ty == "i16")
+                        size += 2;
+                    else if (ty == "i32" || ty == "float" || ty == "i1")
+                        size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr")
+                        size += 8;
+                    else
+                        size += 8;
                 }
             }
             if (variant.struct_fields.has_value()) {
                 for (const auto& field : *variant.struct_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field.type, subs);
                     std::string ty = llvm_type_from_semantic(resolved, true);
-                    if (ty == "{}" || ty == "void") size += 0;  // Unit type has zero size
-                    else if (ty == "i8") size += 1;
-                    else if (ty == "i16") size += 2;
-                    else if (ty == "i32" || ty == "float" || ty == "i1") size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr") size += 8;
-                    else size += 8;
+                    if (ty == "{}" || ty == "void")
+                        size += 0; // Unit type has zero size
+                    else if (ty == "i8")
+                        size += 1;
+                    else if (ty == "i16")
+                        size += 2;
+                    else if (ty == "i32" || ty == "float" || ty == "i1")
+                        size += 4;
+                    else if (ty == "i64" || ty == "double" || ty == "ptr")
+                        size += 8;
+                    else
+                        size += 8;
                 }
             }
             max_size = std::max(max_size, size);
         }
 
         // Ensure at least 8 bytes for data
-        if (max_size == 0) max_size = 8;
+        if (max_size == 0)
+            max_size = 8;
 
         // Emit to type_defs_buffer_ instead of output_ to ensure type is defined before use
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size) << " x i8] }\n";
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size)
+                          << " x i8] }\n";
         struct_types_[mangled] = type_name;
 
         int tag = 0;
@@ -354,18 +373,14 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
         // Register function - map TML name to external symbol
         std::string func_type = ret_type + " (" + param_types + ")";
-        functions_[func.name] = FuncInfo{
-            "@" + symbol_name,
-            func_type,
-            ret_type
-        };
+        functions_[func.name] = FuncInfo{"@" + symbol_name, func_type, ret_type};
 
         // Store link libraries for later (linker phase)
         for (const auto& lib : func.link_libs) {
             extern_link_libs_.insert(lib);
         }
 
-        return;  // Don't generate function body for extern functions
+        return; // Don't generate function body for extern functions
     }
 
     current_func_ = func.name;
@@ -377,17 +392,14 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[func.name] = FuncInfo{
-        "@tml_" + func.name,
-        func_type,
-        ret_type
-    };
+    functions_[func.name] = FuncInfo{"@tml_" + func.name, func_type, ret_type};
 
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
     std::string func_llvm_name = "tml_" + func.name;
     // Public functions and main get external linkage for library export
-    std::string linkage = (func.name == "main" || func.vis == parser::Visibility::Public) ? "" : "internal ";
+    std::string linkage =
+        (func.name == "main" || func.vis == parser::Visibility::Public) ? "" : "internal ";
     // Windows DLL export for public functions
     std::string dll_linkage = "";
     if (options_.dll_export && func.vis == parser::Visibility::Public && func.name != "main") {
@@ -399,7 +411,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // - willreturn: function will return (helps with dead code elimination)
     std::string attrs = " #0";
     emit_line("");
-    emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params + ")" + attrs + " {");
+    emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params +
+              ")" + attrs + " {");
     emit_line("entry:");
 
     // Register function parameters in locals_ by creating allocas
@@ -465,7 +478,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     std::string method_name = type_name + "_" + method.name;
     current_func_ = method_name;
-    current_impl_type_ = type_name;  // Set impl type for 'this' field access
+    current_impl_type_ = type_name; // Set impl type for 'this' field access
     locals_.clear();
     block_terminated_ = false;
 
@@ -478,7 +491,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Build parameter list - methods have an implicit 'this' parameter
     std::string params;
-    std::string param_types = "ptr";  // 'this' is always a pointer
+    std::string param_types = "ptr"; // 'this' is always a pointer
 
     // Check if first param is 'this' or 'mut this'
     bool has_explicit_this = false;
@@ -488,7 +501,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         std::string first_name = get_param_name(first_param);
         if (first_name == "this") {
             has_explicit_this = true;
-            param_start = 1;  // Skip 'this' in param loop since we handle it specially
+            param_start = 1; // Skip 'this' in param loop since we handle it specially
         }
     }
 
@@ -529,7 +542,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Generate method body
     if (method.body) {
         for (const auto& stmt : method.body->stmts) {
-            if (block_terminated_) break;
+            if (block_terminated_)
+                break;
             gen_stmt(*stmt);
         }
 
@@ -563,10 +577,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 }
 
 // Generate a specialized version of a generic function
-void LLVMIRGen::gen_func_instantiation(
-    const parser::FuncDecl& func,
-    const std::vector<types::TypePtr>& type_args
-) {
+void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
+                                       const std::vector<types::TypePtr>& type_args) {
     // 1. Create substitution map: T -> I32, U -> Str, etc.
     std::unordered_map<std::string, types::TypePtr> subs;
     for (size_t i = 0; i < func.generics.size() && i < type_args.size(); ++i) {
@@ -622,11 +634,7 @@ void LLVMIRGen::gen_func_instantiation(
 
     // 5. Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[mangled] = FuncInfo{
-        "@tml_" + mangled,
-        func_type,
-        ret_type
-    };
+    functions_[mangled] = FuncInfo{"@tml_" + mangled, func_type, ret_type};
 
     // 6. Emit function definition
     std::string attrs = " #0";
@@ -638,7 +646,8 @@ void LLVMIRGen::gen_func_instantiation(
         dll_linkage = "dllexport ";
     }
     emit_line("");
-    emit_line("define " + dll_linkage + linkage + ret_type + " @tml_" + mangled + "(" + params + ")" + attrs + " {");
+    emit_line("define " + dll_linkage + linkage + ret_type + " @tml_" + mangled + "(" + params +
+              ")" + attrs + " {");
     emit_line("entry:");
 
     // 7. Register parameters in locals_
@@ -652,7 +661,8 @@ void LLVMIRGen::gen_func_instantiation(
     // 8. Generate function body
     if (func.body) {
         for (const auto& stmt : func.body->stmts) {
-            if (block_terminated_) break;
+            if (block_terminated_)
+                break;
             gen_stmt(*stmt);
         }
 

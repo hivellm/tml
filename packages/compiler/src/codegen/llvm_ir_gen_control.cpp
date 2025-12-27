@@ -6,7 +6,8 @@
 namespace tml::codegen {
 
 // Forward declaration for is_bool_expr (defined in llvm_ir_gen_stmt.cpp)
-bool is_bool_expr(const parser::Expr& expr, const std::unordered_map<std::string, LLVMIRGen::VarInfo>& locals);
+bool is_bool_expr(const parser::Expr& expr,
+                  const std::unordered_map<std::string, LLVMIRGen::VarInfo>& locals);
 
 auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string cond = gen_expr(*if_expr.condition);
@@ -81,7 +82,7 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     // If both branches are terminated (by return/break/continue), don't emit end block
     // This can happen with nested if-else where all paths return
     if (then_terminated && else_terminated) {
-        block_terminated_ = true;  // Mark the overall if as terminated
+        block_terminated_ = true; // Mark the overall if as terminated
         last_expr_type_ = "void";
         return "0";
     }
@@ -92,13 +93,13 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
 
     // Only generate phi if BOTH branches have trailing expressions (return values)
     // AND neither is terminated (by return/break/continue)
-    if (if_expr.else_branch.has_value() &&
-        then_has_value && else_has_value &&
-        !then_terminated && !else_terminated) {
+    if (if_expr.else_branch.has_value() && then_has_value && else_has_value && !then_terminated &&
+        !else_terminated) {
 
         // Ensure types match for phi node
         std::string result = fresh_reg();
-        emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" + label_then + " ], [ " + else_val + ", %" + label_else + " ]");
+        emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" + label_then +
+                  " ], [ " + else_val + ", %" + label_else + " ]");
         last_expr_type_ = then_type;
         return result;
     }
@@ -198,7 +199,8 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
 
         // Extract tag
         std::string tag_ptr = fresh_reg();
-        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 0");
+        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+                  scrutinee_ptr + ", i32 0, i32 0");
         std::string tag = fresh_reg();
         emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
 
@@ -207,7 +209,7 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
         int variant_tag = -1;
         std::string scrutinee_enum_name;
         if (scrutinee_type.starts_with("%struct.")) {
-            scrutinee_enum_name = scrutinee_type.substr(8);  // Remove "%struct."
+            scrutinee_enum_name = scrutinee_type.substr(8); // Remove "%struct."
         }
 
         // Try lookup with scrutinee-derived enum name (for generic enums)
@@ -228,7 +230,8 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
                         break;
                     }
                 }
-                if (variant_tag >= 0) break;
+                if (variant_tag >= 0)
+                    break;
             }
         }
 
@@ -250,7 +253,8 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
         if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
             // Extract payload value
             std::string payload_ptr = fresh_reg();
-            emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+            emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
+                      ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
             std::string payload = fresh_reg();
             emit_line("  " + payload + " = load i64, ptr " + payload_ptr);
 
@@ -414,7 +418,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
-    current_loop_start_ = label_incr;  // continue goes to increment
+    current_loop_start_ = label_incr; // continue goes to increment
     current_loop_end_ = label_end;
 
     // Get loop variable name from pattern
@@ -427,7 +431,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string range_start = "0";
     std::string range_end = "0";
     bool inclusive = false;
-    std::string range_type = "i32";  // Default type for range
+    std::string range_type = "i32"; // Default type for range
     bool is_collection_iter = false;
     std::string collection_ptr;
     std::string idx_var_name = "_for_collection_idx";
@@ -440,7 +444,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         }
         if (range.end.has_value()) {
             range_end = gen_expr(*range.end.value());
-            range_type = last_expr_type_;  // Use type of end value
+            range_type = last_expr_type_; // Use type of end value
         }
     } else {
         // Check if it's a collection (List, HashMap, Buffer)
@@ -459,7 +463,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
             // Load it back to call _len
             std::string collection_loaded = fresh_reg();
             emit_line("  " + collection_loaded + " = load ptr, ptr " + collection_alloca);
-            collection_ptr = collection_alloca;  // Store the alloca, not the value
+            collection_ptr = collection_alloca; // Store the alloca, not the value
 
             // Call the appropriate _len function to get collection size
             std::string len_result = fresh_reg();
@@ -493,9 +497,11 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line("  " + current + " = load " + range_type + ", ptr " + var_alloca);
     std::string cmp_result = fresh_reg();
     if (inclusive) {
-        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + current + ", " + range_end);
+        emit_line("  " + cmp_result + " = icmp sle " + range_type + " " + current + ", " +
+                  range_end);
     } else {
-        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + current + ", " + range_end);
+        emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + current + ", " +
+                  range_end);
     }
     emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_end);
 
@@ -519,7 +525,8 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 
         // Call list_get(collection, index)
         std::string element = fresh_reg();
-        emit_line("  " + element + " = call i64 @list_get(ptr " + collection_loaded + ", i64 " + idx_i64 + ")");
+        emit_line("  " + element + " = call i64 @list_get(ptr " + collection_loaded + ", i64 " +
+                  idx_i64 + ")");
 
         // Convert i64 result to i32 and store in actual loop variable
         std::string element_i32 = fresh_reg();
@@ -580,7 +587,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
     // Extract tag (assumes enum is { i32, i64 })
     std::string tag_ptr = fresh_reg();
-    emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 0");
+    emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+              scrutinee_ptr + ", i32 0, i32 0");
     std::string tag = fresh_reg();
     emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
 
@@ -593,16 +601,15 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
     // Allocate temporary for result
     std::string result_ptr = fresh_reg();
-    std::string result_type = "i32";  // Will be updated by first arm
+    std::string result_type = "i32"; // Will be updated by first arm
     emit_line("  " + result_ptr + " = alloca i32");
 
     // Generate switch based on pattern
     // For now, simplified: each arm is checked sequentially
     for (size_t arm_idx = 0; arm_idx < when.arms.size(); ++arm_idx) {
         const auto& arm = when.arms[arm_idx];
-        std::string next_label = (arm_idx + 1 < when.arms.size())
-            ? fresh_label("when_next")
-            : label_end;
+        std::string next_label =
+            (arm_idx + 1 < when.arms.size()) ? fresh_label("when_next") : label_end;
 
         // Check if pattern matches
         if (arm.pattern->is<parser::EnumPattern>()) {
@@ -619,11 +626,12 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             }
 
             // Find variant index in the correct enum
-            // First, try to extract enum name from scrutinee type (e.g., %struct.Maybe__I32 -> Maybe__I32)
+            // First, try to extract enum name from scrutinee type (e.g., %struct.Maybe__I32 ->
+            // Maybe__I32)
             int variant_tag = -1;
             std::string scrutinee_enum_name;
             if (scrutinee_type.starts_with("%struct.")) {
-                scrutinee_enum_name = scrutinee_type.substr(8);  // Remove "%struct."
+                scrutinee_enum_name = scrutinee_type.substr(8); // Remove "%struct."
             }
 
             // Try lookup with scrutinee-derived enum name (for generic enums)
@@ -639,7 +647,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             if (variant_tag < 0) {
                 std::string full_path;
                 for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
-                    if (i > 0) full_path += "::";
+                    if (i > 0)
+                        full_path += "::";
                     full_path += enum_pat.path.segments[i];
                 }
 
@@ -652,8 +661,10 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             if (variant_tag >= 0) {
                 // Compare tag
                 std::string cmp = fresh_reg();
-                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
-                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" + next_label);
+                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
+                          std::to_string(variant_tag));
+                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" +
+                          next_label);
             } else {
                 // Unknown variant, skip to next
                 emit_line("  br label %" + next_label);
@@ -674,7 +685,8 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
                 // Extract payload value
                 std::string payload_ptr = fresh_reg();
-                emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
+                emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
+                          ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
                 std::string payload = fresh_reg();
                 emit_line("  " + payload + " = load i64, ptr " + payload_ptr);
 

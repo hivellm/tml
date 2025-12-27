@@ -1,11 +1,13 @@
 #include "cmd_cache.hpp"
+
 #include "utils.hpp"
-#include <filesystem>
-#include <iostream>
-#include <iomanip>
-#include <vector>
+
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <iomanip>
+#include <iostream>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -114,8 +116,7 @@ int get_file_age_days(const fs::path& file) {
     try {
         auto ftime = fs::last_write_time(file);
         auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-            ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now()
-        );
+            ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
         auto now = std::chrono::system_clock::now();
         auto age = std::chrono::duration_cast<std::chrono::hours>(now - sctp);
         return static_cast<int>(age.count() / 24);
@@ -149,7 +150,10 @@ int run_cache_info(bool verbose) {
     std::cout << "  Cache metadata files:    " << stats.cache_files << "\n";
     std::cout << "  Other files:             " << stats.other_files << "\n";
     std::cout << "  --------------------------------\n";
-    std::cout << "  Total files:             " << (stats.object_files + stats.executable_files + stats.cache_files + stats.other_files) << "\n";
+    std::cout << "  Total files:             "
+              << (stats.object_files + stats.executable_files + stats.cache_files +
+                  stats.other_files)
+              << "\n";
     std::cout << "  Total size:              " << format_size(stats.total_size) << "\n\n";
 
     if (verbose) {
@@ -173,8 +177,8 @@ int run_cache_info(bool verbose) {
             auto size = fs::file_size(entry.path());
             auto age_days = get_file_age_days(entry.path());
 
-            std::cout << "  " << entry.path().filename().string()
-                      << " (" << format_size(size) << ", " << age_days << " days old)\n";
+            std::cout << "  " << entry.path().filename().string() << " (" << format_size(size)
+                      << ", " << age_days << " days old)\n";
 
             count++;
             if (count >= 20 && !verbose) {
@@ -205,7 +209,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
     if (clean_all) {
         std::cout << "Removing all cached files from: " << cache_dir << "\n";
     } else {
-        std::cout << "Removing files older than " << max_age_days << " days from: " << cache_dir << "\n";
+        std::cout << "Removing files older than " << max_age_days << " days from: " << cache_dir
+                  << "\n";
     }
 
     int removed_count = 0;
@@ -235,8 +240,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
             uintmax_t size = fs::file_size(file);
 
             if (verbose) {
-                std::cout << "  Removing: " << file.filename().string()
-                          << " (" << format_size(size) << ")\n";
+                std::cout << "  Removing: " << file.filename().string() << " (" << format_size(size)
+                          << ")\n";
             }
 
             fs::remove(file);
@@ -244,7 +249,8 @@ int run_cache_clean(bool clean_all, int max_age_days, bool verbose) {
             removed_size += size;
         }
 
-        std::cout << "\nCleaned " << removed_count << " files (" << format_size(removed_size) << ")\n";
+        std::cout << "\nCleaned " << removed_count << " files (" << format_size(removed_size)
+                  << ")\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error cleaning cache: " << e.what() << "\n";
@@ -296,15 +302,13 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
     }
 
     if (verbose) {
-        std::cout << "Cache size (" << format_size(total_size)
-                  << ") exceeds limit (" << format_size(max_size_bytes)
-                  << "), evicting old files...\n";
+        std::cout << "Cache size (" << format_size(total_size) << ") exceeds limit ("
+                  << format_size(max_size_bytes) << "), evicting old files...\n";
     }
 
     // Sort files by last access time (oldest first) - LRU eviction
-    std::sort(files.begin(), files.end(), [](const FileInfo& a, const FileInfo& b) {
-        return a.last_access < b.last_access;
-    });
+    std::sort(files.begin(), files.end(),
+              [](const FileInfo& a, const FileInfo& b) { return a.last_access < b.last_access; });
 
     // Remove files until under limit
     int removed_count = 0;
@@ -317,8 +321,8 @@ int enforce_cache_limit(uintmax_t max_size_mb, bool verbose) {
 
         try {
             if (verbose) {
-                std::cout << "  Evicting: " << file_info.path.filename().string()
-                          << " (" << format_size(file_info.size) << ")\n";
+                std::cout << "  Evicting: " << file_info.path.filename().string() << " ("
+                          << format_size(file_info.size) << ")\n";
             }
 
             fs::remove(file_info.path);

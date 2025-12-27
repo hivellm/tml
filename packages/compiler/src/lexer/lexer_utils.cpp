@@ -1,4 +1,5 @@
 #include "tml/lexer/lexer.hpp"
+
 #include <algorithm>
 
 namespace tml::lexer {
@@ -19,9 +20,7 @@ auto Lexer::tokenize() -> std::vector<Token> {
 
 auto Lexer::is_identifier_start(char32_t c) -> bool {
     // ASCII letters and underscore
-    if ((c >= 'a' && c <= 'z') ||
-        (c >= 'A' && c <= 'Z') ||
-        c == '_') {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
         return true;
     }
 
@@ -94,10 +93,14 @@ auto Lexer::decode_utf8() -> char32_t {
 }
 
 auto Lexer::utf8_char_length(char c) const -> size_t {
-    if ((c & 0x80) == 0) return 1;
-    if ((c & 0xE0) == 0xC0) return 2;
-    if ((c & 0xF0) == 0xE0) return 3;
-    if ((c & 0xF8) == 0xF0) return 4;
+    if ((c & 0x80) == 0)
+        return 1;
+    if ((c & 0xE0) == 0xC0)
+        return 2;
+    if ((c & 0xF0) == 0xE0)
+        return 3;
+    if ((c & 0xF8) == 0xF0)
+        return 4;
     return 1;
 }
 

@@ -1,10 +1,12 @@
 #include "parallel_build.hpp"
+
 #include "cmd_build.hpp"
 #include "compiler_setup.hpp"
 #include "utils.hpp"
+
+#include <algorithm>
 #include <iostream>
 #include <thread>
-#include <algorithm>
 
 namespace tml::cli {
 
@@ -22,9 +24,8 @@ std::shared_ptr<BuildJob> BuildQueue::pop(int timeout_ms) {
     std::unique_lock<std::mutex> lock(mutex);
 
     if (queue.empty()) {
-        cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this] {
-            return !queue.empty() || stop_flag;
-        });
+        cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                    [this] { return !queue.empty() || stop_flag; });
     }
 
     if (queue.empty()) {
@@ -56,8 +57,7 @@ size_t BuildQueue::size() {
 // ParallelBuilder Implementation
 // ============================================================================
 
-ParallelBuilder::ParallelBuilder(int num_threads)
-    : num_threads(num_threads) {
+ParallelBuilder::ParallelBuilder(int num_threads) : num_threads(num_threads) {
     if (this->num_threads == 0) {
         this->num_threads = std::thread::hardware_concurrency();
         if (this->num_threads == 0) {
@@ -90,12 +90,12 @@ bool ParallelBuilder::build(bool verbose) {
     // Launch worker threads
     std::vector<std::thread> workers;
     int actual_threads = (jobs.size() < static_cast<size_t>(num_threads))
-        ? static_cast<int>(jobs.size())
-        : num_threads;
+                             ? static_cast<int>(jobs.size())
+                             : num_threads;
 
     if (verbose) {
-        std::cout << "Compiling " << jobs.size() << " files with "
-                  << actual_threads << " threads...\n";
+        std::cout << "Compiling " << jobs.size() << " files with " << actual_threads
+                  << " threads...\n";
     }
 
     for (int i = 0; i < actual_threads; ++i) {
@@ -152,9 +152,8 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
     // TODO: Extract compilation logic into reusable function
 
     if (verbose) {
-        std::cout << "[" << (stats.completed + stats.failed + 1) << "/"
-                  << stats.total_files << "] Compiling "
-                  << job->source_file.filename().string() << "\n";
+        std::cout << "[" << (stats.completed + stats.failed + 1) << "/" << stats.total_files
+                  << "] Compiling " << job->source_file.filename().string() << "\n";
     }
 
     // Call existing build command

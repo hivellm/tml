@@ -1,7 +1,7 @@
-#include <tml/codegen/c_header_gen.hpp>
-#include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <sstream>
+#include <tml/codegen/c_header_gen.hpp>
 
 namespace tml::codegen {
 
@@ -9,21 +9,20 @@ CHeaderGen::CHeaderGen(const types::TypeEnv& env, CHeaderGenOptions options)
     : env_(env), options_(std::move(options)) {}
 
 std::string CHeaderGen::gen_guard_name(const std::string& module_name) {
-    std::string guard = options_.guard_prefix.empty()
-        ? "TML_" + module_name + "_H"
-        : options_.guard_prefix + "_H";
+    std::string guard =
+        options_.guard_prefix.empty() ? "TML_" + module_name + "_H" : options_.guard_prefix + "_H";
 
     // Convert to uppercase and replace invalid characters
-    std::transform(guard.begin(), guard.end(), guard.begin(),
-                   [](unsigned char c) -> char {
-                       return std::isalnum(c) ? static_cast<char>(std::toupper(c)) : '_';
-                   });
+    std::transform(guard.begin(), guard.end(), guard.begin(), [](unsigned char c) -> char {
+        return std::isalnum(c) ? static_cast<char>(std::toupper(c)) : '_';
+    });
 
     return guard;
 }
 
 std::string CHeaderGen::map_type_to_c(const parser::TypePtr& type) {
-    if (!type) return "void";
+    if (!type)
+        return "void";
 
     // Handle named types (I32, U32, F64, etc.)
     if (auto named = std::get_if<parser::NamedType>(&type->kind)) {
@@ -31,18 +30,30 @@ std::string CHeaderGen::map_type_to_c(const parser::TypePtr& type) {
             const std::string& type_name = named->path.segments[0];
 
             // Map primitive types
-            if (type_name == "I8")  return "int8_t";
-            if (type_name == "I16") return "int16_t";
-            if (type_name == "I32") return "int32_t";
-            if (type_name == "I64") return "int64_t";
-            if (type_name == "U8")  return "uint8_t";
-            if (type_name == "U16") return "uint16_t";
-            if (type_name == "U32") return "uint32_t";
-            if (type_name == "U64") return "uint64_t";
-            if (type_name == "F32") return "float";
-            if (type_name == "F64") return "double";
-            if (type_name == "Bool") return "bool";
-            if (type_name == "Str") return "const char*";
+            if (type_name == "I8")
+                return "int8_t";
+            if (type_name == "I16")
+                return "int16_t";
+            if (type_name == "I32")
+                return "int32_t";
+            if (type_name == "I64")
+                return "int64_t";
+            if (type_name == "U8")
+                return "uint8_t";
+            if (type_name == "U16")
+                return "uint16_t";
+            if (type_name == "U32")
+                return "uint32_t";
+            if (type_name == "U64")
+                return "uint64_t";
+            if (type_name == "F32")
+                return "float";
+            if (type_name == "F64")
+                return "double";
+            if (type_name == "Bool")
+                return "bool";
+            if (type_name == "Str")
+                return "const char*";
 
             // Return the name as-is for custom types
             return type_name;
@@ -86,7 +97,8 @@ std::string CHeaderGen::gen_func_decl(const parser::FuncDecl& func) {
         params << "void";
     } else {
         for (size_t i = 0; i < func.params.size(); ++i) {
-            if (i > 0) params << ", ";
+            if (i > 0)
+                params << ", ";
             std::string param_type = map_type_to_c(func.params[i].type);
 
             // Extract parameter name from pattern

@@ -1,15 +1,15 @@
 #ifndef TML_CLI_PARALLEL_BUILD_HPP
 #define TML_CLI_PARALLEL_BUILD_HPP
 
-#include <string>
-#include <vector>
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
 #include <memory>
-#include <atomic>
 #include <mutex>
-#include <condition_variable>
 #include <queue>
 #include <set>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -21,7 +21,7 @@ namespace tml::cli {
 struct BuildJob {
     fs::path source_file;
     fs::path output_file;
-    std::vector<std::string> dependencies;  // Module import names
+    std::vector<std::string> dependencies; // Module import names
     bool completed = false;
     bool failed = false;
     std::string error_message;
@@ -47,8 +47,7 @@ struct BuildStats {
 
     int64_t elapsed_ms() const {
         auto now = std::chrono::high_resolution_clock::now();
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - start_time).count();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
     }
 };
 
@@ -87,7 +86,9 @@ public:
     bool build(bool verbose = false);
 
     // Get build statistics
-    const BuildStats& get_stats() const { return stats; }
+    const BuildStats& get_stats() const {
+        return stats;
+    }
 
 private:
     int num_threads;

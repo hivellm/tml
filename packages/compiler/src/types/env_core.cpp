@@ -36,7 +36,8 @@ void TypeEnv::unify(TypePtr a, TypePtr b) {
 }
 
 auto TypeEnv::resolve(TypePtr type) -> TypePtr {
-    if (!type) return type;
+    if (!type)
+        return type;
 
     // Track visited type variables to detect cycles
     std::unordered_set<uint64_t> visited;
@@ -44,7 +45,8 @@ auto TypeEnv::resolve(TypePtr type) -> TypePtr {
 }
 
 auto TypeEnv::resolve_impl(TypePtr type, std::unordered_set<uint64_t>& visited) -> TypePtr {
-    if (!type) return type;
+    if (!type)
+        return type;
 
     if (type->is<TypeVar>()) {
         auto id = type->as<TypeVar>().id;

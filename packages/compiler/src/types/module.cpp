@@ -1,5 +1,7 @@
 #include "tml/types/module.hpp"
+
 #include "tml/types/env.hpp"
+
 #include <algorithm>
 
 namespace tml::types {
@@ -37,7 +39,8 @@ auto ModuleRegistry::list_modules() const -> std::vector<std::string> {
     return result;
 }
 
-auto ModuleRegistry::resolve_file_module(const std::string& path) const -> std::optional<std::string> {
+auto ModuleRegistry::resolve_file_module(const std::string& path) const
+    -> std::optional<std::string> {
     auto it = file_to_module_.find(path);
     if (it != file_to_module_.end()) {
         return it->second;
@@ -45,14 +48,17 @@ auto ModuleRegistry::resolve_file_module(const std::string& path) const -> std::
     return std::nullopt;
 }
 
-void ModuleRegistry::register_file_mapping(const std::string& file_path, const std::string& module_path) {
+void ModuleRegistry::register_file_mapping(const std::string& file_path,
+                                           const std::string& module_path) {
     file_to_module_[file_path] = module_path;
 }
 
-auto ModuleRegistry::lookup_function(const std::string& module_path, const std::string& symbol_name) const
+auto ModuleRegistry::lookup_function(const std::string& module_path,
+                                     const std::string& symbol_name) const
     -> std::optional<FuncSig> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     auto it = module->functions.find(symbol_name);
     if (it != module->functions.end()) {
@@ -61,10 +67,12 @@ auto ModuleRegistry::lookup_function(const std::string& module_path, const std::
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_struct(const std::string& module_path, const std::string& symbol_name) const
+auto ModuleRegistry::lookup_struct(const std::string& module_path,
+                                   const std::string& symbol_name) const
     -> std::optional<StructDef> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     auto it = module->structs.find(symbol_name);
     if (it != module->structs.end()) {
@@ -73,10 +81,11 @@ auto ModuleRegistry::lookup_struct(const std::string& module_path, const std::st
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_enum(const std::string& module_path, const std::string& symbol_name) const
-    -> std::optional<EnumDef> {
+auto ModuleRegistry::lookup_enum(const std::string& module_path,
+                                 const std::string& symbol_name) const -> std::optional<EnumDef> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     auto it = module->enums.find(symbol_name);
     if (it != module->enums.end()) {
@@ -85,10 +94,12 @@ auto ModuleRegistry::lookup_enum(const std::string& module_path, const std::stri
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_behavior(const std::string& module_path, const std::string& symbol_name) const
+auto ModuleRegistry::lookup_behavior(const std::string& module_path,
+                                     const std::string& symbol_name) const
     -> std::optional<BehaviorDef> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     auto it = module->behaviors.find(symbol_name);
     if (it != module->behaviors.end()) {
@@ -97,10 +108,12 @@ auto ModuleRegistry::lookup_behavior(const std::string& module_path, const std::
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_type_alias(const std::string& module_path, const std::string& symbol_name) const
+auto ModuleRegistry::lookup_type_alias(const std::string& module_path,
+                                       const std::string& symbol_name) const
     -> std::optional<TypePtr> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     auto it = module->type_aliases.find(symbol_name);
     if (it != module->type_aliases.end()) {
@@ -109,10 +122,12 @@ auto ModuleRegistry::lookup_type_alias(const std::string& module_path, const std
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_symbol(const std::string& module_path, const std::string& symbol_name) const
+auto ModuleRegistry::lookup_symbol(const std::string& module_path,
+                                   const std::string& symbol_name) const
     -> std::optional<ModuleSymbol> {
     auto module = get_module(module_path);
-    if (!module) return std::nullopt;
+    if (!module)
+        return std::nullopt;
 
     // Try each symbol type in order
     {

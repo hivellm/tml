@@ -1,13 +1,15 @@
 #include "compiler_setup.hpp"
-#include "utils.hpp"
+
 #include "tml/common.hpp"
-#include <iostream>
-#include <filesystem>
-#include <cstdlib>
-#include <mutex>
-#include <map>
-#include <thread>
+#include "utils.hpp"
+
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <iostream>
+#include <map>
+#include <mutex>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -84,15 +86,20 @@ MSVCInfo find_msvc() {
         }
         if (!sdk_ver.empty()) {
             std::string inc_base = sdk_base + "/Include/" + sdk_ver;
-            if (fs::exists(inc_base + "/ucrt")) info.includes.push_back(inc_base + "/ucrt");
-            if (fs::exists(inc_base + "/shared")) info.includes.push_back(inc_base + "/shared");
-            if (fs::exists(inc_base + "/um")) info.includes.push_back(inc_base + "/um");
+            if (fs::exists(inc_base + "/ucrt"))
+                info.includes.push_back(inc_base + "/ucrt");
+            if (fs::exists(inc_base + "/shared"))
+                info.includes.push_back(inc_base + "/shared");
+            if (fs::exists(inc_base + "/um"))
+                info.includes.push_back(inc_base + "/um");
 
             std::string lib_base = sdk_base + "/Lib/" + sdk_ver;
             bool use_x64 = info.cl_path.find("x64") != std::string::npos;
             std::string arch = use_x64 ? "x64" : "x86";
-            if (fs::exists(lib_base + "/ucrt/" + arch)) info.libs.push_back(lib_base + "/ucrt/" + arch);
-            if (fs::exists(lib_base + "/um/" + arch)) info.libs.push_back(lib_base + "/um/" + arch);
+            if (fs::exists(lib_base + "/ucrt/" + arch))
+                info.libs.push_back(lib_base + "/ucrt/" + arch);
+            if (fs::exists(lib_base + "/um/" + arch))
+                info.libs.push_back(lib_base + "/um/" + arch);
         }
     }
 
@@ -133,7 +140,8 @@ std::string find_runtime() {
     return "";
 }
 
-std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang, bool verbose) {
+std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang,
+                                    bool verbose) {
     fs::path c_path = runtime_c_path;
     fs::path obj_path = c_path.parent_path() / "essential";
 #ifdef _WIN32
@@ -153,8 +161,11 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
         if (verbose) {
             std::cout << "Pre-compiling runtime: " << c_path << "\n";
         }
-        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                                  to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+        std::string compile_cmd =
+            clang +
+            " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+            to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) +
+            "\"";
         int ret = std::system(compile_cmd.c_str());
         if (ret != 0) {
             return runtime_c_path;
@@ -165,7 +176,7 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
 }
 
 std::string ensure_c_compiled(const std::string& c_path_str, const std::string& cache_dir,
-                               const std::string& clang, bool verbose) {
+                              const std::string& clang, bool verbose) {
     fs::path c_path = c_path_str;
 
     // Create cache directory if needed
@@ -204,10 +215,13 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
 
     if (should_compile) {
         if (verbose) {
-            std::cout << "Compiling: " << c_path.filename().string() << " -> " << obj_path.filename().string() << "\n";
+            std::cout << "Compiling: " << c_path.filename().string() << " -> "
+                      << obj_path.filename().string() << "\n";
         }
-        std::string compile_cmd = clang + " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
-                                  obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+        std::string compile_cmd =
+            clang +
+            " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+            obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
 
         // Mark compilation as done
@@ -232,4 +246,4 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     return obj_path_str;
 }
 
-}
+} // namespace tml::cli

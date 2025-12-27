@@ -14,10 +14,10 @@ void BorrowChecker::create_borrow(PlaceId place, BorrowKind kind, Location loc) 
         .kind = kind,
         .start = loc,
         .end = std::nullopt,
-        .last_use = std::nullopt,  // NLL: Will be updated when reference is used
+        .last_use = std::nullopt, // NLL: Will be updated when reference is used
         .scope_depth = env_.scope_depth(),
         .lifetime = env_.next_lifetime_id(),
-        .ref_place = 0,  // Will be set when reference is stored in a variable
+        .ref_place = 0, // Will be set when reference is stored in a variable
     };
 
     state.active_borrows.push_back(borrow);
@@ -47,8 +47,10 @@ void BorrowChecker::release_borrow(PlaceId place, BorrowKind kind, Location loc)
     bool has_active_shared = false;
     for (const auto& borrow : state.active_borrows) {
         if (!borrow.end) {
-            if (borrow.kind == BorrowKind::Mutable) has_active_mut = true;
-            else has_active_shared = true;
+            if (borrow.kind == BorrowKind::Mutable)
+                has_active_mut = true;
+            else
+                has_active_shared = true;
         }
     }
 
@@ -69,8 +71,7 @@ void BorrowChecker::move_value(PlaceId place, Location loc) {
         return;
     }
 
-    if (state.state == OwnershipState::Borrowed ||
-        state.state == OwnershipState::MutBorrowed) {
+    if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
         error("cannot move out of `" + state.name + "` because it is borrowed", loc.span);
         return;
     }
@@ -128,32 +129,42 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
 
     if (kind == BorrowKind::Mutable) {
         if (!state.is_mutable && !is_reborrow) {
-            error("cannot borrow `" + state.name + "` as mutable because it is not declared as mutable", loc.span);
+            error("cannot borrow `" + state.name +
+                      "` as mutable because it is not declared as mutable",
+                  loc.span);
             return;
         }
 
         // For reborrows from mutable references, allow creating new mutable borrows
         if (is_reborrow && state.borrowed_from->second == BorrowKind::Shared) {
-            error("cannot reborrow `" + state.name + "` as mutable because it was borrowed as immutable", loc.span);
+            error("cannot reborrow `" + state.name +
+                      "` as mutable because it was borrowed as immutable",
+                  loc.span);
             return;
         }
 
         if (state.state == OwnershipState::Borrowed && !is_reborrow) {
-            error("cannot borrow `" + state.name + "` as mutable because it is also borrowed as immutable", loc.span);
+            error("cannot borrow `" + state.name +
+                      "` as mutable because it is also borrowed as immutable",
+                  loc.span);
             return;
         }
 
         // Allow two-phase borrows: during method calls, we can have a mutable borrow
         // that is temporarily shared while evaluating arguments
         if (state.state == OwnershipState::MutBorrowed && !is_two_phase_borrow_active_) {
-            error("cannot borrow `" + state.name + "` as mutable more than once at a time", loc.span);
+            error("cannot borrow `" + state.name + "` as mutable more than once at a time",
+                  loc.span);
             return;
         }
     } else {
         // Shared borrow
         // Allow shared reborrow from mutable borrow (coercion &mut T -> &T)
-        if (state.state == OwnershipState::MutBorrowed && !is_reborrow && !is_two_phase_borrow_active_) {
-            error("cannot borrow `" + state.name + "` as immutable because it is also borrowed as mutable", loc.span);
+        if (state.state == OwnershipState::MutBorrowed && !is_reborrow &&
+            !is_two_phase_borrow_active_) {
+            error("cannot borrow `" + state.name +
+                      "` as immutable because it is also borrowed as mutable",
+                  loc.span);
             return;
         }
     }
@@ -207,7 +218,7 @@ void BorrowChecker::error(const std::string& message, SourceSpan span) {
 }
 
 void BorrowChecker::error_with_note(const std::string& message, SourceSpan span,
-                                     const std::string& note, SourceSpan note_span) {
+                                    const std::string& note, SourceSpan note_span) {
     errors_.push_back(BorrowError{
         .message = message,
         .span = span,
@@ -219,6 +230,5 @@ void BorrowChecker::error_with_note(const std::string& message, SourceSpan span,
 auto BorrowChecker::current_location(SourceSpan span) const -> Location {
     return Location{current_stmt_, span};
 }
-
 
 } // namespace tml::borrow

@@ -10,7 +10,7 @@ namespace tml::codegen {
 // Loops until no new instantiations are added (handles recursive types)
 
 void LLVMIRGen::generate_pending_instantiations() {
-    const int MAX_ITERATIONS = 100;  // Prevent infinite loops
+    const int MAX_ITERATIONS = 100; // Prevent infinite loops
     int iterations = 0;
 
     // First pass: generate ALL type definitions (structs and enums)
@@ -91,16 +91,16 @@ void LLVMIRGen::generate_pending_instantiations() {
                 }
             }
         }
-        if (new_types) changed = true;
+        if (new_types)
+            changed = true;
     }
 }
 
 // Request enum instantiation - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
-auto LLVMIRGen::require_enum_instantiation(
-    const std::string& base_name,
-    const std::vector<types::TypePtr>& type_args
-) -> std::string {
+auto LLVMIRGen::require_enum_instantiation(const std::string& base_name,
+                                           const std::vector<types::TypePtr>& type_args)
+    -> std::string {
     std::string mangled = mangle_struct_name(base_name, type_args);
 
     auto it = enum_instantiations_.find(mangled);
@@ -109,10 +109,8 @@ auto LLVMIRGen::require_enum_instantiation(
     }
 
     enum_instantiations_[mangled] = GenericInstantiation{
-        base_name,
-        type_args,
-        mangled,
-        true  // Mark as generated since we'll generate it immediately
+        base_name, type_args, mangled,
+        true // Mark as generated since we'll generate it immediately
     };
 
     // Register enum variants and generate type definition immediately
@@ -135,19 +133,16 @@ auto LLVMIRGen::require_enum_instantiation(
 }
 
 // Placeholder for function instantiation (will implement when adding generic functions)
-auto LLVMIRGen::require_func_instantiation(
-    const std::string& base_name,
-    const std::vector<types::TypePtr>& type_args
-) -> std::string {
+auto LLVMIRGen::require_func_instantiation(const std::string& base_name,
+                                           const std::vector<types::TypePtr>& type_args)
+    -> std::string {
     std::string mangled = mangle_func_name(base_name, type_args);
 
     // Register the instantiation if not already registered
     if (func_instantiations_.find(mangled) == func_instantiations_.end()) {
         func_instantiations_[mangled] = GenericInstantiation{
-            base_name,
-            type_args,
-            mangled,
-            false  // not generated yet
+            base_name, type_args, mangled,
+            false // not generated yet
         };
     }
 

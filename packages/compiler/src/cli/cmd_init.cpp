@@ -1,9 +1,11 @@
 #include "cmd_init.hpp"
+
 #include "utils.hpp"
-#include <iostream>
-#include <fstream>
-#include <filesystem>
+
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 
 namespace fs = std::filesystem;
 

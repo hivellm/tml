@@ -27,7 +27,7 @@ void TypeEnv::define_func(FuncSig sig) {
         if (!module_registry_->has_module(ffi_mod)) {
             Module ffi_module;
             ffi_module.name = ffi_mod;
-            ffi_module.file_path = "";  // FFI modules have no source file
+            ffi_module.file_path = ""; // FFI modules have no source file
             module_registry_->register_module(ffi_mod, ffi_module);
         }
 

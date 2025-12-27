@@ -78,7 +78,8 @@ void sleep_ms(int32_t ms) {
 #ifdef _WIN32
 void sleep_us(int64_t us) {
     DWORD ms = (DWORD)(us / 1000);
-    if (ms == 0 && us > 0) ms = 1;
+    if (ms == 0 && us > 0)
+        ms = 1;
     Sleep(ms);
 }
 #else

@@ -21,17 +21,17 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
     if (expr.is<parser::BinaryExpr>()) {
         const auto& bin = expr.as<parser::BinaryExpr>();
         switch (bin.op) {
-            case parser::BinaryOp::Eq:
-            case parser::BinaryOp::Ne:
-            case parser::BinaryOp::Lt:
-            case parser::BinaryOp::Gt:
-            case parser::BinaryOp::Le:
-            case parser::BinaryOp::Ge:
-            case parser::BinaryOp::And:
-            case parser::BinaryOp::Or:
-                return true;
-            default:
-                return false;
+        case parser::BinaryOp::Eq:
+        case parser::BinaryOp::Ne:
+        case parser::BinaryOp::Lt:
+        case parser::BinaryOp::Gt:
+        case parser::BinaryOp::Le:
+        case parser::BinaryOp::Ge:
+        case parser::BinaryOp::And:
+        case parser::BinaryOp::Or:
+            return true;
+        default:
+            return false;
         }
     }
     if (expr.is<parser::UnaryExpr>()) {
@@ -47,7 +47,8 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
                 return true;
             }
             // Channel functions that return bool
-            if (name == "channel_send" || name == "channel_try_send" || name == "channel_try_recv") {
+            if (name == "channel_send" || name == "channel_try_send" ||
+                name == "channel_try_recv") {
                 return true;
             }
             // Mutex functions that return bool
@@ -55,7 +56,8 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
                 return true;
             }
             // Collection functions that return bool
-            if (name == "hashmap_has" || name == "hashmap_remove" || name == "list_is_empty" || name == "str_eq") {
+            if (name == "hashmap_has" || name == "hashmap_remove" || name == "list_is_empty" ||
+                name == "str_eq") {
                 return true;
             }
         }
@@ -64,9 +66,8 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
     if (expr.is<parser::MethodCallExpr>()) {
         const auto& call = expr.as<parser::MethodCallExpr>();
         const auto& method = call.method;
-        if (method == "is_empty" || method == "isEmpty" ||
-            method == "has" || method == "contains" ||
-            method == "remove") {
+        if (method == "is_empty" || method == "isEmpty" || method == "has" ||
+            method == "contains" || method == "remove") {
             return true;
         }
     }
@@ -74,7 +75,8 @@ static bool is_bool_expr_static(const parser::Expr& expr) {
 }
 
 // Helper to check if an expression is boolean-typed (with variable lookup)
-bool is_bool_expr(const parser::Expr& expr, const std::unordered_map<std::string, LLVMIRGen::VarInfo>& locals) {
+bool is_bool_expr(const parser::Expr& expr,
+                  const std::unordered_map<std::string, LLVMIRGen::VarInfo>& locals) {
     // Check for bool-typed variable
     if (expr.is<parser::IdentExpr>()) {
         const auto& ident = expr.as<parser::IdentExpr>().name;
@@ -137,7 +139,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (let.type_annotation) {
         var_type = llvm_type_ptr(*let.type_annotation);
         is_struct = var_type.starts_with("%struct.");
-        is_ptr = (var_type == "ptr");  // Collection types like List[T] are pointers
+        is_ptr = (var_type == "ptr"); // Collection types like List[T] are pointers
     } else if (let.init.has_value()) {
         // Infer type from initializer
         const auto& init = *let.init.value();
@@ -169,7 +171,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 const auto& path_expr = call.callee->as<parser::PathExpr>();
                 // Build full path name like "Instant::now"
                 for (size_t i = 0; i < path_expr.path.segments.size(); ++i) {
-                    if (i > 0) fn_name += "::";
+                    if (i > 0)
+                        fn_name += "::";
                     fn_name += path_expr.path.segments[i];
                 }
             } else if (call.callee->is<parser::IdentExpr>()) {
@@ -179,7 +182,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 auto sig_opt = env_.lookup_func(fn_name);
                 if (sig_opt && sig_opt->return_type) {
                     if (sig_opt->return_type->is<types::PrimitiveType>()) {
-                        types::PrimitiveKind kind = sig_opt->return_type->as<types::PrimitiveType>().kind;
+                        types::PrimitiveKind kind =
+                            sig_opt->return_type->as<types::PrimitiveType>().kind;
                         if (kind == types::PrimitiveKind::Str) {
                             var_type = "ptr";
                             is_ptr = true;
@@ -211,7 +215,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // Handle dyn coercion: let d: dyn Describable = c (where c is Counter)
     if (var_type.starts_with("%dyn.") && let.init.has_value()) {
         // Extract behavior name from %dyn.Describable
-        std::string behavior_name = var_type.substr(5);  // Skip "%dyn."
+        std::string behavior_name = var_type.substr(5); // Skip "%dyn."
 
         // Get the concrete type name from the initializer
         std::string concrete_type;
@@ -224,9 +228,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 // Get type from locals_
                 std::string local_type = it->second.type;
                 if (local_type.starts_with("%struct.")) {
-                    concrete_type = local_type.substr(8);  // Skip "%struct."
+                    concrete_type = local_type.substr(8); // Skip "%struct."
                 }
-                data_ptr = it->second.reg;  // Use alloca pointer
+                data_ptr = it->second.reg; // Use alloca pointer
             }
         }
 
@@ -240,12 +244,14 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                 // Store data pointer (field 0)
                 std::string data_field = fresh_reg();
-                emit_line("  " + data_field + " = getelementptr " + var_type + ", ptr " + dyn_alloca + ", i32 0, i32 0");
+                emit_line("  " + data_field + " = getelementptr " + var_type + ", ptr " +
+                          dyn_alloca + ", i32 0, i32 0");
                 emit_line("  store ptr " + data_ptr + ", ptr " + data_field);
 
                 // Store vtable pointer (field 1)
                 std::string vtable_field = fresh_reg();
-                emit_line("  " + vtable_field + " = getelementptr " + var_type + ", ptr " + dyn_alloca + ", i32 0, i32 1");
+                emit_line("  " + vtable_field + " = getelementptr " + var_type + ", ptr " +
+                          dyn_alloca + ", i32 0, i32 1");
                 emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
 
                 locals_[var_name] = VarInfo{dyn_alloca, var_type};
@@ -262,10 +268,12 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
         // Check if this is a unit variant of a generic enum
         for (const auto& [gen_enum_name, gen_enum_decl] : pending_generic_enums_) {
-            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size(); ++variant_idx) {
+            for (size_t variant_idx = 0; variant_idx < gen_enum_decl->variants.size();
+                 ++variant_idx) {
                 const auto& variant = gen_enum_decl->variants[variant_idx];
                 // Check if this is a unit variant (no tuple_fields and no struct_fields)
-                bool is_unit = !variant.tuple_fields.has_value() && !variant.struct_fields.has_value();
+                bool is_unit =
+                    !variant.tuple_fields.has_value() && !variant.struct_fields.has_value();
 
                 if (variant.name == ident_init.name && is_unit) {
                     // Found matching unit variant - use var_type from annotation
@@ -279,7 +287,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
                     // Set tag (field 0)
                     std::string tag_ptr = fresh_reg();
-                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + var_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + var_type + ", ptr " +
+                              enum_val + ", i32 0, i32 0");
                     emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                     // Load the complete enum value
@@ -307,7 +316,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 VarInfo info{closure_fn, "ptr", nullptr, std::nullopt};
                 if (last_closure_captures_.has_value()) {
                     info.closure_captures = last_closure_captures_;
-                    last_closure_captures_ = std::nullopt;  // Clear after use
+                    last_closure_captures_ = std::nullopt; // Clear after use
                 }
                 locals_[var_name] = info;
                 return;
@@ -342,7 +351,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             expected_enum_type_ = var_type;
         }
         init_val = gen_expr(*let.init.value());
-        expected_enum_type_.clear();  // Clear context after expression
+        expected_enum_type_.clear(); // Clear context after expression
         // If type wasn't explicitly annotated and expression has a known type, use it
         if (!let.type_annotation && last_expr_type_ != "i32") {
             if (last_expr_type_ == "double" || last_expr_type_ == "i64" ||

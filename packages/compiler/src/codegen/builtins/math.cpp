@@ -48,7 +48,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string arr = gen_expr(*call.args[0]);
             std::string len = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i64 @simd_sum_i32(ptr " + arr + ", i64 " + len + ")");
+            emit_line("  " + result + " = call i64 @simd_sum_i32(ptr " + arr + ", i64 " + len +
+                      ")");
             return result;
         }
         return "0";
@@ -60,7 +61,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string arr = gen_expr(*call.args[0]);
             std::string len = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @simd_sum_f64(ptr " + arr + ", i64 " + len + ")");
+            emit_line("  " + result + " = call double @simd_sum_f64(ptr " + arr + ", i64 " + len +
+                      ")");
             return result;
         }
         return "0.0";
@@ -73,7 +75,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string b = gen_expr(*call.args[1]);
             std::string len = gen_expr(*call.args[2]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @simd_dot_f64(ptr " + a + ", ptr " + b + ", i64 " + len + ")");
+            emit_line("  " + result + " = call double @simd_dot_f64(ptr " + a + ", ptr " + b +
+                      ", i64 " + len + ")");
             return result;
         }
         return "0.0";
@@ -90,7 +93,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @float_to_fixed(double " + double_val + ", i32 " + decimals + ")");
+            emit_line("  " + result + " = call ptr @float_to_fixed(double " + double_val +
+                      ", i32 " + decimals + ")");
             return result;
         }
         return "0";
@@ -104,7 +108,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @float_to_precision(double " + double_val + ", i32 " + precision + ")");
+            emit_line("  " + result + " = call ptr @float_to_precision(double " + double_val +
+                      ", i32 " + precision + ")");
             return result;
         }
         return "0";
@@ -142,9 +147,10 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             // Convert to double if needed
             if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
                 double_val = fresh_reg();
-                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value + " to double");
+                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value +
+                          " to double");
             } else {
-                double_val = value;  // Already a double
+                double_val = value; // Already a double
             }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @float_to_int(double " + double_val + ")");
@@ -200,7 +206,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = sitofp i32 " + value + " to double");
             std::string double_result = fresh_reg();
-            emit_line("  " + double_result + " = call double @float_abs(double " + double_val + ")");
+            emit_line("  " + double_result + " = call double @float_abs(double " + double_val +
+                      ")");
             // Convert back to i32
             std::string result = fresh_reg();
             emit_line("  " + result + " = fptosi double " + double_result + " to i32");
@@ -217,9 +224,10 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             // Convert to double if needed
             if (last_expr_type_ == "i32" || last_expr_type_ == "i64") {
                 double_val = fresh_reg();
-                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value + " to double");
+                emit_line("  " + double_val + " = sitofp " + last_expr_type_ + " " + value +
+                          " to double");
             } else {
-                double_val = value;  // Already a double
+                double_val = value; // Already a double
             }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call double @float_sqrt(double " + double_val + ")");
@@ -239,12 +247,14 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             // Convert base to double if needed
             if (base_type == "i32" || base_type == "i64") {
                 double_base = fresh_reg();
-                emit_line("  " + double_base + " = sitofp " + base_type + " " + base + " to double");
+                emit_line("  " + double_base + " = sitofp " + base_type + " " + base +
+                          " to double");
             } else {
-                double_base = base;  // Already a double
+                double_base = base; // Already a double
             }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @float_pow(double " + double_base + ", i32 " + exp + ")");
+            emit_line("  " + result + " = call double @float_pow(double " + double_base + ", i32 " +
+                      exp + ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -333,7 +343,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string f = gen_expr(*call.args[0]);
             std::string sign = gen_expr(*call.args[1]);
             std::string int_result = fresh_reg();
-            emit_line("  " + int_result + " = call i32 @is_inf(double " + f + ", i32 " + sign + ")");
+            emit_line("  " + int_result + " = call i32 @is_inf(double " + f + ", i32 " + sign +
+                      ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = icmp ne i32 " + int_result + ", 0");
             last_expr_type_ = "i1";
@@ -364,7 +375,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string x = gen_expr(*call.args[0]);
             std::string y = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @nextafter(double " + x + ", double " + y + ")");
+            emit_line("  " + result + " = call double @nextafter(double " + x + ", double " + y +
+                      ")");
             last_expr_type_ = "double";
             return result;
         }
@@ -377,7 +389,8 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             std::string x = gen_expr(*call.args[0]);
             std::string y = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call float @nextafter32(float " + x + ", float " + y + ")");
+            emit_line("  " + result + " = call float @nextafter32(float " + x + ", float " + y +
+                      ")");
             last_expr_type_ = "float";
             return result;
         }

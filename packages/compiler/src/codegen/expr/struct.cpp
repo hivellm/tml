@@ -30,7 +30,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             // Check if field type is a generic parameter
             if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
                 const auto& ftype = field_decl.type->as<parser::NamedType>();
-                std::string type_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                std::string type_name =
+                    ftype.path.segments.empty() ? "" : ftype.path.segments.back();
                 auto gen_it = inferred_generics.find(type_name);
                 if (gen_it != inferred_generics.end() && !gen_it->second) {
                     // This field's type is a generic parameter - infer from value
@@ -90,11 +91,13 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 for (const auto& gp : nested_decl->generics) {
                     nested_inferred[gp.name] = nullptr;
                 }
-                for (size_t ni = 0; ni < nested.fields.size() && ni < nested_decl->fields.size(); ++ni) {
+                for (size_t ni = 0; ni < nested.fields.size() && ni < nested_decl->fields.size();
+                     ++ni) {
                     const auto& nf = nested_decl->fields[ni];
                     if (nf.type && nf.type->is<parser::NamedType>()) {
                         const auto& nft = nf.type->as<parser::NamedType>();
-                        std::string nft_name = nft.path.segments.empty() ? "" : nft.path.segments.back();
+                        std::string nft_name =
+                            nft.path.segments.empty() ? "" : nft.path.segments.back();
                         auto ngen_it = nested_inferred.find(nft_name);
                         if (ngen_it != nested_inferred.end() && !ngen_it->second) {
                             ngen_it->second = infer_expr_type(*nested.fields[ni].second);
@@ -105,7 +108,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                     auto inf = nested_inferred[gp.name];
                     nested_type_args.push_back(inf ? inf : types::make_i32());
                 }
-                std::string nested_mangled = require_struct_instantiation(nested_base, nested_type_args);
+                std::string nested_mangled =
+                    require_struct_instantiation(nested_base, nested_type_args);
                 field_type = "%struct." + nested_mangled;
             } else {
                 field_type = "%struct." + nested_base;
@@ -122,7 +126,8 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         }
 
         std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr + ", i32 0, i32 " + std::to_string(field_idx));
+        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
+                  ", i32 0, i32 " + std::to_string(field_idx));
         emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
     }
 
@@ -148,7 +153,8 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
             const auto& field_decl = decl->fields[fi];
             if (field_decl.type && field_decl.type->is<parser::NamedType>()) {
                 const auto& ftype = field_decl.type->as<parser::NamedType>();
-                std::string type_name = ftype.path.segments.empty() ? "" : ftype.path.segments.back();
+                std::string type_name =
+                    ftype.path.segments.empty() ? "" : ftype.path.segments.back();
                 auto gen_it = inferred_generics.find(type_name);
                 if (gen_it != inferred_generics.end() && !gen_it->second) {
                     gen_it->second = infer_expr_type(*s.fields[fi].second);
@@ -173,7 +179,8 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
 }
 
 // Helper to get field index for struct types - uses dynamic registry
-auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::string& field_name) -> int {
+auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::string& field_name)
+    -> int {
     // First check the dynamic struct_fields_ registry
     auto it = struct_fields_.find(struct_name);
     if (it != struct_fields_.end()) {
@@ -186,19 +193,25 @@ auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::strin
 
     // Fallback for hardcoded types (legacy support)
     if (struct_name == "Point") {
-        if (field_name == "x") return 0;
-        if (field_name == "y") return 1;
+        if (field_name == "x")
+            return 0;
+        if (field_name == "y")
+            return 1;
     }
     if (struct_name == "Rectangle") {
-        if (field_name == "origin") return 0;
-        if (field_name == "width") return 1;
-        if (field_name == "height") return 2;
+        if (field_name == "origin")
+            return 0;
+        if (field_name == "width")
+            return 1;
+        if (field_name == "height")
+            return 2;
     }
     return 0;
 }
 
 // Helper to get field type for struct types - uses dynamic registry
-auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string& field_name) -> std::string {
+auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string& field_name)
+    -> std::string {
     // First check the dynamic struct_fields_ registry
     auto it = struct_fields_.find(struct_name);
     if (it != struct_fields_.end()) {
@@ -262,7 +275,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
                 // Get pointer to nested field
                 std::string nested_ptr = fresh_reg();
-                emit_line("  " + nested_ptr + " = getelementptr " + outer_type + ", ptr " + outer_ptr + ", i32 0, i32 " + std::to_string(nested_idx));
+                emit_line("  " + nested_ptr + " = getelementptr " + outer_type + ", ptr " +
+                          outer_ptr + ", i32 0, i32 " + std::to_string(nested_idx));
 
                 struct_type = nested_type;
                 struct_ptr = nested_ptr;
@@ -287,7 +301,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
 
     // Use getelementptr to access field, then load
     std::string field_ptr = fresh_reg();
-    emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+    emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr +
+              ", i32 0, i32 " + std::to_string(field_idx));
 
     std::string result = fresh_reg();
     emit_line("  " + result + " = load " + field_type + ", ptr " + field_ptr);

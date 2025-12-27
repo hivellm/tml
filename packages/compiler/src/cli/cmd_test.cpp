@@ -1,23 +1,25 @@
 #include "cmd_test.hpp"
-#include "cmd_debug.hpp"
+
 #include "cmd_build.hpp"
+#include "cmd_debug.hpp"
 #include "compiler_setup.hpp"
-#include "utils.hpp"
 #include "tml/common.hpp"
-#include <iostream>
-#include <fstream>
-#include <filesystem>
+#include "utils.hpp"
+
 #include <algorithm>
-#include <cstdlib>
-#include <thread>
-#include <mutex>
 #include <atomic>
-#include <vector>
-#include <future>
 #include <chrono>
-#include <map>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <future>
 #include <iomanip>
+#include <iostream>
+#include <map>
+#include <mutex>
 #include <sstream>
+#include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -50,16 +52,36 @@ struct ColorOutput {
 
     ColorOutput(bool use_color) : enabled(use_color) {}
 
-    const char* reset() const { return enabled ? colors::reset : ""; }
-    const char* bold() const { return enabled ? colors::bold : ""; }
-    const char* dim() const { return enabled ? colors::dim : ""; }
-    const char* red() const { return enabled ? colors::red : ""; }
-    const char* green() const { return enabled ? colors::green : ""; }
-    const char* yellow() const { return enabled ? colors::yellow : ""; }
-    const char* blue() const { return enabled ? colors::blue : ""; }
-    const char* cyan() const { return enabled ? colors::cyan : ""; }
-    const char* gray() const { return enabled ? colors::gray : ""; }
-    const char* magenta() const { return enabled ? colors::magenta : ""; }
+    const char* reset() const {
+        return enabled ? colors::reset : "";
+    }
+    const char* bold() const {
+        return enabled ? colors::bold : "";
+    }
+    const char* dim() const {
+        return enabled ? colors::dim : "";
+    }
+    const char* red() const {
+        return enabled ? colors::red : "";
+    }
+    const char* green() const {
+        return enabled ? colors::green : "";
+    }
+    const char* yellow() const {
+        return enabled ? colors::yellow : "";
+    }
+    const char* blue() const {
+        return enabled ? colors::blue : "";
+    }
+    const char* cyan() const {
+        return enabled ? colors::cyan : "";
+    }
+    const char* gray() const {
+        return enabled ? colors::gray : "";
+    }
+    const char* magenta() const {
+        return enabled ? colors::magenta : "";
+    }
 };
 
 std::string format_duration(int64_t ms) {
@@ -89,7 +111,7 @@ std::string extract_group_name(const std::string& file_path) {
     for (size_t i = 0; i < parts.size(); ++i) {
         if (parts[i] == "tests" || parts[i] == "tml") {
             // Take the next directory as the group name
-            if (i + 1 < parts.size() - 1) {  // -1 to exclude the filename
+            if (i + 1 < parts.size() - 1) { // -1 to exclude the filename
                 std::string group = parts[i + 1];
                 // If the next part is also a directory (not the file), include it
                 if (i + 2 < parts.size() - 1) {
@@ -232,12 +254,13 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
     if (opts.nocapture) {
         result.exit_code = run_run(test_file, empty_args, opts.release, false, opts.no_cache);
     } else {
-        result.exit_code = run_run_quiet(test_file, empty_args, opts.release, &captured_output, false, opts.no_cache);
+        result.exit_code = run_run_quiet(test_file, empty_args, opts.release, &captured_output,
+                                         false, opts.no_cache);
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
-    result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        end_time - start_time).count();
+    result.duration_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
     // Check for soft timeout (just flag it, test already completed)
     if (result.duration_ms > opts.timeout_seconds * 1000) {
@@ -286,12 +309,8 @@ struct TestResultCollector {
 };
 
 // Thread worker for parallel test execution
-void test_worker_new(
-    const std::vector<std::string>& test_files,
-    std::atomic<size_t>& current_index,
-    TestResultCollector& collector,
-    const TestOptions& opts
-) {
+void test_worker_new(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
+                     TestResultCollector& collector, const TestOptions& opts) {
     while (true) {
         size_t index = current_index.fetch_add(1);
         if (index >= test_files.size()) {
@@ -305,11 +324,8 @@ void test_worker_new(
 }
 
 // Print test results in Vitest style
-void print_results_vitest_style(
-    const std::vector<TestResult>& results,
-    const TestOptions& opts,
-    int64_t total_duration_ms
-) {
+void print_results_vitest_style(const std::vector<TestResult>& results, const TestOptions& opts,
+                                int64_t total_duration_ms) {
     ColorOutput c(!opts.no_color);
 
     // Group results by directory
@@ -348,12 +364,10 @@ void print_results_vitest_style(
         const char* icon = all_passed ? "+" : "x";
         const char* icon_color = all_passed ? c.green() : c.red();
 
-        std::cout << " " << icon_color << icon << c.reset() << " "
-                  << c.bold() << group.name << c.reset()
-                  << " " << c.gray() << "(" << group.results.size() << " test"
-                  << (group.results.size() != 1 ? "s" : "") << ")" << c.reset()
-                  << " " << c.dim() << format_duration(group.total_duration_ms) << c.reset()
-                  << "\n";
+        std::cout << " " << icon_color << icon << c.reset() << " " << c.bold() << group.name
+                  << c.reset() << " " << c.gray() << "(" << group.results.size() << " test"
+                  << (group.results.size() != 1 ? "s" : "") << ")" << c.reset() << " " << c.dim()
+                  << format_duration(group.total_duration_ms) << c.reset() << "\n";
 
         // Print individual tests in group (only if verbose or there are failures)
         if (opts.verbose || group.failed > 0) {
@@ -361,8 +375,8 @@ void print_results_vitest_style(
                 const char* test_icon = result.passed ? "+" : "x";
                 const char* test_color = result.passed ? c.green() : c.red();
 
-                std::cout << "   " << test_color << test_icon << c.reset()
-                          << " " << result.test_name;
+                std::cout << "   " << test_color << test_icon << c.reset() << " "
+                          << result.test_name;
 
                 if (!result.passed) {
                     std::cout << " " << c.red() << "[" << result.error_message << "]" << c.reset();
@@ -394,8 +408,8 @@ void print_results_vitest_style(
     if (total_failed > 0) {
         std::cout << c.red() << c.bold() << total_failed << " failed" << c.reset() << " | ";
     }
-    std::cout << c.green() << c.bold() << total_passed << " passed" << c.reset()
-              << " " << c.gray() << "(" << results.size() << ")" << c.reset() << "\n";
+    std::cout << c.green() << c.bold() << total_passed << " passed" << c.reset() << " " << c.gray()
+              << "(" << results.size() << ")" << c.reset() << "\n";
 
     std::cout << " " << c.bold() << "Duration    " << c.reset()
               << format_duration(total_duration_ms) << "\n";
@@ -452,18 +466,18 @@ int run_test(int argc, char* argv[], bool verbose) {
 
     if (test_files.empty()) {
         if (!opts.quiet) {
-            std::cout << c.yellow() << "No tests matched the specified pattern(s)" << c.reset() << "\n";
+            std::cout << c.yellow() << "No tests matched the specified pattern(s)" << c.reset()
+                      << "\n";
         }
         return 0;
     }
 
     // Print header
     if (!opts.quiet) {
-        std::cout << "\n " << c.cyan() << c.bold() << "TML" << c.reset()
-                  << " " << c.dim() << "v0.1.0" << c.reset() << "\n";
-        std::cout << "\n " << c.dim() << "Running " << test_files.size()
-                  << " test file" << (test_files.size() != 1 ? "s" : "")
-                  << "..." << c.reset() << "\n";
+        std::cout << "\n " << c.cyan() << c.bold() << "TML" << c.reset() << " " << c.dim()
+                  << "v0.1.0" << c.reset() << "\n";
+        std::cout << "\n " << c.dim() << "Running " << test_files.size() << " test file"
+                  << (test_files.size() != 1 ? "s" : "") << "..." << c.reset() << "\n";
     }
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -474,7 +488,8 @@ int run_test(int argc, char* argv[], bool verbose) {
     unsigned int num_threads = opts.test_threads;
     if (num_threads == 0) {
         num_threads = std::thread::hardware_concurrency();
-        if (num_threads == 0) num_threads = 4;  // Fallback
+        if (num_threads == 0)
+            num_threads = 4; // Fallback
     }
 
     // Single-threaded mode for verbose/nocapture or if only 1 test
@@ -492,13 +507,8 @@ int run_test(int argc, char* argv[], bool verbose) {
         num_threads = std::min(num_threads, static_cast<unsigned int>(test_files.size()));
 
         for (unsigned int i = 0; i < num_threads; ++i) {
-            threads.emplace_back(
-                test_worker_new,
-                std::ref(test_files),
-                std::ref(current_index),
-                std::ref(collector),
-                std::ref(opts)
-            );
+            threads.emplace_back(test_worker_new, std::ref(test_files), std::ref(current_index),
+                                 std::ref(collector), std::ref(opts));
         }
 
         for (auto& thread : threads) {
@@ -507,8 +517,8 @@ int run_test(int argc, char* argv[], bool verbose) {
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
-    int64_t total_duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        end_time - start_time).count();
+    int64_t total_duration_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
     // Print results
     if (!opts.quiet) {

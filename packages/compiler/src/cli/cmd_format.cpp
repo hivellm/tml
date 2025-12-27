@@ -1,13 +1,15 @@
 #include "cmd_format.hpp"
-#include "utils.hpp"
+
 #include "tml/common.hpp"
+#include "tml/format/formatter.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/parser/parser.hpp"
-#include "tml/format/formatter.hpp"
-#include <iostream>
-#include <fstream>
+#include "utils.hpp"
+
 #include <filesystem>
+#include <fstream>
+#include <iostream>
 
 namespace fs = std::filesystem;
 using namespace tml;
@@ -29,9 +31,8 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -43,9 +44,8 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -87,4 +87,4 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
     return 0;
 }
 
-}
+} // namespace tml::cli

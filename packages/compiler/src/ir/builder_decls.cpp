@@ -13,7 +13,8 @@ auto IRBuilder::build_func(const parser::FuncDecl& func) -> IRFunc {
     if (!func.params.empty()) {
         sig = "(";
         for (size_t i = 0; i < func.params.size(); ++i) {
-            if (i > 0) sig += ",";
+            if (i > 0)
+                sig += ",";
             // Simplified type representation
             sig += "param";
         }
@@ -85,9 +86,8 @@ auto IRBuilder::build_struct(const parser::StructDecl& st) -> IRType {
         field.vis = visibility_from_ast(f.vis);
         fields.push_back(std::move(field));
     }
-    std::sort(fields.begin(), fields.end(), [](const auto& a, const auto& b) {
-        return a.name < b.name;
-    });
+    std::sort(fields.begin(), fields.end(),
+              [](const auto& a, const auto& b) { return a.name < b.name; });
     struct_type.fields = std::move(fields);
     ir_type.kind = std::move(struct_type);
 
@@ -120,9 +120,8 @@ auto IRBuilder::build_enum(const parser::EnumDecl& en) -> IRType {
         }
         variants.push_back(std::move(variant));
     }
-    std::sort(variants.begin(), variants.end(), [](const auto& a, const auto& b) {
-        return a.name < b.name;
-    });
+    std::sort(variants.begin(), variants.end(),
+              [](const auto& a, const auto& b) { return a.name < b.name; });
     enum_type.variants = std::move(variants);
     ir_type.kind = std::move(enum_type);
 
@@ -172,9 +171,8 @@ auto IRBuilder::build_trait(const parser::TraitDecl& trait) -> IRBehavior {
         }
         methods.push_back(std::move(method));
     }
-    std::sort(methods.begin(), methods.end(), [](const auto& a, const auto& b) {
-        return a.name < b.name;
-    });
+    std::sort(methods.begin(), methods.end(),
+              [](const auto& a, const auto& b) { return a.name < b.name; });
     ir_behavior.methods = std::move(methods);
 
     return ir_behavior;
@@ -234,9 +232,8 @@ auto IRBuilder::build_impl(const parser::ImplDecl& impl) -> IRImpl {
         }
         methods.push_back(std::move(method));
     }
-    std::sort(methods.begin(), methods.end(), [](const auto& a, const auto& b) {
-        return a.name < b.name;
-    });
+    std::sort(methods.begin(), methods.end(),
+              [](const auto& a, const auto& b) { return a.name < b.name; });
     ir_impl.methods = std::move(methods);
 
     return ir_impl;
@@ -251,6 +248,5 @@ auto IRBuilder::build_const(const parser::ConstDecl& cst) -> IRConst {
     ir_const.value = build_expr(*cst.value);
     return ir_const;
 }
-
 
 } // namespace tml::ir

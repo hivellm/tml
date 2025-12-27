@@ -1,10 +1,10 @@
 #ifndef TML_CLI_RLIB_HPP
 #define TML_CLI_RLIB_HPP
 
-#include <string>
-#include <vector>
 #include <filesystem>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -14,29 +14,29 @@ namespace tml::cli {
  * Represents a public export from a TML module
  */
 struct RlibExport {
-    std::string name;        // TML identifier (e.g., "add")
-    std::string symbol;      // Mangled symbol (e.g., "tml_add")
-    std::string type;        // Type signature (e.g., "func(I32, I32) -> I32")
-    bool is_public;          // Visibility (true for pub items)
+    std::string name;   // TML identifier (e.g., "add")
+    std::string symbol; // Mangled symbol (e.g., "tml_add")
+    std::string type;   // Type signature (e.g., "func(I32, I32) -> I32")
+    bool is_public;     // Visibility (true for pub items)
 };
 
 /**
  * Represents a compiled module in an RLIB
  */
 struct RlibModule {
-    std::string name;                    // Module name (e.g., "mylib")
-    std::string file;                    // Object file name (e.g., "mylib.obj")
-    std::string hash;                    // Content hash of source
-    std::vector<RlibExport> exports;     // Public symbols
+    std::string name;                // Module name (e.g., "mylib")
+    std::string file;                // Object file name (e.g., "mylib.obj")
+    std::string hash;                // Content hash of source
+    std::vector<RlibExport> exports; // Public symbols
 };
 
 /**
  * Represents a dependency of an RLIB
  */
 struct RlibDependency {
-    std::string name;        // Dependency name
-    std::string version;     // Required version (semver)
-    std::string hash;        // Content hash of dependency .rlib
+    std::string name;    // Dependency name
+    std::string version; // Required version (semver)
+    std::string hash;    // Content hash of dependency .rlib
 };
 
 /**
@@ -52,9 +52,9 @@ struct RlibLibraryInfo {
  * Complete RLIB metadata structure
  */
 struct RlibMetadata {
-    std::string format_version;              // Metadata format version
-    RlibLibraryInfo library;                 // Library info
-    std::vector<RlibModule> modules;         // Compiled modules
+    std::string format_version;               // Metadata format version
+    RlibLibraryInfo library;                  // Library info
+    std::vector<RlibModule> modules;          // Compiled modules
     std::vector<RlibDependency> dependencies; // Dependencies
 
     /**
@@ -83,7 +83,7 @@ struct RlibMetadata {
  */
 struct RlibCreateOptions {
     bool verbose = false;
-    std::string archiver = "lib.exe";  // "lib.exe" on Windows, "ar" on Linux
+    std::string archiver = "lib.exe"; // "lib.exe" on Windows, "ar" on Linux
 };
 
 /**
@@ -104,12 +104,8 @@ struct RlibResult {
  * @param options Creation options
  * @return Result of operation
  */
-RlibResult create_rlib(
-    const std::vector<fs::path>& object_files,
-    const RlibMetadata& metadata,
-    const fs::path& output_rlib,
-    const RlibCreateOptions& options = {}
-);
+RlibResult create_rlib(const std::vector<fs::path>& object_files, const RlibMetadata& metadata,
+                       const fs::path& output_rlib, const RlibCreateOptions& options = {});
 
 /**
  * Read metadata from an existing .rlib file
@@ -126,10 +122,7 @@ std::optional<RlibMetadata> read_rlib_metadata(const fs::path& rlib_file);
  * @param temp_dir Temporary directory for extraction
  * @return List of extracted object file paths
  */
-std::vector<fs::path> extract_rlib_objects(
-    const fs::path& rlib_file,
-    const fs::path& temp_dir
-);
+std::vector<fs::path> extract_rlib_objects(const fs::path& rlib_file, const fs::path& temp_dir);
 
 /**
  * Extract a single file from .rlib archive
@@ -139,11 +132,8 @@ std::vector<fs::path> extract_rlib_objects(
  * @param output_path Where to write extracted file
  * @return True on success
  */
-bool extract_rlib_member(
-    const fs::path& rlib_file,
-    const std::string& member_name,
-    const fs::path& output_path
-);
+bool extract_rlib_member(const fs::path& rlib_file, const std::string& member_name,
+                         const fs::path& output_path);
 
 /**
  * Calculate SHA256 hash of a file

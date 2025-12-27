@@ -1,8 +1,8 @@
 // TML Runtime - Math Functions
 // Matches: codegen/builtins/math.cpp
 
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,17 +12,19 @@
 // Compiler barrier to prevent optimization
 #ifdef _MSC_VER
 #pragma optimize("", off)
-int32_t black_box_i32(int32_t value) { return value; }
-int64_t black_box_i64(int64_t value) { return value; }
+int32_t black_box_i32(int32_t value) {
+    return value;
+}
+int64_t black_box_i64(int64_t value) {
+    return value;
+}
 #pragma optimize("", on)
 #else
-__attribute__((noinline))
-int32_t black_box_i32(int32_t value) {
+__attribute__((noinline)) int32_t black_box_i32(int32_t value) {
     __asm__ volatile("" : "+r"(value));
     return value;
 }
-__attribute__((noinline))
-int64_t black_box_i64(int64_t value) {
+__attribute__((noinline)) int64_t black_box_i64(int64_t value) {
     __asm__ volatile("" : "+r"(value));
     return value;
 }
@@ -63,16 +65,20 @@ static char float_buffer[64];
 
 // float_to_fixed(value: F64, decimals: I32) -> Str
 const char* float_to_fixed(double value, int32_t decimals) {
-    if (decimals < 0) decimals = 0;
-    if (decimals > 20) decimals = 20;
+    if (decimals < 0)
+        decimals = 0;
+    if (decimals > 20)
+        decimals = 20;
     snprintf(float_buffer, sizeof(float_buffer), "%.*f", decimals, value);
     return float_buffer;
 }
 
 // float_to_precision(value: F64, precision: I32) -> Str
 const char* float_to_precision(double value, int32_t precision) {
-    if (precision < 1) precision = 1;
-    if (precision > 21) precision = 21;
+    if (precision < 1)
+        precision = 1;
+    if (precision > 21)
+        precision = 21;
     snprintf(float_buffer, sizeof(float_buffer), "%.*g", precision, value);
     return float_buffer;
 }
@@ -129,28 +135,40 @@ double float_pow(double base, int32_t exp) {
 
 // float32_bits(f: F32) -> U32
 uint32_t float32_bits(float f) {
-    union { float f; uint32_t u; } conv;
+    union {
+        float f;
+        uint32_t u;
+    } conv;
     conv.f = f;
     return conv.u;
 }
 
 // float32_from_bits(b: U32) -> F32
 float float32_from_bits(uint32_t b) {
-    union { uint32_t u; float f; } conv;
+    union {
+        uint32_t u;
+        float f;
+    } conv;
     conv.u = b;
     return conv.f;
 }
 
 // float64_bits(f: F64) -> U64
 uint64_t float64_bits(double f) {
-    union { double d; uint64_t u; } conv;
+    union {
+        double d;
+        uint64_t u;
+    } conv;
     conv.d = f;
     return conv.u;
 }
 
 // float64_from_bits(b: U64) -> F64
 double float64_from_bits(uint64_t b) {
-    union { uint64_t u; double d; } conv;
+    union {
+        uint64_t u;
+        double d;
+    } conv;
     conv.u = b;
     return conv.d;
 }

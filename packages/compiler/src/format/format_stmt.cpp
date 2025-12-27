@@ -22,7 +22,8 @@ void Formatter::format_var_stmt(const parser::VarStmt& var) {
 
     if (var.type_annotation.has_value()) {
         output_ << ":";
-        if (options_.space_after_colon) output_ << " ";
+        if (options_.space_after_colon)
+            output_ << " ";
         output_ << format_type_ptr(var.type_annotation.value());
     }
 
@@ -35,7 +36,8 @@ void Formatter::format_let_stmt(const parser::LetStmt& let) {
 
     if (let.type_annotation.has_value()) {
         output_ << ":";
-        if (options_.space_after_colon) output_ << " ";
+        if (options_.space_after_colon)
+            output_ << " ";
         output_ << format_type_ptr(let.type_annotation.value());
     }
 

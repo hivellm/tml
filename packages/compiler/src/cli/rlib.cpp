@@ -1,16 +1,18 @@
 #include "rlib.hpp"
+
 #include "utils.hpp"
-#include <iostream>
-#include <fstream>
-#include <sstream>
+
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <sstream>
 
 // For SHA256 hashing
 #ifdef _WIN32
-#include <windows.h>
 #include <wincrypt.h>
+#include <windows.h>
 #pragma comment(lib, "advapi32.lib")
 #else
 #include <openssl/sha.h>
@@ -29,20 +31,34 @@ std::string json_escape(const std::string& str) {
 
     for (char c : str) {
         switch (c) {
-            case '"':  result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\b': result += "\\b"; break;
-            case '\f': result += "\\f"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    result += "\\u";
-                    result += "0000";  // Simple placeholder for low control chars
-                } else {
-                    result += c;
-                }
+        case '"':
+            result += "\\\"";
+            break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '\b':
+            result += "\\b";
+            break;
+        case '\f':
+            result += "\\f";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            if (c < 0x20) {
+                result += "\\u";
+                result += "0000"; // Simple placeholder for low control chars
+            } else {
+                result += c;
+            }
         }
     }
 
@@ -55,16 +71,19 @@ std::string json_escape(const std::string& str) {
 std::string extract_json_string(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\"";
     size_t pos = json.find(search);
-    if (pos == std::string::npos) return "";
+    if (pos == std::string::npos)
+        return "";
 
     // Find the opening quote after the colon
     pos = json.find("\"", pos + search.length());
-    if (pos == std::string::npos) return "";
+    if (pos == std::string::npos)
+        return "";
     pos++; // Skip opening quote
 
     // Find the closing quote
     size_t end = json.find("\"", pos);
-    if (end == std::string::npos) return "";
+    if (end == std::string::npos)
+        return "";
 
     return json.substr(pos, end - pos);
 }
@@ -75,14 +94,17 @@ std::string extract_json_string(const std::string& json, const std::string& key)
 bool extract_json_bool(const std::string& json, const std::string& key) {
     std::string search = "\"" + key + "\"";
     size_t pos = json.find(search);
-    if (pos == std::string::npos) return false;
+    if (pos == std::string::npos)
+        return false;
 
     pos = json.find(":", pos);
-    if (pos == std::string::npos) return false;
+    if (pos == std::string::npos)
+        return false;
 
     // Skip whitespace
     pos++;
-    while (pos < json.length() && std::isspace(json[pos])) pos++;
+    while (pos < json.length() && std::isspace(json[pos]))
+        pos++;
 
     return json.substr(pos, 4) == "true";
 }
@@ -93,7 +115,8 @@ bool extract_json_bool(const std::string& json, const std::string& key) {
 std::string exec_command(const std::string& cmd) {
     std::string result;
     FILE* pipe = _popen(cmd.c_str(), "r");
-    if (!pipe) return result;
+    if (!pipe)
+        return result;
 
     char buffer[128];
     while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
@@ -163,13 +186,15 @@ std::string RlibMetadata::to_json() const {
             oss << "          \"type\": \"" << json_escape(exp.type) << "\",\n";
             oss << "          \"public\": " << (exp.is_public ? "true" : "false") << "\n";
             oss << "        }";
-            if (j < mod.exports.size() - 1) oss << ",";
+            if (j < mod.exports.size() - 1)
+                oss << ",";
             oss << "\n";
         }
 
         oss << "      ]\n";
         oss << "    }";
-        if (i < modules.size() - 1) oss << ",";
+        if (i < modules.size() - 1)
+            oss << ",";
         oss << "\n";
     }
     oss << "  ],\n";
@@ -183,7 +208,8 @@ std::string RlibMetadata::to_json() const {
         oss << "      \"version\": \"" << json_escape(dep.version) << "\",\n";
         oss << "      \"hash\": \"" << json_escape(dep.hash) << "\"\n";
         oss << "    }";
-        if (i < dependencies.size() - 1) oss << ",";
+        if (i < dependencies.size() - 1)
+            oss << ",";
         oss << "\n";
     }
     oss << "  ]\n";
@@ -221,15 +247,8 @@ std::string calculate_file_hash(const fs::path& file_path) {
 
 #ifdef _WIN32
     // Windows: Use CryptoAPI
-    HANDLE hFile = CreateFileW(
-        file_path.wstring().c_str(),
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_FLAG_SEQUENTIAL_SCAN,
-        nullptr
-    );
+    HANDLE hFile = CreateFileW(file_path.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                               OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
 
     if (hFile == INVALID_HANDLE_VALUE) {
         return "";
@@ -284,7 +303,8 @@ std::string calculate_file_hash(const fs::path& file_path) {
 #else
     // Linux/macOS: Use OpenSSL
     std::ifstream file(file_path, std::ios::binary);
-    if (!file) return "";
+    if (!file)
+        return "";
 
     SHA256_CTX sha256;
     SHA256_Init(&sha256);
@@ -313,12 +333,8 @@ std::string calculate_file_hash(const fs::path& file_path) {
 // RLIB Creation
 // ============================================================================
 
-RlibResult create_rlib(
-    const std::vector<fs::path>& object_files,
-    const RlibMetadata& metadata,
-    const fs::path& output_rlib,
-    const RlibCreateOptions& options
-) {
+RlibResult create_rlib(const std::vector<fs::path>& object_files, const RlibMetadata& metadata,
+                       const fs::path& output_rlib, const RlibCreateOptions& options) {
     // Create temporary directory for intermediate files
     fs::path temp_dir = fs::temp_directory_path() / "tml_rlib_temp";
     fs::create_directories(temp_dir);
@@ -399,27 +415,23 @@ RlibResult create_rlib(
 // RLIB Reading
 // ============================================================================
 
-bool extract_rlib_member(
-    const fs::path& rlib_file,
-    const std::string& member_name,
-    const fs::path& output_path
-) {
+bool extract_rlib_member(const fs::path& rlib_file, const std::string& member_name,
+                         const fs::path& output_path) {
     if (!fs::exists(rlib_file)) {
         return false;
     }
 
 #ifdef _WIN32
     // Windows: Use lib.exe to extract
-    std::string cmd = "lib.exe /NOLOGO /EXTRACT:\"" + member_name +
-                      "\" /OUT:\"" + output_path.string() +
-                      "\" \"" + rlib_file.string() + "\" 2>nul";
+    std::string cmd = "lib.exe /NOLOGO /EXTRACT:\"" + member_name + "\" /OUT:\"" +
+                      output_path.string() + "\" \"" + rlib_file.string() + "\" 2>nul";
 
     int result = std::system(cmd.c_str());
     return result == 0 && fs::exists(output_path);
 #else
     // Linux/macOS: Use ar to extract
-    std::string cmd = "ar p \"" + rlib_file.string() + "\" \"" + member_name +
-                      "\" > \"" + output_path.string() + "\"";
+    std::string cmd = "ar p \"" + rlib_file.string() + "\" \"" + member_name + "\" > \"" +
+                      output_path.string() + "\"";
 
     int result = std::system(cmd.c_str());
     return result == 0 && fs::exists(output_path);
@@ -468,10 +480,7 @@ std::optional<RlibMetadata> read_rlib_metadata(const fs::path& rlib_file) {
     }
 }
 
-std::vector<fs::path> extract_rlib_objects(
-    const fs::path& rlib_file,
-    const fs::path& temp_dir
-) {
+std::vector<fs::path> extract_rlib_objects(const fs::path& rlib_file, const fs::path& temp_dir) {
     std::vector<fs::path> result;
 
     if (!fs::exists(rlib_file)) {

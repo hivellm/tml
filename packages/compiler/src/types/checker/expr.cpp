@@ -1,8 +1,9 @@
 // Type checker expression checking
 // Handles: check_expr, check_literal, check_ident, check_binary, check_unary, etc.
 
-#include "tml/types/checker.hpp"
 #include "tml/lexer/token.hpp"
+#include "tml/types/checker.hpp"
+
 #include <algorithm>
 
 namespace tml::types {
@@ -15,129 +16,122 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual);
 // Helper to get primitive name as string
 static std::string primitive_to_string(PrimitiveKind kind) {
     switch (kind) {
-        case PrimitiveKind::I8: return "I8";
-        case PrimitiveKind::I16: return "I16";
-        case PrimitiveKind::I32: return "I32";
-        case PrimitiveKind::I64: return "I64";
-        case PrimitiveKind::I128: return "I128";
-        case PrimitiveKind::U8: return "U8";
-        case PrimitiveKind::U16: return "U16";
-        case PrimitiveKind::U32: return "U32";
-        case PrimitiveKind::U64: return "U64";
-        case PrimitiveKind::U128: return "U128";
-        case PrimitiveKind::F32: return "F32";
-        case PrimitiveKind::F64: return "F64";
-        case PrimitiveKind::Bool: return "Bool";
-        case PrimitiveKind::Char: return "Char";
-        case PrimitiveKind::Str: return "Str";
-        case PrimitiveKind::Unit: return "Unit";
-        case PrimitiveKind::Never: return "Never";
+    case PrimitiveKind::I8:
+        return "I8";
+    case PrimitiveKind::I16:
+        return "I16";
+    case PrimitiveKind::I32:
+        return "I32";
+    case PrimitiveKind::I64:
+        return "I64";
+    case PrimitiveKind::I128:
+        return "I128";
+    case PrimitiveKind::U8:
+        return "U8";
+    case PrimitiveKind::U16:
+        return "U16";
+    case PrimitiveKind::U32:
+        return "U32";
+    case PrimitiveKind::U64:
+        return "U64";
+    case PrimitiveKind::U128:
+        return "U128";
+    case PrimitiveKind::F32:
+        return "F32";
+    case PrimitiveKind::F64:
+        return "F64";
+    case PrimitiveKind::Bool:
+        return "Bool";
+    case PrimitiveKind::Char:
+        return "Char";
+    case PrimitiveKind::Str:
+        return "Str";
+    case PrimitiveKind::Unit:
+        return "Unit";
+    case PrimitiveKind::Never:
+        return "Never";
     }
     return "unknown";
 }
 
 auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
-    return std::visit([this, &expr](const auto& e) -> TypePtr {
-        using T = std::decay_t<decltype(e)>;
+    return std::visit(
+        [this, &expr](const auto& e) -> TypePtr {
+            using T = std::decay_t<decltype(e)>;
 
-        if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
-            return check_literal(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IdentExpr>) {
-            return check_ident(e, expr.span);
-        }
-        else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
-            return check_binary(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
-            return check_unary(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::CallExpr>) {
-            return check_call(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
-            return check_method_call(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
-            return check_field_access(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IndexExpr>) {
-            return check_index(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
-            return check_block(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IfExpr>) {
-            return check_if(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::TernaryExpr>) {
-            return check_ternary(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IfLetExpr>) {
-            return check_if_let(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
-            return check_when(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
-            return check_loop(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ForExpr>) {
-            return check_for(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
-            return check_return(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::BreakExpr>) {
-            return check_break(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ContinueExpr>) {
-            return make_never();
-        }
-        else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
-            return check_tuple(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
-            return check_array(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::StructExpr>) {
-            return check_struct_expr(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
-            return check_closure(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::TryExpr>) {
-            return check_try(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::PathExpr>) {
-            return check_path(e, expr.span);
-        }
-        else if constexpr (std::is_same_v<T, parser::RangeExpr>) {
-            return check_range(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
-            return check_interp_string(e);
-        }
-        else {
-            return make_unit();
-        }
-    }, expr.kind);
+            if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
+                return check_literal(e);
+            } else if constexpr (std::is_same_v<T, parser::IdentExpr>) {
+                return check_ident(e, expr.span);
+            } else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
+                return check_binary(e);
+            } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
+                return check_unary(e);
+            } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
+                return check_call(e);
+            } else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
+                return check_method_call(e);
+            } else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
+                return check_field_access(e);
+            } else if constexpr (std::is_same_v<T, parser::IndexExpr>) {
+                return check_index(e);
+            } else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
+                return check_block(e);
+            } else if constexpr (std::is_same_v<T, parser::IfExpr>) {
+                return check_if(e);
+            } else if constexpr (std::is_same_v<T, parser::TernaryExpr>) {
+                return check_ternary(e);
+            } else if constexpr (std::is_same_v<T, parser::IfLetExpr>) {
+                return check_if_let(e);
+            } else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
+                return check_when(e);
+            } else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
+                return check_loop(e);
+            } else if constexpr (std::is_same_v<T, parser::ForExpr>) {
+                return check_for(e);
+            } else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
+                return check_return(e);
+            } else if constexpr (std::is_same_v<T, parser::BreakExpr>) {
+                return check_break(e);
+            } else if constexpr (std::is_same_v<T, parser::ContinueExpr>) {
+                return make_never();
+            } else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
+                return check_tuple(e);
+            } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
+                return check_array(e);
+            } else if constexpr (std::is_same_v<T, parser::StructExpr>) {
+                return check_struct_expr(e);
+            } else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
+                return check_closure(e);
+            } else if constexpr (std::is_same_v<T, parser::TryExpr>) {
+                return check_try(e);
+            } else if constexpr (std::is_same_v<T, parser::PathExpr>) {
+                return check_path(e, expr.span);
+            } else if constexpr (std::is_same_v<T, parser::RangeExpr>) {
+                return check_range(e);
+            } else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
+                return check_interp_string(e);
+            } else {
+                return make_unit();
+            }
+        },
+        expr.kind);
 }
 
 auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
     switch (lit.token.kind) {
-        case lexer::TokenKind::IntLiteral:
-            return make_i64();
-        case lexer::TokenKind::FloatLiteral:
-            return make_f64();
-        case lexer::TokenKind::StringLiteral:
-            return make_str();
-        case lexer::TokenKind::CharLiteral:
-            return make_primitive(PrimitiveKind::Char);
-        case lexer::TokenKind::BoolLiteral:
-            return make_bool();
-        default:
-            return make_unit();
+    case lexer::TokenKind::IntLiteral:
+        return make_i64();
+    case lexer::TokenKind::FloatLiteral:
+        return make_f64();
+    case lexer::TokenKind::StringLiteral:
+        return make_str();
+    case lexer::TokenKind::CharLiteral:
+        return make_primitive(PrimitiveKind::Char);
+    case lexer::TokenKind::BoolLiteral:
+        return make_bool();
+    default:
+        return make_unit();
     }
 }
 
@@ -213,7 +207,8 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
         if (!similar.empty()) {
             msg += ". Did you mean: ";
             for (size_t i = 0; i < similar.size(); ++i) {
-                if (i > 0) msg += ", ";
+                if (i > 0)
+                    msg += ", ";
                 msg += "`" + similar[i] + "`";
             }
             msg += "?";
@@ -233,7 +228,7 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
         TypePtr resolved_right = env_.resolve(right);
         if (!types_compatible(resolved_left, resolved_right)) {
             error(std::string("Binary operator '") + op_name + "' requires matching types, found " +
-                  type_to_string(resolved_left) + " and " + type_to_string(resolved_right),
+                      type_to_string(resolved_left) + " and " + type_to_string(resolved_right),
                   binary.left->span);
         }
     };
@@ -243,52 +238,53 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
             const auto& ident = binary.left->as<parser::IdentExpr>();
             auto sym = env_.current_scope()->lookup(ident.name);
             if (sym && !sym->is_mutable) {
-                error("Cannot assign to immutable variable '" + ident.name + "'", binary.left->span);
+                error("Cannot assign to immutable variable '" + ident.name + "'",
+                      binary.left->span);
             }
         }
     };
 
     switch (binary.op) {
-        case parser::BinaryOp::Add:
-        case parser::BinaryOp::Sub:
-        case parser::BinaryOp::Mul:
-        case parser::BinaryOp::Div:
-        case parser::BinaryOp::Mod:
-            check_binary_types("+");
-            return left;
-        case parser::BinaryOp::Lt:
-        case parser::BinaryOp::Le:
-        case parser::BinaryOp::Gt:
-        case parser::BinaryOp::Ge:
-        case parser::BinaryOp::Eq:
-        case parser::BinaryOp::Ne:
-            check_binary_types("comparison");
-            return make_bool();
-        case parser::BinaryOp::And:
-        case parser::BinaryOp::Or:
-            return make_bool();
-        case parser::BinaryOp::BitAnd:
-        case parser::BinaryOp::BitOr:
-        case parser::BinaryOp::BitXor:
-        case parser::BinaryOp::Shl:
-        case parser::BinaryOp::Shr:
-            return left;
-        case parser::BinaryOp::Assign:
-            check_assignable();
-            check_binary_types("=");
-            return make_unit();
-        case parser::BinaryOp::AddAssign:
-        case parser::BinaryOp::SubAssign:
-        case parser::BinaryOp::MulAssign:
-        case parser::BinaryOp::DivAssign:
-        case parser::BinaryOp::ModAssign:
-        case parser::BinaryOp::BitAndAssign:
-        case parser::BinaryOp::BitOrAssign:
-        case parser::BinaryOp::BitXorAssign:
-        case parser::BinaryOp::ShlAssign:
-        case parser::BinaryOp::ShrAssign:
-            check_assignable();
-            return make_unit();
+    case parser::BinaryOp::Add:
+    case parser::BinaryOp::Sub:
+    case parser::BinaryOp::Mul:
+    case parser::BinaryOp::Div:
+    case parser::BinaryOp::Mod:
+        check_binary_types("+");
+        return left;
+    case parser::BinaryOp::Lt:
+    case parser::BinaryOp::Le:
+    case parser::BinaryOp::Gt:
+    case parser::BinaryOp::Ge:
+    case parser::BinaryOp::Eq:
+    case parser::BinaryOp::Ne:
+        check_binary_types("comparison");
+        return make_bool();
+    case parser::BinaryOp::And:
+    case parser::BinaryOp::Or:
+        return make_bool();
+    case parser::BinaryOp::BitAnd:
+    case parser::BinaryOp::BitOr:
+    case parser::BinaryOp::BitXor:
+    case parser::BinaryOp::Shl:
+    case parser::BinaryOp::Shr:
+        return left;
+    case parser::BinaryOp::Assign:
+        check_assignable();
+        check_binary_types("=");
+        return make_unit();
+    case parser::BinaryOp::AddAssign:
+    case parser::BinaryOp::SubAssign:
+    case parser::BinaryOp::MulAssign:
+    case parser::BinaryOp::DivAssign:
+    case parser::BinaryOp::ModAssign:
+    case parser::BinaryOp::BitAndAssign:
+    case parser::BinaryOp::BitOrAssign:
+    case parser::BinaryOp::BitXorAssign:
+    case parser::BinaryOp::ShlAssign:
+    case parser::BinaryOp::ShrAssign:
+        check_assignable();
+        return make_unit();
     }
     return make_unit();
 }
@@ -297,28 +293,28 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
     auto operand = check_expr(*unary.operand);
 
     switch (unary.op) {
-        case parser::UnaryOp::Neg:
-            return operand;
-        case parser::UnaryOp::Not:
-            return make_bool();
-        case parser::UnaryOp::BitNot:
-            return operand;
-        case parser::UnaryOp::Ref:
-            return make_ref(operand, false);
-        case parser::UnaryOp::RefMut:
-            return make_ref(operand, true);
-        case parser::UnaryOp::Deref:
-            if (operand->is<RefType>()) {
-                return operand->as<RefType>().inner;
-            }
-            if (operand->is<PtrType>()) {
-                return operand->as<PtrType>().inner;
-            }
-            error("Cannot dereference non-reference type", unary.operand->span);
-            return make_unit();
-        case parser::UnaryOp::Inc:
-        case parser::UnaryOp::Dec:
-            return operand;
+    case parser::UnaryOp::Neg:
+        return operand;
+    case parser::UnaryOp::Not:
+        return make_bool();
+    case parser::UnaryOp::BitNot:
+        return operand;
+    case parser::UnaryOp::Ref:
+        return make_ref(operand, false);
+    case parser::UnaryOp::RefMut:
+        return make_ref(operand, true);
+    case parser::UnaryOp::Deref:
+        if (operand->is<RefType>()) {
+            return operand->as<RefType>().inner;
+        }
+        if (operand->is<PtrType>()) {
+            return operand->as<PtrType>().inner;
+        }
+        error("Cannot dereference non-reference type", unary.operand->span);
+        return make_unit();
+    case parser::UnaryOp::Inc:
+    case parser::UnaryOp::Dec:
+        return operand;
     }
     return make_unit();
 }
@@ -379,8 +375,10 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
 
                         for (const auto& behavior : constraint.required_behaviors) {
                             if (!env_.type_implements(type_name, behavior)) {
-                                error("Type '" + type_name + "' does not implement behavior '" + behavior +
-                                      "' required by constraint on " + constraint.type_param, call.callee->span);
+                                error("Type '" + type_name + "' does not implement behavior '" +
+                                          behavior + "' required by constraint on " +
+                                          constraint.type_param,
+                                      call.callee->span);
                             }
                         }
                     }
@@ -397,8 +395,9 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                 if (variant_name == ident.name) {
                     if (call.args.size() != payload_types.size()) {
                         error("Enum variant '" + variant_name + "' expects " +
-                              std::to_string(payload_types.size()) + " arguments, but got " +
-                              std::to_string(call.args.size()), call.callee->span);
+                                  std::to_string(payload_types.size()) + " arguments, but got " +
+                                  std::to_string(call.args.size()),
+                              call.callee->span);
                         return make_unit();
                     }
 
@@ -481,7 +480,8 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                     return method.return_type;
                 }
             }
-            error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'", call.receiver->span);
+            error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
+                  call.receiver->span);
         }
     }
     return make_unit();
@@ -500,7 +500,8 @@ auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr 
         if (struct_def) {
             std::unordered_map<std::string, TypePtr> subs;
             if (!struct_def->type_params.empty() && !named.type_args.empty()) {
-                for (size_t i = 0; i < struct_def->type_params.size() && i < named.type_args.size(); ++i) {
+                for (size_t i = 0; i < struct_def->type_params.size() && i < named.type_args.size();
+                     ++i) {
                     subs[struct_def->type_params[i]] = named.type_args[i];
                 }
             }

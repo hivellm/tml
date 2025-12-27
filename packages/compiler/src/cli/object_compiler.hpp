@@ -1,9 +1,9 @@
 #ifndef TML_CLI_OBJECT_COMPILER_HPP
 #define TML_CLI_OBJECT_COMPILER_HPP
 
-#include <string>
 #include <filesystem>
 #include <optional>
+#include <string>
 
 namespace fs = std::filesystem;
 
@@ -31,10 +31,10 @@ struct LinkResult {
  * Compilation options for object file generation
  */
 struct ObjectCompileOptions {
-    int optimization_level = 3;     // -O3 by default
-    bool debug_info = false;        // Include debug information
-    bool position_independent = false;  // -fPIC for shared libraries
-    bool verbose = false;           // Print commands
+    int optimization_level = 3;        // -O3 by default
+    bool debug_info = false;           // Include debug information
+    bool position_independent = false; // -fPIC for shared libraries
+    bool verbose = false;              // Print commands
 };
 
 /**
@@ -42,14 +42,14 @@ struct ObjectCompileOptions {
  */
 struct LinkOptions {
     enum class OutputType {
-        Executable,     // .exe
-        StaticLib,      // .a/.lib
-        DynamicLib      // .so/.dll
+        Executable, // .exe
+        StaticLib,  // .a/.lib
+        DynamicLib  // .so/.dll
     };
 
     OutputType output_type = OutputType::Executable;
     bool verbose = false;
-    std::vector<fs::path> additional_objects;  // Runtime libs, etc.
+    std::vector<fs::path> additional_objects; // Runtime libs, etc.
     std::vector<std::string> link_flags;
 };
 
@@ -62,12 +62,10 @@ struct LinkOptions {
  * @param options Compilation options
  * @return Compilation result with object file path or error
  */
-ObjectCompileResult compile_ll_to_object(
-    const fs::path& ll_file,
-    const std::optional<fs::path>& output_file,
-    const std::string& clang_path,
-    const ObjectCompileOptions& options
-);
+ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
+                                         const std::optional<fs::path>& output_file,
+                                         const std::string& clang_path,
+                                         const ObjectCompileOptions& options);
 
 /**
  * Batch compilation result
@@ -87,12 +85,9 @@ struct BatchCompileResult {
  * @param num_threads Number of parallel threads (0 = auto)
  * @return Batch compilation result
  */
-BatchCompileResult compile_ll_batch(
-    const std::vector<fs::path>& ll_files,
-    const std::string& clang_path,
-    const ObjectCompileOptions& options,
-    int num_threads = 0
-);
+BatchCompileResult compile_ll_batch(const std::vector<fs::path>& ll_files,
+                                    const std::string& clang_path,
+                                    const ObjectCompileOptions& options, int num_threads = 0);
 
 /**
  * Link object files to create final output
@@ -103,12 +98,8 @@ BatchCompileResult compile_ll_batch(
  * @param options Link options
  * @return Link result with output file path or error
  */
-LinkResult link_objects(
-    const std::vector<fs::path>& object_files,
-    const fs::path& output_file,
-    const std::string& clang_path,
-    const LinkOptions& options
-);
+LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::path& output_file,
+                        const std::string& clang_path, const LinkOptions& options);
 
 /**
  * Get default object file extension for current platform

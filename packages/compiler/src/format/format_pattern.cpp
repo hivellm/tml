@@ -10,7 +10,8 @@ auto Formatter::format_pattern(const parser::Pattern& pattern) -> std::string {
     } else if (pattern.is<parser::IdentPattern>()) {
         const auto& ident = pattern.as<parser::IdentPattern>();
         std::string result;
-        if (ident.is_mut) result = "mut ";
+        if (ident.is_mut)
+            result = "mut ";
         result += ident.name;
         if (ident.type_annotation.has_value()) {
             result += ": " + format_type_ptr(ident.type_annotation.value());
@@ -22,7 +23,8 @@ auto Formatter::format_pattern(const parser::Pattern& pattern) -> std::string {
         const auto& tuple = pattern.as<parser::TuplePattern>();
         std::string result = "(";
         for (size_t i = 0; i < tuple.elements.size(); ++i) {
-            if (i > 0) result += ", ";
+            if (i > 0)
+                result += ", ";
             result += format_pattern(*tuple.elements[i]);
         }
         result += ")";
@@ -31,11 +33,13 @@ auto Formatter::format_pattern(const parser::Pattern& pattern) -> std::string {
         const auto& s = pattern.as<parser::StructPattern>();
         std::string result = format_type_path(s.path) + " { ";
         for (size_t i = 0; i < s.fields.size(); ++i) {
-            if (i > 0) result += ", ";
+            if (i > 0)
+                result += ", ";
             result += s.fields[i].first + ": " + format_pattern(*s.fields[i].second);
         }
         if (s.has_rest) {
-            if (!s.fields.empty()) result += ", ";
+            if (!s.fields.empty())
+                result += ", ";
             result += "..";
         }
         result += " }";
@@ -46,7 +50,8 @@ auto Formatter::format_pattern(const parser::Pattern& pattern) -> std::string {
         if (e.payload.has_value()) {
             result += "(";
             for (size_t i = 0; i < e.payload->size(); ++i) {
-                if (i > 0) result += ", ";
+                if (i > 0)
+                    result += ", ";
                 result += format_pattern(*(*e.payload)[i]);
             }
             result += ")";
@@ -56,7 +61,8 @@ auto Formatter::format_pattern(const parser::Pattern& pattern) -> std::string {
         const auto& or_pat = pattern.as<parser::OrPattern>();
         std::string result;
         for (size_t i = 0; i < or_pat.patterns.size(); ++i) {
-            if (i > 0) result += " | ";
+            if (i > 0)
+                result += " | ";
             result += format_pattern(*or_pat.patterns[i]);
         }
         return result;

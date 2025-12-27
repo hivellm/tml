@@ -1,11 +1,11 @@
 #ifndef TML_CLI_BUILD_CONFIG_HPP
 #define TML_CLI_BUILD_CONFIG_HPP
 
-#include <string>
-#include <vector>
+#include <filesystem>
 #include <map>
 #include <optional>
-#include <filesystem>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -31,8 +31,8 @@ struct PackageInfo {
  */
 struct LibConfig {
     std::string path = "src/lib.tml";
-    std::vector<std::string> crate_types = {"rlib"};  // rlib, lib, dylib
-    std::string name;  // Optional override (defaults to package name)
+    std::vector<std::string> crate_types = {"rlib"}; // rlib, lib, dylib
+    std::string name;                                // Optional override (defaults to package name)
     bool emit_header = false;
 
     bool validate() const;
@@ -53,14 +53,20 @@ struct BinConfig {
  */
 struct Dependency {
     std::string name;
-    std::string version;  // Semver constraint (e.g., "^1.2.0")
-    std::string path;     // For path dependencies
-    std::string git;      // For git dependencies (future)
-    std::string tag;      // Git tag (future)
+    std::string version; // Semver constraint (e.g., "^1.2.0")
+    std::string path;    // For path dependencies
+    std::string git;     // For git dependencies (future)
+    std::string tag;     // Git tag (future)
 
-    bool is_path_dependency() const { return !path.empty(); }
-    bool is_version_dependency() const { return !version.empty(); }
-    bool is_git_dependency() const { return !git.empty(); }
+    bool is_path_dependency() const {
+        return !path.empty();
+    }
+    bool is_version_dependency() const {
+        return !version.empty();
+    }
+    bool is_git_dependency() const {
+        return !git.empty();
+    }
 
     bool validate() const;
 };
@@ -69,7 +75,7 @@ struct Dependency {
  * Build settings from [build] section
  */
 struct BuildSettings {
-    int optimization_level = 0;  // 0-3
+    int optimization_level = 0; // 0-3
     bool emit_ir = false;
     bool emit_header = false;
     bool verbose = false;
@@ -83,7 +89,7 @@ struct BuildSettings {
  * Profile-specific configuration from [profile.debug] or [profile.release]
  */
 struct ProfileConfig {
-    std::string name;  // "debug" or "release"
+    std::string name; // "debug" or "release"
     BuildSettings settings;
 
     bool validate() const;
@@ -149,7 +155,9 @@ public:
     /**
      * Get error message if parsing failed
      */
-    std::string get_error() const { return error_message_; }
+    std::string get_error() const {
+        return error_message_;
+    }
 
 private:
     std::string content_;
@@ -160,8 +168,12 @@ private:
     // Helper methods
     void skip_whitespace();
     void skip_comment();
-    bool is_eof() const { return pos_ >= content_.size(); }
-    char peek() const { return is_eof() ? '\0' : content_[pos_]; }
+    bool is_eof() const {
+        return pos_ >= content_.size();
+    }
+    char peek() const {
+        return is_eof() ? '\0' : content_[pos_];
+    }
     char advance();
 
     std::string parse_identifier();

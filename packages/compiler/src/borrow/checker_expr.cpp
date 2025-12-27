@@ -3,68 +3,52 @@
 namespace tml::borrow {
 
 void BorrowChecker::check_expr(const parser::Expr& expr) {
-    std::visit([this, &expr](const auto& e) {
-        using T = std::decay_t<decltype(e)>;
+    std::visit(
+        [this, &expr](const auto& e) {
+            using T = std::decay_t<decltype(e)>;
 
-        if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
-            // Literals don't involve borrowing
-        }
-        else if constexpr (std::is_same_v<T, parser::IdentExpr>) {
-            check_ident(e, expr.span);
-        }
-        else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
-            check_binary(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
-            check_unary(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::CallExpr>) {
-            check_call(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
-            check_method_call(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
-            check_field_access(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IndexExpr>) {
-            check_index(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
-            check_block(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::IfExpr>) {
-            check_if(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
-            check_when(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
-            check_loop(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ForExpr>) {
-            check_for(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
-            check_return(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::BreakExpr>) {
-            check_break(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
-            check_tuple(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
-            check_array(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::StructExpr>) {
-            check_struct_expr(e);
-        }
-        else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
-            check_closure(e);
-        }
-        // Other expressions handled as needed
-    }, expr.kind);
+            if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
+                // Literals don't involve borrowing
+            } else if constexpr (std::is_same_v<T, parser::IdentExpr>) {
+                check_ident(e, expr.span);
+            } else if constexpr (std::is_same_v<T, parser::BinaryExpr>) {
+                check_binary(e);
+            } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
+                check_unary(e);
+            } else if constexpr (std::is_same_v<T, parser::CallExpr>) {
+                check_call(e);
+            } else if constexpr (std::is_same_v<T, parser::MethodCallExpr>) {
+                check_method_call(e);
+            } else if constexpr (std::is_same_v<T, parser::FieldExpr>) {
+                check_field_access(e);
+            } else if constexpr (std::is_same_v<T, parser::IndexExpr>) {
+                check_index(e);
+            } else if constexpr (std::is_same_v<T, parser::BlockExpr>) {
+                check_block(e);
+            } else if constexpr (std::is_same_v<T, parser::IfExpr>) {
+                check_if(e);
+            } else if constexpr (std::is_same_v<T, parser::WhenExpr>) {
+                check_when(e);
+            } else if constexpr (std::is_same_v<T, parser::LoopExpr>) {
+                check_loop(e);
+            } else if constexpr (std::is_same_v<T, parser::ForExpr>) {
+                check_for(e);
+            } else if constexpr (std::is_same_v<T, parser::ReturnExpr>) {
+                check_return(e);
+            } else if constexpr (std::is_same_v<T, parser::BreakExpr>) {
+                check_break(e);
+            } else if constexpr (std::is_same_v<T, parser::TupleExpr>) {
+                check_tuple(e);
+            } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
+                check_array(e);
+            } else if constexpr (std::is_same_v<T, parser::StructExpr>) {
+                check_struct_expr(e);
+            } else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
+                check_closure(e);
+            }
+            // Other expressions handled as needed
+        },
+        expr.kind);
 }
 
 void BorrowChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) {
@@ -93,12 +77,9 @@ void BorrowChecker::check_binary(const parser::BinaryExpr& binary) {
     check_expr(*binary.right);
 
     // Assignment operators require mutable access to LHS
-    if (binary.op == parser::BinaryOp::Assign ||
-        binary.op == parser::BinaryOp::AddAssign ||
-        binary.op == parser::BinaryOp::SubAssign ||
-        binary.op == parser::BinaryOp::MulAssign ||
-        binary.op == parser::BinaryOp::DivAssign ||
-        binary.op == parser::BinaryOp::ModAssign) {
+    if (binary.op == parser::BinaryOp::Assign || binary.op == parser::BinaryOp::AddAssign ||
+        binary.op == parser::BinaryOp::SubAssign || binary.op == parser::BinaryOp::MulAssign ||
+        binary.op == parser::BinaryOp::DivAssign || binary.op == parser::BinaryOp::ModAssign) {
 
         // Check if LHS is a mutable place
         if (binary.left->template is<parser::IdentExpr>()) {
@@ -126,9 +107,8 @@ void BorrowChecker::check_unary(const parser::UnaryExpr& unary) {
         auto full_place = extract_place(*unary.operand);
 
         if (full_place) {
-            auto kind = (unary.op == parser::UnaryOp::RefMut)
-                ? BorrowKind::Mutable
-                : BorrowKind::Shared;
+            auto kind =
+                (unary.op == parser::UnaryOp::RefMut) ? BorrowKind::Mutable : BorrowKind::Shared;
 
             // Use projection-aware borrow checking
             check_can_borrow_with_projection(full_place->base, *full_place, kind, loc);
@@ -138,9 +118,8 @@ void BorrowChecker::check_unary(const parser::UnaryExpr& unary) {
             const auto& ident = unary.operand->template as<parser::IdentExpr>();
             auto place_id = env_.lookup(ident.name);
             if (place_id) {
-                auto kind = (unary.op == parser::UnaryOp::RefMut)
-                    ? BorrowKind::Mutable
-                    : BorrowKind::Shared;
+                auto kind = (unary.op == parser::UnaryOp::RefMut) ? BorrowKind::Mutable
+                                                                  : BorrowKind::Shared;
                 check_can_borrow(*place_id, kind, loc);
                 create_borrow(*place_id, kind, loc);
             }
@@ -291,20 +270,21 @@ void BorrowChecker::check_tuple(const parser::TupleExpr& tuple) {
 }
 
 void BorrowChecker::check_array(const parser::ArrayExpr& array) {
-    std::visit([this](const auto& a) {
-        using T = std::decay_t<decltype(a)>;
-        if constexpr (std::is_same_v<T, std::vector<parser::ExprPtr>>) {
-            // Array literal: [1, 2, 3]
-            for (const auto& elem : a) {
-                check_expr(*elem);
+    std::visit(
+        [this](const auto& a) {
+            using T = std::decay_t<decltype(a)>;
+            if constexpr (std::is_same_v<T, std::vector<parser::ExprPtr>>) {
+                // Array literal: [1, 2, 3]
+                for (const auto& elem : a) {
+                    check_expr(*elem);
+                }
+            } else if constexpr (std::is_same_v<T, std::pair<parser::ExprPtr, parser::ExprPtr>>) {
+                // Array repeat: [expr; count]
+                check_expr(*a.first);
+                check_expr(*a.second);
             }
-        }
-        else if constexpr (std::is_same_v<T, std::pair<parser::ExprPtr, parser::ExprPtr>>) {
-            // Array repeat: [expr; count]
-            check_expr(*a.first);
-            check_expr(*a.second);
-        }
-    }, array.kind);
+        },
+        array.kind);
 }
 
 void BorrowChecker::check_struct_expr(const parser::StructExpr& struct_expr) {
@@ -342,6 +322,5 @@ void BorrowChecker::check_closure(const parser::ClosureExpr& closure) {
     drop_scope_places();
     env_.pop_scope();
 }
-
 
 } // namespace tml::borrow
