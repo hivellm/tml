@@ -163,6 +163,9 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Unit: use "{}" (empty struct) when used as data, "void" for return types
         case types::PrimitiveKind::Unit:
             return for_data ? "{}" : "void";
+        // Never type (bottom type) - use void as it represents no value
+        case types::PrimitiveKind::Never:
+            return "void";
         }
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
