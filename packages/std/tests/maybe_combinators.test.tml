@@ -1,5 +1,6 @@
 // Tests for Maybe[T] combinators
 // Tests: map, and_then, filter, or_else
+use test
 
 // Define types locally (until enum variant import is fixed)
 type Maybe[T] {
@@ -45,74 +46,123 @@ func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
     return f()
 }
 
-func main() {
-    println("=== Maybe[T] Combinators Test ===")
-    println("")
+// Helper to extract value for testing
+func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
+    when m {
+        Just(val) => return val,
+        Nothing => return default_val
+    }
+    return default_val
+}
 
-    // Test map
-    println("Testing map:")
+func is_just[T](m: Maybe[T]) -> Bool {
+    when m {
+        Just(_) => return true,
+        Nothing => return false
+    }
+    return false
+}
+
+func is_nothing[T](m: Maybe[T]) -> Bool {
+    when m {
+        Just(_) => return false,
+        Nothing => return true
+    }
+    return true
+}
+
+// ============================================================================
+// map Tests
+// ============================================================================
+
+@test
+func test_map_just_doubles_value() -> I32 {
     let x: Maybe[I32] = Just(5)
     let y: Maybe[I32] = map(x, do(val: I32) val * 2)
-    when y {
-        Just(v) => println("  map(Just(5), *2) = Just({v})"),
-        Nothing => println("  ERROR: Expected Just(10), got Nothing")
-    }
+    assert(unwrap_or(y, 0) == 10, "map(Just(5), *2) should be Just(10)")
+    return 0
+}
 
-    let z: Maybe[I32] = map(Nothing, do(val: I32) val * 2)
-    when z {
-        Just(_) => println("  ERROR: Expected Nothing, got Just"),
-        Nothing => println("  map(Nothing, *2) = Nothing")
-    }
+@test
+func test_map_nothing_stays_nothing() -> I32 {
+    let x: Maybe[I32] = Nothing
+    let y: Maybe[I32] = map(x, do(val: I32) val * 2)
+    assert(is_nothing(y) == true, "map(Nothing, *2) should be Nothing")
+    return 0
+}
 
-    // Test and_then
-    println("")
-    println("Testing and_then:")
+// ============================================================================
+// and_then Tests
+// ============================================================================
+
+@test
+func test_and_then_just_returns_just() -> I32 {
     let a: Maybe[I32] = Just(5)
     let b: Maybe[I32] = and_then(a, do(val: I32) if val > 0 then Just(val * 2) else Nothing)
-    when b {
-        Just(v) => println("  and_then(Just(5), check>0) = Just({v})"),
-        Nothing => println("  ERROR: Expected Just(10), got Nothing")
-    }
+    assert(unwrap_or(b, 0) == 10, "and_then(Just(5), check>0) should be Just(10)")
+    return 0
+}
 
-    let c: Maybe[I32] = and_then(a, do(val: I32) if val > 10 then Just(val * 2) else Nothing)
-    when c {
-        Just(_) => println("  ERROR: Expected Nothing, got Just"),
-        Nothing => println("  and_then(Just(5), check>10) = Nothing")
-    }
+@test
+func test_and_then_just_returns_nothing() -> I32 {
+    let a: Maybe[I32] = Just(5)
+    let b: Maybe[I32] = and_then(a, do(val: I32) if val > 10 then Just(val * 2) else Nothing)
+    assert(is_nothing(b) == true, "and_then(Just(5), check>10) should be Nothing")
+    return 0
+}
 
-    // Test filter
-    println("")
-    println("Testing filter:")
+@test
+func test_and_then_nothing_stays_nothing() -> I32 {
+    let a: Maybe[I32] = Nothing
+    let b: Maybe[I32] = and_then(a, do(val: I32) Just(val * 2))
+    assert(is_nothing(b) == true, "and_then(Nothing, f) should be Nothing")
+    return 0
+}
+
+// ============================================================================
+// filter Tests
+// ============================================================================
+
+@test
+func test_filter_just_passes() -> I32 {
     let d: Maybe[I32] = Just(5)
     let e: Maybe[I32] = filter(d, do(val: I32) val > 3)
-    when e {
-        Just(v) => println("  filter(Just(5), >3) = Just({v})"),
-        Nothing => println("  ERROR: Expected Just(5), got Nothing")
-    }
+    assert(unwrap_or(e, 0) == 5, "filter(Just(5), >3) should be Just(5)")
+    return 0
+}
 
-    let f: Maybe[I32] = filter(d, do(val: I32) val > 10)
-    when f {
-        Just(_) => println("  ERROR: Expected Nothing, got Just"),
-        Nothing => println("  filter(Just(5), >10) = Nothing")
-    }
+@test
+func test_filter_just_fails() -> I32 {
+    let d: Maybe[I32] = Just(5)
+    let e: Maybe[I32] = filter(d, do(val: I32) val > 10)
+    assert(is_nothing(e) == true, "filter(Just(5), >10) should be Nothing")
+    return 0
+}
 
-    // Test or_else
-    println("")
-    println("Testing or_else:")
+@test
+func test_filter_nothing_stays_nothing() -> I32 {
+    let d: Maybe[I32] = Nothing
+    let e: Maybe[I32] = filter(d, do(val: I32) val > 0)
+    assert(is_nothing(e) == true, "filter(Nothing, f) should be Nothing")
+    return 0
+}
+
+// ============================================================================
+// or_else Tests
+// ============================================================================
+
+@test
+func test_or_else_nothing_returns_fallback() -> I32 {
     let g: Maybe[I32] = Nothing
     let h: Maybe[I32] = or_else(g, do() Just(42))
-    when h {
-        Just(v) => println("  or_else(Nothing, Just(42)) = Just({v})"),
-        Nothing => println("  ERROR: Expected Just(42), got Nothing")
-    }
+    assert(unwrap_or(h, 0) == 42, "or_else(Nothing, Just(42)) should be Just(42)")
+    return 0
+}
 
+@test
+func test_or_else_just_keeps_original() -> I32 {
     let i: Maybe[I32] = Just(10)
     let j: Maybe[I32] = or_else(i, do() Just(42))
-    when j {
-        Just(v) => println("  or_else(Just(10), Just(42)) = Just({v})"),
-        Nothing => println("  ERROR: Expected Just(10), got Nothing")
-    }
-
-    println("")
-    println("All Maybe[T] combinator tests completed!")
+    assert(unwrap_or(j, 0) == 10, "or_else(Just(10), Just(42)) should be Just(10)")
+    return 0
 }

@@ -1,4 +1,5 @@
 // Simple Outcome[T, E] combinator test with non-generic helpers
+use test
 
 type Outcome[T, E] {
     Ok(T),
@@ -13,26 +14,43 @@ func map_ok_i32(o: Outcome[I32, I32], f: func(I32) -> I32) -> Outcome[I32, I32] 
     }
 }
 
-func main() {
-    println("=== Simple Outcome[I32, I32] Test ===")
+func unwrap_or_ok(o: Outcome[I32, I32], default_val: I32) -> I32 {
+    when o {
+        Ok(val) => return val,
+        Err(_) => return default_val
+    }
+    return default_val
+}
 
-    // Test map_ok on Ok value
+func unwrap_or_err(o: Outcome[I32, I32], default_val: I32) -> I32 {
+    when o {
+        Ok(_) => return default_val,
+        Err(e) => return e
+    }
+    return default_val
+}
+
+func is_err(o: Outcome[I32, I32]) -> Bool {
+    when o {
+        Ok(_) => return false,
+        Err(_) => return true
+    }
+    return true
+}
+
+@test
+func test_map_ok_on_ok_value() -> I32 {
     let x: Outcome[I32, I32] = Ok(5)
     let y: Outcome[I32, I32] = map_ok_i32(x, do(val: I32) val * 2)
+    assert(unwrap_or_ok(y, 0) == 10, "map_ok(Ok(5), *2) should be Ok(10)")
+    return 0
+}
 
-    when y {
-        Ok(v) => println("map_ok(Ok(5), *2) = Ok({v})"),
-        Err(_) => println("ERROR: Expected Ok(10), got Err")
-    }
-
-    // Test map_ok on Err value
+@test
+func test_map_ok_on_err_value() -> I32 {
     let a: Outcome[I32, I32] = Err(42)
     let b: Outcome[I32, I32] = map_ok_i32(a, do(val: I32) val * 2)
-
-    when b {
-        Ok(_) => println("ERROR: Expected Err(42), got Ok"),
-        Err(e) => println("map_ok(Err(42), *2) = Err({e})")
-    }
-
-    println("Test completed!")
+    assert(is_err(b) == true, "map_ok(Err(42), *2) should be Err")
+    assert(unwrap_or_err(b, 0) == 42, "map_ok(Err(42), *2) should preserve Err(42)")
+    return 0
 }

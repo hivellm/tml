@@ -1,5 +1,6 @@
 // Tests for Outcome[T, E] combinators
 // Tests: map_ok, map_err, and_then_ok, or_else_ok
+use test
 
 // Define types locally (until enum variant import is fixed)
 type Outcome[T, E] {
@@ -36,80 +37,129 @@ func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[
     }
 }
 
-func main() {
-    println("=== Outcome[T, E] Combinators Test ===")
-    println("")
+// Helper functions for testing
+func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
+    when o {
+        Ok(val) => return val,
+        Err(_) => return default_val
+    }
+    return default_val
+}
 
-    // Test map_ok
-    println("Testing map_ok:")
+func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
+    when o {
+        Ok(_) => return default_val,
+        Err(e) => return e
+    }
+    return default_val
+}
+
+func is_ok[T, E](o: Outcome[T, E]) -> Bool {
+    when o {
+        Ok(_) => return true,
+        Err(_) => return false
+    }
+    return false
+}
+
+func is_err[T, E](o: Outcome[T, E]) -> Bool {
+    when o {
+        Ok(_) => return false,
+        Err(_) => return true
+    }
+    return true
+}
+
+// ============================================================================
+// map_ok Tests
+// ============================================================================
+
+@test
+func test_map_ok_on_ok() -> I32 {
     let x: Outcome[I32, I32] = Ok(5)
     let y: Outcome[I32, I32] = map_ok(x, do(val: I32) val * 2)
-    when y {
-        Ok(v) => println("  map_ok(Ok(5), *2) = Ok({v})"),
-        Err(_) => println("  ERROR: Expected Ok(10), got Err")
-    }
+    assert(unwrap_or_ok(y, 0) == 10, "map_ok(Ok(5), *2) should be Ok(10)")
+    return 0
+}
 
-    let z: Outcome[I32, I32] = map_ok(Err(42), do(val: I32) val * 2)
-    when z {
-        Ok(_) => println("  ERROR: Expected Err(42), got Ok"),
-        Err(err) => println("  map_ok(Err(42), *2) = Err({err})")
-    }
+@test
+func test_map_ok_on_err() -> I32 {
+    let x: Outcome[I32, I32] = Err(42)
+    let y: Outcome[I32, I32] = map_ok(x, do(val: I32) val * 2)
+    assert(is_err(y) == true, "map_ok(Err(42), *2) should be Err")
+    assert(unwrap_or_err(y, 0) == 42, "map_ok(Err(42), *2) should preserve error value")
+    return 0
+}
 
-    // Test map_err
-    println("")
-    println("Testing map_err:")
+// ============================================================================
+// map_err Tests
+// ============================================================================
+
+@test
+func test_map_err_on_err() -> I32 {
     let a: Outcome[I32, I32] = Err(5)
     let b: Outcome[I32, I32] = map_err(a, do(err: I32) err * 2)
-    when b {
-        Ok(_) => println("  ERROR: Expected Err(10), got Ok"),
-        Err(err) => println("  map_err(Err(5), *2) = Err({err})")
-    }
+    assert(unwrap_or_err(b, 0) == 10, "map_err(Err(5), *2) should be Err(10)")
+    return 0
+}
 
-    let c: Outcome[I32, I32] = map_err(Ok(42), do(err: I32) err * 2)
-    when c {
-        Ok(v) => println("  map_err(Ok(42), *2) = Ok({v})"),
-        Err(_) => println("  ERROR: Expected Ok(42), got Err")
-    }
+@test
+func test_map_err_on_ok() -> I32 {
+    let a: Outcome[I32, I32] = Ok(42)
+    let b: Outcome[I32, I32] = map_err(a, do(err: I32) err * 2)
+    assert(is_ok(b) == true, "map_err(Ok(42), *2) should be Ok")
+    assert(unwrap_or_ok(b, 0) == 42, "map_err(Ok(42), *2) should preserve ok value")
+    return 0
+}
 
-    // Test and_then_ok
-    println("")
-    println("Testing and_then_ok:")
+// ============================================================================
+// and_then_ok Tests
+// ============================================================================
+
+@test
+func test_and_then_ok_returns_ok() -> I32 {
     let d: Outcome[I32, I32] = Ok(5)
-    let e1: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 0 then Ok(val * 2) else Err(999))
-    when e1 {
-        Ok(v) => println("  and_then_ok(Ok(5), check>0) = Ok({v})"),
-        Err(_) => println("  ERROR: Expected Ok(10), got Err")
-    }
+    let e: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 0 then Ok(val * 2) else Err(999))
+    assert(unwrap_or_ok(e, 0) == 10, "and_then_ok(Ok(5), check>0) should be Ok(10)")
+    return 0
+}
 
-    let f: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 10 then Ok(val * 2) else Err(999))
-    when f {
-        Ok(_) => println("  ERROR: Expected Err(999), got Ok"),
-        Err(err) => println("  and_then_ok(Ok(5), check>10) = Err({err})")
-    }
+@test
+func test_and_then_ok_returns_err() -> I32 {
+    let d: Outcome[I32, I32] = Ok(5)
+    let e: Outcome[I32, I32] = and_then_ok(d, do(val: I32) if val > 10 then Ok(val * 2) else Err(999))
+    assert(is_err(e) == true, "and_then_ok(Ok(5), check>10) should be Err")
+    assert(unwrap_or_err(e, 0) == 999, "and_then_ok(Ok(5), check>10) should be Err(999)")
+    return 0
+}
 
-    let g: Outcome[I32, I32] = and_then_ok(Err(100), do(val: I32) Ok(val * 2))
-    when g {
-        Ok(_) => println("  ERROR: Expected Err(100), got Ok"),
-        Err(err) => println("  and_then_ok(Err(100), f) = Err({err})")
-    }
+@test
+func test_and_then_ok_on_err() -> I32 {
+    let d: Outcome[I32, I32] = Err(100)
+    let e: Outcome[I32, I32] = and_then_ok(d, do(val: I32) Ok(val * 2))
+    assert(is_err(e) == true, "and_then_ok(Err(100), f) should be Err")
+    assert(unwrap_or_err(e, 0) == 100, "and_then_ok(Err(100), f) should preserve Err(100)")
+    return 0
+}
 
-    // Test or_else_ok
-    println("")
-    println("Testing or_else_ok:")
+// ============================================================================
+// or_else_ok Tests
+// ============================================================================
+
+@test
+func test_or_else_ok_on_err() -> I32 {
     let h: Outcome[I32, I32] = Err(5)
     let i: Outcome[I32, I32] = or_else_ok(h, do(err: I32) Ok(0))
-    when i {
-        Ok(v) => println("  or_else_ok(Err(5), Ok(0)) = Ok({v})"),
-        Err(_) => println("  ERROR: Expected Ok(0), got Err")
-    }
+    assert(is_ok(i) == true, "or_else_ok(Err(5), Ok(0)) should be Ok")
+    assert(unwrap_or_ok(i, -1) == 0, "or_else_ok(Err(5), Ok(0)) should be Ok(0)")
+    return 0
+}
 
+@test
+func test_or_else_ok_on_ok() -> I32 {
     let j: Outcome[I32, I32] = Ok(42)
     let k: Outcome[I32, I32] = or_else_ok(j, do(err: I32) Ok(0))
-    when k {
-        Ok(v) => println("  or_else_ok(Ok(42), Ok(0)) = Ok({v})"),
-        Err(_) => println("  ERROR: Expected Ok(42), got Err")
-    }
-
-    println("")
-    println("All Outcome[T, E] combinator tests completed!")
+    assert(is_ok(k) == true, "or_else_ok(Ok(42), Ok(0)) should be Ok")
+    assert(unwrap_or_ok(k, -1) == 42, "or_else_ok(Ok(42), Ok(0)) should preserve Ok(42)")
+    return 0
 }

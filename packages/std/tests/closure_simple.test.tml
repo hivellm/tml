@@ -1,14 +1,20 @@
 // Very simple closure test
+use test
 
 func apply(x: I32, f: func(I32) -> I32) -> I32 {
     return f(x)
 }
 
-func main() {
-    println("=== Simple Closure Test ===")
-
+@test
+func test_apply_closure_multiply() -> I32 {
     let result: I32 = apply(5, do(val: I32) val * 2)
-    println("apply(5, *2) = {result}")
+    assert(result == 10, "apply(5, *2) should be 10")
+    return 0
+}
 
-    println("Test completed!")
+@test
+func test_apply_closure_add() -> I32 {
+    let result: I32 = apply(7, do(val: I32) val + 3)
+    assert(result == 10, "apply(7, +3) should be 10")
+    return 0
 }
