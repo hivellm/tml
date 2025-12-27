@@ -73,12 +73,23 @@ func sqrt(x: F64) -> F64
 }
 ```
 
+### 🔤 String Interpolation
+Embed expressions directly in strings:
+```tml
+let name = "World"
+let count = 42
+println("Hello, {name}! Count is {count}.")
+// Output: Hello, World! Count is 42.
+```
+
 ### 🏗️ Rust-Inspired, LLM-Optimized
 Learns from Rust but changes syntax for determinism:
 
 ```tml
 // TML (explicit, deterministic)
-func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
+func first[T](items: ref List[T]) -> Maybe[T]
+where T: Duplicate
+{
     return items.first().duplicate()
 }
 
@@ -109,7 +120,8 @@ public func main() {
     var counter = 0         // Mutable
     const MAX_SIZE = 1024   // Compile-time constant
 
-    println("counter = " + counter.to_string())
+    // String interpolation
+    println("counter = {counter}")
 }
 ```
 
@@ -117,7 +129,9 @@ public func main() {
 ```tml
 module collections
 
-func first[T: Duplicate](items: ref List[T]) -> Maybe[T] {
+func first[T](items: ref List[T]) -> Maybe[T]
+where T: Duplicate
+{
     return items.first().duplicate()
 }
 
@@ -128,6 +142,13 @@ func map[T, U](items: List[T], f: do(T) -> U) -> List[U] {
     }
     return result
 }
+
+// Closures
+func apply_twice[T](value: T, f: do(T) -> T) -> T {
+    return f(f(value))
+}
+
+let result = apply_twice(5, do(x) { x * 2 })  // 20
 ```
 
 ### Pattern Matching
@@ -235,19 +256,24 @@ Source (.tml)
 |-----------|--------|----------|
 | Lexer | ✅ Complete | 100% |
 | Parser | ✅ Complete | 100% (LL(1) compliant) |
-| Type Checker | ✅ Complete | 100% (generics, modules) |
+| Type Checker | ✅ Complete | 100% (generics, closures, where clauses) |
 | Borrow Checker | 🟡 Basic | ~60% (lifetime tracking) |
 | LLVM Backend | ✅ Complete | 100% (via text IR) |
 | Test Framework | ✅ Complete | 100% (@test, @bench) |
 | Module System | ✅ Complete | 100% (imports, method lookup) |
-| Standard Library | 🟡 In Progress | ~35% (iter basics working) |
+| FFI System | ✅ Complete | 100% (@extern, @link, namespaces) |
+| Standard Library | 🟡 In Progress | ~66% (core modules working) |
 
 ### Test Results
-- **23 tests passing** (90%+ pass rate)
+- **23+ tests passing** (90%+ pass rate)
 - Compiler tests: ✅ All passing
-- Runtime tests: ✅ Most passing (1 known issue)
+- Runtime tests: ✅ Most passing
 
 ### Recent Features (Dec 2024)
+- ✅ **String Interpolation** (Dec 27) - `"Hello {name}!"` syntax
+- ✅ **Where Clauses** (Dec 27) - `func foo[T]() where T: Add` constraint syntax
+- ✅ **Closures** (Dec 27) - `do(x) { x * 2 }` with environment capture
+- ✅ **FFI Namespaces** (Dec 27) - Unified `ffi::c`, `ffi::win32` namespace system
 - ✅ **Iterator Combinators** (Dec 26) - `sum()`, `count()`, `take()`, `skip()` working
 - ✅ **Module Method Lookup** (Dec 26) - Imported type methods now resolve correctly
 - ✅ **Trait Objects** (Dec 24) - `dyn Behavior` with vtable dispatch
