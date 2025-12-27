@@ -113,10 +113,16 @@ struct Type {
     }
 
     template <typename T> [[nodiscard]] auto as() -> T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 
     template <typename T> [[nodiscard]] auto as() const -> const T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 };
@@ -191,10 +197,16 @@ struct Pattern {
     }
 
     template <typename T> [[nodiscard]] auto as() -> T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 
     template <typename T> [[nodiscard]] auto as() const -> const T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 };
@@ -504,10 +516,16 @@ struct Expr {
     }
 
     template <typename T> [[nodiscard]] auto as() -> T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 
     template <typename T> [[nodiscard]] auto as() const -> const T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 };
@@ -551,10 +569,16 @@ struct Stmt {
     }
 
     template <typename T> [[nodiscard]] auto as() -> T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 
     template <typename T> [[nodiscard]] auto as() const -> const T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 };
@@ -739,10 +763,16 @@ struct Decl {
     }
 
     template <typename T> [[nodiscard]] auto as() -> T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 
     template <typename T> [[nodiscard]] auto as() const -> const T& {
+        if (!is<T>()) {
+            throw std::bad_variant_access();
+        }
         return std::get<T>(kind);
     }
 };
@@ -767,8 +797,8 @@ auto make_ident_expr(std::string name, SourceSpan span) -> ExprPtr;
 auto make_binary_expr(BinaryOp op, ExprPtr left, ExprPtr right, SourceSpan span) -> ExprPtr;
 auto make_unary_expr(UnaryOp op, ExprPtr operand, SourceSpan span) -> ExprPtr;
 auto make_call_expr(ExprPtr callee, std::vector<ExprPtr> args, SourceSpan span) -> ExprPtr;
-auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr,
-                     SourceSpan span) -> ExprPtr;
+auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr, SourceSpan span)
+    -> ExprPtr;
 
 // Create type helpers
 auto make_named_type(std::string name, SourceSpan span) -> TypePtr;
