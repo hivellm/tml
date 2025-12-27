@@ -1,0 +1,751 @@
+//! Memory allocation APIs.
+//!
+//! This module provides the core memory allocation primitives for TML, including:
+//!
+//! - [`Layout`] - Describes memory layout (size and alignment)
+//! - [`LayoutError`] - Error type for invalid layouts
+//! - [`AllocError`] - Error type for allocation failures
+//! - [`Allocator`] - Behavior for custom allocators
+//! - [`GlobalAlloc`] - Lowlevel behavior for the global allocator
+//! - [`Global`] - The default global allocator
+//!
+//! # Overview
+//!
+//! Memory allocation in TML follows a layered design:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────┐
+//! │                   User Code                          │
+//! │         Heap[T], List[T], HashMap[K,V]              │
+//! └─────────────────────┬───────────────────────────────┘
+//!                       │
+//! ┌─────────────────────▼───────────────────────────────┐
+//! │                  Allocator                           │
+//! │     Safe, ergonomic API with error handling          │
+//! └─────────────────────┬───────────────────────────────┘
+//!                       │
+//! ┌─────────────────────▼───────────────────────────────┐
+//! │                 GlobalAlloc                          │
+//! │     Lowlevel API for system allocator replacement    │
+//! └─────────────────────┬───────────────────────────────┘
+//!                       │
+//! ┌─────────────────────▼───────────────────────────────┐
+//! │              System Allocator                        │
+//! │            (malloc/free, etc.)                       │
+//! └─────────────────────────────────────────────────────┘
+//! ```
+//!
+//! # Quick Start
+//!
+//! Most code doesn't need to interact with allocators directly. Types like
+//! `Heap[T]`, `List[T]`, and `HashMap[K,V]` handle allocation automatically.
+//!
+//! When you do need custom allocation:
+//!
+//! ## Calculating Memory Layouts
+//!
+//! ```tml
+//! use core::alloc::Layout
+//!
+//! // Layout for a specific type
+//! let layout = Layout::new[MyStruct]()
+//!
+//! // Layout for an array
+//! let array_layout = Layout::array[I64](100).unwrap()
+//!
+//! // Custom layout
+//! let custom = Layout::from_size_align(1024, 64).unwrap()
+//! ```
+//!
+//! ## Using the Allocator API
+//!
+//! ```tml
+//! use core::alloc::{Allocator, Global, Layout, AllocError}
+//!
+//! func allocate_buffer() -> Outcome[NonNull[U8], AllocError] {
+//!     let layout = Layout::from_size_align(4096, 16).unwrap()
+//!     return Global.allocate(layout)
+//! }
+//! ```
+//!
+//! ## Implementing a Custom Allocator
+//!
+//! ```tml
+//! use core::alloc::{Allocator, Layout, AllocError}
+//! use core::ptr::NonNull
+//!
+//! pub type ArenaAllocator {
+//!     // ... arena state ...
+//! }
+//!
+//! impl Allocator for ArenaAllocator {
+//!     pub func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+//!         // Arena allocation logic
+//!     }
+//!
+//!     pub lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout) {
+//!         // Arena typically doesn't deallocate individual items
+//!     }
+//! }
+//! ```
+//!
+//! # Allocator vs GlobalAlloc
+//!
+//! TML provides two allocator behaviors:
+//!
+//! | Aspect | `Allocator` | `GlobalAlloc` |
+//! |--------|-------------|---------------|
+//! | Safety | Safe (returns `Outcome`) | Lowlevel (returns raw pointers) |
+//! | Usage | Per-collection | Program-wide |
+//! | Registration | Passed to constructors | `@global_allocator` attribute |
+//! | Error handling | `AllocError` | Null pointer |
+//!
+//! Use `Allocator` for most custom allocation needs. Use `GlobalAlloc` only
+//! when replacing the system allocator.
+//!
+//! # The Global Allocator
+//!
+//! The [`Global`] type represents the default allocator. It implements
+//! `Allocator` and delegates to the registered `GlobalAlloc` implementation.
+//!
+//! ```tml
+//! use core::alloc::{Allocator, Global}
+//!
+//! // Use the global allocator
+//! let ptr = Global.allocate(layout)?
+//! ```
+//!
+//! # Memory Layout
+//!
+//! Every allocation has two properties:
+//!
+//! - **Size**: Number of bytes
+//! - **Alignment**: Memory address must be divisible by this value
+//!
+//! The [`Layout`] type combines these and ensures they're valid:
+//!
+//! ```tml
+//! // A 100-byte allocation aligned to 16 bytes
+//! let layout = Layout::from_size_align(100, 16).unwrap()
+//!
+//! // Alignment must be a power of two
+//! assert(Layout::from_size_align(100, 3).is_err())
+//! ```
+//!
+//! # Error Handling
+//!
+//! Allocation can fail due to:
+//!
+//! - Out of memory
+//! - Invalid layout parameters
+//! - System limits exceeded
+//!
+//! The `Allocator` behavior returns `Outcome[NonNull[U8], AllocError]`,
+//! making errors explicit and recoverable:
+//!
+//! ```tml
+//! when allocator.allocate(layout) {
+//!     Ok(ptr) => {
+//!         // Allocation succeeded
+//!     },
+//!     Err(AllocError) => {
+//!         // Handle allocation failure
+//!     }
+//! }
+//! ```
+//!
+//! # See Also
+//!
+//! - [`Layout`] - Memory layout calculations
+//! - [`Allocator`] - Safe allocator behavior
+//! - [`GlobalAlloc`] - Lowlevel allocator behavior
+//! - `Heap[T]` - Smart pointer for single heap allocations
+//! - `List[T]` - Growable array with custom allocator support
+
+use core::cmp::{PartialEq, Eq}
+use core::fmt::{Display, Debug}
+use core::error::Error
+use core::option::Maybe
+use core::result::Outcome
+use core::ptr::{RawPtr, RawMutPtr, NonNull}
+
+// Re-export submodules
+pub mod layout
+pub mod global
+
+// Re-export main types
+pub use layout::{Layout, LayoutError}
+pub use global::GlobalAlloc
+
+// ============================================================================
+// AllocError
+// ============================================================================
+
+/// The error type for allocation failure.
+///
+/// `AllocError` indicates that an allocation request could not be fulfilled.
+/// This can happen due to:
+///
+/// - Insufficient memory
+/// - Layout size or alignment too large
+/// - System-specific limits exceeded
+///
+/// # Examples
+///
+/// ```tml
+/// use core::alloc::{Allocator, Global, Layout, AllocError}
+///
+/// func try_allocate(size: I64) -> Outcome[NonNull[U8], AllocError] {
+///     let layout = Layout::from_size_align(size, 8).unwrap()
+///     return Global.allocate(layout)
+/// }
+///
+/// when try_allocate(1_000_000_000_000) {
+///     Ok(ptr) => println("allocated!"),
+///     Err(err) => println(err.to_string())  // "memory allocation failed"
+/// }
+/// ```
+///
+/// # Handling Allocation Failures
+///
+/// Different strategies for handling allocation failures:
+///
+/// ```tml
+/// // 1. Propagate the error
+/// func allocate_buffer(size: I64) -> Outcome[Buffer, AllocError] {
+///     let ptr = allocator.allocate(layout)?
+///     return Ok(Buffer::from_ptr(ptr))
+/// }
+///
+/// // 2. Provide a fallback
+/// func allocate_with_fallback(primary: I64, fallback: I64) -> Outcome[NonNull[U8], AllocError] {
+///     let layout = Layout::from_size_align(primary, 8).unwrap()
+///     when allocator.allocate(layout) {
+///         Ok(ptr) => return Ok(ptr),
+///         Err(_) => {
+///             // Try smaller allocation
+///             let smaller = Layout::from_size_align(fallback, 8).unwrap()
+///             return allocator.allocate(smaller)
+///         }
+///     }
+/// }
+///
+/// // 3. Abort on failure (use sparingly)
+/// func must_allocate(layout: Layout) -> NonNull[U8] {
+///     return allocator.allocate(layout).expect("out of memory")
+/// }
+/// ```
+pub type AllocError {}
+
+impl AllocError {
+    /// Creates a new `AllocError`.
+    pub func new() -> AllocError {
+        return AllocError {}
+    }
+}
+
+impl Display for AllocError {
+    pub func to_string(this) -> Str {
+        return "memory allocation failed"
+    }
+}
+
+impl Debug for AllocError {
+    pub func debug_string(this) -> Str {
+        return "AllocError"
+    }
+}
+
+impl Error for AllocError {}
+
+impl PartialEq for AllocError {
+    pub func eq(this, other: ref AllocError) -> Bool {
+        return true
+    }
+}
+
+impl Eq for AllocError {}
+
+// ============================================================================
+// Allocator Behavior
+// ============================================================================
+
+/// A memory allocator.
+///
+/// `Allocator` is the primary behavior for custom memory allocators in TML.
+/// Unlike [`GlobalAlloc`], it provides a safe API with proper error handling.
+///
+/// # Implementing Allocator
+///
+/// To create a custom allocator, implement the required methods:
+///
+/// ```tml
+/// use core::alloc::{Allocator, Layout, AllocError}
+/// use core::ptr::NonNull
+///
+/// pub type PoolAllocator {
+///     pool: RawMutPtr[U8],
+///     pool_size: I64,
+///     allocated: I64
+/// }
+///
+/// impl Allocator for PoolAllocator {
+///     pub func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+///         let size = layout.size()
+///         let align = layout.align()
+///
+///         // Calculate aligned offset
+///         let current = this.pool.addr() + this.allocated
+///         let aligned = (current + align - 1) & ~(align - 1)
+///         let padding = aligned - current
+///
+///         if this.allocated + padding + size > this.pool_size {
+///             return Err(AllocError::new())
+///         }
+///
+///         this.allocated = this.allocated + padding + size
+///         return Ok(NonNull::new_unchecked(RawMutPtr::from_addr(aligned)))
+///     }
+///
+///     pub lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout) {
+///         // Pool allocator doesn't support individual deallocation
+///     }
+/// }
+/// ```
+///
+/// # Using Allocators with Collections
+///
+/// Collections like `List[T]` can accept custom allocators:
+///
+/// ```tml
+/// let arena = ArenaAllocator::new(1024 * 1024)  // 1MB arena
+/// let list: List[I64, ArenaAllocator] = List::new_in(arena)
+///
+/// // All allocations for this list use the arena
+/// list.push(1)
+/// list.push(2)
+/// list.push(3)
+/// ```
+///
+/// # Memory Safety
+///
+/// Implementations must ensure:
+///
+/// 1. Returned pointers are properly aligned
+/// 2. Allocated memory is valid until deallocated
+/// 3. Memory blocks don't overlap (unless explicitly shared)
+/// 4. `deallocate` is only called with matching layout
+///
+/// # Default Methods
+///
+/// The behavior provides default implementations for:
+///
+/// - `allocate_zeroed` - Allocates and zeros memory
+/// - `grow` - Grows an existing allocation
+/// - `grow_zeroed` - Grows and zeros the new portion
+/// - `shrink` - Shrinks an existing allocation
+///
+/// Override these if your allocator can provide more efficient implementations.
+pub behavior Allocator {
+    /// Allocates memory as described by the given `layout`.
+    ///
+    /// On success, returns a `NonNull[U8]` meeting the size and alignment
+    /// guarantees of `layout`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AllocError)` if allocation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let layout = Layout::from_size_align(100, 8).unwrap()
+    ///
+    /// when allocator.allocate(layout) {
+    ///     Ok(ptr) => {
+    ///         // Use the allocated memory
+    ///         // Don't forget to deallocate!
+    ///     },
+    ///     Err(err) => {
+    ///         println("allocation failed: " + err.to_string())
+    ///     }
+    /// }
+    /// ```
+    func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError]
+
+    /// Deallocates the memory referenced by `ptr`.
+    ///
+    /// # Safety
+    ///
+    /// This is a lowlevel function. The caller must ensure:
+    ///
+    /// - `ptr` was returned by a previous call to `allocate` on this allocator
+    /// - `layout` is the same layout used for the allocation
+    /// - The memory has not already been deallocated
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let layout = Layout::from_size_align(100, 8).unwrap()
+    /// let ptr = allocator.allocate(layout).unwrap()
+    ///
+    /// // ... use the memory ...
+    ///
+    /// lowlevel {
+    ///     allocator.deallocate(ptr, layout)
+    /// }
+    /// // ptr is now invalid
+    /// ```
+    lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout)
+
+    /// Allocates zero-initialized memory.
+    ///
+    /// The default implementation calls `allocate` and zeroes the memory.
+    /// Override this if your allocator can provide zero-initialized memory
+    /// more efficiently.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AllocError)` if allocation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let layout = Layout::array[I64](100).unwrap()
+    /// let ptr = allocator.allocate_zeroed(layout)?
+    ///
+    /// // All bytes are guaranteed to be zero
+    /// ```
+    func allocate_zeroed(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        let ptr = this.allocate(layout)?
+        lowlevel {
+            let raw_ptr: RawMutPtr[U8] = ptr.as_ptr()
+            memset(raw_ptr.addr(), 0, layout.size())
+        }
+        return Ok(ptr)
+    }
+
+    /// Grows an allocation to a larger size.
+    ///
+    /// Given a pointer to a current allocation and its layout, this attempts
+    /// to grow the allocation to fit `new_layout`. If successful, the old
+    /// allocation is invalidated.
+    ///
+    /// # Arguments
+    ///
+    /// * `ptr` - Pointer to the current allocation
+    /// * `old_layout` - The layout of the current allocation
+    /// * `new_layout` - The desired new layout (must be larger)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AllocError)` if:
+    /// - The new allocation cannot be satisfied
+    /// - `new_layout.size() < old_layout.size()`
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let old_layout = Layout::from_size_align(100, 8).unwrap()
+    /// let ptr = allocator.allocate(old_layout)?
+    ///
+    /// // Grow to 200 bytes
+    /// let new_layout = Layout::from_size_align(200, 8).unwrap()
+    /// let new_ptr = allocator.grow(ptr, old_layout, new_layout)?
+    ///
+    /// // ptr is now invalid, use new_ptr
+    /// ```
+    func grow(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        // Allocate new memory
+        let new_ptr = this.allocate(new_layout)?
+
+        // Copy old data
+        lowlevel {
+            let src: RawPtr[U8] = ptr.as_const_ptr()
+            let dst: RawMutPtr[U8] = new_ptr.as_ptr()
+            memcpy(dst.addr(), src.addr(), old_layout.size())
+        }
+
+        // Deallocate old memory
+        lowlevel {
+            this.deallocate(ptr, old_layout)
+        }
+
+        return Ok(new_ptr)
+    }
+
+    /// Grows an allocation, zeroing the new portion.
+    ///
+    /// Similar to `grow`, but the additional memory is zero-initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let old_layout = Layout::array[I64](10).unwrap()
+    /// let ptr = allocator.allocate(old_layout)?
+    ///
+    /// let new_layout = Layout::array[I64](20).unwrap()
+    /// let new_ptr = allocator.grow_zeroed(ptr, old_layout, new_layout)?
+    ///
+    /// // Elements 10-19 are guaranteed to be zero
+    /// ```
+    func grow_zeroed(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        let new_ptr = this.grow(ptr, old_layout, new_layout)?
+
+        // Zero the new portion
+        let old_size = old_layout.size()
+        let new_size = new_layout.size()
+        if new_size > old_size {
+            lowlevel {
+                let start: RawMutPtr[U8] = new_ptr.as_ptr().add(old_size)
+                memset(start.addr(), 0, new_size - old_size)
+            }
+        }
+
+        return Ok(new_ptr)
+    }
+
+    /// Shrinks an allocation to a smaller size.
+    ///
+    /// Given a pointer to a current allocation and its layout, this attempts
+    /// to shrink the allocation to fit `new_layout`. If successful, the old
+    /// allocation is invalidated.
+    ///
+    /// # Arguments
+    ///
+    /// * `ptr` - Pointer to the current allocation
+    /// * `old_layout` - The layout of the current allocation
+    /// * `new_layout` - The desired new layout (must be smaller)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AllocError)` if:
+    /// - The shrink operation fails
+    /// - `new_layout.size() > old_layout.size()`
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let old_layout = Layout::from_size_align(1000, 8).unwrap()
+    /// let ptr = allocator.allocate(old_layout)?
+    ///
+    /// // Shrink to 100 bytes
+    /// let new_layout = Layout::from_size_align(100, 8).unwrap()
+    /// let new_ptr = allocator.shrink(ptr, old_layout, new_layout)?
+    /// ```
+    func shrink(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        // Default implementation: allocate new, copy, deallocate old
+        let new_ptr = this.allocate(new_layout)?
+
+        // Copy data (only up to new size)
+        lowlevel {
+            let src: RawPtr[U8] = ptr.as_const_ptr()
+            let dst: RawMutPtr[U8] = new_ptr.as_ptr()
+            memcpy(dst.addr(), src.addr(), new_layout.size())
+        }
+
+        // Deallocate old memory
+        lowlevel {
+            this.deallocate(ptr, old_layout)
+        }
+
+        return Ok(new_ptr)
+    }
+
+    /// Returns a reference to this allocator.
+    ///
+    /// This is useful for passing allocators by reference to functions
+    /// that need an owned allocator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func use_allocator[A: Allocator](alloc: A) { ... }
+    ///
+    /// let my_alloc = MyAllocator::new()
+    /// use_allocator(my_alloc.by_ref())  // Borrows instead of moving
+    /// // my_alloc is still usable here
+    /// ```
+    func by_ref(ref this) -> ref Self {
+        return this
+    }
+}
+
+// ============================================================================
+// Global Allocator
+// ============================================================================
+
+/// The global memory allocator.
+///
+/// `Global` is a zero-sized type that implements `Allocator` by delegating
+/// to the registered global allocator (or the system allocator by default).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::alloc::{Allocator, Global, Layout}
+///
+/// // Allocate using the global allocator
+/// let layout = Layout::from_size_align(1024, 8).unwrap()
+/// let ptr = Global.allocate(layout)?
+///
+/// // ... use the memory ...
+///
+/// lowlevel {
+///     Global.deallocate(ptr, layout)
+/// }
+/// ```
+///
+/// # With Collections
+///
+/// `Global` is the default allocator for standard collections:
+///
+/// ```tml
+/// // These are equivalent:
+/// let list1: List[I64] = List::new()
+/// let list2: List[I64, Global] = List::new_in(Global)
+/// ```
+pub type Global {}
+
+impl Allocator for Global {
+    pub func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        if layout.size() == 0 {
+            // Zero-sized allocation returns a dangling aligned pointer
+            return Ok(layout.dangling())
+        }
+
+        let ptr: RawMutPtr[U8] = lowlevel { global_alloc(layout.size(), layout.align()) }
+
+        when NonNull::new(ptr) {
+            Just(nonnull) => return Ok(nonnull),
+            Nothing => return Err(AllocError::new())
+        }
+    }
+
+    pub lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout) {
+        if layout.size() == 0 {
+            // Zero-sized allocations don't need deallocation
+            return
+        }
+
+        lowlevel { global_dealloc(ptr.as_ptr().addr(), layout.size(), layout.align()) }
+    }
+
+    pub func allocate_zeroed(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        if layout.size() == 0 {
+            return Ok(layout.dangling())
+        }
+
+        let ptr: RawMutPtr[U8] = lowlevel { global_alloc_zeroed(layout.size(), layout.align()) }
+
+        when NonNull::new(ptr) {
+            Just(nonnull) => return Ok(nonnull),
+            Nothing => return Err(AllocError::new())
+        }
+    }
+}
+
+// ============================================================================
+// Allocator Implementation for References
+// ============================================================================
+
+/// Allocator implementation for immutable references.
+///
+/// This allows passing allocators by reference without moving them.
+impl[A: Allocator] Allocator for ref A {
+    pub func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).allocate(layout)
+    }
+
+    pub lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout) {
+        (*this).deallocate(ptr, layout)
+    }
+
+    pub func allocate_zeroed(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).allocate_zeroed(layout)
+    }
+
+    pub func grow(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).grow(ptr, old_layout, new_layout)
+    }
+
+    pub func grow_zeroed(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).grow_zeroed(ptr, old_layout, new_layout)
+    }
+
+    pub func shrink(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).shrink(ptr, old_layout, new_layout)
+    }
+}
+
+/// Allocator implementation for mutable references.
+impl[A: Allocator] Allocator for mut ref A {
+    pub func allocate(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).allocate(layout)
+    }
+
+    pub lowlevel func deallocate(this, ptr: NonNull[U8], layout: Layout) {
+        (*this).deallocate(ptr, layout)
+    }
+
+    pub func allocate_zeroed(this, layout: Layout) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).allocate_zeroed(layout)
+    }
+
+    pub func grow(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).grow(ptr, old_layout, new_layout)
+    }
+
+    pub func grow_zeroed(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).grow_zeroed(ptr, old_layout, new_layout)
+    }
+
+    pub func shrink(
+        this,
+        ptr: NonNull[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[NonNull[U8], AllocError] {
+        return (*this).shrink(ptr, old_layout, new_layout)
+    }
+}

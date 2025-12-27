@@ -1,0 +1,822 @@
+// Tests for core::alloc module
+
+use core::alloc::{Layout, LayoutError, AllocError, Allocator, Global}
+use core::option::Maybe
+use core::result::Outcome
+use core::ptr::{NonNull, RawMutPtr}
+
+// ============================================================================
+// Layout Constructor Tests
+// ============================================================================
+
+@test
+func test_layout_from_size_align_valid() {
+    // Valid: size=100, align=8 (power of two)
+    let result = Layout::from_size_align(100, 8)
+    assert(result.is_ok())
+
+    when result {
+        Ok(layout) => {
+            assert_eq(layout.size(), 100)
+            assert_eq(layout.align(), 8)
+        },
+        Err(_) => panic("should have succeeded")
+    }
+}
+
+@test
+func test_layout_from_size_align_invalid_alignment_not_power_of_two() {
+    // Invalid: alignment 3 is not a power of two
+    let result = Layout::from_size_align(100, 3)
+    assert(result.is_err())
+}
+
+@test
+func test_layout_from_size_align_invalid_alignment_zero() {
+    // Invalid: alignment cannot be zero
+    let result = Layout::from_size_align(100, 0)
+    assert(result.is_err())
+}
+
+@test
+func test_layout_from_size_align_invalid_negative_size() {
+    // Invalid: negative size
+    let result = Layout::from_size_align(-1, 8)
+    assert(result.is_err())
+}
+
+@test
+func test_layout_from_size_align_invalid_negative_alignment() {
+    // Invalid: negative alignment
+    let result = Layout::from_size_align(100, -8)
+    assert(result.is_err())
+}
+
+@test
+func test_layout_from_size_align_all_power_of_two_alignments() {
+    // Test all common power-of-two alignments
+    let alignments: List[I64] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+
+    for align in alignments {
+        let result = Layout::from_size_align(100, align)
+        assert(result.is_ok())
+        when result {
+            Ok(layout) => assert_eq(layout.align(), align),
+            Err(_) => panic("alignment " + align.to_string() + " should be valid")
+        }
+    }
+}
+
+@test
+func test_layout_new_i8() {
+    let layout = Layout::new[I8]()
+    assert_eq(layout.size(), 1)
+    assert_eq(layout.align(), 1)
+}
+
+@test
+func test_layout_new_i16() {
+    let layout = Layout::new[I16]()
+    assert_eq(layout.size(), 2)
+    assert_eq(layout.align(), 2)
+}
+
+@test
+func test_layout_new_i32() {
+    let layout = Layout::new[I32]()
+    assert_eq(layout.size(), 4)
+    assert_eq(layout.align(), 4)
+}
+
+@test
+func test_layout_new_i64() {
+    let layout = Layout::new[I64]()
+    assert_eq(layout.size(), 8)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_layout_new_u8() {
+    let layout = Layout::new[U8]()
+    assert_eq(layout.size(), 1)
+    assert_eq(layout.align(), 1)
+}
+
+@test
+func test_layout_new_u64() {
+    let layout = Layout::new[U64]()
+    assert_eq(layout.size(), 8)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_layout_new_f32() {
+    let layout = Layout::new[F32]()
+    assert_eq(layout.size(), 4)
+    assert_eq(layout.align(), 4)
+}
+
+@test
+func test_layout_new_f64() {
+    let layout = Layout::new[F64]()
+    assert_eq(layout.size(), 8)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_layout_new_bool() {
+    let layout = Layout::new[Bool]()
+    assert_eq(layout.size(), 1)
+    assert_eq(layout.align(), 1)
+}
+
+@test
+func test_layout_for_value() {
+    let x: I64 = 42
+    let layout = Layout::for_value(ref x)
+    assert_eq(layout.size(), 8)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_layout_from_size_align_unchecked() {
+    // Unchecked version should work for valid inputs
+    let layout = Layout::from_size_align_unchecked(100, 8)
+    assert_eq(layout.size(), 100)
+    assert_eq(layout.align(), 8)
+}
+
+// ============================================================================
+// Layout Accessors Tests
+// ============================================================================
+
+@test
+func test_layout_size_accessor() {
+    let layout = Layout::from_size_align(256, 16).unwrap()
+    assert_eq(layout.size(), 256)
+}
+
+@test
+func test_layout_align_accessor() {
+    let layout = Layout::from_size_align(256, 16).unwrap()
+    assert_eq(layout.align(), 16)
+}
+
+// ============================================================================
+// Layout Padding Calculation Tests
+// ============================================================================
+
+@test
+func test_padding_needed_for_aligned() {
+    // If already aligned, no padding needed
+    let layout = Layout::from_size_align(16, 8).unwrap()
+    assert_eq(layout.padding_needed_for(0), 0)
+    assert_eq(layout.padding_needed_for(8), 0)
+    assert_eq(layout.padding_needed_for(16), 0)
+}
+
+@test
+func test_padding_needed_for_misaligned() {
+    let layout = Layout::from_size_align(4, 8).unwrap()
+
+    // At position 4, need 4 bytes to reach 8
+    assert_eq(layout.padding_needed_for(4), 4)
+
+    // At position 7, need 1 byte to reach 8
+    assert_eq(layout.padding_needed_for(7), 1)
+
+    // At position 9, need 7 bytes to reach 16
+    assert_eq(layout.padding_needed_for(9), 7)
+}
+
+@test
+func test_padding_needed_for_align_1() {
+    // Alignment 1 never needs padding
+    let layout = Layout::from_size_align(10, 1).unwrap()
+    assert_eq(layout.padding_needed_for(0), 0)
+    assert_eq(layout.padding_needed_for(1), 0)
+    assert_eq(layout.padding_needed_for(5), 0)
+    assert_eq(layout.padding_needed_for(100), 0)
+}
+
+@test
+func test_padding_needed_for_align_16() {
+    let layout = Layout::from_size_align(10, 16).unwrap()
+
+    assert_eq(layout.padding_needed_for(0), 0)   // Already aligned
+    assert_eq(layout.padding_needed_for(1), 15)  // Need 15 bytes
+    assert_eq(layout.padding_needed_for(8), 8)   // Need 8 bytes
+    assert_eq(layout.padding_needed_for(15), 1)  // Need 1 byte
+    assert_eq(layout.padding_needed_for(16), 0)  // Already aligned
+}
+
+@test
+func test_pad_to_align_no_padding_needed() {
+    // Size is already a multiple of alignment
+    let layout = Layout::from_size_align(16, 8).unwrap()
+    let padded = layout.pad_to_align().unwrap()
+    assert_eq(padded.size(), 16)
+    assert_eq(padded.align(), 8)
+}
+
+@test
+func test_pad_to_align_padding_needed() {
+    // Size 5, align 4 -> should pad to 8
+    let layout = Layout::from_size_align(5, 4).unwrap()
+    let padded = layout.pad_to_align().unwrap()
+    assert_eq(padded.size(), 8)
+    assert_eq(padded.align(), 4)
+}
+
+@test
+func test_pad_to_align_various_sizes() {
+    // Test various size/align combinations
+
+    // 1 byte, align 4 -> pad to 4
+    let layout = Layout::from_size_align(1, 4).unwrap()
+    assert_eq(layout.pad_to_align().unwrap().size(), 4)
+
+    // 7 bytes, align 8 -> pad to 8
+    let layout = Layout::from_size_align(7, 8).unwrap()
+    assert_eq(layout.pad_to_align().unwrap().size(), 8)
+
+    // 10 bytes, align 16 -> pad to 16
+    let layout = Layout::from_size_align(10, 16).unwrap()
+    assert_eq(layout.pad_to_align().unwrap().size(), 16)
+}
+
+// ============================================================================
+// Layout align_to Tests
+// ============================================================================
+
+@test
+func test_align_to_increase_alignment() {
+    let layout = Layout::from_size_align(100, 4).unwrap()
+    let aligned = layout.align_to(16).unwrap()
+
+    assert_eq(aligned.size(), 100)    // Size unchanged
+    assert_eq(aligned.align(), 16)    // Alignment increased
+}
+
+@test
+func test_align_to_same_alignment() {
+    let layout = Layout::from_size_align(100, 8).unwrap()
+    let aligned = layout.align_to(8).unwrap()
+
+    assert_eq(aligned.size(), 100)
+    assert_eq(aligned.align(), 8)
+}
+
+@test
+func test_align_to_never_decreases() {
+    // align_to should never decrease alignment
+    let layout = Layout::from_size_align(100, 16).unwrap()
+    let aligned = layout.align_to(8).unwrap()
+
+    assert_eq(aligned.size(), 100)
+    assert_eq(aligned.align(), 16)  // Still 16, not reduced to 8
+}
+
+@test
+func test_align_to_invalid_alignment() {
+    let layout = Layout::from_size_align(100, 8).unwrap()
+    // Try to align to 3 (not a power of two)
+    let result = layout.align_to(3)
+    assert(result.is_err())
+}
+
+// ============================================================================
+// Layout extend Tests
+// ============================================================================
+
+@test
+func test_extend_same_alignment() {
+    // Extending [I64; 4] with another [I64; 4]
+    let a = Layout::from_size_align(8, 8).unwrap()
+    let b = Layout::from_size_align(8, 8).unwrap()
+
+    let (combined, offset) = a.extend(b).unwrap()
+
+    assert_eq(offset, 8)           // b starts at offset 8
+    assert_eq(combined.size(), 16) // Total size is 16
+    assert_eq(combined.align(), 8) // Alignment is 8
+}
+
+@test
+func test_extend_different_alignment() {
+    // Simulating struct { a: I32, b: I64 }
+    let a = Layout::from_size_align(4, 4).unwrap()  // I32
+    let b = Layout::from_size_align(8, 8).unwrap()  // I64
+
+    let (combined, b_offset) = a.extend(b).unwrap()
+
+    assert_eq(b_offset, 8)          // b needs to be at offset 8 (4 + 4 padding)
+    assert_eq(combined.size(), 16)  // Total: 4 (a) + 4 (padding) + 8 (b) = 16
+    assert_eq(combined.align(), 8)  // Max alignment
+}
+
+@test
+func test_extend_no_padding_needed() {
+    // First field is already aligned for second
+    let a = Layout::from_size_align(16, 8).unwrap()
+    let b = Layout::from_size_align(8, 8).unwrap()
+
+    let (combined, offset) = a.extend(b).unwrap()
+
+    assert_eq(offset, 16)          // No padding needed
+    assert_eq(combined.size(), 24)
+    assert_eq(combined.align(), 8)
+}
+
+@test
+func test_extend_multiple_fields() {
+    // Simulating struct { a: U8, b: U16, c: U32 }
+    let a = Layout::from_size_align(1, 1).unwrap()  // U8
+    let b = Layout::from_size_align(2, 2).unwrap()  // U16
+    let c = Layout::from_size_align(4, 4).unwrap()  // U32
+
+    // Extend a with b
+    let (ab, b_offset) = a.extend(b).unwrap()
+    assert_eq(b_offset, 2)  // U8 + 1 padding
+
+    // Extend ab with c
+    let (abc, c_offset) = ab.extend(c).unwrap()
+    assert_eq(c_offset, 4)  // Aligned to 4
+    assert_eq(abc.size(), 8)
+    assert_eq(abc.align(), 4)
+}
+
+// ============================================================================
+// Layout repeat Tests
+// ============================================================================
+
+@test
+func test_repeat_zero_elements() {
+    let elem = Layout::from_size_align(8, 8).unwrap()
+    let (array, stride) = elem.repeat(0).unwrap()
+
+    assert_eq(array.size(), 0)
+    assert_eq(array.align(), 8)
+    assert_eq(stride, 8)
+}
+
+@test
+func test_repeat_one_element() {
+    let elem = Layout::from_size_align(8, 8).unwrap()
+    let (array, stride) = elem.repeat(1).unwrap()
+
+    assert_eq(array.size(), 8)
+    assert_eq(array.align(), 8)
+    assert_eq(stride, 8)
+}
+
+@test
+func test_repeat_multiple_elements_no_padding() {
+    // Element size is already aligned
+    let elem = Layout::from_size_align(8, 8).unwrap()
+    let (array, stride) = elem.repeat(10).unwrap()
+
+    assert_eq(array.size(), 80)  // 10 * 8
+    assert_eq(array.align(), 8)
+    assert_eq(stride, 8)
+}
+
+@test
+func test_repeat_multiple_elements_with_padding() {
+    // Element size 5, align 4 -> stride 8 (with padding)
+    let elem = Layout::from_size_align(5, 4).unwrap()
+    let (array, stride) = elem.repeat(10).unwrap()
+
+    assert_eq(stride, 8)         // 5 + 3 padding
+    assert_eq(array.size(), 80)  // 10 * 8
+    assert_eq(array.align(), 4)
+}
+
+@test
+func test_repeat_large_count() {
+    let elem = Layout::from_size_align(8, 8).unwrap()
+    let (array, stride) = elem.repeat(1000).unwrap()
+
+    assert_eq(array.size(), 8000)
+    assert_eq(stride, 8)
+}
+
+// ============================================================================
+// Layout array Tests
+// ============================================================================
+
+@test
+func test_array_i64_zero_elements() {
+    let layout = Layout::array[I64](0).unwrap()
+    assert_eq(layout.size(), 0)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_array_i64_one_element() {
+    let layout = Layout::array[I64](1).unwrap()
+    assert_eq(layout.size(), 8)
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_array_i64_ten_elements() {
+    let layout = Layout::array[I64](10).unwrap()
+    assert_eq(layout.size(), 80)  // 10 * 8
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_array_i64_hundred_elements() {
+    let layout = Layout::array[I64](100).unwrap()
+    assert_eq(layout.size(), 800)  // 100 * 8
+    assert_eq(layout.align(), 8)
+}
+
+@test
+func test_array_u8_elements() {
+    let layout = Layout::array[U8](100).unwrap()
+    assert_eq(layout.size(), 100)  // 100 * 1
+    assert_eq(layout.align(), 1)
+}
+
+@test
+func test_array_bool_elements() {
+    let layout = Layout::array[Bool](50).unwrap()
+    assert_eq(layout.size(), 50)  // 50 * 1
+    assert_eq(layout.align(), 1)
+}
+
+// ============================================================================
+// Layout dangling Tests
+// ============================================================================
+
+@test
+func test_dangling_non_null() {
+    let layout = Layout::from_size_align(100, 8).unwrap()
+    let ptr = layout.dangling()
+
+    assert(not ptr.as_ptr().is_null())
+}
+
+@test
+func test_dangling_address_equals_alignment() {
+    let layout = Layout::from_size_align(100, 16).unwrap()
+    let ptr = layout.dangling()
+
+    // The dangling pointer should have address equal to alignment
+    assert_eq(ptr.as_ptr().addr(), 16)
+}
+
+@test
+func test_dangling_various_alignments() {
+    let alignments: List[I64] = [1, 2, 4, 8, 16, 32, 64]
+
+    for align in alignments {
+        let layout = Layout::from_size_align(100, align).unwrap()
+        let ptr = layout.dangling()
+        assert_eq(ptr.as_ptr().addr(), align)
+    }
+}
+
+// ============================================================================
+// Layout Equality Tests
+// ============================================================================
+
+@test
+func test_layout_equality_same_values() {
+    let a = Layout::from_size_align(100, 8).unwrap()
+    let b = Layout::from_size_align(100, 8).unwrap()
+    assert(a == b)
+}
+
+@test
+func test_layout_equality_different_size() {
+    let a = Layout::from_size_align(100, 8).unwrap()
+    let b = Layout::from_size_align(200, 8).unwrap()
+    assert(a != b)
+}
+
+@test
+func test_layout_equality_different_align() {
+    let a = Layout::from_size_align(100, 8).unwrap()
+    let b = Layout::from_size_align(100, 16).unwrap()
+    assert(a != b)
+}
+
+@test
+func test_layout_equality_reflexive() {
+    let layout = Layout::from_size_align(100, 8).unwrap()
+    assert(layout == layout)
+}
+
+// ============================================================================
+// LayoutError Tests
+// ============================================================================
+
+@test
+func test_layout_error_display() {
+    let err = LayoutError::new()
+    assert_eq(err.to_string(), "invalid layout parameters")
+}
+
+@test
+func test_layout_error_debug() {
+    let err = LayoutError::new()
+    assert_eq(err.debug_string(), "LayoutError")
+}
+
+@test
+func test_layout_error_equality() {
+    let err1 = LayoutError::new()
+    let err2 = LayoutError::new()
+    assert(err1 == err2)
+}
+
+// ============================================================================
+// AllocError Tests
+// ============================================================================
+
+@test
+func test_alloc_error_display() {
+    let err = AllocError::new()
+    assert_eq(err.to_string(), "memory allocation failed")
+}
+
+@test
+func test_alloc_error_debug() {
+    let err = AllocError::new()
+    assert_eq(err.debug_string(), "AllocError")
+}
+
+@test
+func test_alloc_error_equality() {
+    let err1 = AllocError::new()
+    let err2 = AllocError::new()
+    assert(err1 == err2)
+}
+
+// ============================================================================
+// Global Allocator Tests
+// ============================================================================
+
+@test
+func test_global_allocator_allocate_small() {
+    let layout = Layout::from_size_align(16, 8).unwrap()
+
+    when Global.allocate(layout) {
+        Ok(ptr) => {
+            assert(not ptr.as_ptr().is_null())
+
+            // Cleanup
+            lowlevel {
+                Global.deallocate(ptr, layout)
+            }
+        },
+        Err(_) => panic("allocation should succeed")
+    }
+}
+
+@test
+func test_global_allocator_allocate_large() {
+    let layout = Layout::from_size_align(1024 * 1024, 16).unwrap()  // 1MB
+
+    when Global.allocate(layout) {
+        Ok(ptr) => {
+            assert(not ptr.as_ptr().is_null())
+
+            lowlevel {
+                Global.deallocate(ptr, layout)
+            }
+        },
+        Err(_) => {
+            // Large allocation might fail on some systems, that's ok
+        }
+    }
+}
+
+@test
+func test_global_allocator_allocate_zero_size() {
+    // Zero-sized allocation should return a dangling pointer
+    let layout = Layout::from_size_align(0, 8).unwrap()
+
+    when Global.allocate(layout) {
+        Ok(ptr) => {
+            assert(not ptr.as_ptr().is_null())
+            // No deallocation needed for zero-sized
+        },
+        Err(_) => panic("zero-sized allocation should succeed")
+    }
+}
+
+@test
+func test_global_allocator_allocate_zeroed() {
+    let layout = Layout::array[I64](10).unwrap()
+
+    when Global.allocate_zeroed(layout) {
+        Ok(ptr) => {
+            // Check that memory is actually zeroed
+            let i64_ptr = ptr.cast[I64]()
+
+            for i in 0 to 10 {
+                let value = i64_ptr.as_ptr().add(i).read()
+                assert_eq(value, 0)
+            }
+
+            lowlevel {
+                Global.deallocate(ptr, layout)
+            }
+        },
+        Err(_) => panic("allocation should succeed")
+    }
+}
+
+@test
+func test_global_allocator_allocate_and_write() {
+    let layout = Layout::from_size_align(8, 8).unwrap()
+
+    when Global.allocate(layout) {
+        Ok(ptr) => {
+            // Write a value
+            let i64_ptr = ptr.cast[I64]()
+            i64_ptr.write(42)
+
+            // Read it back
+            let value = i64_ptr.read()
+            assert_eq(value, 42)
+
+            lowlevel {
+                Global.deallocate(ptr, layout)
+            }
+        },
+        Err(_) => panic("allocation should succeed")
+    }
+}
+
+@test
+func test_global_allocator_multiple_allocations() {
+    let layout = Layout::from_size_align(64, 8).unwrap()
+
+    // Allocate multiple blocks
+    let ptr1 = Global.allocate(layout).unwrap()
+    let ptr2 = Global.allocate(layout).unwrap()
+    let ptr3 = Global.allocate(layout).unwrap()
+
+    // They should be different
+    assert(ptr1.as_ptr().addr() != ptr2.as_ptr().addr())
+    assert(ptr2.as_ptr().addr() != ptr3.as_ptr().addr())
+    assert(ptr1.as_ptr().addr() != ptr3.as_ptr().addr())
+
+    // Cleanup
+    lowlevel {
+        Global.deallocate(ptr1, layout)
+        Global.deallocate(ptr2, layout)
+        Global.deallocate(ptr3, layout)
+    }
+}
+
+// ============================================================================
+// Allocator Behavior Tests (using Global as implementation)
+// ============================================================================
+
+@test
+func test_allocator_grow() {
+    let old_layout = Layout::from_size_align(64, 8).unwrap()
+    let new_layout = Layout::from_size_align(128, 8).unwrap()
+
+    // Allocate initial block
+    let ptr = Global.allocate(old_layout).unwrap()
+
+    // Write some data
+    let i64_ptr = ptr.cast[I64]()
+    for i in 0 to 8 {  // 64 bytes = 8 I64s
+        i64_ptr.as_ptr().add(i).write(i)
+    }
+
+    // Grow the allocation
+    when Global.grow(ptr, old_layout, new_layout) {
+        Ok(new_ptr) => {
+            // Verify data was preserved
+            let new_i64_ptr = new_ptr.cast[I64]()
+            for i in 0 to 8 {
+                let value = new_i64_ptr.as_ptr().add(i).read()
+                assert_eq(value, i)
+            }
+
+            lowlevel {
+                Global.deallocate(new_ptr, new_layout)
+            }
+        },
+        Err(_) => panic("grow should succeed")
+    }
+}
+
+@test
+func test_allocator_grow_zeroed() {
+    let old_layout = Layout::from_size_align(64, 8).unwrap()
+    let new_layout = Layout::from_size_align(128, 8).unwrap()
+
+    let ptr = Global.allocate(old_layout).unwrap()
+
+    when Global.grow_zeroed(ptr, old_layout, new_layout) {
+        Ok(new_ptr) => {
+            // Check that new portion is zeroed (bytes 64-127)
+            let u8_ptr = new_ptr.as_ptr()
+            for i in 64 to 128 {
+                let value = u8_ptr.add(i).read()
+                assert_eq(value, 0)
+            }
+
+            lowlevel {
+                Global.deallocate(new_ptr, new_layout)
+            }
+        },
+        Err(_) => panic("grow_zeroed should succeed")
+    }
+}
+
+@test
+func test_allocator_shrink() {
+    let old_layout = Layout::from_size_align(128, 8).unwrap()
+    let new_layout = Layout::from_size_align(64, 8).unwrap()
+
+    let ptr = Global.allocate(old_layout).unwrap()
+
+    // Write data in the part we're keeping
+    let i64_ptr = ptr.cast[I64]()
+    for i in 0 to 8 {
+        i64_ptr.as_ptr().add(i).write(i * 10)
+    }
+
+    when Global.shrink(ptr, old_layout, new_layout) {
+        Ok(new_ptr) => {
+            // Verify data was preserved
+            let new_i64_ptr = new_ptr.cast[I64]()
+            for i in 0 to 8 {
+                let value = new_i64_ptr.as_ptr().add(i).read()
+                assert_eq(value, i * 10)
+            }
+
+            lowlevel {
+                Global.deallocate(new_ptr, new_layout)
+            }
+        },
+        Err(_) => panic("shrink should succeed")
+    }
+}
+
+@test
+func test_allocator_by_ref() {
+    let alloc = Global
+    let alloc_ref = alloc.by_ref()
+
+    let layout = Layout::from_size_align(32, 8).unwrap()
+
+    when alloc_ref.allocate(layout) {
+        Ok(ptr) => {
+            lowlevel {
+                alloc_ref.deallocate(ptr, layout)
+            }
+        },
+        Err(_) => panic("allocation through reference should succeed")
+    }
+}
+
+// ============================================================================
+// Edge Case Tests
+// ============================================================================
+
+@test
+func test_layout_max_alignment() {
+    // Test with very large power-of-two alignment
+    let result = Layout::from_size_align(100, 4096)
+    assert(result.is_ok())
+}
+
+@test
+func test_layout_size_exactly_at_boundary() {
+    // Size that's exactly a multiple of alignment
+    let layout = Layout::from_size_align(64, 8).unwrap()
+    let padded = layout.pad_to_align().unwrap()
+    assert_eq(padded.size(), 64)  // No padding needed
+}
+
+@test
+func test_extend_zero_sized_layouts() {
+    let a = Layout::from_size_align(0, 1).unwrap()
+    let b = Layout::from_size_align(8, 8).unwrap()
+
+    let (combined, offset) = a.extend(b).unwrap()
+    assert_eq(offset, 0)
+    assert_eq(combined.size(), 8)
+    assert_eq(combined.align(), 8)
+}
+
+@test
+func test_repeat_with_zero_sized_type() {
+    let elem = Layout::from_size_align(0, 1).unwrap()
+    let (array, stride) = elem.repeat(100).unwrap()
+
+    assert_eq(array.size(), 0)
+    assert_eq(stride, 0)
+}
