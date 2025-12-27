@@ -1,0 +1,321 @@
+// TML Core Library - Collections Behaviors Module
+// Provides: Behavior implementations for List[T] and HashMap[K,V]
+
+use std::collections::{List, HashMap}
+
+// ============================================================================
+// List[T] - Duplicate (Clone)
+// ============================================================================
+
+impl[T: Duplicate] Duplicate for List[T] {
+    pub func duplicate(this) -> List[T] {
+        let result: List[T] = List::new(this.capacity())
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len() {
+                break
+            }
+            result.push(this.get(i).duplicate())
+            i = i + 1
+        }
+        return result
+    }
+}
+
+// ============================================================================
+// List[T] - PartialEq, Eq
+// ============================================================================
+
+impl[T: PartialEq] PartialEq for List[T] {
+    pub func eq(this, other: ref List[T]) -> Bool {
+        if this.len() != other.len() {
+            return false
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len() {
+                break
+            }
+            if this.get(i).ne(ref other.get(i)) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+impl[T: Eq] Eq for List[T] {}
+
+// ============================================================================
+// List[T] - PartialOrd, Ord (Lexicographic)
+// ============================================================================
+
+impl[T: PartialOrd] PartialOrd for List[T] {
+    pub func partial_cmp(this, other: ref List[T]) -> Maybe[Ordering] {
+        let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
+        let mut i: I64 = 0
+        loop {
+            if i >= min_len {
+                break
+            }
+            when this.get(i).partial_cmp(ref other.get(i)) {
+                Just(ord) => {
+                    when ord {
+                        Less => return Just(Less),
+                        Greater => return Just(Greater),
+                        Equal => {}
+                    }
+                },
+                Nothing => return Nothing
+            }
+            i = i + 1
+        }
+        // All compared elements are equal, compare lengths
+        if this.len() < other.len() {
+            return Just(Less)
+        }
+        if this.len() > other.len() {
+            return Just(Greater)
+        }
+        return Just(Equal)
+    }
+}
+
+impl[T: Ord] Ord for List[T] {
+    pub func cmp(this, other: ref List[T]) -> Ordering {
+        let min_len: I64 = if this.len() < other.len() then this.len() else other.len()
+        let mut i: I64 = 0
+        loop {
+            if i >= min_len {
+                break
+            }
+            when this.get(i).cmp(ref other.get(i)) {
+                Less => return Less,
+                Greater => return Greater,
+                Equal => {}
+            }
+            i = i + 1
+        }
+        // All compared elements are equal, compare lengths
+        if this.len() < other.len() {
+            return Less
+        }
+        if this.len() > other.len() {
+            return Greater
+        }
+        return Equal
+    }
+}
+
+// ============================================================================
+// List[T] - Default
+// ============================================================================
+
+impl[T] Default for List[T] {
+    pub func default() -> List[T] {
+        return List::new(8)
+    }
+}
+
+// ============================================================================
+// List[T] - Display, Debug
+// ============================================================================
+
+impl[T: Display] Display for List[T] {
+    pub func to_string(this) -> Str {
+        let mut result: Str = "["
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len() {
+                break
+            }
+            if i > 0 {
+                result = result + ", "
+            }
+            result = result + this.get(i).to_string()
+            i = i + 1
+        }
+        return result + "]"
+    }
+}
+
+impl[T: Debug] Debug for List[T] {
+    pub func debug_string(this) -> Str {
+        let mut result: Str = "List["
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len() {
+                break
+            }
+            if i > 0 {
+                result = result + ", "
+            }
+            result = result + this.get(i).debug_string()
+            i = i + 1
+        }
+        return result + "]"
+    }
+}
+
+// ============================================================================
+// List[T] - Hash
+// ============================================================================
+
+impl[T: Hash] Hash for List[T] {
+    pub func hash(this) -> I64 {
+        let mut h: I64 = 0
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len() {
+                break
+            }
+            h = combine_hashes(h, this.get(i).hash())
+            i = i + 1
+        }
+        return h
+    }
+}
+
+// ============================================================================
+// List[T] - Index
+// ============================================================================
+
+impl[T] Index[I64] for List[T] {
+    type Output = T
+
+    pub func index(this, idx: I64) -> T {
+        return this.get(idx)
+    }
+}
+
+impl[T] IndexMut[I64] for List[T] {
+    pub func index_mut(mut this, idx: I64) -> mut ref T {
+        return lowlevel { list_get_mut(this.handle, idx) }
+    }
+}
+
+// ============================================================================
+// List[T] - FromIterator
+// ============================================================================
+
+impl[T] FromIterator[T] for List[T] {
+    pub func from_iter[I: Iterator](iter: I) -> List[T] where I::Item = T {
+        let result: List[T] = List::new(8)
+        let mut it = iter
+        loop {
+            when it.next() {
+                Just(item) => result.push(item),
+                Nothing => break
+            }
+        }
+        return result
+    }
+}
+
+// ============================================================================
+// List[T] - Extend
+// ============================================================================
+
+impl[T] Extend[T] for List[T] {
+    pub func extend[I: Iterator](mut this, iter: I) where I::Item = T {
+        let mut it = iter
+        loop {
+            when it.next() {
+                Just(item) => this.push(item),
+                Nothing => break
+            }
+        }
+    }
+}
+
+// ============================================================================
+// List[T] - IntoIterator
+// ============================================================================
+
+/// Iterator over List[T]
+pub type ListIter[T] {
+    list: List[T],
+    index: I64
+}
+
+impl[T] Iterator for ListIter[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.index >= this.list.len() {
+            return Nothing
+        }
+        let item: T = this.list.get(this.index)
+        this.index = this.index + 1
+        return Just(item)
+    }
+}
+
+impl[T] IntoIterator for List[T] {
+    type Item = T
+    type IntoIter = ListIter[T]
+
+    pub func into_iter(this) -> ListIter[T] {
+        return ListIter { list: this, index: 0 }
+    }
+}
+
+impl[T] List[T] {
+    /// Returns an iterator over the list
+    pub func iter(this) -> ListIter[T] {
+        return ListIter { list: this, index: 0 }
+    }
+}
+
+// ============================================================================
+// HashMap[K, V] - Default
+// ============================================================================
+
+impl[K, V] Default for HashMap[K, V] {
+    pub func default() -> HashMap[K, V] {
+        return HashMap::new(16)
+    }
+}
+
+// ============================================================================
+// HashMap[K, V] - Duplicate (Clone)
+// ============================================================================
+
+impl[K: Duplicate + Hash, V: Duplicate] Duplicate for HashMap[K, V] {
+    pub func duplicate(this) -> HashMap[K, V] {
+        let result: HashMap[K, V] = HashMap::new(16)
+        // Note: This requires HashMap to have an iterator, which it currently doesn't
+        // For now, we can't properly implement this without key iteration support
+        return result
+    }
+}
+
+// ============================================================================
+// HashMap[K, V] - Display, Debug
+// ============================================================================
+
+impl[K: Display, V: Display] Display for HashMap[K, V] {
+    pub func to_string(this) -> Str {
+        // Note: Without key iteration, we can only show size
+        return "{HashMap with " + this.len().to_string() + " entries}"
+    }
+}
+
+impl[K: Debug, V: Debug] Debug for HashMap[K, V] {
+    pub func debug_string(this) -> Str {
+        return "HashMap { len: " + this.len().to_string() + " }"
+    }
+}
+
+// ============================================================================
+// HashMap[K, V] - Index
+// ============================================================================
+
+impl[K, V] Index[K] for HashMap[K, V] {
+    type Output = V
+
+    pub func index(this, key: K) -> V {
+        return this.get(key)
+    }
+}

@@ -1,0 +1,18 @@
+// TML Core Library - Iterator Module
+// Provides: Iterator behavior and combinators
+//
+// This module is organized into submodules following Rust's core::iter pattern:
+// - traits: Core iterator behaviors (Iterator, IntoIterator, FromIterator, Extend)
+// - adapters: Iterator adapter types (Map, Filter, Take, Skip, etc.)
+// - sources: Iterator source types (Range, Repeat, Once, Empty)
+
+pub mod traits    // Iterator, IntoIterator, FromIterator, Extend
+pub mod adapters  // Map, Filter, Take, Skip, Chain, Zip, Enumerate, etc.
+
+// Re-export commonly used items
+pub use traits::{Iterator, IntoIterator, FromIterator, Extend}
+pub use adapters::{
+    Map, Filter, Take, Skip, Chain, Zip, Enumerate, Peekable,
+    TakeWhile, SkipWhile, Rev, FlatMap, Flatten, Cycle, StepBy,
+    Inspect, Fuse
+}

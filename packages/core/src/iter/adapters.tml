@@ -1,0 +1,591 @@
+// TML Core Library - Iterator Adapters
+// Types that wrap iterators to transform their output
+
+use core::iter::traits::{Iterator}
+use core::clone::Duplicate
+
+// ============================================================================
+// Map Adapter
+// ============================================================================
+
+/// An iterator that maps each element using a function.
+pub type Map[I, F, B] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F, B] Iterator for Map[I, F, B] where F: Fn(I::Item) -> B {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        when this.iter.next() {
+            Just(item) => return Just((this.f)(item)),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Filter Adapter
+// ============================================================================
+
+/// An iterator that filters elements using a predicate.
+pub type Filter[I, P] {
+    iter: I,
+    predicate: P
+}
+
+impl[I: Iterator, P] Iterator for Filter[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if (this.predicate)(ref item) {
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// TakeWhile Adapter
+// ============================================================================
+
+/// An iterator that yields elements while a predicate is true.
+pub type TakeWhile[I, P] {
+    iter: I,
+    predicate: P,
+    done: Bool
+}
+
+impl[I: Iterator, P] Iterator for TakeWhile[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => {
+                if (this.predicate)(ref item) {
+                    return Just(item)
+                } else {
+                    this.done = true
+                    return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// SkipWhile Adapter
+// ============================================================================
+
+/// An iterator that skips elements while a predicate is true.
+pub type SkipWhile[I, P] {
+    iter: I,
+    predicate: P,
+    done_skipping: Bool
+}
+
+impl[I: Iterator, P] Iterator for SkipWhile[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.done_skipping {
+            return this.iter.next()
+        }
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if (this.predicate)(ref item) {
+                        // Skip this item
+                    } else {
+                        this.done_skipping = true
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Take Adapter
+// ============================================================================
+
+/// An iterator that takes at most n elements.
+pub type Take[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Take[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Skip Adapter
+// ============================================================================
+
+/// An iterator that skips the first n elements.
+pub type Skip[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Skip[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            if this.remaining <= 0 {
+                break
+            }
+            when this.iter.next() {
+                Just(_) => this.remaining = this.remaining - 1,
+                Nothing => return Nothing
+            }
+        }
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Chain Adapter
+// ============================================================================
+
+/// An iterator that chains two iterators together.
+pub type Chain[A, B] {
+    first: A,
+    second: B,
+    first_done: Bool
+}
+
+impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item {
+    type Item = A::Item
+
+    pub func next(mut this) -> Maybe[A::Item] {
+        if not this.first_done {
+            when this.first.next() {
+                Just(item) => return Just(item),
+                Nothing => this.first_done = true
+            }
+        }
+        return this.second.next()
+    }
+}
+
+// ============================================================================
+// Zip Adapter
+// ============================================================================
+
+/// An iterator that zips two iterators together.
+pub type Zip[A, B] {
+    first: A,
+    second: B
+}
+
+impl[A: Iterator, B: Iterator] Iterator for Zip[A, B] {
+    type Item = (A::Item, B::Item)
+
+    pub func next(mut this) -> Maybe[(A::Item, B::Item)] {
+        when this.first.next() {
+            Just(a) => {
+                when this.second.next() {
+                    Just(b) => return Just((a, b)),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Enumerate Adapter
+// ============================================================================
+
+/// An iterator that yields (index, element) pairs.
+pub type Enumerate[I] {
+    iter: I,
+    index: I64
+}
+
+impl[I: Iterator] Iterator for Enumerate[I] {
+    type Item = (I64, I::Item)
+
+    pub func next(mut this) -> Maybe[(I64, I::Item)] {
+        when this.iter.next() {
+            Just(item) => {
+                let idx: I64 = this.index
+                this.index = this.index + 1
+                return Just((idx, item))
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Peekable Adapter
+// ============================================================================
+
+/// An iterator that peeks at the next element without consuming it.
+pub type Peekable[I: Iterator] {
+    iter: I,
+    peeked: Maybe[Maybe[I::Item]]
+}
+
+impl[I: Iterator] Peekable[I] {
+    /// Returns a reference to the next element without consuming it.
+    pub func peek(mut this) -> Maybe[ref I::Item] {
+        when this.peeked {
+            Just(maybe_item) => {
+                when maybe_item {
+                    Just(item) => return Just(ref item),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => {
+                this.peeked = Just(this.iter.next())
+                return this.peek()
+            }
+        }
+    }
+}
+
+impl[I: Iterator] Iterator for Peekable[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.peeked {
+            Just(maybe_item) => {
+                this.peeked = Nothing
+                return maybe_item
+            },
+            Nothing => return this.iter.next()
+        }
+    }
+}
+
+// ============================================================================
+// Rev Adapter
+// ============================================================================
+
+/// An iterator that reverses another iterator.
+/// Note: This collects all elements first, so it's not lazy.
+pub type Rev[I: Iterator] {
+    items: List[I::Item],
+    index: I64
+}
+
+impl[I: Iterator] Iterator for Rev[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.index < 0 {
+            return Nothing
+        }
+        let item: I::Item = this.items.get(this.index)
+        this.index = this.index - 1
+        return Just(item)
+    }
+}
+
+// ============================================================================
+// FlatMap Adapter
+// ============================================================================
+
+/// An iterator that maps and flattens.
+pub type FlatMap[I, F, U] where I: Iterator, U: Iterator {
+    iter: I,
+    f: F,
+    current: Maybe[U]
+}
+
+impl[I: Iterator, F, U: Iterator] Iterator for FlatMap[I, F, U] where F: Fn(I::Item) -> U {
+    type Item = U::Item
+
+    pub func next(mut this) -> Maybe[U::Item] {
+        loop {
+            // Try to get from current inner iterator
+            when this.current {
+                Just(inner) => {
+                    when inner.next() {
+                        Just(item) => return Just(item),
+                        Nothing => this.current = Nothing
+                    }
+                },
+                Nothing => {}
+            }
+            // Get next inner iterator
+            when this.iter.next() {
+                Just(item) => this.current = Just((this.f)(item)),
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Flatten Adapter
+// ============================================================================
+
+/// An iterator that flattens nested iterators.
+pub type Flatten[I] where I: Iterator, I::Item: Iterator {
+    iter: I,
+    current: Maybe[I::Item]
+}
+
+impl[I: Iterator] Iterator for Flatten[I] where I::Item: Iterator {
+    type Item = (I::Item)::Item
+
+    pub func next(mut this) -> Maybe[(I::Item)::Item] {
+        loop {
+            when this.current {
+                Just(inner) => {
+                    when inner.next() {
+                        Just(item) => return Just(item),
+                        Nothing => this.current = Nothing
+                    }
+                },
+                Nothing => {}
+            }
+            when this.iter.next() {
+                Just(inner_iter) => this.current = Just(inner_iter),
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Cycle Adapter
+// ============================================================================
+
+/// An iterator that cycles through another iterator endlessly.
+pub type Cycle[I: Iterator] {
+    orig: List[I::Item],
+    index: I64
+}
+
+impl[I: Iterator] Iterator for Cycle[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.orig.is_empty() {
+            return Nothing
+        }
+        let item: I::Item = this.orig.get(this.index)
+        this.index = (this.index + 1) % this.orig.len()
+        return Just(item)
+    }
+}
+
+// ============================================================================
+// StepBy Adapter
+// ============================================================================
+
+/// An iterator that steps by a given amount.
+pub type StepBy[I: Iterator] {
+    iter: I,
+    step: I64,
+    first: Bool
+}
+
+impl[I: Iterator] Iterator for StepBy[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.first {
+            this.first = false
+            return this.iter.next()
+        }
+        // Skip step-1 elements
+        let mut i: I64 = 0
+        loop {
+            if i >= this.step - 1 {
+                break
+            }
+            when this.iter.next() {
+                Just(_) => {},
+                Nothing => return Nothing
+            }
+            i = i + 1
+        }
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Inspect Adapter
+// ============================================================================
+
+/// An iterator that calls a function on each element (for debugging).
+pub type Inspect[I, F] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F] Iterator for Inspect[I, F] where F: Fn(ref I::Item) {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter.next() {
+            Just(item) => {
+                (this.f)(ref item)
+                return Just(item)
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Fuse Adapter
+// ============================================================================
+
+/// An iterator that stops permanently after first None.
+pub type Fuse[I: Iterator] {
+    iter: Maybe[I]
+}
+
+impl[I: Iterator] Iterator for Fuse[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter {
+            Just(inner) => {
+                when inner.next() {
+                    Just(item) => return Just(item),
+                    Nothing => {
+                        this.iter = Nothing
+                        return Nothing
+                    }
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Iterator Extension Methods - Adapter Creation
+// ============================================================================
+
+/// Extension methods for creating iterator adapters.
+impl[I: Iterator] I {
+    /// Creates an iterator that maps each element.
+    pub func map[B](this, f: func(I::Item) -> B) -> Map[I, func(I::Item) -> B, B] {
+        return Map { iter: this, f: f }
+    }
+
+    /// Creates an iterator that filters elements.
+    pub func filter(this, predicate: func(ref I::Item) -> Bool) -> Filter[I, func(ref I::Item) -> Bool] {
+        return Filter { iter: this, predicate: predicate }
+    }
+
+    /// Creates an iterator that takes at most n elements.
+    pub func take(this, n: I64) -> Take[I] {
+        return Take { iter: this, remaining: n }
+    }
+
+    /// Creates an iterator that skips the first n elements.
+    pub func skip(this, n: I64) -> Skip[I] {
+        return Skip { iter: this, remaining: n }
+    }
+
+    /// Creates an iterator that chains with another iterator.
+    pub func chain[B: Iterator](this, other: B) -> Chain[I, B] where I::Item = B::Item {
+        return Chain { first: this, second: other, first_done: false }
+    }
+
+    /// Creates an iterator that zips with another iterator.
+    pub func zip[B: Iterator](this, other: B) -> Zip[I, B] {
+        return Zip { first: this, second: other }
+    }
+
+    /// Creates an iterator that yields (index, element) pairs.
+    pub func enumerate(this) -> Enumerate[I] {
+        return Enumerate { iter: this, index: 0 }
+    }
+
+    /// Creates a peekable iterator.
+    pub func peekable(this) -> Peekable[I] {
+        return Peekable { iter: this, peeked: Nothing }
+    }
+
+    /// Creates an iterator that yields elements while the predicate is true.
+    pub func take_while(this, predicate: func(ref I::Item) -> Bool) -> TakeWhile[I, func(ref I::Item) -> Bool] {
+        return TakeWhile { iter: this, predicate: predicate, done: false }
+    }
+
+    /// Creates an iterator that skips elements while the predicate is true.
+    pub func skip_while(this, predicate: func(ref I::Item) -> Bool) -> SkipWhile[I, func(ref I::Item) -> Bool] {
+        return SkipWhile { iter: this, predicate: predicate, done_skipping: false }
+    }
+
+    /// Reverses the iterator. Note: This collects all elements first.
+    pub func rev(mut this) -> Rev[I] {
+        let items: List[I::Item] = this.collect()
+        return Rev { items: items, index: items.len() - 1 }
+    }
+
+    /// Maps each element to an iterator and flattens.
+    pub func flat_map[U: Iterator](this, f: func(I::Item) -> U) -> FlatMap[I, func(I::Item) -> U, U] {
+        return FlatMap { iter: this, f: f, current: Nothing }
+    }
+
+    /// Creates an iterator that steps by the given amount.
+    pub func step_by(this, step: I64) -> StepBy[I] {
+        if step <= 0 {
+            panic("step_by: step must be positive")
+        }
+        return StepBy { iter: this, step: step, first: true }
+    }
+
+    /// Creates an iterator that calls a function on each element before yielding it.
+    pub func inspect(this, f: func(ref I::Item)) -> Inspect[I, func(ref I::Item)] {
+        return Inspect { iter: this, f: f }
+    }
+
+    /// Creates an iterator that yields None forever after the first None.
+    pub func fuse(this) -> Fuse[I] {
+        return Fuse { iter: Just(this) }
+    }
+}
+
+/// Extension for iterators with Duplicate items.
+impl[I: Iterator] I where I::Item: Duplicate {
+    /// Creates an iterator that cycles through elements endlessly.
+    /// Note: This collects all elements first.
+    pub func cycle(mut this) -> Cycle[I] {
+        let items: List[I::Item] = this.collect()
+        return Cycle { orig: items, index: 0 }
+    }
+}
+
+/// Extension for iterators of iterators.
+impl[I: Iterator] I where I::Item: Iterator {
+    /// Flattens nested iterators.
+    pub func flatten(this) -> Flatten[I] {
+        return Flatten { iter: this, current: Nothing }
+    }
+}

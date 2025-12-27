@@ -20,6 +20,7 @@
 // - slice: Slice operations (sort, binary_search, etc.)
 // - ptr: Raw pointer operations, NonNull
 // - error: Error behavior and common error types
+// - collections: Behavior implementations for List, HashMap
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
@@ -39,3 +40,4 @@ pub mod borrow   // Borrow, BorrowMut, ToOwned, Cow
 pub mod slice    // Slice, MutSlice, sort, binary_search
 pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
+pub mod collections  // List, HashMap behavior implementations
