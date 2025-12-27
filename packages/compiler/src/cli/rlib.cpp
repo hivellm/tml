@@ -11,8 +11,10 @@
 
 // For SHA256 hashing
 #ifdef _WIN32
+// clang-format off
+#include <windows.h>  // Must come before wincrypt.h
 #include <wincrypt.h>
-#include <windows.h>
+// clang-format on
 #pragma comment(lib, "advapi32.lib")
 #else
 #include <openssl/sha.h>

@@ -1,6 +1,8 @@
 #include "tml/types/env.hpp"
 #include "tml/types/module.hpp"
 
+#include <algorithm>
+
 namespace tml::types {
 
 auto TypeEnv::lookup_struct(const std::string& name) const -> std::optional<StructDef> {
