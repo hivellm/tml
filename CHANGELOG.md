@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Comprehensive Codegen Builtins Test Suite** (2025-12-27) - 86 new C++ unit tests for all builtin functions
+  - New test file: `tests/codegen_builtins_test.cpp`
+  - Math tests (7): sqrt, pow, abs, floor, ceil, round, black_box
+  - Time tests (5): time_ms, time_us, time_ns, elapsed_ms, sleep_ms
+  - Memory tests (7): alloc, dealloc, mem_copy, mem_set, mem_zero, mem_compare, mem_eq
+  - Atomic tests (11): atomic_load/store/add/sub/exchange/cas/and/or, fence variants
+  - Sync tests (16): spinlock, thread_yield/sleep/id, channel_*, mutex_*, waitgroup_*
+  - String tests (12): str_len/hash/eq/concat/substring/contains/starts_with/ends_with/to_upper/to_lower/trim/char_at
+  - Collections tests (25): list_*, hashmap_*, buffer_*
+  - IO tests (3): print, println, print_i32
+  - New type checker registration files:
+    - `env_builtins_math.cpp` - Math builtins (sqrt, pow, abs, floor, ceil, round, black_box)
+    - `env_builtins_collections.cpp` - Collection builtins (list_*, hashmap_*, buffer_*)
+  - Updated `env_builtins_sync.cpp` with thread_sleep, channel_*, mutex_*, waitgroup_*
+  - All 86 tests passing, 272 core tests passing total
+
 ### Fixed
 - **Unit Test Fixes** (2025-12-26) - Fixed failing C++ unit tests
   - Fixed `ParserTest.IndexExpressions` - Parser now correctly distinguishes between generic args `List[I32]` and index expressions `arr[0]` by checking if content after `[` is a literal

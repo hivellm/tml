@@ -192,6 +192,8 @@ namespace tml::types
         void init_builtin_mem();
         void init_builtin_atomic();
         void init_builtin_sync();
+        void init_builtin_math();
+        void init_builtin_collections();
 
         // NOTE: init_std_*_module() functions removed - modules now load from .tml files
     };

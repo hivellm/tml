@@ -102,6 +102,8 @@ add_library(tml_types STATIC
     src/types/env_builtins_mem.cpp
     src/types/env_builtins_atomic.cpp
     src/types/env_builtins_sync.cpp
+    src/types/env_builtins_math.cpp
+    src/types/env_builtins_collections.cpp
     src/types/env_definitions.cpp
     src/types/env_lookups.cpp
     src/types/module.cpp
@@ -220,6 +222,7 @@ if(TML_BUILD_TESTS)
         tests/ir_test.cpp
         tests/format_test.cpp
         tests/codegen_test.cpp
+        tests/codegen_builtins_test.cpp
         tests/cli/object_compiler_test.cpp
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
