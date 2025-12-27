@@ -163,8 +163,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     }
 }
 
-auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_func_decl(Visibility vis,
+                             std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Check for async/unsafe modifiers
@@ -299,8 +299,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
         Decl{.kind = std::move(func), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_struct_decl(Visibility vis,
+                               std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
@@ -384,8 +384,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         Decl{.kind = std::move(struct_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_enum_decl(Visibility vis,
+                             std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // 'type' keyword already consumed by parse_decl
@@ -521,8 +521,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
         Decl{.kind = std::move(enum_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_trait_decl(Visibility vis,
+                              std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Consume 'behavior' keyword

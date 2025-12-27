@@ -5,8 +5,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call)
-    -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
+                                     const parser::CallExpr& call) -> std::optional<std::string> {
 
     // time_ms() -> I32 - Current time in milliseconds
     if (fn_name == "time_ms") {
