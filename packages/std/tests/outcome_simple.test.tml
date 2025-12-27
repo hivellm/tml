@@ -21,7 +21,7 @@ func main() {
     let y: Outcome[I32, I32] = map_ok_i32(x, do(val: I32) val * 2)
 
     when y {
-        Ok(v) => println("map_ok(Ok(5), *2) = Ok({})", v),
+        Ok(v) => println("map_ok(Ok(5), *2) = Ok({v})"),
         Err(_) => println("ERROR: Expected Ok(10), got Err")
     }
 
@@ -31,7 +31,7 @@ func main() {
 
     when b {
         Ok(_) => println("ERROR: Expected Err(42), got Ok"),
-        Err(e) => println("map_ok(Err(42), *2) = Err({})", e)
+        Err(e) => println("map_ok(Err(42), *2) = Err({e})")
     }
 
     println("Test completed!")

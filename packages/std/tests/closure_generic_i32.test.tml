@@ -8,10 +8,10 @@ func main() {
     println("=== Generic Closure Test (I32) ===")
 
     let result: I32 = apply_i32(5, do(val: I32) val * 2)
-    println("apply_i32(5, *2) = {}", result)
+    println("apply_i32(5, *2) = {result}")
 
     let result2: I32 = apply_i32(10, do(val: I32) val + 3)
-    println("apply_i32(10, +3) = {}", result2)
+    println("apply_i32(10, +3) = {result2}")
 
     println("Test completed!")
 }

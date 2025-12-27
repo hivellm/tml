@@ -12,8 +12,8 @@ pub func multiply(x: I32, y: I32) -> I32 {
 
 func main() {
     let result: I32 = add(10, 20)
-    println("10 + 20 = {}", result)
+    println("10 + 20 = {result}")
 
     let product: I32 = multiply(5, 6)
-    println("5 * 6 = {}", product)
+    println("5 * 6 = {product}")
 }

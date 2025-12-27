@@ -54,7 +54,7 @@ func main() {
     let x: Maybe[I32] = Just(5)
     let y: Maybe[I32] = map(x, do(val: I32) val * 2)
     when y {
-        Just(v) => println("  map(Just(5), *2) = Just({})", v),
+        Just(v) => println("  map(Just(5), *2) = Just({v})"),
         Nothing => println("  ERROR: Expected Just(10), got Nothing")
     }
 
@@ -70,7 +70,7 @@ func main() {
     let a: Maybe[I32] = Just(5)
     let b: Maybe[I32] = and_then(a, do(val: I32) if val > 0 then Just(val * 2) else Nothing)
     when b {
-        Just(v) => println("  and_then(Just(5), check>0) = Just({})", v),
+        Just(v) => println("  and_then(Just(5), check>0) = Just({v})"),
         Nothing => println("  ERROR: Expected Just(10), got Nothing")
     }
 
@@ -86,7 +86,7 @@ func main() {
     let d: Maybe[I32] = Just(5)
     let e: Maybe[I32] = filter(d, do(val: I32) val > 3)
     when e {
-        Just(v) => println("  filter(Just(5), >3) = Just({})", v),
+        Just(v) => println("  filter(Just(5), >3) = Just({v})"),
         Nothing => println("  ERROR: Expected Just(5), got Nothing")
     }
 
@@ -102,14 +102,14 @@ func main() {
     let g: Maybe[I32] = Nothing
     let h: Maybe[I32] = or_else(g, do() Just(42))
     when h {
-        Just(v) => println("  or_else(Nothing, Just(42)) = Just({})", v),
+        Just(v) => println("  or_else(Nothing, Just(42)) = Just({v})"),
         Nothing => println("  ERROR: Expected Just(42), got Nothing")
     }
 
     let i: Maybe[I32] = Just(10)
     let j: Maybe[I32] = or_else(i, do() Just(42))
     when j {
-        Just(v) => println("  or_else(Just(10), Just(42)) = Just({})", v),
+        Just(v) => println("  or_else(Just(10), Just(42)) = Just({v})"),
         Nothing => println("  ERROR: Expected Just(10), got Nothing")
     }
 

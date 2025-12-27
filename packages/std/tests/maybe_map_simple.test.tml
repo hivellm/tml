@@ -21,7 +21,7 @@ func main() {
     let y: Maybe[I32] = map(x, do(val: I32) val * 2)
 
     when y {
-        Just(v) => println("map(Just(5), *2) = Just({})", v),
+        Just(v) => println("map(Just(5), *2) = Just({v})"),
         Nothing => println("ERROR: got Nothing")
     }
 

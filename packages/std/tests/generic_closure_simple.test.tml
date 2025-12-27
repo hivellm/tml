@@ -8,7 +8,7 @@ func main() {
     println("=== Generic Closure Test ===")
 
     let result: I32 = apply(5, do(val: I32) val * 2)
-    println("apply(5, *2) = {}", result)
+    println("apply(5, *2) = {result}")
 
     println("Test completed!")
 }
