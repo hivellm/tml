@@ -84,7 +84,7 @@ void IREmitter::emit_pattern(std::ostringstream& out, const IRPattern& pattern) 
 
 void IREmitter::emit_type_expr(std::ostringstream& out, const IRTypeExpr& type) {
     std::visit(
-        [this, &out](const auto& t) {
+        [&out](const auto& t) {
             using T = std::decay_t<decltype(t)>;
 
             if constexpr (std::is_same_v<T, IRTypeRef>) {
