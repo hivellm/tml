@@ -49,6 +49,14 @@ static std::string to_forward_slashes(const fs::path& path) {
     return result;
 }
 
+// Helper to quote a command path only if it contains spaces
+static std::string quote_command(const std::string& cmd) {
+    if (cmd.find(' ') != std::string::npos) {
+        return "\"" + cmd + "\"";
+    }
+    return cmd;
+}
+
 ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
                                          const std::optional<fs::path>& output_file,
                                          const std::string& clang_path,
@@ -74,8 +82,8 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
 
     // Build clang command
     std::ostringstream cmd;
-    cmd << "\"" << clang_path << "\""; // Quote path for spaces (e.g., C:/Program Files/...)
-    cmd << " -c";                      // Compile only, don't link
+    cmd << quote_command(clang_path); // Quote path only if it has spaces
+    cmd << " -c";                     // Compile only, don't link
 
     // Optimization level
     cmd << " " << get_optimization_flag(options.optimization_level);
@@ -162,7 +170,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
     switch (options.output_type) {
     case LinkOptions::OutputType::Executable: {
         // Link executable using clang
-        cmd << "\"" << clang_path << "\""; // Quote path for spaces
+        cmd << quote_command(clang_path); // Quote path only if it has spaces
 
         // Output file
         cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
@@ -221,7 +229,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 
     case LinkOptions::OutputType::DynamicLib: {
         // Shared library using clang
-        cmd << "\"" << clang_path << "\""; // Quote path for spaces
+        cmd << quote_command(clang_path); // Quote path only if it has spaces
         cmd << " -shared";
 
 #ifdef _WIN32

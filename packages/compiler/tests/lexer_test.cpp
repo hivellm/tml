@@ -701,11 +701,6 @@ TEST_F(LexerTest, InterpolatedStringSimple) {
     // InterpStringStart("Hello ") + Identifier(name) + InterpStringEnd("!")
     auto tokens = lex("\"Hello {name}!\"");
 
-    // Print tokens for debugging
-    for (size_t i = 0; i < tokens.size(); i++) {
-        std::cout << "Token " << i << ": " << token_kind_to_string(tokens[i].kind) << std::endl;
-    }
-
     ASSERT_GE(tokens.size(), 3);
     EXPECT_EQ(tokens[0].kind, TokenKind::InterpStringStart);
     EXPECT_EQ(tokens[1].kind, TokenKind::Identifier);
@@ -715,11 +710,6 @@ TEST_F(LexerTest, InterpolatedStringSimple) {
 TEST_F(LexerTest, InterpolatedStringMultiple) {
     // "Hello {name}, you are {age} years old"
     auto tokens = lex("\"Hello {name}, you are {age} years old\"");
-
-    // Print tokens for debugging
-    for (size_t i = 0; i < tokens.size(); i++) {
-        std::cout << "Token " << i << ": " << token_kind_to_string(tokens[i].kind) << std::endl;
-    }
 
     // Expected: InterpStringStart + Identifier + InterpStringMiddle + Identifier + InterpStringEnd
     ASSERT_GE(tokens.size(), 5);

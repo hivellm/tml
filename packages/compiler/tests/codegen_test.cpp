@@ -5,7 +5,6 @@
 #include "types/checker.hpp"
 
 #include <gtest/gtest.h>
-#include <iostream>
 #include <memory>
 
 using namespace tml;
@@ -19,51 +18,32 @@ protected:
     std::unique_ptr<Source> source_;
 
     auto generate(const std::string& code) -> std::string {
-        try {
-            std::cout << "\n=== Parsing ===" << std::endl;
-            source_ = std::make_unique<Source>(Source::from_string(code));
-            Lexer lexer(*source_);
-            auto tokens = lexer.tokenize();
-            std::cout << "Tokens: " << tokens.size() << std::endl;
+        source_ = std::make_unique<Source>(Source::from_string(code));
+        Lexer lexer(*source_);
+        auto tokens = lexer.tokenize();
 
-            Parser parser(std::move(tokens));
-            auto module_result = parser.parse_module("test");
-            EXPECT_TRUE(is_ok(module_result));
-            auto& module = std::get<parser::Module>(module_result);
-            std::cout << "Module parsed" << std::endl;
+        Parser parser(std::move(tokens));
+        auto module_result = parser.parse_module("test");
+        EXPECT_TRUE(is_ok(module_result));
+        auto& module = std::get<parser::Module>(module_result);
 
-            std::cout << "\n=== Type Checking ===" << std::endl;
-            TypeChecker checker;
-            auto env_result = checker.check_module(module);
-            EXPECT_TRUE(is_ok(env_result));
-            auto& env = std::get<TypeEnv>(env_result);
-            std::cout << "Type checking OK" << std::endl;
+        TypeChecker checker;
+        auto env_result = checker.check_module(module);
+        EXPECT_TRUE(is_ok(env_result));
+        auto& env = std::get<TypeEnv>(env_result);
 
-            std::cout << "\n=== Codegen ===" << std::endl;
-            LLVMIRGen gen(env);
-            auto ir_result = gen.generate(module);
+        LLVMIRGen gen(env);
+        auto ir_result = gen.generate(module);
 
-            if (is_err(ir_result)) {
-                auto& errors = std::get<std::vector<LLVMGenError>>(ir_result);
-                std::cout << "Codegen errors:" << std::endl;
-                for (const auto& err : errors) {
-                    std::cout << "  - " << err.message << std::endl;
-                }
-                EXPECT_TRUE(false) << "Codegen failed";
-                return "";
+        if (is_err(ir_result)) {
+            auto& errors = std::get<std::vector<LLVMGenError>>(ir_result);
+            for (const auto& err : errors) {
+                ADD_FAILURE() << "Codegen error: " << err.message;
             }
-
-            auto& ir = std::get<std::string>(ir_result);
-            std::cout << "\n=== Generated LLVM IR ===" << std::endl;
-            std::cout << ir << std::endl;
-            std::cout << "=== End LLVM IR ===" << std::endl;
-
-            return ir;
-        } catch (const std::exception& e) {
-            std::cout << "\n=== EXCEPTION ===" << std::endl;
-            std::cout << "Exception: " << e.what() << std::endl;
-            throw;
+            return "";
         }
+
+        return std::get<std::string>(ir_result);
     }
 };
 
@@ -107,8 +87,6 @@ TEST_F(CodegenTest, EnumConstructorUnitVariant) {
             let x: Maybe[I64] = Nothing
         }
     )");
-
-    std::cout << "\n=== Testing unit variant Nothing ===" << std::endl;
 
     // Check that tag is set for Nothing (tag = 1)
     EXPECT_NE(ir.find("store i32 1"), std::string::npos)

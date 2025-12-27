@@ -40,9 +40,8 @@ protected:
         if (is_err(ir_result)) {
             auto& errors = std::get<std::vector<LLVMGenError>>(ir_result);
             for (const auto& err : errors) {
-                std::cerr << "Codegen error: " << err.message << std::endl;
+                ADD_FAILURE() << "Codegen error: " << err.message;
             }
-            EXPECT_TRUE(false) << "Codegen failed";
             return "";
         }
 
