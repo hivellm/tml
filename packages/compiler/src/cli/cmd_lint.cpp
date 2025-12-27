@@ -1,5 +1,6 @@
 #include "cmd_lint.hpp"
 
+#include "cmd_format.hpp"
 #include "common.hpp"
 #include "utils.hpp"
 
@@ -145,7 +146,8 @@ void print_lint_help() {
     std::cout << "Usage: tml lint [options] [paths...]\n\n";
     std::cout << "Lint TML source files for style and common issues.\n\n";
     std::cout << "Options:\n";
-    std::cout << "  --fix           Automatically fix issues where possible\n";
+    std::cout
+        << "  --fix           Automatically fix issues (runs formatter + fixes tabs/whitespace)\n";
     std::cout << "  --quiet, -q     Only show errors (no warnings)\n";
     std::cout << "  --verbose, -v   Show all files being checked\n";
     std::cout << "  --help, -h      Show this help\n\n";
@@ -190,6 +192,13 @@ int run_lint(int argc, char* argv[]) {
 
     if (fix_mode) {
         std::cout << YELLOW << "Linting and fixing TML files..." << RESET << "\n";
+
+        // First, run the formatter on all paths
+        std::cout << "\n" << YELLOW << "Running formatter..." << RESET << "\n";
+        for (const auto& path : paths) {
+            run_fmt(path, false /* check_only */, verbose);
+        }
+        std::cout << "\n";
     } else {
         std::cout << "Linting TML files...\n";
     }
