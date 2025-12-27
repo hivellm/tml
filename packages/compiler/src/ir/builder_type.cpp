@@ -1,4 +1,4 @@
-#include "tml/ir/ir.hpp"
+#include "ir/ir.hpp"
 
 namespace tml::ir {
 

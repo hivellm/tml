@@ -1,11 +1,11 @@
-#include "tml/ir/ir.hpp"
+#include "ir/ir.hpp"
 
 #include <algorithm>
 
 namespace tml::ir {
 
-auto IRBuilder::build_module(const parser::Module& module,
-                             const std::string& module_name) -> IRModule {
+auto IRBuilder::build_module(const parser::Module& module, const std::string& module_name)
+    -> IRModule {
     current_module_ = module_name;
 
     IRModule ir_module;

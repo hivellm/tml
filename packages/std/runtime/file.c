@@ -2,6 +2,7 @@
 // Implements: File operations (read, write, append)
 
 #include "file.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,8 +20,8 @@
 #define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
 #define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #else
-#include <unistd.h>
 #include <dirent.h>
+#include <unistd.h>
 #ifndef MAX_PATH
 #define MAX_PATH 4096
 #endif
@@ -31,7 +32,8 @@
 // ============================================================================
 
 TmlFile* file_open(const char* path, int32_t mode) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
     const char* fmode;
     if (mode & TML_FILE_APPEND) {
@@ -39,11 +41,12 @@ TmlFile* file_open(const char* path, int32_t mode) {
     } else if (mode & TML_FILE_WRITE) {
         fmode = (mode & TML_FILE_READ) ? "w+b" : "wb";
     } else {
-        fmode = "rb";  // Default to read
+        fmode = "rb"; // Default to read
     }
 
     FILE* fp = fopen(path, fmode);
-    if (!fp) return NULL;
+    if (!fp)
+        return NULL;
 
     TmlFile* file = (TmlFile*)malloc(sizeof(TmlFile));
     if (!file) {
@@ -78,7 +81,8 @@ TmlFile* file_open_append(const char* path) {
 }
 
 void file_close(TmlFile* file) {
-    if (!file) return;
+    if (!file)
+        return;
     if (file->is_open && file->handle) {
         fclose((FILE*)file->handle);
     }
@@ -92,17 +96,20 @@ bool file_is_open(TmlFile* file) {
 }
 
 int64_t file_read(TmlFile* file, uint8_t* buffer, int64_t size) {
-    if (!file || !file->is_open || !buffer || size <= 0) return 0;
+    if (!file || !file->is_open || !buffer || size <= 0)
+        return 0;
     size_t read = fread(buffer, 1, size, (FILE*)file->handle);
     file->position += read;
     return (int64_t)read;
 }
 
 char* file_read_all(const char* path) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
     FILE* fp = fopen(path, "rb");
-    if (!fp) return NULL;
+    if (!fp)
+        return NULL;
 
     fseek(fp, 0, SEEK_END);
     long size = ftell(fp);
@@ -122,7 +129,8 @@ char* file_read_all(const char* path) {
 }
 
 char* file_read_line(TmlFile* file) {
-    if (!file || !file->is_open) return NULL;
+    if (!file || !file->is_open)
+        return NULL;
 
     FILE* fp = (FILE*)file->handle;
 
@@ -130,7 +138,8 @@ char* file_read_line(TmlFile* file) {
     size_t capacity = 256;
     size_t len = 0;
     char* line = (char*)malloc(capacity);
-    if (!line) return NULL;
+    if (!line)
+        return NULL;
 
     int c;
     while ((c = fgetc(fp)) != EOF) {
@@ -147,7 +156,7 @@ char* file_read_line(TmlFile* file) {
         if (c == '\n') {
             break;
         }
-        if (c != '\r') {  // Skip CR in CRLF
+        if (c != '\r') { // Skip CR in CRLF
             line[len++] = (char)c;
         }
     }
@@ -163,8 +172,10 @@ char* file_read_line(TmlFile* file) {
 }
 
 int64_t file_write(TmlFile* file, const uint8_t* data, int64_t size) {
-    if (!file || !file->is_open || !data || size <= 0) return 0;
-    if (!(file->mode & (TML_FILE_WRITE | TML_FILE_APPEND))) return 0;
+    if (!file || !file->is_open || !data || size <= 0)
+        return 0;
+    if (!(file->mode & (TML_FILE_WRITE | TML_FILE_APPEND)))
+        return 0;
 
     size_t written = fwrite(data, 1, size, (FILE*)file->handle);
     file->position += written;
@@ -175,16 +186,19 @@ int64_t file_write(TmlFile* file, const uint8_t* data, int64_t size) {
 }
 
 bool file_write_str(TmlFile* file, const char* str) {
-    if (!str) return false;
+    if (!str)
+        return false;
     size_t len = strlen(str);
     return file_write(file, (const uint8_t*)str, len) == (int64_t)len;
 }
 
 bool file_write_all(const char* path, const char* content) {
-    if (!path || !content) return false;
+    if (!path || !content)
+        return false;
 
     FILE* fp = fopen(path, "wb");
-    if (!fp) return false;
+    if (!fp)
+        return false;
 
     size_t len = strlen(content);
     size_t written = fwrite(content, 1, len, fp);
@@ -194,10 +208,12 @@ bool file_write_all(const char* path, const char* content) {
 }
 
 bool file_append_all(const char* path, const char* content) {
-    if (!path || !content) return false;
+    if (!path || !content)
+        return false;
 
     FILE* fp = fopen(path, "ab");
-    if (!fp) return false;
+    if (!fp)
+        return false;
 
     size_t len = strlen(content);
     size_t written = fwrite(content, 1, len, fp);
@@ -215,15 +231,19 @@ int64_t file_position(TmlFile* file) {
 }
 
 bool file_seek(TmlFile* file, int64_t position) {
-    if (!file || !file->is_open) return false;
-    if (fseek((FILE*)file->handle, (long)position, SEEK_SET) != 0) return false;
+    if (!file || !file->is_open)
+        return false;
+    if (fseek((FILE*)file->handle, (long)position, SEEK_SET) != 0)
+        return false;
     file->position = position;
     return true;
 }
 
 bool file_seek_end(TmlFile* file) {
-    if (!file || !file->is_open) return false;
-    if (fseek((FILE*)file->handle, 0, SEEK_END) != 0) return false;
+    if (!file || !file->is_open)
+        return false;
+    if (fseek((FILE*)file->handle, 0, SEEK_END) != 0)
+        return false;
     file->position = file->size;
     return true;
 }
@@ -240,27 +260,33 @@ void file_rewind(TmlFile* file) {
 // ============================================================================
 
 bool path_exists(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
     struct stat st;
     return stat(path, &st) == 0;
 }
 
 bool path_is_file(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
     struct stat st;
-    if (stat(path, &st) != 0) return false;
+    if (stat(path, &st) != 0)
+        return false;
     return S_ISREG(st.st_mode);
 }
 
 bool path_is_dir(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
     struct stat st;
-    if (stat(path, &st) != 0) return false;
+    if (stat(path, &st) != 0)
+        return false;
     return S_ISDIR(st.st_mode);
 }
 
 bool path_create_dir(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
 #ifdef _WIN32
     return _mkdir(path) == 0;
 #else
@@ -269,12 +295,14 @@ bool path_create_dir(const char* path) {
 }
 
 bool path_create_dir_all(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
 
     // Make a copy to modify
     size_t len = strlen(path);
     char* tmp = (char*)malloc(len + 1);
-    if (!tmp) return false;
+    if (!tmp)
+        return false;
     strcpy(tmp, path);
 
     // Create each directory component
@@ -298,12 +326,14 @@ bool path_create_dir_all(const char* path) {
 }
 
 bool path_remove(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
     return remove(path) == 0;
 }
 
 bool path_remove_dir(const char* path) {
-    if (!path) return false;
+    if (!path)
+        return false;
 #ifdef _WIN32
     return _rmdir(path) == 0;
 #else
@@ -312,15 +342,18 @@ bool path_remove_dir(const char* path) {
 }
 
 bool path_rename(const char* from, const char* to) {
-    if (!from || !to) return false;
+    if (!from || !to)
+        return false;
     return rename(from, to) == 0;
 }
 
 bool path_copy(const char* from, const char* to) {
-    if (!from || !to) return false;
+    if (!from || !to)
+        return false;
 
     FILE* src = fopen(from, "rb");
-    if (!src) return false;
+    if (!src)
+        return false;
 
     FILE* dst = fopen(to, "wb");
     if (!dst) {
@@ -345,7 +378,8 @@ bool path_copy(const char* from, const char* to) {
 }
 
 char* path_join(const char* base, const char* child) {
-    if (!base || !child) return NULL;
+    if (!base || !child)
+        return NULL;
 
     size_t base_len = strlen(base);
     size_t child_len = strlen(child);
@@ -362,7 +396,8 @@ char* path_join(const char* base, const char* child) {
     }
 
     char* result = (char*)malloc(base_len + 1 + child_len + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     memcpy(result, base, base_len);
 #ifdef _WIN32
@@ -377,10 +412,12 @@ char* path_join(const char* base, const char* child) {
 }
 
 char* path_parent(const char* path) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
     size_t len = strlen(path);
-    if (len == 0) return NULL;
+    if (len == 0)
+        return NULL;
 
     // Skip trailing separators
     while (len > 0 && (path[len - 1] == '/' || path[len - 1] == '\\')) {
@@ -393,16 +430,19 @@ char* path_parent(const char* path) {
         i--;
     }
 
-    if (i == 0) return NULL;  // No parent
+    if (i == 0)
+        return NULL; // No parent
 
     // Skip the separator
     i--;
 
     // Handle root path
-    if (i == 0) i = 1;
+    if (i == 0)
+        i = 1;
 
     char* result = (char*)malloc(i + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
     memcpy(result, path, i);
     result[i] = '\0';
 
@@ -410,10 +450,12 @@ char* path_parent(const char* path) {
 }
 
 char* path_filename(const char* path) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
     size_t len = strlen(path);
-    if (len == 0) return NULL;
+    if (len == 0)
+        return NULL;
 
     // Skip trailing separators
     while (len > 0 && (path[len - 1] == '/' || path[len - 1] == '\\')) {
@@ -428,7 +470,8 @@ char* path_filename(const char* path) {
 
     size_t name_len = len - start;
     char* result = (char*)malloc(name_len + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
     memcpy(result, path + start, name_len);
     result[name_len] = '\0';
 
@@ -436,30 +479,37 @@ char* path_filename(const char* path) {
 }
 
 char* path_extension(const char* path) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
     const char* filename = path;
     const char* sep = strrchr(path, '/');
-    if (!sep) sep = strrchr(path, '\\');
-    if (sep) filename = sep + 1;
+    if (!sep)
+        sep = strrchr(path, '\\');
+    if (sep)
+        filename = sep + 1;
 
     const char* dot = strrchr(filename, '.');
-    if (!dot || dot == filename) return NULL;
+    if (!dot || dot == filename)
+        return NULL;
 
     size_t len = strlen(dot);
     char* result = (char*)malloc(len + 1);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
     strcpy(result, dot);
 
     return result;
 }
 
 char* path_absolute(const char* path) {
-    if (!path) return NULL;
+    if (!path)
+        return NULL;
 
 #ifdef _WIN32
     char* result = (char*)malloc(MAX_PATH);
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
     if (_fullpath(result, path, MAX_PATH) == NULL) {
         free(result);
         return NULL;

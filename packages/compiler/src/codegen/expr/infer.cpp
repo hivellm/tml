@@ -1,8 +1,8 @@
 // LLVM IR generator - Type inference
 // Handles: infer_expr_type for generics instantiation
 
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/types/module.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "types/module.hpp"
 
 namespace tml::codegen {
 

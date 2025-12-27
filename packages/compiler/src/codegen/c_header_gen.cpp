@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <cctype>
+#include <codegen/c_header_gen.hpp>
 #include <sstream>
-#include <tml/codegen/c_header_gen.hpp>
 
 namespace tml::codegen {
 

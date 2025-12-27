@@ -2,7 +2,7 @@
 // Handles: check_if, check_ternary, check_if_let, check_when, check_loop, check_for, check_range,
 // check_return, check_break
 
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 
 namespace tml::types {
 

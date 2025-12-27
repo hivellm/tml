@@ -1,8 +1,8 @@
 #ifndef TML_IR_IR_HPP
 #define TML_IR_IR_HPP
 
-#include "tml/common.hpp"
-#include "tml/parser/ast.hpp"
+#include "common.hpp"
+#include "parser/ast.hpp"
 
 #include <memory>
 #include <optional>

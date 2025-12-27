@@ -1,5 +1,6 @@
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -390,9 +391,12 @@ func fibonacci(n: I64) -> I64 {
     // Verify key tokens are present
     bool has_func = false, has_if = false, has_return = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::KwFunc) has_func = true;
-        if (token.kind == TokenKind::KwIf) has_if = true;
-        if (token.kind == TokenKind::KwReturn) has_return = true;
+        if (token.kind == TokenKind::KwFunc)
+            has_func = true;
+        if (token.kind == TokenKind::KwIf)
+            has_if = true;
+        if (token.kind == TokenKind::KwReturn)
+            has_return = true;
     }
     EXPECT_TRUE(has_func);
     EXPECT_TRUE(has_if);
@@ -424,15 +428,16 @@ impl Point {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify struct and impl keywords
     bool has_type = false, has_impl = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::KwType) has_type = true;
-        if (token.kind == TokenKind::KwImpl) has_impl = true;
+        if (token.kind == TokenKind::KwType)
+            has_type = true;
+        if (token.kind == TokenKind::KwImpl)
+            has_impl = true;
     }
     EXPECT_TRUE(has_type);
     EXPECT_TRUE(has_impl);
@@ -459,15 +464,16 @@ func unwrap_or[T](opt: Maybe[T], dflt: T) -> T {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify type and when keywords
     bool has_type = false, has_when = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::KwType) has_type = true;
-        if (token.kind == TokenKind::KwWhen) has_when = true;
+        if (token.kind == TokenKind::KwType)
+            has_type = true;
+        if (token.kind == TokenKind::KwWhen)
+            has_when = true;
     }
     EXPECT_TRUE(has_type);
     EXPECT_TRUE(has_when);
@@ -495,14 +501,14 @@ impl Printable for Counter {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify behavior keyword
     bool has_behavior = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::KwBehavior) has_behavior = true;
+        if (token.kind == TokenKind::KwBehavior)
+            has_behavior = true;
     }
     EXPECT_TRUE(has_behavior);
 }
@@ -531,17 +537,20 @@ func loops_example() {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify loop-related keywords
     bool has_for = false, has_loop = false, has_break = false, has_in = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::KwFor) has_for = true;
-        if (token.kind == TokenKind::KwLoop) has_loop = true;
-        if (token.kind == TokenKind::KwBreak) has_break = true;
-        if (token.kind == TokenKind::KwIn) has_in = true;
+        if (token.kind == TokenKind::KwFor)
+            has_for = true;
+        if (token.kind == TokenKind::KwLoop)
+            has_loop = true;
+        if (token.kind == TokenKind::KwBreak)
+            has_break = true;
+        if (token.kind == TokenKind::KwIn)
+            has_in = true;
     }
     EXPECT_TRUE(has_for);
     EXPECT_TRUE(has_loop);
@@ -570,16 +579,16 @@ func main() -> I32 {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify @ decorator tokens
     int at_count = 0;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::At) at_count++;
+        if (token.kind == TokenKind::At)
+            at_count++;
     }
-    EXPECT_GE(at_count, 4);  // @link and @extern for each function
+    EXPECT_GE(at_count, 4); // @link and @extern for each function
 }
 
 TEST_F(LexerTest, IntegrationAllLiteralTypes) {
@@ -612,21 +621,25 @@ func literals_test() {
     // Count different literal types
     int int_count = 0, float_count = 0, str_count = 0, char_count = 0, bool_count = 0;
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
 
-        if (token.kind == TokenKind::IntLiteral) int_count++;
-        if (token.kind == TokenKind::FloatLiteral) float_count++;
-        if (token.kind == TokenKind::StringLiteral) str_count++;
-        if (token.kind == TokenKind::CharLiteral) char_count++;
-        if (token.kind == TokenKind::BoolLiteral) bool_count++;
+        if (token.kind == TokenKind::IntLiteral)
+            int_count++;
+        if (token.kind == TokenKind::FloatLiteral)
+            float_count++;
+        if (token.kind == TokenKind::StringLiteral)
+            str_count++;
+        if (token.kind == TokenKind::CharLiteral)
+            char_count++;
+        if (token.kind == TokenKind::BoolLiteral)
+            bool_count++;
     }
 
-    EXPECT_GE(int_count, 5);    // At least 5 integer literals
-    EXPECT_GE(float_count, 3);  // At least 3 float literals
-    EXPECT_GE(str_count, 2);    // At least 2 string literals
-    EXPECT_GE(char_count, 2);   // At least 2 char literals
-    EXPECT_EQ(bool_count, 2);   // Exactly 2 bool literals
+    EXPECT_GE(int_count, 5);   // At least 5 integer literals
+    EXPECT_GE(float_count, 3); // At least 3 float literals
+    EXPECT_GE(str_count, 2);   // At least 2 string literals
+    EXPECT_GE(char_count, 2);  // At least 2 char literals
+    EXPECT_EQ(bool_count, 2);  // Exactly 2 bool literals
 }
 
 TEST_F(LexerTest, IntegrationOperatorChains) {
@@ -645,22 +658,29 @@ func operators() {
 
     // Verify no error tokens
     for (const auto& token : tokens) {
-        EXPECT_NE(token.kind, TokenKind::Error)
-            << "Unexpected error token: " << token.lexeme;
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
     }
 
     // Verify key operators are present
     bool has_plus = false, has_star = false, has_and = false, has_or = false;
     bool has_shl = false, has_shr = false, has_bitor = false, has_bitand = false;
     for (const auto& token : tokens) {
-        if (token.kind == TokenKind::Plus) has_plus = true;
-        if (token.kind == TokenKind::Star) has_star = true;
-        if (token.kind == TokenKind::KwAnd) has_and = true;
-        if (token.kind == TokenKind::KwOr) has_or = true;
-        if (token.kind == TokenKind::Shl) has_shl = true;
-        if (token.kind == TokenKind::Shr) has_shr = true;
-        if (token.kind == TokenKind::BitOr) has_bitor = true;
-        if (token.kind == TokenKind::BitAnd) has_bitand = true;
+        if (token.kind == TokenKind::Plus)
+            has_plus = true;
+        if (token.kind == TokenKind::Star)
+            has_star = true;
+        if (token.kind == TokenKind::KwAnd)
+            has_and = true;
+        if (token.kind == TokenKind::KwOr)
+            has_or = true;
+        if (token.kind == TokenKind::Shl)
+            has_shl = true;
+        if (token.kind == TokenKind::Shr)
+            has_shr = true;
+        if (token.kind == TokenKind::BitOr)
+            has_bitor = true;
+        if (token.kind == TokenKind::BitAnd)
+            has_bitand = true;
     }
     EXPECT_TRUE(has_plus);
     EXPECT_TRUE(has_star);

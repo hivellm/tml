@@ -1,75 +1,7 @@
 // Tests for Maybe[T] combinators
 // Tests: map, and_then, filter, or_else
 use test
-
-// Define types locally (until enum variant import is fixed)
-type Maybe[T] {
-    Just(T),
-    Nothing
-}
-
-// Combinator functions
-func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
-    when m {
-        Just(val) => return Just(f(val)),
-        Nothing => return Nothing
-    }
-    return Nothing
-}
-
-func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
-    when m {
-        Just(val) => return f(val),
-        Nothing => return Nothing
-    }
-    return Nothing
-}
-
-func filter[T](m: Maybe[T], predicate: func(T) -> Bool) -> Maybe[T] {
-    when m {
-        Just(val) => {
-            if predicate(val) then {
-                return Just(val)
-            }
-            return Nothing
-        },
-        Nothing => return Nothing
-    }
-    return Nothing
-}
-
-func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
-    when m {
-        Just(val) => return Just(val),
-        Nothing => return f()
-    }
-    return f()
-}
-
-// Helper to extract value for testing
-func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
-    when m {
-        Just(val) => return val,
-        Nothing => return default_val
-    }
-    return default_val
-}
-
-func is_just[T](m: Maybe[T]) -> Bool {
-    when m {
-        Just(_) => return true,
-        Nothing => return false
-    }
-    return false
-}
-
-func is_nothing[T](m: Maybe[T]) -> Bool {
-    when m {
-        Just(_) => return false,
-        Nothing => return true
-    }
-    return true
-}
+use std::types
 
 // ============================================================================
 // map Tests

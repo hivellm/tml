@@ -3,8 +3,8 @@
 // Description: Tests pure computation speed
 
 #include <chrono>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 
 using namespace std::chrono;
 
@@ -24,7 +24,7 @@ int64_t bench_int_add(int64_t iterations) {
 int64_t bench_int_mul(int64_t iterations) {
     int64_t product = 1;
     for (int64_t i = 1; i <= iterations; ++i) {
-        product = (product * i) % 10000007;  // Prevent overflow
+        product = (product * i) % 10000007; // Prevent overflow
     }
     return product;
 }
@@ -36,14 +36,16 @@ int64_t bench_mixed_ops(int64_t iterations) {
         a = (a + b) * c % 10000007;
         b = (b * c + a) % 10000007;
         c = (c + a - b) % 10000007;
-        if (c < 0) c += 10000007;
+        if (c < 0)
+            c += 10000007;
     }
     return a + b + c;
 }
 
 // Benchmark 4: Fibonacci iterative
 int64_t bench_fibonacci(int64_t n) {
-    if (n <= 1) return n;
+    if (n <= 1)
+        return n;
     int64_t a = 0, b = 1;
     for (int64_t i = 2; i <= n; ++i) {
         int64_t temp = a + b;
@@ -64,7 +66,8 @@ int64_t bench_count_primes(int64_t limit) {
                 break;
             }
         }
-        if (is_prime) ++count;
+        if (is_prime)
+            ++count;
     }
     return count;
 }

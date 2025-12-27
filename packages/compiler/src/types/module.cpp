@@ -1,6 +1,6 @@
-#include "tml/types/module.hpp"
+#include "types/module.hpp"
 
-#include "tml/types/env.hpp"
+#include "types/env.hpp"
 
 #include <algorithm>
 
@@ -53,8 +53,9 @@ void ModuleRegistry::register_file_mapping(const std::string& file_path,
     file_to_module_[file_path] = module_path;
 }
 
-auto ModuleRegistry::lookup_function(const std::string& module_path, const std::string& symbol_name)
-    const -> std::optional<FuncSig> {
+auto ModuleRegistry::lookup_function(const std::string& module_path,
+                                     const std::string& symbol_name) const
+    -> std::optional<FuncSig> {
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
@@ -66,8 +67,9 @@ auto ModuleRegistry::lookup_function(const std::string& module_path, const std::
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_struct(const std::string& module_path, const std::string& symbol_name)
-    const -> std::optional<StructDef> {
+auto ModuleRegistry::lookup_struct(const std::string& module_path,
+                                   const std::string& symbol_name) const
+    -> std::optional<StructDef> {
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
@@ -92,8 +94,9 @@ auto ModuleRegistry::lookup_enum(const std::string& module_path,
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_behavior(const std::string& module_path, const std::string& symbol_name)
-    const -> std::optional<BehaviorDef> {
+auto ModuleRegistry::lookup_behavior(const std::string& module_path,
+                                     const std::string& symbol_name) const
+    -> std::optional<BehaviorDef> {
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;
@@ -119,8 +122,9 @@ auto ModuleRegistry::lookup_type_alias(const std::string& module_path,
     return std::nullopt;
 }
 
-auto ModuleRegistry::lookup_symbol(const std::string& module_path, const std::string& symbol_name)
-    const -> std::optional<ModuleSymbol> {
+auto ModuleRegistry::lookup_symbol(const std::string& module_path,
+                                   const std::string& symbol_name) const
+    -> std::optional<ModuleSymbol> {
     auto module = get_module(module_path);
     if (!module)
         return std::nullopt;

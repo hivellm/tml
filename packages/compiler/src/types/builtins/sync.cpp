@@ -1,5 +1,5 @@
 // Builtin synchronization primitives
-#include "tml/types/env.hpp"
+#include "types/env.hpp"
 
 namespace tml::types {
 

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "tml/common.hpp"
-#include "tml/parser/ast.hpp"
-#include "tml/types/checker.hpp"
+#include "common.hpp"
+#include "parser/ast.hpp"
+#include "types/checker.hpp"
 
 #include <sstream>
 #include <string>

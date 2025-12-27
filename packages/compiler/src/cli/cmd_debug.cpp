@@ -1,11 +1,11 @@
 #include "cmd_debug.hpp"
 
-#include "tml/common.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/types/checker.hpp"
-#include "tml/types/module.hpp"
+#include "common.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/checker.hpp"
+#include "types/module.hpp"
 #include "utils.hpp"
 
 #include <filesystem>

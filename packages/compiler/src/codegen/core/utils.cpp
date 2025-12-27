@@ -1,7 +1,7 @@
 // LLVM IR generator - Core utilities
 // Handles: constructor, fresh_reg, fresh_label, emit, emit_line, report_error, add_string_literal
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 

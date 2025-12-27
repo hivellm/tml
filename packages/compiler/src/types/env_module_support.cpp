@@ -1,8 +1,8 @@
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/types/env.hpp"
-#include "tml/types/module.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/env.hpp"
+#include "types/module.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -90,6 +90,10 @@ auto TypeEnv::resolve_imported_symbol(const std::string& name) const -> std::opt
         return it->second.module_path + "::" + it->second.original_name;
     }
     return std::nullopt;
+}
+
+auto TypeEnv::all_imports() const -> const std::unordered_map<std::string, ImportedSymbol>& {
+    return imported_symbols_;
 }
 
 // Helper to parse a single TML file and extract public functions

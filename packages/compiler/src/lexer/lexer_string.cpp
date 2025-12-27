@@ -1,4 +1,4 @@
-#include "tml/lexer/lexer.hpp"
+#include "lexer/lexer.hpp"
 
 #include <charconv>
 #include <system_error>

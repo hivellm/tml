@@ -1,10 +1,10 @@
 #ifndef TML_TYPES_CHECKER_HPP
 #define TML_TYPES_CHECKER_HPP
 
-#include "tml/common.hpp"
-#include "tml/parser/ast.hpp"
-#include "tml/types/env.hpp"
-#include "tml/types/type.hpp"
+#include "common.hpp"
+#include "parser/ast.hpp"
+#include "types/env.hpp"
+#include "types/type.hpp"
 
 #include <vector>
 

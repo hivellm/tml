@@ -2,7 +2,7 @@
 // Main entry point for gen_call that delegates to specialized builtin handlers
 // Handles: enum constructors, indirect calls, generic functions, user-defined functions
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 

@@ -1,12 +1,12 @@
 // LLVM IR generator - Synchronization builtin functions
 // Handles: spinlock, threading, channels, mutex, waitgroup primitives
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // ============ SPINLOCK PRIMITIVES ============
 

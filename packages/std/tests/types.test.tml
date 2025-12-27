@@ -1,7 +1,7 @@
 // Tests for Maybe and Outcome types
 use test
 
-// Define types locally (until enum variant import is fixed)
+// Define types locally (codegen bug with imported module functions)
 type Maybe[T] {
     Just(T),
     Nothing

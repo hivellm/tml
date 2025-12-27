@@ -1,16 +1,16 @@
 #include "cmd_build.hpp"
 
 #include "build_config.hpp"
+#include "codegen/c_header_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "common.hpp"
 #include "compiler_setup.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
 #include "object_compiler.hpp"
+#include "parser/parser.hpp"
 #include "rlib.hpp"
-#include "tml/codegen/c_header_gen.hpp"
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/common.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 #include "utils.hpp"
 
 #include <cstdlib>
@@ -22,7 +22,7 @@
 #include <sstream>
 #include <thread>
 #ifndef _WIN32
-#include "tml/types/module.hpp"
+#include "types/module.hpp"
 
 #include <sys/wait.h>
 #endif

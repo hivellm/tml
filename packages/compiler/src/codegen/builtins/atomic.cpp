@@ -2,12 +2,12 @@
 // Handles: atomic_load, atomic_store, atomic_add, atomic_sub, atomic_exchange,
 //          atomic_cas, atomic_cas_val, atomic_and, atomic_or, fence, fence_acquire, fence_release
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name,
-                                       const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // atomic_load(ptr) -> I32 - Thread-safe read
     if (fn_name == "atomic_load") {

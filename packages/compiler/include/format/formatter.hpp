@@ -1,7 +1,7 @@
 #pragma once
 
-#include "tml/common.hpp"
-#include "tml/parser/ast.hpp"
+#include "common.hpp"
+#include "parser/ast.hpp"
 
 #include <sstream>
 #include <string>

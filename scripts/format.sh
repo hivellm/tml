@@ -22,7 +22,13 @@ echo -e "${YELLOW}Running clang-format...${NC}"
 
 # Find all C/C++ source files (excluding build directories and dependencies)
 FILES=$(find "$ROOT_DIR/packages/compiler/src" \
+    "$ROOT_DIR/packages/compiler/include" \
     "$ROOT_DIR/packages/compiler/runtime" \
+    "$ROOT_DIR/packages/compiler/tests" \
+    "$ROOT_DIR/packages/std/runtime" \
+    "$ROOT_DIR/packages/test/runtime" \
+    "$ROOT_DIR/benchmarks/cpp" \
+    "$ROOT_DIR/examples/ffi" \
     \( -name "*.cpp" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" \) \
     2>/dev/null)
 

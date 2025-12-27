@@ -2,9 +2,10 @@
 // Implements: List, HashMap, Buffer
 
 #include "collections.h"
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 // ============================================================================
 // List - Dynamic array implementation
@@ -12,9 +13,11 @@
 
 TmlList* list_create(int64_t initial_capacity) {
     TmlList* list = (TmlList*)malloc(sizeof(TmlList));
-    if (!list) return NULL;
+    if (!list)
+        return NULL;
 
-    if (initial_capacity < 8) initial_capacity = 8;
+    if (initial_capacity < 8)
+        initial_capacity = 8;
 
     list->data = (int64_t*)malloc(sizeof(int64_t) * initial_capacity);
     if (!list->data) {
@@ -28,7 +31,8 @@ TmlList* list_create(int64_t initial_capacity) {
 }
 
 void list_destroy(TmlList* list) {
-    if (!list) return;
+    if (!list)
+        return;
     free(list->data);
     free(list);
 }
@@ -43,7 +47,8 @@ static void list_grow(TmlList* list) {
 }
 
 void list_push(TmlList* list, int64_t value) {
-    if (!list) return;
+    if (!list)
+        return;
     if (list->len >= list->capacity) {
         list_grow(list);
     }
@@ -51,17 +56,20 @@ void list_push(TmlList* list, int64_t value) {
 }
 
 int64_t list_pop(TmlList* list) {
-    if (!list || list->len == 0) return 0;
+    if (!list || list->len == 0)
+        return 0;
     return list->data[--list->len];
 }
 
 int64_t list_get(TmlList* list, int64_t index) {
-    if (!list || index < 0 || index >= list->len) return 0;
+    if (!list || index < 0 || index >= list->len)
+        return 0;
     return list->data[index];
 }
 
 void list_set(TmlList* list, int64_t index, int64_t value) {
-    if (!list || index < 0 || index >= list->len) return;
+    if (!list || index < 0 || index >= list->len)
+        return;
     list->data[index] = value;
 }
 
@@ -74,7 +82,8 @@ int64_t list_capacity(TmlList* list) {
 }
 
 void list_clear(TmlList* list) {
-    if (list) list->len = 0;
+    if (list)
+        list->len = 0;
 }
 
 int32_t list_is_empty(TmlList* list) {
@@ -82,7 +91,8 @@ int32_t list_is_empty(TmlList* list) {
 }
 
 void list_resize(TmlList* list, int64_t new_len) {
-    if (!list || new_len < 0) return;
+    if (!list || new_len < 0)
+        return;
 
     // Grow capacity if needed
     if (new_len > list->capacity) {
@@ -91,7 +101,8 @@ void list_resize(TmlList* list, int64_t new_len) {
             new_capacity *= 2;
         }
         int64_t* new_data = (int64_t*)realloc(list->data, sizeof(int64_t) * new_capacity);
-        if (!new_data) return;
+        if (!new_data)
+            return;
         list->data = new_data;
         list->capacity = new_capacity;
     }
@@ -105,7 +116,8 @@ void list_resize(TmlList* list, int64_t new_len) {
 }
 
 void list_reserve(TmlList* list, int64_t min_capacity) {
-    if (!list || min_capacity <= list->capacity) return;
+    if (!list || min_capacity <= list->capacity)
+        return;
 
     int64_t* new_data = (int64_t*)realloc(list->data, sizeof(int64_t) * min_capacity);
     if (new_data) {
@@ -115,7 +127,8 @@ void list_reserve(TmlList* list, int64_t min_capacity) {
 }
 
 void list_shrink_to_fit(TmlList* list) {
-    if (!list || list->len == 0) return;
+    if (!list || list->len == 0)
+        return;
 
     int64_t* new_data = (int64_t*)realloc(list->data, sizeof(int64_t) * list->len);
     if (new_data) {
@@ -125,20 +138,21 @@ void list_shrink_to_fit(TmlList* list) {
 }
 
 int64_t list_remove(TmlList* list, int64_t index) {
-    if (!list || index < 0 || index >= list->len) return 0;
+    if (!list || index < 0 || index >= list->len)
+        return 0;
 
     int64_t value = list->data[index];
 
     // Shift elements left
-    memmove(list->data + index, list->data + index + 1,
-            sizeof(int64_t) * (list->len - index - 1));
+    memmove(list->data + index, list->data + index + 1, sizeof(int64_t) * (list->len - index - 1));
 
     list->len--;
     return value;
 }
 
 void list_insert(TmlList* list, int64_t index, int64_t value) {
-    if (!list || index < 0 || index > list->len) return;
+    if (!list || index < 0 || index > list->len)
+        return;
 
     // Grow if needed
     if (list->len >= list->capacity) {
@@ -147,8 +161,7 @@ void list_insert(TmlList* list, int64_t index, int64_t value) {
 
     // Shift elements right
     if (index < list->len) {
-        memmove(list->data + index + 1, list->data + index,
-                sizeof(int64_t) * (list->len - index));
+        memmove(list->data + index + 1, list->data + index, sizeof(int64_t) * (list->len - index));
     }
 
     list->data[index] = value;
@@ -156,7 +169,8 @@ void list_insert(TmlList* list, int64_t index, int64_t value) {
 }
 
 void list_reverse(TmlList* list) {
-    if (!list || list->len <= 1) return;
+    if (!list || list->len <= 1)
+        return;
 
     int64_t left = 0;
     int64_t right = list->len - 1;
@@ -186,9 +200,11 @@ static uint64_t hash_i64(int64_t key) {
 
 TmlHashMap* hashmap_create(int64_t initial_capacity) {
     TmlHashMap* map = (TmlHashMap*)malloc(sizeof(TmlHashMap));
-    if (!map) return NULL;
+    if (!map)
+        return NULL;
 
-    if (initial_capacity < 16) initial_capacity = 16;
+    if (initial_capacity < 16)
+        initial_capacity = 16;
 
     map->entries = (HashEntry*)calloc(initial_capacity, sizeof(HashEntry));
     if (!map->entries) {
@@ -202,7 +218,8 @@ TmlHashMap* hashmap_create(int64_t initial_capacity) {
 }
 
 void hashmap_destroy(TmlHashMap* map) {
-    if (!map) return;
+    if (!map)
+        return;
     free(map->entries);
     free(map);
 }
@@ -232,7 +249,8 @@ static void hashmap_grow(TmlHashMap* map) {
 }
 
 void hashmap_set(TmlHashMap* map, int64_t key, int64_t value) {
-    if (!map) return;
+    if (!map)
+        return;
 
     // Grow if load factor > 0.7
     if (map->len * 10 > map->capacity * 7) {
@@ -285,7 +303,8 @@ void hashmap_set(TmlHashMap* map, int64_t key, int64_t value) {
 }
 
 int64_t hashmap_get(TmlHashMap* map, int64_t key) {
-    if (!map) return 0;
+    if (!map)
+        return 0;
 
     uint64_t hash = hash_i64(key);
     int64_t index = hash % map->capacity;
@@ -294,7 +313,8 @@ int64_t hashmap_get(TmlHashMap* map, int64_t key) {
         int64_t probe = (index + i) % map->capacity;
         HashEntry* entry = &map->entries[probe];
 
-        if (!entry->occupied) return 0;  // Not found
+        if (!entry->occupied)
+            return 0; // Not found
         if (!entry->deleted && entry->key == key) {
             return entry->value;
         }
@@ -304,7 +324,8 @@ int64_t hashmap_get(TmlHashMap* map, int64_t key) {
 }
 
 bool hashmap_has(TmlHashMap* map, int64_t key) {
-    if (!map) return false;
+    if (!map)
+        return false;
 
     uint64_t hash = hash_i64(key);
     int64_t index = hash % map->capacity;
@@ -313,7 +334,8 @@ bool hashmap_has(TmlHashMap* map, int64_t key) {
         int64_t probe = (index + i) % map->capacity;
         HashEntry* entry = &map->entries[probe];
 
-        if (!entry->occupied) return false;
+        if (!entry->occupied)
+            return false;
         if (!entry->deleted && entry->key == key) {
             return true;
         }
@@ -323,7 +345,8 @@ bool hashmap_has(TmlHashMap* map, int64_t key) {
 }
 
 bool hashmap_remove(TmlHashMap* map, int64_t key) {
-    if (!map) return false;
+    if (!map)
+        return false;
 
     uint64_t hash = hash_i64(key);
     int64_t index = hash % map->capacity;
@@ -332,7 +355,8 @@ bool hashmap_remove(TmlHashMap* map, int64_t key) {
         int64_t probe = (index + i) % map->capacity;
         HashEntry* entry = &map->entries[probe];
 
-        if (!entry->occupied) return false;
+        if (!entry->occupied)
+            return false;
         if (!entry->deleted && entry->key == key) {
             entry->deleted = true;
             map->len--;
@@ -348,7 +372,8 @@ int64_t hashmap_len(TmlHashMap* map) {
 }
 
 void hashmap_clear(TmlHashMap* map) {
-    if (!map) return;
+    if (!map)
+        return;
     memset(map->entries, 0, sizeof(HashEntry) * map->capacity);
     map->len = 0;
 }
@@ -359,9 +384,11 @@ void hashmap_clear(TmlHashMap* map) {
 
 TmlBuffer* buffer_create(int64_t initial_capacity) {
     TmlBuffer* buf = (TmlBuffer*)malloc(sizeof(TmlBuffer));
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
 
-    if (initial_capacity < 64) initial_capacity = 64;
+    if (initial_capacity < 64)
+        initial_capacity = 64;
 
     buf->data = (uint8_t*)malloc(initial_capacity);
     if (!buf->data) {
@@ -376,14 +403,16 @@ TmlBuffer* buffer_create(int64_t initial_capacity) {
 }
 
 void buffer_destroy(TmlBuffer* buf) {
-    if (!buf) return;
+    if (!buf)
+        return;
     free(buf->data);
     free(buf);
 }
 
 static void buffer_grow(TmlBuffer* buf, int64_t min_capacity) {
     int64_t new_capacity = buf->capacity * 2;
-    if (new_capacity < min_capacity) new_capacity = min_capacity;
+    if (new_capacity < min_capacity)
+        new_capacity = min_capacity;
 
     uint8_t* new_data = (uint8_t*)realloc(buf->data, new_capacity);
     if (new_data) {
@@ -393,7 +422,8 @@ static void buffer_grow(TmlBuffer* buf, int64_t min_capacity) {
 }
 
 void buffer_write_byte(TmlBuffer* buf, int32_t byte) {
-    if (!buf) return;
+    if (!buf)
+        return;
     if (buf->len >= buf->capacity) {
         buffer_grow(buf, buf->capacity + 1);
     }
@@ -401,7 +431,8 @@ void buffer_write_byte(TmlBuffer* buf, int32_t byte) {
 }
 
 void buffer_write_i32(TmlBuffer* buf, int32_t value) {
-    if (!buf) return;
+    if (!buf)
+        return;
     if (buf->len + 4 > buf->capacity) {
         buffer_grow(buf, buf->len + 4);
     }
@@ -413,7 +444,8 @@ void buffer_write_i32(TmlBuffer* buf, int32_t value) {
 }
 
 void buffer_write_i64(TmlBuffer* buf, int64_t value) {
-    if (!buf) return;
+    if (!buf)
+        return;
     if (buf->len + 8 > buf->capacity) {
         buffer_grow(buf, buf->len + 8);
     }
@@ -429,12 +461,14 @@ void buffer_write_i64(TmlBuffer* buf, int64_t value) {
 }
 
 int32_t buffer_read_byte(TmlBuffer* buf) {
-    if (!buf || buf->read_pos >= buf->len) return -1;
+    if (!buf || buf->read_pos >= buf->len)
+        return -1;
     return buf->data[buf->read_pos++];
 }
 
 int32_t buffer_read_i32(TmlBuffer* buf) {
-    if (!buf || buf->read_pos + 4 > buf->len) return 0;
+    if (!buf || buf->read_pos + 4 > buf->len)
+        return 0;
     int32_t value = 0;
     value |= buf->data[buf->read_pos++];
     value |= buf->data[buf->read_pos++] << 8;
@@ -444,7 +478,8 @@ int32_t buffer_read_i32(TmlBuffer* buf) {
 }
 
 int64_t buffer_read_i64(TmlBuffer* buf) {
-    if (!buf || buf->read_pos + 8 > buf->len) return 0;
+    if (!buf || buf->read_pos + 8 > buf->len)
+        return 0;
     int64_t value = 0;
     value |= (int64_t)buf->data[buf->read_pos++];
     value |= (int64_t)buf->data[buf->read_pos++] << 8;
@@ -466,16 +501,19 @@ int64_t buffer_capacity(TmlBuffer* buf) {
 }
 
 int64_t buffer_remaining(TmlBuffer* buf) {
-    if (!buf) return 0;
+    if (!buf)
+        return 0;
     return buf->len - buf->read_pos;
 }
 
 void buffer_clear(TmlBuffer* buf) {
-    if (!buf) return;
+    if (!buf)
+        return;
     buf->len = 0;
     buf->read_pos = 0;
 }
 
 void buffer_reset_read(TmlBuffer* buf) {
-    if (buf) buf->read_pos = 0;
+    if (buf)
+        buf->read_pos = 0;
 }

@@ -1,8 +1,8 @@
 #ifndef TML_MATH_LIB_H
 #define TML_MATH_LIB_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

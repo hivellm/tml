@@ -2,12 +2,12 @@
 // Handles: float conversions, rounding, sqrt, pow, bit manipulation,
 //          special float values, SIMD operations, black_box
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // Helper: check if function is defined as a TML module function (not a builtin)
     auto is_module_func = [&](const std::string& name) -> bool {

@@ -1,7 +1,7 @@
 // LLVM IR generator - Main generate function
 // Handles: generate, infer_print_type
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 #include <iomanip>
 #include <set>

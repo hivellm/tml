@@ -1,7 +1,7 @@
 // TML source code formatter - core utilities
 // Produces consistently formatted TML code from an AST
 
-#include "tml/format/formatter.hpp"
+#include "format/formatter.hpp"
 
 namespace tml::format {
 

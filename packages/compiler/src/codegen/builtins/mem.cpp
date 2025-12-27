@@ -2,12 +2,12 @@
 // Handles: alloc, dealloc, mem_alloc, mem_free, mem_copy, mem_move,
 //          mem_set, mem_zero, mem_compare, mem_eq, read_i32, write_i32, ptr_offset
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
-                                    const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // Memory allocation: alloc(size) -> ptr
     // Always inline as malloc call (registered as builtin for type checking)

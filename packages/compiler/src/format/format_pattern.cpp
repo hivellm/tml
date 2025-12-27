@@ -1,6 +1,6 @@
 // TML source code formatter - pattern formatting
 
-#include "tml/format/formatter.hpp"
+#include "format/formatter.hpp"
 
 namespace tml::format {
 

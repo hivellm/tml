@@ -1,8 +1,8 @@
 // LLVM IR generator - Method calls
 // Handles: gen_method_call for all method dispatch (static, instance, ptr, dyn)
 
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/types/module.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "types/module.hpp"
 
 namespace tml::codegen {
 

@@ -1,10 +1,10 @@
 // TML Code Coverage Runtime
 // Tracks test coverage data
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 // Maximum number of entries to track
 #define MAX_FUNCTIONS 1024
@@ -77,8 +77,7 @@ static int32_t find_or_create_line(const char* file, int32_t line) {
 // Helper: Find or create branch entry
 static int32_t find_or_create_branch(const char* file, int32_t line, int32_t branch_id) {
     for (int32_t i = 0; i < g_branch_count; i++) {
-        if (g_branches[i].line == line &&
-            g_branches[i].branch_id == branch_id &&
+        if (g_branches[i].line == line && g_branches[i].branch_id == branch_id &&
             strcmp(g_branches[i].file, file) == 0) {
             return i;
         }
@@ -157,7 +156,8 @@ int32_t tml_is_func_covered(const char* name) {
 }
 
 int32_t tml_get_coverage_percent(void) {
-    if (g_func_count == 0) return 100;
+    if (g_func_count == 0)
+        return 100;
     return (tml_get_covered_func_count() * 100) / g_func_count;
 }
 
@@ -198,7 +198,8 @@ void tml_print_coverage_report(void) {
         printf("\n");
         printf("LINE COVERAGE: %d/%d", covered_lines, g_line_count);
         printf(" (%.1f%%)\n", (float)covered_lines * 100.0f / (float)g_line_count);
-        printf("--------------------------------------------------------------------------------\n");
+        printf(
+            "--------------------------------------------------------------------------------\n");
 
         // Group by file
         char current_file[MAX_NAME_LEN] = "";
@@ -218,12 +219,12 @@ void tml_print_coverage_report(void) {
         printf("\n");
         printf("BRANCH COVERAGE: %d/%d", covered_branches, g_branch_count);
         printf(" (%.1f%%)\n", (float)covered_branches * 100.0f / (float)g_branch_count);
-        printf("--------------------------------------------------------------------------------\n");
+        printf(
+            "--------------------------------------------------------------------------------\n");
 
         for (int32_t i = 0; i < g_branch_count; i++) {
             const char* status = g_branches[i].hit_count > 0 ? "+" : "-";
-            printf("  %s %s:L%d:B%d (hits: %d)\n",
-                   status, g_branches[i].file, g_branches[i].line,
+            printf("  %s %s:L%d:B%d (hits: %d)\n", status, g_branches[i].file, g_branches[i].line,
                    g_branches[i].branch_id, g_branches[i].hit_count);
         }
     }
@@ -237,7 +238,8 @@ void tml_print_coverage_report(void) {
         printf("  Lines:     %d covered / %d total\n", tml_get_covered_line_count(), g_line_count);
     }
     if (g_branch_count > 0) {
-        printf("  Branches:  %d covered / %d total\n", tml_get_covered_branch_count(), g_branch_count);
+        printf("  Branches:  %d covered / %d total\n", tml_get_covered_branch_count(),
+               g_branch_count);
     }
     printf("================================================================================\n");
 }

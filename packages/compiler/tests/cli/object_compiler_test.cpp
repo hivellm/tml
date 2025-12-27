@@ -1,9 +1,10 @@
 // Object compiler unit tests
 // Uses relative path to src/cli/ headers since they're not in include/
 #include "../../src/cli/object_compiler.hpp"
-#include <gtest/gtest.h>
+
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 
 using namespace tml::cli;
 namespace fs = std::filesystem;
@@ -58,7 +59,7 @@ entry:
 TEST_F(ObjectCompilerTest, CompileSuccess) {
     ObjectCompileOptions opts;
     opts.verbose = false;
-    opts.optimization_level = 0;  // -O0
+    opts.optimization_level = 0; // -O0
 
     auto result = compile_ll_to_object(ll_file, obj_file, "clang", opts);
 
@@ -119,9 +120,11 @@ TEST_F(ObjectCompilerTest, BatchCompilation) {
         ll << R"(; ModuleID = 'test)" << i << R"('
 target triple = "x86_64-pc-windows-msvc"
 
-define i32 @test_func)" << i << R"((i32 %x) {
+define i32 @test_func)"
+           << i << R"((i32 %x) {
 entry:
-  %result = add i32 %x, )" << i << R"(
+  %result = add i32 %x, )"
+           << i << R"(
   ret i32 %result
 }
 )";
@@ -136,7 +139,8 @@ entry:
     auto result = compile_ll_batch(ll_files, "clang", opts, 0);
 
     EXPECT_TRUE(result.success) << "Batch compilation should succeed";
-    EXPECT_EQ(result.object_files.size(), ll_files.size()) << "Should produce object files for all inputs";
+    EXPECT_EQ(result.object_files.size(), ll_files.size())
+        << "Should produce object files for all inputs";
 
     // Verify all object files exist
     for (const auto& obj : result.object_files) {

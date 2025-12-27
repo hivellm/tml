@@ -15,8 +15,9 @@
  *   LD_LIBRARY_PATH=. ./use_math_dll
  */
 
-#include <stdio.h>
 #include "math_lib.h"
+
+#include <stdio.h>
 
 int main() {
     printf("=== TML Math Library DLL Test ===\n\n");
@@ -48,16 +49,17 @@ int main() {
     int passed = 0;
     int total = 0;
 
-    #define TEST(expr, expected, desc) do { \
-        total++; \
-        int32_t result = (expr); \
-        if (result == (expected)) { \
-            printf("  ✓ %s: %d\n", desc, result); \
-            passed++; \
-        } else { \
-            printf("  ✗ %s: expected %d, got %d\n", desc, (expected), result); \
-        } \
-    } while(0)
+#define TEST(expr, expected, desc)                                                                 \
+    do {                                                                                           \
+        total++;                                                                                   \
+        int32_t result = (expr);                                                                   \
+        if (result == (expected)) {                                                                \
+            printf("  ✓ %s: %d\n", desc, result);                                                  \
+            passed++;                                                                              \
+        } else {                                                                                   \
+            printf("  ✗ %s: expected %d, got %d\n", desc, (expected), result);                     \
+        }                                                                                          \
+    } while (0)
 
     TEST(tml_add(25, 75), 100, "Addition");
     TEST(tml_subtract(100, 30), 70, "Subtraction");

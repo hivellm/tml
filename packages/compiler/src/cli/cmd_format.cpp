@@ -1,10 +1,10 @@
 #include "cmd_format.hpp"
 
-#include "tml/common.hpp"
-#include "tml/format/formatter.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
-#include "tml/parser/parser.hpp"
+#include "common.hpp"
+#include "format/formatter.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
 #include "utils.hpp"
 
 #include <filesystem>

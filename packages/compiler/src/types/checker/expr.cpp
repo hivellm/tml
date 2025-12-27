@@ -1,8 +1,8 @@
 // Type checker expression checking
 // Handles: check_expr, check_literal, check_ident, check_binary, check_unary, etc.
 
-#include "tml/lexer/token.hpp"
-#include "tml/types/checker.hpp"
+#include "lexer/token.hpp"
+#include "types/checker.hpp"
 
 #include <algorithm>
 
@@ -196,6 +196,31 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
                     auto type = std::make_shared<Type>();
                     type->kind = NamedType{ident.name, module_path, {}};
                     return type;
+                }
+            }
+        }
+
+        // Check if it's an enum constructor from an imported module
+        for (const auto& [import_name, import_info] : env_.all_imports()) {
+            auto imported_module = env_.get_module(import_info.module_path);
+            if (!imported_module)
+                continue;
+
+            for (const auto& [imported_enum_name, imported_enum_def] : imported_module->enums) {
+                for (const auto& [variant_name, payload_types] : imported_enum_def.variants) {
+                    if (variant_name == ident.name) {
+                        if (payload_types.empty()) {
+                            auto enum_type = std::make_shared<Type>();
+                            enum_type->kind =
+                                NamedType{imported_enum_name, import_info.module_path, {}};
+                            return enum_type;
+                        } else {
+                            auto enum_type = std::make_shared<Type>();
+                            enum_type->kind =
+                                NamedType{imported_enum_name, import_info.module_path, {}};
+                            return make_func(payload_types, enum_type);
+                        }
+                    }
                 }
             }
         }

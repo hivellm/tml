@@ -1,8 +1,9 @@
-#include "tml/types/checker.hpp"
-#include "tml/types/type.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/checker.hpp"
+#include "types/type.hpp"
+
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -484,18 +485,18 @@ TEST(TypeTest, TypesEqual) {
     // Structural equality - same type kind means equal
     auto a = make_i32();
     auto b = make_i32();
-    EXPECT_TRUE(types_equal(a, b));  // Same type kind
+    EXPECT_TRUE(types_equal(a, b)); // Same type kind
 
     auto ref_a = make_ref(make_i32(), false);
     auto ref_b = make_ref(make_i32(), false);
     EXPECT_TRUE(types_equal(ref_a, ref_b));
 
     auto ref_mut = make_ref(make_i32(), true);
-    EXPECT_FALSE(types_equal(ref_a, ref_mut));  // Mutability differs
+    EXPECT_FALSE(types_equal(ref_a, ref_mut)); // Mutability differs
 
     // Different primitive types
     auto i64 = make_i64();
-    EXPECT_FALSE(types_equal(a, i64));  // Different kinds
+    EXPECT_FALSE(types_equal(a, i64)); // Different kinds
 }
 
 // ============================================================================

@@ -4,24 +4,24 @@
 #ifndef STD_FILE_H
 #define STD_FILE_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // ============================================================================
 // File Handle
 // ============================================================================
 
 typedef struct {
-    void* handle;       // FILE* pointer
-    int64_t size;       // File size (cached on open)
-    int64_t position;   // Current position
-    int32_t mode;       // Open mode (read=1, write=2, append=4)
+    void* handle;     // FILE* pointer
+    int64_t size;     // File size (cached on open)
+    int64_t position; // Current position
+    int32_t mode;     // Open mode (read=1, write=2, append=4)
     bool is_open;
 } TmlFile;
 
 // File open modes
-#define TML_FILE_READ   1
-#define TML_FILE_WRITE  2
+#define TML_FILE_READ 1
+#define TML_FILE_WRITE 2
 #define TML_FILE_APPEND 4
 
 // ============================================================================
@@ -38,8 +38,8 @@ bool file_is_open(TmlFile* file);
 
 // Read operations
 int64_t file_read(TmlFile* file, uint8_t* buffer, int64_t size);
-char* file_read_all(const char* path);           // Returns malloc'd string
-char* file_read_line(TmlFile* file);             // Returns malloc'd string
+char* file_read_all(const char* path); // Returns malloc'd string
+char* file_read_line(TmlFile* file);   // Returns malloc'd string
 
 // Write operations
 int64_t file_write(TmlFile* file, const uint8_t* data, int64_t size);

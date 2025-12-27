@@ -2,7 +2,7 @@
 // Handles: resolve_type, resolve_type_path, error, block_has_return, stmt_has_return,
 // expr_has_return
 
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 
 namespace tml::types {
 

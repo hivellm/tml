@@ -1,4 +1,4 @@
-#include "tml/parser/parser.hpp"
+#include "parser/parser.hpp"
 
 namespace tml::parser {
 

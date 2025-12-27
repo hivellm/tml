@@ -1,7 +1,7 @@
 // LLVM IR generator - Control flow
 // Handles: if, block, loop, while, for, return
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 

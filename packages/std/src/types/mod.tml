@@ -318,7 +318,6 @@ pub func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
         Ok(val) => return Ok(f(val)),
         Err(e) => return Err(e)
     }
-    return Err(e)
 }
 
 /// Maps an Outcome[T, E] to Outcome[T, F] by applying a function to the Err value
@@ -334,7 +333,6 @@ pub func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
         Ok(val) => return Ok(val),
         Err(e) => return Err(f(e))
     }
-    return Err(f(e))
 }
 
 /// Applies a function that returns an Outcome to the Ok value (flatMap/bind)
@@ -349,7 +347,6 @@ pub func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> 
         Ok(val) => return f(val),
         Err(e) => return Err(e)
     }
-    return Err(e)
 }
 
 /// Returns this Outcome if it's Ok, otherwise returns the result of calling f with the error
@@ -364,5 +361,4 @@ pub func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outc
         Ok(val) => return Ok(val),
         Err(e) => return f(e)
     }
-    return f(e)
 }

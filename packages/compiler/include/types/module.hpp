@@ -1,9 +1,9 @@
 #ifndef TML_TYPES_MODULE_HPP
 #define TML_TYPES_MODULE_HPP
 
-#include "tml/parser/ast.hpp"
-#include "tml/types/env_stability.hpp"
-#include "tml/types/type.hpp"
+#include "parser/ast.hpp"
+#include "types/env_stability.hpp"
+#include "types/type.hpp"
 
 #include <memory>
 #include <optional>

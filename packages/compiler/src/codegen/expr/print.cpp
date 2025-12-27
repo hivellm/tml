@@ -1,7 +1,7 @@
 // LLVM IR generator - Format print
 // Handles: gen_format_print for formatted string output
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 #include <algorithm>
 #include <cctype>

@@ -1,12 +1,12 @@
 // LLVM IR generator - Time builtin functions
 // Handles: time_ms, time_us, time_ns, elapsed_*, sleep_*, Instant::*, Duration::*
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // time_ms() -> I32 - Current time in milliseconds
     if (fn_name == "time_ms") {

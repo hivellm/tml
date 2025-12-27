@@ -1,8 +1,8 @@
 #pragma once
 
+#include <parser/ast.hpp>
 #include <string>
-#include <tml/parser/ast.hpp>
-#include <tml/types/env.hpp>
+#include <types/env.hpp>
 #include <vector>
 
 namespace tml::codegen {

@@ -1,7 +1,8 @@
-#include "tml/borrow/checker.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
+#include "borrow/checker.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -76,7 +77,8 @@ TEST_F(BorrowCheckerTest, ImmutableAssignmentError) {
             let x: I32 = 42
             x = 10
         }
-    )", "not mutable");
+    )",
+                "not mutable");
 }
 
 // ============================================================================
@@ -117,7 +119,8 @@ TEST_F(BorrowCheckerTest, MutableBorrowOfImmutableError) {
             let x: I32 = 42
             let r: mut ref I32 = mut ref x
         }
-    )", "not declared as mutable");
+    )",
+                "not declared as mutable");
 }
 
 TEST_F(BorrowCheckerTest, DoubleMutableBorrowError) {
@@ -127,7 +130,8 @@ TEST_F(BorrowCheckerTest, DoubleMutableBorrowError) {
             let r1: mut ref I32 = mut ref x
             let r2: mut ref I32 = mut ref x
         }
-    )", "more than once");
+    )",
+                "more than once");
 }
 
 TEST_F(BorrowCheckerTest, MixedBorrowError) {
@@ -137,7 +141,8 @@ TEST_F(BorrowCheckerTest, MixedBorrowError) {
             let r1: ref I32 = ref x
             let r2: mut ref I32 = mut ref x
         }
-    )", "also borrowed as immutable");
+    )",
+                "also borrowed as immutable");
 }
 
 TEST_F(BorrowCheckerTest, MixedBorrowErrorReverse) {
@@ -147,7 +152,8 @@ TEST_F(BorrowCheckerTest, MixedBorrowErrorReverse) {
             let r1: mut ref I32 = mut ref x
             let r2: ref I32 = ref x
         }
-    )", "also borrowed as mutable");
+    )",
+                "also borrowed as mutable");
 }
 
 // ============================================================================
@@ -449,7 +455,8 @@ TEST_F(BorrowCheckerTest, DanglingReferenceInReturn) {
             let x: I32 = 42
             return ref x
         }
-    )", "cannot return reference to local variable");
+    )",
+                "cannot return reference to local variable");
 }
 
 // ============================================================================

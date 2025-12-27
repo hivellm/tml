@@ -9,8 +9,9 @@
  *   Linux:   clang use_math_lib.c -o use_math_lib libmath_lib.a
  */
 
-#include <stdio.h>
 #include "math_lib.h"
+
+#include <stdio.h>
 
 int main() {
     printf("=== TML Math Library Test ===\n\n");
@@ -44,15 +45,16 @@ int main() {
     int passed = 0;
     int total = 0;
 
-    #define TEST(expr, expected) do { \
-        total++; \
-        if ((expr) == (expected)) { \
-            printf("  ✓ " #expr " == %d\n", expected); \
-            passed++; \
-        } else { \
-            printf("  ✗ " #expr " != %d (got %d)\n", expected, (expr)); \
-        } \
-    } while(0)
+#define TEST(expr, expected)                                                                       \
+    do {                                                                                           \
+        total++;                                                                                   \
+        if ((expr) == (expected)) {                                                                \
+            printf("  ✓ " #expr " == %d\n", expected);                                             \
+            passed++;                                                                              \
+        } else {                                                                                   \
+            printf("  ✗ " #expr " != %d (got %d)\n", expected, (expr));                            \
+        }                                                                                          \
+    } while (0)
 
     TEST(tml_add(3, 7), 10);
     TEST(tml_multiply(6, 7), 42);

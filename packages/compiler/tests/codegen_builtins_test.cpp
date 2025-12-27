@@ -1,11 +1,12 @@
 // TML Compiler - Codegen Builtins Tests
 // Comprehensive tests for all builtin functions in codegen
 
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/types/checker.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/checker.hpp"
+
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -48,7 +49,8 @@ protected:
         return std::get<std::string>(ir_result);
     }
 
-    void expect_ir_contains(const std::string& ir, const std::string& pattern, const std::string& msg) {
+    void expect_ir_contains(const std::string& ir, const std::string& pattern,
+                            const std::string& msg) {
         EXPECT_NE(ir.find(pattern), std::string::npos) << msg;
     }
 };

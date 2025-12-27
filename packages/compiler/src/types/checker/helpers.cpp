@@ -1,7 +1,7 @@
 // Type checker helper functions
 // Shared utilities used by other checker modules
 
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 
 #include <algorithm>
 

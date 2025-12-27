@@ -1,12 +1,13 @@
 // LLVM IR generator - Collections builtin functions
 // Handles: list_*, hashmap_*, buffer_*
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_collections(
-    const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
+                                            const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // ============ LIST FUNCTIONS ============
 

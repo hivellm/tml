@@ -1,7 +1,7 @@
 #ifndef TML_TYPES_TYPE_HPP
 #define TML_TYPES_TYPE_HPP
 
-#include "tml/common.hpp"
+#include "common.hpp"
 
 #include <memory>
 #include <optional>

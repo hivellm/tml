@@ -1,6 +1,7 @@
-#include "tml/lexer/lexer.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/format/formatter.hpp"
+#include "format/formatter.hpp"
+#include "lexer/lexer.hpp"
+#include "parser/parser.hpp"
+
 #include <gtest/gtest.h>
 
 using namespace tml;
@@ -32,7 +33,8 @@ protected:
     // Format and check if output parses correctly (round-trip test)
     auto round_trip(const std::string& code) -> bool {
         std::string formatted = format(code);
-        if (formatted == "PARSE_ERROR") return false;
+        if (formatted == "PARSE_ERROR")
+            return false;
 
         // Parse the formatted output
         auto source = Source::from_string(formatted);
@@ -166,7 +168,8 @@ TEST_F(FormatterTest, EnumWithTupleVariant) {
 }
 
 TEST_F(FormatterTest, EnumWithStructVariant) {
-    std::string input = "type Shape { Circle { radius: F64 }, Rectangle { width: F64, height: F64 } }";
+    std::string input =
+        "type Shape { Circle { radius: F64 }, Rectangle { width: F64, height: F64 } }";
     std::string formatted = format(input);
     EXPECT_TRUE(formatted.find("Circle {") != std::string::npos);
     EXPECT_TRUE(formatted.find("radius: F64") != std::string::npos);
@@ -381,7 +384,8 @@ TEST_F(FormatterTest, WhenInline) {
 }
 
 TEST_F(FormatterTest, WhenWithMultipleArms) {
-    std::string input = "func f() { when (x) { 0 => \"zero\", 1 => \"one\", 2 => \"two\", _ => \"many\" } }";
+    std::string input =
+        "func f() { when (x) { 0 => \"zero\", 1 => \"one\", 2 => \"two\", _ => \"many\" } }";
     std::string formatted = format(input);
     EXPECT_TRUE(formatted.find("0 =>") != std::string::npos);
     EXPECT_TRUE(formatted.find("1 =>") != std::string::npos);

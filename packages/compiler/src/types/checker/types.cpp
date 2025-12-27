@@ -2,7 +2,7 @@
 // Handles: check_tuple, check_array, check_struct_expr, check_closure, check_try, check_path,
 // collect_captures_from_expr
 
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 
 #include <algorithm>
 

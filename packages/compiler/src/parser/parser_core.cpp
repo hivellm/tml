@@ -1,4 +1,4 @@
-#include "tml/parser/parser.hpp"
+#include "parser/parser.hpp"
 
 namespace tml::parser {
 
@@ -52,8 +52,8 @@ auto Parser::match(lexer::TokenKind kind) -> bool {
     return false;
 }
 
-auto Parser::expect(lexer::TokenKind kind,
-                    const std::string& message) -> Result<lexer::Token, ParseError> {
+auto Parser::expect(lexer::TokenKind kind, const std::string& message)
+    -> Result<lexer::Token, ParseError> {
     if (check(kind)) {
         return advance();
     }

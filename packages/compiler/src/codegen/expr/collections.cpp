@@ -1,7 +1,7 @@
 // LLVM IR generator - Collections and paths
 // Handles: gen_array, gen_index, gen_path
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 

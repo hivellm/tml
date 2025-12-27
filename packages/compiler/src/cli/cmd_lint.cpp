@@ -1,6 +1,6 @@
 #include "cmd_lint.hpp"
 
-#include "tml/common.hpp"
+#include "common.hpp"
 #include "utils.hpp"
 
 #include <filesystem>

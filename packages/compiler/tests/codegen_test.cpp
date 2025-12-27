@@ -1,11 +1,12 @@
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/types/checker.hpp"
-#include "tml/parser/parser.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
+#include "types/checker.hpp"
+
 #include <gtest/gtest.h>
-#include <memory>
 #include <iostream>
+#include <memory>
 
 using namespace tml;
 using namespace tml::codegen;
@@ -190,12 +191,10 @@ TEST_F(CodegenTest, WhenExpressionSimple) {
         << "IR should extract tag from enum";
 
     // Check for tag comparison
-    EXPECT_NE(ir.find("icmp eq i32"), std::string::npos)
-        << "IR should compare tag values";
+    EXPECT_NE(ir.find("icmp eq i32"), std::string::npos) << "IR should compare tag values";
 
     // Check for conditional branches
-    EXPECT_NE(ir.find("br i1"), std::string::npos)
-        << "IR should have conditional branches";
+    EXPECT_NE(ir.find("br i1"), std::string::npos) << "IR should have conditional branches";
 }
 
 TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
@@ -224,8 +223,7 @@ TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
         << "IR should extract payload from enum";
 
     // Check that we return the extracted value
-    EXPECT_NE(ir.find("ret i64"), std::string::npos)
-        << "Function should return i64 value";
+    EXPECT_NE(ir.find("ret i64"), std::string::npos) << "Function should return i64 value";
 }
 
 // ============================================================================
@@ -247,8 +245,7 @@ TEST_F(CodegenTest, ExternFunctionBasic) {
         << "IR should contain extern declaration";
 
     // Verify it's NOT defined (no define @getenv)
-    EXPECT_EQ(ir.find("define"), ir.find("define"))
-        << "Extern function should not have a body";
+    EXPECT_EQ(ir.find("define"), ir.find("define")) << "Extern function should not have a body";
 }
 
 TEST_F(CodegenTest, ExternFunctionWithCustomName) {

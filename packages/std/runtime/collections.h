@@ -4,8 +4,8 @@
 #ifndef STD_COLLECTIONS_H
 #define STD_COLLECTIONS_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // ============================================================================
 // List - Dynamic array

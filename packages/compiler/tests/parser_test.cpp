@@ -1,5 +1,6 @@
-#include "tml/lexer/lexer.hpp"
-#include "tml/parser/parser.hpp"
+#include "lexer/lexer.hpp"
+#include "parser/parser.hpp"
+
 #include <gtest/gtest.h>
 
 using namespace tml;
@@ -622,7 +623,8 @@ TEST_F(ParserTest, InterpolatedStringSimple) {
 TEST_F(ParserTest, InterpolatedStringMultiple) {
     // Test: "Hello {name}, you are {age} years old"
     auto result = parse_expr("\"Hello {name}, you are {age} years old\"");
-    ASSERT_TRUE(is_ok(result)) << "Failed to parse interpolated string with multiple interpolations";
+    ASSERT_TRUE(is_ok(result))
+        << "Failed to parse interpolated string with multiple interpolations";
     EXPECT_TRUE(unwrap(result)->is<InterpolatedStringExpr>());
 
     auto& interp = unwrap(result)->as<InterpolatedStringExpr>();

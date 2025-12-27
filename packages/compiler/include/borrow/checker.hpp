@@ -1,9 +1,9 @@
 #ifndef TML_BORROW_CHECKER_HPP
 #define TML_BORROW_CHECKER_HPP
 
-#include "tml/common.hpp"
-#include "tml/parser/ast.hpp"
-#include "tml/types/type.hpp"
+#include "common.hpp"
+#include "parser/ast.hpp"
+#include "types/type.hpp"
 
 #include <optional>
 #include <set>

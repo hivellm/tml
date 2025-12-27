@@ -2,8 +2,8 @@
 
 #include "cmd_build.hpp"
 #include "cmd_debug.hpp"
+#include "common.hpp"
 #include "compiler_setup.hpp"
-#include "tml/common.hpp"
 #include "utils.hpp"
 
 #include <algorithm>

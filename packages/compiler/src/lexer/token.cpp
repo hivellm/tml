@@ -1,4 +1,4 @@
-#include "tml/lexer/token.hpp"
+#include "lexer/token.hpp"
 
 #include <cassert>
 #include <unordered_map>

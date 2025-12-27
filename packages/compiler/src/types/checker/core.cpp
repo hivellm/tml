@@ -1,8 +1,8 @@
 // Type checker core - module checking and declarations
 // Handles: check_module, register_*, check_func_decl, check_impl_decl
 
-#include "tml/lexer/token.hpp"
-#include "tml/types/checker.hpp"
+#include "lexer/token.hpp"
+#include "types/checker.hpp"
 
 #include <algorithm>
 #include <iostream>

@@ -266,4 +266,4 @@ endif()
 
 # Install
 install(TARGETS tml RUNTIME DESTINATION bin)
-install(DIRECTORY include/tml DESTINATION include)
+install(DIRECTORY include/ DESTINATION include)

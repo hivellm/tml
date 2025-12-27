@@ -1,74 +1,7 @@
 // Tests for Outcome[T, E] combinators
 // Tests: map_ok, map_err, and_then_ok, or_else_ok
 use test
-
-// Define types locally (until enum variant import is fixed)
-type Outcome[T, E] {
-    Ok(T),
-    Err(E)
-}
-
-// Combinator functions
-func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
-    when o {
-        Ok(val) => return Ok(f(val)),
-        Err(e) => return Err(e)
-    }
-}
-
-func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
-    when o {
-        Ok(val) => return Ok(val),
-        Err(e) => return Err(f(e))
-    }
-}
-
-func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> Outcome[U, E] {
-    when o {
-        Ok(val) => return f(val),
-        Err(e) => return Err(e)
-    }
-}
-
-func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[T, E] {
-    when o {
-        Ok(val) => return Ok(val),
-        Err(e) => return f(e)
-    }
-}
-
-// Helper functions for testing
-func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
-    when o {
-        Ok(val) => return val,
-        Err(_) => return default_val
-    }
-    return default_val
-}
-
-func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
-    when o {
-        Ok(_) => return default_val,
-        Err(e) => return e
-    }
-    return default_val
-}
-
-func is_ok[T, E](o: Outcome[T, E]) -> Bool {
-    when o {
-        Ok(_) => return true,
-        Err(_) => return false
-    }
-    return false
-}
-
-func is_err[T, E](o: Outcome[T, E]) -> Bool {
-    when o {
-        Ok(_) => return false,
-        Err(_) => return true
-    }
-    return true
-}
+use std::types
 
 // ============================================================================
 // map_ok Tests

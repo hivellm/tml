@@ -2,10 +2,10 @@
 // Handles: emit_header, emit_runtime_decls, emit_module_lowlevel_decls
 // Handles: emit_module_pure_tml_functions, emit_string_constants
 
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/lexer/lexer.hpp"
-#include "tml/lexer/source.hpp"
-#include "tml/parser/parser.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "lexer/source.hpp"
+#include "parser/parser.hpp"
 
 #include <filesystem>
 

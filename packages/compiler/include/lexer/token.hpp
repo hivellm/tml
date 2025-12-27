@@ -1,7 +1,7 @@
 #ifndef TML_LEXER_TOKEN_HPP
 #define TML_LEXER_TOKEN_HPP
 
-#include "tml/common.hpp"
+#include "common.hpp"
 
 #include <cstdint>
 #include <string>

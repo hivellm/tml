@@ -1,5 +1,5 @@
-#include "tml/types/env.hpp"
-#include "tml/types/module.hpp"
+#include "types/env.hpp"
+#include "types/module.hpp"
 
 #include <algorithm>
 
@@ -131,8 +131,9 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
     return std::nullopt;
 }
 
-auto TypeEnv::lookup_func_overload(const std::string& name, const std::vector<TypePtr>& arg_types)
-    const -> std::optional<FuncSig> {
+auto TypeEnv::lookup_func_overload(const std::string& name,
+                                   const std::vector<TypePtr>& arg_types) const
+    -> std::optional<FuncSig> {
     auto it = functions_.find(name);
     if (it != functions_.end()) {
         for (const auto& sig : it->second) {

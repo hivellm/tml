@@ -7,12 +7,12 @@
 //          char_is_ascii, char_is_control, char_to_uppercase, char_to_lowercase,
 //          char_to_digit, char_from_digit, char_code, char_from_code
 
-#include "tml/codegen/llvm_ir_gen.hpp"
+#include "codegen/llvm_ir_gen.hpp"
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name,
-                                       const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // str_len(s) -> I32
     if (fn_name == "str_len") {

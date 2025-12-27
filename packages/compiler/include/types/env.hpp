@@ -1,9 +1,9 @@
 #ifndef TML_TYPES_ENV_HPP
 #define TML_TYPES_ENV_HPP
 
-#include "tml/types/env_stability.hpp"
-#include "tml/types/module.hpp"
-#include "tml/types/type.hpp"
+#include "types/env_stability.hpp"
+#include "types/module.hpp"
+#include "types/type.hpp"
 
 #include <memory>
 #include <optional>
@@ -172,6 +172,8 @@ public:
     // Symbol resolution with imports
     [[nodiscard]] auto resolve_imported_symbol(const std::string& name) const
         -> std::optional<std::string /* full path */>;
+    [[nodiscard]] auto all_imports() const
+        -> const std::unordered_map<std::string, ImportedSymbol>&;
 
     // Module lookup
     [[nodiscard]] auto get_module(const std::string& module_path) const -> std::optional<Module>;

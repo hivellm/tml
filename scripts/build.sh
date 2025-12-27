@@ -155,9 +155,9 @@ fi
 
 cmake --build . --config "$CMAKE_BUILD_TYPE" -j "$JOBS"
 
-# Copy compile_commands.json to root for IDE support
+# Copy compile_commands.json to build dir for IDE support
 if [ -f "compile_commands.json" ]; then
-    cp compile_commands.json "$ROOT_DIR/"
+    cp compile_commands.json "$ROOT_DIR/build/"
 fi
 
 # Print result

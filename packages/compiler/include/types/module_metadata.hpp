@@ -1,7 +1,7 @@
 #ifndef TML_TYPES_MODULE_METADATA_HPP
 #define TML_TYPES_MODULE_METADATA_HPP
 
-#include "tml/types/module.hpp"
+#include "types/module.hpp"
 
 #include <filesystem>
 #include <string>

@@ -1,8 +1,8 @@
 // LLVM IR generator - Expression generation
 // Handles: literals, identifiers, binary ops, unary ops
 
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/lexer/lexer.hpp"
+#include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
 
 #include <iostream>
 
@@ -86,7 +86,7 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
         return std::to_string(lit.token.float_value().value);
     case lexer::TokenKind::BoolLiteral:
         last_expr_type_ = "i1";
-        return lit.token.lexeme == "true" ? "1" : "0";
+        return lit.token.bool_value() ? "1" : "0";
     case lexer::TokenKind::StringLiteral: {
         std::string str_val = std::string(lit.token.string_value().value);
         std::string const_name = add_string_literal(str_val);

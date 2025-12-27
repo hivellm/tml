@@ -1,7 +1,7 @@
 // Type checker statement handling
 // Handles: check_stmt, check_let, check_var, bind_pattern
 
-#include "tml/types/checker.hpp"
+#include "types/checker.hpp"
 
 #include <algorithm>
 
