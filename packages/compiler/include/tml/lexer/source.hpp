@@ -2,6 +2,7 @@
 #define TML_LEXER_SOURCE_HPP
 
 #include "tml/common.hpp"
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,13 +15,19 @@ public:
     Source(std::string filename, std::string content);
 
     // Get the entire source content
-    [[nodiscard]] auto content() const -> std::string_view { return content_; }
+    [[nodiscard]] auto content() const -> std::string_view {
+        return content_;
+    }
 
     // Get the filename
-    [[nodiscard]] auto filename() const -> std::string_view { return filename_; }
+    [[nodiscard]] auto filename() const -> std::string_view {
+        return filename_;
+    }
 
     // Get length in bytes
-    [[nodiscard]] auto length() const -> size_t { return content_.size(); }
+    [[nodiscard]] auto length() const -> size_t {
+        return content_.size();
+    }
 
     // Get character at offset (UTF-8 byte)
     [[nodiscard]] auto at(size_t offset) const -> char;
@@ -41,7 +48,8 @@ public:
     [[nodiscard]] static auto from_file(const std::string& path) -> Result<Source, std::string>;
 
     // Create source from string (for tests/REPL)
-    [[nodiscard]] static auto from_string(std::string content, std::string name = "<input>") -> Source;
+    [[nodiscard]] static auto from_string(std::string content, std::string name = "<input>")
+        -> Source;
 
 private:
     std::string filename_;

@@ -2,8 +2,9 @@
 #define TML_TYPES_MODULE_METADATA_HPP
 
 #include "tml/types/module.hpp"
-#include <string>
+
 #include <filesystem>
+#include <string>
 
 namespace tml::types {
 

@@ -2,19 +2,20 @@
 
 #include "tml/common.hpp"
 #include "tml/parser/ast.hpp"
-#include <string>
+
 #include <sstream>
+#include <string>
 
 namespace tml::format {
 
 // Formatter options
 struct FormatOptions {
-    int indent_width = 4;           // Spaces per indent level
-    bool use_tabs = false;          // Use tabs instead of spaces
-    int max_line_width = 100;       // Preferred max line width
-    bool trailing_commas = true;    // Add trailing commas in lists
-    bool space_after_colon = true;  // "x: T" vs "x:T"
-    bool align_fields = false;      // Align struct field types
+    int indent_width = 4;          // Spaces per indent level
+    bool use_tabs = false;         // Use tabs instead of spaces
+    int max_line_width = 100;      // Preferred max line width
+    bool trailing_commas = true;   // Add trailing commas in lists
+    bool space_after_colon = true; // "x: T" vs "x:T"
+    bool align_fields = false;     // Align struct field types
 };
 
 // TML source code formatter
@@ -105,7 +106,8 @@ private:
     // Operator helpers
     auto binary_op_str(parser::BinaryOp op) -> std::string;
     auto unary_op_str(parser::UnaryOp op) -> std::string;
-    auto needs_parens(const parser::Expr& expr, const parser::BinaryExpr& parent, bool is_right) -> bool;
+    auto needs_parens(const parser::Expr& expr, const parser::BinaryExpr& parent, bool is_right)
+        -> bool;
 };
 
 } // namespace tml::format

@@ -3,6 +3,7 @@
 
 #include "tml/common.hpp"
 #include "tml/lexer/token.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -94,39 +95,28 @@ struct InferType {
 
 // Dynamic trait object type: dyn Behavior[T]
 struct DynType {
-    TypePath behavior;                      // The behavior being used as trait object
-    std::optional<GenericArgs> generics;    // Generic parameters: dyn Iterator[I32]
-    bool is_mut;                            // dyn mut Behavior
+    TypePath behavior;                   // The behavior being used as trait object
+    std::optional<GenericArgs> generics; // Generic parameters: dyn Iterator[I32]
+    bool is_mut;                         // dyn mut Behavior
     SourceSpan span;
 };
 
 // Type variant
 struct Type {
-    std::variant<
-        NamedType,
-        RefType,
-        PtrType,
-        ArrayType,
-        SliceType,
-        TupleType,
-        FuncType,
-        InferType,
-        DynType
-    > kind;
+    std::variant<NamedType, RefType, PtrType, ArrayType, SliceType, TupleType, FuncType, InferType,
+                 DynType>
+        kind;
     SourceSpan span;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -191,30 +181,20 @@ struct RangePattern {
 
 // Pattern variant
 struct Pattern {
-    std::variant<
-        WildcardPattern,
-        IdentPattern,
-        LiteralPattern,
-        TuplePattern,
-        StructPattern,
-        EnumPattern,
-        OrPattern,
-        RangePattern
-    > kind;
+    std::variant<WildcardPattern, IdentPattern, LiteralPattern, TuplePattern, StructPattern,
+                 EnumPattern, OrPattern, RangePattern>
+        kind;
     SourceSpan span;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -237,14 +217,14 @@ struct IdentExpr {
 
 // Unary expression: -x, !x, &x, &mut x, *x
 enum class UnaryOp {
-    Neg,      // -
-    Not,      // !
-    BitNot,   // ~
-    Ref,      // &
-    RefMut,   // &mut
-    Deref,    // *
-    Inc,      // ++ (postfix increment)
-    Dec,      // -- (postfix decrement)
+    Neg,    // -
+    Not,    // !
+    BitNot, // ~
+    Ref,    // &
+    RefMut, // &mut
+    Deref,  // *
+    Inc,    // ++ (postfix increment)
+    Dec,    // -- (postfix decrement)
 };
 
 struct UnaryExpr {
@@ -256,17 +236,39 @@ struct UnaryExpr {
 // Binary expression: a + b, a && b, etc.
 enum class BinaryOp {
     // Arithmetic
-    Add, Sub, Mul, Div, Mod,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
     // Comparison
-    Eq, Ne, Lt, Gt, Le, Ge,
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
     // Logical
-    And, Or,
+    And,
+    Or,
     // Bitwise
-    BitAnd, BitOr, BitXor, Shl, Shr,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
     // Assignment
     Assign,
-    AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
-    BitAndAssign, BitOrAssign, BitXorAssign, ShlAssign, ShrAssign,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
+    ModAssign,
+    BitAndAssign,
+    BitOrAssign,
+    BitXorAssign,
+    ShlAssign,
+    ShrAssign,
 };
 
 struct BinaryExpr {
@@ -313,17 +315,17 @@ struct TupleExpr {
 
 // Array expression: [1, 2, 3] or [0; 10]
 struct ArrayExpr {
-    std::variant<
-        std::vector<ExprPtr>,           // [1, 2, 3]
-        std::pair<ExprPtr, ExprPtr>     // [expr; count]
-    > kind;
+    std::variant<std::vector<ExprPtr>,       // [1, 2, 3]
+                 std::pair<ExprPtr, ExprPtr> // [expr; count]
+                 >
+        kind;
     SourceSpan span;
 };
 
 // Struct expression: Point { x: 1, y: 2 } or Point[T] { x: 1, y: 2 }
 struct StructExpr {
     TypePath path;
-    std::optional<GenericArgs> generics;  // Generic arguments like [I32]
+    std::optional<GenericArgs> generics; // Generic arguments like [I32]
     std::vector<std::pair<std::string, ExprPtr>> fields;
     std::optional<ExprPtr> base; // ..base for struct update
     SourceSpan span;
@@ -461,7 +463,7 @@ struct AwaitExpr {
 // Path expression: std::io::stdout or List[I32]
 struct PathExpr {
     TypePath path;
-    std::optional<GenericArgs> generics;  // Generic arguments like [I32]
+    std::optional<GenericArgs> generics; // Generic arguments like [I32]
     SourceSpan span;
 };
 
@@ -474,10 +476,10 @@ struct LowlevelExpr {
 
 // Interpolated string segment: either literal text or an expression
 struct InterpolatedSegment {
-    std::variant<
-        std::string,   // Literal text segment
-        ExprPtr        // Interpolated expression: {expr}
-    > content;
+    std::variant<std::string, // Literal text segment
+                 ExprPtr      // Interpolated expression: {expr}
+                 >
+        content;
     SourceSpan span;
 };
 
@@ -489,52 +491,23 @@ struct InterpolatedStringExpr {
 
 // Expression variant
 struct Expr {
-    std::variant<
-        LiteralExpr,
-        IdentExpr,
-        UnaryExpr,
-        BinaryExpr,
-        CallExpr,
-        MethodCallExpr,
-        FieldExpr,
-        IndexExpr,
-        TupleExpr,
-        ArrayExpr,
-        StructExpr,
-        IfExpr,
-        TernaryExpr,
-        IfLetExpr,
-        WhenExpr,
-        LoopExpr,
-        WhileExpr,
-        ForExpr,
-        BlockExpr,
-        ReturnExpr,
-        BreakExpr,
-        ContinueExpr,
-        ClosureExpr,
-        RangeExpr,
-        CastExpr,
-        TryExpr,
-        AwaitExpr,
-        PathExpr,
-        LowlevelExpr,
-        InterpolatedStringExpr
-    > kind;
+    std::variant<LiteralExpr, IdentExpr, UnaryExpr, BinaryExpr, CallExpr, MethodCallExpr, FieldExpr,
+                 IndexExpr, TupleExpr, ArrayExpr, StructExpr, IfExpr, TernaryExpr, IfLetExpr,
+                 WhenExpr, LoopExpr, WhileExpr, ForExpr, BlockExpr, ReturnExpr, BreakExpr,
+                 ContinueExpr, ClosureExpr, RangeExpr, CastExpr, TryExpr, AwaitExpr, PathExpr,
+                 LowlevelExpr, InterpolatedStringExpr>
+        kind;
     SourceSpan span;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -567,26 +540,21 @@ struct ExprStmt {
 
 // Statement variant
 struct Stmt {
-    std::variant<
-        LetStmt,
-        VarStmt,
-        ExprStmt,
-        DeclPtr  // Nested declaration
-    > kind;
+    std::variant<LetStmt, VarStmt, ExprStmt,
+                 DeclPtr // Nested declaration
+                 >
+        kind;
     SourceSpan span;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -611,7 +579,7 @@ struct GenericParam {
 // Decorator/Attribute: @derive(Clone, Debug), @test, @inline
 struct Decorator {
     std::string name;
-    std::vector<ExprPtr> args;  // Optional arguments
+    std::vector<ExprPtr> args; // Optional arguments
     SourceSpan span;
 };
 
@@ -643,9 +611,9 @@ struct FuncDecl {
     SourceSpan span;
 
     // FFI support (@extern and @link decorators)
-    std::optional<std::string> extern_abi;   // "c", "c++", "stdcall", "fastcall", "thiscall"
-    std::optional<std::string> extern_name;  // symbol name if different from func name
-    std::vector<std::string> link_libs;      // libraries to link (.dll, .lib, .so, .a)
+    std::optional<std::string> extern_abi;  // "c", "c++", "stdcall", "fastcall", "thiscall"
+    std::optional<std::string> extern_name; // symbol name if different from func name
+    std::vector<std::string> link_libs;     // libraries to link (.dll, .lib, .so, .a)
 };
 
 // Struct field
@@ -689,7 +657,7 @@ struct EnumDecl {
 // Associated type declaration in behavior: type Item
 struct AssociatedType {
     std::string name;
-    std::vector<TypePath> bounds;  // Optional trait bounds: type Item: Display
+    std::vector<TypePath> bounds; // Optional trait bounds: type Item: Display
     SourceSpan span;
 };
 
@@ -707,7 +675,7 @@ struct TraitDecl {
     std::string name;
     std::vector<GenericParam> generics;
     std::vector<TypePath> super_traits;
-    std::vector<AssociatedType> associated_types;  // Associated types
+    std::vector<AssociatedType> associated_types; // Associated types
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
     SourceSpan span;
@@ -718,7 +686,7 @@ struct ImplDecl {
     std::vector<GenericParam> generics;
     std::optional<TypePath> trait_path;
     TypePtr self_type;
-    std::vector<AssociatedTypeBinding> type_bindings;  // Associated type bindings
+    std::vector<AssociatedTypeBinding> type_bindings; // Associated type bindings
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
     SourceSpan span;
@@ -746,7 +714,7 @@ struct ConstDecl {
 struct UseDecl {
     Visibility vis;
     TypePath path;
-    std::optional<std::string> alias; // as Alias
+    std::optional<std::string> alias;                // as Alias
     std::optional<std::vector<std::string>> symbols; // For grouped imports: {abs, sqrt}
     SourceSpan span;
 };
@@ -761,31 +729,20 @@ struct ModDecl {
 
 // Declaration variant
 struct Decl {
-    std::variant<
-        FuncDecl,
-        StructDecl,
-        EnumDecl,
-        TraitDecl,
-        ImplDecl,
-        TypeAliasDecl,
-        ConstDecl,
-        UseDecl,
-        ModDecl
-    > kind;
+    std::variant<FuncDecl, StructDecl, EnumDecl, TraitDecl, ImplDecl, TypeAliasDecl, ConstDecl,
+                 UseDecl, ModDecl>
+        kind;
     SourceSpan span;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -810,7 +767,8 @@ auto make_ident_expr(std::string name, SourceSpan span) -> ExprPtr;
 auto make_binary_expr(BinaryOp op, ExprPtr left, ExprPtr right, SourceSpan span) -> ExprPtr;
 auto make_unary_expr(UnaryOp op, ExprPtr operand, SourceSpan span) -> ExprPtr;
 auto make_call_expr(ExprPtr callee, std::vector<ExprPtr> args, SourceSpan span) -> ExprPtr;
-auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr, SourceSpan span) -> ExprPtr;
+auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr, SourceSpan span)
+    -> ExprPtr;
 
 // Create type helpers
 auto make_named_type(std::string name, SourceSpan span) -> TypePtr;

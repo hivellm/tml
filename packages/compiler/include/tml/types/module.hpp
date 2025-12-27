@@ -1,15 +1,16 @@
 #ifndef TML_TYPES_MODULE_HPP
 #define TML_TYPES_MODULE_HPP
 
-#include "tml/types/type.hpp"
-#include "tml/types/env_stability.hpp"
 #include "tml/parser/ast.hpp"
+#include "tml/types/env_stability.hpp"
+#include "tml/types/type.hpp"
+
+#include <memory>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <string>
-#include <optional>
 #include <variant>
-#include <memory>
 
 namespace tml::types {
 
@@ -22,7 +23,7 @@ struct BehaviorDef;
 // Represents a single module with its symbols
 struct Module {
     std::string name;
-    std::string file_path;  // Source file location
+    std::string file_path; // Source file location
 
     // Symbol tables for this module
     std::unordered_map<std::string, FuncSig> functions;
@@ -30,7 +31,7 @@ struct Module {
     std::unordered_map<std::string, EnumDef> enums;
     std::unordered_map<std::string, BehaviorDef> behaviors;
     std::unordered_map<std::string, TypePtr> type_aliases;
-    std::unordered_map<std::string, std::string> submodules;  // name -> path
+    std::unordered_map<std::string, std::string> submodules; // name -> path
 
     // Source code for pure TML modules (non-lowlevel)
     // Stored so codegen can re-parse and generate LLVM IR
@@ -42,9 +43,9 @@ struct Module {
 
 // Tracks what symbols are imported into current scope
 struct ImportedSymbol {
-    std::string original_name;    // Name in source module
-    std::string local_name;       // Name in current scope (after 'as')
-    std::string module_path;      // Full module path (e.g., "std::io")
+    std::string original_name; // Name in source module
+    std::string local_name;    // Name in current scope (after 'as')
+    std::string module_path;   // Full module path (e.g., "std::io")
     parser::Visibility visibility;
 };
 
@@ -92,7 +93,7 @@ public:
 
 private:
     std::unordered_map<std::string, Module> modules_;
-    std::unordered_map<std::string, std::string> file_to_module_;  // foo.tml -> foo
+    std::unordered_map<std::string, std::string> file_to_module_; // foo.tml -> foo
 };
 
 } // namespace tml::types

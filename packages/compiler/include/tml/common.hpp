@@ -26,11 +26,19 @@ struct CompilerOptions {
 };
 
 // Convenience macro for debug output (only prints when verbose is enabled)
-#define TML_DEBUG(msg) \
-    do { if (::tml::CompilerOptions::verbose) { std::cerr << msg; } } while(0)
+#define TML_DEBUG(msg)                                                                             \
+    do {                                                                                           \
+        if (::tml::CompilerOptions::verbose) {                                                     \
+            std::cerr << msg;                                                                      \
+        }                                                                                          \
+    } while (0)
 
-#define TML_DEBUG_LN(msg) \
-    do { if (::tml::CompilerOptions::verbose) { std::cerr << msg << "\n"; } } while(0)
+#define TML_DEBUG_LN(msg)                                                                          \
+    do {                                                                                           \
+        if (::tml::CompilerOptions::verbose) {                                                     \
+            std::cerr << msg << "\n";                                                              \
+        }                                                                                          \
+    } while (0)
 
 // Source location for error reporting
 struct SourceLocation {
@@ -54,8 +62,7 @@ struct SourceSpan {
 };
 
 // Result type for operations that can fail
-template <typename T, typename E = std::string>
-using Result = std::variant<T, E>;
+template <typename T, typename E = std::string> using Result = std::variant<T, E>;
 
 template <typename T, typename E>
 [[nodiscard]] constexpr auto is_ok(const Result<T, E>& result) -> bool {
@@ -67,8 +74,7 @@ template <typename T, typename E>
     return std::holds_alternative<E>(result);
 }
 
-template <typename T, typename E>
-[[nodiscard]] constexpr auto unwrap(Result<T, E>& result) -> T& {
+template <typename T, typename E> [[nodiscard]] constexpr auto unwrap(Result<T, E>& result) -> T& {
     return std::get<T>(result);
 }
 
@@ -88,19 +94,15 @@ template <typename T, typename E>
 }
 
 // Smart pointer aliases
-template <typename T>
-using Box = std::unique_ptr<T>;
+template <typename T> using Box = std::unique_ptr<T>;
 
-template <typename T>
-using Rc = std::shared_ptr<T>;
+template <typename T> using Rc = std::shared_ptr<T>;
 
-template <typename T, typename... Args>
-[[nodiscard]] auto make_box(Args&&... args) -> Box<T> {
+template <typename T, typename... Args> [[nodiscard]] auto make_box(Args&&... args) -> Box<T> {
     return std::make_unique<T>(std::forward<Args>(args)...);
 }
 
-template <typename T, typename... Args>
-[[nodiscard]] auto make_rc(Args&&... args) -> Rc<T> {
+template <typename T, typename... Args> [[nodiscard]] auto make_rc(Args&&... args) -> Rc<T> {
     return std::make_shared<T>(std::forward<Args>(args)...);
 }
 

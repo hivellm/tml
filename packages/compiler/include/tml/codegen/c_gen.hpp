@@ -3,8 +3,9 @@
 #include "tml/common.hpp"
 #include "tml/parser/ast.hpp"
 #include "tml/types/checker.hpp"
-#include <string>
+
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -19,9 +20,9 @@ struct CodegenError {
 
 // C code generator options
 struct CGenOptions {
-    bool emit_comments = true;      // Include source location comments
-    bool emit_debug_info = false;   // Emit debug printf statements
-    std::string runtime_prefix = "tml_";  // Prefix for runtime functions
+    bool emit_comments = true;           // Include source location comments
+    bool emit_debug_info = false;        // Emit debug printf statements
+    std::string runtime_prefix = "tml_"; // Prefix for runtime functions
 };
 
 // C code generator

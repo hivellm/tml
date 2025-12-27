@@ -3,11 +3,12 @@
 
 #include "tml/common.hpp"
 #include "tml/parser/ast.hpp"
-#include <string>
-#include <vector>
-#include <variant>
-#include <optional>
+
 #include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace tml::ir {
 
@@ -67,14 +68,8 @@ struct IRFuncType {
     Box<IRTypeRef> ret;
 };
 
-using IRTypeKind = std::variant<
-    IRTypeRef,
-    IRRefType,
-    IRSliceType,
-    IRArrayType,
-    IRTupleType,
-    IRFuncType
->;
+using IRTypeKind =
+    std::variant<IRTypeRef, IRRefType, IRSliceType, IRArrayType, IRTupleType, IRFuncType>;
 
 struct IRTypeExpr {
     IRTypeKind kind;
@@ -110,14 +105,8 @@ struct IRPatternVariant {
     std::vector<IRPatternPtr> fields;
 };
 
-using IRPatternKind = std::variant<
-    IRPatternLit,
-    IRPatternBind,
-    IRPatternWild,
-    IRPatternTuple,
-    IRPatternStruct,
-    IRPatternVariant
->;
+using IRPatternKind = std::variant<IRPatternLit, IRPatternBind, IRPatternWild, IRPatternTuple,
+                                   IRPatternStruct, IRPatternVariant>;
 
 struct IRPattern {
     IRPatternKind kind;
@@ -137,13 +126,13 @@ struct IRVar {
 };
 
 struct IRBinaryOp {
-    std::string op;  // "+", "-", "*", "/", "==", etc.
+    std::string op; // "+", "-", "*", "/", "==", etc.
     IRExprPtr left;
     IRExprPtr right;
 };
 
 struct IRUnaryOp {
-    std::string op;  // "-", "not", "ref", "deref"
+    std::string op; // "-", "not", "ref", "deref"
     IRExprPtr operand;
 };
 
@@ -176,7 +165,7 @@ struct IRIndex {
 
 struct IRStructExpr {
     std::string type_name;
-    std::vector<std::pair<std::string, IRExprPtr>> fields;  // sorted by name
+    std::vector<std::pair<std::string, IRExprPtr>> fields; // sorted by name
 };
 
 struct IRVariantExpr {
@@ -260,34 +249,11 @@ struct IRRange {
     bool inclusive;
 };
 
-using IRExprKind = std::variant<
-    IRLiteral,
-    IRVar,
-    IRBinaryOp,
-    IRUnaryOp,
-    IRCall,
-    IRMethodCall,
-    IRFieldGet,
-    IRFieldSet,
-    IRIndex,
-    IRStructExpr,
-    IRVariantExpr,
-    IRTupleExpr,
-    IRArrayExpr,
-    IRArrayRepeat,
-    IRIf,
-    IRWhen,
-    IRLoop,
-    IRLoopIn,
-    IRLoopWhile,
-    IRBlock,
-    IRClosure,
-    IRTry,
-    IRReturn,
-    IRBreak,
-    IRContinue,
-    IRRange
->;
+using IRExprKind =
+    std::variant<IRLiteral, IRVar, IRBinaryOp, IRUnaryOp, IRCall, IRMethodCall, IRFieldGet,
+                 IRFieldSet, IRIndex, IRStructExpr, IRVariantExpr, IRTupleExpr, IRArrayExpr,
+                 IRArrayRepeat, IRIf, IRWhen, IRLoop, IRLoopIn, IRLoopWhile, IRBlock, IRClosure,
+                 IRTry, IRReturn, IRBreak, IRContinue, IRRange>;
 
 struct IRExpr {
     IRExprKind kind;
@@ -318,12 +284,7 @@ struct IRExprStmt {
     IRExprPtr expr;
 };
 
-using IRStmtKind = std::variant<
-    IRLet,
-    IRVarMut,
-    IRAssign,
-    IRExprStmt
->;
+using IRStmtKind = std::variant<IRLet, IRVarMut, IRAssign, IRExprStmt>;
 
 struct IRStmt {
     IRStmtKind kind;
@@ -362,27 +323,23 @@ struct IRField {
 };
 
 struct IRStructType {
-    std::vector<IRField> fields;  // sorted alphabetically
+    std::vector<IRField> fields; // sorted alphabetically
 };
 
 struct IREnumVariant {
     std::string name;
-    std::vector<IRTypeExpr> fields;  // tuple variant fields
+    std::vector<IRTypeExpr> fields; // tuple variant fields
 };
 
 struct IREnumType {
-    std::vector<IREnumVariant> variants;  // sorted alphabetically
+    std::vector<IREnumVariant> variants; // sorted alphabetically
 };
 
 struct IRAliasType {
     IRTypeExpr target;
 };
 
-using IRTypeDefKind = std::variant<
-    IRStructType,
-    IREnumType,
-    IRAliasType
->;
+using IRTypeDefKind = std::variant<IRStructType, IREnumType, IRAliasType>;
 
 struct IRType {
     StableId id;
@@ -405,7 +362,7 @@ struct IRBehavior {
     Visibility vis;
     std::vector<IRGenericParam> generics;
     std::vector<std::string> super_behaviors;
-    std::vector<IRBehaviorMethod> methods;  // sorted alphabetically
+    std::vector<IRBehaviorMethod> methods; // sorted alphabetically
 };
 
 struct IRImplMethod {
@@ -420,8 +377,8 @@ struct IRImpl {
     StableId id;
     std::vector<IRGenericParam> generics;
     std::string target_type;
-    std::optional<std::string> behavior;  // None for inherent impl
-    std::vector<IRImplMethod> methods;  // sorted alphabetically
+    std::optional<std::string> behavior; // None for inherent impl
+    std::vector<IRImplMethod> methods;   // sorted alphabetically
 };
 
 struct IRConst {
@@ -437,20 +394,14 @@ struct IRImport {
     std::optional<std::string> alias;
 };
 
-using IRItem = std::variant<
-    IRConst,
-    IRType,
-    IRBehavior,
-    IRImpl,
-    IRFunc
->;
+using IRItem = std::variant<IRConst, IRType, IRBehavior, IRImpl, IRFunc>;
 
 struct IRModule {
     StableId id;
     std::string name;
     std::vector<std::string> caps;
-    std::vector<IRImport> imports;  // sorted by path
-    std::vector<IRItem> items;      // sorted by kind, then name
+    std::vector<IRImport> imports; // sorted by path
+    std::vector<IRItem> items;     // sorted by kind, then name
 };
 
 // ============================================================================

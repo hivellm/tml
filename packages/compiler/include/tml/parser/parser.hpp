@@ -4,6 +4,7 @@
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/parser/ast.hpp"
+
 #include <functional>
 #include <vector>
 
@@ -11,22 +12,22 @@ namespace tml::parser {
 
 // Operator precedence levels (higher = tighter binding)
 namespace precedence {
-    constexpr int NONE = 0;
-    constexpr int ASSIGN = 1;      // =, +=, etc.
-    constexpr int TERNARY = 2;     // ? :
-    constexpr int OR = 3;          // ||
-    constexpr int AND = 4;         // &&
-    constexpr int COMPARISON = 5;  // ==, !=, <, >, <=, >=
-    constexpr int BITOR = 6;       // |
-    constexpr int BITXOR = 7;      // ^
-    constexpr int BITAND = 8;      // &
-    constexpr int SHIFT = 9;       // <<, >>
-    constexpr int TERM = 10;       // +, -
-    constexpr int FACTOR = 11;     // *, /, %
-    constexpr int UNARY = 12;      // -, !, ~, &, *
-    constexpr int CALL = 13;       // (), [], .
-    constexpr int RANGE = 14;      // .., ..=
-}
+constexpr int NONE = 0;
+constexpr int ASSIGN = 1;     // =, +=, etc.
+constexpr int TERNARY = 2;    // ? :
+constexpr int OR = 3;         // ||
+constexpr int AND = 4;        // &&
+constexpr int COMPARISON = 5; // ==, !=, <, >, <=, >=
+constexpr int BITOR = 6;      // |
+constexpr int BITXOR = 7;     // ^
+constexpr int BITAND = 8;     // &
+constexpr int SHIFT = 9;      // <<, >>
+constexpr int TERM = 10;      // +, -
+constexpr int FACTOR = 11;    // *, /, %
+constexpr int UNARY = 12;     // -, !, ~, &, *
+constexpr int CALL = 13;      // (), [], .
+constexpr int RANGE = 14;     // .., ..=
+} // namespace precedence
 
 // Parser error
 struct ParseError {
@@ -41,7 +42,8 @@ public:
     explicit Parser(std::vector<lexer::Token> tokens);
 
     // Parse entire module
-    [[nodiscard]] auto parse_module(const std::string& name) -> Result<Module, std::vector<ParseError>>;
+    [[nodiscard]] auto parse_module(const std::string& name)
+        -> Result<Module, std::vector<ParseError>>;
 
     // Parse single declaration (for testing)
     [[nodiscard]] auto parse_decl() -> Result<DeclPtr, ParseError>;
@@ -53,10 +55,14 @@ public:
     [[nodiscard]] auto parse_stmt() -> Result<StmtPtr, ParseError>;
 
     // Get all errors
-    [[nodiscard]] auto errors() const -> const std::vector<ParseError>& { return errors_; }
+    [[nodiscard]] auto errors() const -> const std::vector<ParseError>& {
+        return errors_;
+    }
 
     // Check if any errors occurred
-    [[nodiscard]] auto has_errors() const -> bool { return !errors_.empty(); }
+    [[nodiscard]] auto has_errors() const -> bool {
+        return !errors_.empty();
+    }
 
 private:
     std::vector<lexer::Token> tokens_;
@@ -72,7 +78,8 @@ private:
     [[nodiscard]] auto check(lexer::TokenKind kind) const -> bool;
     [[nodiscard]] auto check_next(lexer::TokenKind kind) const -> bool;
     auto match(lexer::TokenKind kind) -> bool;
-    auto expect(lexer::TokenKind kind, const std::string& message) -> Result<lexer::Token, ParseError>;
+    auto expect(lexer::TokenKind kind, const std::string& message)
+        -> Result<lexer::Token, ParseError>;
 
     // Skip newlines (where they're not significant)
     void skip_newlines();
@@ -85,10 +92,14 @@ private:
     // Declaration parsing
     auto parse_visibility() -> Visibility;
     auto parse_decorators() -> Result<std::vector<Decorator>, ParseError>;
-    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
-    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
-    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
-    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {})
+        -> Result<DeclPtr, ParseError>;
+    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {})
+        -> Result<DeclPtr, ParseError>;
+    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {})
+        -> Result<DeclPtr, ParseError>;
+    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {})
+        -> Result<DeclPtr, ParseError>;
     auto parse_impl_decl() -> Result<DeclPtr, ParseError>;
     auto parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
     auto parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
@@ -132,7 +143,8 @@ private:
     auto parse_break_expr() -> Result<ExprPtr, ParseError>;
     auto parse_continue_expr() -> Result<ExprPtr, ParseError>;
     auto parse_closure_expr() -> Result<ExprPtr, ParseError>;
-    auto parse_struct_expr(TypePath path, std::optional<GenericArgs> generics = std::nullopt) -> Result<ExprPtr, ParseError>;
+    auto parse_struct_expr(TypePath path, std::optional<GenericArgs> generics = std::nullopt)
+        -> Result<ExprPtr, ParseError>;
     auto parse_lowlevel_expr() -> Result<ExprPtr, ParseError>;
     auto parse_interp_string_expr() -> Result<ExprPtr, ParseError>;
 

@@ -2,6 +2,7 @@
 #define TML_LEXER_TOKEN_HPP
 
 #include "tml/common.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -15,143 +16,143 @@ enum class TokenKind : uint8_t {
     Eof,
 
     // Literals
-    IntLiteral,      // 42, 0xFF, 0b1010, 0o755, 1_000_000
-    FloatLiteral,    // 3.14, 1e10, 2.5e-3
-    StringLiteral,   // "hello", "line\nbreak"
-    CharLiteral,     // 'a', '\n', '\u{1F600}'
-    BoolLiteral,     // true, false
+    IntLiteral,    // 42, 0xFF, 0b1010, 0o755, 1_000_000
+    FloatLiteral,  // 3.14, 1e10, 2.5e-3
+    StringLiteral, // "hello", "line\nbreak"
+    CharLiteral,   // 'a', '\n', '\u{1F600}'
+    BoolLiteral,   // true, false
 
     // Interpolated string tokens: "Hello {name}!"
-    InterpStringStart,   // "Hello { - string start up to first interpolation
-    InterpStringMiddle,  // } text { - text between interpolations
-    InterpStringEnd,     // } world" - text after last interpolation to closing quote
+    InterpStringStart,  // "Hello { - string start up to first interpolation
+    InterpStringMiddle, // } text { - text between interpolations
+    InterpStringEnd,    // } world" - text after last interpolation to closing quote
 
     // Identifiers
-    Identifier,      // foo, _bar, cafe
+    Identifier, // foo, _bar, cafe
 
     // Keywords - declarations
-    KwFunc,          // func
-    KwType,          // type
-    KwBehavior,      // behavior (trait in Rust)
-    KwImpl,          // impl
-    KwMod,           // mod
-    KwUse,           // use
-    KwPub,           // pub
-    KwDecorator,     // decorator
-    KwCrate,         // crate
-    KwSuper,         // super
+    KwFunc,      // func
+    KwType,      // type
+    KwBehavior,  // behavior (trait in Rust)
+    KwImpl,      // impl
+    KwMod,       // mod
+    KwUse,       // use
+    KwPub,       // pub
+    KwDecorator, // decorator
+    KwCrate,     // crate
+    KwSuper,     // super
 
     // Keywords - variables
-    KwLet,           // let
-    KwConst,         // const
+    KwLet,   // let
+    KwConst, // const
 
     // Keywords - control flow
-    KwIf,            // if
-    KwThen,          // then
-    KwElse,          // else
-    KwWhen,          // when (match)
-    KwLoop,          // loop
-    KwWhile,         // while
-    KwFor,           // for
-    KwIn,            // in
-    KwTo,            // to (range exclusive)
-    KwThrough,       // through (range inclusive)
-    KwBreak,         // break
-    KwContinue,      // continue
-    KwReturn,        // return
+    KwIf,       // if
+    KwThen,     // then
+    KwElse,     // else
+    KwWhen,     // when (match)
+    KwLoop,     // loop
+    KwWhile,    // while
+    KwFor,      // for
+    KwIn,       // in
+    KwTo,       // to (range exclusive)
+    KwThrough,  // through (range inclusive)
+    KwBreak,    // break
+    KwContinue, // continue
+    KwReturn,   // return
 
     // Keywords - logical operators (TML uses words, not symbols)
-    KwAnd,           // and
-    KwOr,            // or
-    KwNot,           // not
+    KwAnd, // and
+    KwOr,  // or
+    KwNot, // not
 
     // Keywords - types
-    KwThis,          // this (self value)
-    KwThisType,      // This (Self type)
-    KwAs,            // as
+    KwThis,     // this (self value)
+    KwThisType, // This (Self type)
+    KwAs,       // as
 
     // Keywords - memory
-    KwMut,           // mut
-    KwRef,           // ref
+    KwMut, // mut
+    KwRef, // ref
 
     // Keywords - closures
-    KwDo,            // do (closure)
+    KwDo, // do (closure)
 
     // Keywords - other
-    KwAsync,         // async
-    KwAwait,         // await
-    KwWith,          // with (effects)
-    KwWhere,         // where (generic constraints)
-    KwDyn,           // dyn (trait objects)
-    KwLowlevel,      // lowlevel (unsafe in Rust)
-    KwQuote,         // quote (metaprogramming)
+    KwAsync,    // async
+    KwAwait,    // await
+    KwWith,     // with (effects)
+    KwWhere,    // where (generic constraints)
+    KwDyn,      // dyn (trait objects)
+    KwLowlevel, // lowlevel (unsafe in Rust)
+    KwQuote,    // quote (metaprogramming)
 
     // Operators - arithmetic
-    Plus,            // +
-    Minus,           // -
-    Star,            // *
-    Slash,           // /
-    Percent,         // %
-    StarStar,        // ** (power)
-    PlusPlus,        // ++ (increment)
-    MinusMinus,      // -- (decrement)
+    Plus,       // +
+    Minus,      // -
+    Star,       // *
+    Slash,      // /
+    Percent,    // %
+    StarStar,   // ** (power)
+    PlusPlus,   // ++ (increment)
+    MinusMinus, // -- (decrement)
 
     // Operators - comparison
-    Eq,              // ==
-    Ne,              // !=
-    Lt,              // <
-    Gt,              // >
-    Le,              // <=
-    Ge,              // >=
+    Eq, // ==
+    Ne, // !=
+    Lt, // <
+    Gt, // >
+    Le, // <=
+    Ge, // >=
 
     // Operators - bitwise
-    BitAnd,          // &
-    BitOr,           // |
-    BitXor,          // ^
-    BitNot,          // ~
-    Shl,             // <<
-    Shr,             // >>
+    BitAnd, // &
+    BitOr,  // |
+    BitXor, // ^
+    BitNot, // ~
+    Shl,    // <<
+    Shr,    // >>
 
     // Operators - assignment
-    Assign,          // =
-    PlusAssign,      // +=
-    MinusAssign,     // -=
-    StarAssign,      // *=
-    SlashAssign,     // /=
-    PercentAssign,   // %=
-    BitAndAssign,    // &=
-    BitOrAssign,     // |=
-    BitXorAssign,    // ^=
-    ShlAssign,       // <<=
-    ShrAssign,       // >>=
+    Assign,        // =
+    PlusAssign,    // +=
+    MinusAssign,   // -=
+    StarAssign,    // *=
+    SlashAssign,   // /=
+    PercentAssign, // %=
+    BitAndAssign,  // &=
+    BitOrAssign,   // |=
+    BitXorAssign,  // ^=
+    ShlAssign,     // <<=
+    ShrAssign,     // >>=
 
     // Operators - other
-    Arrow,           // ->
-    FatArrow,        // =>
-    Dot,             // .
-    DotDot,          // .. (also via 'to' keyword)
-    Colon,           // :
-    ColonColon,      // ::
-    Question,        // ? (ternary operator)
-    Bang,            // ! (error propagation)
-    At,              // @
-    Pipe,            // | (in patterns)
-    Dollar,          // $ (splice in quote)
-    DollarBrace,     // ${ (splice block)
+    Arrow,       // ->
+    FatArrow,    // =>
+    Dot,         // .
+    DotDot,      // .. (also via 'to' keyword)
+    Colon,       // :
+    ColonColon,  // ::
+    Question,    // ? (ternary operator)
+    Bang,        // ! (error propagation)
+    At,          // @
+    Pipe,        // | (in patterns)
+    Dollar,      // $ (splice in quote)
+    DollarBrace, // ${ (splice block)
 
     // Delimiters
-    LParen,          // (
-    RParen,          // )
-    LBracket,        // [
-    RBracket,        // ]
-    LBrace,          // {
-    RBrace,          // }
-    Comma,           // ,
-    Semi,            // ;
+    LParen,   // (
+    RParen,   // )
+    LBracket, // [
+    RBracket, // ]
+    LBrace,   // {
+    RBrace,   // }
+    Comma,    // ,
+    Semi,     // ;
 
     // Special
-    Newline,         // significant newlines (for statement separation)
-    Error,           // lexer error token
+    Newline, // significant newlines (for statement separation)
+    Error,   // lexer error token
 };
 
 // Convert token kind to string for display
@@ -195,26 +196,30 @@ struct Token {
     std::string_view lexeme; // Raw text from source
 
     // Literal value (if applicable)
-    std::variant<
-        std::monostate,  // No value (keywords, operators, etc.)
-        IntValue,
-        FloatValue,
-        StringValue,
-        CharValue,
-        bool             // BoolLiteral
-    > value;
+    std::variant<std::monostate, // No value (keywords, operators, etc.)
+                 IntValue, FloatValue, StringValue, CharValue,
+                 bool // BoolLiteral
+                 >
+        value;
 
-    [[nodiscard]] auto is(TokenKind k) const -> bool { return kind == k; }
+    [[nodiscard]] auto is(TokenKind k) const -> bool {
+        return kind == k;
+    }
 
     [[nodiscard]] auto is_one_of(std::initializer_list<TokenKind> kinds) const -> bool {
         for (auto k : kinds) {
-            if (kind == k) return true;
+            if (kind == k)
+                return true;
         }
         return false;
     }
 
-    [[nodiscard]] auto is_eof() const -> bool { return kind == TokenKind::Eof; }
-    [[nodiscard]] auto is_error() const -> bool { return kind == TokenKind::Error; }
+    [[nodiscard]] auto is_eof() const -> bool {
+        return kind == TokenKind::Eof;
+    }
+    [[nodiscard]] auto is_error() const -> bool {
+        return kind == TokenKind::Error;
+    }
 
     // Get typed value (asserts correct type)
     [[nodiscard]] auto int_value() const -> const IntValue&;

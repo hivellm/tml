@@ -4,6 +4,7 @@
 #include "tml/common.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/lexer/token.hpp"
+
 #include <vector>
 
 namespace tml::lexer {
@@ -26,20 +27,24 @@ public:
     [[nodiscard]] auto tokenize() -> std::vector<Token>;
 
     // Get all errors encountered during lexing
-    [[nodiscard]] auto errors() const -> const std::vector<LexerError>& { return errors_; }
+    [[nodiscard]] auto errors() const -> const std::vector<LexerError>& {
+        return errors_;
+    }
 
     // Check if any errors occurred
-    [[nodiscard]] auto has_errors() const -> bool { return !errors_.empty(); }
+    [[nodiscard]] auto has_errors() const -> bool {
+        return !errors_.empty();
+    }
 
 private:
     const Source& source_;
-    size_t pos_ = 0;           // Current byte position
-    size_t token_start_ = 0;   // Start of current token
+    size_t pos_ = 0;         // Current byte position
+    size_t token_start_ = 0; // Start of current token
     std::vector<LexerError> errors_;
 
     // Interpolated string state
-    int interp_depth_ = 0;     // Nesting depth of interpolated strings
-    bool in_interpolation_ = false;  // Currently inside {expr} of interpolated string
+    int interp_depth_ = 0;          // Nesting depth of interpolated strings
+    bool in_interpolation_ = false; // Currently inside {expr} of interpolated string
 
     // Character access
     [[nodiscard]] auto peek() const -> char;
@@ -66,8 +71,8 @@ private:
     [[nodiscard]] auto lex_operator() -> Token;
 
     // Interpolated string lexers
-    [[nodiscard]] auto lex_interp_string_continue() -> Token;  // Continue after }
-    [[nodiscard]] auto check_string_has_interpolation() const -> bool;  // Peek ahead for {
+    [[nodiscard]] auto lex_interp_string_continue() -> Token;          // Continue after }
+    [[nodiscard]] auto check_string_has_interpolation() const -> bool; // Peek ahead for {
 
     // Number parsing helpers
     [[nodiscard]] auto lex_hex_number() -> Token;

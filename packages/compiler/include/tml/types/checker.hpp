@@ -5,6 +5,7 @@
 #include "tml/parser/ast.hpp"
 #include "tml/types/env.hpp"
 #include "tml/types/type.hpp"
+
 #include <vector>
 
 namespace tml::types {
@@ -22,8 +23,12 @@ public:
     [[nodiscard]] auto check_module(const parser::Module& module)
         -> Result<TypeEnv, std::vector<TypeError>>;
 
-    [[nodiscard]] auto errors() const -> const std::vector<TypeError>& { return errors_; }
-    [[nodiscard]] auto has_errors() const -> bool { return !errors_.empty(); }
+    [[nodiscard]] auto errors() const -> const std::vector<TypeError>& {
+        return errors_;
+    }
+    [[nodiscard]] auto has_errors() const -> bool {
+        return !errors_.empty();
+    }
 
     // Module system integration
     void set_module_registry(std::shared_ptr<ModuleRegistry> registry) {
@@ -34,9 +39,9 @@ private:
     TypeEnv env_;
     std::vector<TypeError> errors_;
     TypePtr current_return_type_ = nullptr;
-    TypePtr current_self_type_ = nullptr;  // For resolving 'This' in impl blocks
+    TypePtr current_self_type_ = nullptr; // For resolving 'This' in impl blocks
     int loop_depth_ = 0;
-    bool in_lowlevel_ = false;  // When true, & returns pointer instead of reference
+    bool in_lowlevel_ = false; // When true, & returns pointer instead of reference
 
     // Declaration registration (first pass)
     void register_struct_decl(const parser::StructDecl& decl);
@@ -94,10 +99,9 @@ private:
     auto resolve_type_path(const parser::TypePath& path) -> TypePtr;
 
     // Closure capture analysis
-    void collect_captures_from_expr(const parser::Expr& expr,
-                                     std::shared_ptr<Scope> closure_scope,
-                                     std::shared_ptr<Scope> parent_scope,
-                                     std::vector<CapturedVar>& captures);
+    void collect_captures_from_expr(const parser::Expr& expr, std::shared_ptr<Scope> closure_scope,
+                                    std::shared_ptr<Scope> parent_scope,
+                                    std::vector<CapturedVar>& captures);
 
     // Return statement validation
     bool block_has_return(const parser::BlockExpr& block);
@@ -107,7 +111,8 @@ private:
     void error(const std::string& message, SourceSpan span);
 
     // Error message improvements
-    auto find_similar_names(const std::string& name, const std::vector<std::string>& candidates, size_t max_suggestions = 3) -> std::vector<std::string>;
+    auto find_similar_names(const std::string& name, const std::vector<std::string>& candidates,
+                            size_t max_suggestions = 3) -> std::vector<std::string>;
     auto get_all_known_names() -> std::vector<std::string>;
     auto levenshtein_distance(const std::string& s1, const std::string& s2) -> size_t;
 };

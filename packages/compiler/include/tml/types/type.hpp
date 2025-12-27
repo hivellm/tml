@@ -2,6 +2,7 @@
 #define TML_TYPES_TYPE_HPP
 
 #include "tml/common.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -18,16 +19,25 @@ using TypePtr = std::shared_ptr<Type>;
 // Primitive types
 enum class PrimitiveKind {
     // Integers
-    I8, I16, I32, I64, I128,
-    U8, U16, U32, U64, U128,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
     // Floats
-    F32, F64,
+    F32,
+    F64,
     // Other primitives
     Bool,
-    Char,   // Unicode scalar
-    Str,    // String slice
-    Unit,   // ()
-    Never,  // ! (never returns)
+    Char,  // Unicode scalar
+    Str,   // String slice
+    Unit,  // ()
+    Never, // ! (never returns)
 };
 
 // Primitive type
@@ -105,43 +115,29 @@ struct GenericType {
 
 // Dynamic behavior (trait object): dyn Behavior[T]
 struct DynBehaviorType {
-    std::string behavior_name;           // The behavior this is a trait object of
-    std::vector<TypePtr> type_args;      // Generic parameters
-    bool is_mut;                         // dyn mut Behavior
+    std::string behavior_name;      // The behavior this is a trait object of
+    std::vector<TypePtr> type_args; // Generic parameters
+    bool is_mut;                    // dyn mut Behavior
 };
 
 // Type variant
 struct Type {
-    std::variant<
-        PrimitiveType,
-        NamedType,
-        RefType,
-        PtrType,
-        ArrayType,
-        SliceType,
-        TupleType,
-        FuncType,
-        ClosureType,
-        TypeVar,
-        GenericType,
-        DynBehaviorType
-    > kind;
+    std::variant<PrimitiveType, NamedType, RefType, PtrType, ArrayType, SliceType, TupleType,
+                 FuncType, ClosureType, TypeVar, GenericType, DynBehaviorType>
+        kind;
 
     // Type ID for fast comparison
     uint64_t id = 0;
 
-    template<typename T>
-    [[nodiscard]] auto is() const -> bool {
+    template <typename T> [[nodiscard]] auto is() const -> bool {
         return std::holds_alternative<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() -> T& {
+    template <typename T> [[nodiscard]] auto as() -> T& {
         return std::get<T>(kind);
     }
 
-    template<typename T>
-    [[nodiscard]] auto as() const -> const T& {
+    template <typename T> [[nodiscard]] auto as() const -> const T& {
         return std::get<T>(kind);
     }
 };
@@ -157,7 +153,8 @@ struct Type {
 [[nodiscard]] auto make_never() -> TypePtr;
 [[nodiscard]] auto make_tuple(std::vector<TypePtr> elements) -> TypePtr;
 [[nodiscard]] auto make_func(std::vector<TypePtr> params, TypePtr ret) -> TypePtr;
-[[nodiscard]] auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<CapturedVar> captures = {}) -> TypePtr;
+[[nodiscard]] auto make_closure(std::vector<TypePtr> params, TypePtr ret,
+                                std::vector<CapturedVar> captures = {}) -> TypePtr;
 [[nodiscard]] auto make_ref(TypePtr inner, bool is_mut = false) -> TypePtr;
 [[nodiscard]] auto make_ptr(TypePtr inner, bool is_mut = false) -> TypePtr;
 [[nodiscard]] auto make_array(TypePtr element, size_t size) -> TypePtr;
@@ -170,10 +167,9 @@ struct Type {
 // Generic type substitution
 // Replaces GenericType instances with concrete types from the substitution map
 // e.g., substitute_type(List[T], {T -> I32}) returns List[I32]
-[[nodiscard]] auto substitute_type(
-    const TypePtr& type,
-    const std::unordered_map<std::string, TypePtr>& substitutions
-) -> TypePtr;
+[[nodiscard]] auto substitute_type(const TypePtr& type,
+                                   const std::unordered_map<std::string, TypePtr>& substitutions)
+    -> TypePtr;
 
 // Helper to convert primitive kind to string name
 [[nodiscard]] auto primitive_kind_to_string(PrimitiveKind kind) -> std::string;
