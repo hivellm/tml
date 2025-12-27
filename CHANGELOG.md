@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Unit Test Fixes** (2025-12-26) - Fixed failing C++ unit tests
+  - Fixed `ParserTest.IndexExpressions` - Parser now correctly distinguishes between generic args `List[I32]` and index expressions `arr[0]` by checking if content after `[` is a literal
+  - Fixed TypeChecker tests that used implicit return syntax (TML requires explicit `return` statements):
+    - `TypeCheckerTest.ResolveBuiltinTypes` - Added `return` to function bodies
+    - `TypeCheckerTest.ResolveReferenceTypes` - Added `return` to function bodies
+    - `TypeCheckerTest.ResolveSliceType` - Added `return` to function body
+    - `TypeCheckerTest.SimpleFunctionDecl` - Added `return` to function body
+    - `TypeCheckerTest.AsyncFunction` - Added `return` to function body
+    - `TypeCheckerTest.ImplBlock` - Added `return` to impl method
+    - `TypeCheckerTest.TypeAlias` - Added `return` to function body
+    - `TypeCheckerTest.IfExpression` - Added `return` to if/else branches
+    - `TypeCheckerTest.WhenExpression` - Added `return` before when expression
+    - `TypeCheckerTest.MultipleFunctions` - Added `return` to all functions
+    - `TypeCheckerTest.CompleteModule` - Added `return` to impl methods
+  - Fixed `test_out_dir` integration test - Renamed fixture file to prevent test runner from executing it
+
 ### Changed
 - **Runtime Functions Complete** (2025-12-26) - All codegen builtins now have runtime implementations
   - New runtime file: `runtime/math.c` - Math functions for codegen

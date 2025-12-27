@@ -267,6 +267,27 @@ auto Parser::parse_generic_args() -> Result<std::optional<GenericArgs>, ParseErr
         return std::nullopt;
     }
 
+    // Lookahead to distinguish generic args from index expressions
+    // Generic args: List[I32], HashMap[K, V] - contain type names
+    // Index expressions: arr[0], arr[i] - contain values/expressions
+    // If the content after '[' is a literal (number, string, etc.),
+    // it's an index expression, not generic args
+    auto saved_pos = pos_;
+    advance(); // consume '[' for lookahead
+
+    bool is_definitely_index =
+        check(lexer::TokenKind::IntLiteral) ||
+        check(lexer::TokenKind::FloatLiteral) ||
+        check(lexer::TokenKind::StringLiteral) ||
+        check(lexer::TokenKind::BoolLiteral) ||
+        check(lexer::TokenKind::CharLiteral);
+
+    pos_ = saved_pos; // restore position
+
+    if (is_definitely_index) {
+        return std::nullopt;
+    }
+
     auto start_span = peek().span;
     advance(); // consume '['
 

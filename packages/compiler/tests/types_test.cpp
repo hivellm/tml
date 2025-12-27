@@ -45,10 +45,10 @@ protected:
 
 TEST_F(TypeCheckerTest, ResolveBuiltinTypes) {
     auto env = check_ok(R"(
-        func test_i32(x: I32) -> I32 { x }
-        func test_i64(x: I64) -> I64 { x }
-        func test_bool(x: Bool) -> Bool { x }
-        func test_str(x: Str) -> Str { x }
+        func test_i32(x: I32) -> I32 { return x }
+        func test_i64(x: I64) -> I64 { return x }
+        func test_bool(x: Bool) -> Bool { return x }
+        func test_str(x: Str) -> Str { return x }
     )");
 
     auto i32_func = env.lookup_func("test_i32");
@@ -60,8 +60,8 @@ TEST_F(TypeCheckerTest, ResolveBuiltinTypes) {
 
 TEST_F(TypeCheckerTest, ResolveReferenceTypes) {
     auto env = check_ok(R"(
-        func test_ref(x: ref I32) -> ref I32 { x }
-        func test_mut_ref(x: mut ref I32) -> mut ref I32 { x }
+        func test_ref(x: ref I32) -> ref I32 { return x }
+        func test_mut_ref(x: mut ref I32) -> mut ref I32 { return x }
     )");
 
     auto ref_func = env.lookup_func("test_ref");
@@ -77,7 +77,7 @@ TEST_F(TypeCheckerTest, ResolveReferenceTypes) {
 
 TEST_F(TypeCheckerTest, ResolveSliceType) {
     auto env = check_ok(R"(
-        func test_slice(x: [I32]) -> [I32] { x }
+        func test_slice(x: [I32]) -> [I32] { return x }
     )");
 
     auto func = env.lookup_func("test_slice");
@@ -92,7 +92,7 @@ TEST_F(TypeCheckerTest, ResolveSliceType) {
 TEST_F(TypeCheckerTest, SimpleFunctionDecl) {
     auto env = check_ok(R"(
         func add(a: I32, b: I32) -> I32 {
-            a + b
+            return a + b
         }
     )");
 
@@ -120,7 +120,7 @@ TEST_F(TypeCheckerTest, FunctionWithNoReturn) {
 TEST_F(TypeCheckerTest, AsyncFunction) {
     auto env = check_ok(R"(
         async func fetch_data() -> I32 {
-            42
+            return 42
         }
     )");
 
@@ -223,7 +223,7 @@ TEST_F(TypeCheckerTest, ImplBlock) {
 
         impl Counter {
             func new() -> Counter {
-                Counter { value: 0 }
+                return Counter { value: 0 }
             }
 
             func increment(this) {
@@ -248,7 +248,7 @@ TEST_F(TypeCheckerTest, TypeAlias) {
     auto env = check_ok(R"(
         type Int = I32
 
-        func test(x: Int) -> Int { x }
+        func test(x: Int) -> Int { return x }
     )");
 
     auto alias = env.lookup_type_alias("Int");
@@ -314,9 +314,9 @@ TEST_F(TypeCheckerTest, IfExpression) {
     check_ok(R"(
         func test(x: I32) -> I32 {
             if x > 0 {
-                1
+                return 1
             } else {
-                0
+                return 0
             }
         }
     )");
@@ -345,7 +345,7 @@ TEST_F(TypeCheckerTest, ForExpression) {
 TEST_F(TypeCheckerTest, WhenExpression) {
     check_ok(R"(
         func test(x: I32) -> I32 {
-            when x {
+            return when x {
                 0 => 100,
                 1 => 200,
                 _ => 0,
@@ -401,9 +401,9 @@ TEST_F(TypeCheckerTest, DISABLED_TupleExpression) {
 
 TEST_F(TypeCheckerTest, MultipleFunctions) {
     auto env = check_ok(R"(
-        func foo(x: I32) -> I32 { x }
-        func bar(x: I32) -> I32 { foo(x) }
-        func baz() -> I32 { bar(42) }
+        func foo(x: I32) -> I32 { return x }
+        func bar(x: I32) -> I32 { return foo(x) }
+        func baz() -> I32 { return bar(42) }
     )");
 
     EXPECT_TRUE(env.lookup_func("foo").has_value());
@@ -429,11 +429,11 @@ TEST_F(TypeCheckerTest, CompleteModule) {
 
         impl Point {
             func new(x: I32, y: I32) -> Point {
-                Point { x: x, y: y }
+                return Point { x: x, y: y }
             }
 
             func distance(this) -> I32 {
-                this.x + this.y
+                return this.x + this.y
             }
         }
 
