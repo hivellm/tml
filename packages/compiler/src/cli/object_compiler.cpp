@@ -124,13 +124,6 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
 
     if (options.verbose) {
         std::cout << "[object_compiler] " << command << "\n";
-    } else {
-        // Redirect stderr to suppress clang error output in quiet mode
-#ifdef _WIN32
-        command += " 2>NUL";
-#else
-        command += " 2>/dev/null";
-#endif
     }
 
     // Execute compilation
@@ -240,14 +233,14 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
         cmd << " -shared";
 
 #ifdef _WIN32
-        // Windows: use LLD linker for consistent GNU-style flag support
+        // Windows: use LLD linker
         cmd << " -fuse-ld=lld";
-        // Export all symbols from DLL
-        cmd << " -Wl,--export-all-symbols";
-        // Create import library alongside DLL
+        // Export all symbols from DLL (MSVC-style flag)
+        cmd << " -Wl,-export-all-symbols";
+        // Create import library alongside DLL (MSVC-style flag)
         fs::path lib_file = output_file;
         lib_file.replace_extension(".lib");
-        cmd << " -Wl,--out-implib=" << to_forward_slashes(lib_file);
+        cmd << " -Wl,-implib:" << to_forward_slashes(lib_file);
 #else
         // Unix: position-independent code required for shared libraries
         cmd << " -fPIC";
