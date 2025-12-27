@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `env_builtins_sync.cpp` with thread_sleep, channel_*, mutex_*, waitgroup_*
   - All 86 tests passing, 272 core tests passing total
 
+- **Expression Codegen Refactoring** (2025-12-27) - Split llvm_ir_gen_types.cpp (1667 lines) into modular components
+  - New directory: `src/codegen/expr/`
+  - `expr/infer.cpp` (287 lines) - Type inference (infer_expr_type)
+  - `expr/struct.cpp` (298 lines) - Struct expressions (gen_struct_expr, gen_field, etc.)
+  - `expr/print.cpp` (176 lines) - Format print (gen_format_print)
+  - `expr/collections.cpp` (128 lines) - Arrays and paths (gen_array, gen_index, gen_path)
+  - `expr/method.cpp` (812 lines) - Method calls (gen_method_call)
+  - Removed: `llvm_ir_gen_types.cpp` (all code moved to expr/)
+  - Build verified: 277 tests passing
+
 ### Fixed
 - **Unit Test Fixes** (2025-12-26) - Fixed failing C++ unit tests
   - Fixed `ParserTest.IndexExpressions` - Parser now correctly distinguishes between generic args `List[I32]` and index expressions `arr[0]` by checking if content after `[` is a literal

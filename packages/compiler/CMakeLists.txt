@@ -147,8 +147,13 @@ add_library(tml_codegen STATIC
     src/codegen/llvm_ir_gen_expr.cpp
     src/codegen/llvm_ir_gen_builtins.cpp
     src/codegen/llvm_ir_gen_control.cpp
-    src/codegen/llvm_ir_gen_types.cpp
     src/codegen/c_header_gen.cpp
+    # Expression codegen (split for maintainability)
+    src/codegen/expr/infer.cpp
+    src/codegen/expr/struct.cpp
+    src/codegen/expr/print.cpp
+    src/codegen/expr/collections.cpp
+    src/codegen/expr/method.cpp
     # Builtin function codegen (split for maintainability)
     src/codegen/builtins/io.cpp
     src/codegen/builtins/mem.cpp
