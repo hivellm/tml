@@ -1,0 +1,521 @@
+// TML Core Library - Slice Module
+// Provides: Slice operations (sort, binary_search, reverse, etc.)
+
+// ============================================================================
+// Slice Type
+// ============================================================================
+
+/// A view into a contiguous sequence of elements.
+/// Slices are a dynamically-sized view into a contiguous sequence.
+pub type Slice[T] {
+    data: ref T,
+    len: I64
+}
+
+impl[T] Slice[T] {
+    /// Returns the number of elements in the slice.
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Returns true if the slice is empty.
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Returns the first element, or Nothing if empty.
+    pub func first(this) -> Maybe[ref T] {
+        if this.len == 0 {
+            return Nothing
+        }
+        return Just(this.get(0).unwrap())
+    }
+
+    /// Returns the last element, or Nothing if empty.
+    pub func last(this) -> Maybe[ref T] {
+        if this.len == 0 {
+            return Nothing
+        }
+        return Just(this.get(this.len - 1).unwrap())
+    }
+
+    /// Returns a reference to the element at the given index.
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get(this.data, index) })
+    }
+
+    /// Returns a mutable reference to the element at the given index.
+    pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get_mut(this.data, index) })
+    }
+}
+
+// ============================================================================
+// Mutable Slice Type
+// ============================================================================
+
+/// A mutable view into a contiguous sequence of elements.
+pub type MutSlice[T] {
+    data: mut ref T,
+    len: I64
+}
+
+impl[T] MutSlice[T] {
+    /// Returns the number of elements in the slice.
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Returns true if the slice is empty.
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Returns a reference to the element at the given index.
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get(this.data, index) })
+    }
+
+    /// Returns a mutable reference to the element at the given index.
+    pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get_mut(this.data, index) })
+    }
+
+    /// Swaps two elements in the slice.
+    pub func swap(mut this, a: I64, b: I64) {
+        if a < 0 or a >= this.len or b < 0 or b >= this.len {
+            panic("slice::swap: index out of bounds")
+        }
+        lowlevel { slice_swap(this.data, a, b) }
+    }
+
+    /// Reverses the elements in the slice.
+    pub func reverse(mut this) {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len - 1
+        loop {
+            if left >= right {
+                break
+            }
+            this.swap(left, right)
+            left = left + 1
+            right = right - 1
+        }
+    }
+
+    /// Rotates the slice left by k elements.
+    pub func rotate_left(mut this, k: I64) {
+        if this.len == 0 {
+            return
+        }
+        let k_mod: I64 = k % this.len
+        if k_mod == 0 {
+            return
+        }
+        // Reverse first k elements
+        this.reverse_range(0, k_mod - 1)
+        // Reverse remaining elements
+        this.reverse_range(k_mod, this.len - 1)
+        // Reverse entire slice
+        this.reverse()
+    }
+
+    /// Rotates the slice right by k elements.
+    pub func rotate_right(mut this, k: I64) {
+        if this.len == 0 {
+            return
+        }
+        let k_mod: I64 = k % this.len
+        this.rotate_left(this.len - k_mod)
+    }
+
+    /// Reverses elements in a range [start, end].
+    func reverse_range(mut this, start: I64, end: I64) {
+        let mut left: I64 = start
+        let mut right: I64 = end
+        loop {
+            if left >= right {
+                break
+            }
+            this.swap(left, right)
+            left = left + 1
+            right = right - 1
+        }
+    }
+
+    /// Fills the slice with the given value.
+    pub func fill(mut this, value: T) where T: Copy {
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            lowlevel { slice_set(this.data, i, value) }
+            i = i + 1
+        }
+    }
+}
+
+// ============================================================================
+// Sorting
+// ============================================================================
+
+impl[T: Ord] MutSlice[T] {
+    /// Sorts the slice in ascending order.
+    pub func sort(mut this) {
+        if this.len <= 1 {
+            return
+        }
+        this.quicksort(0, this.len - 1)
+    }
+
+    /// Quicksort implementation.
+    func quicksort(mut this, low: I64, high: I64) {
+        if low < high {
+            let pivot: I64 = this.partition(low, high)
+            if pivot > 0 {
+                this.quicksort(low, pivot - 1)
+            }
+            this.quicksort(pivot + 1, high)
+        }
+    }
+
+    /// Partition for quicksort.
+    func partition(mut this, low: I64, high: I64) -> I64 {
+        let pivot_ref: ref T = this.get(high).unwrap()
+        let mut i: I64 = low - 1
+        let mut j: I64 = low
+        loop {
+            if j >= high {
+                break
+            }
+            let current_ref: ref T = this.get(j).unwrap()
+            if current_ref.le(pivot_ref) {
+                i = i + 1
+                this.swap(i, j)
+            }
+            j = j + 1
+        }
+        this.swap(i + 1, high)
+        return i + 1
+    }
+}
+
+impl[T] MutSlice[T] {
+    /// Sorts the slice using a comparison function.
+    pub func sort_by(mut this, compare: func(ref T, ref T) -> Ordering) {
+        if this.len <= 1 {
+            return
+        }
+        this.quicksort_by(0, this.len - 1, compare)
+    }
+
+    /// Quicksort with custom comparison.
+    func quicksort_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) {
+        if low < high {
+            let pivot: I64 = this.partition_by(low, high, compare)
+            if pivot > 0 {
+                this.quicksort_by(low, pivot - 1, compare)
+            }
+            this.quicksort_by(pivot + 1, high, compare)
+        }
+    }
+
+    /// Partition with custom comparison.
+    func partition_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) -> I64 {
+        let pivot_ref: ref T = this.get(high).unwrap()
+        let mut i: I64 = low - 1
+        let mut j: I64 = low
+        loop {
+            if j >= high {
+                break
+            }
+            let current_ref: ref T = this.get(j).unwrap()
+            when compare(current_ref, pivot_ref) {
+                Less => {
+                    i = i + 1
+                    this.swap(i, j)
+                },
+                Equal => {
+                    i = i + 1
+                    this.swap(i, j)
+                },
+                Greater => {}
+            }
+            j = j + 1
+        }
+        this.swap(i + 1, high)
+        return i + 1
+    }
+
+    /// Sorts the slice by a key extracted from each element.
+    pub func sort_by_key[K: Ord](mut this, key_fn: func(ref T) -> K) {
+        this.sort_by(do(a: ref T, b: ref T) key_fn(a).cmp(ref key_fn(b)))
+    }
+}
+
+// ============================================================================
+// Binary Search
+// ============================================================================
+
+impl[T: Ord] Slice[T] {
+    /// Binary search for a value, returning Ok(index) if found or Err(insertion_point) if not.
+    pub func binary_search(this, target: ref T) -> Outcome[I64, I64] {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len
+        loop {
+            if left >= right {
+                break
+            }
+            let mid: I64 = left + (right - left) / 2
+            let mid_ref: ref T = this.get(mid).unwrap()
+            when mid_ref.cmp(target) {
+                Less => left = mid + 1,
+                Equal => return Ok(mid),
+                Greater => right = mid
+            }
+        }
+        return Err(left)
+    }
+}
+
+impl[T] Slice[T] {
+    /// Binary search using a comparison function.
+    pub func binary_search_by(this, compare: func(ref T) -> Ordering) -> Outcome[I64, I64] {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len
+        loop {
+            if left >= right {
+                break
+            }
+            let mid: I64 = left + (right - left) / 2
+            let mid_ref: ref T = this.get(mid).unwrap()
+            when compare(mid_ref) {
+                Less => left = mid + 1,
+                Equal => return Ok(mid),
+                Greater => right = mid
+            }
+        }
+        return Err(left)
+    }
+
+    /// Binary search by a key.
+    pub func binary_search_by_key[K: Ord](this, key: ref K, key_fn: func(ref T) -> K) -> Outcome[I64, I64] {
+        return this.binary_search_by(do(elem: ref T) key_fn(elem).cmp(key))
+    }
+}
+
+// ============================================================================
+// Splitting
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Splits the slice at the given index, returning two slices.
+    pub func split_at(this, mid: I64) -> (Slice[T], Slice[T]) {
+        if mid < 0 or mid > this.len {
+            panic("slice::split_at: index out of bounds")
+        }
+        let first: Slice[T] = Slice {
+            data: this.data,
+            len: mid
+        }
+        let second: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.data, mid) },
+            len: this.len - mid
+        }
+        return (first, second)
+    }
+
+    /// Returns the first n elements.
+    pub func take(this, n: I64) -> Slice[T] {
+        let count: I64 = if n > this.len then this.len else n
+        return Slice {
+            data: this.data,
+            len: count
+        }
+    }
+
+    /// Skips the first n elements.
+    pub func skip(this, n: I64) -> Slice[T] {
+        let count: I64 = if n > this.len then this.len else n
+        return Slice {
+            data: lowlevel { slice_offset(this.data, count) },
+            len: this.len - count
+        }
+    }
+}
+
+// ============================================================================
+// Chunks Iterator
+// ============================================================================
+
+/// An iterator over non-overlapping chunks of a slice.
+pub type Chunks[T] {
+    slice: Slice[T],
+    chunk_size: I64
+}
+
+impl[T] Iterator for Chunks[T] {
+    type Item = Slice[T]
+
+    pub func next(mut this) -> Maybe[Slice[T]] {
+        if this.slice.len == 0 {
+            return Nothing
+        }
+        let chunk_len: I64 = if this.chunk_size > this.slice.len then this.slice.len else this.chunk_size
+        let chunk: Slice[T] = this.slice.take(chunk_len)
+        this.slice = this.slice.skip(chunk_len)
+        return Just(chunk)
+    }
+}
+
+impl[T] Slice[T] {
+    /// Returns an iterator over chunks of the given size.
+    pub func chunks(this, chunk_size: I64) -> Chunks[T] {
+        if chunk_size <= 0 {
+            panic("slice::chunks: chunk_size must be positive")
+        }
+        return Chunks {
+            slice: this,
+            chunk_size: chunk_size
+        }
+    }
+}
+
+// ============================================================================
+// Windows Iterator
+// ============================================================================
+
+/// An iterator over overlapping windows of a slice.
+pub type Windows[T] {
+    slice: Slice[T],
+    window_size: I64,
+    index: I64
+}
+
+impl[T] Iterator for Windows[T] {
+    type Item = Slice[T]
+
+    pub func next(mut this) -> Maybe[Slice[T]] {
+        if this.index + this.window_size > this.slice.len {
+            return Nothing
+        }
+        let window: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.slice.data, this.index) },
+            len: this.window_size
+        }
+        this.index = this.index + 1
+        return Just(window)
+    }
+}
+
+impl[T] Slice[T] {
+    /// Returns an iterator over overlapping windows of the given size.
+    pub func windows(this, window_size: I64) -> Windows[T] {
+        if window_size <= 0 {
+            panic("slice::windows: window_size must be positive")
+        }
+        return Windows {
+            slice: this,
+            window_size: window_size,
+            index: 0
+        }
+    }
+}
+
+// ============================================================================
+// Contains and Search
+// ============================================================================
+
+impl[T: PartialEq] Slice[T] {
+    /// Returns true if the slice contains the given value.
+    pub func contains(this, value: ref T) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let elem: ref T = this.get(i).unwrap()
+            if elem.eq(value) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /// Returns true if the slice starts with the given prefix.
+    pub func starts_with(this, prefix: Slice[T]) -> Bool {
+        if prefix.len > this.len {
+            return false
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= prefix.len {
+                break
+            }
+            let a: ref T = this.get(i).unwrap()
+            let b: ref T = prefix.get(i).unwrap()
+            if not a.eq(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns true if the slice ends with the given suffix.
+    pub func ends_with(this, suffix: Slice[T]) -> Bool {
+        if suffix.len > this.len {
+            return false
+        }
+        let offset: I64 = this.len - suffix.len
+        let mut i: I64 = 0
+        loop {
+            if i >= suffix.len {
+                break
+            }
+            let a: ref T = this.get(offset + i).unwrap()
+            let b: ref T = suffix.get(i).unwrap()
+            if not a.eq(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+// ============================================================================
+// Copy Operations
+// ============================================================================
+
+impl[T: Copy] MutSlice[T] {
+    /// Copies elements from src to this slice.
+    pub func copy_from_slice(mut this, src: Slice[T]) {
+        if src.len != this.len {
+            panic("slice::copy_from_slice: slices must have same length")
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let val: T = *src.get(i).unwrap()
+            lowlevel { slice_set(this.data, i, val) }
+            i = i + 1
+        }
+    }
+}

@@ -1,0 +1,225 @@
+// TML Core Library - Borrow Module
+// Provides: Borrow[T], BorrowMut[T], ToOwned behaviors
+
+// ============================================================================
+// Borrow Behavior
+// ============================================================================
+
+/// A behavior for borrowing data.
+/// Types implementing Borrow[T] can provide a reference to T.
+///
+/// This is useful for creating functions that can work with either
+/// owned or borrowed data. For example, HashMap::get can take any
+/// type that borrows as the key type.
+pub behavior Borrow[T] {
+    /// Borrows data as type T.
+    func borrow(this) -> ref T
+}
+
+// ============================================================================
+// BorrowMut Behavior
+// ============================================================================
+
+/// A behavior for mutably borrowing data.
+/// Types implementing BorrowMut[T] can provide a mutable reference to T.
+pub behavior BorrowMut[T]: Borrow[T] {
+    /// Mutably borrows data as type T.
+    func borrow_mut(mut this) -> mut ref T
+}
+
+// ============================================================================
+// ToOwned Behavior
+// ============================================================================
+
+/// A behavior for creating owned data from borrowed data.
+/// This is the counterpart to Borrow - where Borrow allows borrowing
+/// from an owned type, ToOwned allows creating an owned type from a borrow.
+pub behavior ToOwned {
+    /// The resulting owned type.
+    type Owned
+
+    /// Creates owned data from borrowed data.
+    func to_owned(this) -> This::Owned
+}
+
+// ============================================================================
+// Reflexive Borrow Implementations
+// ============================================================================
+
+// Every type can borrow as itself
+impl[T] Borrow[T] for T {
+    pub func borrow(this) -> ref T {
+        return ref this
+    }
+}
+
+impl[T] BorrowMut[T] for T {
+    pub func borrow_mut(mut this) -> mut ref T {
+        return mut ref this
+    }
+}
+
+// ============================================================================
+// Primitive ToOwned Implementations
+// ============================================================================
+
+impl ToOwned for I8 {
+    type Owned = I8
+    pub func to_owned(this) -> I8 {
+        return this
+    }
+}
+
+impl ToOwned for I16 {
+    type Owned = I16
+    pub func to_owned(this) -> I16 {
+        return this
+    }
+}
+
+impl ToOwned for I32 {
+    type Owned = I32
+    pub func to_owned(this) -> I32 {
+        return this
+    }
+}
+
+impl ToOwned for I64 {
+    type Owned = I64
+    pub func to_owned(this) -> I64 {
+        return this
+    }
+}
+
+impl ToOwned for U8 {
+    type Owned = U8
+    pub func to_owned(this) -> U8 {
+        return this
+    }
+}
+
+impl ToOwned for U16 {
+    type Owned = U16
+    pub func to_owned(this) -> U16 {
+        return this
+    }
+}
+
+impl ToOwned for U32 {
+    type Owned = U32
+    pub func to_owned(this) -> U32 {
+        return this
+    }
+}
+
+impl ToOwned for U64 {
+    type Owned = U64
+    pub func to_owned(this) -> U64 {
+        return this
+    }
+}
+
+impl ToOwned for F32 {
+    type Owned = F32
+    pub func to_owned(this) -> F32 {
+        return this
+    }
+}
+
+impl ToOwned for F64 {
+    type Owned = F64
+    pub func to_owned(this) -> F64 {
+        return this
+    }
+}
+
+impl ToOwned for Bool {
+    type Owned = Bool
+    pub func to_owned(this) -> Bool {
+        return this
+    }
+}
+
+impl ToOwned for Str {
+    type Owned = Str
+    pub func to_owned(this) -> Str {
+        return this.duplicate()
+    }
+}
+
+// ============================================================================
+// Maybe[T] Implementations
+// ============================================================================
+
+impl[T: ToOwned] ToOwned for Maybe[T] {
+    type Owned = Maybe[T::Owned]
+
+    pub func to_owned(this) -> Maybe[T::Owned] {
+        when this {
+            Just(val) => return Just(val.to_owned()),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Outcome[T, E] Implementations
+// ============================================================================
+
+impl[T: ToOwned, E: ToOwned] ToOwned for Outcome[T, E] {
+    type Owned = Outcome[T::Owned, E::Owned]
+
+    pub func to_owned(this) -> Outcome[T::Owned, E::Owned] {
+        when this {
+            Ok(val) => return Ok(val.to_owned()),
+            Err(err) => return Err(err.to_owned())
+        }
+    }
+}
+
+// ============================================================================
+// Cow[T] - Clone on Write
+// ============================================================================
+
+/// A clone-on-write smart pointer.
+/// Cow[T] can hold either borrowed or owned data.
+/// When mutation is needed on borrowed data, it clones to owned.
+pub type Cow[T: ToOwned] {
+    Borrowed(ref T),
+    Owned(T::Owned)
+}
+
+impl[T: ToOwned] Cow[T] {
+    /// Returns true if the Cow holds borrowed data.
+    pub func is_borrowed(this) -> Bool {
+        when this {
+            Borrowed(_) => return true,
+            Owned(_) => return false
+        }
+    }
+
+    /// Returns true if the Cow holds owned data.
+    pub func is_owned(this) -> Bool {
+        when this {
+            Borrowed(_) => return false,
+            Owned(_) => return true
+        }
+    }
+
+    /// Extracts the owned data, cloning if necessary.
+    pub func into_owned(this) -> T::Owned {
+        when this {
+            Borrowed(b) => return b.to_owned(),
+            Owned(o) => return o
+        }
+    }
+}
+
+impl[T: ToOwned] Borrow[T] for Cow[T] where T::Owned: Borrow[T] {
+    pub func borrow(this) -> ref T {
+        when this {
+            Borrowed(b) => return b,
+            Owned(o) => return o.borrow()
+        }
+    }
+}

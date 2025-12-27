@@ -13,6 +13,13 @@
 // - mem: Memory utilities (size_of, swap, replace, forget)
 // - cell: Interior mutability (Cell, RefCell)
 // - str: String manipulation utilities
+// - iter: Iterator, IntoIterator, FromIterator, and adapters
+// - option: Maybe[T] enhanced methods
+// - result: Outcome[T, E] enhanced methods
+// - borrow: Borrow, BorrowMut, ToOwned, Cow
+// - slice: Slice operations (sort, binary_search, etc.)
+// - ptr: Raw pointer operations, NonNull
+// - error: Error behavior and common error types
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
@@ -28,3 +35,7 @@ pub mod str      // String utilities
 pub mod iter     // Iterator, IntoIterator, FromIterator, adapters
 pub mod option   // Maybe[T] enhanced methods
 pub mod result   // Outcome[T, E] enhanced methods
+pub mod borrow   // Borrow, BorrowMut, ToOwned, Cow
+pub mod slice    // Slice, MutSlice, sort, binary_search
+pub mod ptr      // RawPtr, RawMutPtr, NonNull
+pub mod error    // Error behavior, SimpleError, IoError

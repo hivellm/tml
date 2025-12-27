@@ -1,0 +1,370 @@
+// TML Core Library - Error Module
+// Provides: Error behavior, common error types
+
+// ============================================================================
+// Error Behavior
+// ============================================================================
+
+/// The base behavior for all error types.
+/// Types implementing Error can be used with the `?` operator and
+/// can provide a chain of underlying errors.
+pub behavior Error: Display + Debug {
+    /// Returns the underlying source of this error, if any.
+    /// This enables error chaining - each error can wrap a lower-level cause.
+    func source(this) -> Maybe[ref dyn Error] {
+        return Nothing
+    }
+
+    /// Returns a short description of the error.
+    func description(this) -> Str {
+        return this.to_string()
+    }
+}
+
+// ============================================================================
+// Common Error Types
+// ============================================================================
+
+/// A simple string-based error.
+pub type SimpleError {
+    message: Str
+}
+
+impl SimpleError {
+    /// Creates a new SimpleError with the given message.
+    pub func new(message: Str) -> SimpleError {
+        return SimpleError { message: message }
+    }
+}
+
+impl Display for SimpleError {
+    pub func to_string(this) -> Str {
+        return this.message
+    }
+}
+
+impl Debug for SimpleError {
+    pub func debug_string(this) -> Str {
+        return "SimpleError(\"" + this.message + "\")"
+    }
+}
+
+impl Error for SimpleError {}
+
+// ============================================================================
+// NeverError - Error type for infallible operations
+// ============================================================================
+
+/// An error type that can never be constructed.
+/// Use this as the error type for operations that cannot fail.
+pub type NeverError {
+    _private: Never
+}
+
+impl Display for NeverError {
+    pub func to_string(this) -> Str {
+        // This can never be called because NeverError cannot be constructed
+        unreachable()
+    }
+}
+
+impl Debug for NeverError {
+    pub func debug_string(this) -> Str {
+        unreachable()
+    }
+}
+
+impl Error for NeverError {}
+
+// ============================================================================
+// BoxedError - Type-erased error
+// ============================================================================
+
+/// A type-erased error that can hold any error type.
+/// Useful when you need to return different error types from the same function.
+pub type BoxedError {
+    inner: Heap[dyn Error]
+}
+
+impl BoxedError {
+    /// Boxes an error.
+    pub func new[E: Error](error: E) -> BoxedError {
+        return BoxedError {
+            inner: Heap::new(error)
+        }
+    }
+
+    /// Returns a reference to the inner error.
+    pub func as_ref(this) -> ref dyn Error {
+        return ref *this.inner
+    }
+}
+
+impl Display for BoxedError {
+    pub func to_string(this) -> Str {
+        return (*this.inner).to_string()
+    }
+}
+
+impl Debug for BoxedError {
+    pub func debug_string(this) -> Str {
+        return (*this.inner).debug_string()
+    }
+}
+
+impl Error for BoxedError {
+    pub func source(this) -> Maybe[ref dyn Error] {
+        return (*this.inner).source()
+    }
+}
+
+// ============================================================================
+// ChainedError - Error with explicit cause
+// ============================================================================
+
+/// An error that wraps another error as its cause.
+pub type ChainedError[E: Error] {
+    message: Str,
+    cause: E
+}
+
+impl[E: Error] ChainedError[E] {
+    /// Creates a new ChainedError with a message and cause.
+    pub func new(message: Str, cause: E) -> ChainedError[E] {
+        return ChainedError { message: message, cause: cause }
+    }
+
+    /// Returns the underlying cause.
+    pub func cause(this) -> ref E {
+        return ref this.cause
+    }
+}
+
+impl[E: Error] Display for ChainedError[E] {
+    pub func to_string(this) -> Str {
+        return this.message + ": " + this.cause.to_string()
+    }
+}
+
+impl[E: Error] Debug for ChainedError[E] {
+    pub func debug_string(this) -> Str {
+        return "ChainedError { message: \"" + this.message + "\", cause: " + this.cause.debug_string() + " }"
+    }
+}
+
+impl[E: Error] Error for ChainedError[E] {
+    pub func source(this) -> Maybe[ref dyn Error] {
+        return Just(ref this.cause as ref dyn Error)
+    }
+}
+
+// ============================================================================
+// ParseError - Error for parsing operations
+// ============================================================================
+
+/// An error that occurred during parsing.
+pub type ParseError {
+    message: Str,
+    position: Maybe[I64]
+}
+
+impl ParseError {
+    /// Creates a new ParseError.
+    pub func new(message: Str) -> ParseError {
+        return ParseError { message: message, position: Nothing }
+    }
+
+    /// Creates a ParseError with a position.
+    pub func with_position(message: Str, position: I64) -> ParseError {
+        return ParseError { message: message, position: Just(position) }
+    }
+}
+
+impl Display for ParseError {
+    pub func to_string(this) -> Str {
+        when this.position {
+            Just(pos) => return "parse error at position " + pos.to_string() + ": " + this.message,
+            Nothing => return "parse error: " + this.message
+        }
+    }
+}
+
+impl Debug for ParseError {
+    pub func debug_string(this) -> Str {
+        return "ParseError { message: \"" + this.message + "\", position: " + this.position.debug_string() + " }"
+    }
+}
+
+impl Error for ParseError {}
+
+// ============================================================================
+// IoError - Error for I/O operations
+// ============================================================================
+
+/// The kind of I/O error.
+pub type IoErrorKind {
+    NotFound,
+    PermissionDenied,
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    NotConnected,
+    AddrInUse,
+    AddrNotAvailable,
+    BrokenPipe,
+    AlreadyExists,
+    WouldBlock,
+    InvalidInput,
+    InvalidData,
+    TimedOut,
+    WriteZero,
+    Interrupted,
+    UnexpectedEof,
+    OutOfMemory,
+    Other
+}
+
+impl Display for IoErrorKind {
+    pub func to_string(this) -> Str {
+        when this {
+            NotFound => return "entity not found",
+            PermissionDenied => return "permission denied",
+            ConnectionRefused => return "connection refused",
+            ConnectionReset => return "connection reset",
+            ConnectionAborted => return "connection aborted",
+            NotConnected => return "not connected",
+            AddrInUse => return "address in use",
+            AddrNotAvailable => return "address not available",
+            BrokenPipe => return "broken pipe",
+            AlreadyExists => return "entity already exists",
+            WouldBlock => return "operation would block",
+            InvalidInput => return "invalid input parameter",
+            InvalidData => return "invalid data",
+            TimedOut => return "operation timed out",
+            WriteZero => return "write zero",
+            Interrupted => return "operation interrupted",
+            UnexpectedEof => return "unexpected end of file",
+            OutOfMemory => return "out of memory",
+            Other => return "other error"
+        }
+    }
+}
+
+impl Debug for IoErrorKind {
+    pub func debug_string(this) -> Str {
+        when this {
+            NotFound => return "NotFound",
+            PermissionDenied => return "PermissionDenied",
+            ConnectionRefused => return "ConnectionRefused",
+            ConnectionReset => return "ConnectionReset",
+            ConnectionAborted => return "ConnectionAborted",
+            NotConnected => return "NotConnected",
+            AddrInUse => return "AddrInUse",
+            AddrNotAvailable => return "AddrNotAvailable",
+            BrokenPipe => return "BrokenPipe",
+            AlreadyExists => return "AlreadyExists",
+            WouldBlock => return "WouldBlock",
+            InvalidInput => return "InvalidInput",
+            InvalidData => return "InvalidData",
+            TimedOut => return "TimedOut",
+            WriteZero => return "WriteZero",
+            Interrupted => return "Interrupted",
+            UnexpectedEof => return "UnexpectedEof",
+            OutOfMemory => return "OutOfMemory",
+            Other => return "Other"
+        }
+    }
+}
+
+/// An I/O error.
+pub type IoError {
+    kind: IoErrorKind,
+    message: Maybe[Str]
+}
+
+impl IoError {
+    /// Creates a new IoError of the given kind.
+    pub func new(kind: IoErrorKind) -> IoError {
+        return IoError { kind: kind, message: Nothing }
+    }
+
+    /// Creates a new IoError with a custom message.
+    pub func with_message(kind: IoErrorKind, message: Str) -> IoError {
+        return IoError { kind: kind, message: Just(message) }
+    }
+
+    /// Returns the kind of error.
+    pub func kind(this) -> IoErrorKind {
+        return this.kind
+    }
+}
+
+impl Display for IoError {
+    pub func to_string(this) -> Str {
+        when this.message {
+            Just(msg) => return this.kind.to_string() + ": " + msg,
+            Nothing => return this.kind.to_string()
+        }
+    }
+}
+
+impl Debug for IoError {
+    pub func debug_string(this) -> Str {
+        return "IoError { kind: " + this.kind.debug_string() + ", message: " + this.message.debug_string() + " }"
+    }
+}
+
+impl Error for IoError {}
+
+// ============================================================================
+// Error Extension Methods
+// ============================================================================
+
+/// Extension methods for Outcome with Error types.
+impl[T, E: Error] Outcome[T, E] {
+    /// Wraps the error in a ChainedError with additional context.
+    pub func context(this, message: Str) -> Outcome[T, ChainedError[E]] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => return Err(ChainedError::new(message, err))
+        }
+    }
+
+    /// Wraps the error in a ChainedError with context from a function.
+    pub func with_context(this, f: func() -> Str) -> Outcome[T, ChainedError[E]] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => return Err(ChainedError::new(f(), err))
+        }
+    }
+}
+
+// ============================================================================
+// Error Iteration - Walk the error chain
+// ============================================================================
+
+/// An iterator over the error chain.
+pub type ErrorChain {
+    current: Maybe[ref dyn Error]
+}
+
+impl Iterator for ErrorChain {
+    type Item = ref dyn Error
+
+    pub func next(mut this) -> Maybe[ref dyn Error] {
+        when this.current {
+            Just(err) => {
+                this.current = err.source()
+                return Just(err)
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+/// Returns an iterator over the error chain, starting with this error.
+pub func error_chain[E: Error](error: ref E) -> ErrorChain {
+    return ErrorChain {
+        current: Just(error as ref dyn Error)
+    }
+}
