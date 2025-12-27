@@ -487,8 +487,9 @@ generates specialized code: `Pair[I32]` and `Pair[Bool]` become separate types.
 | Generic Enums | ✅ Complete | `Maybe[T]`, `Outcome[T, E]` |
 | Pattern Matching | ✅ Complete | `when` expressions with generic enums |
 | Multi-param Generics | ✅ Complete | Unlimited type parameters |
-| Generic Functions | ⚠️ Parsing Only | Codegen not yet implemented |
-| Bounds/Constraints | ❌ Not Started | `T: Addable` syntax parsed but not checked |
+| Generic Functions | ✅ Complete | Type inference at call sites |
+| Bounds/Constraints | ✅ Complete | `T: Addable` syntax with where clauses |
+| Where Clauses | ✅ Complete | `where T: Ordered + Hashable` |
 
 ### 9.2 Generic Structs
 
@@ -569,7 +570,7 @@ The compiler generates specialized code for each unique type instantiation:
 | `Maybe[Bool]` | `Maybe__Bool` | `%struct.Maybe__Bool` |
 | `Outcome[I32, I32]` | `Outcome__I32__I32` | `%struct.Outcome__I32__I32` |
 
-### 9.5 Generic Functions (Not Yet Implemented)
+### 9.5 Generic Functions
 
 ```tml
 func identity[T](x: T) -> T {
@@ -580,14 +581,12 @@ func swap[T](a: T, b: T) -> (T, T) {
     return (b, a)
 }
 
-// Usage (type inferred)
+// Usage (type inferred at call site)
 let x: I32 = identity(42)        // I32
 let y: String = identity("hello")   // String
 ```
 
-> **Note:** Generic function parsing works, but codegen is not yet implemented.
-
-### 9.6 Bounds/Constraints (Not Yet Implemented)
+### 9.6 Bounds and Where Clauses
 
 ```tml
 // T must implement Addable
@@ -608,24 +607,7 @@ where K: Equal + Hashable, V: Duplicate
 }
 ```
 
-> **Note:** Bounds syntax is parsed but not enforced by the type checker yet.
-
-### 9.7 Known Limitations
-
-1. **Field Type Resolution**: The type checker doesn't resolve generic field
-   types for comparisons or assignments to typed variables:
-   ```tml
-   let p: Pair[I32] = Pair { first: 10, second: 20 }
-
-   // Works
-   print(p.first)
-
-   // Doesn't work (type checker sees T, not I32)
-   let x: I32 = p.first  // Error: expected I32, found T
-   if p.first == 10 { }  // Error: requires matching types
-   ```
-
-2. **Workaround**: Use `print()` directly on field access, which is polymorphic.
+Where clauses are fully checked at call sites. If a type doesn't satisfy the constraints, the compiler produces an error with suggestions.
 
 ## 10. Behaviors
 

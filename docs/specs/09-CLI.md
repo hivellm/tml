@@ -6,7 +6,7 @@
 
 ```bash
 tml --version
-# tml 1.0.0 (abc1234 2024-01-15)
+# tml 1.0.0 (abc1234 2025-12-27)
 
 tml --help
 # TML Toolchain
@@ -534,7 +534,7 @@ tml cache info
 # Size: 45.2 MB
 # Entries: 127
 # Hit rate: 87%
-# Last cleaned: 2025-01-15
+# Last cleaned: 2025-12-27
 ```
 
 **How it works:**

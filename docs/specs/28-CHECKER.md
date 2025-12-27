@@ -1,6 +1,6 @@
 # 28. Type and Effect Checker
 
-The minimal checker validates types and effects. Borrow checking is a separate pass.
+The type checker validates types and effects. Borrow checking is a separate pass.
 
 ## 1. Checker Phases
 
@@ -19,6 +19,88 @@ Source → Parser → AST
                    ↓
               IR Generation
 ```
+
+## 1.1 Implementation Structure
+
+The type checker is organized into modular files for maintainability:
+
+```
+packages/compiler/src/types/
+├── checker/                    # Type checker modules
+│   ├── helpers.cpp             # Shared utilities
+│   │   ├── is_integer_type()
+│   │   ├── is_float_type()
+│   │   ├── types_compatible()
+│   │   ├── levenshtein_distance()
+│   │   ├── find_similar_names()
+│   │   └── get_all_known_names()
+│   ├── core.cpp                # Core checking
+│   │   ├── TypeChecker()
+│   │   ├── check_module()
+│   │   ├── register_struct_decl()
+│   │   ├── register_enum_decl()
+│   │   ├── register_trait_decl()
+│   │   ├── check_func_decl()
+│   │   └── check_impl_decl()
+│   ├── expr.cpp                # Expression checking
+│   │   ├── check_expr()
+│   │   ├── check_literal()
+│   │   ├── check_ident()
+│   │   ├── check_binary()
+│   │   ├── check_unary()
+│   │   ├── check_call()
+│   │   ├── check_method_call()
+│   │   └── check_interp_string()
+│   ├── stmt.cpp                # Statement checking
+│   │   ├── check_stmt()
+│   │   ├── check_let()
+│   │   ├── check_var()
+│   │   └── bind_pattern()
+│   ├── control.cpp             # Control flow
+│   │   ├── check_if()
+│   │   ├── check_ternary()
+│   │   ├── check_when()
+│   │   ├── check_loop()
+│   │   ├── check_for()
+│   │   ├── check_return()
+│   │   └── check_break()
+│   ├── types.cpp               # Type expressions
+│   │   ├── check_tuple()
+│   │   ├── check_array()
+│   │   ├── check_struct_expr()
+│   │   ├── check_closure()
+│   │   ├── check_path()
+│   │   └── collect_captures_from_expr()
+│   └── resolve.cpp             # Type resolution
+│       ├── resolve_type()
+│       ├── resolve_type_path()
+│       ├── error()
+│       ├── block_has_return()
+│       └── expr_has_return()
+├── builtins/                   # Builtin function registration
+│   ├── register.cpp            # Main registration
+│   ├── types.cpp               # Primitive types
+│   ├── io.cpp                  # I/O functions (print, println)
+│   ├── string.cpp              # String functions (str_*)
+│   ├── math.cpp                # Math functions (sqrt, pow, abs)
+│   ├── mem.cpp                 # Memory functions (alloc, dealloc)
+│   ├── time.cpp                # Time functions (time_ms, elapsed_ms)
+│   ├── atomic.cpp              # Atomic operations (atomic_*)
+│   ├── sync.cpp                # Synchronization (mutex_*, channel_*)
+│   └── collections.cpp         # Collection functions (list_*, hashmap_*)
+├── env_core.cpp                # Environment core
+├── env_scope.cpp               # Scope management
+├── env_definitions.cpp         # Type definitions
+├── env_lookups.cpp             # Symbol lookups
+└── module.cpp                  # Module handling
+```
+
+### Key Features
+
+- **Similar Name Suggestions**: Uses Levenshtein distance to suggest corrections for typos
+- **Where Clause Enforcement**: Validates type constraints at call sites
+- **Interpolated String Checking**: Validates expressions in `{expr}` interpolations
+- **Closure Capture Analysis**: Tracks captured variables for closure codegen
 
 ## 2. Name Resolution
 

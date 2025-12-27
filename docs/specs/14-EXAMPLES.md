@@ -10,6 +10,35 @@ public func main() {
 }
 ```
 
+## 1.1 String Interpolation
+
+```tml
+module greeting
+
+public func main() {
+    let name: String = "World"
+    let count: I32 = 42
+
+    // Variable interpolation
+    println("Hello {name}!")           // "Hello World!"
+
+    // Expression interpolation
+    println("Count: {count * 2}")      // "Count: 84"
+
+    // Method calls
+    let items: List[I32] = [1, 2, 3]
+    println("Items: {items.len()}")    // "Items: 3"
+
+    // Complex expressions
+    let a: I32 = 10
+    let b: I32 = 5
+    println("{a} + {b} = {a + b}")     // "10 + 5 = 15"
+
+    // Escaped braces
+    println("Use \\{ and \\} for literals")
+}
+```
+
 ## 2. Fibonacci
 
 ```tml

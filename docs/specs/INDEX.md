@@ -113,6 +113,14 @@ var count: I32 = 0      // mutable, explicit type required
 const PI: F64 = 3.14159 // compile-time constant, explicit type
 ```
 
+### String Interpolation
+```tml
+let name: String = "World"
+let greeting: String = "Hello {name}!"    // "Hello World!"
+let result: String = "Sum: {a + b}"       // expressions allowed
+let escaped: String = "Use \{ and \}"     // literal braces
+```
+
 ### Functions
 ```tml
 func greet(name: String) -> String {
@@ -357,20 +365,24 @@ tml fmt                # format code
 | v0.5 | ✅ Active | Bootstrap compiler with LLVM backend |
 | v1.0 | 🔄 In Progress | Self-hosted compiler |
 
-### Implementation Status (Dec 2024)
+### Implementation Status (Dec 2025)
 
 | Feature | Status |
 |---------|--------|
 | Lexer | ✅ Complete |
 | Parser | ✅ Complete (LL(1)) |
-| Type Checker | ✅ Complete |
+| Type Checker | ✅ Complete (modular) |
 | Pattern Matching | ✅ Complete |
 | Module System | ✅ Complete |
 | Trait Objects | ✅ Complete |
 | Generics | ✅ Complete (monomorphization) |
+| Where Clauses | ✅ Complete |
+| String Interpolation | ✅ Complete |
 | LLVM Backend | ✅ Complete |
 | Test Framework | ✅ Complete |
-| Borrow Checker | 🟡 Basic |
+| FFI Support | ✅ Complete (@extern, @link) |
+| Borrow Checker | ✅ Complete (reborrows, two-phase) |
+| Build Cache | ✅ Complete (content-based) |
 
 ## License
 

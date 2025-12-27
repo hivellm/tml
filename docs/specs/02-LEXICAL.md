@@ -149,6 +149,8 @@ MultiLine = '"""' .* '"""'
 | `\0` | Null |
 | `\xNN` | Hex byte |
 | `\u{NNNN}` | Unicode codepoint |
+| `\{` | Literal open brace |
+| `\}` | Literal close brace |
 
 **Examples:**
 ```tml
@@ -165,7 +167,49 @@ string
 """
 ```
 
-### 4.4 Bytes
+### 4.4 Interpolated Strings
+
+Interpolated strings allow embedding expressions within string literals using `{expr}` syntax.
+
+```ebnf
+InterpString = '"' (InterpChar | '{' Expr '}')* '"'
+InterpChar   = EscapeSeq | [^"\\{\n]
+```
+
+**Lexer tokens:**
+- `InterpStringStart` - Opening part before first `{`
+- `InterpStringMiddle` - Part between `}` and next `{`
+- `InterpStringEnd` - Closing part after last `}`
+
+**Examples:**
+```tml
+// Simple variable interpolation
+let name: String = "World"
+let msg: String = "Hello {name}!"        // "Hello World!"
+
+// Expression interpolation
+let a: I32 = 5
+let b: I32 = 3
+let result: String = "Sum: {a + b}"      // "Sum: 8"
+
+// Method calls in interpolation
+let items: List[I32] = [1, 2, 3]
+let info: String = "Count: {items.len()}" // "Count: 3"
+
+// Escaped braces
+let code: String = "Use \{ and \} for literals"
+
+// Nested interpolation
+let greeting: String = "Hi {user.name}!"
+```
+
+**Implementation notes:**
+- Expressions in `{}` are evaluated and converted to strings
+- Any expression type with `to_string()` method can be interpolated
+- Lexer tracks interpolation depth for nested braces
+- Type checker validates all interpolated expressions
+
+### 4.5 Bytes
 
 ```ebnf
 Bytes    = 'b"' ByteChar* '"'
@@ -178,7 +222,7 @@ b"hello"
 b"\x00\xFF"
 ```
 
-### 4.5 Characters
+### 4.6 Characters
 
 ```ebnf
 Char = "'" (EscapeSeq | [^'\\\n]) "'"

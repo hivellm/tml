@@ -167,6 +167,30 @@ struct Token {
 // Trait resolution for methods
 ```
 
+**Implementation Structure** (modular design for maintainability):
+```
+src/types/
+├── checker/                # Core type checking (split from checker.cpp)
+│   ├── helpers.cpp         # Utilities, Levenshtein distance, type compatibility
+│   ├── core.cpp            # check_module, register_*, check_func_decl
+│   ├── expr.cpp            # check_expr, check_literal, check_call, check_interp_string
+│   ├── stmt.cpp            # check_stmt, check_let, check_var, bind_pattern
+│   ├── control.cpp         # check_if, check_when, check_loop, check_return
+│   ├── types.cpp           # check_tuple, check_closure, check_path
+│   └── resolve.cpp         # resolve_type, resolve_type_path
+├── builtins/               # Builtin function registration
+│   ├── register.cpp        # Main registration entry point
+│   ├── io.cpp              # print, println
+│   ├── string.cpp          # str_len, str_concat, str_contains, etc.
+│   ├── math.cpp            # sqrt, pow, abs, floor, ceil, round
+│   ├── mem.cpp             # alloc, dealloc, mem_copy, mem_set
+│   ├── time.cpp            # time_ms, elapsed_ms, sleep_ms
+│   ├── atomic.cpp          # atomic_load/store/add/cas, fence
+│   ├── sync.cpp            # mutex_*, channel_*, waitgroup_*
+│   └── collections.cpp     # list_*, hashmap_*, buffer_*
+└── env_*.cpp               # Environment management
+```
+
 #### Borrow Checker
 ```cpp
 // Input: TAST

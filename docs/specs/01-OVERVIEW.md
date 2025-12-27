@@ -112,6 +112,14 @@ let content: String = file.read_string()!
 let parsed: Outcome[I32, Error] = content.parse[I32]()! else 0
 ```
 
+**String interpolation:**
+```tml
+let name: String = "World"
+let greeting: String = "Hello {name}!"      // "Hello World!"
+let result: String = "Sum: {a + b}"         // expressions allowed
+let info: String = "Items: {list.len()}"    // method calls
+```
+
 **Closures:**
 ```tml
 let nums: List[I32] = items

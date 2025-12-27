@@ -509,18 +509,33 @@ thread_id() -> I64       // Get current thread ID
 These are low-level string utility functions available as global builtins:
 
 ```tml
-str_len(s: Str) -> I32       // Length of string in bytes
-str_eq(a: Str, b: Str) -> Bool  // Compare two strings for equality
-str_hash(s: Str) -> I32      // Compute hash of a string
+str_len(s: Str) -> I32               // Length of string in bytes
+str_eq(a: Str, b: Str) -> Bool       // Compare two strings for equality
+str_hash(s: Str) -> I32              // Compute hash of a string
+str_concat(a: Str, b: Str) -> Str    // Concatenate two strings
+str_substring(s: Str, start: I32, len: I32) -> Str  // Extract substring
+str_contains(s: Str, sub: Str) -> Bool              // Check if contains substring
+str_starts_with(s: Str, prefix: Str) -> Bool        // Check prefix
+str_ends_with(s: Str, suffix: Str) -> Bool          // Check suffix
+str_to_upper(s: Str) -> Str          // Convert to uppercase
+str_to_lower(s: Str) -> Str          // Convert to lowercase
+str_trim(s: Str) -> Str              // Remove leading/trailing whitespace
+str_char_at(s: Str, index: I32) -> I32              // Get char code at index
 ```
 
 **Examples:**
 
 ```tml
-let len: I32 = str_len("hello")      // 5
-let same: Bool = str_eq("a", "a")    // true
-let diff: Bool = str_eq("a", "b")    // false
-let hash: I32 = str_hash("key")      // some I32 hash value
+let len: I32 = str_len("hello")           // 5
+let same: Bool = str_eq("a", "a")         // true
+let diff: Bool = str_eq("a", "b")         // false
+let hash: I32 = str_hash("key")           // some I32 hash value
+
+// String manipulation
+let full: Str = str_concat("Hello", " World")   // "Hello World"
+let sub: Str = str_substring("Hello", 0, 2)     // "He"
+let has: Bool = str_contains("Hello", "ell")    // true
+let upper: Str = str_to_upper("hello")          // "HELLO"
 
 // str_hash is useful for implementing custom hash-based data structures
 // Same strings always produce the same hash
@@ -529,7 +544,58 @@ assert(str_hash("test") == str_hash("test"))
 
 **Note:** For most string operations, prefer using the `String` type methods (see section 1.5). These low-level functions are provided for cases where you need direct, simple operations without the overhead of method calls.
 
-### 7.10 Time and Benchmarking
+### 7.10 Synchronization Primitives
+
+Higher-level synchronization primitives for concurrent programming.
+
+```tml
+// Mutex (mutual exclusion lock)
+mutex_create() -> *Unit         // Create a new mutex
+mutex_destroy(m: *Unit) -> Unit // Destroy mutex
+mutex_lock(m: *Unit) -> Unit    // Acquire lock (blocks)
+mutex_unlock(m: *Unit) -> Unit  // Release lock
+mutex_trylock(m: *Unit) -> Bool // Try to acquire (non-blocking)
+
+// Channels (message passing)
+channel_create() -> *Unit       // Create a new channel
+channel_destroy(c: *Unit) -> Unit  // Destroy channel
+channel_send(c: *Unit, val: I32) -> Unit   // Send value (blocks if full)
+channel_recv(c: *Unit) -> I32              // Receive value (blocks if empty)
+channel_try_send(c: *Unit, val: I32) -> Bool  // Non-blocking send
+channel_try_recv(c: *Unit) -> Maybe[I32]   // Non-blocking receive
+channel_len(c: *Unit) -> I32    // Number of items in channel
+
+// WaitGroup (barrier synchronization)
+waitgroup_create() -> *Unit     // Create a new waitgroup
+waitgroup_destroy(wg: *Unit) -> Unit  // Destroy waitgroup
+waitgroup_add(wg: *Unit, n: I32) -> Unit  // Add n tasks
+waitgroup_done(wg: *Unit) -> Unit         // Signal task complete
+waitgroup_wait(wg: *Unit) -> Unit         // Wait for all tasks
+
+// Thread control
+thread_sleep(ms: I32) -> Unit   // Sleep for milliseconds
+thread_yield() -> Unit          // Yield to scheduler
+thread_id() -> I64              // Get current thread ID
+```
+
+**Example:**
+
+```tml
+// Using mutex for thread-safe counter
+let mutex: *Unit = mutex_create()
+let counter: *Unit = alloc(4)
+atomic_store(counter, 0)
+
+mutex_lock(mutex)
+let val: I32 = atomic_load(counter)
+atomic_store(counter, val + 1)
+mutex_unlock(mutex)
+
+mutex_destroy(mutex)
+dealloc(counter)
+```
+
+### 7.11 Time and Benchmarking
 
 ```tml
 // ⚠️ DEPRECATED: Use Instant API instead
