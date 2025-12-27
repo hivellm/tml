@@ -1,0 +1,257 @@
+// TML Core Library - String Utilities Module
+// Provides: String manipulation functions
+
+// ============================================================================
+// String Length and Emptiness
+// ============================================================================
+
+/// Returns the length of a string in bytes.
+pub func len(s: Str) -> I64 {
+    return lowlevel { str_len(s) }
+}
+
+/// Returns true if the string is empty.
+pub func is_empty(s: Str) -> Bool {
+    return len(s) == 0
+}
+
+// ============================================================================
+// Character Access
+// ============================================================================
+
+/// Returns the character at the given byte index.
+/// Panics if the index is out of bounds.
+pub func char_at(s: Str, index: I64) -> I32 {
+    return lowlevel { str_char_at(s, index) }
+}
+
+/// Returns the first character of the string, or Nothing if empty.
+pub func first_char(s: Str) -> Maybe[I32] {
+    if is_empty(s) {
+        return Nothing
+    }
+    return Just(char_at(s, 0))
+}
+
+/// Returns the last character of the string, or Nothing if empty.
+pub func last_char(s: Str) -> Maybe[I32] {
+    let length: I64 = len(s)
+    if length == 0 {
+        return Nothing
+    }
+    return Just(char_at(s, length - 1))
+}
+
+// ============================================================================
+// Substring Operations
+// ============================================================================
+
+/// Returns a substring from start to end (exclusive).
+pub func substring(s: Str, start: I64, end: I64) -> Str {
+    return lowlevel { str_substring(s, start, end) }
+}
+
+/// Returns a substring from start to the end of the string.
+pub func substring_from(s: Str, start: I64) -> Str {
+    return substring(s, start, len(s))
+}
+
+/// Returns a substring from the beginning to end (exclusive).
+pub func substring_to(s: Str, end: I64) -> Str {
+    return substring(s, 0, end)
+}
+
+// ============================================================================
+// Trimming
+// ============================================================================
+
+/// Removes leading and trailing whitespace from a string.
+pub func trim(s: Str) -> Str {
+    return lowlevel { str_trim(s) }
+}
+
+/// Removes leading whitespace from a string.
+pub func trim_start(s: Str) -> Str {
+    return lowlevel { str_trim_start(s) }
+}
+
+/// Removes trailing whitespace from a string.
+pub func trim_end(s: Str) -> Str {
+    return lowlevel { str_trim_end(s) }
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+/// Converts all characters to uppercase.
+pub func to_uppercase(s: Str) -> Str {
+    return lowlevel { str_to_uppercase(s) }
+}
+
+/// Converts all characters to lowercase.
+pub func to_lowercase(s: Str) -> Str {
+    return lowlevel { str_to_lowercase(s) }
+}
+
+// ============================================================================
+// Search Operations
+// ============================================================================
+
+/// Returns true if the string contains the given substring.
+pub func contains(s: Str, pattern: Str) -> Bool {
+    return lowlevel { str_contains(s, pattern) }
+}
+
+/// Returns true if the string starts with the given prefix.
+pub func starts_with(s: Str, prefix: Str) -> Bool {
+    return lowlevel { str_starts_with(s, prefix) }
+}
+
+/// Returns true if the string ends with the given suffix.
+pub func ends_with(s: Str, suffix: Str) -> Bool {
+    return lowlevel { str_ends_with(s, suffix) }
+}
+
+/// Returns the index of the first occurrence of the pattern, or Nothing if not found.
+pub func find(s: Str, pattern: Str) -> Maybe[I64] {
+    let idx: I64 = lowlevel { str_find(s, pattern) }
+    if idx < 0 {
+        return Nothing
+    }
+    return Just(idx)
+}
+
+/// Returns the index of the last occurrence of the pattern, or Nothing if not found.
+pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
+    let idx: I64 = lowlevel { str_rfind(s, pattern) }
+    if idx < 0 {
+        return Nothing
+    }
+    return Just(idx)
+}
+
+// ============================================================================
+// Splitting
+// ============================================================================
+
+/// Splits a string by the given delimiter.
+/// Returns a list of substrings.
+pub func split(s: Str, delimiter: Str) -> List[Str] {
+    return lowlevel { str_split(s, delimiter) }
+}
+
+/// Splits a string by whitespace.
+pub func split_whitespace(s: Str) -> List[Str] {
+    return lowlevel { str_split_whitespace(s) }
+}
+
+/// Splits a string into lines.
+pub func lines(s: Str) -> List[Str] {
+    return lowlevel { str_lines(s) }
+}
+
+// ============================================================================
+// Replacement
+// ============================================================================
+
+/// Replaces all occurrences of `from` with `to`.
+pub func replace(s: Str, from: Str, to: Str) -> Str {
+    return lowlevel { str_replace(s, from, to) }
+}
+
+/// Replaces the first occurrence of `from` with `to`.
+pub func replace_first(s: Str, from: Str, to: Str) -> Str {
+    return lowlevel { str_replace_first(s, from, to) }
+}
+
+// ============================================================================
+// Repetition and Padding
+// ============================================================================
+
+/// Repeats the string n times.
+pub func repeat(s: Str, n: I64) -> Str {
+    return lowlevel { str_repeat(s, n) }
+}
+
+/// Pads the string on the left to reach the given width.
+pub func pad_left(s: Str, width: I64, pad_char: Str) -> Str {
+    let current_len: I64 = len(s)
+    if current_len >= width {
+        return s
+    }
+    let padding: Str = repeat(pad_char, width - current_len)
+    return padding + s
+}
+
+/// Pads the string on the right to reach the given width.
+pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
+    let current_len: I64 = len(s)
+    if current_len >= width {
+        return s
+    }
+    let padding: Str = repeat(pad_char, width - current_len)
+    return s + padding
+}
+
+// ============================================================================
+// Parsing
+// ============================================================================
+
+/// Parses a string as an I32.
+/// Returns Nothing if parsing fails.
+pub func parse_i32(s: Str) -> Maybe[I32] {
+    let result: I32 = lowlevel { str_parse_i32(s) }
+    // Check for parse error (returns 0 on error, need sentinel)
+    return Just(result)
+}
+
+/// Parses a string as an I64.
+/// Returns Nothing if parsing fails.
+pub func parse_i64(s: Str) -> Maybe[I64] {
+    let result: I64 = lowlevel { str_parse_i64(s) }
+    return Just(result)
+}
+
+/// Parses a string as an F64.
+/// Returns Nothing if parsing fails.
+pub func parse_f64(s: Str) -> Maybe[F64] {
+    let result: F64 = lowlevel { str_parse_f64(s) }
+    return Just(result)
+}
+
+/// Parses a string as a Bool.
+/// Accepts "true", "false", "1", "0" (case insensitive).
+pub func parse_bool(s: Str) -> Maybe[Bool] {
+    let lower: Str = to_lowercase(s)
+    if lower == "true" or lower == "1" {
+        return Just(true)
+    }
+    if lower == "false" or lower == "0" {
+        return Just(false)
+    }
+    return Nothing
+}
+
+// ============================================================================
+// Joining
+// ============================================================================
+
+/// Joins a list of strings with the given separator.
+pub func join(parts: List[Str], separator: Str) -> Str {
+    return lowlevel { str_join(parts, separator) }
+}
+
+// ============================================================================
+// Concatenation
+// ============================================================================
+
+/// Concatenates two strings.
+pub func concat(a: Str, b: Str) -> Str {
+    return a + b
+}
+
+/// Concatenates multiple strings.
+pub func concat_all(parts: List[Str]) -> Str {
+    return join(parts, "")
+}

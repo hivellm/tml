@@ -1,0 +1,174 @@
+// TML Core Library - Memory Module
+// Provides: size_of, align_of, swap, replace, take, forget
+
+// ============================================================================
+// Size and Alignment
+// ============================================================================
+
+/// Returns the size of a type in bytes.
+/// This is a compile-time constant for sized types.
+pub func size_of[T]() -> I64 {
+    return lowlevel { sizeof_type[T]() }
+}
+
+/// Returns the alignment of a type in bytes.
+/// This is a compile-time constant for sized types.
+pub func align_of[T]() -> I64 {
+    return lowlevel { alignof_type[T]() }
+}
+
+/// Returns the size of the value's type in bytes.
+pub func size_of_val[T](val: ref T) -> I64 {
+    return size_of[T]()
+}
+
+/// Returns the alignment of the value's type in bytes.
+pub func align_of_val[T](val: ref T) -> I64 {
+    return align_of[T]()
+}
+
+// ============================================================================
+// Swap and Replace
+// ============================================================================
+
+/// Swaps the values at two mutable locations.
+/// After calling swap, the value at `a` will be the value that was at `b`,
+/// and vice versa.
+pub func swap[T](a: mut ref T, b: mut ref T) {
+    let temp: T = *a
+    *a = *b
+    *b = temp
+}
+
+/// Replaces the value at a mutable location with a new value,
+/// returning the old value.
+pub func replace[T](dest: mut ref T, src: T) -> T {
+    let old: T = *dest
+    *dest = src
+    return old
+}
+
+/// Takes the value out of the mutable reference, leaving Default::default() in its place.
+/// Requires T: Default
+pub func take[T: Default](dest: mut ref T) -> T {
+    return replace(dest, T::default())
+}
+
+// ============================================================================
+// Forget
+// ============================================================================
+
+/// Intentionally leaks a value without running its destructor.
+/// Use this to prevent Drop from being called on a value.
+///
+/// WARNING: This can cause memory leaks if used incorrectly.
+/// Only use when you know the value's resources will be cleaned up elsewhere.
+pub func forget[T](value: T) {
+    lowlevel { mem_forget(value) }
+}
+
+// ============================================================================
+// Drop
+// ============================================================================
+
+/// Drops a value, running its destructor if it has one.
+/// This is useful when you want to explicitly drop a value before
+/// the end of its scope.
+pub func drop[T](value: T) {
+    // Value goes out of scope here and is dropped
+}
+
+// ============================================================================
+// ManuallyDrop[T]
+// ============================================================================
+
+/// A wrapper that prevents automatic dropping of the contained value.
+/// You must manually call `into_inner()` or use unsafe code to extract the value.
+pub type ManuallyDrop[T] {
+    value: T
+}
+
+impl[T] ManuallyDrop[T] {
+    /// Creates a new ManuallyDrop wrapper.
+    pub func new(value: T) -> ManuallyDrop[T] {
+        return ManuallyDrop[T] { value: value }
+    }
+
+    /// Extracts the value from the ManuallyDrop wrapper.
+    /// The value will be dropped normally when it goes out of scope.
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+
+    /// Gets a reference to the contained value.
+    pub func get_ref(this) -> ref T {
+        return ref this.value
+    }
+
+    /// Gets a mutable reference to the contained value.
+    pub func get_mut(mut this) -> mut ref T {
+        return mut ref this.value
+    }
+}
+
+// ============================================================================
+// MaybeUninit[T]
+// ============================================================================
+
+/// A wrapper type that represents possibly uninitialized data.
+/// Use this for performance-critical code where you need to delay initialization.
+///
+/// WARNING: Reading from an uninitialized MaybeUninit is undefined behavior.
+pub type MaybeUninit[T] {
+    // Internal storage - may or may not be initialized
+    storage: T
+}
+
+impl[T] MaybeUninit[T] {
+    /// Creates a new MaybeUninit with uninitialized contents.
+    pub func uninit() -> MaybeUninit[T] {
+        return lowlevel { maybe_uninit_create[T]() }
+    }
+
+    /// Creates a new MaybeUninit initialized with the given value.
+    pub func new(value: T) -> MaybeUninit[T] {
+        return MaybeUninit[T] { storage: value }
+    }
+
+    /// Writes a value into the MaybeUninit.
+    pub func write(mut this, value: T) {
+        this.storage = value
+    }
+
+    /// Assumes the contents are initialized and extracts the value.
+    ///
+    /// SAFETY: Calling this on uninitialized data is undefined behavior.
+    pub func assume_init(this) -> T {
+        return this.storage
+    }
+
+    /// Gets a reference to the contained value.
+    ///
+    /// SAFETY: Calling this on uninitialized data is undefined behavior.
+    pub func assume_init_ref(this) -> ref T {
+        return ref this.storage
+    }
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/// Returns a zeroed value of type T.
+/// This is useful for initializing memory to a known state.
+pub func zeroed[T]() -> T {
+    return lowlevel { mem_zeroed[T]() }
+}
+
+/// Transmutes a value from one type to another.
+///
+/// SAFETY: This is extremely unsafe. The types must have the same size
+/// and the bit pattern of the source must be valid for the destination type.
+pub func transmute[Src, Dst](src: Src) -> Dst {
+    return lowlevel { mem_transmute[Src, Dst](src) }
+}

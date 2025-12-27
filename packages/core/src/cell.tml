@@ -1,0 +1,245 @@
+// TML Core Library - Cell Module
+// Provides: Cell[T] and RefCell[T] for interior mutability
+
+// ============================================================================
+// Cell[T] - Simple interior mutability for Copy types
+// ============================================================================
+
+/// A mutable memory location for Copy types.
+/// Cell provides interior mutability by moving values in and out.
+/// It is not thread-safe (not Sync).
+pub type Cell[T] {
+    value: T
+}
+
+impl[T: Copy] Cell[T] {
+    /// Creates a new Cell containing the given value.
+    pub func new(value: T) -> Cell[T] {
+        return Cell[T] { value: value }
+    }
+
+    /// Returns a copy of the contained value.
+    pub func get(this) -> T {
+        return this.value
+    }
+
+    /// Sets the contained value.
+    pub func set(mut this, value: T) {
+        this.value = value
+    }
+
+    /// Replaces the contained value and returns the old value.
+    pub func replace(mut this, value: T) -> T {
+        let old: T = this.value
+        this.value = value
+        return old
+    }
+
+    /// Takes the value out of the cell, replacing it with Default::default().
+    pub func take(mut this) -> T where T: Default {
+        return this.replace(T::default())
+    }
+
+    /// Updates the contained value using a function.
+    pub func update(mut this, f: func(T) -> T) {
+        this.value = f(this.value)
+    }
+}
+
+impl[T: Default + Copy] Default for Cell[T] {
+    pub func default() -> Cell[T] {
+        return Cell[T]::new(T::default())
+    }
+}
+
+// ============================================================================
+// RefCell[T] - Runtime borrow checking
+// ============================================================================
+
+/// The borrow state of a RefCell.
+type BorrowState {
+    /// No active borrows
+    Unused,
+    /// One or more immutable borrows (count)
+    Reading(I32),
+    /// One mutable borrow
+    Writing
+}
+
+/// A mutable memory location with dynamically checked borrow rules.
+/// RefCell enforces Rust's borrowing rules at runtime instead of compile time.
+/// It is not thread-safe (not Sync).
+///
+/// Panics if borrowing rules are violated:
+/// - Cannot borrow_mut while any borrow is active
+/// - Cannot borrow while borrow_mut is active
+pub type RefCell[T] {
+    value: T,
+    borrow_state: BorrowState
+}
+
+impl[T] RefCell[T] {
+    /// Creates a new RefCell containing the given value.
+    pub func new(value: T) -> RefCell[T] {
+        return RefCell[T] {
+            value: value,
+            borrow_state: BorrowState::Unused
+        }
+    }
+
+    /// Immutably borrows the wrapped value.
+    /// Panics if the value is currently mutably borrowed.
+    pub func borrow(mut this) -> Ref[T] {
+        when this.borrow_state {
+            BorrowState::Unused => {
+                this.borrow_state = BorrowState::Reading(1)
+                return Ref[T] { cell: ref this }
+            },
+            BorrowState::Reading(count) => {
+                this.borrow_state = BorrowState::Reading(count + 1)
+                return Ref[T] { cell: ref this }
+            },
+            BorrowState::Writing => {
+                panic("RefCell already mutably borrowed")
+            }
+        }
+    }
+
+    /// Mutably borrows the wrapped value.
+    /// Panics if the value is currently borrowed.
+    pub func borrow_mut(mut this) -> RefMut[T] {
+        when this.borrow_state {
+            BorrowState::Unused => {
+                this.borrow_state = BorrowState::Writing
+                return RefMut[T] { cell: mut ref this }
+            },
+            BorrowState::Reading(_) => {
+                panic("RefCell already immutably borrowed")
+            },
+            BorrowState::Writing => {
+                panic("RefCell already mutably borrowed")
+            }
+        }
+    }
+
+    /// Tries to immutably borrow the wrapped value.
+    /// Returns Nothing if the value is currently mutably borrowed.
+    pub func try_borrow(mut this) -> Maybe[Ref[T]] {
+        when this.borrow_state {
+            BorrowState::Unused => {
+                this.borrow_state = BorrowState::Reading(1)
+                return Just(Ref[T] { cell: ref this })
+            },
+            BorrowState::Reading(count) => {
+                this.borrow_state = BorrowState::Reading(count + 1)
+                return Just(Ref[T] { cell: ref this })
+            },
+            BorrowState::Writing => {
+                return Nothing
+            }
+        }
+    }
+
+    /// Tries to mutably borrow the wrapped value.
+    /// Returns Nothing if the value is currently borrowed.
+    pub func try_borrow_mut(mut this) -> Maybe[RefMut[T]] {
+        when this.borrow_state {
+            BorrowState::Unused => {
+                this.borrow_state = BorrowState::Writing
+                return Just(RefMut[T] { cell: mut ref this })
+            },
+            _ => {
+                return Nothing
+            }
+        }
+    }
+
+    /// Replaces the wrapped value and returns the old value.
+    /// Panics if the value is currently borrowed.
+    pub func replace(mut this, value: T) -> T {
+        let mut_ref: RefMut[T] = this.borrow_mut()
+        let old: T = mut_ref.replace(value)
+        return old
+    }
+
+    /// Takes the value out of the RefCell, leaving Default::default() in its place.
+    /// Panics if the value is currently borrowed.
+    pub func take(mut this) -> T where T: Default {
+        return this.replace(T::default())
+    }
+}
+
+impl[T: Default] Default for RefCell[T] {
+    pub func default() -> RefCell[T] {
+        return RefCell[T]::new(T::default())
+    }
+}
+
+// ============================================================================
+// Ref[T] - Immutable borrow wrapper
+// ============================================================================
+
+/// A wrapper type for an immutably borrowed value from a RefCell.
+pub type Ref[T] {
+    cell: ref RefCell[T]
+}
+
+impl[T] Ref[T] {
+    /// Returns a reference to the borrowed value.
+    pub func get(this) -> ref T {
+        return ref this.cell.value
+    }
+}
+
+// When Ref is dropped, decrement the borrow count
+impl[T] Drop for Ref[T] {
+    pub func drop(mut this) {
+        when this.cell.borrow_state {
+            BorrowState::Reading(count) => {
+                if count == 1 {
+                    this.cell.borrow_state = BorrowState::Unused
+                } else {
+                    this.cell.borrow_state = BorrowState::Reading(count - 1)
+                }
+            },
+            _ => {
+                // Should not happen
+            }
+        }
+    }
+}
+
+// ============================================================================
+// RefMut[T] - Mutable borrow wrapper
+// ============================================================================
+
+/// A wrapper type for a mutably borrowed value from a RefCell.
+pub type RefMut[T] {
+    cell: mut ref RefCell[T]
+}
+
+impl[T] RefMut[T] {
+    /// Returns a reference to the borrowed value.
+    pub func get(this) -> ref T {
+        return ref this.cell.value
+    }
+
+    /// Returns a mutable reference to the borrowed value.
+    pub func get_mut(mut this) -> mut ref T {
+        return mut ref this.cell.value
+    }
+
+    /// Replaces the borrowed value and returns the old value.
+    pub func replace(mut this, value: T) -> T {
+        let old: T = this.cell.value
+        this.cell.value = value
+        return old
+    }
+}
+
+// When RefMut is dropped, release the mutable borrow
+impl[T] Drop for RefMut[T] {
+    pub func drop(mut this) {
+        this.cell.borrow_state = BorrowState::Unused
+    }
+}
