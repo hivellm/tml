@@ -1,0 +1,240 @@
+//! Slice comparison operations.
+//!
+//! This module provides comparison operations for slices:
+//!
+//! - [`contains`]: Check if a slice contains an element
+//! - [`starts_with`]: Check if a slice starts with another slice
+//! - [`ends_with`]: Check if a slice ends with another slice
+//!
+//! These methods are available on slices where the element type implements
+//! [`PartialEq`].
+//!
+//! # Examples
+//!
+//! ```tml
+//! let data = [1, 2, 3, 4, 5].as_slice()
+//!
+//! assert(data.contains(ref 3))
+//! assert(data.starts_with([1, 2].as_slice()))
+//! assert(data.ends_with([4, 5].as_slice()))
+//! ```
+
+use core::slice::{Slice}
+use core::cmp::PartialEq
+
+// ============================================================================
+// Contains and Search
+// ============================================================================
+
+/// Extension behavior for slice comparison operations.
+///
+/// This is automatically implemented for `Slice[T]` where `T: PartialEq`.
+pub behavior SlicePartialEq[T: PartialEq] {
+    /// Returns `true` if the slice contains an element with the given value.
+    func contains(this, value: ref T) -> Bool
+
+    /// Returns `true` if `prefix` is a prefix of the slice.
+    func starts_with(this, prefix: Slice[T]) -> Bool
+
+    /// Returns `true` if `suffix` is a suffix of the slice.
+    func ends_with(this, suffix: Slice[T]) -> Bool
+}
+
+impl[T: PartialEq] Slice[T] {
+    /// Returns `true` if the slice contains an element with the given value.
+    ///
+    /// This operation is *O*(*n*).
+    ///
+    /// Note that if you have a sorted slice, [`binary_search`] may be faster.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert(v.as_slice().contains(ref 30))
+    /// assert(v.as_slice().contains(ref 50) == false)
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// For sorted slices, consider using [`binary_search`] which is *O*(log *n*)
+    /// instead of *O*(*n*).
+    pub func contains(this, value: ref T) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let elem: ref T = this.get(i).unwrap()
+            if elem.eq(value) {
+                return true
+            }
+            i = i + 1
+        }
+        return false
+    }
+
+    /// Returns `true` if `prefix` is a prefix of the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// let slice = v.as_slice()
+    /// assert(slice.starts_with([10, 40].as_slice()))
+    /// assert(slice.starts_with([10].as_slice()))
+    /// assert(slice.starts_with([].as_slice()))  // Empty prefix always matches
+    /// assert(slice.starts_with([10, 50].as_slice()) == false)
+    /// ```
+    ///
+    /// # Edge Cases
+    ///
+    /// - An empty prefix always matches (returns `true`)
+    /// - A prefix longer than the slice never matches (returns `false`)
+    pub func starts_with(this, prefix: Slice[T]) -> Bool {
+        if prefix.len > this.len {
+            return false
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= prefix.len {
+                break
+            }
+            let a: ref T = this.get(i).unwrap()
+            let b: ref T = prefix.get(i).unwrap()
+            if not a.eq(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns `true` if `suffix` is a suffix of the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// let slice = v.as_slice()
+    /// assert(slice.ends_with([40, 30].as_slice()))
+    /// assert(slice.ends_with([30].as_slice()))
+    /// assert(slice.ends_with([].as_slice()))  // Empty suffix always matches
+    /// assert(slice.ends_with([50, 30].as_slice()) == false)
+    /// ```
+    ///
+    /// # Edge Cases
+    ///
+    /// - An empty suffix always matches (returns `true`)
+    /// - A suffix longer than the slice never matches (returns `false`)
+    pub func ends_with(this, suffix: Slice[T]) -> Bool {
+        if suffix.len > this.len {
+            return false
+        }
+        let offset: I64 = this.len - suffix.len
+        let mut i: I64 = 0
+        loop {
+            if i >= suffix.len {
+                break
+            }
+            let a: ref T = this.get(offset + i).unwrap()
+            let b: ref T = suffix.get(i).unwrap()
+            if not a.eq(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Returns the first position of the element in the slice, or `Nothing`
+    /// if not found.
+    ///
+    /// This operation is *O*(*n*).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30, 40]
+    /// assert_eq(v.as_slice().position(ref 40), Just(1))
+    /// assert_eq(v.as_slice().position(ref 50), Nothing)
+    /// ```
+    pub func position(this, value: ref T) -> Maybe[I64] {
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let elem: ref T = this.get(i).unwrap()
+            if elem.eq(value) {
+                return Just(i)
+            }
+            i = i + 1
+        }
+        return Nothing
+    }
+
+    /// Returns the last position of the element in the slice, or `Nothing`
+    /// if not found.
+    ///
+    /// This operation is *O*(*n*).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30, 40]
+    /// assert_eq(v.as_slice().rposition(ref 40), Just(3))
+    /// assert_eq(v.as_slice().rposition(ref 50), Nothing)
+    /// ```
+    pub func rposition(this, value: ref T) -> Maybe[I64] {
+        let mut i: I64 = this.len - 1
+        loop {
+            if i < 0 {
+                break
+            }
+            let elem: ref T = this.get(i).unwrap()
+            if elem.eq(value) {
+                return Just(i)
+            }
+            i = i - 1
+        }
+        return Nothing
+    }
+}
+
+// ============================================================================
+// Slice Equality
+// ============================================================================
+
+impl[T: PartialEq] PartialEq for Slice[T] {
+    /// Returns `true` if two slices are equal element by element.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = [1, 2, 3].as_slice()
+    /// let b = [1, 2, 3].as_slice()
+    /// let c = [1, 2, 4].as_slice()
+    ///
+    /// assert(a.eq(ref b))
+    /// assert(a.eq(ref c) == false)
+    /// ```
+    pub func eq(this, other: ref Slice[T]) -> Bool {
+        if this.len != other.len {
+            return false
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let a: ref T = this.get(i).unwrap()
+            let b: ref T = other.get(i).unwrap()
+            if not a.eq(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}

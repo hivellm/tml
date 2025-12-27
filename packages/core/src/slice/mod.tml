@@ -1,0 +1,645 @@
+//! Utilities for working with slices.
+//!
+//! A slice is a dynamically-sized view into a contiguous sequence, `[T]`.
+//! Slices are a view into a block of memory represented as a pointer and a
+//! length.
+//!
+//! This module provides types and functions for working with slices:
+//!
+//! - [`Slice`]: An immutable view into a contiguous sequence
+//! - [`MutSlice`]: A mutable view into a contiguous sequence
+//! - Sorting: [`sort`], [`sort_by`], [`sort_by_key`] (see [`sort`] submodule)
+//! - Searching: [`binary_search`], [`binary_search_by`], [`contains`]
+//! - Iterators: [`Chunks`], [`Windows`] (see [`iter`] submodule)
+//! - Comparisons: [`starts_with`], [`ends_with`] (see [`cmp`] submodule)
+//!
+//! # Module Structure
+//!
+//! The slice module is organized into submodules following Rust's structure:
+//!
+//! - [`mod.tml`]: Core slice types (`Slice`, `MutSlice`) and basic operations
+//! - [`iter`]: Iterator types (`Chunks`, `Windows`) for slice iteration
+//! - [`cmp`]: Comparison operations (`contains`, `starts_with`, `ends_with`)
+//! - [`sort`]: Sorting algorithms (`sort`, `sort_by`, `sort_by_key`)
+//!
+//! # Examples
+//!
+//! Sorting a slice:
+//!
+//! ```tml
+//! let mut data = [5, 2, 8, 1, 9]
+//! let slice = data.as_mut_slice()
+//! slice.sort()
+//! assert_eq(data, [1, 2, 5, 8, 9])
+//! ```
+//!
+//! Binary search:
+//!
+//! ```tml
+//! let data = [1, 2, 3, 4, 5]
+//! let slice = data.as_slice()
+//! when slice.binary_search(ref 3) {
+//!     Ok(index) => assert_eq(index, 2),
+//!     Err(_) => panic("not found")
+//! }
+//! ```
+//!
+//! Iterating in chunks:
+//!
+//! ```tml
+//! let data = [1, 2, 3, 4, 5]
+//! for chunk in data.as_slice().chunks(2) {
+//!     println(chunk.len().to_string())
+//! }
+//! // Output: 2, 2, 1
+//! ```
+
+pub mod iter   // Chunks, Windows iterators
+pub mod cmp    // contains, starts_with, ends_with
+pub mod sort   // sort, sort_by, sort_by_key
+
+// Re-export commonly used items
+pub use iter::{Chunks, Windows}
+pub use cmp::{SlicePartialEq}
+pub use sort::{SliceSort, SliceSortBy}
+
+use core::cmp::{Ordering, Ord}
+use core::clone::Copy
+
+// ============================================================================
+// Slice Type
+// ============================================================================
+
+/// A dynamically-sized view into a contiguous sequence, `[T]`.
+///
+/// Contiguous here means that elements are laid out so that every element is
+/// the same distance from its neighbors.
+///
+/// Slices are a view into a block of memory represented as a pointer and a
+/// length. This is an immutable slice - see [`MutSlice`] for the mutable
+/// version.
+///
+/// # Examples
+///
+/// ```tml
+/// let vec = [1, 2, 3, 4, 5]
+/// let slice: Slice[I32] = vec.as_slice()
+///
+/// assert_eq(slice.len(), 5)
+/// assert_eq(slice.get(0), Just(ref 1))
+/// assert_eq(slice.first(), Just(ref 1))
+/// assert_eq(slice.last(), Just(ref 5))
+/// ```
+pub type Slice[T] {
+    data: ref T,
+    len: I64
+}
+
+impl[T] Slice[T] {
+    /// Returns the number of elements in the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = [1, 2, 3]
+    /// assert_eq(a.as_slice().len(), 3)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Returns `true` if the slice has a length of 0.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = [1, 2, 3]
+    /// assert(a.as_slice().is_empty() == false)
+    ///
+    /// let b: List[I32] = []
+    /// assert(b.as_slice().is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Returns the first element of the slice, or `Nothing` if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert_eq(v.as_slice().first(), Just(ref 10))
+    ///
+    /// let w: List[I32] = []
+    /// assert_eq(w.as_slice().first(), Nothing)
+    /// ```
+    pub func first(this) -> Maybe[ref T] {
+        if this.len == 0 {
+            return Nothing
+        }
+        return Just(this.get(0).unwrap())
+    }
+
+    /// Returns the last element of the slice, or `Nothing` if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert_eq(v.as_slice().last(), Just(ref 30))
+    ///
+    /// let w: List[I32] = []
+    /// assert_eq(w.as_slice().last(), Nothing)
+    /// ```
+    pub func last(this) -> Maybe[ref T] {
+        if this.len == 0 {
+            return Nothing
+        }
+        return Just(this.get(this.len - 1).unwrap())
+    }
+
+    /// Returns a reference to an element, or `Nothing` if the index is out
+    /// of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert_eq(v.as_slice().get(1), Just(ref 40))
+    /// assert_eq(v.as_slice().get(3), Nothing)
+    /// ```
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get(this.data, index) })
+    }
+
+    /// Returns a mutable reference to an element, or `Nothing` if the index
+    /// is out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = [10, 40, 30]
+    /// when v.as_slice().get_mut(1) {
+    ///     Just(elem) => *elem = 42,
+    ///     Nothing => {}
+    /// }
+    /// assert_eq(v, [10, 42, 30])
+    /// ```
+    pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get_mut(this.data, index) })
+    }
+}
+
+// ============================================================================
+// Splitting Operations
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Divides one slice into two at an index.
+    ///
+    /// The first will contain all indices from `[0, mid)` (excluding the
+    /// index `mid` itself) and the second will contain all indices from
+    /// `[mid, len)` (excluding the index `len` itself).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `mid > len`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3, 4, 5, 6]
+    /// let (left, right) = v.as_slice().split_at(3)
+    ///
+    /// assert_eq(left.len(), 3)
+    /// assert_eq(right.len(), 3)
+    /// ```
+    pub func split_at(this, mid: I64) -> (Slice[T], Slice[T]) {
+        if mid < 0 or mid > this.len {
+            panic("slice::split_at: index out of bounds")
+        }
+        let first: Slice[T] = Slice {
+            data: this.data,
+            len: mid
+        }
+        let second: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.data, mid) },
+            len: this.len - mid
+        }
+        return (first, second)
+    }
+
+    /// Returns the first `n` elements of the slice, or the whole slice if
+    /// it has fewer than `n` elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3]
+    /// let slice = v.as_slice()
+    ///
+    /// assert_eq(slice.take(2).len(), 2)
+    /// assert_eq(slice.take(10).len(), 3)  // clamped to len
+    /// ```
+    pub func take(this, n: I64) -> Slice[T] {
+        let count: I64 = if n > this.len then this.len else n
+        return Slice {
+            data: this.data,
+            len: count
+        }
+    }
+
+    /// Returns a slice with the first `n` elements removed.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3, 4, 5]
+    /// let slice = v.as_slice()
+    ///
+    /// assert_eq(slice.skip(2).len(), 3)
+    /// assert_eq(slice.skip(10).len(), 0)  // all skipped
+    /// ```
+    pub func skip(this, n: I64) -> Slice[T] {
+        let count: I64 = if n > this.len then this.len else n
+        return Slice {
+            data: lowlevel { slice_offset(this.data, count) },
+            len: this.len - count
+        }
+    }
+}
+
+// ============================================================================
+// Binary Search
+// ============================================================================
+
+impl[T: Ord] Slice[T] {
+    /// Binary searches this slice for a given element.
+    ///
+    /// If the value is found then [`Ok`] is returned, containing the index
+    /// of the matching element. If there are multiple matches, then any one
+    /// of the matches could be returned.
+    ///
+    /// If the value is not found then [`Err`] is returned, containing the
+    /// index where a matching element could be inserted while maintaining
+    /// sorted order.
+    ///
+    /// # Examples
+    ///
+    /// Looks up a series of four elements. The first is found, with a
+    /// uniquely determined position; the second and third are not found;
+    /// the fourth could match any position in `[1, 4]`.
+    ///
+    /// ```tml
+    /// let s = [0, 1, 1, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
+    /// let slice = s.as_slice()
+    ///
+    /// assert_eq(slice.binary_search(ref 13), Ok(9))
+    /// assert_eq(slice.binary_search(ref 4), Err(7))
+    /// assert_eq(slice.binary_search(ref 100), Err(13))
+    /// let r = slice.binary_search(ref 1)
+    /// assert(r == Ok(1) or r == Ok(2) or r == Ok(3) or r == Ok(4))
+    /// ```
+    pub func binary_search(this, target: ref T) -> Outcome[I64, I64] {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len
+        loop {
+            if left >= right {
+                break
+            }
+            let mid: I64 = left + (right - left) / 2
+            let mid_ref: ref T = this.get(mid).unwrap()
+            when mid_ref.cmp(target) {
+                Less => left = mid + 1,
+                Equal => return Ok(mid),
+                Greater => right = mid
+            }
+        }
+        return Err(left)
+    }
+}
+
+impl[T] Slice[T] {
+    /// Binary searches this slice with a comparator function.
+    ///
+    /// The comparator function should return an order code that indicates
+    /// whether its argument is `Less`, `Equal` or `Greater` than the desired
+    /// target.
+    ///
+    /// If the value is found then [`Ok`] is returned, containing the index
+    /// of the matching element. If the value is not found then [`Err`] is
+    /// returned, containing the index where a matching element could be
+    /// inserted while maintaining sorted order.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let s = [0, 1, 1, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
+    /// let slice = s.as_slice()
+    /// let seek = 13
+    /// assert_eq(slice.binary_search_by(do(x) x.cmp(ref seek)), Ok(9))
+    /// ```
+    pub func binary_search_by(this, compare: func(ref T) -> Ordering) -> Outcome[I64, I64] {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len
+        loop {
+            if left >= right {
+                break
+            }
+            let mid: I64 = left + (right - left) / 2
+            let mid_ref: ref T = this.get(mid).unwrap()
+            when compare(mid_ref) {
+                Less => left = mid + 1,
+                Equal => return Ok(mid),
+                Greater => right = mid
+            }
+        }
+        return Err(left)
+    }
+
+    /// Binary searches this slice with a key extraction function.
+    ///
+    /// Assumes that the slice is sorted by the key.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let s = [(0, 0), (2, 1), (4, 1), (5, 1), (3, 1),
+    ///          (1, 2), (2, 3), (4, 5), (5, 8), (3, 13),
+    ///          (1, 21), (2, 34), (4, 55)]
+    /// let slice = s.as_slice()
+    ///
+    /// assert_eq(slice.binary_search_by_key(ref 13, do(x) x.1), Ok(9))
+    /// assert_eq(slice.binary_search_by_key(ref 4, do(x) x.1), Err(7))
+    /// ```
+    pub func binary_search_by_key[K: Ord](this, key: ref K, key_fn: func(ref T) -> K) -> Outcome[I64, I64] {
+        return this.binary_search_by(do(elem: ref T) key_fn(elem).cmp(key))
+    }
+}
+
+// ============================================================================
+// Mutable Slice Type
+// ============================================================================
+
+/// A mutable, dynamically-sized view into a contiguous sequence, `[T]`.
+///
+/// This is the mutable counterpart to [`Slice`]. It provides methods for
+/// in-place modification of the underlying data.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut vec = [5, 2, 8, 1, 9]
+/// let slice: MutSlice[I32] = vec.as_mut_slice()
+///
+/// slice.sort()
+/// assert_eq(vec, [1, 2, 5, 8, 9])
+///
+/// slice.reverse()
+/// assert_eq(vec, [9, 8, 5, 2, 1])
+/// ```
+pub type MutSlice[T] {
+    data: mut ref T,
+    len: I64
+}
+
+impl[T] MutSlice[T] {
+    /// Returns the number of elements in the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut a = [1, 2, 3]
+    /// assert_eq(a.as_mut_slice().len(), 3)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.len
+    }
+
+    /// Returns `true` if the slice has a length of 0.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut a = [1, 2, 3]
+    /// assert(a.as_mut_slice().is_empty() == false)
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.len == 0
+    }
+
+    /// Returns a reference to an element, or `Nothing` if the index is out
+    /// of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = [10, 40, 30]
+    /// assert_eq(v.as_mut_slice().get(1), Just(ref 40))
+    /// ```
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get(this.data, index) })
+    }
+
+    /// Returns a mutable reference to an element, or `Nothing` if the index
+    /// is out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut x = [0, 1, 2]
+    /// when x.as_mut_slice().get_mut(1) {
+    ///     Just(elem) => *elem = 42,
+    ///     Nothing => {}
+    /// }
+    /// assert_eq(x, [0, 42, 2])
+    /// ```
+    pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        return Just(lowlevel { slice_get_mut(this.data, index) })
+    }
+
+    /// Swaps two elements in the slice.
+    ///
+    /// If `a` equals to `b`, it's guaranteed that elements won't change
+    /// value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a` or `b` are out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = ["a", "b", "c", "d", "e"]
+    /// v.as_mut_slice().swap(1, 3)
+    /// assert_eq(v, ["a", "d", "c", "b", "e"])
+    /// ```
+    pub func swap(mut this, a: I64, b: I64) {
+        if a < 0 or a >= this.len or b < 0 or b >= this.len {
+            panic("slice::swap: index out of bounds")
+        }
+        lowlevel { slice_swap(this.data, a, b) }
+    }
+
+    /// Reverses the order of elements in the slice, in place.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = [1, 2, 3]
+    /// v.as_mut_slice().reverse()
+    /// assert_eq(v, [3, 2, 1])
+    /// ```
+    pub func reverse(mut this) {
+        let mut left: I64 = 0
+        let mut right: I64 = this.len - 1
+        loop {
+            if left >= right {
+                break
+            }
+            this.swap(left, right)
+            left = left + 1
+            right = right - 1
+        }
+    }
+
+    /// Rotates the slice in-place such that the first `k` elements of the
+    /// slice move to the end while the last `len - k` elements move to the
+    /// front.
+    ///
+    /// After calling `rotate_left`, the element previously at index `k` will
+    /// become the first element in the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut a = ['a', 'b', 'c', 'd', 'e', 'f']
+    /// a.as_mut_slice().rotate_left(2)
+    /// assert_eq(a, ['c', 'd', 'e', 'f', 'a', 'b'])
+    /// ```
+    pub func rotate_left(mut this, k: I64) {
+        if this.len == 0 {
+            return
+        }
+        let k_mod: I64 = k % this.len
+        if k_mod == 0 {
+            return
+        }
+        // Reverse first k elements
+        this.reverse_range(0, k_mod - 1)
+        // Reverse remaining elements
+        this.reverse_range(k_mod, this.len - 1)
+        // Reverse entire slice
+        this.reverse()
+    }
+
+    /// Rotates the slice in-place such that the last `k` elements of the
+    /// slice move to the front while the first `len - k` elements move to
+    /// the end.
+    ///
+    /// After calling `rotate_right`, the element previously at index
+    /// `len - k` will become the first element in the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut a = ['a', 'b', 'c', 'd', 'e', 'f']
+    /// a.as_mut_slice().rotate_right(2)
+    /// assert_eq(a, ['e', 'f', 'a', 'b', 'c', 'd'])
+    /// ```
+    pub func rotate_right(mut this, k: I64) {
+        if this.len == 0 {
+            return
+        }
+        let k_mod: I64 = k % this.len
+        this.rotate_left(this.len - k_mod)
+    }
+
+    /// Reverses elements in a range [start, end].
+    func reverse_range(mut this, start: I64, end: I64) {
+        let mut left: I64 = start
+        let mut right: I64 = end
+        loop {
+            if left >= right {
+                break
+            }
+            this.swap(left, right)
+            left = left + 1
+            right = right - 1
+        }
+    }
+
+    /// Fills `this` with elements by cloning `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut buf = [0, 0, 0, 0]
+    /// buf.as_mut_slice().fill(1)
+    /// assert_eq(buf, [1, 1, 1, 1])
+    /// ```
+    pub func fill(mut this, value: T) where T: Copy {
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            lowlevel { slice_set(this.data, i, value) }
+            i = i + 1
+        }
+    }
+}
+
+// ============================================================================
+// Copy Operations
+// ============================================================================
+
+impl[T: Copy] MutSlice[T] {
+    /// Copies all elements from `src` into `this`, using a memcpy.
+    ///
+    /// The length of `src` must be the same as `this`.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the two slices have different lengths.
+    ///
+    /// # Examples
+    ///
+    /// Cloning a slice:
+    ///
+    /// ```tml
+    /// let src = [1, 2, 3, 4]
+    /// let mut dst = [0, 0, 0, 0]
+    ///
+    /// dst.as_mut_slice().copy_from_slice(src.as_slice())
+    ///
+    /// assert_eq(dst, [1, 2, 3, 4])
+    /// ```
+    pub func copy_from_slice(mut this, src: Slice[T]) {
+        if src.len != this.len {
+            panic("slice::copy_from_slice: slices must have same length")
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len {
+                break
+            }
+            let val: T = *src.get(i).unwrap()
+            lowlevel { slice_set(this.data, i, val) }
+            i = i + 1
+        }
+    }
+}

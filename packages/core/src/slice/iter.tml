@@ -1,0 +1,364 @@
+//! Slice iterator types.
+//!
+//! This module contains the iterator types for slices:
+//!
+//! - [`Chunks`]: An iterator over non-overlapping chunks of a slice
+//! - [`Windows`]: An iterator over overlapping windows of a slice
+//!
+//! These iterators are created by methods on [`Slice`]:
+//!
+//! - [`Slice::chunks`] creates a [`Chunks`] iterator
+//! - [`Slice::windows`] creates a [`Windows`] iterator
+//!
+//! # Examples
+//!
+//! ## Chunks
+//!
+//! ```tml
+//! let slice = [1, 2, 3, 4, 5].as_slice()
+//!
+//! for chunk in slice.chunks(2) {
+//!     println("Chunk of size: " + chunk.len().to_string())
+//! }
+//! // Output: Chunk of size: 2
+//! //         Chunk of size: 2
+//! //         Chunk of size: 1
+//! ```
+//!
+//! ## Windows
+//!
+//! ```tml
+//! let slice = [1, 2, 3, 4].as_slice()
+//!
+//! for window in slice.windows(2) {
+//!     // Process each window
+//! }
+//! // Yields: [1, 2], [2, 3], [3, 4]
+//! ```
+
+use core::slice::{Slice}
+use core::iter::Iterator
+
+// ============================================================================
+// Chunks Iterator
+// ============================================================================
+
+/// An iterator over a slice in (non-overlapping) chunks (`chunk_size`
+/// elements at a time), starting at the beginning of the slice.
+///
+/// When the slice len is not evenly divided by the chunk size, the last
+/// slice of the iteration will be the remainder.
+///
+/// This struct is created by the [`chunks`] method on [slices][Slice].
+///
+/// # Examples
+///
+/// ```tml
+/// let slice = [1, 2, 3, 4, 5]
+/// let mut iter = slice.as_slice().chunks(2)
+///
+/// assert_eq(iter.next().unwrap().len(), 2)  // [1, 2]
+/// assert_eq(iter.next().unwrap().len(), 2)  // [3, 4]
+/// assert_eq(iter.next().unwrap().len(), 1)  // [5]
+/// assert(iter.next().is_nothing())
+/// ```
+///
+/// # Layout
+///
+/// `Chunks` stores a reference to the remaining slice and the chunk size.
+/// Each call to `next()` advances the internal slice by `chunk_size` elements.
+pub type Chunks[T] {
+    slice: Slice[T],
+    chunk_size: I64
+}
+
+impl[T] Iterator for Chunks[T] {
+    type Item = Slice[T]
+
+    /// Returns the next chunk, or `Nothing` if there are no more elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut iter = [1, 2, 3].as_slice().chunks(2)
+    /// assert_eq(iter.next().unwrap().len(), 2)
+    /// assert_eq(iter.next().unwrap().len(), 1)
+    /// assert(iter.next().is_nothing())
+    /// ```
+    pub func next(mut this) -> Maybe[Slice[T]] {
+        if this.slice.len == 0 {
+            return Nothing
+        }
+        let chunk_len: I64 = if this.chunk_size > this.slice.len then this.slice.len else this.chunk_size
+        let chunk: Slice[T] = this.slice.take(chunk_len)
+        this.slice = this.slice.skip(chunk_len)
+        return Just(chunk)
+    }
+}
+
+impl[T] Chunks[T] {
+    /// Returns the number of remaining chunks.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let iter = [1, 2, 3, 4, 5].as_slice().chunks(2)
+    /// assert_eq(iter.remainder(), 3)  // Three chunks: [1,2], [3,4], [5]
+    /// ```
+    pub func remainder(this) -> I64 {
+        if this.slice.len == 0 {
+            return 0
+        }
+        return (this.slice.len + this.chunk_size - 1) / this.chunk_size
+    }
+}
+
+// ============================================================================
+// Slice::chunks method
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Returns an iterator over `chunk_size` elements of the slice at a
+    /// time, starting at the beginning of the slice.
+    ///
+    /// The chunks are slices and do not overlap. If `chunk_size` does not
+    /// divide the length of the slice, then the last chunk will not have
+    /// length `chunk_size`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is 0 or negative.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let slice = [1, 2, 3, 4, 5]
+    /// let mut iter = slice.as_slice().chunks(2)
+    ///
+    /// assert_eq(iter.next().unwrap().len(), 2)
+    /// assert_eq(iter.next().unwrap().len(), 2)
+    /// assert_eq(iter.next().unwrap().len(), 1)
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Processing data in batches
+    /// - Parallel processing with work chunks
+    /// - Pagination
+    pub func chunks(this, chunk_size: I64) -> Chunks[T] {
+        if chunk_size <= 0 {
+            panic("slice::chunks: chunk_size must be positive")
+        }
+        return Chunks {
+            slice: this,
+            chunk_size: chunk_size
+        }
+    }
+
+    /// Returns an iterator over `chunk_size` elements of the slice at a
+    /// time, starting at the beginning of the slice.
+    ///
+    /// If the slice length is not evenly divisible, the last chunk is
+    /// omitted (unlike [`chunks`], which includes a smaller last chunk).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is 0 or negative.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let slice = [1, 2, 3, 4, 5]
+    /// let mut iter = slice.as_slice().chunks_exact(2)
+    ///
+    /// assert_eq(iter.next().unwrap().len(), 2)  // [1, 2]
+    /// assert_eq(iter.next().unwrap().len(), 2)  // [3, 4]
+    /// assert(iter.next().is_nothing())          // [5] is not yielded
+    /// ```
+    pub func chunks_exact(this, chunk_size: I64) -> ChunksExact[T] {
+        if chunk_size <= 0 {
+            panic("slice::chunks_exact: chunk_size must be positive")
+        }
+        let remainder_len: I64 = this.len % chunk_size
+        return ChunksExact {
+            slice: this.take(this.len - remainder_len),
+            chunk_size: chunk_size,
+            remainder: this.skip(this.len - remainder_len)
+        }
+    }
+}
+
+// ============================================================================
+// ChunksExact Iterator
+// ============================================================================
+
+/// An iterator over a slice in exact chunks (`chunk_size` elements at a
+/// time), starting at the beginning of the slice.
+///
+/// Unlike [`Chunks`], if the slice length is not evenly divisible by the
+/// chunk size, the remaining elements can be retrieved with the
+/// [`remainder`] method.
+///
+/// # Examples
+///
+/// ```tml
+/// let slice = [1, 2, 3, 4, 5].as_slice()
+/// let mut iter = slice.chunks_exact(2)
+///
+/// assert_eq(iter.next().unwrap().len(), 2)  // [1, 2]
+/// assert_eq(iter.next().unwrap().len(), 2)  // [3, 4]
+/// assert(iter.next().is_nothing())
+///
+/// assert_eq(iter.remainder().len(), 1)      // [5]
+/// ```
+pub type ChunksExact[T] {
+    slice: Slice[T],
+    chunk_size: I64,
+    remainder: Slice[T]
+}
+
+impl[T] Iterator for ChunksExact[T] {
+    type Item = Slice[T]
+
+    pub func next(mut this) -> Maybe[Slice[T]] {
+        if this.slice.len < this.chunk_size {
+            return Nothing
+        }
+        let chunk: Slice[T] = this.slice.take(this.chunk_size)
+        this.slice = this.slice.skip(this.chunk_size)
+        return Just(chunk)
+    }
+}
+
+impl[T] ChunksExact[T] {
+    /// Returns the remainder of the original slice that was not part of
+    /// any chunk.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut iter = [1, 2, 3, 4, 5].as_slice().chunks_exact(2)
+    /// iter.next()  // [1, 2]
+    /// iter.next()  // [3, 4]
+    ///
+    /// let remainder = iter.remainder()
+    /// assert_eq(remainder.len(), 1)  // [5]
+    /// ```
+    pub func remainder(this) -> Slice[T] {
+        return this.remainder
+    }
+}
+
+// ============================================================================
+// Windows Iterator
+// ============================================================================
+
+/// An iterator over overlapping subslices of length `size`.
+///
+/// This struct is created by the [`windows`] method on [slices][Slice].
+///
+/// # Examples
+///
+/// ```tml
+/// let slice = [1, 2, 3, 4]
+/// let mut iter = slice.as_slice().windows(2)
+///
+/// assert_eq(iter.next().unwrap().len(), 2)  // [1, 2]
+/// assert_eq(iter.next().unwrap().len(), 2)  // [2, 3]
+/// assert_eq(iter.next().unwrap().len(), 2)  // [3, 4]
+/// assert(iter.next().is_nothing())
+/// ```
+///
+/// # Use Cases
+///
+/// - Computing moving averages
+/// - Finding patterns in sequences
+/// - Pairwise comparisons
+pub type Windows[T] {
+    slice: Slice[T],
+    window_size: I64,
+    index: I64
+}
+
+impl[T] Iterator for Windows[T] {
+    type Item = Slice[T]
+
+    /// Returns the next window, or `Nothing` if there are no more windows.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut iter = [1, 2, 3].as_slice().windows(2)
+    /// assert_eq(iter.next().unwrap().len(), 2)  // [1, 2]
+    /// assert_eq(iter.next().unwrap().len(), 2)  // [2, 3]
+    /// assert(iter.next().is_nothing())
+    /// ```
+    pub func next(mut this) -> Maybe[Slice[T]] {
+        if this.index + this.window_size > this.slice.len {
+            return Nothing
+        }
+        let window: Slice[T] = Slice {
+            data: lowlevel { slice_offset(this.slice.data, this.index) },
+            len: this.window_size
+        }
+        this.index = this.index + 1
+        return Just(window)
+    }
+}
+
+impl[T] Windows[T] {
+    /// Returns the number of remaining windows.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let iter = [1, 2, 3, 4].as_slice().windows(2)
+    /// assert_eq(iter.remaining(), 3)  // [1,2], [2,3], [3,4]
+    /// ```
+    pub func remaining(this) -> I64 {
+        if this.index + this.window_size > this.slice.len {
+            return 0
+        }
+        return this.slice.len - this.window_size - this.index + 1
+    }
+}
+
+// ============================================================================
+// Slice::windows method
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Returns an iterator over all contiguous windows of length `size`.
+    /// The windows overlap. If the slice is shorter than `size`, the
+    /// iterator returns no values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `size` is 0 or negative.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let slice = [1, 2, 3, 4]
+    /// let mut iter = slice.as_slice().windows(2)
+    ///
+    /// // Yields [1, 2], [2, 3], [3, 4]
+    /// assert_eq(iter.count(), 3)
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Computing moving averages: `slice.windows(n).map(do(w) w.sum() / n)`
+    /// - Finding pairs: `slice.windows(2).filter(do(w) condition(w))`
+    /// - Detecting changes: `slice.windows(2).any(do(w) w[0] != w[1])`
+    pub func windows(this, window_size: I64) -> Windows[T] {
+        if window_size <= 0 {
+            panic("slice::windows: window_size must be positive")
+        }
+        return Windows {
+            slice: this,
+            window_size: window_size,
+            index: 0
+        }
+    }
+}

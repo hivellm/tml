@@ -1,0 +1,333 @@
+//! Slice sorting algorithms.
+//!
+//! This module provides sorting functionality for mutable slices:
+//!
+//! - [`sort`]: Sort using the element's natural ordering
+//! - [`sort_by`]: Sort using a custom comparator function
+//! - [`sort_by_key`]: Sort using a key extraction function
+//!
+//! # Stability
+//!
+//! The current implementation uses quicksort, which is **unstable** - equal
+//! elements may be reordered. Future versions may add stable sorting options.
+//!
+//! # Complexity
+//!
+//! | Algorithm | Time Complexity | Space Complexity |
+//! |-----------|-----------------|------------------|
+//! | Quicksort | O(n log n) avg, O(n²) worst | O(log n) |
+//!
+//! # Examples
+//!
+//! ## Basic Sorting
+//!
+//! ```tml
+//! let mut v = [5, 4, 1, 3, 2]
+//! v.as_mut_slice().sort()
+//! assert_eq(v, [1, 2, 3, 4, 5])
+//! ```
+//!
+//! ## Custom Comparator
+//!
+//! ```tml
+//! let mut v = [5, 4, 1, 3, 2]
+//! // Sort in descending order
+//! v.as_mut_slice().sort_by(do(a, b) b.cmp(a))
+//! assert_eq(v, [5, 4, 3, 2, 1])
+//! ```
+//!
+//! ## Sort by Key
+//!
+//! ```tml
+//! let mut v = [-5, 4, 1, -3, 2]
+//! // Sort by absolute value
+//! v.as_mut_slice().sort_by_key(do(k) k.abs())
+//! assert_eq(v, [1, 2, -3, 4, -5])
+//! ```
+
+use core::slice::{MutSlice}
+use core::cmp::{Ordering, Ord}
+
+// ============================================================================
+// Sort Behaviors
+// ============================================================================
+
+/// Behavior for sortable slices using natural ordering.
+pub behavior SliceSort[T: Ord] {
+    /// Sorts the slice in ascending order.
+    func sort(mut this)
+}
+
+/// Behavior for sortable slices using custom comparators.
+pub behavior SliceSortBy[T] {
+    /// Sorts the slice with a comparator function.
+    func sort_by(mut this, compare: func(ref T, ref T) -> Ordering)
+
+    /// Sorts the slice with a key extraction function.
+    func sort_by_key[K: Ord](mut this, key_fn: func(ref T) -> K)
+}
+
+// ============================================================================
+// Sorting with Natural Order
+// ============================================================================
+
+impl[T: Ord] MutSlice[T] {
+    /// Sorts the slice in ascending order.
+    ///
+    /// This sort is unstable (i.e., may reorder equal elements), in-place
+    /// (i.e., does not allocate), and *O*(*n* \* log(*n*)) worst-case.
+    ///
+    /// # Current Implementation
+    ///
+    /// The current implementation uses quicksort with the last element as
+    /// pivot. This may degrade to O(n²) for certain inputs (already sorted,
+    /// reverse sorted).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = [5, 4, 1, 3, 2]
+    /// v.as_mut_slice().sort()
+    /// assert_eq(v, [1, 2, 3, 4, 5])
+    /// ```
+    ///
+    /// # Stability
+    ///
+    /// This sort is **unstable**: equal elements may be reordered.
+    pub func sort(mut this) {
+        if this.len <= 1 {
+            return
+        }
+        this.quicksort(0, this.len - 1)
+    }
+
+    /// Internal quicksort implementation.
+    ///
+    /// Uses the classic Lomuto partition scheme with the last element as
+    /// pivot.
+    func quicksort(mut this, low: I64, high: I64) {
+        if low < high {
+            let pivot: I64 = this.partition(low, high)
+            if pivot > 0 {
+                this.quicksort(low, pivot - 1)
+            }
+            this.quicksort(pivot + 1, high)
+        }
+    }
+
+    /// Lomuto partition scheme.
+    ///
+    /// Partitions the slice around the pivot (last element) such that:
+    /// - All elements less than or equal to pivot are before it
+    /// - All elements greater than pivot are after it
+    ///
+    /// Returns the final position of the pivot.
+    func partition(mut this, low: I64, high: I64) -> I64 {
+        let pivot_ref: ref T = this.get(high).unwrap()
+        let mut i: I64 = low - 1
+        let mut j: I64 = low
+        loop {
+            if j >= high {
+                break
+            }
+            let current_ref: ref T = this.get(j).unwrap()
+            if current_ref.le(pivot_ref) {
+                i = i + 1
+                this.swap(i, j)
+            }
+            j = j + 1
+        }
+        this.swap(i + 1, high)
+        return i + 1
+    }
+}
+
+// ============================================================================
+// Sorting with Custom Comparator
+// ============================================================================
+
+impl[T] MutSlice[T] {
+    /// Sorts the slice with a comparator function.
+    ///
+    /// This sort is unstable (i.e., may reorder equal elements), in-place
+    /// (i.e., does not allocate), and *O*(*n* \* log(*n*)) worst-case.
+    ///
+    /// The comparator function must define a total ordering for the elements
+    /// in the slice. If the ordering is not total, the resulting order is
+    /// unspecified.
+    ///
+    /// # Examples
+    ///
+    /// Sort in ascending order:
+    ///
+    /// ```tml
+    /// let mut v = [5, 4, 1, 3, 2]
+    /// v.as_mut_slice().sort_by(do(a, b) a.cmp(b))
+    /// assert_eq(v, [1, 2, 3, 4, 5])
+    /// ```
+    ///
+    /// Sort in descending order:
+    ///
+    /// ```tml
+    /// let mut v = [5, 4, 1, 3, 2]
+    /// v.as_mut_slice().sort_by(do(a, b) b.cmp(a))
+    /// assert_eq(v, [5, 4, 3, 2, 1])
+    /// ```
+    ///
+    /// Sort strings by length:
+    ///
+    /// ```tml
+    /// let mut words = ["apple", "pie", "banana", "fig"]
+    /// words.as_mut_slice().sort_by(do(a, b) a.len().cmp(ref b.len()))
+    /// assert_eq(words, ["pie", "fig", "apple", "banana"])
+    /// ```
+    pub func sort_by(mut this, compare: func(ref T, ref T) -> Ordering) {
+        if this.len <= 1 {
+            return
+        }
+        this.quicksort_by(0, this.len - 1, compare)
+    }
+
+    /// Quicksort with custom comparison.
+    func quicksort_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) {
+        if low < high {
+            let pivot: I64 = this.partition_by(low, high, compare)
+            if pivot > 0 {
+                this.quicksort_by(low, pivot - 1, compare)
+            }
+            this.quicksort_by(pivot + 1, high, compare)
+        }
+    }
+
+    /// Partition with custom comparison.
+    func partition_by(mut this, low: I64, high: I64, compare: func(ref T, ref T) -> Ordering) -> I64 {
+        let pivot_ref: ref T = this.get(high).unwrap()
+        let mut i: I64 = low - 1
+        let mut j: I64 = low
+        loop {
+            if j >= high {
+                break
+            }
+            let current_ref: ref T = this.get(j).unwrap()
+            when compare(current_ref, pivot_ref) {
+                Less => {
+                    i = i + 1
+                    this.swap(i, j)
+                },
+                Equal => {
+                    i = i + 1
+                    this.swap(i, j)
+                },
+                Greater => {}
+            }
+            j = j + 1
+        }
+        this.swap(i + 1, high)
+        return i + 1
+    }
+
+    /// Sorts the slice with a key extraction function.
+    ///
+    /// This sort is unstable (i.e., may reorder equal elements), in-place
+    /// (i.e., does not allocate), and *O*(*m* \* *n* \* log(*n*)) worst-case,
+    /// where the key function is *O*(*m*).
+    ///
+    /// # Examples
+    ///
+    /// Sort by absolute value:
+    ///
+    /// ```tml
+    /// let mut v = [-5, 4, 1, -3, 2]
+    /// v.as_mut_slice().sort_by_key(do(k) k.abs())
+    /// assert_eq(v, [1, 2, -3, 4, -5])
+    /// ```
+    ///
+    /// Sort structs by a field:
+    ///
+    /// ```tml
+    /// let mut people = [
+    ///     Person { name: "Alice", age: 30 },
+    ///     Person { name: "Bob", age: 25 },
+    ///     Person { name: "Charlie", age: 35 }
+    /// ]
+    /// people.as_mut_slice().sort_by_key(do(p) p.age)
+    /// // Now sorted by age: Bob (25), Alice (30), Charlie (35)
+    /// ```
+    ///
+    /// # Performance Note
+    ///
+    /// The key function is called multiple times per element during sorting.
+    /// If the key computation is expensive, consider using `sort_by` with
+    /// cached keys or a Schwartzian transform.
+    pub func sort_by_key[K: Ord](mut this, key_fn: func(ref T) -> K) {
+        this.sort_by(do(a: ref T, b: ref T) key_fn(a).cmp(ref key_fn(b)))
+    }
+}
+
+// ============================================================================
+// Additional Sorting Utilities
+// ============================================================================
+
+impl[T: Ord] MutSlice[T] {
+    /// Checks if the slice is sorted in ascending order.
+    ///
+    /// Returns `true` for empty slices and single-element slices.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let sorted = [1, 2, 3, 4, 5]
+    /// let unsorted = [1, 3, 2, 4, 5]
+    ///
+    /// assert(sorted.as_mut_slice().is_sorted())
+    /// assert(unsorted.as_mut_slice().is_sorted() == false)
+    /// ```
+    pub func is_sorted(this) -> Bool {
+        if this.len <= 1 {
+            return true
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len - 1 {
+                break
+            }
+            let a: ref T = this.get(i).unwrap()
+            let b: ref T = this.get(i + 1).unwrap()
+            if a.gt(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+impl[T] MutSlice[T] {
+    /// Checks if the slice is sorted according to a comparator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let desc = [5, 4, 3, 2, 1]
+    /// assert(desc.as_mut_slice().is_sorted_by(do(a, b) b.cmp(a)))
+    /// ```
+    pub func is_sorted_by(this, compare: func(ref T, ref T) -> Ordering) -> Bool {
+        if this.len <= 1 {
+            return true
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= this.len - 1 {
+                break
+            }
+            let a: ref T = this.get(i).unwrap()
+            let b: ref T = this.get(i + 1).unwrap()
+            when compare(a, b) {
+                Greater => return false,
+                _ => {}
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
