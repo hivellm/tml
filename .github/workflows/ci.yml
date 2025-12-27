@@ -70,10 +70,12 @@ jobs:
         continue-on-error: true
         run: |
           # Run on a subset of files to avoid timeout
+          # Include paths match CMakeLists.txt configuration
+          INCLUDE_ARGS="-I packages/compiler/include -I packages/compiler/src"
           FILES=$(find packages/compiler/src -name "*.cpp" | head -10)
           for file in $FILES; do
             echo "Checking: $file"
-            clang-tidy -p build "$file" -- -std=c++17 2>/dev/null || true
+            clang-tidy "$file" -- -std=c++17 $INCLUDE_ARGS 2>/dev/null || true
           done
 
   # Build on multiple platforms
