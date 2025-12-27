@@ -1,0 +1,312 @@
+// Tests for core::cell module
+
+use core::cell::{Cell, RefCell, Ref, RefMut, BorrowState}
+
+// ============================================================================
+// Cell[T] Tests
+// ============================================================================
+
+@test
+func test_cell_new() {
+    let cell: Cell[I32] = Cell::new(42)
+    assert_eq(cell.get(), 42)
+}
+
+@test
+func test_cell_set() {
+    let mut cell: Cell[I32] = Cell::new(10)
+    cell.set(20)
+    assert_eq(cell.get(), 20)
+}
+
+@test
+func test_cell_replace() {
+    let mut cell: Cell[I32] = Cell::new(100)
+    let old: I32 = cell.replace(200)
+    assert_eq(old, 100)
+    assert_eq(cell.get(), 200)
+}
+
+@test
+func test_cell_swap() {
+    let mut cell1: Cell[I32] = Cell::new(1)
+    let mut cell2: Cell[I32] = Cell::new(2)
+    cell1.swap(mut ref cell2)
+    assert_eq(cell1.get(), 2)
+    assert_eq(cell2.get(), 1)
+}
+
+@test
+func test_cell_update() {
+    let mut cell: Cell[I32] = Cell::new(10)
+    let old: I32 = cell.update(do(x: I32) x * 2)
+    assert_eq(old, 10)
+    assert_eq(cell.get(), 20)
+}
+
+@test
+func test_cell_take() {
+    let mut cell: Cell[I32] = Cell::new(42)
+    let taken: I32 = cell.take()
+    assert_eq(taken, 42)
+    assert_eq(cell.get(), 0)  // Default for I32
+}
+
+@test
+func test_cell_bool() {
+    let mut cell: Cell[Bool] = Cell::new(true)
+    assert_eq(cell.get(), true)
+    cell.set(false)
+    assert_eq(cell.get(), false)
+}
+
+// ============================================================================
+// RefCell[T] Tests - Basic Operations
+// ============================================================================
+
+@test
+func test_refcell_new() {
+    let cell: RefCell[I32] = RefCell::new(42)
+    let r: Ref[I32] = cell.borrow()
+    assert_eq(*r, 42)
+}
+
+@test
+func test_refcell_borrow() {
+    let mut cell: RefCell[I32] = RefCell::new(100)
+    {
+        let r: Ref[I32] = cell.borrow()
+        assert_eq(*r, 100)
+    }
+}
+
+@test
+func test_refcell_borrow_mut() {
+    let mut cell: RefCell[I32] = RefCell::new(50)
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        *r = 75
+    }
+    let r: Ref[I32] = cell.borrow()
+    assert_eq(*r, 75)
+}
+
+@test
+func test_refcell_multiple_immutable_borrows() {
+    let mut cell: RefCell[I32] = RefCell::new(42)
+    {
+        let r1: Ref[I32] = cell.borrow()
+        let r2: Ref[I32] = cell.borrow()
+        assert_eq(*r1, 42)
+        assert_eq(*r2, 42)
+    }
+}
+
+@test
+func test_refcell_try_borrow_success() {
+    let mut cell: RefCell[I32] = RefCell::new(10)
+    let result: Maybe[Ref[I32]] = cell.try_borrow()
+    assert(result.is_just())
+    assert_eq(*result.unwrap(), 10)
+}
+
+@test
+func test_refcell_try_borrow_mut_success() {
+    let mut cell: RefCell[I32] = RefCell::new(20)
+    let result: Maybe[RefMut[I32]] = cell.try_borrow_mut()
+    assert(result.is_just())
+}
+
+@test
+func test_refcell_try_borrow_fails_when_mutably_borrowed() {
+    let mut cell: RefCell[I32] = RefCell::new(30)
+    {
+        let mut _r: RefMut[I32] = cell.borrow_mut()
+        let result: Maybe[Ref[I32]] = cell.try_borrow()
+        assert(result.is_nothing())
+    }
+}
+
+@test
+func test_refcell_try_borrow_mut_fails_when_borrowed() {
+    let mut cell: RefCell[I32] = RefCell::new(40)
+    {
+        let _r: Ref[I32] = cell.borrow()
+        let result: Maybe[RefMut[I32]] = cell.try_borrow_mut()
+        assert(result.is_nothing())
+    }
+}
+
+// ============================================================================
+// RefCell[T] Tests - Replace and Swap
+// ============================================================================
+
+@test
+func test_refcell_replace() {
+    let mut cell: RefCell[I32] = RefCell::new(100)
+    let old: I32 = cell.replace(200)
+    assert_eq(old, 100)
+    assert_eq(*cell.borrow(), 200)
+}
+
+@test
+func test_refcell_swap() {
+    let mut cell1: RefCell[I32] = RefCell::new(1)
+    let mut cell2: RefCell[I32] = RefCell::new(2)
+    cell1.swap(mut ref cell2)
+    assert_eq(*cell1.borrow(), 2)
+    assert_eq(*cell2.borrow(), 1)
+}
+
+@test
+func test_refcell_take() {
+    let mut cell: RefCell[I32] = RefCell::new(42)
+    let taken: I32 = cell.take()
+    assert_eq(taken, 42)
+    assert_eq(*cell.borrow(), 0)  // Default for I32
+}
+
+// ============================================================================
+// Ref[T] Tests
+// ============================================================================
+
+@test
+func test_ref_deref() {
+    let mut cell: RefCell[I32] = RefCell::new(42)
+    let r: Ref[I32] = cell.borrow()
+    let val: I32 = *r
+    assert_eq(val, 42)
+}
+
+@test
+func test_ref_map() {
+    type Point { x: I32, y: I32 }
+    let mut cell: RefCell[Point] = RefCell::new(Point { x: 10, y: 20 })
+    let r: Ref[Point] = cell.borrow()
+    let x_ref: Ref[I32] = r.map(do(p: ref Point) ref p.x)
+    assert_eq(*x_ref, 10)
+}
+
+// ============================================================================
+// RefMut[T] Tests
+// ============================================================================
+
+@test
+func test_refmut_deref() {
+    let mut cell: RefCell[I32] = RefCell::new(42)
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        assert_eq(*r, 42)
+    }
+}
+
+@test
+func test_refmut_deref_mut() {
+    let mut cell: RefCell[I32] = RefCell::new(42)
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        *r = 100
+    }
+    assert_eq(*cell.borrow(), 100)
+}
+
+@test
+func test_refmut_map() {
+    type Point { x: I32, y: I32 }
+    let mut cell: RefCell[Point] = RefCell::new(Point { x: 10, y: 20 })
+    {
+        let mut r: RefMut[Point] = cell.borrow_mut()
+        let mut x_ref: RefMut[I32] = r.map(do(p: mut ref Point) mut ref p.x)
+        *x_ref = 100
+    }
+    assert_eq((*cell.borrow()).x, 100)
+}
+
+// ============================================================================
+// BorrowState Tests
+// ============================================================================
+
+@test
+func test_borrow_state_unborrowed() {
+    let state: BorrowState = Unborrowed
+    when state {
+        Unborrowed => assert(true),
+        _ => assert(false)
+    }
+}
+
+@test
+func test_borrow_state_reading() {
+    let state: BorrowState = Reading(3)
+    when state {
+        Reading(n) => assert_eq(n, 3),
+        _ => assert(false)
+    }
+}
+
+@test
+func test_borrow_state_writing() {
+    let state: BorrowState = Writing
+    when state {
+        Writing => assert(true),
+        _ => assert(false)
+    }
+}
+
+// ============================================================================
+// Complex Usage Tests
+// ============================================================================
+
+@test
+func test_cell_in_struct() {
+    type Counter {
+        value: Cell[I32]
+    }
+
+    let counter: Counter = Counter { value: Cell::new(0) }
+    counter.value.set(counter.value.get() + 1)
+    counter.value.set(counter.value.get() + 1)
+    counter.value.set(counter.value.get() + 1)
+    assert_eq(counter.value.get(), 3)
+}
+
+@test
+func test_refcell_with_string() {
+    let mut cell: RefCell[Str] = RefCell::new("hello")
+    {
+        let mut r: RefMut[Str] = cell.borrow_mut()
+        *r = "world"
+    }
+    assert_eq(*cell.borrow(), "world")
+}
+
+@test
+func test_refcell_with_maybe() {
+    let mut cell: RefCell[Maybe[I32]] = RefCell::new(Just(42))
+    {
+        let mut r: RefMut[Maybe[I32]] = cell.borrow_mut()
+        *r = Nothing
+    }
+    assert((*cell.borrow()).is_nothing())
+}
+
+@test
+func test_nested_refcell_operations() {
+    let mut cell: RefCell[I32] = RefCell::new(0)
+
+    // Multiple sequential operations
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        *r = *r + 10
+    }
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        *r = *r * 2
+    }
+    {
+        let mut r: RefMut[I32] = cell.borrow_mut()
+        *r = *r - 5
+    }
+
+    assert_eq(*cell.borrow(), 15)  // (0 + 10) * 2 - 5 = 15
+}

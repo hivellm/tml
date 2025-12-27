@@ -1,0 +1,307 @@
+// Tests for core::borrow module
+
+use core::borrow::{Borrow, BorrowMut, ToOwned, Cow}
+
+// ============================================================================
+// Borrow Tests
+// ============================================================================
+
+@test
+func test_borrow_i32() {
+    let x: I32 = 42
+    let r: ref I32 = x.borrow()
+    assert_eq(*r, 42)
+}
+
+@test
+func test_borrow_str() {
+    let s: Str = "hello"
+    let r: ref Str = s.borrow()
+    assert_eq(*r, "hello")
+}
+
+@test
+func test_borrow_bool() {
+    let b: Bool = true
+    let r: ref Bool = b.borrow()
+    assert_eq(*r, true)
+}
+
+// ============================================================================
+// BorrowMut Tests
+// ============================================================================
+
+@test
+func test_borrow_mut_i32() {
+    let mut x: I32 = 42
+    let r: mut ref I32 = x.borrow_mut()
+    *r = 100
+    assert_eq(x, 100)
+}
+
+@test
+func test_borrow_mut_str() {
+    let mut s: Str = "hello"
+    let r: mut ref Str = s.borrow_mut()
+    *r = "world"
+    assert_eq(s, "world")
+}
+
+// ============================================================================
+// ToOwned Tests - Primitives
+// ============================================================================
+
+@test
+func test_to_owned_i8() {
+    let x: I8 = 42
+    let y: I8 = x.to_owned()
+    assert_eq(y, 42 as I8)
+}
+
+@test
+func test_to_owned_i16() {
+    let x: I16 = 1000
+    let y: I16 = x.to_owned()
+    assert_eq(y, 1000 as I16)
+}
+
+@test
+func test_to_owned_i32() {
+    let x: I32 = 123456
+    let y: I32 = x.to_owned()
+    assert_eq(y, 123456)
+}
+
+@test
+func test_to_owned_i64() {
+    let x: I64 = 9876543210
+    let y: I64 = x.to_owned()
+    assert_eq(y, 9876543210 as I64)
+}
+
+@test
+func test_to_owned_u8() {
+    let x: U8 = 255
+    let y: U8 = x.to_owned()
+    assert_eq(y, 255 as U8)
+}
+
+@test
+func test_to_owned_u16() {
+    let x: U16 = 65535
+    let y: U16 = x.to_owned()
+    assert_eq(y, 65535 as U16)
+}
+
+@test
+func test_to_owned_u32() {
+    let x: U32 = 4000000000
+    let y: U32 = x.to_owned()
+    assert_eq(y, 4000000000 as U32)
+}
+
+@test
+func test_to_owned_u64() {
+    let x: U64 = 18446744073709551615
+    let y: U64 = x.to_owned()
+    assert_eq(y, 18446744073709551615 as U64)
+}
+
+@test
+func test_to_owned_f32() {
+    let x: F32 = 3.14
+    let y: F32 = x.to_owned()
+    assert(y > 3.13 and y < 3.15)
+}
+
+@test
+func test_to_owned_f64() {
+    let x: F64 = 2.71828
+    let y: F64 = x.to_owned()
+    assert(y > 2.71 and y < 2.72)
+}
+
+@test
+func test_to_owned_bool() {
+    let x: Bool = true
+    let y: Bool = x.to_owned()
+    assert_eq(y, true)
+}
+
+@test
+func test_to_owned_str() {
+    let x: Str = "hello"
+    let y: Str = x.to_owned()
+    assert_eq(y, "hello")
+}
+
+// ============================================================================
+// ToOwned Tests - Maybe[T]
+// ============================================================================
+
+@test
+func test_to_owned_maybe_just() {
+    let m: Maybe[I32] = Just(42)
+    let n: Maybe[I32] = m.to_owned()
+    assert(n.is_just())
+    assert_eq(n.unwrap(), 42)
+}
+
+@test
+func test_to_owned_maybe_nothing() {
+    let m: Maybe[I32] = Nothing
+    let n: Maybe[I32] = m.to_owned()
+    assert(n.is_nothing())
+}
+
+// ============================================================================
+// ToOwned Tests - Outcome[T, E]
+// ============================================================================
+
+@test
+func test_to_owned_outcome_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let p: Outcome[I32, Str] = o.to_owned()
+    assert(p.is_ok())
+    assert_eq(p.unwrap(), 42)
+}
+
+@test
+func test_to_owned_outcome_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let p: Outcome[I32, Str] = o.to_owned()
+    assert(p.is_err())
+    assert_eq(p.unwrap_err(), "error")
+}
+
+// ============================================================================
+// Cow[T] Tests - Borrowed
+// ============================================================================
+
+@test
+func test_cow_borrowed_is_borrowed() {
+    let s: Str = "hello"
+    let cow: Cow[Str] = Borrowed(ref s)
+    assert(cow.is_borrowed())
+    assert(cow.is_owned() == false)
+}
+
+@test
+func test_cow_borrowed_into_owned() {
+    let s: Str = "hello"
+    let cow: Cow[Str] = Borrowed(ref s)
+    let owned: Str = cow.into_owned()
+    assert_eq(owned, "hello")
+}
+
+// ============================================================================
+// Cow[T] Tests - Owned
+// ============================================================================
+
+@test
+func test_cow_owned_is_owned() {
+    let cow: Cow[Str] = Owned("hello")
+    assert(cow.is_owned())
+    assert(cow.is_borrowed() == false)
+}
+
+@test
+func test_cow_owned_into_owned() {
+    let cow: Cow[Str] = Owned("hello")
+    let owned: Str = cow.into_owned()
+    assert_eq(owned, "hello")
+}
+
+// ============================================================================
+// Cow[T] Tests - With I32
+// ============================================================================
+
+@test
+func test_cow_i32_borrowed() {
+    let x: I32 = 42
+    let cow: Cow[I32] = Borrowed(ref x)
+    assert(cow.is_borrowed())
+    assert_eq(cow.into_owned(), 42)
+}
+
+@test
+func test_cow_i32_owned() {
+    let cow: Cow[I32] = Owned(42)
+    assert(cow.is_owned())
+    assert_eq(cow.into_owned(), 42)
+}
+
+// ============================================================================
+// Cow[T] Tests - Borrow behavior
+// ============================================================================
+
+@test
+func test_cow_borrow_borrowed() {
+    let s: Str = "hello"
+    let cow: Cow[Str] = Borrowed(ref s)
+    let r: ref Str = cow.borrow()
+    assert_eq(*r, "hello")
+}
+
+@test
+func test_cow_borrow_owned() {
+    let cow: Cow[Str] = Owned("world")
+    let r: ref Str = cow.borrow()
+    assert_eq(*r, "world")
+}
+
+// ============================================================================
+// Complex Borrow Scenarios
+// ============================================================================
+
+func accepts_borrow[T: Borrow[I32]](value: T) -> I32 {
+    return *value.borrow()
+}
+
+@test
+func test_function_accepts_borrow() {
+    let x: I32 = 42
+    let result: I32 = accepts_borrow(x)
+    assert_eq(result, 42)
+}
+
+func modifies_borrow_mut[T: BorrowMut[I32]](mut value: T) {
+    let r: mut ref I32 = value.borrow_mut()
+    *r = *r * 2
+}
+
+@test
+func test_function_modifies_borrow_mut() {
+    let mut x: I32 = 21
+    modifies_borrow_mut(mut x)
+    assert_eq(x, 42)
+}
+
+// ============================================================================
+// ToOwned with generic constraints
+// ============================================================================
+
+func clone_value[T: ToOwned](value: T) -> T::Owned {
+    return value.to_owned()
+}
+
+@test
+func test_generic_clone_i32() {
+    let x: I32 = 100
+    let y: I32 = clone_value(x)
+    assert_eq(y, 100)
+}
+
+@test
+func test_generic_clone_str() {
+    let s: Str = "test"
+    let t: Str = clone_value(s)
+    assert_eq(t, "test")
+}
+
+@test
+func test_generic_clone_maybe() {
+    let m: Maybe[I32] = Just(50)
+    let n: Maybe[I32] = clone_value(m)
+    assert_eq(n.unwrap(), 50)
+}

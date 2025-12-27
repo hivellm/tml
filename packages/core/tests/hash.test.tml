@@ -1,0 +1,207 @@
+// Tests for core::hash module
+
+use core::hash::{Hash, combine_hashes}
+
+// ============================================================================
+// Primitive Hash Tests
+// ============================================================================
+
+@test
+func test_i32_hash() {
+    let x: I32 = 42
+    let h: I64 = x.hash()
+    // Hash should be deterministic
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_i32_different_values_different_hashes() {
+    let x: I32 = 42
+    let y: I32 = 43
+    // Different values should (usually) have different hashes
+    assert(x.hash() != y.hash())
+}
+
+@test
+func test_i64_hash() {
+    let x: I64 = 1234567890
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_i8_hash() {
+    let x: I8 = 100
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_i16_hash() {
+    let x: I16 = 1000
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_u8_hash() {
+    let x: U8 = 255
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_u16_hash() {
+    let x: U16 = 65535
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_u32_hash() {
+    let x: U32 = 4000000000
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_u64_hash() {
+    let x: U64 = 18446744073709551615
+    let h: I64 = x.hash()
+    assert_eq(h, x.hash())
+}
+
+@test
+func test_bool_hash_true() {
+    let b: Bool = true
+    let h: I64 = b.hash()
+    assert_eq(h, 1)
+}
+
+@test
+func test_bool_hash_false() {
+    let b: Bool = false
+    let h: I64 = b.hash()
+    assert_eq(h, 0)
+}
+
+@test
+func test_str_hash() {
+    let s: Str = "hello"
+    let h: I64 = s.hash()
+    // Hash should be deterministic
+    assert_eq(h, "hello".hash())
+}
+
+@test
+func test_str_different_strings_different_hashes() {
+    let s1: Str = "hello"
+    let s2: Str = "world"
+    assert(s1.hash() != s2.hash())
+}
+
+@test
+func test_str_empty_hash() {
+    let s: Str = ""
+    let h: I64 = s.hash()
+    assert_eq(h, "".hash())
+}
+
+// ============================================================================
+// Maybe[T] Hash Tests
+// ============================================================================
+
+@test
+func test_maybe_just_hash() {
+    let m: Maybe[I32] = Just(42)
+    let h: I64 = m.hash()
+    // Should be deterministic
+    assert_eq(h, Just(42).hash())
+}
+
+@test
+func test_maybe_nothing_hash() {
+    let m: Maybe[I32] = Nothing
+    let h: I64 = m.hash()
+    assert_eq(h, 0)
+}
+
+@test
+func test_maybe_just_different_values() {
+    let m1: Maybe[I32] = Just(1)
+    let m2: Maybe[I32] = Just(2)
+    assert(m1.hash() != m2.hash())
+}
+
+@test
+func test_maybe_just_vs_nothing() {
+    let m1: Maybe[I32] = Just(0)
+    let m2: Maybe[I32] = Nothing
+    // Just(0) and Nothing should have different hashes
+    // Note: Just(0) has hash combine_hashes(1, 0), Nothing has hash 0
+    assert(m1.hash() != m2.hash())
+}
+
+// ============================================================================
+// combine_hashes Tests
+// ============================================================================
+
+@test
+func test_combine_hashes_basic() {
+    let h1: I64 = 10
+    let h2: I64 = 20
+    let combined: I64 = combine_hashes(h1, h2)
+    // Should be deterministic
+    assert_eq(combined, combine_hashes(10, 20))
+}
+
+@test
+func test_combine_hashes_order_matters() {
+    let h1: I64 = 10
+    let h2: I64 = 20
+    // combine_hashes(10, 20) != combine_hashes(20, 10)
+    assert(combine_hashes(h1, h2) != combine_hashes(h2, h1))
+}
+
+@test
+func test_combine_hashes_with_zero() {
+    let h1: I64 = 42
+    let h2: I64 = 0
+    let combined: I64 = combine_hashes(h1, h2)
+    // h1 * 31 + 0 = h1 * 31
+    assert_eq(combined, h1 * 31)
+}
+
+@test
+func test_combine_hashes_chained() {
+    let h1: I64 = 1
+    let h2: I64 = 2
+    let h3: I64 = 3
+    let combined: I64 = combine_hashes(combine_hashes(h1, h2), h3)
+    assert_eq(combined, combine_hashes(combine_hashes(1, 2), 3))
+}
+
+// ============================================================================
+// Hash Equality Consistency Tests
+// ============================================================================
+
+@test
+func test_equal_values_equal_hashes_i32() {
+    let x: I32 = 100
+    let y: I32 = 100
+    assert_eq(x.hash(), y.hash())
+}
+
+@test
+func test_equal_values_equal_hashes_str() {
+    let s1: Str = "test"
+    let s2: Str = "test"
+    assert_eq(s1.hash(), s2.hash())
+}
+
+@test
+func test_equal_maybe_equal_hashes() {
+    let m1: Maybe[I32] = Just(42)
+    let m2: Maybe[I32] = Just(42)
+    assert_eq(m1.hash(), m2.hash())
+}

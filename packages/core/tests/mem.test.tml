@@ -1,0 +1,324 @@
+// Tests for core::mem module
+
+use core::mem::{size_of, align_of, size_of_val, align_of_val, swap, replace, take, drop, ManuallyDrop, MaybeUninit}
+
+// ============================================================================
+// size_of Tests
+// ============================================================================
+
+@test
+func test_size_of_i8() {
+    let size: I64 = size_of[I8]()
+    assert_eq(size, 1)
+}
+
+@test
+func test_size_of_i16() {
+    let size: I64 = size_of[I16]()
+    assert_eq(size, 2)
+}
+
+@test
+func test_size_of_i32() {
+    let size: I64 = size_of[I32]()
+    assert_eq(size, 4)
+}
+
+@test
+func test_size_of_i64() {
+    let size: I64 = size_of[I64]()
+    assert_eq(size, 8)
+}
+
+@test
+func test_size_of_u8() {
+    let size: I64 = size_of[U8]()
+    assert_eq(size, 1)
+}
+
+@test
+func test_size_of_u16() {
+    let size: I64 = size_of[U16]()
+    assert_eq(size, 2)
+}
+
+@test
+func test_size_of_u32() {
+    let size: I64 = size_of[U32]()
+    assert_eq(size, 4)
+}
+
+@test
+func test_size_of_u64() {
+    let size: I64 = size_of[U64]()
+    assert_eq(size, 8)
+}
+
+@test
+func test_size_of_f32() {
+    let size: I64 = size_of[F32]()
+    assert_eq(size, 4)
+}
+
+@test
+func test_size_of_f64() {
+    let size: I64 = size_of[F64]()
+    assert_eq(size, 8)
+}
+
+@test
+func test_size_of_bool() {
+    let size: I64 = size_of[Bool]()
+    assert_eq(size, 1)
+}
+
+// ============================================================================
+// align_of Tests
+// ============================================================================
+
+@test
+func test_align_of_i8() {
+    let align: I64 = align_of[I8]()
+    assert_eq(align, 1)
+}
+
+@test
+func test_align_of_i16() {
+    let align: I64 = align_of[I16]()
+    assert_eq(align, 2)
+}
+
+@test
+func test_align_of_i32() {
+    let align: I64 = align_of[I32]()
+    assert_eq(align, 4)
+}
+
+@test
+func test_align_of_i64() {
+    let align: I64 = align_of[I64]()
+    assert_eq(align, 8)
+}
+
+// ============================================================================
+// size_of_val / align_of_val Tests
+// ============================================================================
+
+@test
+func test_size_of_val_i32() {
+    let x: I32 = 42
+    let size: I64 = size_of_val(ref x)
+    assert_eq(size, 4)
+}
+
+@test
+func test_align_of_val_i64() {
+    let x: I64 = 100
+    let align: I64 = align_of_val(ref x)
+    assert_eq(align, 8)
+}
+
+// ============================================================================
+// swap Tests
+// ============================================================================
+
+@test
+func test_swap_i32() {
+    let mut a: I32 = 10
+    let mut b: I32 = 20
+    swap(mut ref a, mut ref b)
+    assert_eq(a, 20)
+    assert_eq(b, 10)
+}
+
+@test
+func test_swap_str() {
+    let mut a: Str = "hello"
+    let mut b: Str = "world"
+    swap(mut ref a, mut ref b)
+    assert_eq(a, "world")
+    assert_eq(b, "hello")
+}
+
+@test
+func test_swap_same_value() {
+    let mut a: I32 = 42
+    let mut b: I32 = 42
+    swap(mut ref a, mut ref b)
+    assert_eq(a, 42)
+    assert_eq(b, 42)
+}
+
+@test
+func test_swap_bool() {
+    let mut a: Bool = true
+    let mut b: Bool = false
+    swap(mut ref a, mut ref b)
+    assert_eq(a, false)
+    assert_eq(b, true)
+}
+
+// ============================================================================
+// replace Tests
+// ============================================================================
+
+@test
+func test_replace_i32() {
+    let mut x: I32 = 10
+    let old: I32 = replace(mut ref x, 20)
+    assert_eq(old, 10)
+    assert_eq(x, 20)
+}
+
+@test
+func test_replace_str() {
+    let mut s: Str = "old"
+    let old: Str = replace(mut ref s, "new")
+    assert_eq(old, "old")
+    assert_eq(s, "new")
+}
+
+@test
+func test_replace_bool() {
+    let mut b: Bool = false
+    let old: Bool = replace(mut ref b, true)
+    assert_eq(old, false)
+    assert_eq(b, true)
+}
+
+@test
+func test_replace_maybe() {
+    let mut m: Maybe[I32] = Just(10)
+    let old: Maybe[I32] = replace(mut ref m, Nothing)
+    assert(old.is_just())
+    assert_eq(old.unwrap(), 10)
+    assert(m.is_nothing())
+}
+
+// ============================================================================
+// take Tests
+// ============================================================================
+
+@test
+func test_take_i32() {
+    let mut x: I32 = 42
+    let taken: I32 = take(mut ref x)
+    assert_eq(taken, 42)
+    assert_eq(x, 0)  // Default for I32
+}
+
+@test
+func test_take_bool() {
+    let mut b: Bool = true
+    let taken: Bool = take(mut ref b)
+    assert_eq(taken, true)
+    assert_eq(b, false)  // Default for Bool
+}
+
+@test
+func test_take_str() {
+    let mut s: Str = "hello"
+    let taken: Str = take(mut ref s)
+    assert_eq(taken, "hello")
+    assert_eq(s, "")  // Default for Str
+}
+
+@test
+func test_take_maybe() {
+    let mut m: Maybe[I32] = Just(100)
+    let taken: Maybe[I32] = take(mut ref m)
+    assert(taken.is_just())
+    assert_eq(taken.unwrap(), 100)
+    assert(m.is_nothing())  // Default for Maybe[T]
+}
+
+// ============================================================================
+// ManuallyDrop Tests
+// ============================================================================
+
+@test
+func test_manually_drop_new() {
+    let md: ManuallyDrop[I32] = ManuallyDrop::new(42)
+    let val: I32 = md.into_inner()
+    assert_eq(val, 42)
+}
+
+@test
+func test_manually_drop_get_ref() {
+    let md: ManuallyDrop[I32] = ManuallyDrop::new(100)
+    let r: ref I32 = md.get_ref()
+    assert_eq(*r, 100)
+}
+
+@test
+func test_manually_drop_get_mut() {
+    let mut md: ManuallyDrop[I32] = ManuallyDrop::new(50)
+    let r: mut ref I32 = md.get_mut()
+    *r = 75
+    assert_eq(md.into_inner(), 75)
+}
+
+@test
+func test_manually_drop_str() {
+    let md: ManuallyDrop[Str] = ManuallyDrop::new("test")
+    assert_eq(*md.get_ref(), "test")
+    assert_eq(md.into_inner(), "test")
+}
+
+// ============================================================================
+// MaybeUninit Tests
+// ============================================================================
+
+@test
+func test_maybe_uninit_new() {
+    let mu: MaybeUninit[I32] = MaybeUninit::new(42)
+    let val: I32 = mu.assume_init()
+    assert_eq(val, 42)
+}
+
+@test
+func test_maybe_uninit_write_and_assume_init() {
+    let mut mu: MaybeUninit[I32] = MaybeUninit::uninit()
+    mu.write(123)
+    let val: I32 = mu.assume_init()
+    assert_eq(val, 123)
+}
+
+@test
+func test_maybe_uninit_assume_init_ref() {
+    let mu: MaybeUninit[I32] = MaybeUninit::new(77)
+    let r: ref I32 = mu.assume_init_ref()
+    assert_eq(*r, 77)
+}
+
+@test
+func test_maybe_uninit_str() {
+    let mu: MaybeUninit[Str] = MaybeUninit::new("hello")
+    assert_eq(mu.assume_init(), "hello")
+}
+
+// ============================================================================
+// drop Tests
+// ============================================================================
+
+@test
+func test_drop_i32() {
+    let x: I32 = 42
+    drop(x)
+    // Value is now dropped, test passes if no panic
+    assert(true)
+}
+
+@test
+func test_drop_str() {
+    let s: Str = "to be dropped"
+    drop(s)
+    assert(true)
+}
+
+@test
+func test_drop_maybe() {
+    let m: Maybe[I32] = Just(10)
+    drop(m)
+    assert(true)
+}

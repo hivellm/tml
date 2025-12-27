@@ -1,0 +1,241 @@
+// Tests for core::marker module
+
+use core::marker::{Send, Sync, Sized, Unpin}
+
+// ============================================================================
+// Send Marker Tests
+// ============================================================================
+
+// These tests verify that marker behaviors are implemented for primitive types.
+// Marker behaviors have no methods, so we just verify the implementations exist
+// by using them in where clauses.
+
+func requires_send[T: Send](value: T) -> T {
+    return value
+}
+
+@test
+func test_i8_is_send() {
+    let x: I8 = 42
+    let y: I8 = requires_send(x)
+    assert_eq(y, 42 as I8)
+}
+
+@test
+func test_i16_is_send() {
+    let x: I16 = 1000
+    let y: I16 = requires_send(x)
+    assert_eq(y, 1000 as I16)
+}
+
+@test
+func test_i32_is_send() {
+    let x: I32 = 123456
+    let y: I32 = requires_send(x)
+    assert_eq(y, 123456)
+}
+
+@test
+func test_i64_is_send() {
+    let x: I64 = 9876543210
+    let y: I64 = requires_send(x)
+    assert_eq(y, 9876543210 as I64)
+}
+
+@test
+func test_bool_is_send() {
+    let b: Bool = true
+    let c: Bool = requires_send(b)
+    assert_eq(c, true)
+}
+
+@test
+func test_str_is_send() {
+    let s: Str = "hello"
+    let t: Str = requires_send(s)
+    assert_eq(t, "hello")
+}
+
+// ============================================================================
+// Sync Marker Tests
+// ============================================================================
+
+func requires_sync[T: Sync](value: T) -> T {
+    return value
+}
+
+@test
+func test_i32_is_sync() {
+    let x: I32 = 42
+    let y: I32 = requires_sync(x)
+    assert_eq(y, 42)
+}
+
+@test
+func test_i64_is_sync() {
+    let x: I64 = 100
+    let y: I64 = requires_sync(x)
+    assert_eq(y, 100 as I64)
+}
+
+@test
+func test_bool_is_sync() {
+    let b: Bool = false
+    let c: Bool = requires_sync(b)
+    assert_eq(c, false)
+}
+
+@test
+func test_str_is_sync() {
+    let s: Str = "world"
+    let t: Str = requires_sync(s)
+    assert_eq(t, "world")
+}
+
+// ============================================================================
+// Sized Marker Tests
+// ============================================================================
+
+func requires_sized[T: Sized](value: T) -> T {
+    return value
+}
+
+@test
+func test_i32_is_sized() {
+    let x: I32 = 99
+    let y: I32 = requires_sized(x)
+    assert_eq(y, 99)
+}
+
+@test
+func test_f64_is_sized() {
+    let x: F64 = 3.14159
+    let y: F64 = requires_sized(x)
+    assert(y > 3.14 and y < 3.15)
+}
+
+@test
+func test_bool_is_sized() {
+    let b: Bool = true
+    let c: Bool = requires_sized(b)
+    assert_eq(c, true)
+}
+
+// ============================================================================
+// Unpin Marker Tests
+// ============================================================================
+
+func requires_unpin[T: Unpin](value: T) -> T {
+    return value
+}
+
+@test
+func test_i32_is_unpin() {
+    let x: I32 = 77
+    let y: I32 = requires_unpin(x)
+    assert_eq(y, 77)
+}
+
+@test
+func test_str_is_unpin() {
+    let s: Str = "unpin"
+    let t: Str = requires_unpin(s)
+    assert_eq(t, "unpin")
+}
+
+// ============================================================================
+// Maybe[T] Marker Tests
+// ============================================================================
+
+@test
+func test_maybe_i32_is_send() {
+    let m: Maybe[I32] = Just(42)
+    let n: Maybe[I32] = requires_send(m)
+    assert(n.is_just())
+}
+
+@test
+func test_maybe_i32_is_sync() {
+    let m: Maybe[I32] = Nothing
+    let n: Maybe[I32] = requires_sync(m)
+    assert(n.is_nothing())
+}
+
+@test
+func test_maybe_i32_is_sized() {
+    let m: Maybe[I32] = Just(10)
+    let n: Maybe[I32] = requires_sized(m)
+    assert_eq(n.unwrap(), 10)
+}
+
+@test
+func test_maybe_i32_is_unpin() {
+    let m: Maybe[I32] = Just(20)
+    let n: Maybe[I32] = requires_unpin(m)
+    assert_eq(n.unwrap(), 20)
+}
+
+// ============================================================================
+// Outcome[T, E] Marker Tests
+// ============================================================================
+
+@test
+func test_outcome_is_send() {
+    let o: Outcome[I32, Str] = Ok(100)
+    let p: Outcome[I32, Str] = requires_send(o)
+    assert(p.is_ok())
+}
+
+@test
+func test_outcome_is_sync() {
+    let o: Outcome[I32, Str] = Err("error")
+    let p: Outcome[I32, Str] = requires_sync(o)
+    assert(p.is_err())
+}
+
+@test
+func test_outcome_is_sized() {
+    let o: Outcome[I32, Str] = Ok(50)
+    let p: Outcome[I32, Str] = requires_sized(o)
+    assert_eq(p.unwrap(), 50)
+}
+
+@test
+func test_outcome_is_unpin() {
+    let o: Outcome[I32, Str] = Ok(75)
+    let p: Outcome[I32, Str] = requires_unpin(o)
+    assert_eq(p.unwrap(), 75)
+}
+
+// ============================================================================
+// Combined Marker Tests
+// ============================================================================
+
+func requires_send_sync[T: Send + Sync](value: T) -> T {
+    return value
+}
+
+@test
+func test_i32_is_send_and_sync() {
+    let x: I32 = 123
+    let y: I32 = requires_send_sync(x)
+    assert_eq(y, 123)
+}
+
+func requires_all_markers[T: Send + Sync + Sized + Unpin](value: T) -> T {
+    return value
+}
+
+@test
+func test_i32_has_all_markers() {
+    let x: I32 = 456
+    let y: I32 = requires_all_markers(x)
+    assert_eq(y, 456)
+}
+
+@test
+func test_bool_has_all_markers() {
+    let b: Bool = true
+    let c: Bool = requires_all_markers(b)
+    assert_eq(c, true)
+}

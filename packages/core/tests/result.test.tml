@@ -1,0 +1,464 @@
+// Tests for core::result module (Outcome[T, E] enhancements)
+
+use core::result::{OutcomeIter}
+
+// ============================================================================
+// Core Methods Tests
+// ============================================================================
+
+@test
+func test_is_ok_true() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.is_ok())
+}
+
+@test
+func test_is_ok_false() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.is_ok() == false)
+}
+
+@test
+func test_is_err_true() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.is_err())
+}
+
+@test
+func test_is_err_false() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.is_err() == false)
+}
+
+@test
+func test_is_ok_and_true() {
+    let o: Outcome[I32, Str] = Ok(10)
+    assert(o.is_ok_and(do(x: I32) x > 5))
+}
+
+@test
+func test_is_ok_and_false_predicate() {
+    let o: Outcome[I32, Str] = Ok(3)
+    assert(o.is_ok_and(do(x: I32) x > 5) == false)
+}
+
+@test
+func test_is_ok_and_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.is_ok_and(do(x: I32) x > 5) == false)
+}
+
+@test
+func test_is_err_and_true() {
+    let o: Outcome[I32, Str] = Err("fatal")
+    assert(o.is_err_and(do(e: Str) e == "fatal"))
+}
+
+@test
+func test_is_err_and_false_predicate() {
+    let o: Outcome[I32, Str] = Err("warning")
+    assert(o.is_err_and(do(e: Str) e == "fatal") == false)
+}
+
+@test
+func test_is_err_and_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.is_err_and(do(e: Str) e == "fatal") == false)
+}
+
+// ============================================================================
+// Extracting Values Tests
+// ============================================================================
+
+@test
+func test_unwrap_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert_eq(o.unwrap(), 42)
+}
+
+@test
+func test_expect_ok() {
+    let o: Outcome[I32, Str] = Ok(100)
+    assert_eq(o.expect("should be ok"), 100)
+}
+
+@test
+func test_unwrap_err_err() {
+    let o: Outcome[I32, Str] = Err("error message")
+    assert_eq(o.unwrap_err(), "error message")
+}
+
+@test
+func test_expect_err_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert_eq(o.expect_err("should be err"), "error")
+}
+
+@test
+func test_unwrap_or_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert_eq(o.unwrap_or(99), 42)
+}
+
+@test
+func test_unwrap_or_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert_eq(o.unwrap_or(99), 99)
+}
+
+@test
+func test_unwrap_or_else_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert_eq(o.unwrap_or_else(do(e: Str) 99), 42)
+}
+
+@test
+func test_unwrap_or_else_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert_eq(o.unwrap_or_else(do(e: Str) 99), 99)
+}
+
+@test
+func test_unwrap_or_default_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert_eq(o.unwrap_or_default(), 42)
+}
+
+@test
+func test_unwrap_or_default_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert_eq(o.unwrap_or_default(), 0)  // Default for I32
+}
+
+// ============================================================================
+// Transforming Values Tests
+// ============================================================================
+
+@test
+func test_map_ok() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: Outcome[I32, Str] = o.map(do(x: I32) x * 2)
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 20)
+}
+
+@test
+func test_map_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, Str] = o.map(do(x: I32) x * 2)
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "error")
+}
+
+@test
+func test_map_type_change() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let result: Outcome[Str, Str] = o.map(do(x: I32) x.to_string())
+    assert_eq(result.unwrap(), "42")
+}
+
+@test
+func test_map_err_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, I32] = o.map_err(do(e: Str) e.len() as I32)
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), 5)  // len("error") = 5
+}
+
+@test
+func test_map_err_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let result: Outcome[I32, I32] = o.map_err(do(e: Str) e.len() as I32)
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+}
+
+@test
+func test_map_or_ok() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: I32 = o.map_or(0, do(x: I32) x * 2)
+    assert_eq(result, 20)
+}
+
+@test
+func test_map_or_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: I32 = o.map_or(99, do(x: I32) x * 2)
+    assert_eq(result, 99)
+}
+
+@test
+func test_map_or_else_ok() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: I32 = o.map_or_else(do(e: Str) 0, do(x: I32) x * 2)
+    assert_eq(result, 20)
+}
+
+@test
+func test_map_or_else_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: I32 = o.map_or_else(do(e: Str) e.len() as I32, do(x: I32) x * 2)
+    assert_eq(result, 5)
+}
+
+// ============================================================================
+// Chaining Operations Tests
+// ============================================================================
+
+@test
+func test_and_then_ok_to_ok() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: Outcome[I32, Str] = o.and_then(do(x: I32) Ok(x * 2))
+    assert_eq(result.unwrap(), 20)
+}
+
+@test
+func test_and_then_ok_to_err() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: Outcome[I32, Str] = o.and_then(do(x: I32) Err("failed"))
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "failed")
+}
+
+@test
+func test_and_then_err() {
+    let o: Outcome[I32, Str] = Err("initial error")
+    let result: Outcome[I32, Str] = o.and_then(do(x: I32) Ok(x * 2))
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "initial error")
+}
+
+@test
+func test_or_else_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let result: Outcome[I32, I32] = o.or_else(do(e: Str) Err(e.len() as I32))
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+}
+
+@test
+func test_or_else_err_to_ok() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, Str] = o.or_else(do(e: Str) Ok(99))
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 99)
+}
+
+@test
+func test_or_else_err_to_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, Str] = o.or_else(do(e: Str) Err("new error"))
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "new error")
+}
+
+@test
+func test_or_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let result: Outcome[I32, Str] = o.or(Ok(99))
+    assert_eq(result.unwrap(), 42)
+}
+
+@test
+func test_or_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, Str] = o.or(Ok(99))
+    assert_eq(result.unwrap(), 99)
+}
+
+@test
+func test_and_ok_ok() {
+    let a: Outcome[I32, Str] = Ok(1)
+    let b: Outcome[Str, Str] = Ok("hello")
+    let result: Outcome[Str, Str] = a.and(b)
+    assert_eq(result.unwrap(), "hello")
+}
+
+@test
+func test_and_err_ok() {
+    let a: Outcome[I32, Str] = Err("error")
+    let b: Outcome[Str, Str] = Ok("hello")
+    let result: Outcome[Str, Str] = a.and(b)
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "error")
+}
+
+// ============================================================================
+// Converting to Maybe Tests
+// ============================================================================
+
+@test
+func test_ok_method_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let m: Maybe[I32] = o.ok()
+    assert(m.is_just())
+    assert_eq(m.unwrap(), 42)
+}
+
+@test
+func test_ok_method_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let m: Maybe[I32] = o.ok()
+    assert(m.is_nothing())
+}
+
+@test
+func test_err_method_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let m: Maybe[Str] = o.err()
+    assert(m.is_nothing())
+}
+
+@test
+func test_err_method_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let m: Maybe[Str] = o.err()
+    assert(m.is_just())
+    assert_eq(m.unwrap(), "error")
+}
+
+// ============================================================================
+// Flattening Tests
+// ============================================================================
+
+@test
+func test_flatten_ok_ok() {
+    let o: Outcome[Outcome[I32, Str], Str] = Ok(Ok(42))
+    let result: Outcome[I32, Str] = o.flatten()
+    assert_eq(result.unwrap(), 42)
+}
+
+@test
+func test_flatten_ok_err() {
+    let o: Outcome[Outcome[I32, Str], Str] = Ok(Err("inner error"))
+    let result: Outcome[I32, Str] = o.flatten()
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "inner error")
+}
+
+@test
+func test_flatten_err() {
+    let o: Outcome[Outcome[I32, Str], Str] = Err("outer error")
+    let result: Outcome[I32, Str] = o.flatten()
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "outer error")
+}
+
+// ============================================================================
+// Contains Methods Tests
+// ============================================================================
+
+@test
+func test_contains_ok_true() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.contains(ref 42))
+}
+
+@test
+func test_contains_ok_false() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.contains(ref 100) == false)
+}
+
+@test
+func test_contains_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.contains(ref 42) == false)
+}
+
+@test
+func test_contains_err_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.contains_err(ref "error") == false)
+}
+
+@test
+func test_contains_err_err_true() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.contains_err(ref "error"))
+}
+
+@test
+func test_contains_err_err_false() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.contains_err(ref "other") == false)
+}
+
+// ============================================================================
+// Iterator Tests
+// ============================================================================
+
+@test
+func test_iter_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    let mut iter: OutcomeIter[I32] = o.iter()
+    let first: Maybe[I32] = iter.next()
+    assert(first.is_just())
+    assert_eq(first.unwrap(), 42)
+    let second: Maybe[I32] = iter.next()
+    assert(second.is_nothing())
+}
+
+@test
+func test_iter_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    let mut iter: OutcomeIter[I32] = o.iter()
+    let first: Maybe[I32] = iter.next()
+    assert(first.is_nothing())
+}
+
+// ============================================================================
+// Chained Operations Tests
+// ============================================================================
+
+@test
+func test_chained_map_and_then() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: Outcome[I32, Str] = o
+        .map(do(x: I32) x * 2)
+        .and_then(do(x: I32) if x > 15 then Ok(x) else Err("too small"))
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 20)
+}
+
+@test
+func test_chained_map_and_then_fails() {
+    let o: Outcome[I32, Str] = Ok(5)
+    let result: Outcome[I32, Str] = o
+        .map(do(x: I32) x * 2)  // 10
+        .and_then(do(x: I32) if x > 15 then Ok(x) else Err("too small"))
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "too small")
+}
+
+@test
+func test_complex_chain_ok() {
+    let o: Outcome[I32, Str] = Ok(10)
+    let result: I32 = o
+        .map(do(x: I32) x * 2)       // Ok(20)
+        .and_then(do(x: I32) Ok(x + 5))  // Ok(25)
+        .map(do(x: I32) x - 10)      // Ok(15)
+        .unwrap_or(0)
+    assert_eq(result, 15)
+}
+
+@test
+func test_complex_chain_err() {
+    let o: Outcome[I32, Str] = Err("initial")
+    let result: I32 = o
+        .map(do(x: I32) x * 2)
+        .and_then(do(x: I32) Ok(x + 5))
+        .map(do(x: I32) x - 10)
+        .unwrap_or(99)
+    assert_eq(result, 99)
+}
+
+@test
+func test_or_else_chain() {
+    let o: Outcome[I32, Str] = Err("first")
+    let result: Outcome[I32, Str] = o
+        .or_else(do(e: Str) Err("second"))
+        .or_else(do(e: Str) Ok(42))
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), 42)
+}
