@@ -1,6 +1,9 @@
 #include "tml/lexer/lexer.hpp"
+
+#include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 
 namespace tml::lexer {
 
@@ -33,9 +36,7 @@ auto Lexer::lex_hex_number() -> Token {
 
     while (!is_at_end()) {
         char c = peek();
-        if ((c >= '0' && c <= '9') ||
-            (c >= 'a' && c <= 'f') ||
-            (c >= 'A' && c <= 'F') ||
+        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ||
             c == '_') {
             advance();
         } else {
@@ -217,9 +218,12 @@ auto Lexer::lex_decimal_number() -> Token {
 
     if (has_dot || has_exp) {
         // Float literal
-        double value = 0;
-        auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-        if (result.ec != std::errc{}) {
+        // Note: std::from_chars for floats is not supported on macOS libc++
+        // Use strtod instead for cross-platform compatibility
+        char* end_ptr = nullptr;
+        errno = 0;
+        double value = std::strtod(digits.c_str(), &end_ptr);
+        if (errno == ERANGE || end_ptr != digits.c_str() + digits.size()) {
             return make_error_token("Invalid floating-point number");
         }
 
@@ -239,6 +243,5 @@ auto Lexer::lex_decimal_number() -> Token {
         return token;
     }
 }
-
 
 } // namespace tml::lexer
