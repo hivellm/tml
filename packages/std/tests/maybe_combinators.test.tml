@@ -1,11 +1,6 @@
-// Tests for Maybe[T] combinators
-// Tests: map, and_then, filter, or_else
+// Tests for Maybe[T] combinators: map, and_then, filter, or_else
 use test
 use std::types
-
-// ============================================================================
-// map Tests
-// ============================================================================
 
 @test
 func test_map_just_doubles_value() -> I32 {
@@ -22,10 +17,6 @@ func test_map_nothing_stays_nothing() -> I32 {
     assert(is_nothing(y) == true, "map(Nothing, *2) should be Nothing")
     return 0
 }
-
-// ============================================================================
-// and_then Tests
-// ============================================================================
 
 @test
 func test_and_then_just_returns_just() -> I32 {
@@ -51,10 +42,6 @@ func test_and_then_nothing_stays_nothing() -> I32 {
     return 0
 }
 
-// ============================================================================
-// filter Tests
-// ============================================================================
-
 @test
 func test_filter_just_passes() -> I32 {
     let d: Maybe[I32] = Just(5)
@@ -78,10 +65,6 @@ func test_filter_nothing_stays_nothing() -> I32 {
     assert(is_nothing(e) == true, "filter(Nothing, f) should be Nothing")
     return 0
 }
-
-// ============================================================================
-// or_else Tests
-// ============================================================================
 
 @test
 func test_or_else_nothing_returns_fallback() -> I32 {
