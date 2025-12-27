@@ -158,13 +158,18 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 #ifdef _WIN32
     fs::path lib_file = test_dir / "test_ffi_lib.lib";
     fs::path exe_file = test_dir / "use_ffi_lib.exe";
-    std::string compile_cmd = "clang -I" + test_dir.string() + " \"" + c_test_file.string() +
-                              "\" \"" + lib_file.string() + "\" -o \"" + exe_file.string() +
-                              "\" 2>&1";
+    // Find clang - check common install paths with spaces
+    std::string clang_cmd = "clang";
+    if (fs::exists("C:/Program Files/LLVM/bin/clang.exe")) {
+        clang_cmd = "\"C:/Program Files/LLVM/bin/clang.exe\"";
+    }
+    std::string compile_cmd = clang_cmd + " -I\"" + test_dir.string() + "\" \"" +
+                              c_test_file.string() + "\" \"" + lib_file.string() + "\" -o \"" +
+                              exe_file.string() + "\" 2>&1";
 #else
     fs::path lib_file = test_dir / "libtest_ffi_lib.a";
     fs::path exe_file = test_dir / "use_ffi_lib";
-    std::string compile_cmd = "clang -I" + test_dir.string() + " \"" + c_test_file.string() +
+    std::string compile_cmd = "clang -I\"" + test_dir.string() + "\" \"" + c_test_file.string() +
                               "\" \"" + lib_file.string() + "\" -o \"" + exe_file.string() + "\"";
 #endif
 

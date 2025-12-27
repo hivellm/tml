@@ -19,6 +19,14 @@ namespace tml::cli {
 static std::mutex compilation_mutex;
 static std::map<std::string, bool> compilation_in_progress;
 
+// Helper to quote a command path only if it contains spaces
+static std::string quote_command(const std::string& cmd) {
+    if (cmd.find(' ') != std::string::npos) {
+        return "\"" + cmd + "\"";
+    }
+    return cmd;
+}
+
 #ifdef _WIN32
 MSVCInfo find_msvc() {
     MSVCInfo info;
@@ -162,7 +170,7 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
             std::cout << "Pre-compiling runtime: " << c_path << "\n";
         }
         std::string compile_cmd =
-            clang +
+            quote_command(clang) +
             " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
             to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) +
             "\"";
@@ -219,7 +227,7 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
                       << obj_path.filename().string() << "\n";
         }
         std::string compile_cmd =
-            clang +
+            quote_command(clang) +
             " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
             obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
