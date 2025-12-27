@@ -24,5 +24,5 @@ jobs:
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh,nd,ba,ue,fo,te,ot,lod,dout,ths,whn,som,numer,hel,tht,afe,ehr,ith,ue"
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors"

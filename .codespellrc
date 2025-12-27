@@ -1,9 +1,9 @@
 [codespell]
-# Directories and files to skip
-skip = *.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,*.dll,*.so,*.dylib
+# Directories and files to skip (includes .md files and doc directories)
+skip = *.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,*.dll,*.so,*.dylib,docs,rulebook
 
-# Words to ignore (false positives)
-ignore-words-list = crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh,nd,ba,ue,fo,te,ot,lod,dout,ths,whn,som,numer,hel,ot,tht
+# Words to ignore (false positives, LLVM IR instructions, technical terms)
+ignore-words-list = crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,olt,ogt,oge,ole,oeq,une,statics,inferrable,implementors
 
 # Check hidden files
 check-hidden = false

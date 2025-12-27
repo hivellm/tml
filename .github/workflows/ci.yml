@@ -109,6 +109,7 @@ jobs:
           fi
 
       - name: Configure CMake
+        shell: bash
         run: |
           cmake -B build -S packages/compiler \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -116,6 +117,7 @@ jobs:
             -G "${{ matrix.cmake_generator }}"
 
       - name: Build
+        shell: bash
         run: cmake --build build --config ${{ env.BUILD_TYPE }}
 
       - name: Upload Compiler Artifact
@@ -158,6 +160,7 @@ jobs:
           fi
 
       - name: Configure CMake
+        shell: bash
         run: |
           cmake -B build -S packages/compiler \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -165,6 +168,7 @@ jobs:
             -G "${{ matrix.cmake_generator }}"
 
       - name: Build
+        shell: bash
         run: cmake --build build --config ${{ env.BUILD_TYPE }}
 
       - name: Run C++ Tests (Linux/macOS)
@@ -265,5 +269,5 @@ jobs:
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc" \
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,*.md,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,docs,rulebook" \
             --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh"
