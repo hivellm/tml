@@ -74,6 +74,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @println(ptr)");
     emit_line("");
 
+
     // NOTE: Math functions moved to core::math module
     // Import with: use core::math
 
@@ -267,6 +268,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @str_to_lower(ptr)");
     emit_line("declare ptr @str_trim(ptr)");
     emit_line("declare i32 @str_char_at(ptr, i32)");
+    emit_line("declare ptr @i64_to_str(i64)");
+    emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
 
     // Time functions (matches runtime/time.c)

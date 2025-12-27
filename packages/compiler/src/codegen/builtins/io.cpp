@@ -44,6 +44,7 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
         // Single value print - auto-detect type
         const auto& arg_expr = *call.args[0];
         std::string arg_val = gen_expr(arg_expr);
+        std::string gen_type = last_expr_type_;  // Capture type from gen_expr
 
         // Try to infer type from expression
         auto arg_type = infer_print_type(arg_expr);
@@ -63,6 +64,11 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
 
         // For string constants (@.str.X), treat as string
         if (arg_val.starts_with("@.str.")) {
+            arg_type = PrintArgType::Str;
+        }
+
+        // Use gen_type as fallback for interpolated strings and other ptr results
+        if (arg_type == PrintArgType::Unknown && gen_type == "ptr") {
             arg_type = PrintArgType::Str;
         }
 

@@ -934,13 +934,27 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
                 segment_strs.push_back(expr_val);
             } else if (expr_type == "i32" || expr_type == "i64") {
                 // Convert integer to string using i64_to_str
+                std::string int_val = expr_val;
+                if (expr_type == "i32") {
+                    // Sign extend i32 to i64
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
+                    int_val = ext_reg;
+                }
                 std::string str_result = fresh_reg();
-                emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + expr_val + ")");
+                emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + int_val + ")");
                 segment_strs.push_back(str_result);
             } else if (expr_type == "double" || expr_type == "float") {
                 // Convert float to string using f64_to_str
+                std::string float_val = expr_val;
+                if (expr_type == "float") {
+                    // Extend float to double
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = fpext float " + expr_val + " to double");
+                    float_val = ext_reg;
+                }
                 std::string str_result = fresh_reg();
-                emit_line("  " + str_result + " = call ptr @f64_to_str(double " + expr_val + ")");
+                emit_line("  " + str_result + " = call ptr @f64_to_str(double " + float_val + ")");
                 segment_strs.push_back(str_result);
             } else if (expr_type == "i1") {
                 // Convert bool to string

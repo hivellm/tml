@@ -166,6 +166,22 @@ int32_t str_char_at(const char* s, int32_t index) {
     return (int32_t)(unsigned char)s[index];
 }
 
+// i64_to_str(n: I64) -> Str
+// Convert integer to string for string interpolation
+static char i64_buffer[32];
+const char* i64_to_str(int64_t n) {
+    snprintf(i64_buffer, sizeof(i64_buffer), "%lld", (long long)n);
+    return i64_buffer;
+}
+
+// f64_to_str(n: F64) -> Str
+// Convert float to string for string interpolation
+static char f64_buffer[64];
+const char* f64_to_str(double n) {
+    snprintf(f64_buffer, sizeof(f64_buffer), "%g", n);
+    return f64_buffer;
+}
+
 // ============================================================================
 // Time Functions (matches env_builtins_time.cpp)
 // ============================================================================

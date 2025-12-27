@@ -43,7 +43,7 @@ protected:
 func main() -> I32 {
     println("Cache test")
     let x: I32 = 42
-    println("Result: {}", x)
+    println("Result: {x}")
     return 0
 }
 )";
@@ -56,7 +56,7 @@ func main() -> I32 {
 func main() -> I32 {
     println("Cache test - MODIFIED")
     let x: I32 = 100
-    println("Result: {}", x)
+    println("Result: {x}")
     return 0
 }
 )";
