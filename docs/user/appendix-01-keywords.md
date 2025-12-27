@@ -49,6 +49,12 @@ by TML. These cannot be used as identifiers.
 | `while` | While loop |
 | `with` | Context expression |
 
+## Additional Keywords
+
+| Keyword | Description |
+|---------|-------------|
+| `where` | Generic constraints (e.g., `where T: Add`) |
+
 ## Reserved for Future Use
 
 These keywords are reserved but not yet implemented:
@@ -56,9 +62,8 @@ These keywords are reserved but not yet implemented:
 | Keyword | Planned Use |
 |---------|-------------|
 | `match` | Alternative to `when` |
-| `enum` | Enumeration type |
+| `enum` | Alternative to sum types |
 | `trait` | Alternative to `behavior` |
-| `where` | Generic constraints |
 | `yield` | Generator functions |
 | `macro` | Macro definitions |
 

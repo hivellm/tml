@@ -13,8 +13,9 @@ Active (v0.5.0)
 | **Generics** | ✅ Complete | Monomorphization (Rust-style) |
 | Generic Structs | ✅ Complete | `Pair[T]`, `Entry[K, V]` |
 | Generic Enums | ✅ Complete | `Maybe[T]`, `Outcome[T, E]` |
-| Generic Functions | ⚠️ Parsing Only | Codegen pending |
-| Bounds/Constraints | ❌ Not Started | `T: Addable` syntax |
+| Generic Functions | ✅ Complete | Full codegen with monomorphization |
+| Bounds/Constraints | ✅ Complete | `where T: Addable` syntax |
+| String Interpolation | ✅ Complete | `"Hello {name}!"` syntax |
 | Effects | ❌ Not Started | `with io, panic` |
 | Ownership | ✅ Basic | Move semantics, no borrow checker |
 | **Concurrency** | ✅ Complete | Atomics, fences, spinlocks |

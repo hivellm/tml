@@ -101,6 +101,38 @@ func main() {
 }
 ```
 
+### String Interpolation
+
+TML supports string interpolation with `{expression}` syntax:
+
+```tml
+func main() {
+    let name = "Alice"
+    let age = 30
+
+    // Basic interpolation
+    let greeting = "Hello, {name}!"
+    println(greeting)  // Hello, Alice!
+
+    // Expressions inside braces
+    let message = "{name} is {age} years old"
+    println(message)  // Alice is 30 years old
+
+    // Complex expressions
+    let calc = "Sum: {2 + 3}, Product: {4 * 5}"
+    println(calc)  // Sum: 5, Product: 20
+}
+```
+
+To include a literal `{` or `}` in a string, escape them with a backslash:
+
+```tml
+func main() {
+    let json = "\{\"name\": \"{name}\"\}"
+    println(json)  // {"name": "Alice"}
+}
+```
+
 ## Type Annotations
 
 While TML can often infer types, you can add explicit annotations:

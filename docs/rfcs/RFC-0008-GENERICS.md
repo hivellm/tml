@@ -195,19 +195,15 @@ func test_generics() -> I32 {
 
 ### Current Implementation
 
-1. **Generic Functions**: Parsing works, codegen not implemented
-2. **Bounds**: Syntax parsed, not enforced
-3. **Field Type Resolution**: Type checker sees `T` instead of concrete type
+1. **Generic Functions**: ✅ Fully implemented with monomorphization
+2. **Bounds**: ✅ `where` clause syntax with type checking
+3. **Field Type Resolution**: ✅ Type checker correctly resolves concrete types
 
-### Known Issues
+### Remaining Work
 
-```tml
-// Works
-print(p.first)
-
-// Type checker limitation
-let x: I32 = p.first  // Error: expected I32, found T
-```
+1. **Higher-kinded types**: Not supported (`F[_]`)
+2. **Associated types**: Not yet implemented
+3. **Default type parameters**: Not yet implemented
 
 ## Alternatives Rejected
 

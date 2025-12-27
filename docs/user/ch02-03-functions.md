@@ -296,6 +296,64 @@ func main() {
 }
 ```
 
+## Generic Functions
+
+Functions can be generic, accepting any type that satisfies certain constraints:
+
+```tml
+// Simple generic function
+func identity[T](value: T) -> T {
+    return value
+}
+
+func main() {
+    let x = identity(42)       // T = I32
+    let y = identity("hello")  // T = Str
+    println(x)
+    println(y)
+}
+```
+
+### Where Clauses
+
+Use `where` to constrain generic types:
+
+```tml
+// T must implement Add behavior
+func double[T](value: T) -> T
+where T: Add
+{
+    return value + value
+}
+
+// Multiple constraints
+func compare_and_print[T](a: T, b: T) -> Bool
+where T: Ord + Debug
+{
+    println("Comparing: {} and {}", a, b)
+    return a > b
+}
+
+func main() {
+    println(double(21))     // 42
+    println(double(3.14))   // 6.28
+}
+```
+
+### Generic Type Bounds
+
+Common behavior bounds:
+
+| Bound | Description |
+|-------|-------------|
+| `Add` | Supports `+` operator |
+| `Sub` | Supports `-` operator |
+| `Ord` | Supports comparison (`<`, `>`, etc.) |
+| `Eq` | Supports equality (`==`, `!=`) |
+| `Debug` | Can be printed for debugging |
+| `Duplicate` | Can be cloned |
+| `Default` | Has a default value |
+
 ## Best Practices
 
 1. **Use descriptive names**: `calculate_area` is better than `ca`
@@ -304,3 +362,4 @@ func main() {
 4. **Document complex functions**: Explain what the function does
 5. **Use closures for short operations**: For longer logic, define named functions
 6. **Prefer function types for callbacks**: Makes APIs clearer
+7. **Use `where` clauses for complex constraints**: Keeps function signatures readable

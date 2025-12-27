@@ -546,18 +546,18 @@ TML provides these built-in decorators:
 | `@cold` | Func | Hint rarely called |
 | `@deprecated(msg)` | Any | Emit deprecation warning |
 | `@must_use` | Func/Type | Warn if result unused |
-| `@derive(...)` | Type | Auto-implement behaviors |
+| `@auto(...)` | Type | Auto-implement behaviors |
 | `@when(...)` | Any | Conditional compilation |
 | `@pre(...)` | Func | Precondition (RFC-0003) |
 | `@post(...)` | Func | Postcondition (RFC-0003) |
 | `@invariant(...)` | Type | Type invariant (RFC-0003) |
 
-### 4.7 Derive Decorator
+### 4.7 Auto Decorator
 
-`@derive` auto-generates behavior implementations:
+`@auto` auto-generates behavior implementations:
 
 ```tml
-@derive(Eq, Hash, Debug, Duplicate)
+@auto(equal, hash, debug, duplicate)
 type User = {
     id: U64,
     name: String,
@@ -565,28 +565,28 @@ type User = {
 }
 
 // Generates:
-impl Eq for User { ... }
+impl Equal for User { ... }
 impl Hash for User { ... }
 impl Debug for User { ... }
 impl Duplicate for User { ... }
 ```
 
-Custom derive:
+Custom auto:
 
 ```tml
-decorator derive_serialize {
+decorator auto_serialize {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
             Type(t) -> {
                 let impl_block = generate_serialize_impl(t)
                 DecoratorResult.AddItem(impl_block)
             },
-            _ -> DecoratorResult.Error("derive only applies to types"),
+            _ -> DecoratorResult.Error("auto only applies to types"),
         }
     }
 }
 
-@derive_serialize
+@auto_serialize
 type Config = { ... }
 ```
 
