@@ -424,7 +424,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
     }
 
     // Coverage instrumentation - inject call at function entry
@@ -523,7 +523,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     emit_line("entry:");
 
     // Register 'this' in locals - it's already a pointer, don't store it
-    locals_["this"] = VarInfo{"%this", "ptr", nullptr};
+    locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
 
     // Register other parameters in locals by creating allocas
     for (size_t i = param_start; i < method.params.size(); ++i) {
@@ -534,7 +534,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
-        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type};
+        locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
     }
 
     // Generate method body
@@ -653,7 +653,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + p.llvm_type);
         emit_line("  store " + p.llvm_type + " %" + p.name + ", ptr " + alloca_reg);
-        locals_[p.name] = VarInfo{alloca_reg, p.llvm_type, p.semantic_type};
+        locals_[p.name] = VarInfo{alloca_reg, p.llvm_type, p.semantic_type, std::nullopt};
     }
 
     // 8. Generate function body

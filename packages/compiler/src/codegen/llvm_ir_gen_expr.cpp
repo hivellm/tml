@@ -866,7 +866,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         emit_line("  " + alloca_reg + " = alloca " + captured_type);
         emit_line("  store " + captured_type + " %" + captured_name + "_captured, ptr " +
                   alloca_reg);
-        locals_[captured_name] = VarInfo{alloca_reg, captured_type};
+        locals_[captured_name] = VarInfo{alloca_reg, captured_type, nullptr, std::nullopt};
     }
 
     // Bind closure parameters to local scope
@@ -874,7 +874,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca i32");
         emit_line("  store i32 %" + param_names[i] + ", ptr " + alloca_reg);
-        locals_[param_names[i]] = VarInfo{alloca_reg, "i32", nullptr};
+        locals_[param_names[i]] = VarInfo{alloca_reg, "i32", nullptr, std::nullopt};
     }
 
     // Generate body

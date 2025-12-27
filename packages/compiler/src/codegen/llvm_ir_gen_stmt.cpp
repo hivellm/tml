@@ -208,7 +208,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     if (is_struct && let.init.has_value() && let.init.value()->is<parser::StructExpr>()) {
         // gen_struct_expr allocates and initializes, returns the pointer
         std::string init_ptr = gen_struct_expr_ptr(let.init.value()->as<parser::StructExpr>());
-        locals_[var_name] = VarInfo{init_ptr, var_type};
+        locals_[var_name] = VarInfo{init_ptr, var_type, nullptr, std::nullopt};
         return;
     }
 
@@ -254,7 +254,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                           dyn_alloca + ", i32 0, i32 1");
                 emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
 
-                locals_[var_name] = VarInfo{dyn_alloca, var_type};
+                locals_[var_name] = VarInfo{dyn_alloca, var_type, nullptr, std::nullopt};
                 return;
             }
         }
@@ -299,7 +299,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     emit_line("  " + alloca_reg + " = alloca " + var_type);
                     emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
 
-                    locals_[var_name] = VarInfo{alloca_reg, var_type};
+                    locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
                     return;
                 }
             }
@@ -338,7 +338,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         if (let.type_annotation) {
             semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
         }
-        locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type};
+        locals_[var_name] = VarInfo{alloca_reg, "ptr", semantic_type, std::nullopt};
         return;
     }
 
@@ -371,7 +371,7 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     }
 
     // Map variable name to alloca with type info
-    locals_[var_name] = VarInfo{alloca_reg, var_type};
+    locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
 }
 
 void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {

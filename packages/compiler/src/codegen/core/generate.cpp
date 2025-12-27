@@ -177,13 +177,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
                         // 'this' is already a pointer parameter, don't create alloca for it
                         if (param_name == "this") {
-                            locals_[param_name] = VarInfo{"%" + param_name, param_type, nullptr};
+                            locals_[param_name] =
+                                VarInfo{"%" + param_name, param_type, nullptr, std::nullopt};
                         } else {
                             std::string alloca_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
                             emit_line("  store " + param_type + " %" + param_name + ", ptr " +
                                       alloca_reg);
-                            locals_[param_name] = VarInfo{alloca_reg, param_type, nullptr};
+                            locals_[param_name] =
+                                VarInfo{alloca_reg, param_type, nullptr, std::nullopt};
                         }
                     }
 
@@ -313,15 +315,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
                                 // 'this' is already a pointer parameter, don't create alloca for it
                                 if (param_name == "this") {
-                                    locals_[param_name] =
-                                        VarInfo{"%" + param_name, param_type, semantic_type};
+                                    locals_[param_name] = VarInfo{"%" + param_name, param_type,
+                                                                  semantic_type, std::nullopt};
                                 } else {
                                     std::string alloca_reg = fresh_reg();
                                     emit_line("  " + alloca_reg + " = alloca " + param_type);
                                     emit_line("  store " + param_type + " %" + param_name +
                                               ", ptr " + alloca_reg);
-                                    locals_[param_name] =
-                                        VarInfo{alloca_reg, param_type, semantic_type};
+                                    locals_[param_name] = VarInfo{alloca_reg, param_type,
+                                                                  semantic_type, std::nullopt};
                                 }
                             }
 

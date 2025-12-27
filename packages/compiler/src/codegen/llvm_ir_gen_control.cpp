@@ -275,7 +275,7 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
                 std::string var_alloca = fresh_reg();
                 emit_line("  " + var_alloca + " = alloca " + bound_type);
                 emit_line("  store " + bound_type + " " + bound_val + ", ptr " + var_alloca);
-                locals_[ident.name] = VarInfo{var_alloca, bound_type};
+                locals_[ident.name] = VarInfo{var_alloca, bound_type, nullptr, std::nullopt};
             }
         }
     } else {
@@ -485,7 +485,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string var_alloca = fresh_reg();
     emit_line("  " + var_alloca + " = alloca " + range_type);
     emit_line("  store " + range_type + " " + range_start + ", ptr " + var_alloca);
-    locals_[var_name] = VarInfo{var_alloca, range_type};
+    locals_[var_name] = VarInfo{var_alloca, range_type, nullptr, std::nullopt};
 
     // Jump to condition
     emit_line("  br label %" + label_cond);
@@ -535,7 +535,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         std::string element_alloca = fresh_reg();
         emit_line("  " + element_alloca + " = alloca i32");
         emit_line("  store i32 " + element_i32 + ", ptr " + element_alloca);
-        locals_[var_name] = VarInfo{element_alloca, "i32", nullptr};
+        locals_[var_name] = VarInfo{element_alloca, "i32", nullptr, std::nullopt};
     }
 
     gen_expr(*for_expr.body);
@@ -708,7 +708,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                     std::string var_alloca = fresh_reg();
                     emit_line("  " + var_alloca + " = alloca " + bound_type);
                     emit_line("  store " + bound_type + " " + bound_val + ", ptr " + var_alloca);
-                    locals_[ident.name] = VarInfo{var_alloca, bound_type};
+                    locals_[ident.name] = VarInfo{var_alloca, bound_type, nullptr, std::nullopt};
                 }
             }
         }
