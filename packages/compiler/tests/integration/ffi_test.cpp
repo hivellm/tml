@@ -1,8 +1,8 @@
 // Integration test for C FFI functionality
-#include <gtest/gtest.h>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <cstdlib>
+#include <gtest/gtest.h>
 
 namespace fs = std::filesystem;
 
@@ -19,13 +19,18 @@ protected:
         test_dir = fs::temp_directory_path() / "tml_ffi_test";
         fs::create_directories(test_dir);
 
-        // Find tml.exe (should be in build/debug/)
-        tml_exe = fs::current_path() / "build" / "debug" / "tml.exe";
+        // Find tml executable (platform-specific name)
+#ifdef _WIN32
+        const char* exe_name = "tml.exe";
+#else
+        const char* exe_name = "tml";
+#endif
+        tml_exe = fs::current_path() / "build" / "debug" / exe_name;
         if (!fs::exists(tml_exe)) {
             // Try without build/debug prefix (if run from build/debug/)
-            tml_exe = fs::current_path() / "tml.exe";
+            tml_exe = fs::current_path() / exe_name;
         }
-        ASSERT_TRUE(fs::exists(tml_exe)) << "tml.exe not found at: " << tml_exe;
+        ASSERT_TRUE(fs::exists(tml_exe)) << "tml executable not found at: " << tml_exe;
 
         tml_lib_file = test_dir / "test_ffi_lib.tml";
         c_header_file = test_dir / "test_ffi_lib.h";
@@ -102,10 +107,8 @@ int main() {
 
 // Test: Build static library with header
 TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
-    std::string cmd = "\"" + tml_exe.string() + "\" build " +
-                      tml_lib_file.string() +
-                      " --crate-type=lib --emit-header --out-dir=" +
-                      test_dir.string();
+    std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
+                      " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
 
     int result = run_command(cmd);
     EXPECT_EQ(result, 0) << "Building static library should succeed";
@@ -126,10 +129,8 @@ TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
 // Test: C program can use TML static library
 TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
     // Build TML library
-    std::string build_cmd = "\"" + tml_exe.string() + "\" build " +
-                            tml_lib_file.string() +
-                            " --crate-type=lib --emit-header --out-dir=" +
-                            test_dir.string();
+    std::string build_cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
+                            " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
     int build_result = run_command(build_cmd);
     ASSERT_EQ(build_result, 0) << "Building TML library should succeed";
 
@@ -137,17 +138,14 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 #ifdef _WIN32
     fs::path lib_file = test_dir / "test_ffi_lib.lib";
     fs::path exe_file = test_dir / "use_ffi_lib.exe";
-    std::string compile_cmd = "clang -I" + test_dir.string() +
-                              " \"" + c_test_file.string() + "\" \"" +
-                              lib_file.string() + "\" -o \"" +
-                              exe_file.string() + "\" 2>&1";
+    std::string compile_cmd = "clang -I" + test_dir.string() + " \"" + c_test_file.string() +
+                              "\" \"" + lib_file.string() + "\" -o \"" + exe_file.string() +
+                              "\" 2>&1";
 #else
     fs::path lib_file = test_dir / "libtest_ffi_lib.a";
     fs::path exe_file = test_dir / "use_ffi_lib";
-    std::string compile_cmd = "clang -I" + test_dir.string() +
-                              " \"" + c_test_file.string() + "\" \"" +
-                              lib_file.string() + "\" -o \"" +
-                              exe_file.string() + "\"";
+    std::string compile_cmd = "clang -I" + test_dir.string() + " \"" + c_test_file.string() +
+                              "\" \"" + lib_file.string() + "\" -o \"" + exe_file.string() + "\"";
 #endif
 
     int compile_result = run_command(compile_cmd);
@@ -162,10 +160,8 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 
 // Test: Build dynamic library with header
 TEST_F(FFIIntegrationTest, BuildDynamicLibraryWithHeader) {
-    std::string cmd = "\"" + tml_exe.string() + "\" build " +
-                      tml_lib_file.string() +
-                      " --crate-type=dylib --emit-header --out-dir=" +
-                      test_dir.string();
+    std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
+                      " --crate-type=dylib --emit-header --out-dir=" + test_dir.string();
 
     int result = run_command(cmd);
     EXPECT_EQ(result, 0) << "Building dynamic library should succeed";
@@ -187,18 +183,15 @@ TEST_F(FFIIntegrationTest, BuildDynamicLibraryWithHeader) {
 // Test: Header contains correct function declarations
 TEST_F(FFIIntegrationTest, HeaderContainsCorrectDeclarations) {
     // Build library to generate header
-    std::string cmd = "\"" + tml_exe.string() + "\" build " +
-                      tml_lib_file.string() +
-                      " --crate-type=lib --emit-header --out-dir=" +
-                      test_dir.string();
+    std::string cmd = "\"" + tml_exe.string() + "\" build " + tml_lib_file.string() +
+                      " --crate-type=lib --emit-header --out-dir=" + test_dir.string();
     int result = run_command(cmd);
     ASSERT_EQ(result, 0) << "Building library should succeed";
     ASSERT_TRUE(fs::exists(c_header_file)) << "Header should exist";
 
     // Read header contents
     std::ifstream header(c_header_file);
-    std::string content((std::istreambuf_iterator<char>(header)),
-                        std::istreambuf_iterator<char>());
+    std::string content((std::istreambuf_iterator<char>(header)), std::istreambuf_iterator<char>());
 
     // Verify function declarations are present
     EXPECT_NE(content.find("tml_add_numbers"), std::string::npos)
@@ -209,8 +202,6 @@ TEST_F(FFIIntegrationTest, HeaderContainsCorrectDeclarations) {
         << "Header should contain get_magic_number declaration";
 
     // Verify it has include guards
-    EXPECT_NE(content.find("#ifndef"), std::string::npos)
-        << "Header should have include guards";
-    EXPECT_NE(content.find("#define"), std::string::npos)
-        << "Header should define include guard";
+    EXPECT_NE(content.find("#ifndef"), std::string::npos) << "Header should have include guards";
+    EXPECT_NE(content.find("#define"), std::string::npos) << "Header should define include guard";
 }

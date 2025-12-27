@@ -1,8 +1,8 @@
 // Integration test for build cache system
-#include <gtest/gtest.h>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <chrono>
+#include <gtest/gtest.h>
 
 namespace fs = std::filesystem;
 
@@ -17,13 +17,18 @@ protected:
         test_dir = fs::temp_directory_path() / "tml_cache_test";
         fs::create_directories(test_dir);
 
-        // Find tml.exe (should be in build/debug/)
-        tml_exe = fs::current_path() / "build" / "debug" / "tml.exe";
+        // Find tml executable (platform-specific name)
+#ifdef _WIN32
+        const char* exe_name = "tml.exe";
+#else
+        const char* exe_name = "tml";
+#endif
+        tml_exe = fs::current_path() / "build" / "debug" / exe_name;
         if (!fs::exists(tml_exe)) {
             // Try without build/debug prefix (if run from build/debug/)
-            tml_exe = fs::current_path() / "tml.exe";
+            tml_exe = fs::current_path() / exe_name;
         }
-        ASSERT_TRUE(fs::exists(tml_exe)) << "tml.exe not found at: " << tml_exe;
+        ASSERT_TRUE(fs::exists(tml_exe)) << "tml executable not found at: " << tml_exe;
 
         // Create a simple TML test file
         test_file = test_dir / "test_cache.tml";
