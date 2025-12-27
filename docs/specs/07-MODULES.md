@@ -2,22 +2,20 @@
 
 ## 1. Structure
 
-### 1.1 Module Declaration
+### 1.1 Module Organization
+
+TML infers module names from file paths. No explicit `module` declaration is needed.
 
 ```tml
-// src/lib.tml
-module mylib
-
-public func hello() {
+// src/lib.tml - module name inferred as "mylib"
+pub func hello() {
     print("Hello from mylib!")
 }
 ```
 
 ```tml
-// src/utils.tml
-module mylib.utils
-
-public func helper() {
+// src/utils.tml - module name inferred as "mylib::utils"
+pub func helper() {
     // ...
 }
 ```
@@ -28,13 +26,13 @@ public func helper() {
 myproject/
 ├── tml.toml
 ├── src/
-│   ├── lib.tml          # module myproject
-│   ├── utils.tml        # module myproject.utils
+│   ├── lib.tml          # myproject (root module)
+│   ├── utils.tml        # myproject::utils
 │   ├── http/
-│   │   ├── mod.tml      # module myproject.http
-│   │   ├── client.tml   # module myproject.http.client
-│   │   └── server.tml   # module myproject.http.server
-│   └── main.tml         # module main (executable)
+│   │   ├── mod.tml      # myproject::http
+│   │   ├── client.tml   # myproject::http::client
+│   │   └── server.tml   # myproject::http::server
+│   └── main.tml         # main (executable entry)
 └── tests/
     └── test_utils.tml
 ```
@@ -44,34 +42,34 @@ myproject/
 ### 2.1 Simple Import
 
 ```tml
-import std.io
-import std.collections.List
+use std::io
+use std::collections::List
 
 // Usage
-io.print("hello")
-let list: List[T] = List.new()
+io::print("hello")
+let list: List[T] = List::new()
 ```
 
 ### 2.2 Import with Alias
 
 ```tml
-import std.collections.HashMap as Map
-import very.long.module.name as short
+use std::collections::HashMap as Map
+use very::long::module::name as short
 
-let m: Map[String, I32] = Map.new()
+let m: Map[String, I32] = Map::new()
 ```
 
 ### 2.3 Multiple Import
 
 ```tml
-import std.collections.{List, Map, Set}
-import std.io.{read, write, File}
+use std::collections::{List, Map, Set}
+use std::io::{read, write, File}
 ```
 
 ### 2.4 Glob Import
 
 ```tml
-import std.prelude.*
+use std::prelude::*
 
 // Brings all public items
 // Use sparingly
@@ -81,35 +79,31 @@ import std.prelude.*
 
 ```tml
 // lib.tml
-module mylib
+pub use internal::Parser
+pub use internal::Lexer
 
-public import internal.Parser
-public import internal.Lexer
-
-// Users do: import mylib.Parser
+// Users do: use mylib::Parser
 ```
 
 ## 3. Visibility
 
-### 3.1 public vs private
+### 3.1 pub vs private (default)
 
 ```tml
-module mylib
-
-public type User {
-    public name: String,    // public field
-    private password: String,  // private field
+pub type User {
+    pub name: String,      // public field
+    password: String,      // private field (default)
 }
 
-public func create_user(name: String) -> User {
+pub func create_user(name: String) -> User {
     return User {
         name: name,
         password: generate_password(),
     }
 }
 
-private func generate_password() -> String {
-    // not visible outside module
+func generate_password() -> String {
+    // not visible outside module (private by default)
     return random_string(16)
 }
 ```
@@ -118,27 +112,95 @@ private func generate_password() -> String {
 
 | Declaration | Visible in |
 |-------------|------------|
-| `private` (default) | Same module |
-| `public` | Anywhere |
+| (default) | Same module only |
+| `pub` | Anywhere |
 
 ### 3.3 Opaque Types
 
 ```tml
 // Public type, private fields
-public type Handle {
-    private id: U64,
-    private data: ptr Unit,
+pub type Handle {
+    id: U64,           // private by default
+    data: ptr Unit,    // private by default
 }
 
 // Only module functions can create/access
-public func create() -> Handle {
+pub func create() -> Handle {
     return Handle { id: next_id(), data: alloc() }
 }
 ```
 
-## 4. Packages
+## 4. FFI Module Integration
 
-### 4.1 tml.toml
+### 4.1 FFI Namespace from @link
+
+When you declare FFI functions with `@link`, the library name becomes a module namespace:
+
+```tml
+@link("user32")
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+@link("kernel32")
+@extern("stdcall")
+func GetTickCount64() -> U64
+
+func main() -> I32 {
+    // Qualified calls using library namespace
+    user32::MessageBoxA(0, "Hello", "TML", 0)
+    let ticks: U64 = kernel32::GetTickCount64()
+    return 0
+}
+```
+
+### 4.2 Library Name Extraction
+
+The namespace is extracted from the `@link` path:
+
+| @link value | Namespace |
+|-------------|-----------|
+| `"SDL2"` | `SDL2` |
+| `"SDL2.dll"` | `SDL2` |
+| `"libSDL2.so"` | `SDL2` |
+| `"./vendor/mylib.dll"` | `mylib` |
+| `"user32"` | `user32` |
+
+### 4.3 Disambiguating Same-Name Functions
+
+```tml
+// Two libraries with same function name
+@link("foo")
+@extern("c")
+func init() -> I32
+
+@link("bar")
+@extern("c")
+func init() -> I32
+
+func main() -> I32 {
+    let a: I32 = foo::init()   // Calls foo library
+    let b: I32 = bar::init()   // Calls bar library
+    return 0
+}
+```
+
+### 4.4 Unified Namespace
+
+Both TML modules and FFI libraries use the same `::` syntax:
+
+```tml
+// Internal TML modules
+use std::math::{abs, sqrt}
+let x: I32 = std::math::abs(-5)
+
+// FFI external libraries
+let result: I32 = SDL2::SDL_Init(0)
+let msg: I32 = user32::MessageBoxA(0, "Hi", "TML", 0)
+```
+
+## 5. Packages
+
+### 5.1 tml.toml
 
 ```toml
 [package]
@@ -168,7 +230,7 @@ std = []
 async = ["tokio"]
 ```
 
-### 4.2 Lock File
+### 5.2 Lock File
 
 ```toml
 # tml.lock (generated automatically)
@@ -184,9 +246,9 @@ checksum = "def456..."
 dependencies = ["mio", "bytes"]
 ```
 
-## 5. Workspaces
+## 6. Workspaces
 
-### 5.1 Structure
+### 6.1 Structure
 
 ```
 workspace/
@@ -202,7 +264,7 @@ workspace/
     └── src/
 ```
 
-### 5.2 Workspace tml.toml
+### 6.2 Workspace tml.toml
 
 ```toml
 [workspace]
@@ -217,7 +279,7 @@ version = "1.0.0"
 edition = "2024"
 ```
 
-### 5.3 Member tml.toml
+### 6.3 Member tml.toml
 
 ```toml
 [package]
@@ -231,9 +293,9 @@ serde = { workspace = true }
 clap = "4.0"
 ```
 
-## 6. Standard Library
+## 7. Standard Library
 
-### 6.1 Structure
+### 7.1 Structure
 
 ```
 std
@@ -263,26 +325,26 @@ std
 └── mem
 ```
 
-### 6.2 Prelude
+### 7.2 Prelude
 
 Auto-imported in every module:
 
 ```tml
 // Implicit equivalent:
-import std.prelude.*
+use std::prelude::*
 
 // Includes:
 // - Maybe, Just, Nothing
-// - Outcome, Success, Failure
+// - Outcome, Ok, Err
 // - Bool, true, false
 // - String, List, Map
 // - print, panic, assert
 // - Common behaviors: Equal, Ordered, Duplicate, Debug
 ```
 
-## 7. Conditional Compilation
+## 8. Conditional Compilation
 
-### 7.1 @when Directive
+### 8.1 @when Directive
 
 ```tml
 @when(target: wasm32)
@@ -301,30 +363,26 @@ func debug_only() {
 }
 ```
 
-### 7.2 @when in Module
+### 8.2 @when in Module
 
 ```tml
 @when(target: windows)
-module platform {
-    import win32.*
-    // ...
-}
+use win32::*
+// Windows-specific code...
 
 @when(target: linux)
-module platform {
-    import posix.*
-    // ...
-}
+use posix::*
+// Linux-specific code...
 ```
 
-## 8. Build Scripts
+## 9. Build Scripts
 
-### 8.1 build.tml
+### 9.1 build.tml
 
 ```tml
 // build.tml - executed before compilation
 
-func main() {
+func main() -> I32 {
     // Generate code
     let proto: String = read("schema.proto")
     let generated: String = compile_proto(proto)
@@ -332,22 +390,23 @@ func main() {
 
     // Configure paths
     println("cargo:include=/usr/local/include")
+    return 0
 }
 ```
 
-## 9. Documentation
+## 10. Documentation
 
-### 9.1 Doc Comments
+### 10.1 Doc Comments
 
 ```tml
 /// Represents a 2D point.
 ///
 /// ## Example
 /// ```
-/// let p: Point = Point.new(1.0, 2.0)
+/// let p: Point = Point::new(1.0, 2.0)
 /// assert_eq(p.x, 1.0)
 /// ```
-public type Point {
+pub type Point {
     /// X coordinate
     x: F64,
     /// Y coordinate
@@ -361,12 +420,12 @@ public type Point {
 ///
 /// ## Returns
 /// The Euclidean distance
-public func distance(this, other: Point) -> F64 {
+pub func distance(this, other: Point) -> F64 {
     // ...
 }
 ```
 
-### 9.2 Module Docs
+### 10.2 Module Docs
 
 ```tml
 //! # Geometry Module
@@ -378,25 +437,21 @@ public func distance(this, other: Point) -> F64 {
 //! - Points and vectors
 //! - Transformations
 //! - Intersections
-
-module geometry
 ```
 
-### 9.3 Generate Docs
+### 10.3 Generate Docs
 
 ```bash
 tml doc --open
-tml doc --format json --output docs/
+tml doc --format=json --output=docs/
 ```
 
-## 10. Tests
+## 11. Tests
 
-### 10.1 Inline Tests
+### 11.1 Inline Tests
 
 ```tml
-module math
-
-public func add(a: I32, b: I32) -> I32 {
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
@@ -408,16 +463,16 @@ func test_add() {
 
 @test(should_fail)
 func test_overflow() {
-    add(I32.MAX, 1)  // should panic in debug
+    add(I32::MAX, 1)  // should panic in debug
 }
 ```
 
-### 10.2 Test Module
+### 11.2 Test Module
 
 ```tml
 // tests/test_math.tml
 
-import mylib.math.*
+use mylib::math::*
 
 @test
 func test_complex_calculation() {
@@ -426,12 +481,12 @@ func test_complex_calculation() {
 }
 ```
 
-### 10.3 Run Tests
+### 11.3 Run Tests
 
 ```bash
 tml test
-tml test --filter "test_add*"
-tml test --module math
+tml test --filter="test_add*"
+tml test --module=math
 ```
 
 ---

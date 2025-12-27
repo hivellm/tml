@@ -117,7 +117,24 @@ auto ModuleMetadata::serialize(const Module& module) -> std::string {
         json << "      \"is_lowlevel\": " << (func_sig.is_lowlevel ? "true" : "false") << ",\n";
         json << "      \"stability\": \"" <<
             (func_sig.stability == StabilityLevel::Stable ? "Stable" :
-             func_sig.stability == StabilityLevel::Unstable ? "Unstable" : "Deprecated") << "\"\n";
+             func_sig.stability == StabilityLevel::Unstable ? "Unstable" : "Deprecated") << "\"";
+
+        // FFI fields
+        if (func_sig.extern_abi.has_value()) {
+            json << ",\n      \"extern_abi\": \"" << json_escape(*func_sig.extern_abi) << "\"";
+        }
+        if (func_sig.extern_name.has_value()) {
+            json << ",\n      \"extern_name\": \"" << json_escape(*func_sig.extern_name) << "\"";
+        }
+        if (!func_sig.link_libs.empty()) {
+            json << ",\n      \"link_libs\": [";
+            for (size_t i = 0; i < func_sig.link_libs.size(); ++i) {
+                if (i > 0) json << ", ";
+                json << "\"" << json_escape(func_sig.link_libs[i]) << "\"";
+            }
+            json << "]";
+        }
+        json << "\n";
         json << "    }";
     }
 

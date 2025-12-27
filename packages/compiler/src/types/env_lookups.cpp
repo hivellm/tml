@@ -95,13 +95,20 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                 return module_registry_->lookup_function(module_path, symbol_name);
             }
         }
-        // If name contains "::" (like "Range::next"), try to resolve the type first
+        // If name contains "::" (like "Range::next" or "SDL2::init"), try direct lookup
         auto method_pos = name.find("::");
         if (method_pos != std::string::npos) {
-            std::string type_name = name.substr(0, method_pos);
-            std::string method_name = name.substr(method_pos + 2);
-            // Try to resolve the type to its module
-            auto type_import_path = resolve_imported_symbol(type_name);
+            std::string module_name = name.substr(0, method_pos);
+            std::string func_name = name.substr(method_pos + 2);
+
+            // First, try direct module lookup (works for FFI modules like SDL2::init)
+            auto direct_result = module_registry_->lookup_function(module_name, func_name);
+            if (direct_result) {
+                return direct_result;
+            }
+
+            // Try to resolve the type to its module (for Type::method patterns)
+            auto type_import_path = resolve_imported_symbol(module_name);
             if (type_import_path) {
                 auto pos = type_import_path->rfind("::");
                 if (pos != std::string::npos) {

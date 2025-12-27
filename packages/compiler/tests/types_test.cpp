@@ -647,3 +647,82 @@ TEST_F(TypeCheckerTest, PatternBindingNestedEnums) {
         }
     )");
 }
+
+// ============================================================================
+// FFI Namespace Tests
+// ============================================================================
+
+TEST_F(TypeCheckerTest, FFIModuleExtractedFromLink) {
+    auto env = check_ok(R"(
+        @link("user32")
+        @extern("c")
+        func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Verify the function has ffi_module set
+    auto func = env.lookup_func("MessageBoxA");
+    ASSERT_TRUE(func.has_value()) << "MessageBoxA should be defined";
+    EXPECT_TRUE(func->has_ffi_module()) << "FFI function should have ffi_module set";
+    EXPECT_EQ(*func->ffi_module, "user32") << "ffi_module should be extracted from @link";
+}
+
+TEST_F(TypeCheckerTest, FFIModuleExtractsLibNameFromPath) {
+    auto env = check_ok(R"(
+        @link("SDL2.dll")
+        @extern("c")
+        func SDL_Init(flags: U32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    auto func = env.lookup_func("SDL_Init");
+    ASSERT_TRUE(func.has_value()) << "SDL_Init should be defined";
+    EXPECT_TRUE(func->has_ffi_module()) << "FFI function should have ffi_module set";
+    EXPECT_EQ(*func->ffi_module, "SDL2") << "ffi_module should strip .dll extension";
+}
+
+TEST_F(TypeCheckerTest, FFIModuleExtractsLibNameFromUnixPath) {
+    auto env = check_ok(R"(
+        @link("libSDL2.so")
+        @extern("c")
+        func SDL_Init(flags: U32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    auto func = env.lookup_func("SDL_Init");
+    ASSERT_TRUE(func.has_value()) << "SDL_Init should be defined";
+    EXPECT_TRUE(func->has_ffi_module()) << "FFI function should have ffi_module set";
+    EXPECT_EQ(*func->ffi_module, "SDL2") << "ffi_module should strip lib prefix and .so extension";
+}
+
+TEST_F(TypeCheckerTest, FFIQualifiedLookup) {
+    auto env = check_ok(R"(
+        @link("mylib")
+        @extern("c")
+        func my_func() -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Direct lookup should work
+    auto direct = env.lookup_func("my_func");
+    ASSERT_TRUE(direct.has_value()) << "Direct lookup should find my_func";
+
+    // Qualified lookup should also work
+    auto qualified = env.lookup_func("mylib::my_func");
+    ASSERT_TRUE(qualified.has_value()) << "Qualified lookup should find mylib::my_func";
+
+    // Both should refer to the same function
+    EXPECT_EQ(direct->name, qualified->name) << "Both lookups should find same function";
+}

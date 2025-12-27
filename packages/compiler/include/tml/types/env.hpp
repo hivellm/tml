@@ -5,6 +5,7 @@
 #include "tml/types/type.hpp"
 #include "tml/types/module.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <optional>
 #include <vector>
@@ -45,7 +46,15 @@ namespace tml::types
         std::vector<WhereConstraint> where_constraints = {}; // At end to not break existing code
         bool is_lowlevel = false;                            // For C runtime functions
 
+        // FFI support (@extern and @link decorators)
+        std::optional<std::string> extern_abi = std::nullopt;   // "c", "c++", "stdcall", etc.
+        std::optional<std::string> extern_name = std::nullopt;  // External symbol name if different
+        std::vector<std::string> link_libs = {};                // Libraries to link
+        std::optional<std::string> ffi_module = std::nullopt;   // FFI namespace (extracted from @link)
+
         // Helper methods
+        [[nodiscard]] bool is_extern() const { return extern_abi.has_value(); }
+        [[nodiscard]] bool has_ffi_module() const { return ffi_module.has_value(); }
         [[nodiscard]] bool is_stable() const { return stability == StabilityLevel::Stable; }
         [[nodiscard]] bool is_deprecated() const { return stability == StabilityLevel::Deprecated; }
         [[nodiscard]] bool is_unstable() const { return stability == StabilityLevel::Unstable; }
@@ -167,6 +176,9 @@ namespace tml::types
         [[nodiscard]] static bool types_match(const TypePtr &a, const TypePtr &b);
 
     private:
+        // Internal helper for resolve with cycle detection
+        [[nodiscard]] auto resolve_impl(TypePtr type, std::unordered_set<uint64_t>& visited) -> TypePtr;
+
         std::unordered_map<std::string, StructDef> structs_;
         std::unordered_map<std::string, EnumDef> enums_;
         std::unordered_map<std::string, BehaviorDef> behaviors_;

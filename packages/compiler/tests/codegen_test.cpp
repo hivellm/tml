@@ -128,7 +128,9 @@ TEST_F(CodegenTest, EnumConstructorWithPrintln) {
     )");
 
     // Verify that both enum construction and println are present
-    EXPECT_NE(ir.find("%struct.Maybe = type"), std::string::npos);
+    // Generic enums use mangled names like Maybe__I64
+    EXPECT_NE(ir.find("%struct.Maybe__I64 = type"), std::string::npos)
+        << "IR should declare %struct.Maybe__I64 type for Maybe[I64]";
     EXPECT_NE(ir.find("@puts"), std::string::npos);
 }
 
@@ -183,7 +185,8 @@ TEST_F(CodegenTest, WhenExpressionSimple) {
     )");
 
     // Check for tag extraction (getelementptr to field 0)
-    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe"), std::string::npos)
+    // Generic enums use mangled names like Maybe__I64
+    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe__I64"), std::string::npos)
         << "IR should extract tag from enum";
 
     // Check for tag comparison
@@ -203,7 +206,7 @@ TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
         }
 
         func get_value(m: Maybe[I64]) -> I64 {
-            when m {
+            return when m {
                 Just(v) => v,
                 Nothing => 0,
             }
@@ -216,7 +219,8 @@ TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
     )");
 
     // Check for payload extraction (getelementptr to field 1)
-    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe, ptr"), std::string::npos)
+    // Generic enums use mangled names like Maybe__I64
+    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe__I64, ptr"), std::string::npos)
         << "IR should extract payload from enum";
 
     // Check that we return the extracted value
@@ -311,4 +315,75 @@ TEST_F(CodegenTest, LinkDecorator) {
     // Just verify it parses and generates - actual linking is done by clang
     EXPECT_NE(ir.find("declare i32 @MyExternFunc(i32)"), std::string::npos)
         << "IR should contain extern declaration with @link";
+}
+
+// ============================================================================
+// FFI Namespace Tests (qualified calls like SDL2::init)
+// ============================================================================
+
+TEST_F(CodegenTest, FFINamespaceQualifiedCall) {
+    std::string ir = generate(R"(
+        @link("mylib")
+        @extern("c")
+        func my_init() -> I32
+
+        func main() -> I32 {
+            let result: I32 = mylib::my_init()
+            return result
+        }
+    )");
+
+    // The qualified call mylib::my_init() should resolve to the extern function
+    EXPECT_NE(ir.find("declare i32 @my_init()"), std::string::npos)
+        << "IR should contain extern declaration";
+    EXPECT_NE(ir.find("call i32 @my_init()"), std::string::npos)
+        << "IR should call the extern function via qualified name";
+}
+
+TEST_F(CodegenTest, FFINamespaceMultipleLibs) {
+    std::string ir = generate(R"(
+        @link("libfoo")
+        @extern("c")
+        func foo_init() -> I32
+
+        @link("libbar")
+        @extern("c")
+        func bar_init() -> I32
+
+        func main() -> I32 {
+            let a: I32 = foo::foo_init()
+            let b: I32 = bar::bar_init()
+            return a + b
+        }
+    )");
+
+    // Both qualified calls should resolve correctly
+    EXPECT_NE(ir.find("declare i32 @foo_init()"), std::string::npos)
+        << "IR should contain foo_init declaration";
+    EXPECT_NE(ir.find("declare i32 @bar_init()"), std::string::npos)
+        << "IR should contain bar_init declaration";
+    EXPECT_NE(ir.find("call i32 @foo_init()"), std::string::npos)
+        << "IR should call foo_init via qualified name";
+    EXPECT_NE(ir.find("call i32 @bar_init()"), std::string::npos)
+        << "IR should call bar_init via qualified name";
+}
+
+TEST_F(CodegenTest, FFINamespaceLibNameExtraction) {
+    // Test that library name is extracted correctly from various formats
+    std::string ir = generate(R"(
+        @link("SDL2.dll")
+        @extern("c")
+        func SDL_Init(flags: U32) -> I32
+
+        func main() -> I32 {
+            let result: I32 = SDL2::SDL_Init(0)
+            return result
+        }
+    )");
+
+    // SDL2.dll should extract to namespace "SDL2"
+    EXPECT_NE(ir.find("declare i32 @SDL_Init(i32)"), std::string::npos)
+        << "IR should contain SDL_Init declaration";
+    EXPECT_NE(ir.find("call i32 @SDL_Init(i32 0)"), std::string::npos)
+        << "IR should call SDL_Init via SDL2:: namespace";
 }

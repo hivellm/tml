@@ -347,8 +347,19 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // ============ USER-DEFINED FUNCTIONS ============
 
+    // Try to look up the function signature first
+    auto func_sig = env_.lookup_func(fn_name);
+
     // Check if this function was registered (includes @extern functions)
     auto func_it = functions_.find(fn_name);
+
+    // If not found directly, check if it's a qualified FFI call (e.g., "SDL2::init")
+    // In this case, the function is registered with just the bare name ("init")
+    if (func_it == functions_.end() && func_sig.has_value() && func_sig->has_ffi_module()) {
+        // Look up with just the function name (without module prefix)
+        func_it = functions_.find(func_sig->name);
+    }
+
     std::string mangled;
     if (func_it != functions_.end()) {
         // Use the registered LLVM name (handles @extern functions correctly)
@@ -357,9 +368,6 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         // Default: user-defined TML function with tml_ prefix
         mangled = "@tml_" + fn_name;
     }
-
-    // Try to look up the function signature
-    auto func_sig = env_.lookup_func(fn_name);
 
     // Determine return type
     std::string ret_type = "i32";  // Default

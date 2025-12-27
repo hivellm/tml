@@ -197,7 +197,7 @@ TEST_F(BorrowCheckerTest, IfExpression) {
 TEST_F(BorrowCheckerTest, LoopExpression) {
     check_ok(R"(
         func test() {
-            let mut x = 0
+            let mut x: I32 = 0
             loop {
                 x = x + 1
                 if x > 10 {
@@ -212,7 +212,7 @@ TEST_F(BorrowCheckerTest, ForExpression) {
     check_ok(R"(
         func test(items: [I32]) {
             for item in items {
-                let x = item
+                let x: I32 = item
             }
         }
     )");
@@ -279,7 +279,7 @@ TEST_F(BorrowCheckerTest, MethodWithThis) {
 TEST_F(BorrowCheckerTest, SimpleClosure) {
     check_ok(R"(
         func test() {
-            let f = do(x: I32) x + 1
+            let f: (I32) -> I32 = do(x: I32) x + 1
         }
     )");
 }
@@ -287,8 +287,8 @@ TEST_F(BorrowCheckerTest, SimpleClosure) {
 TEST_F(BorrowCheckerTest, ClosureWithCapture) {
     check_ok(R"(
         func test() {
-            let y = 10
-            let f = do(x: I32) x + y
+            let y: I32 = 10
+            let f: (I32) -> I32 = do(x: I32) x + y
         }
     )");
 }
@@ -305,7 +305,7 @@ TEST_F(BorrowCheckerTest, StructCreation) {
         }
 
         func test() {
-            let p = Point { x: 1, y: 2 }
+            let p: Point = Point { x: 1, y: 2 }
         }
     )");
 }
@@ -317,7 +317,7 @@ TEST_F(BorrowCheckerTest, StructCreation) {
 TEST_F(BorrowCheckerTest, ArrayCreation) {
     check_ok(R"(
         func test() {
-            let arr = [1, 2, 3]
+            let arr: [I32] = [1, 2, 3]
         }
     )");
 }
@@ -325,7 +325,7 @@ TEST_F(BorrowCheckerTest, ArrayCreation) {
 TEST_F(BorrowCheckerTest, TupleCreation) {
     check_ok(R"(
         func test() {
-            let t = (1, 2, 3)
+            let t: (I32, I32, I32) = (1, 2, 3)
         }
     )");
 }
@@ -352,8 +352,8 @@ TEST_F(BorrowCheckerTest, CompleteProgram) {
         }
 
         func main() {
-            let p = Point::new(10, 20)
-            let d = p.distance()
+            let p: Point = Point::new(10, 20)
+            let d: I32 = p.distance()
         }
     )");
 }
@@ -361,8 +361,8 @@ TEST_F(BorrowCheckerTest, CompleteProgram) {
 TEST_F(BorrowCheckerTest, NestedFunctions) {
     check_ok(R"(
         func outer() -> I32 {
-            let x = 10
-            let result = inner(x)
+            let x: I32 = 10
+            let result: I32 = inner(x)
             result
         }
 

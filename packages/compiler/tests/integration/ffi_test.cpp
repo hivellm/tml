@@ -44,18 +44,15 @@ protected:
     void create_tml_library() {
         std::ofstream out(tml_lib_file);
         out << R"(
-@[export]
-func add_numbers(a: I32, b: I32) -> I32 {
+pub func add_numbers(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-@[export]
-func multiply_numbers(a: I32, b: I32) -> I32 {
+pub func multiply_numbers(a: I32, b: I32) -> I32 {
     return a * b
 }
 
-@[export]
-func get_magic_number() -> I32 {
+pub func get_magic_number() -> I32 {
     return 42
 }
 )";
@@ -107,7 +104,7 @@ int main() {
 TEST_F(FFIIntegrationTest, BuildStaticLibraryWithHeader) {
     std::string cmd = "\"" + tml_exe.string() + "\" build " +
                       tml_lib_file.string() +
-                      " --crate-type lib --emit-header --out-dir " +
+                      " --crate-type=lib --emit-header --out-dir=" +
                       test_dir.string();
 
     int result = run_command(cmd);
@@ -131,7 +128,7 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
     // Build TML library
     std::string build_cmd = "\"" + tml_exe.string() + "\" build " +
                             tml_lib_file.string() +
-                            " --crate-type lib --emit-header --out-dir " +
+                            " --crate-type=lib --emit-header --out-dir=" +
                             test_dir.string();
     int build_result = run_command(build_cmd);
     ASSERT_EQ(build_result, 0) << "Building TML library should succeed";
@@ -167,7 +164,7 @@ TEST_F(FFIIntegrationTest, CProgramUsesStaticLibrary) {
 TEST_F(FFIIntegrationTest, BuildDynamicLibraryWithHeader) {
     std::string cmd = "\"" + tml_exe.string() + "\" build " +
                       tml_lib_file.string() +
-                      " --crate-type dylib --emit-header --out-dir " +
+                      " --crate-type=dylib --emit-header --out-dir=" +
                       test_dir.string();
 
     int result = run_command(cmd);
@@ -192,7 +189,7 @@ TEST_F(FFIIntegrationTest, HeaderContainsCorrectDeclarations) {
     // Build library to generate header
     std::string cmd = "\"" + tml_exe.string() + "\" build " +
                       tml_lib_file.string() +
-                      " --crate-type lib --emit-header --out-dir " +
+                      " --crate-type=lib --emit-header --out-dir=" +
                       test_dir.string();
     int result = run_command(cmd);
     ASSERT_EQ(result, 0) << "Building library should succeed";

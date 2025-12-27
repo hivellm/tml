@@ -82,9 +82,49 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
         });
     }
 
-    // Tuple or function: (T, U) or func(T) -> R
-    if (check(lexer::TokenKind::LParen)) {
-        return parse_type(); // TODO: implement tuple types
+    // Tuple or function type: (T, U) or (T) -> R
+    if (match(lexer::TokenKind::LParen)) {
+        // Parse parameter/element types
+        std::vector<TypePtr> types;
+        while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+            auto elem = parse_type();
+            if (is_err(elem)) return elem;
+            types.push_back(std::move(unwrap(elem)));
+
+            if (!check(lexer::TokenKind::RParen)) {
+                auto comma = expect(lexer::TokenKind::Comma, "Expected ',' or ')'");
+                if (is_err(comma)) return unwrap_err(comma);
+            }
+        }
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')'");
+        if (is_err(rparen)) return unwrap_err(rparen);
+
+        // Check if this is a function type: (...) -> RetType
+        if (match(lexer::TokenKind::Arrow)) {
+            auto ret = parse_type();
+            if (is_err(ret)) return ret;
+
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_box<Type>(Type{
+                .kind = FuncType{
+                    .params = std::move(types),
+                    .return_type = std::move(unwrap(ret)),
+                    .span = span
+                },
+                .span = span
+            });
+        }
+
+        // Otherwise it's a tuple type (or single element tuple)
+        auto span = SourceSpan::merge(start_span, previous().span);
+        return make_box<Type>(Type{
+            .kind = TupleType{
+                .elements = std::move(types),
+                .span = span
+            },
+            .span = span
+        });
     }
 
     // Array or slice: [T; N] or [T]

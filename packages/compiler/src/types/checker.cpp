@@ -51,6 +51,42 @@ bool is_float_type(const TypePtr& type) {
     return kind == PrimitiveKind::F32 || kind == PrimitiveKind::F64;
 }
 
+// Extract library name from @link path for FFI namespace
+// Examples:
+//   "SDL2"           -> "SDL2"
+//   "SDL2.dll"       -> "SDL2"
+//   "libSDL2.so"     -> "SDL2"
+//   "./vendor/foo.a" -> "foo"
+//   "user32"         -> "user32"
+std::string extract_ffi_module_name(const std::string& link_path) {
+    std::string name = link_path;
+
+    // Remove path prefix (keep only filename)
+    auto slash_pos = name.find_last_of("/\\");
+    if (slash_pos != std::string::npos) {
+        name = name.substr(slash_pos + 1);
+    }
+
+    // Remove common library extensions
+    const std::vector<std::string> extensions = {
+        ".dll", ".so", ".dylib", ".lib", ".a"
+    };
+    for (const auto& ext : extensions) {
+        if (name.size() > ext.size() &&
+            name.substr(name.size() - ext.size()) == ext) {
+            name = name.substr(0, name.size() - ext.size());
+            break;
+        }
+    }
+
+    // Remove "lib" prefix (common on Unix)
+    if (name.size() > 3 && name.substr(0, 3) == "lib") {
+        name = name.substr(3);
+    }
+
+    return name;
+}
+
 // Check if types are compatible (allowing numeric coercion)
 bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
     if (types_equal(expected, actual)) return true;
@@ -89,6 +125,11 @@ TypeChecker::TypeChecker() = default;
 auto TypeChecker::check_module(const parser::Module& module)
     -> Result<TypeEnv, std::vector<TypeError>> {
     TML_DEBUG_LN("[DEBUG] check_module called");
+
+    // Ensure module registry exists for FFI namespace support
+    if (!env_.module_registry()) {
+        env_.set_module_registry(std::make_shared<ModuleRegistry>());
+    }
 
     // Pass 0: Process use declarations (imports)
     for (const auto& decl : module.decls) {
@@ -314,6 +355,14 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
+    // Validate @link paths for security (no directory traversal)
+    for (const auto& lib : func.link_libs) {
+        if (lib.find("..") != std::string::npos) {
+            error("@link path '" + lib + "' contains '..' which is not allowed for security reasons",
+                  func.span);
+        }
+    }
+
     std::vector<TypePtr> params;
     for (const auto& p : func.params) {
         params.push_back(resolve_type(*p.type));
@@ -356,6 +405,12 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         func_type_params.push_back(param.name);
     }
 
+    // Extract FFI module namespace from @link
+    std::optional<std::string> ffi_module = std::nullopt;
+    if (!func.link_libs.empty()) {
+        ffi_module = extract_ffi_module_name(func.link_libs[0]);
+    }
+
     env_.define_func(FuncSig{
         .name = func.name,
         .params = std::move(params),
@@ -366,7 +421,12 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         .stability = StabilityLevel::Unstable,
         .deprecated_message = "",
         .since_version = "",
-        .where_constraints = std::move(where_constraints)
+        .where_constraints = std::move(where_constraints),
+        .is_lowlevel = false,
+        .extern_abi = func.extern_abi,
+        .extern_name = func.extern_name,
+        .link_libs = func.link_libs,
+        .ffi_module = ffi_module
     });
 }
 
@@ -1189,6 +1249,13 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 return;
             }
 
+            // Build substitution map for generic type parameters
+            // e.g., for Maybe[I64], map T -> I64
+            std::unordered_map<std::string, TypePtr> type_subs;
+            for (size_t i = 0; i < enum_def->type_params.size() && i < named.type_args.size(); ++i) {
+                type_subs[enum_def->type_params[i]] = named.type_args[i];
+            }
+
             // Find matching variant
             std::string variant_name = p.path.segments.back();
             auto variant_it = std::find_if(
@@ -1218,9 +1285,11 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                     return;
                 }
 
-                // Recursively bind each payload element
+                // Recursively bind each payload element with substituted types
                 for (size_t i = 0; i < p.payload->size(); ++i) {
-                    bind_pattern(*(*p.payload)[i], variant_payload_types[i]);
+                    // Substitute generic types (e.g., T -> I64 for Maybe[I64])
+                    TypePtr payload_type = substitute_type(variant_payload_types[i], type_subs);
+                    bind_pattern(*(*p.payload)[i], payload_type);
                 }
             } else if (!variant_payload_types.empty()) {
                 error("Variant '" + variant_name + "' has payload, but pattern doesn't bind it", pattern.span);
