@@ -201,6 +201,17 @@ get_runtime_objects(const std::shared_ptr<types::ModuleRegistry>& registry,
                 std::cout << "Including mem runtime: " << mem_obj << "\n";
             }
         }
+
+        // Also include time.c by default (commonly used for timing/sleep)
+        fs::path time_c = runtime_dir / "time.c";
+        if (fs::exists(time_c)) {
+            std::string time_obj =
+                ensure_c_compiled(to_forward_slashes(time_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(time_obj));
+            if (verbose) {
+                std::cout << "Including time runtime: " << time_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported
