@@ -141,13 +141,19 @@ target_include_directories(tml_ir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)
 add_library(tml_codegen STATIC
-    src/codegen/llvm_ir_gen.cpp
     src/codegen/llvm_ir_gen_decl.cpp
     src/codegen/llvm_ir_gen_stmt.cpp
     src/codegen/llvm_ir_gen_expr.cpp
     src/codegen/llvm_ir_gen_builtins.cpp
     src/codegen/llvm_ir_gen_control.cpp
     src/codegen/c_header_gen.cpp
+    # Core codegen (split from llvm_ir_gen.cpp for maintainability)
+    src/codegen/core/utils.cpp
+    src/codegen/core/types.cpp
+    src/codegen/core/generic.cpp
+    src/codegen/core/runtime.cpp
+    src/codegen/core/dyn.cpp
+    src/codegen/core/generate.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/infer.cpp
     src/codegen/expr/struct.cpp
@@ -163,7 +169,6 @@ add_library(tml_codegen STATIC
     src/codegen/builtins/math.cpp
     src/codegen/builtins/collections.cpp
     src/codegen/builtins/string.cpp
-    # src/codegen/c_gen.cpp  # Removed - using LLVM backend only
 )
 target_link_libraries(tml_codegen PUBLIC tml_ir)
 target_include_directories(tml_codegen PUBLIC include src)

@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `env_builtins_sync.cpp` with thread_sleep, channel_*, mutex_*, waitgroup_*
   - All 86 tests passing, 272 core tests passing total
 
+- **Core Codegen Refactoring** (2025-12-27) - Split llvm_ir_gen.cpp (1820 lines) into modular components
+  - New directory: `src/codegen/core/`
+  - `core/utils.cpp` - Constructor, fresh_reg, emit, emit_line, report_error, add_string_literal
+  - `core/types.cpp` - Type conversion/mangling, resolve_parser_type_with_subs, unify_types
+  - `core/generic.cpp` - Generic instantiation (generate_pending_instantiations)
+  - `core/runtime.cpp` - Runtime declarations, module imports, string constants
+  - `core/dyn.cpp` - Dynamic dispatch and vtables (register_impl, emit_vtables)
+  - `core/generate.cpp` - Main generate() function, infer_print_type
+  - Removed: Original `llvm_ir_gen.cpp` (all code moved to core/)
+  - Build verified: 93 codegen tests (91 passing, 2 pre-existing failures)
+
 - **Expression Codegen Refactoring** (2025-12-27) - Split llvm_ir_gen_types.cpp (1667 lines) into modular components
   - New directory: `src/codegen/expr/`
   - `expr/infer.cpp` (287 lines) - Type inference (infer_expr_type)
