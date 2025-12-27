@@ -243,7 +243,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
         // Create FuncType
         auto result = std::make_shared<types::Type>();
-        result->kind = types::FuncType{std::move(param_types), return_type};
+        result->kind = types::FuncType{std::move(param_types), return_type, false};
         return result;
     }
     // Handle ternary expressions (condition ? true_value : false_value): infer from true_value
