@@ -1,13 +1,15 @@
-#include "utils.hpp"
-#include "cmd_debug.hpp"
-#include "cmd_build.hpp"
-#include "cmd_format.hpp"
-#include "cmd_test.hpp"
-#include "cmd_cache.hpp"
-#include "cmd_rlib.hpp"
-#include "cmd_init.hpp"
 #include "build_config.hpp"
+#include "cmd_build.hpp"
+#include "cmd_cache.hpp"
+#include "cmd_debug.hpp"
+#include "cmd_format.hpp"
+#include "cmd_init.hpp"
+#include "cmd_lint.hpp"
+#include "cmd_rlib.hpp"
+#include "cmd_test.hpp"
 #include "tml/common.hpp"
+#include "utils.hpp"
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -94,7 +96,7 @@ int tml_main(int argc, char* argv[]) {
         bool debug_info = false;
         int opt_level = manifest_opt ? manifest_opt->build.optimization_level : 0;
         BuildOutputType output_type = BuildOutputType::Executable;
-        std::string output_dir = "";  // Empty means use default (build/debug)
+        std::string output_dir = ""; // Empty means use default (build/debug)
 
         // Determine output type from manifest if available
         if (manifest_opt && manifest_opt->lib) {
@@ -133,9 +135,9 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg == "-O3") {
                 opt_level = 3;
             } else if (arg == "-Os") {
-                opt_level = 4;  // Optimize for size
+                opt_level = 4; // Optimize for size
             } else if (arg == "-Oz") {
-                opt_level = 5;  // Optimize for size (aggressive)
+                opt_level = 5; // Optimize for size (aggressive)
             } else if (arg.starts_with("--crate-type=")) {
                 std::string crate_type = arg.substr(13);
                 if (crate_type == "bin") {
@@ -160,7 +162,8 @@ int tml_main(int argc, char* argv[]) {
         tml::CompilerOptions::optimization_level = opt_level;
         tml::CompilerOptions::debug_info = debug_info;
 
-        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header, output_dir);
+        return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header,
+                         output_dir);
     }
 
     if (command == "fmt") {
@@ -213,12 +216,16 @@ int tml_main(int argc, char* argv[]) {
         return run_init(argc, argv);
     }
 
+    if (command == "lint") {
+        return run_lint(argc, argv);
+    }
+
     std::cerr << "Error: Unknown command '" << command << "'\n";
     std::cerr << "Run 'tml --help' for usage information.\n";
     return 1;
 }
 
-}
+} // namespace tml::cli
 
 // Entry point wrapper (outside namespace)
 int tml_main(int argc, char* argv[]) {

@@ -1,8 +1,8 @@
 # Tasks: Bootstrap Stdlib Core
 
-## Progress: 66% (25/38 tasks complete)
+## Progress: 89% (34/38 tasks complete)
 
-**Latest Update (2025-12-26):** ✅ CRITICAL BUG FIX: Generic functions + closures now work! This unblocks stdlib functional programming patterns (map, filter, fold, etc). See [BUGS.md](../../../BUGS.md) for details.
+**Latest Update (2025-12-27):** ✅ Core traits tests added in packages/std/tests/traits.test.tml. Tests cover Maybe[T], Outcome[T,E], Hash, Default, and comparison patterns.
 
 ## 1. Setup Phase
 - [x] 1.1 Create `runtime/` directory structure (C runtime)
@@ -10,41 +10,41 @@
 - [x] 1.3 Create collections runtime
 - [x] 1.4 Create string runtime
 
-## 2. Core Traits Phase
-- [ ] 2.1 Implement Copy trait
-- [ ] 2.2 Implement Clone trait (duplicate)
-- [ ] 2.3 Implement Drop trait
-- [ ] 2.4 Implement Eq and PartialEq traits
-- [ ] 2.5 Implement Ord and PartialOrd traits
-- [ ] 2.6 Implement Hash trait
-- [ ] 2.7 Implement Display trait
-- [ ] 2.8 Implement Debug trait
-- [ ] 2.9 Implement Default trait
-- [ ] 2.10 Implement From and Into traits
+## 2. Core Traits Phase ✅ COMPLETE
+- [x] 2.1 Implement Copy trait
+- [x] 2.2 Implement Clone trait (Duplicate)
+- [x] 2.3 Implement Drop trait
+- [x] 2.4 Implement Eq and PartialEq traits
+- [x] 2.5 Implement Ord and PartialOrd traits (with Ordering enum)
+- [x] 2.6 Implement Hash trait
+- [x] 2.7 Implement Display trait
+- [x] 2.8 Implement Debug trait
+- [x] 2.9 Implement Default trait
+- [x] 2.10 Implement From, Into, TryFrom, TryInto, AsRef, AsMut traits
 
 ## 3. Primitive Types Phase
 - [x] 3.1 Implement I8, I16, I32, I64 operations
 - [x] 3.2 Implement U8, U16, U32, U64 operations
 - [x] 3.3 Implement F32, F64 operations
 - [x] 3.4 Implement Bool operations
-- [ ] 3.5 Implement Char operations (Unicode)
+- [x] 3.5 Implement Char operations (Unicode)
 - [ ] 3.6 Implement trait impls for all primitives
 
-## 4. Option Type Phase (Maybe[T]) ✅ PARTIAL
+## 4. Option Type Phase (Maybe[T]) ✅ COMPLETE
 - [x] 4.1 Define Maybe[T] enum (Just, Nothing)
 - [x] 4.2 Implement is_just, is_nothing
-- [ ] 4.3 Implement unwrap, expect (requires Never type for panic)
+- [x] 4.3 Implement unwrap, expect (uses panic)
 - [x] 4.4 Implement unwrap_or, unwrap_or_else
-- [x] 4.5 Implement map, and_then, filter, or_else (**FIXED 2025-12-26**: Generic closures bug resolved!)
-- [ ] 4.6 Implement ok_or, ok_or_else
+- [x] 4.5 Implement map, and_then, filter, or_else
+- [x] 4.6 Implement ok_or, ok_or_else
 
-## 5. Result Type Phase (Outcome[T, E]) ✅ PARTIAL
+## 5. Result Type Phase (Outcome[T, E]) ✅ COMPLETE
 - [x] 5.1 Define Outcome[T, E] enum (Ok, Err)
 - [x] 5.2 Implement is_ok, is_err
-- [ ] 5.3 Implement unwrap, expect, unwrap_err (requires Never type)
-- [x] 5.4 Implement map_ok, map_err (**FIXED 2025-12-26**: Generic closures bug resolved!)
+- [x] 5.3 Implement unwrap_ok, expect_ok, unwrap_err, expect_err (uses panic)
+- [x] 5.4 Implement map_ok, map_err
 - [x] 5.5 Implement and_then_ok, or_else_ok
-- [ ] 5.6 Implement ! operator support
+- [ ] 5.6 Implement ! operator support (try operator)
 
 ## 6. List Type Phase
 - [x] 6.1 Implement List runtime with heap allocation
@@ -62,7 +62,7 @@
 ## 7. String Type Phase
 - [x] 7.1 Implement String struct (tml_str)
 - [x] 7.2 Implement str_create, str_from_cstr
-- [ ] 7.3 Implement str_push, str_push_str
+- [x] 7.3 Implement str_push, str_push_str (via StringBuilder API)
 - [x] 7.4 Implement str_len, str_is_empty
 - [ ] 7.5 Implement chars iterator
 - [ ] 7.6 Implement bytes iterator
@@ -86,7 +86,7 @@
 - [x] 9.6 Implement buffer_clear, buffer_reset_read
 
 ## 10. Testing Phase
-- [ ] 10.1 Write tests for core traits
+- [x] 10.1 Write tests for core traits (packages/std/tests/traits.test.tml)
 - [x] 10.2 Write tests for primitives
 - [x] 10.3 Write tests for Maybe (packages/std/tests/types.test.tml)
 - [x] 10.4 Write tests for Outcome (packages/std/tests/types.test.tml)

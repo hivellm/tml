@@ -21,10 +21,10 @@ func test_point_creation() -> I32 {
 
 @test
 func test_rectangle_creation() -> I32 {
-    let rect: Rectangle = Rectangle { 
-        origin: Point { x: 0, y: 0 }, 
-        width: 100, 
-        height: 50 
+    let rect: Rectangle = Rectangle {
+        origin: Point { x: 0, y: 0 },
+        width: 100,
+        height: 50
     }
     assert_eq(rect.width, 100, "Rectangle width should be 100")
     assert_eq(rect.height, 50, "Rectangle height should be 50")

@@ -202,6 +202,7 @@ add_library(tml_cli STATIC
     src/cli/cmd_debug.cpp
     src/cli/cmd_build.cpp
     src/cli/cmd_format.cpp
+    src/cli/cmd_lint.cpp
     src/cli/cmd_test.cpp
     src/cli/cmd_cache.cpp
     src/cli/cmd_rlib.cpp

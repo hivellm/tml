@@ -1,27 +1,30 @@
 #include "cmd_build.hpp"
-#include "utils.hpp"
+
+#include "build_config.hpp"
 #include "compiler_setup.hpp"
 #include "object_compiler.hpp"
 #include "rlib.hpp"
-#include "build_config.hpp"
+#include "tml/codegen/c_header_gen.hpp"
+#include "tml/codegen/llvm_ir_gen.hpp"
 #include "tml/common.hpp"
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/parser/parser.hpp"
 #include "tml/types/checker.hpp"
-#include "tml/codegen/llvm_ir_gen.hpp"
-#include "tml/codegen/c_header_gen.hpp"
-#include <iostream>
-#include <fstream>
-#include <filesystem>
+#include "utils.hpp"
+
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
-#include <thread>
-#include <sstream>
 #include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <thread>
 #ifndef _WIN32
-#include <sys/wait.h>
 #include "tml/types/module.hpp"
+
+#include <sys/wait.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -53,7 +56,8 @@ static std::string generate_content_hash(const std::string& content) {
 }
 
 // Generate a combined hash for executable caching (source + all object files)
-static std::string generate_exe_hash(const std::string& source_hash, const std::vector<fs::path>& obj_files) {
+static std::string generate_exe_hash(const std::string& source_hash,
+                                     const std::vector<fs::path>& obj_files) {
     std::hash<std::string> hasher;
     size_t combined_hash = hasher(source_hash);
 
@@ -61,9 +65,11 @@ static std::string generate_exe_hash(const std::string& source_hash, const std::
     for (const auto& obj : obj_files) {
         if (fs::exists(obj)) {
             // Include file path and last write time
-            combined_hash ^= hasher(obj.string()) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
+            combined_hash ^=
+                hasher(obj.string()) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
             auto ftime = fs::last_write_time(obj).time_since_epoch().count();
-            combined_hash ^= std::hash<decltype(ftime)>{}(ftime) + 0x9e3779b9 + (combined_hash << 6) + (combined_hash >> 2);
+            combined_hash ^= std::hash<decltype(ftime)>{}(ftime) + 0x9e3779b9 +
+                             (combined_hash << 6) + (combined_hash >> 2);
         }
     }
 
@@ -102,8 +108,7 @@ static fs::path find_project_root() {
     // Walk up the directory tree looking for project markers
     while (!current.empty() && current != current.parent_path()) {
         // Check for common project markers
-        if (fs::exists(current / ".git") ||
-            fs::exists(current / "CLAUDE.md") ||
+        if (fs::exists(current / ".git") || fs::exists(current / "CLAUDE.md") ||
             fs::exists(current / "packages")) {
             return current;
         }
@@ -144,20 +149,18 @@ static bool has_bench_functions(const parser::Module& module) {
 
 // Helper to get runtime object files as a vector
 // Returns a vector of compiled runtime object file paths
-static std::vector<fs::path> get_runtime_objects(
-    const std::shared_ptr<types::ModuleRegistry>& registry,
-    const parser::Module& module,
-    const std::string& deps_cache,
-    const std::string& clang,
-    bool verbose
-) {
+static std::vector<fs::path>
+get_runtime_objects(const std::shared_ptr<types::ModuleRegistry>& registry,
+                    const parser::Module& module, const std::string& deps_cache,
+                    const std::string& clang, bool verbose) {
     std::vector<fs::path> objects;
 
     // Helper to find and compile runtime with caching
     auto add_runtime = [&](const std::vector<std::string>& search_paths, const std::string& name) {
         for (const auto& path : search_paths) {
             if (fs::exists(path)) {
-                std::string obj = ensure_c_compiled(to_forward_slashes(fs::absolute(path).string()), deps_cache, clang, verbose);
+                std::string obj = ensure_c_compiled(to_forward_slashes(fs::absolute(path).string()),
+                                                    deps_cache, clang, verbose);
                 objects.push_back(fs::path(obj));
                 if (verbose) {
                     std::cout << "Including " << name << ": " << obj << "\n";
@@ -167,7 +170,7 @@ static std::vector<fs::path> get_runtime_objects(
         }
     };
 
-    // Essential runtime
+    // Essential runtime (IO functions)
     std::string runtime_path = find_runtime();
     if (!runtime_path.empty()) {
         std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
@@ -175,65 +178,102 @@ static std::vector<fs::path> get_runtime_objects(
         if (verbose) {
             std::cout << "Including runtime: " << obj << "\n";
         }
+
+        // Also include string.c and mem.c by default (commonly used)
+        fs::path runtime_dir = fs::path(runtime_path).parent_path();
+
+        fs::path string_c = runtime_dir / "string.c";
+        if (fs::exists(string_c)) {
+            std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
+                                                       deps_cache, clang, verbose);
+            objects.push_back(fs::path(string_obj));
+            if (verbose) {
+                std::cout << "Including string runtime: " << string_obj << "\n";
+            }
+        }
+
+        fs::path mem_c = runtime_dir / "mem.c";
+        if (fs::exists(mem_c)) {
+            std::string mem_obj =
+                ensure_c_compiled(to_forward_slashes(mem_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(mem_obj));
+            if (verbose) {
+                std::cout << "Including mem runtime: " << mem_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported
     if (registry->has_module("core::mem")) {
-        add_runtime({
-            "packages/core/runtime/mem.c",
-            "../../../core/runtime/mem.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
-        }, "core::mem");
+        add_runtime(
+            {
+                "packages/core/runtime/mem.c",
+                "../../../core/runtime/mem.c",
+                "F:/Node/hivellm/tml/packages/core/runtime/mem.c",
+            },
+            "core::mem");
     }
 
     // Link time runtime if core::time is imported OR if @bench decorators are present
     if (registry->has_module("core::time") || has_bench_functions(module)) {
-        add_runtime({
-            "packages/core/runtime/time.c",
-            "../../../core/runtime/time.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/time.c",
-        }, "core::time");
+        add_runtime(
+            {
+                "packages/core/runtime/time.c",
+                "../../../core/runtime/time.c",
+                "F:/Node/hivellm/tml/packages/core/runtime/time.c",
+            },
+            "core::time");
     }
 
     if (registry->has_module("core::thread") || registry->has_module("core::sync")) {
-        add_runtime({
-            "packages/core/runtime/thread.c",
-            "../../../core/runtime/thread.c",
-            "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
-        }, "core::thread");
+        add_runtime(
+            {
+                "packages/core/runtime/thread.c",
+                "../../../core/runtime/thread.c",
+                "F:/Node/hivellm/tml/packages/core/runtime/thread.c",
+            },
+            "core::thread");
     }
 
     if (registry->has_module("test")) {
-        add_runtime({
-            "packages/test/runtime/test.c",
-            "../../../test/runtime/test.c",
-            "F:/Node/hivellm/tml/packages/test/runtime/test.c",
-        }, "test");
+        add_runtime(
+            {
+                "packages/test/runtime/test.c",
+                "../../../test/runtime/test.c",
+                "F:/Node/hivellm/tml/packages/test/runtime/test.c",
+            },
+            "test");
 
         // Also link coverage runtime (part of test module)
-        add_runtime({
-            "packages/test/runtime/coverage.c",
-            "../../../test/runtime/coverage.c",
-            "F:/Node/hivellm/tml/packages/test/runtime/coverage.c",
-        }, "test::coverage");
+        add_runtime(
+            {
+                "packages/test/runtime/coverage.c",
+                "../../../test/runtime/coverage.c",
+                "F:/Node/hivellm/tml/packages/test/runtime/coverage.c",
+            },
+            "test::coverage");
     }
 
     // Link std::collections runtime if imported
     if (registry->has_module("std::collections")) {
-        add_runtime({
-            "packages/std/runtime/collections.c",
-            "../../../std/runtime/collections.c",
-            "F:/Node/hivellm/tml/packages/std/runtime/collections.c",
-        }, "std::collections");
+        add_runtime(
+            {
+                "packages/std/runtime/collections.c",
+                "../../../std/runtime/collections.c",
+                "F:/Node/hivellm/tml/packages/std/runtime/collections.c",
+            },
+            "std::collections");
     }
 
     // Link std::file runtime if imported
     if (registry->has_module("std::file")) {
-        add_runtime({
-            "packages/std/runtime/file.c",
-            "../../../std/runtime/file.c",
-            "F:/Node/hivellm/tml/packages/std/runtime/file.c",
-        }, "std::file");
+        add_runtime(
+            {
+                "packages/std/runtime/file.c",
+                "../../../std/runtime/file.c",
+                "F:/Node/hivellm/tml/packages/std/runtime/file.c",
+            },
+            "std::file");
     }
 
     return objects;
@@ -257,7 +297,8 @@ static fs::path get_run_cache_dir() {
     return cache;
 }
 
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache, BuildOutputType output_type, bool emit_header, const std::string& output_dir) {
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_cache,
+              BuildOutputType output_type, bool emit_header, const std::string& output_dir) {
     (void)no_cache; // TODO: Implement cache control for build command
 
     // Try to load tml.toml manifest
@@ -286,9 +327,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -300,9 +340,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -321,9 +360,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -345,9 +383,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": codegen error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": codegen error: " << error.message << "\n";
         }
         return 1;
     }
@@ -356,8 +393,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 
     // Use build directory structure (like Rust's target/)
     // If output_dir is specified, use it; otherwise use default build directory
-    fs::path build_dir = output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
-    fs::create_directories(build_dir);  // Ensure custom output directory exists
+    fs::path build_dir =
+        output_dir.empty() ? get_build_dir(false /* debug */) : fs::path(output_dir);
+    fs::create_directories(build_dir); // Ensure custom output directory exists
 
     fs::path ll_output = build_dir / (module_name + ".ll");
     fs::path exe_output = build_dir / module_name;
@@ -426,34 +464,34 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     LinkOptions::OutputType link_output_type = LinkOptions::OutputType::Executable;
 
     switch (output_type) {
-        case BuildOutputType::Executable:
-            final_output = exe_output;  // Already has .exe extension
-            link_output_type = LinkOptions::OutputType::Executable;
-            break;
-        case BuildOutputType::StaticLib:
+    case BuildOutputType::Executable:
+        final_output = exe_output; // Already has .exe extension
+        link_output_type = LinkOptions::OutputType::Executable;
+        break;
+    case BuildOutputType::StaticLib:
 #ifdef _WIN32
-            final_output = build_dir / (module_name + ".lib");
+        final_output = build_dir / (module_name + ".lib");
 #else
-            final_output = build_dir / ("lib" + module_name + ".a");
+        final_output = build_dir / ("lib" + module_name + ".a");
 #endif
-            link_output_type = LinkOptions::OutputType::StaticLib;
-            break;
-        case BuildOutputType::DynamicLib:
+        link_output_type = LinkOptions::OutputType::StaticLib;
+        break;
+    case BuildOutputType::DynamicLib:
 #ifdef _WIN32
-            final_output = build_dir / (module_name + ".dll");
+        final_output = build_dir / (module_name + ".dll");
 #else
 #ifdef __APPLE__
-            final_output = build_dir / ("lib" + module_name + ".dylib");
+        final_output = build_dir / ("lib" + module_name + ".dylib");
 #else
-            final_output = build_dir / ("lib" + module_name + ".so");
+        final_output = build_dir / ("lib" + module_name + ".so");
 #endif
 #endif
-            link_output_type = LinkOptions::OutputType::DynamicLib;
-            break;
-        case BuildOutputType::RlibLib:
-            final_output = build_dir / (module_name + ".rlib");
-            // RLIB doesn't use standard linking - we'll create it separately
-            break;
+        link_output_type = LinkOptions::OutputType::DynamicLib;
+        break;
+    case BuildOutputType::RlibLib:
+        final_output = build_dir / (module_name + ".rlib");
+        // RLIB doesn't use standard linking - we'll create it separately
+        break;
     }
 
     // For RLIB: Create RLIB archive instead of linking
@@ -462,7 +500,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
         RlibMetadata metadata;
         metadata.format_version = "1.0";
         metadata.library.name = module_name;
-        metadata.library.version = "0.1.0";  // TODO: Read from manifest
+        metadata.library.version = "0.1.0"; // TODO: Read from manifest
         metadata.library.tml_version = "0.1.0";
 
         // Add module information
@@ -480,8 +518,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
                 if (func_decl.vis == parser::Visibility::Public) {
                     RlibExport exp;
                     exp.name = func_decl.name;
-                    exp.symbol = "tml_" + func_decl.name;  // Simple mangling
-                    exp.type = "func";  // TODO: Add full type signature
+                    exp.symbol = "tml_" + func_decl.name; // Simple mangling
+                    exp.type = "func";                    // TODO: Add full type signature
                     exp.is_public = true;
                     rlib_module.exports.push_back(exp);
                 }
@@ -557,7 +595,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     return 0;
 }
 
-int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose, bool coverage, bool no_cache) {
+int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
+            bool coverage, bool no_cache) {
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -572,9 +611,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     if (lex.has_errors()) {
         for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
         }
         return 1;
     }
@@ -586,9 +624,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -607,9 +644,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": error: " << error.message << "\n";
             for (const auto& note : error.notes) {
                 std::cerr << "  note: " << note << "\n";
             }
@@ -629,9 +665,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
         for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":"
-                      << error.span.start.column << ": codegen error: "
-                      << error.message << "\n";
+            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
+                      << ": codegen error: " << error.message << "\n";
         }
         return 1;
     }
@@ -808,13 +843,14 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 #endif
 }
 
-int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
-                  bool verbose, std::string* output, bool coverage, bool no_cache) {
+int run_run_quiet(const std::string& path, const std::vector<std::string>& args, bool verbose,
+                  std::string* output, bool coverage, bool no_cache) {
     std::string source_code;
     try {
         source_code = read_file(path);
     } catch (const std::exception& e) {
-        if (output) *output = std::string("error: ") + e.what();
+        if (output)
+            *output = std::string("error: ") + e.what();
         return 1;
     }
 
@@ -826,10 +862,11 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         std::string err_output;
         for (const auto& error : lex.errors()) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
-                          std::to_string(error.span.start.column) + ": error: " +
-                          error.message + "\n";
+                          std::to_string(error.span.start.column) + ": error: " + error.message +
+                          "\n";
         }
-        if (output) *output = err_output;
+        if (output)
+            *output = err_output;
         return 1;
     }
 
@@ -842,10 +879,11 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
-                          std::to_string(error.span.start.column) + ": error: " +
-                          error.message + "\n";
+                          std::to_string(error.span.start.column) + ": error: " + error.message +
+                          "\n";
         }
-        if (output) *output = err_output;
+        if (output)
+            *output = err_output;
         return 1;
     }
 
@@ -861,10 +899,11 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
-                          std::to_string(error.span.start.column) + ": error: " +
-                          error.message + "\n";
+                          std::to_string(error.span.start.column) + ": error: " + error.message +
+                          "\n";
         }
-        if (output) *output = err_output;
+        if (output)
+            *output = err_output;
         return 1;
     }
 
@@ -882,10 +921,11 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
-                          std::to_string(error.span.start.column) + ": codegen error: " +
-                          error.message + "\n";
+                          std::to_string(error.span.start.column) +
+                          ": codegen error: " + error.message + "\n";
         }
-        if (output) *output = err_output;
+        if (output)
+            *output = err_output;
         return 1;
     }
 
@@ -897,7 +937,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     // Calculate content hash for caching (unique per source content)
     std::string content_hash = generate_content_hash(source_code);
 
-    // Generate unique file names using cache key + thread ID for exe/output (to avoid race conditions)
+    // Generate unique file names using cache key + thread ID for exe/output (to avoid race
+    // conditions)
     std::string cache_key = generate_cache_key(path);
     std::string unique_name = module_name + "_" + cache_key;
 
@@ -911,7 +952,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     std::string clang = find_clang();
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
-        if (output) *output = "error: clang not found";
+        if (output)
+            *output = "error: clang not found";
         return 1;
     }
 
@@ -925,7 +967,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         // Write LLVM IR to file
         std::ofstream ll_file(ll_output);
         if (!ll_file) {
-            if (output) *output = "error: Cannot write to " + ll_output.string();
+            if (output)
+                *output = "error: Cannot write to " + ll_output.string();
             return 1;
         }
         ll_file << llvm_ir;
@@ -935,11 +978,12 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
-        obj_options.verbose = false;  // Always quiet for tests
+        obj_options.verbose = false; // Always quiet for tests
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
-            if (output) *output = "error: " + obj_result.error_message;
+            if (output)
+                *output = "error: " + obj_result.error_message;
             fs::remove(ll_output);
             return 1;
         }
@@ -967,7 +1011,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         // Link all object files to create executable
         LinkOptions link_options;
         link_options.output_type = LinkOptions::OutputType::Executable;
-        link_options.verbose = false;  // Always quiet for tests
+        link_options.verbose = false; // Always quiet for tests
 
         // Add @link libraries from FFI decorators
         for (const auto& lib : llvm_gen.get_link_libs()) {
@@ -984,7 +1028,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
         auto link_result = link_objects(object_files, temp_exe, clang, link_options);
         if (!link_result.success) {
-            if (output) *output = "error: " + link_result.error_message;
+            if (output)
+                *output = "error: " + link_result.error_message;
             return 1;
         }
 
@@ -1006,7 +1051,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     // Copy cached exe to final unique location (use hard link for speed in parallel tests)
     if (!fast_copy_file(cached_exe, exe_output)) {
-        if (output) *output = "error: Failed to copy cached exe";
+        if (output)
+            *output = "error: Failed to copy cached exe";
         return 1;
     }
 
@@ -1037,8 +1083,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     // Read captured output
     if (output && fs::exists(out_file)) {
         std::ifstream ifs(out_file);
-        *output = std::string((std::istreambuf_iterator<char>(ifs)),
-                              std::istreambuf_iterator<char>());
+        *output =
+            std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     }
 
     // Clean up temporary files (keep .obj in cache for reuse)
@@ -1052,4 +1098,4 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 #endif
 }
 
-}
+} // namespace tml::cli

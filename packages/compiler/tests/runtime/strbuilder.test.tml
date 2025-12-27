@@ -1,0 +1,124 @@
+use test
+
+// StringBuilder Tests
+// Tests for strbuilder_create, strbuilder_push, strbuilder_push_str, etc.
+
+// ============ strbuilder_create tests ============
+
+@test
+func test_strbuilder_create() -> I32 {
+    let sb: *Unit = strbuilder_create(16)
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 0, "New strbuilder should have length 0")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+@test
+func test_strbuilder_capacity() -> I32 {
+    let sb: *Unit = strbuilder_create(32)
+    let cap: I64 = strbuilder_capacity(sb)
+    assert(cap >= 32, "Capacity should be at least 32")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+// ============ strbuilder_push tests ============
+
+@test
+func test_strbuilder_push_single() -> I32 {
+    let sb: *Unit = strbuilder_create(16)
+    strbuilder_push(sb, 'A')
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 1, "Length should be 1 after push")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+@test
+func test_strbuilder_push_multiple() -> I32 {
+    let sb: *Unit = strbuilder_create(16)
+    strbuilder_push(sb, 'H')
+    strbuilder_push(sb, 'i')
+    strbuilder_push(sb, '!')
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 3, "Length should be 3 after 3 pushes")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+// ============ strbuilder_push_str tests ============
+
+@test
+func test_strbuilder_push_str() -> I32 {
+    let sb: *Unit = strbuilder_create(16)
+    strbuilder_push_str(sb, "Hello")
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 5, "Length should be 5 after pushing 'Hello'")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+@test
+func test_strbuilder_push_str_multiple() -> I32 {
+    let sb: *Unit = strbuilder_create(32)
+    strbuilder_push_str(sb, "Hello")
+    strbuilder_push_str(sb, ", ")
+    strbuilder_push_str(sb, "World!")
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 13, "Length should be 13")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+// ============ strbuilder_as_str tests ============
+
+@test
+func test_strbuilder_as_str() -> I32 {
+    let sb: *Unit = strbuilder_create(32)
+    strbuilder_push_str(sb, "Test")
+    let s: Str = strbuilder_as_str(sb)
+    assert(str_eq(s, "Test"), "as_str should return 'Test'")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+@test
+func test_strbuilder_mixed_operations() -> I32 {
+    let sb: *Unit = strbuilder_create(64)
+    strbuilder_push(sb, 'H')
+    strbuilder_push(sb, 'i')
+    strbuilder_push_str(sb, " there")
+    strbuilder_push(sb, '!')
+    let s: Str = strbuilder_as_str(sb)
+    assert(str_eq(s, "Hi there!"), "Mixed operations should produce 'Hi there!'")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+// ============ strbuilder_clear tests ============
+
+@test
+func test_strbuilder_clear() -> I32 {
+    let sb: *Unit = strbuilder_create(32)
+    strbuilder_push_str(sb, "Some text")
+    let len1: I64 = strbuilder_len(sb)
+    assert(len1 == 9, "Length should be 9 before clear")
+    strbuilder_clear(sb)
+    let len2: I64 = strbuilder_len(sb)
+    assert(len2 == 0, "Length should be 0 after clear")
+    strbuilder_destroy(sb)
+    return 0
+}
+
+// ============ strbuilder growth tests ============
+
+@test
+func test_strbuilder_growth() -> I32 {
+    let sb: *Unit = strbuilder_create(4)  // Small initial capacity
+    strbuilder_push_str(sb, "This is a longer string that will cause growth")
+    let len: I64 = strbuilder_len(sb)
+    assert(len == 46, "Length should be 46 after pushing long string")
+    strbuilder_destroy(sb)
+    return 0
+}

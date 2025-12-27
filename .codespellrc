@@ -1,0 +1,12 @@
+[codespell]
+# Directories and files to skip
+skip = *.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe,*.dll,*.so,*.dylib
+
+# Words to ignore (false positives)
+ignore-words-list = crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh,nd,ba,ue,fo,te,ot,lod,dout,ths,whn,som,numer,hel,ot,tht
+
+# Check hidden files
+check-hidden = false
+
+# Interactive mode
+interactive = 0

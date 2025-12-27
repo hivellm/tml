@@ -6,6 +6,7 @@
 #include "tml/lexer/lexer.hpp"
 #include "tml/lexer/source.hpp"
 #include "tml/parser/parser.hpp"
+
 #include <filesystem>
 
 namespace tml::codegen {
@@ -22,8 +23,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("%struct.tml_str = type { ptr, i64 }");
 
     // File I/O types (from std::file)
-    emit_line("%struct.File = type { ptr }");  // handle field
-    emit_line("%struct.Path = type { ptr }");  // path string field
+    emit_line("%struct.File = type { ptr }"); // handle field
+    emit_line("%struct.Path = type { ptr }"); // path string field
     emit_line("");
 
     // External C functions
@@ -73,7 +74,6 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @print(ptr)");
     emit_line("declare void @println(ptr)");
     emit_line("");
-
 
     // NOTE: Math functions moved to core::math module
     // Import with: use core::math
@@ -272,6 +272,37 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
 
+    // Char utilities (matches runtime/string.c)
+    emit_line("; Char utilities");
+    emit_line("declare i32 @char_is_alphabetic(i32)");
+    emit_line("declare i32 @char_is_numeric(i32)");
+    emit_line("declare i32 @char_is_alphanumeric(i32)");
+    emit_line("declare i32 @char_is_whitespace(i32)");
+    emit_line("declare i32 @char_is_uppercase(i32)");
+    emit_line("declare i32 @char_is_lowercase(i32)");
+    emit_line("declare i32 @char_is_ascii(i32)");
+    emit_line("declare i32 @char_is_control(i32)");
+    emit_line("declare i32 @char_to_uppercase(i32)");
+    emit_line("declare i32 @char_to_lowercase(i32)");
+    emit_line("declare i32 @char_to_digit(i32, i32)");
+    emit_line("declare i32 @char_from_digit(i32, i32)");
+    emit_line("declare i32 @char_code(i32)");
+    emit_line("declare i32 @char_from_code(i32)");
+    emit_line("");
+
+    // StringBuilder utilities (matches runtime/string.c)
+    emit_line("; StringBuilder utilities");
+    emit_line("declare ptr @strbuilder_create(i64)");
+    emit_line("declare void @strbuilder_destroy(ptr)");
+    emit_line("declare void @strbuilder_push(ptr, i32)");
+    emit_line("declare void @strbuilder_push_str(ptr, ptr)");
+    emit_line("declare i64 @strbuilder_len(ptr)");
+    emit_line("declare i64 @strbuilder_capacity(ptr)");
+    emit_line("declare void @strbuilder_clear(ptr)");
+    emit_line("declare ptr @strbuilder_to_str(ptr)");
+    emit_line("declare ptr @strbuilder_as_str(ptr)");
+    emit_line("");
+
     // Time functions (matches runtime/time.c)
     emit_line("; Time functions");
     emit_line("declare i32 @time_ms()");
@@ -301,19 +332,19 @@ void LLVMIRGen::emit_runtime_decls() {
     // Format strings for print/println
     // Size calculation: count actual bytes (each escape like \0A = 1 byte, not 3)
     emit_line("; Format strings");
-    emit_line("@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");           // %d\n\0 = 4 bytes
-    emit_line("@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");         // %d\0 = 3 bytes
-    emit_line("@.fmt.i64 = private constant [5 x i8] c\"%ld\\0A\\00\"");          // %ld\n\0 = 5 bytes
-    emit_line("@.fmt.i64.no_nl = private constant [4 x i8] c\"%ld\\00\"");        // %ld\0 = 4 bytes
-    emit_line("@.fmt.float = private constant [4 x i8] c\"%f\\0A\\00\"");         // %f\n\0 = 4 bytes
-    emit_line("@.fmt.float.no_nl = private constant [3 x i8] c\"%f\\00\"");       // %f\0 = 3 bytes
-    emit_line("@.fmt.float3 = private constant [6 x i8] c\"%.3f\\0A\\00\"");      // %.3f\n\0 = 6 bytes
-    emit_line("@.fmt.float3.no_nl = private constant [5 x i8] c\"%.3f\\00\"");    // %.3f\0 = 5 bytes
-    emit_line("@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");         // %s\0 = 3 bytes
-    emit_line("@.str.true = private constant [5 x i8] c\"true\\00\"");            // true\0 = 5 bytes
-    emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");          // false\0 = 6 bytes
-    emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");              // " "\0 = 2 bytes
-    emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");         // \n\0 = 2 bytes
+    emit_line("@.fmt.int = private constant [4 x i8] c\"%d\\0A\\00\"");        // %d\n\0 = 4 bytes
+    emit_line("@.fmt.int.no_nl = private constant [3 x i8] c\"%d\\00\"");      // %d\0 = 3 bytes
+    emit_line("@.fmt.i64 = private constant [5 x i8] c\"%ld\\0A\\00\"");       // %ld\n\0 = 5 bytes
+    emit_line("@.fmt.i64.no_nl = private constant [4 x i8] c\"%ld\\00\"");     // %ld\0 = 4 bytes
+    emit_line("@.fmt.float = private constant [4 x i8] c\"%f\\0A\\00\"");      // %f\n\0 = 4 bytes
+    emit_line("@.fmt.float.no_nl = private constant [3 x i8] c\"%f\\00\"");    // %f\0 = 3 bytes
+    emit_line("@.fmt.float3 = private constant [6 x i8] c\"%.3f\\0A\\00\"");   // %.3f\n\0 = 6 bytes
+    emit_line("@.fmt.float3.no_nl = private constant [5 x i8] c\"%.3f\\00\""); // %.3f\0 = 5 bytes
+    emit_line("@.fmt.str.no_nl = private constant [3 x i8] c\"%s\\00\"");      // %s\0 = 3 bytes
+    emit_line("@.str.true = private constant [5 x i8] c\"true\\00\"");         // true\0 = 5 bytes
+    emit_line("@.str.false = private constant [6 x i8] c\"false\\00\"");       // false\0 = 6 bytes
+    emit_line("@.str.space = private constant [2 x i8] c\" \\00\"");           // " "\0 = 2 bytes
+    emit_line("@.str.newline = private constant [2 x i8] c\"\\0A\\00\"");      // \n\0 = 2 bytes
     emit_line("");
 }
 
@@ -337,12 +368,14 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
 
                 std::string params_str;
                 for (size_t i = 0; i < func_sig.params.size(); ++i) {
-                    if (i > 0) params_str += ", ";
+                    if (i > 0)
+                        params_str += ", ";
                     params_str += llvm_type_from_semantic(func_sig.params[i]);
                 }
 
                 // Emit declaration with tml_ prefix
-                emit_line("declare " + llvm_ret_type + " @tml_" + func_name + "(" + params_str + ")");
+                emit_line("declare " + llvm_ret_type + " @tml_" + func_name + "(" + params_str +
+                          ")");
             }
         }
     }
@@ -373,7 +406,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         auto tokens = lex.tokenize();
 
         if (lex.has_errors()) {
-            continue;  // Skip modules with lexer errors
+            continue; // Skip modules with lexer errors
         }
 
         parser::Parser parser(std::move(tokens));
@@ -381,7 +414,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         auto parse_result = parser.parse_module(mod_name);
 
         if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-            continue;  // Skip modules with parse errors
+            continue; // Skip modules with parse errors
         }
 
         // Store the AST persistently so that pending_generic_funcs_ pointers remain valid
@@ -395,12 +428,13 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             if (decl->is<parser::StructDecl>()) {
                 const auto& s = decl->as<parser::StructDecl>();
                 if (s.vis == parser::Visibility::Public) {
-                    gen_struct_decl(s);  // This registers generic structs in pending_generic_structs_
+                    gen_struct_decl(
+                        s); // This registers generic structs in pending_generic_structs_
                 }
             } else if (decl->is<parser::EnumDecl>()) {
                 const auto& e = decl->as<parser::EnumDecl>();
                 if (e.vis == parser::Visibility::Public) {
-                    gen_enum_decl(e);  // This registers generic enums in pending_generic_enums_
+                    gen_enum_decl(e); // This registers generic enums in pending_generic_enums_
                 }
             }
         }
@@ -411,8 +445,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 const auto& func = decl->as<parser::FuncDecl>();
 
                 // Only generate code for public, non-lowlevel functions with bodies
-                if (func.vis == parser::Visibility::Public &&
-                    !func.is_unsafe &&
+                if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
                     func.body.has_value()) {
                     gen_func_decl(func);
                 }
@@ -448,10 +481,12 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                                         // Convert parser type args to semantic types
                                         std::vector<types::TypePtr> type_args;
                                         for (const auto& arg : named.generics->args) {
-                                            type_args.push_back(resolve_parser_type_with_subs(*arg, {}));
+                                            type_args.push_back(
+                                                resolve_parser_type_with_subs(*arg, {}));
                                         }
                                         // Check if already instantiated
-                                        std::string mangled = mangle_struct_name(base_name, type_args);
+                                        std::string mangled =
+                                            mangle_struct_name(base_name, type_args);
                                         if (struct_types_.find(mangled) == struct_types_.end()) {
                                             gen_enum_instantiation(*it->second, type_args);
                                         }
@@ -464,8 +499,7 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     // Second pass: generate the methods
                     for (const auto& method : impl.methods) {
                         // Generate code for public, non-lowlevel methods with bodies
-                        if (method.vis == parser::Visibility::Public &&
-                            !method.is_unsafe &&
+                        if (method.vis == parser::Visibility::Public && !method.is_unsafe &&
                             method.body.has_value()) {
                             // Generate impl method with qualified name
                             gen_impl_method(type_name, method);
@@ -480,23 +514,29 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
 }
 
 void LLVMIRGen::emit_string_constants() {
-    if (string_literals_.empty()) return;
+    if (string_literals_.empty())
+        return;
 
     emit_line("; String constants");
     for (const auto& [name, value] : string_literals_) {
         // Escape the string and add null terminator
         std::string escaped;
         for (char c : value) {
-            if (c == '\n') escaped += "\\0A";
-            else if (c == '\t') escaped += "\\09";
-            else if (c == '\\') escaped += "\\5C";
-            else if (c == '"') escaped += "\\22";
-            else escaped += c;
+            if (c == '\n')
+                escaped += "\\0A";
+            else if (c == '\t')
+                escaped += "\\09";
+            else if (c == '\\')
+                escaped += "\\5C";
+            else if (c == '"')
+                escaped += "\\22";
+            else
+                escaped += c;
         }
         escaped += "\\00";
 
-        emit_line(name + " = private constant [" +
-                  std::to_string(value.size() + 1) + " x i8] c\"" + escaped + "\"");
+        emit_line(name + " = private constant [" + std::to_string(value.size() + 1) + " x i8] c\"" +
+                  escaped + "\"");
     }
     emit_line("");
 }

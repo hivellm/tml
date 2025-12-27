@@ -1,7 +1,9 @@
 #include "utils.hpp"
+
 #include "tml/common.hpp"
-#include <iostream>
+
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 namespace tml::cli {
@@ -9,7 +11,8 @@ namespace tml::cli {
 std::string to_forward_slashes(const std::string& path) {
     std::string result = path;
     for (char& c : result) {
-        if (c == '\\') c = '/';
+        if (c == '\\')
+            c = '/';
     }
     return result;
 }
@@ -33,6 +36,7 @@ void print_usage() {
     std::cout << "  check     Type-check without generating code\n";
     std::cout << "  test      Run tests\n";
     std::cout << "  fmt       Format source files\n";
+    std::cout << "  lint      Check files for style issues\n";
     std::cout << "  cache     Manage build cache\n";
     std::cout << "  rlib      Inspect RLIB libraries\n";
     std::cout << "  init      Initialize a new project\n";
@@ -52,4 +56,4 @@ void print_version() {
     std::cout << "tml " << VERSION << "\n";
 }
 
-}
+} // namespace tml::cli

@@ -1,6 +1,7 @@
 // TML Standard Library
 // Re-exports all standard library modules
 
+pub mod traits      // Core behaviors (Copy, Eq, Ord, Hash, etc.)
 pub mod types       // Maybe[T], Outcome[T, E]
 pub mod collections // List, HashMap, Buffer
 pub mod file        // File I/O

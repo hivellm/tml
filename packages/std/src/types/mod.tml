@@ -40,6 +40,39 @@ pub func is_nothing[T](m: Maybe[T]) -> Bool {
     return true
 }
 
+/// Unwraps the value, panicking if Nothing.
+/// Use only when you're certain the value exists.
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let val: I32 = unwrap(x)  // 5
+/// let y: Maybe[I32] = Nothing
+/// unwrap(y)  // panics!
+/// ```
+pub func unwrap[T](m: Maybe[T]) -> T {
+    when m {
+        Just(val) => return val,
+        Nothing => panic("called unwrap() on Nothing")
+    }
+    panic("unreachable")
+}
+
+/// Unwraps the value, panicking with a custom message if Nothing.
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Nothing
+/// expect(x, "user not found")  // panics with "user not found"
+/// ```
+pub func expect[T](m: Maybe[T], msg: Str) -> T {
+    when m {
+        Just(val) => return val,
+        Nothing => panic(msg)
+    }
+    panic("unreachable")
+}
+
 /// Unwraps the value or returns a default
 pub func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
     when m {
@@ -116,6 +149,39 @@ pub func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
     return f()
 }
 
+/// Transforms Maybe[T] into Outcome[T, E], mapping Just(v) to Ok(v) and Nothing to Err(err)
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let y: Outcome[I32, Str] = ok_or(x, "not found")  // Ok(5)
+/// let z: Maybe[I32] = Nothing
+/// let w: Outcome[I32, Str] = ok_or(z, "not found")  // Err("not found")
+/// ```
+pub func ok_or[T, E](m: Maybe[T], err: E) -> Outcome[T, E] {
+    when m {
+        Just(val) => return Ok(val),
+        Nothing => return Err(err)
+    }
+    return Err(err)
+}
+
+/// Transforms Maybe[T] into Outcome[T, E], mapping Just(v) to Ok(v) and Nothing to Err(f())
+/// The error is lazily evaluated.
+///
+/// Example:
+/// ```tml
+/// let x: Maybe[I32] = Nothing
+/// let y: Outcome[I32, Str] = ok_or_else(x, do() "computed error")  // Err("computed error")
+/// ```
+pub func ok_or_else[T, E](m: Maybe[T], f: func() -> E) -> Outcome[T, E] {
+    when m {
+        Just(val) => return Ok(val),
+        Nothing => return Err(f())
+    }
+    return Err(f())
+}
+
 // ============================================================================
 // Outcome[T, E] - Result type for error handling
 // ============================================================================
@@ -154,6 +220,71 @@ pub func is_err[T, E](o: Outcome[T, E]) -> Bool {
         Err(_) => return true
     }
     return true
+}
+
+/// Unwraps the Ok value, panicking if Err.
+/// Use only when you're certain the result is Ok.
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Ok(5)
+/// let val: I32 = unwrap_ok(x)  // 5
+/// let y: Outcome[I32, Str] = Err("error")
+/// unwrap_ok(y)  // panics!
+/// ```
+pub func unwrap_ok[T, E](o: Outcome[T, E]) -> T {
+    when o {
+        Ok(val) => return val,
+        Err(_) => panic("called unwrap_ok() on Err")
+    }
+    panic("unreachable")
+}
+
+/// Unwraps the Ok value, panicking with a custom message if Err.
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Err("error")
+/// expect_ok(x, "operation failed")  // panics with "operation failed"
+/// ```
+pub func expect_ok[T, E](o: Outcome[T, E], msg: Str) -> T {
+    when o {
+        Ok(val) => return val,
+        Err(_) => panic(msg)
+    }
+    panic("unreachable")
+}
+
+/// Unwraps the Err value, panicking if Ok.
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Err("error message")
+/// let err: Str = unwrap_err(x)  // "error message"
+/// let y: Outcome[I32, Str] = Ok(5)
+/// unwrap_err(y)  // panics!
+/// ```
+pub func unwrap_err[T, E](o: Outcome[T, E]) -> E {
+    when o {
+        Ok(_) => panic("called unwrap_err() on Ok"),
+        Err(e) => return e
+    }
+    panic("unreachable")
+}
+
+/// Unwraps the Err value, panicking with a custom message if Ok.
+///
+/// Example:
+/// ```tml
+/// let x: Outcome[I32, Str] = Ok(5)
+/// expect_err(x, "expected failure")  // panics with "expected failure"
+/// ```
+pub func expect_err[T, E](o: Outcome[T, E], msg: Str) -> E {
+    when o {
+        Ok(_) => panic(msg),
+        Err(e) => return e
+    }
+    panic("unreachable")
 }
 
 /// Unwraps the Ok value or returns a default

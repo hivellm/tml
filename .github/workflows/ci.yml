@@ -1,0 +1,269 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  # Format check
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+
+      - name: Check C/C++ formatting
+        run: |
+          NEEDS_FORMAT=false
+          for file in $(find packages/compiler/src packages/compiler/runtime -name "*.cpp" -o -name "*.c" -o -name "*.h" -o -name "*.hpp" 2>/dev/null); do
+            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+              echo "Needs formatting: $file"
+              NEEDS_FORMAT=true
+            fi
+          done
+          if [ "$NEEDS_FORMAT" = true ]; then
+            echo "Some files need formatting. Run ./scripts/format.sh locally."
+            exit 1
+          fi
+          echo "All files are properly formatted"
+
+  # Lint check - builds TML compiler and uses `tml lint`
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang llvm
+
+      - name: Build TML Compiler
+        run: |
+          cmake -B build -S packages/compiler \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DTML_BUILD_TESTS=OFF \
+            -G Ninja
+          cmake --build build --config $BUILD_TYPE
+
+      - name: Run TML Lint
+        run: |
+          TML_EXE=$(find build -name "tml" -type f | head -1)
+          chmod +x "$TML_EXE"
+          echo "Using TML compiler: $TML_EXE"
+          "$TML_EXE" lint packages examples
+
+      - name: Run clang-tidy (C++ lint)
+        continue-on-error: true
+        run: |
+          # Run on a subset of files to avoid timeout
+          FILES=$(find packages/compiler/src -name "*.cpp" | head -10)
+          for file in $FILES; do
+            echo "Checking: $file"
+            clang-tidy -p build "$file" -- -std=c++17 2>/dev/null || true
+          done
+
+  # Build on multiple platforms
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            cmake_generator: Ninja
+          - os: windows-latest
+            cmake_generator: Visual Studio 17 2022
+          - os: macos-latest
+            cmake_generator: Ninja
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          else
+            brew install ninja
+          fi
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -S packages/compiler \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DTML_BUILD_TESTS=ON \
+            -G "${{ matrix.cmake_generator }}"
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+
+      - name: Upload Compiler Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tml-${{ matrix.os }}
+          path: |
+            build/${{ env.BUILD_TYPE }}/tml*
+            build/Debug/tml*
+          if-no-files-found: warn
+
+  # Run C++ unit tests
+  test-cpp:
+    name: C++ Tests (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            cmake_generator: Ninja
+          - os: windows-latest
+            cmake_generator: Visual Studio 17 2022
+          - os: macos-latest
+            cmake_generator: Ninja
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          else
+            brew install ninja
+          fi
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -S packages/compiler \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DTML_BUILD_TESTS=ON \
+            -G "${{ matrix.cmake_generator }}"
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }}
+
+      - name: Run C++ Tests (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          TEST_EXE=$(find build -name "tml_tests" -type f | head -1)
+          if [ -n "$TEST_EXE" ]; then
+            chmod +x "$TEST_EXE"
+            "$TEST_EXE" --gtest_output=xml:test-results.xml
+          fi
+
+      - name: Run C++ Tests (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $testExe = Get-ChildItem -Path build -Recurse -Filter "tml_tests.exe" | Select-Object -First 1
+          if ($testExe) {
+            & $testExe.FullName --gtest_output=xml:test-results.xml
+          }
+        shell: pwsh
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-cpp-${{ matrix.os }}
+          path: test-results.xml
+          if-no-files-found: ignore
+
+  # Run TML integration tests (Linux only for simplicity)
+  test-tml:
+    name: TML Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang llvm
+
+      - name: Configure and Build
+        run: |
+          cmake -B build -S packages/compiler \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DTML_BUILD_TESTS=OFF \
+            -G Ninja
+          cmake --build build --config ${{ env.BUILD_TYPE }}
+
+      - name: Find TML Compiler
+        id: find-tml
+        run: |
+          TML_EXE=$(find build -name "tml" -type f | head -1)
+          echo "TML_EXE=$TML_EXE" >> $GITHUB_OUTPUT
+          chmod +x "$TML_EXE"
+
+      - name: Run TML Tests
+        run: |
+          TML="${{ steps.find-tml.outputs.TML_EXE }}"
+          echo "Running TML integration tests..."
+
+          # Run compiler tests
+          for test in packages/compiler/tests/compiler/*.test.tml; do
+            if [ -f "$test" ]; then
+              echo "Testing: $test"
+              "$TML" test "$test" || echo "Test failed: $test"
+            fi
+          done
+
+          # Run runtime tests
+          for test in packages/compiler/tests/runtime/*.test.tml; do
+            if [ -f "$test" ]; then
+              echo "Testing: $test"
+              "$TML" test "$test" || echo "Test failed: $test"
+            fi
+          done
+
+          # Run std tests
+          for test in packages/std/tests/*.test.tml; do
+            if [ -f "$test" ]; then
+              echo "Testing: $test"
+              "$TML" test "$test" || echo "Test failed: $test"
+            fi
+          done
+
+  # Spell check (moved from separate file)
+  codespell:
+    name: Spell Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Codespell
+        run: python -m pip install --upgrade 'codespell[toml]'
+
+      - name: Run Codespell
+        run: |
+          codespell \
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh"

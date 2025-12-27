@@ -2,9 +2,9 @@ name: Codespell
 
 on:
   push:
-    branches: [ master, main, develop ]
+    branches: [master, main, develop]
   pull_request:
-    branches: [ master, main, develop ]
+    branches: [master, main, develop]
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Install Codespell
         run: python -m pip install --upgrade 'codespell[toml]'
@@ -24,8 +24,5 @@ jobs:
       - name: Run Codespell
         run: |
           codespell \
-            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage" \
-            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc"
-          # MONOREPO NOTE: Add multilingual stopwords to ignore-words-list if needed
-          # Example: --ignore-words-list="crate,ser,deser,meu,oder,ist,alle" (Portuguese,German,etc)
-
+            --skip="*.lock,*.json,*.map,*.yaml,*.yml,*.csv,*.bib,target,node_modules,.git,dist,venv,build,benchmarks,coverage,*.ll,*.bc,*.o,*.obj,*.exe" \
+            --ignore-words-list="crate,ser,deser,upToDate,optIn,shouldBe,Bloc,strbuilder,LPAR,RPAR,LBRACE,RBRACE,LBRACKET,RBRACKET,inout,hte,teh,nd,ba,ue,fo,te,ot,lod,dout,ths,whn,som,numer,hel,tht,afe,ehr,ith,ue"

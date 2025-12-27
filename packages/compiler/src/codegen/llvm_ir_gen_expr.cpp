@@ -3,6 +3,7 @@
 
 #include "tml/codegen/llvm_ir_gen.hpp"
 #include "tml/lexer/lexer.hpp"
+
 #include <iostream>
 
 namespace tml::codegen {
@@ -76,25 +77,30 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
 
 auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
     switch (lit.token.kind) {
-        case lexer::TokenKind::IntLiteral:
-            // Use the actual numeric value, not the lexeme (handles 0x, 0b, etc.)
-            last_expr_type_ = "i32";
-            return std::to_string(lit.token.int_value().value);
-        case lexer::TokenKind::FloatLiteral:
-            last_expr_type_ = "double";
-            return std::to_string(lit.token.float_value().value);
-        case lexer::TokenKind::BoolLiteral:
-            last_expr_type_ = "i1";
-            return lit.token.lexeme == "true" ? "1" : "0";
-        case lexer::TokenKind::StringLiteral: {
-            std::string str_val = std::string(lit.token.string_value().value);
-            std::string const_name = add_string_literal(str_val);
-            last_expr_type_ = "ptr";
-            return const_name;
-        }
-        default:
-            last_expr_type_ = "i32";
-            return "0";
+    case lexer::TokenKind::IntLiteral:
+        // Use the actual numeric value, not the lexeme (handles 0x, 0b, etc.)
+        last_expr_type_ = "i32";
+        return std::to_string(lit.token.int_value().value);
+    case lexer::TokenKind::FloatLiteral:
+        last_expr_type_ = "double";
+        return std::to_string(lit.token.float_value().value);
+    case lexer::TokenKind::BoolLiteral:
+        last_expr_type_ = "i1";
+        return lit.token.lexeme == "true" ? "1" : "0";
+    case lexer::TokenKind::StringLiteral: {
+        std::string str_val = std::string(lit.token.string_value().value);
+        std::string const_name = add_string_literal(str_val);
+        last_expr_type_ = "ptr";
+        return const_name;
+    }
+    case lexer::TokenKind::CharLiteral: {
+        // Char literals are stored as i32 (Unicode code point)
+        last_expr_type_ = "i32";
+        return std::to_string(lit.token.char_value().value);
+    }
+    default:
+        last_expr_type_ = "i32";
+        return "0";
     }
 }
 
@@ -102,7 +108,7 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     // Check global constants first
     auto const_it = global_constants_.find(ident.name);
     if (const_it != global_constants_.end()) {
-        last_expr_type_ = "i64";  // Constants are i64 for now
+        last_expr_type_ = "i64"; // Constants are i64 for now
         return const_it->second;
     }
 
@@ -113,7 +119,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         // Check if it's an alloca (starts with %t and has digit after) that needs loading
         // But skip %this which is a direct parameter, not an alloca
         // This includes ptr types - we load the pointer value from the alloca
-        if (var.reg[0] == '%' && var.reg[1] == 't' && var.reg.length() > 2 && std::isdigit(var.reg[2])) {
+        if (var.reg[0] == '%' && var.reg[1] == 't' && var.reg.length() > 2 &&
+            std::isdigit(var.reg[2])) {
             std::string reg = fresh_reg();
             emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
             return reg;
@@ -125,8 +132,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     auto func_it = functions_.find(ident.name);
     if (func_it != functions_.end()) {
         const FuncInfo& func = func_it->second;
-        last_expr_type_ = "ptr";  // Function pointers are ptr type in LLVM
-        return func.llvm_name;    // Return @tml_funcname
+        last_expr_type_ = "ptr"; // Function pointers are ptr type in LLVM
+        return func.llvm_name;   // Return @tml_funcname
     }
 
     // Check if it's an enum unit variant (variant without payload)
@@ -171,7 +178,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
 
                 // Set tag
                 std::string tag_ptr = fresh_reg();
-                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                          enum_val + ", i32 0, i32 0");
                 emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                 // No payload to set
@@ -214,7 +222,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
 
                 // Set tag
                 std::string tag_ptr = fresh_reg();
-                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                          enum_val + ", i32 0, i32 0");
                 emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                 // No payload to set
@@ -257,7 +266,8 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
 
                     // Set tag
                     std::string tag_ptr = fresh_reg();
-                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " + enum_val + ", i32 0, i32 0");
+                    emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type + ", ptr " +
+                              enum_val + ", i32 0, i32 0");
                     emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " + tag_ptr);
 
                     // No payload to set
@@ -327,7 +337,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 int field_idx = get_field_index(type_name, field.field);
                 std::string field_type = get_field_type(type_name, field.field);
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " +
+                          struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
                 // Store value to field
                 emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
@@ -357,51 +368,59 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 bool is_float = (op_type == "double" || op_type == "float");
 
                 switch (bin.op) {
-                    case parser::BinaryOp::AddAssign:
-                        if (is_float)
-                            emit_line("  " + result + " = fadd " + op_type + " " + current + ", " + right);
-                        else
-                            emit_line("  " + result + " = add nsw " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::SubAssign:
-                        if (is_float)
-                            emit_line("  " + result + " = fsub " + op_type + " " + current + ", " + right);
-                        else
-                            emit_line("  " + result + " = sub nsw " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::MulAssign:
-                        if (is_float)
-                            emit_line("  " + result + " = fmul " + op_type + " " + current + ", " + right);
-                        else
-                            emit_line("  " + result + " = mul nsw " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::DivAssign:
-                        if (is_float)
-                            emit_line("  " + result + " = fdiv " + op_type + " " + current + ", " + right);
-                        else
-                            emit_line("  " + result + " = sdiv " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::ModAssign:
-                        emit_line("  " + result + " = srem " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::BitAndAssign:
-                        emit_line("  " + result + " = and " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::BitOrAssign:
-                        emit_line("  " + result + " = or " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::BitXorAssign:
-                        emit_line("  " + result + " = xor " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::ShlAssign:
-                        emit_line("  " + result + " = shl " + op_type + " " + current + ", " + right);
-                        break;
-                    case parser::BinaryOp::ShrAssign:
-                        emit_line("  " + result + " = ashr " + op_type + " " + current + ", " + right);
-                        break;
-                    default:
-                        result = current;
-                        break;
+                case parser::BinaryOp::AddAssign:
+                    if (is_float)
+                        emit_line("  " + result + " = fadd " + op_type + " " + current + ", " +
+                                  right);
+                    else
+                        emit_line("  " + result + " = add nsw " + op_type + " " + current + ", " +
+                                  right);
+                    break;
+                case parser::BinaryOp::SubAssign:
+                    if (is_float)
+                        emit_line("  " + result + " = fsub " + op_type + " " + current + ", " +
+                                  right);
+                    else
+                        emit_line("  " + result + " = sub nsw " + op_type + " " + current + ", " +
+                                  right);
+                    break;
+                case parser::BinaryOp::MulAssign:
+                    if (is_float)
+                        emit_line("  " + result + " = fmul " + op_type + " " + current + ", " +
+                                  right);
+                    else
+                        emit_line("  " + result + " = mul nsw " + op_type + " " + current + ", " +
+                                  right);
+                    break;
+                case parser::BinaryOp::DivAssign:
+                    if (is_float)
+                        emit_line("  " + result + " = fdiv " + op_type + " " + current + ", " +
+                                  right);
+                    else
+                        emit_line("  " + result + " = sdiv " + op_type + " " + current + ", " +
+                                  right);
+                    break;
+                case parser::BinaryOp::ModAssign:
+                    emit_line("  " + result + " = srem " + op_type + " " + current + ", " + right);
+                    break;
+                case parser::BinaryOp::BitAndAssign:
+                    emit_line("  " + result + " = and " + op_type + " " + current + ", " + right);
+                    break;
+                case parser::BinaryOp::BitOrAssign:
+                    emit_line("  " + result + " = or " + op_type + " " + current + ", " + right);
+                    break;
+                case parser::BinaryOp::BitXorAssign:
+                    emit_line("  " + result + " = xor " + op_type + " " + current + ", " + right);
+                    break;
+                case parser::BinaryOp::ShlAssign:
+                    emit_line("  " + result + " = shl " + op_type + " " + current + ", " + right);
+                    break;
+                case parser::BinaryOp::ShrAssign:
+                    emit_line("  " + result + " = ashr " + op_type + " " + current + ", " + right);
+                    break;
+                default:
+                    result = current;
+                    break;
                 }
 
                 // Store result back
@@ -432,7 +451,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
         // Extract tag from left
         std::string left_tag_ptr = fresh_reg();
-        emit_line("  " + left_tag_ptr + " = getelementptr " + left_type + ", ptr " + left_alloca + ", i32 0, i32 0");
+        emit_line("  " + left_tag_ptr + " = getelementptr " + left_type + ", ptr " + left_alloca +
+                  ", i32 0, i32 0");
         std::string left_tag = fresh_reg();
         emit_line("  " + left_tag + " = load i32, ptr " + left_tag_ptr);
 
@@ -443,7 +463,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
         // Extract tag from right
         std::string right_tag_ptr = fresh_reg();
-        emit_line("  " + right_tag_ptr + " = getelementptr " + right_type + ", ptr " + right_alloca + ", i32 0, i32 0");
+        emit_line("  " + right_tag_ptr + " = getelementptr " + right_type + ", ptr " +
+                  right_alloca + ", i32 0, i32 0");
         std::string right_tag = fresh_reg();
         emit_line("  " + right_tag + " = load i32, ptr " + right_tag_ptr);
 
@@ -455,8 +476,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     }
 
     // Check if either operand is a float
-    bool is_float = (left_type == "double" || left_type == "float" ||
-                     right_type == "double" || right_type == "float");
+    bool is_float = (left_type == "double" || left_type == "float" || right_type == "double" ||
+                     right_type == "float");
 
     // Check if either operand is i64
     bool is_i64 = (left_type == "i64" || right_type == "i64");
@@ -515,130 +536,130 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     std::string int_type = is_bool ? "i1" : (is_i64 ? "i64" : "i32");
 
     switch (bin.op) {
-        case parser::BinaryOp::Add:
-            if (is_float) {
-                emit_line("  " + result + " = fadd double " + left + ", " + right);
-                last_expr_type_ = "double";
-            } else {
-                emit_line("  " + result + " = add nsw " + int_type + " " + left + ", " + right);
-                last_expr_type_ = int_type;
-            }
-            break;
-        case parser::BinaryOp::Sub:
-            if (is_float) {
-                emit_line("  " + result + " = fsub double " + left + ", " + right);
-                last_expr_type_ = "double";
-            } else {
-                emit_line("  " + result + " = sub nsw " + int_type + " " + left + ", " + right);
-                last_expr_type_ = int_type;
-            }
-            break;
-        case parser::BinaryOp::Mul:
-            if (is_float) {
-                emit_line("  " + result + " = fmul double " + left + ", " + right);
-                last_expr_type_ = "double";
-            } else {
-                emit_line("  " + result + " = mul nsw " + int_type + " " + left + ", " + right);
-                last_expr_type_ = int_type;
-            }
-            break;
-        case parser::BinaryOp::Div:
-            if (is_float) {
-                emit_line("  " + result + " = fdiv double " + left + ", " + right);
-                last_expr_type_ = "double";
-            } else {
-                emit_line("  " + result + " = sdiv " + int_type + " " + left + ", " + right);
-                last_expr_type_ = int_type;
-            }
-            break;
-        case parser::BinaryOp::Mod:
-            emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
+    case parser::BinaryOp::Add:
+        if (is_float) {
+            emit_line("  " + result + " = fadd double " + left + ", " + right);
+            last_expr_type_ = "double";
+        } else {
+            emit_line("  " + result + " = add nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
-            break;
-        // Comparisons return i1 (use fcmp for floats, icmp for integers)
-        case parser::BinaryOp::Eq:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp oeq double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Ne:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp one double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Lt:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp olt double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp slt " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Gt:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp ogt double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp sgt " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Le:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp ole double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp sle " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Ge:
-            if (is_float) {
-                emit_line("  " + result + " = fcmp oge double " + left + ", " + right);
-            } else {
-                emit_line("  " + result + " = icmp sge " + int_type + " " + left + ", " + right);
-            }
-            last_expr_type_ = "i1";
-            break;
-        // Logical operators work on i1
-        case parser::BinaryOp::And:
-            emit_line("  " + result + " = and i1 " + left + ", " + right);
-            last_expr_type_ = "i1";
-            break;
-        case parser::BinaryOp::Or:
-            emit_line("  " + result + " = or i1 " + left + ", " + right);
-            last_expr_type_ = "i1";
-            break;
-        // Bitwise operators work on same type
-        case parser::BinaryOp::BitAnd:
-            emit_line("  " + result + " = and " + int_type + " " + left + ", " + right);
+        }
+        break;
+    case parser::BinaryOp::Sub:
+        if (is_float) {
+            emit_line("  " + result + " = fsub double " + left + ", " + right);
+            last_expr_type_ = "double";
+        } else {
+            emit_line("  " + result + " = sub nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
-            break;
-        case parser::BinaryOp::BitOr:
-            emit_line("  " + result + " = or " + int_type + " " + left + ", " + right);
+        }
+        break;
+    case parser::BinaryOp::Mul:
+        if (is_float) {
+            emit_line("  " + result + " = fmul double " + left + ", " + right);
+            last_expr_type_ = "double";
+        } else {
+            emit_line("  " + result + " = mul nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
-            break;
-        case parser::BinaryOp::BitXor:
-            emit_line("  " + result + " = xor " + int_type + " " + left + ", " + right);
+        }
+        break;
+    case parser::BinaryOp::Div:
+        if (is_float) {
+            emit_line("  " + result + " = fdiv double " + left + ", " + right);
+            last_expr_type_ = "double";
+        } else {
+            emit_line("  " + result + " = sdiv " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
-            break;
-        case parser::BinaryOp::Shl:
-            // nuw = no unsigned wrap for shift
-            emit_line("  " + result + " = shl nuw " + int_type + " " + left + ", " + right);
-            last_expr_type_ = int_type;
-            break;
-        case parser::BinaryOp::Shr:
-            emit_line("  " + result + " = ashr " + int_type + " " + left + ", " + right);
-            last_expr_type_ = int_type;
-            break;
-        // Note: Assign is handled above before evaluating left/right
-        default:
-            emit_line("  " + result + " = add nsw i32 " + left + ", " + right);
-            break;
+        }
+        break;
+    case parser::BinaryOp::Mod:
+        emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    // Comparisons return i1 (use fcmp for floats, icmp for integers)
+    case parser::BinaryOp::Eq:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp oeq double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Ne:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp one double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Lt:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp olt double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp slt " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Gt:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp ogt double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp sgt " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Le:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp ole double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp sle " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Ge:
+        if (is_float) {
+            emit_line("  " + result + " = fcmp oge double " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = icmp sge " + int_type + " " + left + ", " + right);
+        }
+        last_expr_type_ = "i1";
+        break;
+    // Logical operators work on i1
+    case parser::BinaryOp::And:
+        emit_line("  " + result + " = and i1 " + left + ", " + right);
+        last_expr_type_ = "i1";
+        break;
+    case parser::BinaryOp::Or:
+        emit_line("  " + result + " = or i1 " + left + ", " + right);
+        last_expr_type_ = "i1";
+        break;
+    // Bitwise operators work on same type
+    case parser::BinaryOp::BitAnd:
+        emit_line("  " + result + " = and " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    case parser::BinaryOp::BitOr:
+        emit_line("  " + result + " = or " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    case parser::BinaryOp::BitXor:
+        emit_line("  " + result + " = xor " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    case parser::BinaryOp::Shl:
+        // nuw = no unsigned wrap for shift
+        emit_line("  " + result + " = shl nuw " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    case parser::BinaryOp::Shr:
+        emit_line("  " + result + " = ashr " + int_type + " " + left + ", " + right);
+        last_expr_type_ = int_type;
+        break;
+    // Note: Assign is handled above before evaluating left/right
+    default:
+        emit_line("  " + result + " = add nsw i32 " + left + ", " + right);
+        break;
     }
 
     return result;
@@ -720,25 +741,25 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     std::string result = fresh_reg();
 
     switch (unary.op) {
-        case parser::UnaryOp::Neg:
-            if (operand_type == "double" || operand_type == "float") {
-                emit_line("  " + result + " = fsub double 0.0, " + operand);
-                last_expr_type_ = "double";
-            } else {
-                emit_line("  " + result + " = sub " + operand_type + " 0, " + operand);
-                last_expr_type_ = operand_type;
-            }
-            break;
-        case parser::UnaryOp::Not:
-            emit_line("  " + result + " = xor i1 " + operand + ", 1");
-            last_expr_type_ = "i1";
-            break;
-        case parser::UnaryOp::BitNot:
-            emit_line("  " + result + " = xor i32 " + operand + ", -1");
-            last_expr_type_ = "i32";
-            break;
-        default:
-            return operand;
+    case parser::UnaryOp::Neg:
+        if (operand_type == "double" || operand_type == "float") {
+            emit_line("  " + result + " = fsub double 0.0, " + operand);
+            last_expr_type_ = "double";
+        } else {
+            emit_line("  " + result + " = sub " + operand_type + " 0, " + operand);
+            last_expr_type_ = operand_type;
+        }
+        break;
+    case parser::UnaryOp::Not:
+        emit_line("  " + result + " = xor i1 " + operand + ", 1");
+        last_expr_type_ = "i1";
+        break;
+    case parser::UnaryOp::BitNot:
+        emit_line("  " + result + " = xor i32 " + operand + ", -1");
+        last_expr_type_ = "i32";
+        break;
+    default:
+        return operand;
     }
 
     return result;
@@ -769,7 +790,8 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
 
     // Add captured variables as parameters
     for (const auto& captured_name : closure.captured_vars) {
-        if (!param_types_str.empty()) param_types_str += ", ";
+        if (!param_types_str.empty())
+            param_types_str += ", ";
 
         // Look up the type from locals
         auto it = locals_.find(captured_name);
@@ -781,7 +803,8 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
 
     // Add closure parameters
     for (size_t i = 0; i < closure.params.size(); ++i) {
-        if (!param_types_str.empty()) param_types_str += ", ";
+        if (!param_types_str.empty())
+            param_types_str += ", ";
 
         // For now, assume i32 parameters (simplified)
         param_types_str += "i32";
@@ -810,7 +833,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     }
 
     // Save information about captured variables before clearing locals
-    std::vector<std::pair<std::string, std::string>> captured_info;  // (name, type)
+    std::vector<std::pair<std::string, std::string>> captured_info; // (name, type)
     for (const auto& captured_name : closure.captured_vars) {
         auto it = locals_.find(captured_name);
         std::string captured_type = (it != locals_.end()) ? it->second.type : "i32";
@@ -820,7 +843,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Save current function state
     std::stringstream saved_output;
     saved_output << output_.str();
-    output_.str("");  // Clear for closure generation
+    output_.str(""); // Clear for closure generation
     auto saved_locals = locals_;
     auto saved_ret_type = current_ret_type_;
     bool saved_terminated = block_terminated_;
@@ -831,7 +854,8 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     block_terminated_ = false;
 
     // Emit function header
-    emit_line("define internal " + ret_type + " @" + closure_name + "(" + param_types_str + ") #0 {");
+    emit_line("define internal " + ret_type + " @" + closure_name + "(" + param_types_str +
+              ") #0 {");
     emit_line("entry:");
 
     // Bind captured variables to local scope
@@ -840,7 +864,8 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
 
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + captured_type);
-        emit_line("  store " + captured_type + " %" + captured_name + "_captured, ptr " + alloca_reg);
+        emit_line("  store " + captured_type + " %" + captured_name + "_captured, ptr " +
+                  alloca_reg);
         locals_[captured_name] = VarInfo{alloca_reg, captured_type};
     }
 
@@ -868,7 +893,7 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
 
     // Restore original function state
     output_.str(saved_output.str());
-    output_.seekp(0, std::ios_base::end);  // Restore position to end
+    output_.seekp(0, std::ios_base::end); // Restore position to end
     locals_ = saved_locals;
     current_ret_type_ = saved_ret_type;
     block_terminated_ = saved_terminated;
@@ -879,10 +904,9 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     // Return function pointer
     // For now, return the function name as a "function pointer"
     // This is simplified - full support would need actual function pointers
-    last_expr_type_ = "ptr";  // Closures are function pointers
+    last_expr_type_ = "ptr"; // Closures are function pointers
     return "@" + closure_name;
 }
-
 
 auto LLVMIRGen::gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string {
     // Lowlevel blocks are generated like regular blocks
@@ -978,7 +1002,8 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
     std::string result = segment_strs[0];
     for (size_t i = 1; i < segment_strs.size(); ++i) {
         std::string new_result = fresh_reg();
-        emit_line("  " + new_result + " = call ptr @str_concat(ptr " + result + ", ptr " + segment_strs[i] + ")");
+        emit_line("  " + new_result + " = call ptr @str_concat(ptr " + result + ", ptr " +
+                  segment_strs[i] + ")");
         result = new_result;
     }
 
