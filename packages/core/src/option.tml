@@ -1,0 +1,328 @@
+// TML Core Library - Option Module
+// Provides: Enhanced Maybe[T] methods (Option in Rust)
+
+// ============================================================================
+// Maybe[T] Type (defined in std::types, enhanced here)
+// ============================================================================
+
+// The Maybe[T] type is defined as:
+// pub type Maybe[T] {
+//     Just(T),
+//     Nothing,
+// }
+
+// ============================================================================
+// Core Methods
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns true if the option is Just.
+    pub func is_just(this) -> Bool {
+        when this {
+            Just(_) => return true,
+            Nothing => return false
+        }
+    }
+
+    /// Returns true if the option is Nothing.
+    pub func is_nothing(this) -> Bool {
+        when this {
+            Just(_) => return false,
+            Nothing => return true
+        }
+    }
+
+    /// Returns true if the option contains the given value.
+    pub func contains[U: PartialEq](this, value: ref U) -> Bool where T = U {
+        when this {
+            Just(v) => return v.eq(value),
+            Nothing => return false
+        }
+    }
+}
+
+// ============================================================================
+// Extracting Values
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns the contained value, panicking if Nothing.
+    pub func unwrap(this) -> T {
+        when this {
+            Just(val) => return val,
+            Nothing => panic("called unwrap() on Nothing")
+        }
+    }
+
+    /// Returns the contained value, panicking with a custom message if Nothing.
+    pub func expect(this, msg: Str) -> T {
+        when this {
+            Just(val) => return val,
+            Nothing => panic(msg)
+        }
+    }
+
+    /// Returns the contained value or a default.
+    pub func unwrap_or(this, default_val: T) -> T {
+        when this {
+            Just(val) => return val,
+            Nothing => return default_val
+        }
+    }
+
+    /// Returns the contained value or computes it from a function.
+    pub func unwrap_or_else(this, f: func() -> T) -> T {
+        when this {
+            Just(val) => return val,
+            Nothing => return f()
+        }
+    }
+
+    /// Returns the contained value or the default for T.
+    pub func unwrap_or_default(this) -> T where T: Default {
+        when this {
+            Just(val) => return val,
+            Nothing => return T::default()
+        }
+    }
+}
+
+// ============================================================================
+// Transforming Values
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Maps a Maybe[T] to Maybe[U] by applying a function to the contained value.
+    pub func map[U](this, f: func(T) -> U) -> Maybe[U] {
+        when this {
+            Just(val) => return Just(f(val)),
+            Nothing => return Nothing
+        }
+    }
+
+    /// Maps a Maybe[T] to U by applying a function or returning a default.
+    pub func map_or[U](this, default_val: U, f: func(T) -> U) -> U {
+        when this {
+            Just(val) => return f(val),
+            Nothing => return default_val
+        }
+    }
+
+    /// Maps a Maybe[T] to U by applying a function or computing a default.
+    pub func map_or_else[U](this, default_fn: func() -> U, f: func(T) -> U) -> U {
+        when this {
+            Just(val) => return f(val),
+            Nothing => return default_fn()
+        }
+    }
+
+    /// Calls a function with the contained value (if any) and returns the option.
+    pub func inspect(this, f: func(ref T)) -> Maybe[T] {
+        when this {
+            Just(val) => {
+                f(ref val)
+                return Just(val)
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Chaining Operations
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns Nothing if the option is Nothing, otherwise calls f with the value.
+    pub func and_then[U](this, f: func(T) -> Maybe[U]) -> Maybe[U] {
+        when this {
+            Just(val) => return f(val),
+            Nothing => return Nothing
+        }
+    }
+
+    /// Returns the option if it contains a value, otherwise returns the other option.
+    pub func or(this, other: Maybe[T]) -> Maybe[T] {
+        when this {
+            Just(val) => return Just(val),
+            Nothing => return other
+        }
+    }
+
+    /// Returns the option if it contains a value, otherwise calls f.
+    pub func or_else(this, f: func() -> Maybe[T]) -> Maybe[T] {
+        when this {
+            Just(val) => return Just(val),
+            Nothing => return f()
+        }
+    }
+
+    /// Returns Just if exactly one of self or other is Just, otherwise Nothing.
+    pub func xor(this, other: Maybe[T]) -> Maybe[T] {
+        when this {
+            Just(val) => {
+                when other {
+                    Just(_) => return Nothing,
+                    Nothing => return Just(val)
+                }
+            },
+            Nothing => return other
+        }
+    }
+
+    /// Returns Nothing if the option is Nothing, otherwise returns other.
+    pub func and[U](this, other: Maybe[U]) -> Maybe[U] {
+        when this {
+            Just(_) => return other,
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Filtering
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns Nothing if the option is Nothing or the predicate returns false.
+    pub func filter(this, predicate: func(ref T) -> Bool) -> Maybe[T] {
+        when this {
+            Just(val) => {
+                if predicate(ref val) {
+                    return Just(val)
+                }
+                return Nothing
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Converting to Other Types
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Converts Maybe[T] to Outcome[T, E] using the provided error.
+    pub func ok_or[E](this, err: E) -> Outcome[T, E] {
+        when this {
+            Just(val) => return Ok(val),
+            Nothing => return Err(err)
+        }
+    }
+
+    /// Converts Maybe[T] to Outcome[T, E] using a function to produce the error.
+    pub func ok_or_else[E](this, err_fn: func() -> E) -> Outcome[T, E] {
+        when this {
+            Just(val) => return Ok(val),
+            Nothing => return Err(err_fn())
+        }
+    }
+
+    /// Transposes a Maybe[Outcome[T, E]] into Outcome[Maybe[T], E].
+    pub func transpose[E](this) -> Outcome[Maybe[T], E] where T: Outcome[T, E] {
+        when this {
+            Just(result) => {
+                when result {
+                    Ok(val) => return Ok(Just(val)),
+                    Err(e) => return Err(e)
+                }
+            },
+            Nothing => return Ok(Nothing)
+        }
+    }
+}
+
+// ============================================================================
+// Reference Operations
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns a reference to the contained value.
+    pub func as_ref(this) -> Maybe[ref T] {
+        when this {
+            Just(val) => return Just(ref val),
+            Nothing => return Nothing
+        }
+    }
+
+    /// Returns a mutable reference to the contained value.
+    pub func as_mut(mut this) -> Maybe[mut ref T] {
+        when this {
+            Just(val) => return Just(mut ref val),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Zipping
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Zips two options into a single option containing a tuple.
+    pub func zip[U](this, other: Maybe[U]) -> Maybe[(T, U)] {
+        when this {
+            Just(a) => {
+                when other {
+                    Just(b) => return Just((a, b)),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    /// Zips with another option using a function.
+    pub func zip_with[U, V](this, other: Maybe[U], f: func(T, U) -> V) -> Maybe[V] {
+        when this {
+            Just(a) => {
+                when other {
+                    Just(b) => return Just(f(a, b)),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Flattening
+// ============================================================================
+
+impl[T] Maybe[Maybe[T]] {
+    /// Flattens a nested Maybe.
+    pub func flatten(this) -> Maybe[T] {
+        when this {
+            Just(inner) => return inner,
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Iterator Support
+// ============================================================================
+
+impl[T] Maybe[T] {
+    /// Returns an iterator over the contained value (0 or 1 elements).
+    pub func iter(this) -> MaybeIter[T] {
+        return MaybeIter { value: this }
+    }
+}
+
+/// Iterator over Maybe[T] yielding 0 or 1 elements.
+pub type MaybeIter[T] {
+    value: Maybe[T]
+}
+
+impl[T] Iterator for MaybeIter[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        let result: Maybe[T] = this.value
+        this.value = Nothing
+        return result
+    }
+}

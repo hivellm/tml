@@ -1,0 +1,356 @@
+// TML Core Library - Result Module
+// Provides: Enhanced Outcome[T, E] methods (Result in Rust)
+
+// ============================================================================
+// Outcome[T, E] Type (defined in std::types, enhanced here)
+// ============================================================================
+
+// The Outcome[T, E] type is defined as:
+// pub type Outcome[T, E] {
+//     Ok(T),
+//     Err(E),
+// }
+
+// ============================================================================
+// Core Methods
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns true if the outcome is Ok.
+    pub func is_ok(this) -> Bool {
+        when this {
+            Ok(_) => return true,
+            Err(_) => return false
+        }
+    }
+
+    /// Returns true if the outcome is Err.
+    pub func is_err(this) -> Bool {
+        when this {
+            Ok(_) => return false,
+            Err(_) => return true
+        }
+    }
+
+    /// Returns true if the outcome is Ok and the value matches the predicate.
+    pub func is_ok_and(this, predicate: func(T) -> Bool) -> Bool {
+        when this {
+            Ok(val) => return predicate(val),
+            Err(_) => return false
+        }
+    }
+
+    /// Returns true if the outcome is Err and the error matches the predicate.
+    pub func is_err_and(this, predicate: func(E) -> Bool) -> Bool {
+        when this {
+            Ok(_) => return false,
+            Err(err) => return predicate(err)
+        }
+    }
+}
+
+// ============================================================================
+// Extracting Values
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns the contained Ok value, panicking if Err.
+    pub func unwrap(this) -> T {
+        when this {
+            Ok(val) => return val,
+            Err(_) => panic("called unwrap() on Err")
+        }
+    }
+
+    /// Returns the contained Ok value, panicking with a custom message if Err.
+    pub func expect(this, msg: Str) -> T {
+        when this {
+            Ok(val) => return val,
+            Err(_) => panic(msg)
+        }
+    }
+
+    /// Returns the contained Err value, panicking if Ok.
+    pub func unwrap_err(this) -> E {
+        when this {
+            Ok(_) => panic("called unwrap_err() on Ok"),
+            Err(err) => return err
+        }
+    }
+
+    /// Returns the contained Err value, panicking with a custom message if Ok.
+    pub func expect_err(this, msg: Str) -> E {
+        when this {
+            Ok(_) => panic(msg),
+            Err(err) => return err
+        }
+    }
+
+    /// Returns the contained Ok value or a default.
+    pub func unwrap_or(this, default_val: T) -> T {
+        when this {
+            Ok(val) => return val,
+            Err(_) => return default_val
+        }
+    }
+
+    /// Returns the contained Ok value or computes it from a function.
+    pub func unwrap_or_else(this, f: func(E) -> T) -> T {
+        when this {
+            Ok(val) => return val,
+            Err(err) => return f(err)
+        }
+    }
+
+    /// Returns the contained Ok value or the default for T.
+    pub func unwrap_or_default(this) -> T where T: Default {
+        when this {
+            Ok(val) => return val,
+            Err(_) => return T::default()
+        }
+    }
+}
+
+// ============================================================================
+// Transforming Values
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Maps an Outcome[T, E] to Outcome[U, E] by applying a function to the Ok value.
+    pub func map[U](this, f: func(T) -> U) -> Outcome[U, E] {
+        when this {
+            Ok(val) => return Ok(f(val)),
+            Err(err) => return Err(err)
+        }
+    }
+
+    /// Maps an Outcome[T, E] to Outcome[T, F] by applying a function to the Err value.
+    pub func map_err[F](this, f: func(E) -> F) -> Outcome[T, F] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => return Err(f(err))
+        }
+    }
+
+    /// Maps an Outcome[T, E] to U by applying a function or returning a default.
+    pub func map_or[U](this, default_val: U, f: func(T) -> U) -> U {
+        when this {
+            Ok(val) => return f(val),
+            Err(_) => return default_val
+        }
+    }
+
+    /// Maps an Outcome[T, E] to U by applying functions for both cases.
+    pub func map_or_else[U](this, default_fn: func(E) -> U, f: func(T) -> U) -> U {
+        when this {
+            Ok(val) => return f(val),
+            Err(err) => return default_fn(err)
+        }
+    }
+
+    /// Calls a function with the contained Ok value (if any) and returns the outcome.
+    pub func inspect(this, f: func(ref T)) -> Outcome[T, E] {
+        when this {
+            Ok(val) => {
+                f(ref val)
+                return Ok(val)
+            },
+            Err(err) => return Err(err)
+        }
+    }
+
+    /// Calls a function with the contained Err value (if any) and returns the outcome.
+    pub func inspect_err(this, f: func(ref E)) -> Outcome[T, E] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => {
+                f(ref err)
+                return Err(err)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Chaining Operations
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns Err if the outcome is Err, otherwise calls f with the Ok value.
+    pub func and_then[U](this, f: func(T) -> Outcome[U, E]) -> Outcome[U, E] {
+        when this {
+            Ok(val) => return f(val),
+            Err(err) => return Err(err)
+        }
+    }
+
+    /// Returns Ok if the outcome is Ok, otherwise calls f with the Err value.
+    pub func or_else[F](this, f: func(E) -> Outcome[T, F]) -> Outcome[T, F] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => return f(err)
+        }
+    }
+
+    /// Returns the outcome if it is Ok, otherwise returns the other outcome.
+    pub func or(this, other: Outcome[T, E]) -> Outcome[T, E] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(_) => return other
+        }
+    }
+
+    /// Returns Err if the outcome is Err, otherwise returns other.
+    pub func and[U](this, other: Outcome[U, E]) -> Outcome[U, E] {
+        when this {
+            Ok(_) => return other,
+            Err(err) => return Err(err)
+        }
+    }
+}
+
+// ============================================================================
+// Converting to Maybe
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Converts Outcome[T, E] to Maybe[T], discarding the error.
+    pub func ok(this) -> Maybe[T] {
+        when this {
+            Ok(val) => return Just(val),
+            Err(_) => return Nothing
+        }
+    }
+
+    /// Converts Outcome[T, E] to Maybe[E], discarding the success value.
+    pub func err(this) -> Maybe[E] {
+        when this {
+            Ok(_) => return Nothing,
+            Err(err) => return Just(err)
+        }
+    }
+
+    /// Transposes an Outcome[Maybe[T], E] into Maybe[Outcome[T, E]].
+    pub func transpose(this) -> Maybe[Outcome[T, E]] where T: Maybe[T] {
+        when this {
+            Ok(maybe) => {
+                when maybe {
+                    Just(val) => return Just(Ok(val)),
+                    Nothing => return Nothing
+                }
+            },
+            Err(err) => return Just(Err(err))
+        }
+    }
+}
+
+// ============================================================================
+// Reference Operations
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns a reference to the contained Ok value.
+    pub func as_ref(this) -> Outcome[ref T, ref E] {
+        when this {
+            Ok(val) => return Ok(ref val),
+            Err(err) => return Err(ref err)
+        }
+    }
+
+    /// Returns a mutable reference to the contained Ok value.
+    pub func as_mut(mut this) -> Outcome[mut ref T, mut ref E] {
+        when this {
+            Ok(val) => return Ok(mut ref val),
+            Err(err) => return Err(mut ref err)
+        }
+    }
+}
+
+// ============================================================================
+// Flattening
+// ============================================================================
+
+impl[T, E] Outcome[Outcome[T, E], E] {
+    /// Flattens a nested Outcome.
+    pub func flatten(this) -> Outcome[T, E] {
+        when this {
+            Ok(inner) => return inner,
+            Err(err) => return Err(err)
+        }
+    }
+}
+
+// ============================================================================
+// Copying Inner Values
+// ============================================================================
+
+impl[T: Copy, E] Outcome[T, E] {
+    /// Returns a copy of the contained Ok value.
+    pub func copied(this) -> Outcome[T, E] {
+        when this {
+            Ok(val) => return Ok(val),
+            Err(err) => return Err(err)
+        }
+    }
+}
+
+impl[T: Duplicate, E: Duplicate] Outcome[T, E] {
+    /// Returns a clone of the contained value.
+    pub func duplicated(this) -> Outcome[T, E] {
+        when this {
+            Ok(val) => return Ok(val.duplicate()),
+            Err(err) => return Err(err.duplicate())
+        }
+    }
+}
+
+// ============================================================================
+// Iterator Support
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns an iterator over the contained Ok value (0 or 1 elements).
+    pub func iter(this) -> OutcomeIter[T] {
+        when this {
+            Ok(val) => return OutcomeIter { value: Just(val) },
+            Err(_) => return OutcomeIter { value: Nothing }
+        }
+    }
+}
+
+/// Iterator over Outcome[T, E] yielding 0 or 1 elements (the Ok value).
+pub type OutcomeIter[T] {
+    value: Maybe[T]
+}
+
+impl[T] Iterator for OutcomeIter[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        let result: Maybe[T] = this.value
+        this.value = Nothing
+        return result
+    }
+}
+
+// ============================================================================
+// Contains Methods
+// ============================================================================
+
+impl[T, E] Outcome[T, E] {
+    /// Returns true if the outcome is Ok and contains the given value.
+    pub func contains[U: PartialEq](this, value: ref U) -> Bool where T = U {
+        when this {
+            Ok(v) => return v.eq(value),
+            Err(_) => return false
+        }
+    }
+
+    /// Returns true if the outcome is Err and contains the given error.
+    pub func contains_err[F: PartialEq](this, err: ref F) -> Bool where E = F {
+        when this {
+            Ok(_) => return false,
+            Err(e) => return e.eq(err)
+        }
+    }
+}

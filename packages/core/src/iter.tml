@@ -1,0 +1,544 @@
+// TML Core Library - Iterator Module
+// Provides: Iterator behavior and combinators
+
+// ============================================================================
+// Iterator Behavior
+// ============================================================================
+
+/// The core iteration trait.
+/// Types implementing Iterator can be used in for-in loops.
+pub behavior Iterator {
+    /// The type of elements being iterated.
+    type Item
+
+    /// Advances the iterator and returns the next value.
+    /// Returns Nothing when iteration is complete.
+    func next(mut this) -> Maybe[This::Item]
+
+    /// Returns the number of elements in the iterator (consumes it).
+    func count(mut this) -> I64 {
+        let mut n: I64 = 0
+        loop {
+            when this.next() {
+                Just(_) => n = n + 1,
+                Nothing => break
+            }
+        }
+        return n
+    }
+
+    /// Returns the last element (consumes the iterator).
+    func last(mut this) -> Maybe[This::Item] {
+        let mut result: Maybe[This::Item] = Nothing
+        loop {
+            when this.next() {
+                Just(item) => result = Just(item),
+                Nothing => break
+            }
+        }
+        return result
+    }
+
+    /// Returns the nth element (0-indexed), consuming elements up to that point.
+    func nth(mut this, n: I64) -> Maybe[This::Item] {
+        let mut i: I64 = 0
+        loop {
+            when this.next() {
+                Just(item) => {
+                    if i == n {
+                        return Just(item)
+                    }
+                    i = i + 1
+                },
+                Nothing => break
+            }
+        }
+        return Nothing
+    }
+
+    /// Advances the iterator by n elements.
+    func advance_by(mut this, n: I64) -> I64 {
+        let mut skipped: I64 = 0
+        loop {
+            if skipped >= n {
+                break
+            }
+            when this.next() {
+                Just(_) => skipped = skipped + 1,
+                Nothing => break
+            }
+        }
+        return skipped
+    }
+}
+
+// ============================================================================
+// IntoIterator Behavior
+// ============================================================================
+
+/// Types that can be converted into an Iterator.
+pub behavior IntoIterator {
+    /// The type of elements being iterated.
+    type Item
+
+    /// The iterator type.
+    type IntoIter: Iterator
+
+    /// Converts this value into an iterator.
+    func into_iter(this) -> This::IntoIter
+}
+
+// ============================================================================
+// FromIterator Behavior
+// ============================================================================
+
+/// Types that can be constructed from an iterator.
+pub behavior FromIterator[T] {
+    /// Creates a value from an iterator.
+    func from_iter[I: Iterator](iter: I) -> Self where I::Item = T
+}
+
+// ============================================================================
+// Extend Behavior
+// ============================================================================
+
+/// Types that can be extended with elements from an iterator.
+pub behavior Extend[T] {
+    /// Extends this collection with elements from the iterator.
+    func extend[I: Iterator](mut this, iter: I) where I::Item = T
+}
+
+// ============================================================================
+// Iterator Adapters
+// ============================================================================
+
+/// An iterator that maps each element using a function.
+pub type Map[I, F, B] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F, B] Iterator for Map[I, F, B] where F: Fn(I::Item) -> B {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        when this.iter.next() {
+            Just(item) => return Just((this.f)(item)),
+            Nothing => return Nothing
+        }
+    }
+}
+
+/// An iterator that filters elements using a predicate.
+pub type Filter[I, P] {
+    iter: I,
+    predicate: P
+}
+
+impl[I: Iterator, P] Iterator for Filter[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if (this.predicate)(ref item) {
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+/// An iterator that yields elements while a predicate is true.
+pub type TakeWhile[I, P] {
+    iter: I,
+    predicate: P,
+    done: Bool
+}
+
+impl[I: Iterator, P] Iterator for TakeWhile[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => {
+                if (this.predicate)(ref item) {
+                    return Just(item)
+                } else {
+                    this.done = true
+                    return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+/// An iterator that skips elements while a predicate is true.
+pub type SkipWhile[I, P] {
+    iter: I,
+    predicate: P,
+    done_skipping: Bool
+}
+
+impl[I: Iterator, P] Iterator for SkipWhile[I, P] where P: Fn(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.done_skipping {
+            return this.iter.next()
+        }
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if (this.predicate)(ref item) {
+                        // Skip this item
+                    } else {
+                        this.done_skipping = true
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+/// An iterator that takes at most n elements.
+pub type Take[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Take[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return this.iter.next()
+    }
+}
+
+/// An iterator that skips the first n elements.
+pub type Skip[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Skip[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            if this.remaining <= 0 {
+                break
+            }
+            when this.iter.next() {
+                Just(_) => this.remaining = this.remaining - 1,
+                Nothing => return Nothing
+            }
+        }
+        return this.iter.next()
+    }
+}
+
+/// An iterator that chains two iterators together.
+pub type Chain[A, B] {
+    first: A,
+    second: B,
+    first_done: Bool
+}
+
+impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item {
+    type Item = A::Item
+
+    pub func next(mut this) -> Maybe[A::Item] {
+        if not this.first_done {
+            when this.first.next() {
+                Just(item) => return Just(item),
+                Nothing => this.first_done = true
+            }
+        }
+        return this.second.next()
+    }
+}
+
+/// An iterator that zips two iterators together.
+pub type Zip[A, B] {
+    first: A,
+    second: B
+}
+
+impl[A: Iterator, B: Iterator] Iterator for Zip[A, B] {
+    type Item = (A::Item, B::Item)
+
+    pub func next(mut this) -> Maybe[(A::Item, B::Item)] {
+        when this.first.next() {
+            Just(a) => {
+                when this.second.next() {
+                    Just(b) => return Just((a, b)),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+/// An iterator that yields (index, element) pairs.
+pub type Enumerate[I] {
+    iter: I,
+    index: I64
+}
+
+impl[I: Iterator] Iterator for Enumerate[I] {
+    type Item = (I64, I::Item)
+
+    pub func next(mut this) -> Maybe[(I64, I::Item)] {
+        when this.iter.next() {
+            Just(item) => {
+                let idx: I64 = this.index
+                this.index = this.index + 1
+                return Just((idx, item))
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+/// An iterator that peeks at the next element without consuming it.
+pub type Peekable[I: Iterator] {
+    iter: I,
+    peeked: Maybe[Maybe[I::Item]]
+}
+
+impl[I: Iterator] Peekable[I] {
+    /// Returns a reference to the next element without consuming it.
+    pub func peek(mut this) -> Maybe[ref I::Item] {
+        when this.peeked {
+            Just(maybe_item) => {
+                when maybe_item {
+                    Just(item) => return Just(ref item),
+                    Nothing => return Nothing
+                }
+            },
+            Nothing => {
+                this.peeked = Just(this.iter.next())
+                return this.peek()
+            }
+        }
+    }
+}
+
+impl[I: Iterator] Iterator for Peekable[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.peeked {
+            Just(maybe_item) => {
+                this.peeked = Nothing
+                return maybe_item
+            },
+            Nothing => return this.iter.next()
+        }
+    }
+}
+
+// ============================================================================
+// Iterator Extension Methods
+// ============================================================================
+
+/// Extension methods for all iterators.
+impl[I: Iterator] I {
+    /// Creates an iterator that maps each element.
+    pub func map[B](this, f: func(I::Item) -> B) -> Map[I, func(I::Item) -> B, B] {
+        return Map { iter: this, f: f }
+    }
+
+    /// Creates an iterator that filters elements.
+    pub func filter(this, predicate: func(ref I::Item) -> Bool) -> Filter[I, func(ref I::Item) -> Bool] {
+        return Filter { iter: this, predicate: predicate }
+    }
+
+    /// Creates an iterator that takes at most n elements.
+    pub func take(this, n: I64) -> Take[I] {
+        return Take { iter: this, remaining: n }
+    }
+
+    /// Creates an iterator that skips the first n elements.
+    pub func skip(this, n: I64) -> Skip[I] {
+        return Skip { iter: this, remaining: n }
+    }
+
+    /// Creates an iterator that chains with another iterator.
+    pub func chain[B: Iterator](this, other: B) -> Chain[I, B] where I::Item = B::Item {
+        return Chain { first: this, second: other, first_done: false }
+    }
+
+    /// Creates an iterator that zips with another iterator.
+    pub func zip[B: Iterator](this, other: B) -> Zip[I, B] {
+        return Zip { first: this, second: other }
+    }
+
+    /// Creates an iterator that yields (index, element) pairs.
+    pub func enumerate(this) -> Enumerate[I] {
+        return Enumerate { iter: this, index: 0 }
+    }
+
+    /// Creates a peekable iterator.
+    pub func peekable(this) -> Peekable[I] {
+        return Peekable { iter: this, peeked: Nothing }
+    }
+
+    /// Tests if any element matches the predicate.
+    pub func any(mut this, predicate: func(I::Item) -> Bool) -> Bool {
+        loop {
+            when this.next() {
+                Just(item) => {
+                    if predicate(item) {
+                        return true
+                    }
+                },
+                Nothing => break
+            }
+        }
+        return false
+    }
+
+    /// Tests if all elements match the predicate.
+    pub func all(mut this, predicate: func(I::Item) -> Bool) -> Bool {
+        loop {
+            when this.next() {
+                Just(item) => {
+                    if not predicate(item) {
+                        return false
+                    }
+                },
+                Nothing => break
+            }
+        }
+        return true
+    }
+
+    /// Finds the first element matching the predicate.
+    pub func find(mut this, predicate: func(ref I::Item) -> Bool) -> Maybe[I::Item] {
+        loop {
+            when this.next() {
+                Just(item) => {
+                    if predicate(ref item) {
+                        return Just(item)
+                    }
+                },
+                Nothing => break
+            }
+        }
+        return Nothing
+    }
+
+    /// Returns the position of the first element matching the predicate.
+    pub func position(mut this, predicate: func(I::Item) -> Bool) -> Maybe[I64] {
+        let mut idx: I64 = 0
+        loop {
+            when this.next() {
+                Just(item) => {
+                    if predicate(item) {
+                        return Just(idx)
+                    }
+                    idx = idx + 1
+                },
+                Nothing => break
+            }
+        }
+        return Nothing
+    }
+
+    /// Folds the iterator using an accumulator function.
+    pub func fold[B](mut this, init: B, f: func(B, I::Item) -> B) -> B {
+        let mut acc: B = init
+        loop {
+            when this.next() {
+                Just(item) => acc = f(acc, item),
+                Nothing => break
+            }
+        }
+        return acc
+    }
+
+    /// Reduces the iterator to a single value using a function.
+    pub func reduce(mut this, f: func(I::Item, I::Item) -> I::Item) -> Maybe[I::Item] {
+        when this.next() {
+            Just(first) => {
+                return Just(this.fold(first, f))
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    /// Applies a function to each element (for side effects).
+    pub func for_each(mut this, f: func(I::Item)) {
+        loop {
+            when this.next() {
+                Just(item) => f(item),
+                Nothing => break
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Numeric Iterator Extensions
+// ============================================================================
+
+/// Extension methods for iterators over numeric types.
+impl[I: Iterator] I where I::Item = I32 {
+    /// Returns the sum of all elements.
+    pub func sum(mut this) -> I32 {
+        return this.fold(0, do(acc: I32, x: I32) acc + x)
+    }
+
+    /// Returns the product of all elements.
+    pub func product(mut this) -> I32 {
+        return this.fold(1, do(acc: I32, x: I32) acc * x)
+    }
+
+    /// Returns the maximum element.
+    pub func max(mut this) -> Maybe[I32] {
+        return this.reduce(do(a: I32, b: I32) if a > b then a else b)
+    }
+
+    /// Returns the minimum element.
+    pub func min(mut this) -> Maybe[I32] {
+        return this.reduce(do(a: I32, b: I32) if a < b then a else b)
+    }
+}
+
+impl[I: Iterator] I where I::Item = I64 {
+    /// Returns the sum of all elements.
+    pub func sum(mut this) -> I64 {
+        return this.fold(0, do(acc: I64, x: I64) acc + x)
+    }
+
+    /// Returns the product of all elements.
+    pub func product(mut this) -> I64 {
+        return this.fold(1, do(acc: I64, x: I64) acc * x)
+    }
+
+    /// Returns the maximum element.
+    pub func max(mut this) -> Maybe[I64] {
+        return this.reduce(do(a: I64, b: I64) if a > b then a else b)
+    }
+
+    /// Returns the minimum element.
+    pub func min(mut this) -> Maybe[I64] {
+        return this.reduce(do(a: I64, b: I64) if a < b then a else b)
+    }
+}
