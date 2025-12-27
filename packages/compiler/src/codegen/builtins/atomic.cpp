@@ -6,8 +6,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name, const parser::CallExpr& call)
-    -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_atomic(const std::string& fn_name,
+                                       const parser::CallExpr& call) -> std::optional<std::string> {
 
     // atomic_load(ptr) -> I32 - Thread-safe read
     if (fn_name == "atomic_load") {

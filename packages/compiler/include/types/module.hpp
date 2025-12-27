@@ -76,20 +76,20 @@ public:
     void register_file_mapping(const std::string& file_path, const std::string& module_path);
 
     // Symbol lookup across modules
-    auto lookup_function(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<FuncSig>;
-    auto lookup_struct(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<StructDef>;
-    auto lookup_enum(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<EnumDef>;
-    auto lookup_behavior(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<BehaviorDef>;
-    auto lookup_type_alias(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<TypePtr>;
+    auto lookup_function(const std::string& module_path,
+                         const std::string& symbol_name) const -> std::optional<FuncSig>;
+    auto lookup_struct(const std::string& module_path,
+                       const std::string& symbol_name) const -> std::optional<StructDef>;
+    auto lookup_enum(const std::string& module_path,
+                     const std::string& symbol_name) const -> std::optional<EnumDef>;
+    auto lookup_behavior(const std::string& module_path,
+                         const std::string& symbol_name) const -> std::optional<BehaviorDef>;
+    auto lookup_type_alias(const std::string& module_path,
+                           const std::string& symbol_name) const -> std::optional<TypePtr>;
 
     // Generic symbol lookup
-    auto lookup_symbol(const std::string& module_path, const std::string& symbol_name) const
-        -> std::optional<ModuleSymbol>;
+    auto lookup_symbol(const std::string& module_path,
+                       const std::string& symbol_name) const -> std::optional<ModuleSymbol>;
 
 private:
     std::unordered_map<std::string, Module> modules_;

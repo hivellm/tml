@@ -129,9 +129,9 @@ public:
     [[nodiscard]] auto lookup_behavior(const std::string& name) const -> std::optional<BehaviorDef>;
     [[nodiscard]] auto lookup_func(const std::string& name) const -> std::optional<FuncSig>;
     // Function overloading support - select overload based on argument types
-    [[nodiscard]] auto lookup_func_overload(const std::string& name,
-                                            const std::vector<TypePtr>& arg_types) const
-        -> std::optional<FuncSig>;
+    [[nodiscard]] auto
+    lookup_func_overload(const std::string& name,
+                         const std::vector<TypePtr>& arg_types) const -> std::optional<FuncSig>;
     [[nodiscard]] auto get_all_overloads(const std::string& name) const -> std::vector<FuncSig>;
     [[nodiscard]] auto lookup_type_alias(const std::string& name) const -> std::optional<TypePtr>;
 
@@ -172,8 +172,8 @@ public:
     // Symbol resolution with imports
     [[nodiscard]] auto resolve_imported_symbol(const std::string& name) const
         -> std::optional<std::string /* full path */>;
-    [[nodiscard]] auto all_imports() const
-        -> const std::unordered_map<std::string, ImportedSymbol>&;
+    [[nodiscard]] auto
+    all_imports() const -> const std::unordered_map<std::string, ImportedSymbol>&;
 
     // Module lookup
     [[nodiscard]] auto get_module(const std::string& module_path) const -> std::optional<Module>;

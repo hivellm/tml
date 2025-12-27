@@ -20,8 +20,8 @@ class TypeChecker {
 public:
     TypeChecker();
 
-    [[nodiscard]] auto check_module(const parser::Module& module)
-        -> Result<TypeEnv, std::vector<TypeError>>;
+    [[nodiscard]] auto
+    check_module(const parser::Module& module) -> Result<TypeEnv, std::vector<TypeError>>;
 
     [[nodiscard]] auto errors() const -> const std::vector<TypeError>& {
         return errors_;

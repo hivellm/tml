@@ -6,8 +6,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::CallExpr& call)
-    -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
+                                    const parser::CallExpr& call) -> std::optional<std::string> {
 
     // Memory allocation: alloc(size) -> ptr
     // Always inline as malloc call (registered as builtin for type checking)

@@ -48,8 +48,8 @@ public:
     [[nodiscard]] static auto from_file(const std::string& path) -> Result<Source, std::string>;
 
     // Create source from string (for tests/REPL)
-    [[nodiscard]] static auto from_string(std::string content, std::string name = "<input>")
-        -> Source;
+    [[nodiscard]] static auto from_string(std::string content,
+                                          std::string name = "<input>") -> Source;
 
 private:
     std::string filename_;

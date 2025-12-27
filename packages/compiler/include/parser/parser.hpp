@@ -42,8 +42,8 @@ public:
     explicit Parser(std::vector<lexer::Token> tokens);
 
     // Parse entire module
-    [[nodiscard]] auto parse_module(const std::string& name)
-        -> Result<Module, std::vector<ParseError>>;
+    [[nodiscard]] auto
+    parse_module(const std::string& name) -> Result<Module, std::vector<ParseError>>;
 
     // Parse single declaration (for testing)
     [[nodiscard]] auto parse_decl() -> Result<DeclPtr, ParseError>;
@@ -78,8 +78,8 @@ private:
     [[nodiscard]] auto check(lexer::TokenKind kind) const -> bool;
     [[nodiscard]] auto check_next(lexer::TokenKind kind) const -> bool;
     auto match(lexer::TokenKind kind) -> bool;
-    auto expect(lexer::TokenKind kind, const std::string& message)
-        -> Result<lexer::Token, ParseError>;
+    auto expect(lexer::TokenKind kind,
+                const std::string& message) -> Result<lexer::Token, ParseError>;
 
     // Skip newlines (where they're not significant)
     void skip_newlines();
@@ -92,14 +92,14 @@ private:
     // Declaration parsing
     auto parse_visibility() -> Visibility;
     auto parse_decorators() -> Result<std::vector<Decorator>, ParseError>;
-    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {})
-        -> Result<DeclPtr, ParseError>;
-    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {})
-        -> Result<DeclPtr, ParseError>;
-    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {})
-        -> Result<DeclPtr, ParseError>;
-    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {})
-        -> Result<DeclPtr, ParseError>;
+    auto parse_func_decl(Visibility vis,
+                         std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_struct_decl(Visibility vis,
+                           std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_enum_decl(Visibility vis,
+                         std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
+    auto parse_trait_decl(Visibility vis,
+                          std::vector<Decorator> decorators = {}) -> Result<DeclPtr, ParseError>;
     auto parse_impl_decl() -> Result<DeclPtr, ParseError>;
     auto parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
     auto parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError>;

@@ -279,8 +279,8 @@ auto LLVMIRGen::mangle_func_name(const std::string& base_name,
 // Converts parser::Type to types::TypePtr, applying generic substitutions
 
 auto LLVMIRGen::resolve_parser_type_with_subs(
-    const parser::Type& type, const std::unordered_map<std::string, types::TypePtr>& subs)
-    -> types::TypePtr {
+    const parser::Type& type,
+    const std::unordered_map<std::string, types::TypePtr>& subs) -> types::TypePtr {
     return std::visit(
         [this, &subs](const auto& t) -> types::TypePtr {
             using T = std::decay_t<decltype(t)>;

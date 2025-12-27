@@ -81,9 +81,8 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
 
 // Request instantiation of a generic struct - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
-auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
-                                             const std::vector<types::TypePtr>& type_args)
-    -> std::string {
+auto LLVMIRGen::require_struct_instantiation(
+    const std::string& base_name, const std::vector<types::TypePtr>& type_args) -> std::string {
     // Generate mangled name
     std::string mangled = mangle_struct_name(base_name, type_args);
 

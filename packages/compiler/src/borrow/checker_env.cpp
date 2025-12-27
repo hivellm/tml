@@ -8,8 +8,8 @@ namespace tml::borrow {
 // BorrowEnv Implementation
 // ============================================================================
 
-auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut, Location loc)
-    -> PlaceId {
+auto BorrowEnv::define(const std::string& name, types::TypePtr type, bool is_mut,
+                       Location loc) -> PlaceId {
     PlaceId id = next_id_++;
 
     PlaceState state{
