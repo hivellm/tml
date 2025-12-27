@@ -71,7 +71,11 @@ func main() -> I32 {
     std::pair<bool, double> run_tml_command(const std::string& cmd) {
         auto start = std::chrono::high_resolution_clock::now();
 
-        std::string full_cmd = "\"" + tml_exe.string() + "\" " + cmd + " 2>&1";
+#ifdef _WIN32
+        std::string full_cmd = "\"" + tml_exe.string() + "\" " + cmd + " >NUL 2>&1";
+#else
+        std::string full_cmd = "\"" + tml_exe.string() + "\" " + cmd + " >/dev/null 2>&1";
+#endif
         int result = std::system(full_cmd.c_str());
 
         auto end = std::chrono::high_resolution_clock::now();

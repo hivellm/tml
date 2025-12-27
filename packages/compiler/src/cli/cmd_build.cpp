@@ -576,7 +576,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
     // Clean up .ll file (keep .o file in cache for potential reuse)
     fs::remove(ll_output);
 
-    std::cout << "build: " << to_forward_slashes(final_output.string()) << "\n";
+    if (verbose) {
+        std::cout << "build: " << to_forward_slashes(final_output.string()) << "\n";
+    }
 
     // Generate C header if requested (after successful build)
     if (emit_header) {
@@ -600,7 +602,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
         header_file << header_result.header_content;
         header_file.close();
 
-        std::cout << "emit-header: " << to_forward_slashes(header_output.string()) << "\n";
+        if (verbose) {
+            std::cout << "emit-header: " << to_forward_slashes(header_output.string()) << "\n";
+        }
     }
 
     return 0;

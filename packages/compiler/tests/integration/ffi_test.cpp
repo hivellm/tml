@@ -113,7 +113,12 @@ int main() {
     }
 
     int run_command(const std::string& cmd) {
-        return std::system(cmd.c_str());
+#ifdef _WIN32
+        std::string silent_cmd = cmd + " >NUL 2>&1";
+#else
+        std::string silent_cmd = cmd + " >/dev/null 2>&1";
+#endif
+        return std::system(silent_cmd.c_str());
     }
 };
 

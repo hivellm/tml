@@ -124,6 +124,13 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
 
     if (options.verbose) {
         std::cout << "[object_compiler] " << command << "\n";
+    } else {
+        // Redirect stderr to suppress clang error output in quiet mode
+#ifdef _WIN32
+        command += " 2>NUL";
+#else
+        command += " 2>/dev/null";
+#endif
     }
 
     // Execute compilation
