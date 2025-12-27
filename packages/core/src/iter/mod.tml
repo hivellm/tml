@@ -1,18 +1,251 @@
-// TML Core Library - Iterator Module
-// Provides: Iterator behavior and combinators
-//
-// This module is organized into submodules following Rust's core::iter pattern:
-// - traits: Core iterator behaviors (Iterator, IntoIterator, FromIterator, Extend)
-// - adapters: Iterator adapter types (Map, Filter, Take, Skip, etc.)
-// - sources: Iterator source types (Range, Repeat, Once, Empty)
+//! Composable external iteration.
+//!
+//! If you've found yourself with a collection of some kind, and needed to
+//! perform an operation on the elements of said collection, you'll quickly
+//! run into 'iterators'. Iterators are heavily used in idiomatic TML code,
+//! so it's worth becoming familiar with them.
+//!
+//! # Organization
+//!
+//! This module is organized into three submodules:
+//!
+//! - [`traits`]: Core iterator behaviors (`Iterator`, `IntoIterator`, etc.)
+//! - [`adapters`]: Iterator adapter types (`Map`, `Filter`, `Take`, etc.)
+//! - [`sources`]: Iterator source types (`Empty`, `Once`, `Repeat`, etc.)
+//!
+//! # Quick Start
+//!
+//! The most common way to create an iterator is from a collection:
+//!
+//! ```tml
+//! let numbers = [1, 2, 3, 4, 5]
+//! let mut iter = numbers.into_iter()
+//!
+//! while let Just(n) = iter.next() {
+//!     println(n.to_string())
+//! }
+//! ```
+//!
+//! Or more idiomatically with a `for` loop:
+//!
+//! ```tml
+//! for n in [1, 2, 3, 4, 5] {
+//!     println(n.to_string())
+//! }
+//! ```
+//!
+//! # The Three Forms of Iteration
+//!
+//! There are three common methods to create an iterator from a collection:
+//!
+//! - `into_iter()` - consumes the collection, yields owned values
+//! - `iter()` - borrows the collection, yields references
+//! - `iter_mut()` - mutably borrows, yields mutable references
+//!
+//! # Iterator Adapters
+//!
+//! Adapters transform one iterator into another. They are lazy and don't
+//! consume elements until the iterator is consumed:
+//!
+//! ```tml
+//! let result = [1, 2, 3, 4, 5]
+//!     .into_iter()
+//!     .map(do(x) x * x)
+//!     .filter(do(x) *x > 5)
+//!     .collect()
+//!
+//! assert_eq(result, [9, 16, 25])
+//! ```
+//!
+//! ## Common Adapters
+//!
+//! | Adapter | Description |
+//! |---------|-------------|
+//! | `map(f)` | Transform each element |
+//! | `filter(p)` | Keep elements matching predicate |
+//! | `filter_map(f)` | Filter and transform in one step |
+//! | `take(n)` | Take first n elements |
+//! | `skip(n)` | Skip first n elements |
+//! | `enumerate()` | Add index to each element |
+//! | `zip(other)` | Pair with another iterator |
+//! | `chain(other)` | Concatenate with another iterator |
+//! | `flatten()` | Flatten nested iterators |
+//! | `peekable()` | Allow peeking at next element |
+//! | `rev()` | Reverse the iterator |
+//! | `cloned()` | Duplicate each element |
+//!
+//! # Consuming Iterators
+//!
+//! Adapters are lazy; they don't do anything until consumed. Common
+//! consumers include:
+//!
+//! | Consumer | Description |
+//! |----------|-------------|
+//! | `collect()` | Gather into a collection |
+//! | `for_each(f)` | Call function on each element |
+//! | `fold(init, f)` | Accumulate into single value |
+//! | `reduce(f)` | Fold without initial value |
+//! | `sum()` | Sum numeric elements |
+//! | `count()` | Count elements |
+//! | `any(p)` | Check if any match predicate |
+//! | `all(p)` | Check if all match predicate |
+//! | `find(p)` | Find first matching element |
+//! | `position(p)` | Find index of first match |
+//! | `max()` / `min()` | Find extrema |
+//!
+//! # Iterator Sources
+//!
+//! Create iterators without a collection:
+//!
+//! ```tml
+//! use core::iter::sources::{empty, once, repeat, from_fn}
+//!
+//! // Empty iterator
+//! let e: Empty[I32] = empty()
+//!
+//! // Single element
+//! let o = once(42)
+//!
+//! // Infinite repetition (use .take() to limit!)
+//! let ones = repeat(1).take(5).collect()
+//! assert_eq(ones, [1, 1, 1, 1, 1])
+//!
+//! // Custom generation
+//! let mut n = 0
+//! let squares = from_fn(do() {
+//!     if n < 5 {
+//!         n = n + 1
+//!         return Just(n * n)
+//!     }
+//!     return Nothing
+//! }).collect()
+//! assert_eq(squares, [1, 4, 9, 16, 25])
+//! ```
+//!
+//! # Implementing Iterator
+//!
+//! To make your type iterable, implement the `Iterator` behavior:
+//!
+//! ```tml
+//! type Counter {
+//!     current: I64,
+//!     max: I64
+//! }
+//!
+//! impl Iterator for Counter {
+//!     type Item = I64
+//!
+//!     func next(mut this) -> Maybe[I64] {
+//!         if this.current >= this.max {
+//!             return Nothing
+//!         }
+//!         let result = this.current
+//!         this.current = this.current + 1
+//!         return Just(result)
+//!     }
+//! }
+//!
+//! let c = Counter { current: 0, max: 5 }
+//! let values = c.collect()
+//! assert_eq(values, [0, 1, 2, 3, 4])
+//! ```
+//!
+//! # Advanced Topics
+//!
+//! ## Double-Ended Iteration
+//!
+//! Some iterators can yield elements from both ends:
+//!
+//! ```tml
+//! let mut iter = [1, 2, 3].into_iter()
+//!
+//! assert_eq(iter.next(), Just(1))
+//! assert_eq(iter.next_back(), Just(3))
+//! assert_eq(iter.next(), Just(2))
+//! assert_eq(iter.next_back(), Nothing)
+//! ```
+//!
+//! ## Exact Size
+//!
+//! Some iterators know their exact length:
+//!
+//! ```tml
+//! let iter = [1, 2, 3, 4, 5].into_iter()
+//! assert_eq(iter.len(), 5)
+//! ```
 
 pub mod traits    // Iterator, IntoIterator, FromIterator, Extend
 pub mod adapters  // Map, Filter, Take, Skip, Chain, Zip, Enumerate, etc.
+pub mod sources   // Empty, Once, Repeat, FromFn, Successors
 
-// Re-export commonly used items
-pub use traits::{Iterator, IntoIterator, FromIterator, Extend}
+// Re-export core behaviors
+pub use traits::{
+    Iterator,
+    IntoIterator,
+    FromIterator,
+    Extend,
+    DoubleEndedIterator,
+    ExactSizeIterator,
+    FusedIterator
+}
+
+// Re-export adapter types
 pub use adapters::{
-    Map, Filter, Take, Skip, Chain, Zip, Enumerate, Peekable,
-    TakeWhile, SkipWhile, Rev, FlatMap, Flatten, Cycle, StepBy,
-    Inspect, Fuse
+    // Transforming
+    Map,
+    FilterMap,
+    MapWhile,
+    Scan,
+    Inspect,
+
+    // Filtering
+    Filter,
+    TakeWhile,
+    SkipWhile,
+    Take,
+    Skip,
+    StepBy,
+    Fuse,
+
+    // Combining
+    Chain,
+    Zip,
+    Intersperse,
+    IntersperseWith,
+
+    // Flattening
+    Flatten,
+    FlatMap,
+
+    // Cloning
+    Cloned,
+    Copied,
+
+    // Metadata
+    Enumerate,
+    Peekable,
+
+    // Infinite
+    Cycle,
+    Rev
+}
+
+// Re-export source types and functions
+pub use sources::{
+    Empty,
+    Once,
+    OnceWith,
+    Repeat,
+    RepeatN,
+    RepeatWith,
+    FromFn,
+    Successors,
+    empty,
+    once,
+    once_with,
+    repeat,
+    repeat_n,
+    repeat_with,
+    from_fn,
+    successors
 }

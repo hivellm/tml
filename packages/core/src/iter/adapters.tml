@@ -1,5 +1,125 @@
-// TML Core Library - Iterator Adapters
-// Types that wrap iterators to transform their output
+//! Iterator adapter types.
+//!
+//! This module contains the types returned by iterator adapter methods.
+//! Adapters wrap existing iterators to transform, filter, or combine
+//! their elements in various ways.
+//!
+//! # Overview
+//!
+//! Iterator adapters are lazy - they don't consume elements until iterated.
+//! This allows chaining multiple adapters efficiently:
+//!
+//! ```tml
+//! let result = [1, 2, 3, 4, 5]
+//!     .into_iter()
+//!     .filter(do(x) *x % 2 == 0)
+//!     .map(do(x) x * x)
+//!     .collect()
+//!
+//! assert_eq(result, [4, 16])
+//! ```
+//!
+//! # Adapter Types
+//!
+//! ## Transforming Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Map`] | `.map(f)` | Transform each element |
+//! | [`FilterMap`] | `.filter_map(f)` | Filter and transform in one step |
+//! | [`MapWhile`] | `.map_while(f)` | Transform until predicate fails |
+//! | [`Scan`] | `.scan(init, f)` | Stateful transformation |
+//! | [`Inspect`] | `.inspect(f)` | Side effects without modifying |
+//!
+//! ## Filtering Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Filter`] | `.filter(p)` | Keep elements matching predicate |
+//! | [`TakeWhile`] | `.take_while(p)` | Take while predicate is true |
+//! | [`SkipWhile`] | `.skip_while(p)` | Skip while predicate is true |
+//! | [`Take`] | `.take(n)` | Take first n elements |
+//! | [`Skip`] | `.skip(n)` | Skip first n elements |
+//! | [`StepBy`] | `.step_by(n)` | Take every nth element |
+//! | [`Fuse`] | `.fuse()` | Stop permanently after first None |
+//!
+//! ## Combining Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Chain`] | `.chain(other)` | Concatenate two iterators |
+//! | [`Zip`] | `.zip(other)` | Pair elements from two iterators |
+//! | [`Intersperse`] | `.intersperse(sep)` | Insert separator between elements |
+//!
+//! ## Flattening Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Flatten`] | `.flatten()` | Flatten nested iterators |
+//! | [`FlatMap`] | `.flat_map(f)` | Map then flatten |
+//!
+//! ## Cloning Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Cloned`] | `.cloned()` | Duplicate each element |
+//! | [`Copied`] | `.copied()` | Copy each element (for Copy types) |
+//!
+//! ## Metadata Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Enumerate`] | `.enumerate()` | Add index to each element |
+//! | [`Peekable`] | `.peekable()` | Look ahead without consuming |
+//!
+//! ## Infinite Adapters
+//!
+//! | Type | Method | Description |
+//! |------|--------|-------------|
+//! | [`Cycle`] | `.cycle()` | Repeat iterator forever |
+//! | [`Rev`] | `.rev()` | Reverse direction |
+//!
+//! # Examples
+//!
+//! ## Chaining Adapters
+//!
+//! ```tml
+//! // Find first 3 even squares greater than 10
+//! let result = (1 through 20)
+//!     .map(do(x) x * x)
+//!     .filter(do(x) *x % 2 == 0 and *x > 10)
+//!     .take(3)
+//!     .collect()
+//!
+//! assert_eq(result, [16, 36, 64])
+//! ```
+//!
+//! ## Using Enumerate
+//!
+//! ```tml
+//! let names = ["Alice", "Bob", "Charlie"]
+//! for (idx, name) in names.into_iter().enumerate() {
+//!     println("{}: {}", idx, name)
+//! }
+//! // Output:
+//! // 0: Alice
+//! // 1: Bob
+//! // 2: Charlie
+//! ```
+//!
+//! ## Using Peekable
+//!
+//! ```tml
+//! let mut iter = [1, 2, 3].into_iter().peekable()
+//!
+//! // Look at next element without consuming
+//! assert_eq(iter.peek(), Just(ref 1))
+//! assert_eq(iter.peek(), Just(ref 1))  // Still 1
+//!
+//! // Now consume it
+//! assert_eq(iter.next(), Just(1))
+//! assert_eq(iter.peek(), Just(ref 2))
+//! ```
 
 use core::iter::traits::{Iterator}
 use core::clone::Duplicate
@@ -587,5 +707,419 @@ impl[I: Iterator] I where I::Item: Iterator {
     /// Flattens nested iterators.
     pub func flatten(this) -> Flatten[I] {
         return Flatten { iter: this, current: Nothing }
+    }
+}
+
+// ============================================================================
+// FilterMap Adapter
+// ============================================================================
+
+/// An iterator that both filters and maps.
+///
+/// This struct is created by the [`filter_map`] method on [`Iterator`].
+/// See its documentation for more.
+pub type FilterMap[I, F, B] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F, B] Iterator for FilterMap[I, F, B] where F: FnMut(I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    when (this.f)(item) {
+                        Just(mapped) => return Just(mapped),
+                        Nothing => {}  // Continue to next item
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// MapWhile Adapter
+// ============================================================================
+
+/// An iterator that maps while a predicate returns `Just`.
+///
+/// This struct is created by the [`map_while`] method on [`Iterator`].
+/// See its documentation for more.
+pub type MapWhile[I, F, B] {
+    iter: I,
+    f: F,
+    done: Bool
+}
+
+impl[I: Iterator, F, B] Iterator for MapWhile[I, F, B] where F: FnMut(I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => {
+                when (this.f)(item) {
+                    Just(mapped) => return Just(mapped),
+                    Nothing => {
+                        this.done = true
+                        return Nothing
+                    }
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Cloned Adapter
+// ============================================================================
+
+/// An iterator that duplicates elements.
+///
+/// This struct is created by the [`cloned`] method on [`Iterator`].
+/// It takes an iterator over references and produces owned values by
+/// calling `.duplicate()` on each element.
+pub type Cloned[I] {
+    iter: I
+}
+
+impl[I: Iterator] Iterator for Cloned[I] where I::Item: Duplicate {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter.next() {
+            Just(item) => return Just(item.duplicate()),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Copied Adapter
+// ============================================================================
+
+/// An iterator that copies elements.
+///
+/// This struct is created by the [`copied`] method on [`Iterator`].
+/// It takes an iterator over references and produces owned values by
+/// copying each element (for `Copy` types).
+pub type Copied[I] {
+    iter: I
+}
+
+impl[I: Iterator] Iterator for Copied[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Intersperse Adapter
+// ============================================================================
+
+/// An iterator that inserts a separator between elements.
+///
+/// This struct is created by the [`intersperse`] method on [`Iterator`].
+/// See its documentation for more.
+pub type Intersperse[I: Iterator] where I::Item: Duplicate {
+    iter: I,
+    separator: I::Item,
+    next_is_separator: Bool,
+    peeked: Maybe[I::Item]
+}
+
+impl[I: Iterator] Iterator for Intersperse[I] where I::Item: Duplicate {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.next_is_separator {
+            when this.peeked {
+                Just(_) => {
+                    this.next_is_separator = false
+                    return Just(this.separator.duplicate())
+                },
+                Nothing => return Nothing
+            }
+        } else {
+            when this.peeked {
+                Just(item) => {
+                    this.peeked = this.iter.next()
+                    when this.peeked {
+                        Just(_) => this.next_is_separator = true,
+                        Nothing => {}
+                    }
+                    return Just(item)
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// IntersperseWith Adapter
+// ============================================================================
+
+/// An iterator that inserts a separator computed by a closure between elements.
+///
+/// This struct is created by the [`intersperse_with`] method on [`Iterator`].
+/// See its documentation for more.
+pub type IntersperseWith[I: Iterator, F] {
+    iter: I,
+    separator_fn: F,
+    next_is_separator: Bool,
+    peeked: Maybe[I::Item]
+}
+
+impl[I: Iterator, F] Iterator for IntersperseWith[I, F] where F: FnMut() -> I::Item {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.next_is_separator {
+            when this.peeked {
+                Just(_) => {
+                    this.next_is_separator = false
+                    return Just((this.separator_fn)())
+                },
+                Nothing => return Nothing
+            }
+        } else {
+            when this.peeked {
+                Just(item) => {
+                    this.peeked = this.iter.next()
+                    when this.peeked {
+                        Just(_) => this.next_is_separator = true,
+                        Nothing => {}
+                    }
+                    return Just(item)
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Scan Adapter
+// ============================================================================
+
+/// An iterator that maintains state and produces values based on that state.
+///
+/// This struct is created by the [`scan`] method on [`Iterator`].
+/// See its documentation for more.
+///
+/// # Examples
+///
+/// ```tml
+/// let iter = [1, 2, 3, 4, 5].into_iter()
+///     .scan(0, do(state, x) {
+///         *state = *state + x
+///         if *state < 10 {
+///             return Just(*state)
+///         }
+///         return Nothing
+///     })
+///     .collect()
+///
+/// assert_eq(iter, [1, 3, 6])
+/// ```
+pub type Scan[I, St, F, B] {
+    iter: I,
+    state: St,
+    f: F
+}
+
+impl[I: Iterator, St, F, B] Iterator for Scan[I, St, F, B] where F: FnMut(mut ref St, I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        when this.iter.next() {
+            Just(item) => return (this.f)(mut ref this.state, item),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Additional Iterator Extension Methods
+// ============================================================================
+
+/// Additional extension methods for creating more iterator adapters.
+impl[I: Iterator] I {
+    /// Creates an iterator that both filters and maps.
+    ///
+    /// The returned iterator yields only the values for which the supplied
+    /// closure returns `Just(value)`.
+    ///
+    /// `filter_map` can be used to make chains of [`filter`] and [`map`]
+    /// more concise.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```tml
+    /// let a = ["1", "two", "3", "four", "5"]
+    /// let result = a.into_iter()
+    ///     .filter_map(do(s) s.parse_i32())
+    ///     .collect()
+    /// assert_eq(result, [1, 3, 5])
+    /// ```
+    pub func filter_map[B](this, f: func(I::Item) -> Maybe[B]) -> FilterMap[I, func(I::Item) -> Maybe[B], B] {
+        return FilterMap { iter: this, f: f }
+    }
+
+    /// Creates an iterator that maps while returning `Just`.
+    ///
+    /// The returned iterator yields elements until the first `Nothing` is
+    /// returned from the closure, at which point iteration stops.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```tml
+    /// let a = [-1, 4, 0, 1]
+    /// let result = a.into_iter()
+    ///     .map_while(do(x) {
+    ///         if x > 0 {
+    ///             return Nothing
+    ///         }
+    ///         return Just(x * -1)
+    ///     })
+    ///     .collect()
+    /// assert_eq(result, [1])
+    /// ```
+    pub func map_while[B](this, f: func(I::Item) -> Maybe[B]) -> MapWhile[I, func(I::Item) -> Maybe[B], B] {
+        return MapWhile { iter: this, f: f, done: false }
+    }
+
+    /// Creates an iterator that uses a closure to maintain state and
+    /// produce values.
+    ///
+    /// On each iteration, the closure is called with `&mut state` and the
+    /// next element from the iterator. If it returns `Just(value)`, that
+    /// value is yielded. If it returns `Nothing`, iteration stops.
+    ///
+    /// # Examples
+    ///
+    /// Running sum with early termination:
+    ///
+    /// ```tml
+    /// let values = [1, 2, 3, 4, 5].into_iter()
+    ///     .scan(0, do(sum, x) {
+    ///         *sum = *sum + x
+    ///         if *sum < 10 {
+    ///             return Just(*sum)
+    ///         }
+    ///         return Nothing
+    ///     })
+    ///     .collect()
+    ///
+    /// assert_eq(values, [1, 3, 6])  // Stops before sum reaches 10
+    /// ```
+    pub func scan[St, B](this, state: St, f: func(mut ref St, I::Item) -> Maybe[B]) -> Scan[I, St, func(mut ref St, I::Item) -> Maybe[B], B] {
+        return Scan { iter: this, state: state, f: f }
+    }
+}
+
+/// Extension for iterators with Duplicate items.
+impl[I: Iterator] I where I::Item: Duplicate {
+    /// Creates an iterator which duplicates all of its elements.
+    ///
+    /// This is useful when you have an iterator over references, but you
+    /// need an iterator over owned values.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```tml
+    /// let a = [1, 2, 3]
+    /// let v: List[I32] = a.iter().cloned().collect()
+    /// assert_eq(v, [1, 2, 3])
+    /// ```
+    pub func cloned(this) -> Cloned[I] {
+        return Cloned { iter: this }
+    }
+
+    /// Creates an iterator that inserts a separator between all elements.
+    ///
+    /// `intersperse(sep)` produces a new iterator that places a copy of
+    /// `sep` between all elements of the original iterator.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```tml
+    /// let values = [1, 2, 3].into_iter()
+    ///     .intersperse(0)
+    ///     .collect()
+    ///
+    /// assert_eq(values, [1, 0, 2, 0, 3])
+    /// ```
+    pub func intersperse(mut this, separator: I::Item) -> Intersperse[I] {
+        let first = this.next()
+        return Intersperse {
+            iter: this,
+            separator: separator,
+            next_is_separator: false,
+            peeked: first
+        }
+    }
+
+    /// Creates an iterator that inserts a separator computed by a closure.
+    ///
+    /// Like [`intersperse`], but the separator is computed lazily.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut count = 0
+    /// let values = [1, 2, 3].into_iter()
+    ///     .intersperse_with(do() { count = count + 1; count * 10 })
+    ///     .collect()
+    ///
+    /// assert_eq(values, [1, 10, 2, 20, 3])
+    /// ```
+    pub func intersperse_with(mut this, separator_fn: func() -> I::Item) -> IntersperseWith[I, func() -> I::Item] {
+        let first = this.next()
+        return IntersperseWith {
+            iter: this,
+            separator_fn: separator_fn,
+            next_is_separator: false,
+            peeked: first
+        }
+    }
+}
+
+/// Extension for iterators over Copy types.
+impl[I: Iterator] I {
+    /// Creates an iterator which copies all of its elements.
+    ///
+    /// This is useful when you have an iterator over references to Copy
+    /// types, but you need an iterator over owned values.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```tml
+    /// let a = [1, 2, 3]
+    /// let v: List[I32] = a.iter().copied().collect()
+    /// assert_eq(v, [1, 2, 3])
+    /// ```
+    pub func copied(this) -> Copied[I] {
+        return Copied { iter: this }
     }
 }
