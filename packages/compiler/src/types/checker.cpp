@@ -297,6 +297,23 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
 }
 
 void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
+    // Validate @extern decorator if present
+    if (func.extern_abi.has_value()) {
+        const std::string& abi = *func.extern_abi;
+        if (abi != "c" && abi != "c++" && abi != "stdcall" &&
+            abi != "fastcall" && abi != "thiscall") {
+            error("Invalid @extern ABI '" + abi + "'. "
+                  "Valid options: \"c\", \"c++\", \"stdcall\", \"fastcall\", \"thiscall\"",
+                  func.span);
+        }
+
+        // @extern functions must not have a body
+        if (func.body.has_value()) {
+            error("@extern function '" + func.name + "' must not have a body",
+                  func.span);
+        }
+    }
+
     std::vector<TypePtr> params;
     for (const auto& p : func.params) {
         params.push_back(resolve_type(*p.type));
@@ -354,6 +371,11 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
+    // Skip @extern functions - they have no body to check
+    if (func.extern_abi.has_value()) {
+        return;
+    }
+
     TML_DEBUG_LN("[DEBUG] check_func_body called for function: " << func.name);
     env_.push_scope();
     current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();

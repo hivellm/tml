@@ -37,6 +37,9 @@ public:
     // Generate LLVM IR for a module
     auto generate(const parser::Module& module) -> Result<std::string, std::vector<LLVMGenError>>;
 
+    // Get external libraries to link (from @link decorators)
+    auto get_link_libs() const -> const std::set<std::string>& { return extern_link_libs_; }
+
 private:
     const types::TypeEnv& env_;
     LLVMGenOptions options_;
@@ -108,6 +111,9 @@ private:
 
     // Global constants (name -> value as string)
     std::unordered_map<std::string, std::string> global_constants_;
+
+    // FFI support - external libraries to link (from @link decorator)
+    std::set<std::string> extern_link_libs_;
 
     // Closure support
     std::vector<std::string> module_functions_;  // Generated closure functions

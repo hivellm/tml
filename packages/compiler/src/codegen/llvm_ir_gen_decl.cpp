@@ -310,18 +310,11 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         return;
     }
 
-    current_func_ = func.name;
-    locals_.clear();
-    block_terminated_ = false;
-
     // Determine return type
     std::string ret_type = "void";
     if (func.return_type.has_value()) {
         ret_type = llvm_type_ptr(*func.return_type);
     }
-
-    // Store the return type for use in gen_return
-    current_ret_type_ = ret_type;
 
     // Build parameter list and type list for function signature
     std::string params;
@@ -336,6 +329,51 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         params += param_type + " %" + param_name;
         param_types += param_type;
     }
+
+    // Handle @extern functions - emit declare instead of define
+    if (func.extern_abi.has_value()) {
+        // Get the actual symbol name (extern_name or func.name)
+        std::string symbol_name = func.extern_name.value_or(func.name);
+
+        // Determine calling convention based on ABI
+        std::string call_conv = "";
+        const std::string& abi = *func.extern_abi;
+        if (abi == "stdcall") {
+            call_conv = "x86_stdcallcc ";
+        } else if (abi == "fastcall") {
+            call_conv = "x86_fastcallcc ";
+        } else if (abi == "thiscall") {
+            call_conv = "x86_thiscallcc ";
+        }
+        // "c" and "c++" use default calling convention (no prefix)
+
+        // Emit external declaration
+        emit_line("");
+        emit_line("; @extern(\"" + abi + "\") " + func.name);
+        emit_line("declare " + call_conv + ret_type + " @" + symbol_name + "(" + param_types + ")");
+
+        // Register function - map TML name to external symbol
+        std::string func_type = ret_type + " (" + param_types + ")";
+        functions_[func.name] = FuncInfo{
+            "@" + symbol_name,
+            func_type,
+            ret_type
+        };
+
+        // Store link libraries for later (linker phase)
+        for (const auto& lib : func.link_libs) {
+            extern_link_libs_.insert(lib);
+        }
+
+        return;  // Don't generate function body for extern functions
+    }
+
+    current_func_ = func.name;
+    locals_.clear();
+    block_terminated_ = false;
+
+    // Store the return type for use in gen_return
+    current_ret_type_ = ret_type;
 
     // Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";

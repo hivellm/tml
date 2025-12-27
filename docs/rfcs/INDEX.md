@@ -34,6 +34,7 @@ TML uses a **layered architecture**:
 | [RFC-0007](./RFC-0007-IR.md) | Intermediate Representation | Active | IR format, normalization, stable IDs, serialization |
 | [RFC-0008](./RFC-0008-GENERICS.md) | Generics | **Active** | Monomorphization, generic structs/enums |
 | [RFC-0010](./RFC-0010-TESTING.md) | Testing | Active | Test framework, @test decorator |
+| [RFC-0011](./RFC-0011-FFI.md) | FFI | **Active** | @extern and @link for C/C++ interop |
 
 ## Tooling Specifications
 

@@ -505,6 +505,18 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
         link_options.output_type = link_output_type;
         link_options.verbose = verbose;
 
+        // Add @link libraries from FFI decorators
+        for (const auto& lib : llvm_gen.get_link_libs()) {
+            // Check if it's a path (contains / or \) or a library name
+            if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                // Full path to library file
+                link_options.link_flags.push_back("\"" + lib + "\"");
+            } else {
+                // Library name - use -l flag
+                link_options.link_flags.push_back("-l" + lib);
+            }
+        }
+
         auto link_result = link_objects(object_files, final_output, clang, link_options);
         if (!link_result.success) {
             std::cerr << "error: " << link_result.error_message << "\n";
@@ -715,6 +727,15 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         LinkOptions link_options;
         link_options.output_type = LinkOptions::OutputType::Executable;
         link_options.verbose = verbose;
+
+        // Add @link libraries from FFI decorators
+        for (const auto& lib : llvm_gen.get_link_libs()) {
+            if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                link_options.link_flags.push_back("\"" + lib + "\"");
+            } else {
+                link_options.link_flags.push_back("-l" + lib);
+            }
+        }
 
         // Link to temporary location first
         fs::path temp_exe = cache_dir / (exe_hash + "_link_temp.exe");
@@ -947,6 +968,15 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         LinkOptions link_options;
         link_options.output_type = LinkOptions::OutputType::Executable;
         link_options.verbose = false;  // Always quiet for tests
+
+        // Add @link libraries from FFI decorators
+        for (const auto& lib : llvm_gen.get_link_libs()) {
+            if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                link_options.link_flags.push_back("\"" + lib + "\"");
+            } else {
+                link_options.link_flags.push_back("-l" + lib);
+            }
+        }
 
         // Link to a unique temporary location (avoid race conditions)
         std::string temp_key = generate_cache_key(path);

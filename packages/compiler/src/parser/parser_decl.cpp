@@ -233,6 +233,46 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators) 
 
     auto end_span = previous().span;
 
+    // Process @extern and @link decorators for FFI
+    std::optional<std::string> extern_abi;
+    std::optional<std::string> extern_name;
+    std::vector<std::string> link_libs;
+
+    for (const auto& dec : decorators) {
+        if (dec.name == "extern") {
+            // @extern("abi") or @extern("abi", name = "symbol")
+            if (!dec.args.empty() && dec.args[0]->is<LiteralExpr>()) {
+                const auto& lit = dec.args[0]->as<LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                    extern_abi = lit.token.string_value().value;
+                }
+            }
+            // Check for name = "symbol" argument
+            for (size_t i = 1; i < dec.args.size(); ++i) {
+                if (dec.args[i]->is<BinaryExpr>()) {
+                    const auto& bin = dec.args[i]->as<BinaryExpr>();
+                    if (bin.op == BinaryOp::Assign &&
+                        bin.left->is<IdentExpr>() &&
+                        bin.left->as<IdentExpr>().name == "name" &&
+                        bin.right->is<LiteralExpr>()) {
+                        const auto& lit = bin.right->as<LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                            extern_name = lit.token.string_value().value;
+                        }
+                    }
+                }
+            }
+        } else if (dec.name == "link") {
+            // @link("library") or @link("path/to/lib.dll")
+            if (!dec.args.empty() && dec.args[0]->is<LiteralExpr>()) {
+                const auto& lit = dec.args[0]->as<LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                    link_libs.push_back(lit.token.string_value().value);
+                }
+            }
+        }
+    }
+
     auto func = FuncDecl{
         .decorators = std::move(decorators),
         .vis = vis,
@@ -244,7 +284,10 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators) 
         .body = std::move(body),
         .is_async = is_async,
         .is_unsafe = is_unsafe,
-        .span = SourceSpan::merge(start_span, end_span)
+        .span = SourceSpan::merge(start_span, end_span),
+        .extern_abi = std::move(extern_abi),
+        .extern_name = std::move(extern_name),
+        .link_libs = std::move(link_libs)
     };
 
     return make_box<Decl>(Decl{

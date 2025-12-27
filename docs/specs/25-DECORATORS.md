@@ -611,3 +611,124 @@ decorator warn_unused_fields {
 - Rely on decorator application order for correctness
 - Generate overly complex code
 - Use runtime decorators for compile-time concerns
+
+## 16. FFI Decorators (Foreign Function Interface)
+
+TML provides built-in decorators for seamless C/C++ interoperability.
+
+### 16.1 @extern - External Function Declaration
+
+Declares a function implemented in C/C++ without a TML body:
+
+```tml
+// Basic C function (ABI required)
+@extern("c")
+func puts(s: Str) -> I32
+
+// C function with custom symbol name
+@extern("c", name = "GetTickCount64")
+func get_tick_count() -> U64
+
+// Windows API with stdcall convention
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+// C++ with mangled name
+@extern("c++", name = "_ZN3foo3barEi")
+func foo_bar(x: I32) -> I32
+```
+
+**Supported ABIs:**
+
+| ABI | LLVM Convention | Use Case |
+|-----|-----------------|----------|
+| `"c"` | (default) | Standard C functions |
+| `"c++"` | (default) | C++ with name mangling |
+| `"stdcall"` | `x86_stdcallcc` | Windows API |
+| `"fastcall"` | `x86_fastcallcc` | Performance-critical |
+| `"thiscall"` | `x86_thiscallcc` | C++ methods on Windows |
+
+**Parameters:**
+
+- **First argument (required)**: ABI string - specifies calling convention
+- **`name` (optional)**: External symbol name if different from function name
+
+**Constraints:**
+
+- `@extern` functions MUST NOT have a body
+- ABI MUST be one of the supported values
+- The function signature must match the external symbol exactly
+
+### 16.2 @link - Library Linking
+
+Specifies external libraries to link:
+
+```tml
+// Link by library name
+@link("user32")
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+// Link with path
+@link("./vendor/mylib.dll")
+@extern("c")
+func my_custom_func(x: I32) -> I32
+
+// Link math library (Unix)
+@link("m")
+@extern("c")
+func sin(x: F64) -> F64
+```
+
+**Behavior:**
+
+- Library names (no path separators) are passed as `-l<name>` to the linker
+- Full paths are passed directly to the linker
+- Multiple `@link` decorators can be applied to the same function
+- Link libraries are collected and deduplicated during compilation
+
+### 16.3 Complete FFI Example
+
+```tml
+// Windows MessageBox example
+@link("user32")
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+func main() -> I32 {
+    MessageBoxA(0, "Hello from TML!", "TML FFI", 0)
+    return 0
+}
+
+// Unix system call example
+@extern("c")
+func getenv(name: Str) -> Str
+
+@link("m")
+@extern("c")
+func sqrt(x: F64) -> F64
+
+@extern("c")
+func cos(x: F64) -> F64
+
+func main() -> I32 {
+    let home: Str = getenv("HOME")
+    let val: F64 = sqrt(2.0) + cos(0.0)
+    return 0
+}
+```
+
+### 16.4 Generated LLVM IR
+
+For `@extern` functions, TML generates LLVM `declare` statements:
+
+```llvm
+; @extern("c") func puts(s: Str) -> I32
+declare i32 @puts(ptr)
+
+; @extern("stdcall") func MessageBoxA(...) -> I32
+declare x86_stdcallcc i32 @MessageBoxA(i32, ptr, ptr, i32)
+
+; @extern("c", name = "atoi") func string_to_int(s: Str) -> I32
+declare i32 @atoi(ptr)
+```

@@ -2,6 +2,18 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.5.0] - 2025-12-26
+
+### Added
+- **FFI Decorator Support** - Syntax highlighting for C/C++ interoperability decorators
+  - `@extern(abi)` - Declare external C/C++ functions
+  - `@link(library)` - Specify external libraries to link
+  - Supported ABIs: `"c"`, `"c++"`, `"stdcall"`, `"fastcall"`, `"thiscall"`
+
+### Changed
+- Updated directive patterns to recognize `@extern` and `@link` decorators
+- Added highlighting for decorator arguments
+
 ## [0.4.0] - 2025-12-26
 
 ### Added

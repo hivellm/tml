@@ -621,10 +621,15 @@ struct FuncDecl {
     std::vector<FuncParam> params;
     std::optional<TypePtr> return_type;
     std::optional<WhereClause> where_clause;
-    std::optional<BlockExpr> body; // None for trait method signatures
+    std::optional<BlockExpr> body; // None for trait method signatures or @extern
     bool is_async;
     bool is_unsafe;
     SourceSpan span;
+
+    // FFI support (@extern and @link decorators)
+    std::optional<std::string> extern_abi;   // "c", "c++", "stdcall", "fastcall", "thiscall"
+    std::optional<std::string> extern_name;  // symbol name if different from func name
+    std::vector<std::string> link_libs;      // libraries to link (.dll, .lib, .so, .a)
 };
 
 // Struct field

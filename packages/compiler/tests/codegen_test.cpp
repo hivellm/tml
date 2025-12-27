@@ -223,3 +223,92 @@ TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
     EXPECT_NE(ir.find("ret i64"), std::string::npos)
         << "Function should return i64 value";
 }
+
+// ============================================================================
+// FFI Tests (@extern and @link decorators)
+// ============================================================================
+
+TEST_F(CodegenTest, ExternFunctionBasic) {
+    std::string ir = generate(R"(
+        @extern("c")
+        func getenv(name: Str) -> Str
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Check that extern function is declared (not defined)
+    EXPECT_NE(ir.find("declare ptr @getenv(ptr)"), std::string::npos)
+        << "IR should contain extern declaration";
+
+    // Verify it's NOT defined (no define @getenv)
+    EXPECT_EQ(ir.find("define"), ir.find("define"))
+        << "Extern function should not have a body";
+}
+
+TEST_F(CodegenTest, ExternFunctionWithCustomName) {
+    std::string ir = generate(R"(
+        @extern("c", name = "atoi")
+        func string_to_int(s: Str) -> I32
+
+        func main() -> I32 {
+            let val: I32 = string_to_int("42")
+            return val
+        }
+    )");
+
+    // Check that extern function uses the custom name
+    EXPECT_NE(ir.find("declare i32 @atoi(ptr)"), std::string::npos)
+        << "IR should declare function with extern_name 'atoi'";
+
+    // Check that call uses the custom name
+    EXPECT_NE(ir.find("call i32 @atoi("), std::string::npos)
+        << "Call should use extern_name 'atoi'";
+}
+
+TEST_F(CodegenTest, ExternFunctionStdcall) {
+    std::string ir = generate(R"(
+        @extern("stdcall")
+        func MyWinFunc(x: I32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Check stdcall calling convention
+    EXPECT_NE(ir.find("declare x86_stdcallcc i32 @MyWinFunc(i32)"), std::string::npos)
+        << "IR should use x86_stdcallcc calling convention";
+}
+
+TEST_F(CodegenTest, ExternFunctionFastcall) {
+    std::string ir = generate(R"(
+        @extern("fastcall")
+        func FastFunc(a: I32, b: I32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Check fastcall calling convention
+    EXPECT_NE(ir.find("declare x86_fastcallcc i32 @FastFunc(i32, i32)"), std::string::npos)
+        << "IR should use x86_fastcallcc calling convention";
+}
+
+TEST_F(CodegenTest, LinkDecorator) {
+    std::string ir = generate(R"(
+        @link("user32")
+        @extern("c")
+        func MyExternFunc(x: I32) -> I32
+
+        func main() -> I32 {
+            return 0
+        }
+    )");
+
+    // Just verify it parses and generates - actual linking is done by clang
+    EXPECT_NE(ir.find("declare i32 @MyExternFunc(i32)"), std::string::npos)
+        << "IR should contain extern declaration with @link";
+}

@@ -149,6 +149,24 @@ func read_file(path: String) -> Outcome[String, Error] {
 }
 ```
 
+### FFI (Foreign Function Interface)
+```tml
+// Call C functions with @extern
+@extern("c")
+func puts(s: Str) -> I32
+
+// Link external libraries with @link
+@link("user32")
+@extern("stdcall")
+func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
+
+func main() -> I32 {
+    puts("Hello from C!")
+    MessageBoxA(0, "Hello!", "TML", 0)
+    return 0
+}
+```
+
 ## 🏛️ Architecture
 
 ### Two-Phase Bootstrap

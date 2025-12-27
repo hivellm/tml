@@ -347,15 +347,26 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // ============ USER-DEFINED FUNCTIONS ============
 
-    // User-defined function - look up signature from type environment
-    std::string mangled = "@tml_" + fn_name;
+    // Check if this function was registered (includes @extern functions)
+    auto func_it = functions_.find(fn_name);
+    std::string mangled;
+    if (func_it != functions_.end()) {
+        // Use the registered LLVM name (handles @extern functions correctly)
+        mangled = func_it->second.llvm_name;
+    } else {
+        // Default: user-defined TML function with tml_ prefix
+        mangled = "@tml_" + fn_name;
+    }
 
     // Try to look up the function signature
     auto func_sig = env_.lookup_func(fn_name);
 
     // Determine return type
     std::string ret_type = "i32";  // Default
-    if (func_sig.has_value()) {
+    if (func_it != functions_.end()) {
+        // Use return type from registered function (handles @extern correctly)
+        ret_type = func_it->second.ret_type;
+    } else if (func_sig.has_value()) {
         ret_type = llvm_type_from_semantic(func_sig->return_type);
     }
 

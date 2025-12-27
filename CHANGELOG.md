@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **FFI Support (@extern and @link decorators)** (2025-12-26)
+  - New `@extern(abi)` decorator to declare C/C++ external functions without TML body
+  - New `@link(library)` decorator to specify external libraries to link
+  - Supported ABIs: `"c"`, `"c++"`, `"stdcall"`, `"fastcall"`, `"thiscall"`
+  - Custom symbol names via `@extern("c", name = "symbol")`
+  - LLVM calling conventions: `x86_stdcallcc`, `x86_fastcallcc`, `x86_thiscallcc`
+  - Type checker validates @extern functions have no body
+  - Linker integration passes `-l` flags for libraries
+  - Files modified:
+    - `include/tml/parser/ast.hpp` - Added `extern_abi`, `extern_name`, `link_libs` to FuncDecl
+    - `src/parser/parser_decl.cpp` - Process @extern/@link decorators
+    - `src/types/checker.cpp` - Validate @extern functions
+    - `src/codegen/llvm_ir_gen_decl.cpp` - Emit LLVM `declare` with calling conventions
+    - `src/cli/cmd_build.cpp` - Pass link flags to clang
+  - New tests: 5 FFI unit tests in `tests/codegen_test.cpp`
+
 - **Comprehensive Codegen Builtins Test Suite** (2025-12-27) - 86 new C++ unit tests for all builtin functions
   - New test file: `tests/codegen_builtins_test.cpp`
   - Math tests (7): sqrt, pow, abs, floor, ceil, round, black_box

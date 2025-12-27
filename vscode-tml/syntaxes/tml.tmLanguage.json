@@ -74,7 +74,7 @@
       "patterns": [
         {
           "name": "meta.directive.tml",
-          "match": "@(test|bench|benchmark|when|unless|auto|hint|deprecated|stable|unstable|lowlevel|export|doc)\\b",
+          "match": "@(test|bench|benchmark|when|unless|auto|hint|deprecated|stable|unstable|lowlevel|export|doc|extern|link)\\b",
           "captures": {
             "1": {
               "name": "storage.modifier.directive.tml"
@@ -83,7 +83,7 @@
         },
         {
           "name": "meta.directive.with-args.tml",
-          "begin": "@(test|when|unless|auto|hint|deprecated|doc)\\s*\\(",
+          "begin": "@(test|when|unless|auto|hint|deprecated|doc|extern|link)\\s*\\(",
           "end": "\\)",
           "beginCaptures": {
             "1": {
