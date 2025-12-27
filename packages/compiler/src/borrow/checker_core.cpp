@@ -4,6 +4,28 @@
 namespace tml::borrow {
 
 // ============================================================================
+// Lifetime Elision Rules
+// ============================================================================
+//
+// TML follows Rust's lifetime elision rules to reduce annotation burden:
+//
+// Rule 1: Each elided lifetime in input position becomes a distinct lifetime parameter.
+//   func foo(x: ref T) -> ...       becomes  func foo['a](x: ref['a] T) -> ...
+//   func bar(x: ref T, y: ref U)    becomes  func bar['a, 'b](x: ref['a] T, y: ref['b] U)
+//
+// Rule 2: If there is exactly one input lifetime position, that lifetime is
+//         assigned to all elided output lifetimes.
+//   func foo(x: ref T) -> ref U     becomes  func foo['a](x: ref['a] T) -> ref['a] U
+//
+// Rule 3: If there are multiple input lifetime positions, but one is &self or &mut self,
+//         the lifetime of self is assigned to all elided output lifetimes.
+//   impl Foo { func bar(self: ref Self, x: ref T) -> ref U }
+//   becomes: impl Foo { func bar['a, 'b](self: ref['a] Self, x: ref['b] T) -> ref['a] U }
+//
+// These rules are applied implicitly during borrow checking.
+// ============================================================================
+
+// ============================================================================
 // BorrowChecker Implementation
 // ============================================================================
 

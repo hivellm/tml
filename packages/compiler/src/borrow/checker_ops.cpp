@@ -115,28 +115,57 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
         return;
     }
 
+    // Check if this is a reborrow (borrowing from a reference)
+    // Reborrows are allowed: you can create &T from &mut T, or &mut T from &mut T
+    bool is_reborrow = state.borrowed_from.has_value();
+
     if (kind == BorrowKind::Mutable) {
-        if (!state.is_mutable) {
+        if (!state.is_mutable && !is_reborrow) {
             error("cannot borrow `" + state.name + "` as mutable because it is not declared as mutable", loc.span);
             return;
         }
 
-        if (state.state == OwnershipState::Borrowed) {
+        // For reborrows from mutable references, allow creating new mutable borrows
+        if (is_reborrow && state.borrowed_from->second == BorrowKind::Shared) {
+            error("cannot reborrow `" + state.name + "` as mutable because it was borrowed as immutable", loc.span);
+            return;
+        }
+
+        if (state.state == OwnershipState::Borrowed && !is_reborrow) {
             error("cannot borrow `" + state.name + "` as mutable because it is also borrowed as immutable", loc.span);
             return;
         }
 
-        if (state.state == OwnershipState::MutBorrowed) {
+        // Allow two-phase borrows: during method calls, we can have a mutable borrow
+        // that is temporarily shared while evaluating arguments
+        if (state.state == OwnershipState::MutBorrowed && !is_two_phase_borrow_active_) {
             error("cannot borrow `" + state.name + "` as mutable more than once at a time", loc.span);
             return;
         }
     } else {
         // Shared borrow
-        if (state.state == OwnershipState::MutBorrowed) {
+        // Allow shared reborrow from mutable borrow (coercion &mut T -> &T)
+        if (state.state == OwnershipState::MutBorrowed && !is_reborrow && !is_two_phase_borrow_active_) {
             error("cannot borrow `" + state.name + "` as immutable because it is also borrowed as mutable", loc.span);
             return;
         }
     }
+}
+
+void BorrowChecker::create_reborrow(PlaceId source, PlaceId target, BorrowKind kind, Location loc) {
+    auto& target_state = env_.get_state_mut(target);
+    target_state.borrowed_from = std::make_pair(source, kind);
+
+    // Create a borrow on the source
+    create_borrow(source, kind, loc);
+}
+
+void BorrowChecker::begin_two_phase_borrow() {
+    is_two_phase_borrow_active_ = true;
+}
+
+void BorrowChecker::end_two_phase_borrow() {
+    is_two_phase_borrow_active_ = false;
 }
 
 void BorrowChecker::drop_scope_places() {

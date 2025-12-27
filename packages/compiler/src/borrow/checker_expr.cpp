@@ -131,10 +131,16 @@ void BorrowChecker::check_call(const parser::CallExpr& call) {
 }
 
 void BorrowChecker::check_method_call(const parser::MethodCallExpr& call) {
+    // Two-phase borrow: When calling a method that takes &mut self,
+    // we need to allow the receiver to be borrowed while evaluating args.
+    // Example: vec.push(vec.len()) - vec is borrowed for push, then for len
+    begin_two_phase_borrow();
     check_expr(*call.receiver);
+
     for (const auto& arg : call.args) {
         check_expr(*arg);
     }
+    end_two_phase_borrow();
 }
 
 void BorrowChecker::check_field_access(const parser::FieldExpr& field) {

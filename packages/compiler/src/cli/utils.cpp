@@ -41,7 +41,10 @@ void print_usage() {
     std::cout << "\nOptions:\n";
     std::cout << "  --help, -h       Show this help\n";
     std::cout << "  --version, -V    Show version\n";
-    std::cout << "  --release        Build with optimizations\n";
+    std::cout << "  --release        Build with optimizations (-O3)\n";
+    std::cout << "  --debug, -g      Include debug info (DWARF)\n";
+    std::cout << "  -O0...-O3        Set optimization level\n";
+    std::cout << "  -Os, -Oz         Optimize for size\n";
     std::cout << "  --verbose        Show detailed output\n";
 }
 

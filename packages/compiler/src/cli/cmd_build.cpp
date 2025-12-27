@@ -395,8 +395,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool no_
 
     // Step 1: Compile LLVM IR (.ll) to object file (.o/.obj)
     ObjectCompileOptions obj_options;
-    obj_options.optimization_level = 3;  // -O3
-    obj_options.debug_info = false;      // No debug info in release mode
+    obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+    obj_options.debug_info = tml::CompilerOptions::debug_info;
     obj_options.verbose = verbose;
 
     fs::path obj_output = cache_dir / (module_name + get_object_extension());
@@ -684,8 +684,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
         // Compile LLVM IR to object file
         ObjectCompileOptions obj_options;
-        obj_options.optimization_level = 3;  // -O3
-        obj_options.debug_info = false;
+        obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+        obj_options.debug_info = tml::CompilerOptions::debug_info;
         obj_options.verbose = verbose;
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
@@ -933,8 +933,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
         // Compile LLVM IR to object file
         ObjectCompileOptions obj_options;
-        obj_options.optimization_level = 3;  // -O3
-        obj_options.debug_info = false;
+        obj_options.optimization_level = tml::CompilerOptions::optimization_level;
+        obj_options.debug_info = tml::CompilerOptions::debug_info;
         obj_options.verbose = false;  // Always quiet for tests
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);

@@ -131,6 +131,7 @@ private:
     std::vector<BorrowError> errors_;
     size_t current_stmt_ = 0;
     int loop_depth_ = 0;
+    bool is_two_phase_borrow_active_ = false;  // For two-phase borrow support
 
     // Determine if a type is Copy
     auto is_copy_type(const types::TypePtr& type) const -> bool;
@@ -175,6 +176,13 @@ private:
     void check_can_use(PlaceId place, Location loc);
     void check_can_mutate(PlaceId place, Location loc);
     void check_can_borrow(PlaceId place, BorrowKind kind, Location loc);
+
+    // Reborrow handling: create a borrow from an existing reference
+    void create_reborrow(PlaceId source, PlaceId target, BorrowKind kind, Location loc);
+
+    // Two-phase borrow support for method calls
+    void begin_two_phase_borrow();
+    void end_two_phase_borrow();
 
     // Drop places at end of scope
     void drop_scope_places();

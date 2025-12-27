@@ -101,7 +101,8 @@ bool Dependency::validate() const {
 // ============================================================================
 
 bool BuildSettings::validate() const {
-    return optimization_level >= 0 && optimization_level <= 3;
+    // 0-3: O0-O3, 4: Os, 5: Oz
+    return optimization_level >= 0 && optimization_level <= 5;
 }
 
 // ============================================================================

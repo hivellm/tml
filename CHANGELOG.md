@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Advanced Borrow Checker Features** (2025-12-27)
+  - Reborrow handling: allow `&mut T -> &T` coercion and reborrowing from references
+  - Two-phase borrow support: method calls like `vec.push(vec.len())` now work correctly
+  - Lifetime elision rules: documented implementation following Rust's 3 rules
+  - New `is_two_phase_borrow_active_` flag for method call borrow tracking
+  - New `create_reborrow()` function for reborrow tracking
+  - New `begin/end_two_phase_borrow()` functions for method call support
+  - Files modified:
+    - `include/tml/borrow/checker.hpp` - Added two-phase borrow flag and new methods
+    - `src/borrow/checker_ops.cpp` - Implemented reborrow and two-phase borrow logic
+    - `src/borrow/checker_expr.cpp` - Use two-phase borrows in method calls
+    - `src/borrow/checker_core.cpp` - Added lifetime elision rules documentation
+
+- **Complete Optimization Pipeline** (2025-12-27)
+  - Full optimization level support: `-O0` (none), `-O1`, `-O2`, `-O3` (aggressive)
+  - Size optimization modes: `-Os` (size), `-Oz` (aggressive size)
+  - Debug info generation: `--debug` / `-g` flag for DWARF debug symbols
+  - CLI flags: `--release` (equals -O3), `-O0` through `-O3`, `-Os`, `-Oz`
+  - Global `CompilerOptions` struct for optimization settings
+  - Updated build command help with all optimization options
+  - Files modified:
+    - `include/tml/common.hpp` - Added optimization_level and debug_info to CompilerOptions
+    - `src/cli/object_compiler.cpp` - Added Os/Oz support to get_optimization_flag
+    - `src/cli/object_compiler.hpp` - Updated documentation for optimization levels
+    - `src/cli/build_config.cpp` - Extended validation for levels 0-5
+    - `src/cli/dispatcher.cpp` - Added CLI parsing for all optimization flags
+    - `src/cli/cmd_build.cpp` - Use global CompilerOptions for all builds
+    - `src/cli/utils.cpp` - Updated help text with optimization options
+
 - **FFI Support (@extern and @link decorators)** (2025-12-26)
   - New `@extern(abi)` decorator to declare C/C++ external functions without TML body
   - New `@link(library)` decorator to specify external libraries to link

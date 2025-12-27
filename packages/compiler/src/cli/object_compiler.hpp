@@ -118,7 +118,12 @@ std::string get_object_extension();
 
 /**
  * Build optimization flag string from level
- * 0 -> -O0, 1 -> -O1, 2 -> -O2, 3 -> -O3
+ * 0 -> -O0 (no optimization)
+ * 1 -> -O1 (basic optimization)
+ * 2 -> -O2 (moderate optimization)
+ * 3 -> -O3 (aggressive optimization)
+ * 4 -> -Os (optimize for size)
+ * 5 -> -Oz (optimize for size, aggressive)
  */
 std::string get_optimization_flag(int level);
 

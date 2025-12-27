@@ -27,6 +27,8 @@ std::string get_optimization_flag(int level) {
         case 1: return "-O1";
         case 2: return "-O2";
         case 3: return "-O3";
+        case 4: return "-Os";  // Optimize for size
+        case 5: return "-Oz";  // Optimize for size (aggressive)
         default: return "-O3";
     }
 }

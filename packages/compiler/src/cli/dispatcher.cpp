@@ -69,8 +69,18 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "build") {
         if (argc < 3) {
-            std::cerr << "Usage: tml build <file.tml> [--emit-ir] [--emit-header] [--verbose] [--no-cache] [--crate-type=<type>] [--out-dir=<dir>]\n";
-            std::cerr << "  Crate types: bin (default), lib, dylib, rlib\n";
+            std::cerr << "Usage: tml build <file.tml> [options]\n";
+            std::cerr << "Options:\n";
+            std::cerr << "  --emit-ir           Emit LLVM IR instead of executable\n";
+            std::cerr << "  --emit-header       Generate C header for FFI\n";
+            std::cerr << "  --verbose, -v       Show detailed output\n";
+            std::cerr << "  --no-cache          Disable build cache\n";
+            std::cerr << "  --release           Build with optimizations (-O3)\n";
+            std::cerr << "  --debug, -g         Include debug info (DWARF)\n";
+            std::cerr << "  -O0...-O3           Set optimization level\n";
+            std::cerr << "  -Os, -Oz            Optimize for size\n";
+            std::cerr << "  --crate-type=<type> Output type: bin, lib, dylib, rlib\n";
+            std::cerr << "  --out-dir=<dir>     Output directory\n";
             return 1;
         }
 
@@ -81,6 +91,8 @@ int tml_main(int argc, char* argv[]) {
         bool emit_ir_only = manifest_opt ? manifest_opt->build.emit_ir : false;
         bool emit_header = manifest_opt ? manifest_opt->build.emit_header : false;
         bool no_cache = manifest_opt ? !manifest_opt->build.cache : false;
+        bool debug_info = false;
+        int opt_level = manifest_opt ? manifest_opt->build.optimization_level : 0;
         BuildOutputType output_type = BuildOutputType::Executable;
         std::string output_dir = "";  // Empty means use default (build/debug)
 
@@ -108,6 +120,22 @@ int tml_main(int argc, char* argv[]) {
                 emit_header = true;
             } else if (arg == "--no-cache") {
                 no_cache = true;
+            } else if (arg == "--release") {
+                opt_level = 3;
+            } else if (arg == "--debug" || arg == "-g") {
+                debug_info = true;
+            } else if (arg == "-O0") {
+                opt_level = 0;
+            } else if (arg == "-O1") {
+                opt_level = 1;
+            } else if (arg == "-O2") {
+                opt_level = 2;
+            } else if (arg == "-O3") {
+                opt_level = 3;
+            } else if (arg == "-Os") {
+                opt_level = 4;  // Optimize for size
+            } else if (arg == "-Oz") {
+                opt_level = 5;  // Optimize for size (aggressive)
             } else if (arg.starts_with("--crate-type=")) {
                 std::string crate_type = arg.substr(13);
                 if (crate_type == "bin") {
@@ -127,6 +155,11 @@ int tml_main(int argc, char* argv[]) {
                 output_dir = arg.substr(10);
             }
         }
+
+        // Store optimization settings in global options for use by build
+        tml::CompilerOptions::optimization_level = opt_level;
+        tml::CompilerOptions::debug_info = debug_info;
+
         return run_build(argv[2], verbose, emit_ir_only, no_cache, output_type, emit_header, output_dir);
     }
 

@@ -20,7 +20,9 @@ constexpr int VERSION_PATCH = 0;
 
 // Global compiler options
 struct CompilerOptions {
-    static inline bool verbose = false;  // Enable verbose/debug output
+    static inline bool verbose = false;       // Enable verbose/debug output
+    static inline int optimization_level = 0; // 0-3: O0-O3, 4: Os, 5: Oz
+    static inline bool debug_info = false;    // Include DWARF debug info
 };
 
 // Convenience macro for debug output (only prints when verbose is enabled)
