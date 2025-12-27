@@ -1,20 +1,88 @@
 // TML Core Library - Comparison Module
-// Provides: Ordering, PartialEq, Eq, PartialOrd, Ord
+//
+//! Utilities for comparing and ordering values.
+//!
+//! This module contains various tools for comparing and ordering values. In
+//! summary:
+//!
+//! - [`Ordering`] is an enum returned by the main comparison functions,
+//!   which has three possible values: `Less`, `Equal`, and `Greater`.
+//! - [`PartialEq`] and [`PartialOrd`] are behaviors that allow you to define
+//!   partial equality and ordering relationships.
+//! - [`Eq`] and [`Ord`] are behaviors for types with full equality and total
+//!   ordering.
+//! - [`max`] and [`min`] are functions that return the maximum or minimum
+//!   of two values.
+//!
+//! # Examples
+//!
+//! Implementing comparison for a custom type:
+//!
+//! ```tml
+//! type Person {
+//!     name: Str,
+//!     age: I32
+//! }
+//!
+//! impl PartialEq for Person {
+//!     func eq(this, other: ref Person) -> Bool {
+//!         return this.name == other.name and this.age == other.age
+//!     }
+//! }
+//!
+//! impl Eq for Person {}
+//!
+//! impl PartialOrd for Person {
+//!     func partial_cmp(this, other: ref Person) -> Maybe[Ordering] {
+//!         return Just(this.age.cmp(ref other.age))
+//!     }
+//! }
+//!
+//! impl Ord for Person {
+//!     func cmp(this, other: ref Person) -> Ordering {
+//!         return this.age.cmp(ref other.age)
+//!     }
+//! }
+//! ```
 
 // ============================================================================
 // Ordering Type
 // ============================================================================
-// Represents the result of a comparison between two values.
 
-/// The result of a comparison between two values.
+/// An `Ordering` is the result of a comparison between two values.
+///
+/// It is returned by the comparison methods of the [`Ord`] and [`PartialOrd`]
+/// behaviors.
+///
+/// # Examples
+///
+/// ```tml
+/// let result = 1.cmp(ref 2)
+/// when result {
+///     Less => print("1 < 2"),
+///     Equal => print("1 == 2"),
+///     Greater => print("1 > 2"),
+/// }
+/// ```
 pub type Ordering {
+    /// An ordering where a compared value is less than another.
     Less,
+    /// An ordering where a compared value is equal to another.
     Equal,
+    /// An ordering where a compared value is greater than another.
     Greater,
 }
 
 impl Ordering {
-    /// Returns true if the ordering is Less.
+    /// Returns `true` if the ordering is the `Less` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(Less.is_less())
+    /// assert(Equal.is_less() == false)
+    /// assert(Greater.is_less() == false)
+    /// ```
     pub func is_less(this) -> Bool {
         when this {
             Ordering::Less => return true,
@@ -22,7 +90,15 @@ impl Ordering {
         }
     }
 
-    /// Returns true if the ordering is Equal.
+    /// Returns `true` if the ordering is the `Equal` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(Less.is_equal() == false)
+    /// assert(Equal.is_equal())
+    /// assert(Greater.is_equal() == false)
+    /// ```
     pub func is_equal(this) -> Bool {
         when this {
             Ordering::Equal => return true,
@@ -30,7 +106,15 @@ impl Ordering {
         }
     }
 
-    /// Returns true if the ordering is Greater.
+    /// Returns `true` if the ordering is the `Greater` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(Less.is_greater() == false)
+    /// assert(Equal.is_greater() == false)
+    /// assert(Greater.is_greater())
+    /// ```
     pub func is_greater(this) -> Bool {
         when this {
             Ordering::Greater => return true,
@@ -38,7 +122,22 @@ impl Ordering {
         }
     }
 
-    /// Reverses the ordering: Less becomes Greater, Greater becomes Less.
+    /// Reverses the `Ordering`.
+    ///
+    /// - `Less` becomes `Greater`.
+    /// - `Greater` becomes `Less`.
+    /// - `Equal` remains `Equal`.
+    ///
+    /// This is useful for reversing a comparison, for example to sort in
+    /// descending order.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(Less.reverse(), Greater)
+    /// assert_eq(Equal.reverse(), Equal)
+    /// assert_eq(Greater.reverse(), Less)
+    /// ```
     pub func reverse(this) -> Ordering {
         when this {
             Ordering::Less => return Ordering::Greater,
@@ -47,8 +146,30 @@ impl Ordering {
         }
     }
 
-    /// Chains two orderings: returns this ordering if not Equal,
-    /// otherwise returns the other ordering.
+    /// Chains two orderings.
+    ///
+    /// Returns `this` ordering if it's not `Equal`; otherwise returns `other`.
+    ///
+    /// This is useful for implementing multi-field comparison, where you first
+    /// compare one field, and if it's equal, compare the next field.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let result = Equal.then(Less)
+    /// assert_eq(result, Less)
+    ///
+    /// let result = Less.then(Equal)
+    /// assert_eq(result, Less)
+    /// ```
+    ///
+    /// Comparing tuples lexicographically:
+    ///
+    /// ```tml
+    /// func cmp_tuple(a: (I32, I32), b: (I32, I32)) -> Ordering {
+    ///     return a.0.cmp(ref b.0).then(a.1.cmp(ref b.1))
+    /// }
+    /// ```
     pub func then(this, other: Ordering) -> Ordering {
         when this {
             Ordering::Equal => return other,
@@ -60,16 +181,39 @@ impl Ordering {
 // ============================================================================
 // PartialEq Behavior
 // ============================================================================
-// Partial equality - may not be reflexive (e.g., NaN != NaN for floats)
 
-/// Behavior for partial equality comparisons.
-/// Types implementing PartialEq can use == and != operators.
+/// Behavior for types that form a partial equivalence relation.
+///
+/// The `eq` method tests for `==`, and the default implementation of `ne`
+/// tests for `!=`.
+///
+/// Implementations must ensure that `eq` is symmetric and transitive:
+///
+/// - **Symmetric**: `a == b` implies `b == a`
+/// - **Transitive**: `a == b` and `b == c` implies `a == c`
+///
+/// Note that these requirements mean that the trait itself must be implemented
+/// symmetrically and transitively.
+///
+/// # Examples
+///
+/// ```tml
+/// impl PartialEq for Book {
+///     func eq(this, other: ref Book) -> Bool {
+///         return this.isbn == other.isbn
+///     }
+/// }
+/// ```
 pub behavior PartialEq {
-    /// Tests for equality between two values.
+    /// Tests for `self` and `other` values to be equal.
+    ///
+    /// This method is used by the `==` operator.
     func eq(this, other: ref Self) -> Bool
 
-    /// Tests for inequality between two values.
-    /// Default implementation uses !eq().
+    /// Tests for `self` and `other` values to be not equal.
+    ///
+    /// This method is used by the `!=` operator. The default implementation
+    /// is almost always sufficient, and should not be overridden.
     func ne(this, other: ref Self) -> Bool {
         return not this.eq(other)
     }
@@ -78,10 +222,23 @@ pub behavior PartialEq {
 // ============================================================================
 // Eq Behavior
 // ============================================================================
-// Full equality - reflexive, symmetric, transitive
 
-/// Behavior for full equality.
-/// Types implementing Eq guarantee that a == a is always true.
+/// Behavior for types that form an equivalence relation.
+///
+/// This means that in addition to `a == b` and `a != b` being strict inverses,
+/// the equality relation is:
+///
+/// - **Reflexive**: `a == a`
+/// - **Symmetric**: `a == b` implies `b == a`
+/// - **Transitive**: `a == b` and `b == c` implies `a == c`
+///
+/// This property cannot be checked by the compiler, and therefore `Eq` is a
+/// marker behavior that implies `PartialEq`.
+///
+/// # Derivable
+///
+/// Floating point types (`F32` and `F64`) do not implement `Eq` because
+/// `NaN != NaN`.
 pub behavior Eq: PartialEq {
     // Inherits eq and ne from PartialEq
     // Marker behavior indicating reflexivity
@@ -90,15 +247,49 @@ pub behavior Eq: PartialEq {
 // ============================================================================
 // PartialOrd Behavior
 // ============================================================================
-// Partial ordering - may have incomparable values (e.g., floats with NaN)
 
-/// Behavior for partial ordering comparisons.
-/// Types implementing PartialOrd can use <, <=, >, >= operators.
+/// Behavior for types that form a partial order.
+///
+/// A partial order means that some values of this type cannot be compared
+/// to each other (the result is `Nothing`). For example, floating-point
+/// `NaN` values cannot be compared.
+///
+/// Implementations must ensure consistency with `PartialEq`:
+///
+/// - `a == b` if and only if `partial_cmp(a, b) == Just(Equal)`
+///
+/// # Examples
+///
+/// ```tml
+/// let result = 1.0.partial_cmp(ref 2.0)
+/// assert_eq(result, Just(Less))
+///
+/// // NaN is not comparable
+/// let nan = 0.0 / 0.0
+/// assert(nan.partial_cmp(ref 1.0).is_nothing())
+/// ```
 pub behavior PartialOrd: PartialEq {
-    /// Returns an ordering between self and other, or Nothing if they cannot be compared.
+    /// Returns an ordering between `self` and `other` values if one exists.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(1.partial_cmp(ref 2), Just(Less))
+    /// assert_eq(2.partial_cmp(ref 2), Just(Equal))
+    /// assert_eq(3.partial_cmp(ref 2), Just(Greater))
+    /// ```
     func partial_cmp(this, other: ref Self) -> Maybe[Ordering]
 
-    /// Tests if self is less than other.
+    /// Tests less than (for `self` and `other`).
+    ///
+    /// This method is used by the `<` operator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(1.lt(ref 2))
+    /// assert(2.lt(ref 2) == false)
+    /// ```
     func lt(this, other: ref Self) -> Bool {
         when this.partial_cmp(other) {
             Just(ord) => {
@@ -111,7 +302,17 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
-    /// Tests if self is less than or equal to other.
+    /// Tests less than or equal to (for `self` and `other`).
+    ///
+    /// This method is used by the `<=` operator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(1.le(ref 2))
+    /// assert(2.le(ref 2))
+    /// assert(3.le(ref 2) == false)
+    /// ```
     func le(this, other: ref Self) -> Bool {
         when this.partial_cmp(other) {
             Just(ord) => {
@@ -125,7 +326,16 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
-    /// Tests if self is greater than other.
+    /// Tests greater than (for `self` and `other`).
+    ///
+    /// This method is used by the `>` operator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(2.gt(ref 1))
+    /// assert(2.gt(ref 2) == false)
+    /// ```
     func gt(this, other: ref Self) -> Bool {
         when this.partial_cmp(other) {
             Just(ord) => {
@@ -138,7 +348,17 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
-    /// Tests if self is greater than or equal to other.
+    /// Tests greater than or equal to (for `self` and `other`).
+    ///
+    /// This method is used by the `>=` operator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(2.ge(ref 1))
+    /// assert(2.ge(ref 2))
+    /// assert(1.ge(ref 2) == false)
+    /// ```
     func ge(this, other: ref Self) -> Bool {
         when this.partial_cmp(other) {
             Just(ord) => {
@@ -156,21 +376,67 @@ pub behavior PartialOrd: PartialEq {
 // ============================================================================
 // Ord Behavior
 // ============================================================================
-// Total ordering - all values are comparable
 
-/// Behavior for total ordering.
-/// Types implementing Ord have a total order: any two values can be compared.
+/// Behavior for types that form a total order.
+///
+/// A total order means that any two values of this type can be compared,
+/// and the comparison will always succeed (unlike [`PartialOrd`]).
+///
+/// The comparison must satisfy:
+///
+/// - **Antisymmetry**: if `a < b` then `!(a > b)`, and vice versa.
+/// - **Transitivity**: `a < b` and `b < c` implies `a < c`.
+/// - **Totality**: exactly one of `a < b`, `a == b`, or `a > b` is true.
+///
+/// # Implementing Ord
+///
+/// Types that implement `Ord` must also implement `PartialOrd`, `Eq`, and
+/// `PartialEq`.
+///
+/// # Examples
+///
+/// ```tml
+/// impl Ord for Point {
+///     func cmp(this, other: ref Point) -> Ordering {
+///         // Compare by x, then by y
+///         return this.x.cmp(ref other.x).then(this.y.cmp(ref other.y))
+///     }
+/// }
+/// ```
 pub behavior Ord: Eq + PartialOrd {
-    /// Returns the ordering between self and other.
+    /// Returns the ordering between `self` and `other`.
+    ///
+    /// By convention, `self.cmp(other)` returns the ordering matching
+    /// the expression `self <operator> other` if true.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(5.cmp(ref 10), Less)
+    /// assert_eq(10.cmp(ref 5), Greater)
+    /// assert_eq(5.cmp(ref 5), Equal)
+    /// ```
     func cmp(this, other: ref Self) -> Ordering
 
-    /// Returns an ordering, wrapped in Just.
-    /// Overrides PartialOrd::partial_cmp with a guaranteed result.
+    /// Returns an ordering, wrapped in `Just`.
+    ///
+    /// This is the `Ord` implementation of `partial_cmp`, which always
+    /// returns a value since `Ord` types are totally ordered.
     func partial_cmp(this, other: ref Self) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 
-    /// Returns the maximum of self and other.
+    /// Compares and returns the maximum of two values.
+    ///
+    /// Returns the second argument if the comparison determines them to be
+    /// equal.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(1.max(2), 2)
+    /// assert_eq(2.max(2), 2)
+    /// ```
     func max(this, other: Self) -> Self {
         when this.cmp(ref other) {
             Ordering::Less => return other,
@@ -178,7 +444,17 @@ pub behavior Ord: Eq + PartialOrd {
         }
     }
 
-    /// Returns the minimum of self and other.
+    /// Compares and returns the minimum of two values.
+    ///
+    /// Returns the first argument if the comparison determines them to be
+    /// equal.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(1.min(2), 1)
+    /// assert_eq(2.min(2), 2)
+    /// ```
     func min(this, other: Self) -> Self {
         when this.cmp(ref other) {
             Ordering::Greater => return other,
@@ -186,7 +462,22 @@ pub behavior Ord: Eq + PartialOrd {
         }
     }
 
-    /// Clamps self to be within the range [min, max].
+    /// Restrict a value to a certain interval.
+    ///
+    /// Returns `max` if `self` is greater than `max`, and `min` if `self`
+    /// is less than `min`. Otherwise this returns `self`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `min > max`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq((-3).clamp(-2, 1), -2)
+    /// assert_eq(0.clamp(-2, 1), 0)
+    /// assert_eq(2.clamp(-2, 1), 1)
+    /// ```
     func clamp(this, min_val: Self, max_val: Self) -> Self {
         when this.cmp(ref min_val) {
             Ordering::Less => return min_val,
@@ -331,12 +622,30 @@ impl Ord for I64 {
 // Helper functions
 // ============================================================================
 
-/// Returns the maximum of two values.
+/// Compares and returns the maximum of two values.
+///
+/// Returns the second argument if the comparison determines them to be equal.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(max(1, 2), 2)
+/// assert_eq(max(2, 2), 2)
+/// ```
 pub func max[T: Ord](a: T, b: T) -> T {
     return a.max(b)
 }
 
-/// Returns the minimum of two values.
+/// Compares and returns the minimum of two values.
+///
+/// Returns the first argument if the comparison determines them to be equal.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(min(1, 2), 1)
+/// assert_eq(min(2, 2), 2)
+/// ```
 pub func min[T: Ord](a: T, b: T) -> T {
     return a.min(b)
 }

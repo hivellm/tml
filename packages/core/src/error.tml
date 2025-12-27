@@ -1,21 +1,182 @@
-// TML Core Library - Error Module
-// Provides: Error behavior, common error types
+//! Error handling types and the `Error` behavior.
+//!
+//! This module provides the foundation for error handling in TML, including:
+//!
+//! - The [`Error`] behavior for representing errors
+//! - Common error types like [`SimpleError`], [`IoError`], and [`ParseError`]
+//! - Error chaining with [`ChainedError`]
+//! - Type-erased errors with [`BoxedError`]
+//! - Error chain iteration with [`ErrorChain`]
+//!
+//! # The Error Behavior
+//!
+//! The [`Error`] behavior is the core abstraction for all error types. It extends
+//! [`Display`] and [`Debug`], ensuring all errors can be formatted for users and
+//! developers. The key method is [`source()`], which enables error chaining.
+//!
+//! # Error Chaining
+//!
+//! TML supports error chaining, where each error can optionally reference an
+//! underlying cause. This is useful for preserving the full context of what
+//! went wrong:
+//!
+//! ```tml
+//! use core::error::{Error, ChainedError, SimpleError, error_chain}
+//!
+//! func read_config() -> Outcome[Config, ChainedError[IoError]] {
+//!     let file = open_file("config.json").context("failed to open config")?
+//!     // ...
+//! }
+//!
+//! // Walk the error chain
+//! when read_config() {
+//!     Ok(config) => use_config(config),
+//!     Err(err) => {
+//!         for cause in error_chain(ref err) {
+//!             println(cause.to_string())
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! # Common Patterns
+//!
+//! ## Simple Errors
+//!
+//! For quick error creation with just a message:
+//!
+//! ```tml
+//! use core::error::SimpleError
+//!
+//! func validate(x: I64) -> Outcome[I64, SimpleError] {
+//!     if x < 0 {
+//!         return Err(SimpleError::new("value must be non-negative"))
+//!     }
+//!     return Ok(x)
+//! }
+//! ```
+//!
+//! ## Type-Erased Errors
+//!
+//! When you need to return different error types from the same function:
+//!
+//! ```tml
+//! use core::error::BoxedError
+//!
+//! func process() -> Outcome[Data, BoxedError] {
+//!     let file = open_file("data.txt").map_err(do(e) BoxedError::new(e))?
+//!     let parsed = parse(file).map_err(do(e) BoxedError::new(e))?
+//!     return Ok(parsed)
+//! }
+//! ```
+//!
+//! ## Adding Context
+//!
+//! Use the `context()` extension method to add context to errors:
+//!
+//! ```tml
+//! func load_user(id: I64) -> Outcome[User, ChainedError[DbError]] {
+//!     return db.find_user(id).context("failed to load user " + id.to_string())
+//! }
+//! ```
+
+use core::fmt::{Display, Debug}
+use core::option::Maybe
+use core::iter::Iterator
 
 // ============================================================================
 // Error Behavior
 // ============================================================================
 
 /// The base behavior for all error types.
-/// Types implementing Error can be used with the `?` operator and
-/// can provide a chain of underlying errors.
+///
+/// `Error` is the core behavior for representing and working with errors in TML.
+/// It extends [`Display`] and [`Debug`], ensuring that all errors can be shown
+/// to users (via `to_string()`) and developers (via `debug_string()`).
+///
+/// # Implementing Error
+///
+/// Most error types simply implement the behavior with an empty body, since
+/// the default implementations are usually sufficient:
+///
+/// ```tml
+/// pub type MyError {
+///     code: I64,
+///     message: Str
+/// }
+///
+/// impl Display for MyError {
+///     pub func to_string(this) -> Str {
+///         return "error " + this.code.to_string() + ": " + this.message
+///     }
+/// }
+///
+/// impl Debug for MyError {
+///     pub func debug_string(this) -> Str {
+///         return "MyError { code: " + this.code.to_string() + ", message: \"" + this.message + "\" }"
+///     }
+/// }
+///
+/// impl Error for MyError {}
+/// ```
+///
+/// # Error Chaining
+///
+/// Override `source()` to provide error chaining:
+///
+/// ```tml
+/// impl Error for MyError {
+///     pub func source(this) -> Maybe[ref dyn Error] {
+///         return Just(ref this.cause as ref dyn Error)
+///     }
+/// }
+/// ```
+///
+/// # The `?` Operator
+///
+/// Types implementing `Error` can be used with TML's `?` operator for
+/// convenient error propagation:
+///
+/// ```tml
+/// func process() -> Outcome[Data, MyError] {
+///     let x = try_something()?  // Propagates if error
+///     return Ok(x)
+/// }
+/// ```
 pub behavior Error: Display + Debug {
     /// Returns the underlying source of this error, if any.
+    ///
     /// This enables error chaining - each error can wrap a lower-level cause.
+    /// The default implementation returns `Nothing`, indicating no underlying cause.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use core::error::{Error, ChainedError, SimpleError}
+    ///
+    /// let inner = SimpleError::new("disk full")
+    /// let outer = ChainedError::new("failed to save", inner)
+    ///
+    /// when outer.source() {
+    ///     Just(cause) => println("Caused by: " + cause.to_string()),
+    ///     Nothing => println("No underlying cause")
+    /// }
+    /// ```
     func source(this) -> Maybe[ref dyn Error] {
         return Nothing
     }
 
     /// Returns a short description of the error.
+    ///
+    /// By default, this returns the same as `to_string()`. Override this
+    /// if you want a shorter or more technical description.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = SimpleError::new("connection timed out")
+    /// println(err.description())  // "connection timed out"
+    /// ```
     func description(this) -> Str {
         return this.to_string()
     }
@@ -26,12 +187,50 @@ pub behavior Error: Display + Debug {
 // ============================================================================
 
 /// A simple string-based error.
+///
+/// `SimpleError` is the most basic error type - it just wraps a message string.
+/// Use this for quick error creation when you don't need structured error data.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::SimpleError
+///
+/// func divide(a: I64, b: I64) -> Outcome[I64, SimpleError] {
+///     if b == 0 {
+///         return Err(SimpleError::new("division by zero"))
+///     }
+///     return Ok(a / b)
+/// }
+///
+/// when divide(10, 0) {
+///     Ok(result) => println(result.to_string()),
+///     Err(err) => println("Error: " + err.to_string())
+/// }
+/// // Output: Error: division by zero
+/// ```
+///
+/// # When to Use
+///
+/// Use `SimpleError` when:
+/// - You need a quick, throwaway error
+/// - The error message is sufficient context
+/// - You don't need structured error data or error codes
+///
+/// For more complex scenarios, consider creating a custom error type.
 pub type SimpleError {
     message: Str
 }
 
 impl SimpleError {
-    /// Creates a new SimpleError with the given message.
+    /// Creates a new `SimpleError` with the given message.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = SimpleError::new("something went wrong")
+    /// println(err.to_string())  // "something went wrong"
+    /// ```
     pub func new(message: Str) -> SimpleError {
         return SimpleError { message: message }
     }
@@ -56,7 +255,35 @@ impl Error for SimpleError {}
 // ============================================================================
 
 /// An error type that can never be constructed.
-/// Use this as the error type for operations that cannot fail.
+///
+/// `NeverError` is used as the error type for operations that cannot fail.
+/// Because it contains the `Never` type (which has no values), it's impossible
+/// to create an instance of `NeverError`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::NeverError
+///
+/// // An operation that always succeeds
+/// func always_works() -> Outcome[I64, NeverError] {
+///     return Ok(42)
+/// }
+///
+/// // Safe to unwrap - we know it can't fail
+/// let value = always_works().unwrap()
+/// ```
+///
+/// # Use Cases
+///
+/// - Infallible conversions
+/// - Functions that logically cannot fail
+/// - Type-level assertions that an operation succeeds
+///
+/// # Note
+///
+/// The methods on `NeverError` call `unreachable()` because they can never
+/// actually be invoked - there's no way to create a `NeverError` value.
 pub type NeverError {
     _private: Never
 }
@@ -81,20 +308,67 @@ impl Error for NeverError {}
 // ============================================================================
 
 /// A type-erased error that can hold any error type.
-/// Useful when you need to return different error types from the same function.
+///
+/// `BoxedError` is useful when you need to return different error types from
+/// the same function, or when you want to erase the specific error type.
+/// It heap-allocates the error and stores it behind a trait object.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::{BoxedError, IoError, ParseError}
+///
+/// func process_file(path: Str) -> Outcome[Data, BoxedError] {
+///     // Different error types, unified with BoxedError
+///     let contents = read_file(path)
+///         .map_err(do(e) BoxedError::new(e))?
+///
+///     let data = parse_data(contents)
+///         .map_err(do(e) BoxedError::new(e))?
+///
+///     return Ok(data)
+/// }
+/// ```
+///
+/// # Trade-offs
+///
+/// Using `BoxedError` comes with trade-offs:
+/// - **Pros**: Flexible, can hold any error type, enables error chaining
+/// - **Cons**: Heap allocation, loses specific type information
+///
+/// If you need to handle specific error types differently, consider using
+/// an enum instead.
 pub type BoxedError {
     inner: Heap[dyn Error]
 }
 
 impl BoxedError {
-    /// Boxes an error.
+    /// Boxes an error, creating a new `BoxedError`.
+    ///
+    /// This heap-allocates the error and stores it as a trait object.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let io_err = IoError::new(IoErrorKind::NotFound)
+    /// let boxed = BoxedError::new(io_err)
+    /// println(boxed.to_string())  // "entity not found"
+    /// ```
     pub func new[E: Error](error: E) -> BoxedError {
         return BoxedError {
             inner: Heap::new(error)
         }
     }
 
-    /// Returns a reference to the inner error.
+    /// Returns a reference to the inner error as a trait object.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let boxed = BoxedError::new(SimpleError::new("oops"))
+    /// let inner: ref dyn Error = boxed.as_ref()
+    /// println(inner.to_string())  // "oops"
+    /// ```
     pub func as_ref(this) -> ref dyn Error {
         return ref *this.inner
     }
@@ -123,18 +397,74 @@ impl Error for BoxedError {
 // ============================================================================
 
 /// An error that wraps another error as its cause.
+///
+/// `ChainedError` is used for error chaining - adding context to an existing
+/// error while preserving the original error as the cause. This is the type
+/// returned by the `context()` extension method on `Outcome`.
+///
+/// # Examples
+///
+/// ## Manual Construction
+///
+/// ```tml
+/// use core::error::{ChainedError, IoError, IoErrorKind}
+///
+/// let io_err = IoError::new(IoErrorKind::NotFound)
+/// let chained = ChainedError::new("failed to load config", io_err)
+///
+/// println(chained.to_string())
+/// // Output: "failed to load config: entity not found"
+///
+/// when chained.source() {
+///     Just(cause) => println("Caused by: " + cause.to_string()),
+///     Nothing => {}
+/// }
+/// // Output: "Caused by: entity not found"
+/// ```
+///
+/// ## Using `context()`
+///
+/// The `context()` method on `Outcome` is the idiomatic way to create chained errors:
+///
+/// ```tml
+/// func load_settings() -> Outcome[Settings, ChainedError[IoError]] {
+///     let file = open_file("settings.json")
+///         .context("failed to open settings file")?
+///
+///     let contents = read_all(file)
+///         .context("failed to read settings")?
+///
+///     return parse_settings(contents)
+/// }
+/// ```
 pub type ChainedError[E: Error] {
     message: Str,
     cause: E
 }
 
 impl[E: Error] ChainedError[E] {
-    /// Creates a new ChainedError with a message and cause.
+    /// Creates a new `ChainedError` with a message and underlying cause.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cause = SimpleError::new("connection refused")
+    /// let err = ChainedError::new("failed to connect to database", cause)
+    /// ```
     pub func new(message: Str, cause: E) -> ChainedError[E] {
         return ChainedError { message: message, cause: cause }
     }
 
-    /// Returns the underlying cause.
+    /// Returns a reference to the underlying cause.
+    ///
+    /// Unlike `source()`, this returns the concrete error type, not a trait object.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let chained = ChainedError::new("context", SimpleError::new("cause"))
+    /// let cause: ref SimpleError = chained.cause()
+    /// ```
     pub func cause(this) -> ref E {
         return ref this.cause
     }
@@ -163,18 +493,70 @@ impl[E: Error] Error for ChainedError[E] {
 // ============================================================================
 
 /// An error that occurred during parsing.
+///
+/// `ParseError` represents failures when parsing text into structured data.
+/// It optionally includes a position indicating where in the input the error
+/// occurred.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::ParseError
+///
+/// func parse_number(s: Str) -> Outcome[I64, ParseError] {
+///     if s.is_empty() {
+///         return Err(ParseError::new("empty string"))
+///     }
+///
+///     for (i, ch) in s.chars().enumerate() {
+///         if not ch.is_digit() {
+///             return Err(ParseError::with_position(
+///                 "invalid character '" + ch.to_string() + "'",
+///                 i
+///             ))
+///         }
+///     }
+///
+///     // ... actual parsing
+/// }
+///
+/// when parse_number("12x4") {
+///     Ok(n) => println(n.to_string()),
+///     Err(e) => println(e.to_string())
+/// }
+/// // Output: "parse error at position 2: invalid character 'x'"
+/// ```
 pub type ParseError {
     message: Str,
     position: Maybe[I64]
 }
 
 impl ParseError {
-    /// Creates a new ParseError.
+    /// Creates a new `ParseError` without a position.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = ParseError::new("unexpected end of input")
+    /// println(err.to_string())  // "parse error: unexpected end of input"
+    /// ```
     pub func new(message: Str) -> ParseError {
         return ParseError { message: message, position: Nothing }
     }
 
-    /// Creates a ParseError with a position.
+    /// Creates a `ParseError` with a specific position in the input.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A description of what went wrong
+    /// * `position` - The byte/character offset where the error occurred
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = ParseError::with_position("expected '}'", 42)
+    /// println(err.to_string())  // "parse error at position 42: expected '}'"
+    /// ```
     pub func with_position(message: Str, position: I64) -> ParseError {
         return ParseError { message: message, position: Just(position) }
     }
@@ -201,26 +583,63 @@ impl Error for ParseError {}
 // IoError - Error for I/O operations
 // ============================================================================
 
-/// The kind of I/O error.
+/// The kind of I/O error that occurred.
+///
+/// This enum categorizes I/O errors into common categories, making it easier
+/// to handle specific error conditions programmatically.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::{IoError, IoErrorKind}
+///
+/// func handle_io_error(err: IoError) {
+///     when err.kind() {
+///         NotFound => println("File not found, creating new file..."),
+///         PermissionDenied => println("Permission denied, check file permissions"),
+///         TimedOut => println("Operation timed out, retrying..."),
+///         _ => println("I/O error: " + err.to_string())
+///     }
+/// }
+/// ```
 pub type IoErrorKind {
+    /// An entity was not found (file, directory, etc.).
     NotFound,
+    /// Permission denied for the operation.
     PermissionDenied,
+    /// Connection was refused by the remote host.
     ConnectionRefused,
+    /// Connection was reset by the remote host.
     ConnectionReset,
+    /// Connection was aborted.
     ConnectionAborted,
+    /// Not connected to a remote host.
     NotConnected,
+    /// Address is already in use.
     AddrInUse,
+    /// Address is not available.
     AddrNotAvailable,
+    /// The pipe was closed unexpectedly.
     BrokenPipe,
+    /// An entity already exists (file, directory, etc.).
     AlreadyExists,
+    /// The operation would block (non-blocking I/O).
     WouldBlock,
+    /// Invalid input parameter was provided.
     InvalidInput,
+    /// Data read was not valid.
     InvalidData,
+    /// The operation timed out.
     TimedOut,
+    /// A write operation wrote zero bytes.
     WriteZero,
+    /// The operation was interrupted.
     Interrupted,
+    /// Unexpected end of file/stream.
     UnexpectedEof,
+    /// The system is out of memory.
     OutOfMemory,
+    /// Any other error not covered above.
     Other
 }
 
@@ -276,24 +695,96 @@ impl Debug for IoErrorKind {
     }
 }
 
-/// An I/O error.
+/// An I/O error with a kind and optional message.
+///
+/// `IoError` represents errors that occur during input/output operations.
+/// It consists of an [`IoErrorKind`] that categorizes the error, and an
+/// optional custom message for additional context.
+///
+/// # Examples
+///
+/// ## Creating Errors
+///
+/// ```tml
+/// use core::error::{IoError, IoErrorKind}
+///
+/// // Simple error with just a kind
+/// let err = IoError::new(IoErrorKind::NotFound)
+/// println(err.to_string())  // "entity not found"
+///
+/// // Error with additional context
+/// let err = IoError::with_message(
+///     IoErrorKind::NotFound,
+///     "config.json"
+/// )
+/// println(err.to_string())  // "entity not found: config.json"
+/// ```
+///
+/// ## Handling Errors by Kind
+///
+/// ```tml
+/// func retry_on_interrupt[T](f: func() -> Outcome[T, IoError]) -> Outcome[T, IoError] {
+///     loop {
+///         when f() {
+///             Ok(val) => return Ok(val),
+///             Err(err) => {
+///                 when err.kind() {
+///                     Interrupted => continue,  // Retry
+///                     _ => return Err(err)      // Propagate other errors
+///                 }
+///             }
+///         }
+///     }
+/// }
+/// ```
 pub type IoError {
     kind: IoErrorKind,
     message: Maybe[Str]
 }
 
 impl IoError {
-    /// Creates a new IoError of the given kind.
+    /// Creates a new `IoError` of the given kind without a custom message.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = IoError::new(IoErrorKind::PermissionDenied)
+    /// println(err.to_string())  // "permission denied"
+    /// ```
     pub func new(kind: IoErrorKind) -> IoError {
         return IoError { kind: kind, message: Nothing }
     }
 
-    /// Creates a new IoError with a custom message.
+    /// Creates a new `IoError` with a custom message.
+    ///
+    /// The message provides additional context about the error.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = IoError::with_message(
+    ///     IoErrorKind::PermissionDenied,
+    ///     "/etc/passwd"
+    /// )
+    /// println(err.to_string())  // "permission denied: /etc/passwd"
+    /// ```
     pub func with_message(kind: IoErrorKind, message: Str) -> IoError {
         return IoError { kind: kind, message: Just(message) }
     }
 
-    /// Returns the kind of error.
+    /// Returns the kind of this I/O error.
+    ///
+    /// Use this to handle specific error conditions programmatically.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let err = IoError::new(IoErrorKind::NotFound)
+    /// when err.kind() {
+    ///     NotFound => println("Not found!"),
+    ///     _ => println("Other error")
+    /// }
+    /// ```
     pub func kind(this) -> IoErrorKind {
         return this.kind
     }
@@ -320,9 +811,31 @@ impl Error for IoError {}
 // Error Extension Methods
 // ============================================================================
 
-/// Extension methods for Outcome with Error types.
+/// Extension methods for `Outcome` with `Error` types.
+///
+/// These methods make it easy to add context to errors and work with
+/// error chains.
 impl[T, E: Error] Outcome[T, E] {
-    /// Wraps the error in a ChainedError with additional context.
+    /// Wraps the error in a [`ChainedError`] with additional context.
+    ///
+    /// If the `Outcome` is `Ok`, it's returned unchanged. If it's `Err`,
+    /// the error is wrapped in a `ChainedError` with the given message.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func read_config() -> Outcome[Config, ChainedError[IoError]] {
+    ///     let contents = read_file("config.json")
+    ///         .context("failed to read config file")?
+    ///
+    ///     return parse_config(contents)
+    /// }
+    /// ```
+    ///
+    /// This produces errors like:
+    /// ```text
+    /// failed to read config file: entity not found
+    /// ```
     pub func context(this, message: Str) -> Outcome[T, ChainedError[E]] {
         when this {
             Ok(val) => return Ok(val),
@@ -330,7 +843,19 @@ impl[T, E: Error] Outcome[T, E] {
         }
     }
 
-    /// Wraps the error in a ChainedError with context from a function.
+    /// Wraps the error in a [`ChainedError`] with context from a function.
+    ///
+    /// This is useful when computing the context message is expensive
+    /// and you only want to do it when there's actually an error.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func load_user(id: I64) -> Outcome[User, ChainedError[DbError]] {
+    ///     return db.find_user(id)
+    ///         .with_context(do() "failed to load user " + id.to_string())
+    /// }
+    /// ```
     pub func with_context(this, f: func() -> Str) -> Outcome[T, ChainedError[E]] {
         when this {
             Ok(val) => return Ok(val),
@@ -343,7 +868,36 @@ impl[T, E: Error] Outcome[T, E] {
 // Error Iteration - Walk the error chain
 // ============================================================================
 
-/// An iterator over the error chain.
+/// An iterator over an error chain.
+///
+/// `ErrorChain` iterates through an error and all of its underlying causes,
+/// starting with the initial error and following the chain through `source()`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::{error_chain, ChainedError, SimpleError}
+///
+/// let e1 = SimpleError::new("root cause")
+/// let e2 = ChainedError::new("middle layer", e1)
+/// let e3 = ChainedError::new("top level error", e2)
+///
+/// println("Error chain:")
+/// for err in error_chain(ref e3) {
+///     println("  - " + err.to_string())
+/// }
+/// // Output:
+/// // Error chain:
+/// //   - top level error: middle layer: root cause
+/// //   - middle layer: root cause
+/// //   - root cause
+/// ```
+///
+/// # Use Cases
+///
+/// - Logging the full error chain for debugging
+/// - Finding a specific error type in the chain
+/// - Displaying all contributing factors to an error
 pub type ErrorChain {
     current: Maybe[ref dyn Error]
 }
@@ -362,7 +916,32 @@ impl Iterator for ErrorChain {
     }
 }
 
-/// Returns an iterator over the error chain, starting with this error.
+/// Creates an iterator over the error chain, starting with the given error.
+///
+/// The iterator yields each error in the chain, starting with the provided
+/// error and following through `source()` until reaching an error with no
+/// underlying cause.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::error::{error_chain, IoError, IoErrorKind}
+///
+/// let err = IoError::new(IoErrorKind::NotFound)
+/// for cause in error_chain(ref err) {
+///     println(cause.to_string())
+/// }
+/// ```
+///
+/// # Finding Specific Errors
+///
+/// You can use iterator methods to search the chain:
+///
+/// ```tml
+/// // Check if any error in the chain is a "not found" error
+/// let has_not_found = error_chain(ref err)
+///     .any(do(e) e.description().contains("not found"))
+/// ```
 pub func error_chain[E: Error](error: ref E) -> ErrorChain {
     return ErrorChain {
         current: Just(error as ref dyn Error)

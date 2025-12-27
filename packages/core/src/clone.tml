@@ -1,28 +1,168 @@
-// TML Core Library - Clone Module
-// Provides: Duplicate (Clone) and Copy behaviors
+//! Duplication and copying of values.
+//!
+//! This module provides two related behaviors for creating copies of values:
+//!
+//! - [`Duplicate`] - Types that can be explicitly duplicated (like Rust's `Clone`)
+//! - [`Copy`] - Types that can be trivially copied via bitwise copy
+//!
+//! # Duplicate vs Copy
+//!
+//! In TML, we distinguish between two kinds of copying:
+//!
+//! | Behavior | Method | When to Use |
+//! |----------|--------|-------------|
+//! | [`Copy`] | Implicit | Simple values (primitives, small structs without pointers) |
+//! | [`Duplicate`] | `.duplicate()` | Complex values (heap allocations, reference counting) |
+//!
+//! ## Copy Types
+//!
+//! `Copy` types can be implicitly copied when assigned or passed to functions.
+//! This is a "bitwise copy" - the bytes are simply copied without any custom logic.
+//!
+//! All primitive types are `Copy`:
+//! - Integers: `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`
+//! - Floats: `F32`, `F64`
+//! - Boolean: `Bool`
+//!
+//! ```tml
+//! let x: I64 = 42
+//! let y = x  // x is copied, both x and y are usable
+//! println(x.to_string())  // Works fine
+//! ```
+//!
+//! ## Duplicate Types
+//!
+//! `Duplicate` types require explicit `.duplicate()` to create a copy.
+//! This is used for types where copying involves more than just copying bytes,
+//! such as heap-allocated data.
+//!
+//! ```tml
+//! let s1: Str = "hello"
+//! let s2 = s1.duplicate()  // Explicit duplication
+//! ```
+//!
+//! # Implementing Duplicate
+//!
+//! To make your type duplicatable, implement the `Duplicate` behavior:
+//!
+//! ```tml
+//! use core::clone::Duplicate
+//!
+//! pub type Point {
+//!     x: F64,
+//!     y: F64
+//! }
+//!
+//! impl Duplicate for Point {
+//!     pub func duplicate(this) -> Point {
+//!         return Point {
+//!             x: this.x,
+//!             y: this.y
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! For types containing other `Duplicate` types:
+//!
+//! ```tml
+//! pub type Line {
+//!     start: Point,
+//!     end: Point
+//! }
+//!
+//! impl Duplicate for Line {
+//!     pub func duplicate(this) -> Line {
+//!         return Line {
+//!             start: this.start.duplicate(),
+//!             end: this.end.duplicate()
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! # Naming
+//!
+//! TML uses `Duplicate` instead of Rust's `Clone` to avoid confusion with
+//! Git's `clone` command. The name "duplicate" more clearly describes the
+//! operation being performed.
 
 // ============================================================================
 // Duplicate Behavior (Clone in Rust)
 // ============================================================================
-// Types that can create an explicit copy of themselves.
-// Use .duplicate() to create a copy of a value.
 
-/// Behavior for types that can be explicitly duplicated.
-/// Unlike Copy, Duplicate may involve heap allocation or deep copying.
+/// A common behavior for the ability to explicitly duplicate an object.
+///
+/// Differs from [`Copy`] in that `Copy` is implicit and inexpensive, while
+/// `Duplicate` is always explicit and may be expensive. In order to enforce
+/// these characteristics, TML does not allow users to implement `Copy`, but
+/// rather requires types to opt-in via implementing `Duplicate`.
+///
+/// # Derivability
+///
+/// This behavior can be derived for types where all fields implement `Duplicate`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::clone::Duplicate
+///
+/// let original = vec![1, 2, 3]
+/// let copy = original.duplicate()
+///
+/// // original and copy are independent
+/// ```
 pub behavior Duplicate {
-    /// Create a copy of this value
+    /// Returns a duplicate of the value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = "hello".duplicate()
+    /// ```
     func duplicate(this) -> Self
 }
 
 // ============================================================================
 // Copy Behavior (Marker)
 // ============================================================================
-// Types that can be trivially copied via bitwise copy.
-// All primitive types (I8-I64, U8-U64, F32, F64, Bool) are Copy.
-// Copy types are automatically Duplicate - the duplicate is just a bitwise copy.
 
-/// Marker behavior for types that can be trivially copied.
-/// Copy types don't need explicit .duplicate() - assignment copies the value.
+/// Types whose values can be duplicated simply by copying bits.
+///
+/// By default, variable bindings have 'move semantics'. However, if a type
+/// implements `Copy`, it instead has 'copy semantics': assignments and
+/// function arguments create copies rather than moves.
+///
+/// # When to Implement Copy
+///
+/// A type can implement `Copy` if all of its components implement `Copy`.
+/// Generally, this means:
+///
+/// - No heap allocations
+/// - No references or pointers to external resources
+/// - Small, fixed size
+///
+/// # Relationship with Duplicate
+///
+/// `Copy` extends `Duplicate`. This means every `Copy` type is also `Duplicate`,
+/// with the duplication being a simple bitwise copy.
+///
+/// # Examples
+///
+/// Simple structs can be `Copy`:
+///
+/// ```tml
+/// pub type Point {
+///     x: I32,
+///     y: I32
+/// }
+///
+/// impl Duplicate for Point {
+///     pub func duplicate(this) -> Point { return this }
+/// }
+///
+/// impl Copy for Point {}
+/// ```
 pub behavior Copy: Duplicate {
     // No methods - this is a marker behavior
     // The compiler uses this to enable implicit copying
@@ -31,48 +171,58 @@ pub behavior Copy: Duplicate {
 // ============================================================================
 // Duplicate implementations for primitives
 // ============================================================================
-// Note: These are implicit for primitives but shown for documentation
 
+/// `Duplicate` implementation for `I8`.
 impl Duplicate for I8 {
     pub func duplicate(this) -> I8 { return this }
 }
 
+/// `Duplicate` implementation for `I16`.
 impl Duplicate for I16 {
     pub func duplicate(this) -> I16 { return this }
 }
 
+/// `Duplicate` implementation for `I32`.
 impl Duplicate for I32 {
     pub func duplicate(this) -> I32 { return this }
 }
 
+/// `Duplicate` implementation for `I64`.
 impl Duplicate for I64 {
     pub func duplicate(this) -> I64 { return this }
 }
 
+/// `Duplicate` implementation for `U8`.
 impl Duplicate for U8 {
     pub func duplicate(this) -> U8 { return this }
 }
 
+/// `Duplicate` implementation for `U16`.
 impl Duplicate for U16 {
     pub func duplicate(this) -> U16 { return this }
 }
 
+/// `Duplicate` implementation for `U32`.
 impl Duplicate for U32 {
     pub func duplicate(this) -> U32 { return this }
 }
 
+/// `Duplicate` implementation for `U64`.
 impl Duplicate for U64 {
     pub func duplicate(this) -> U64 { return this }
 }
 
+/// `Duplicate` implementation for `F32`.
 impl Duplicate for F32 {
     pub func duplicate(this) -> F32 { return this }
 }
 
+/// `Duplicate` implementation for `F64`.
 impl Duplicate for F64 {
     pub func duplicate(this) -> F64 { return this }
 }
 
+/// `Duplicate` implementation for `Bool`.
 impl Duplicate for Bool {
     pub func duplicate(this) -> Bool { return this }
 }
@@ -97,6 +247,9 @@ impl Copy for Bool {}
 // Duplicate for Maybe[T]
 // ============================================================================
 
+/// `Duplicate` implementation for `Maybe[T]` where `T: Duplicate`.
+///
+/// Creates a duplicate by duplicating the contained value (if [`Just`]).
 impl[T: Duplicate] Duplicate for Maybe[T] {
     pub func duplicate(this) -> Maybe[T] {
         when this {
@@ -110,6 +263,9 @@ impl[T: Duplicate] Duplicate for Maybe[T] {
 // Duplicate for Outcome[T, E]
 // ============================================================================
 
+/// `Duplicate` implementation for `Outcome[T, E]` where both `T` and `E` implement `Duplicate`.
+///
+/// Creates a duplicate by duplicating the contained value or error.
 impl[T: Duplicate, E: Duplicate] Duplicate for Outcome[T, E] {
     pub func duplicate(this) -> Outcome[T, E] {
         when this {
