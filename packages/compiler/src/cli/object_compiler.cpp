@@ -187,14 +187,27 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 
     case LinkOptions::OutputType::StaticLib: {
         // Use llvm-ar for cross-platform static library creation
-        // llvm-ar is bundled with LLVM and works on all platforms
+        // Fall back to system ar on Unix if llvm-ar not available
         fs::path clang_dir = fs::path(clang_path).parent_path();
         fs::path llvm_ar = clang_dir / "llvm-ar";
 #ifdef _WIN32
         llvm_ar += ".exe";
 #endif
 
-        cmd << to_forward_slashes(llvm_ar.string());
+        std::string ar_cmd;
+        if (fs::exists(llvm_ar)) {
+            ar_cmd = to_forward_slashes(llvm_ar.string());
+        } else {
+#ifdef _WIN32
+            // On Windows, llvm-ar should be available with LLVM
+            ar_cmd = to_forward_slashes(llvm_ar.string());
+#else
+            // On Unix, fall back to system ar
+            ar_cmd = "ar";
+#endif
+        }
+
+        cmd << ar_cmd;
         cmd << " rcs \"" << to_forward_slashes(output_file) << "\"";
 
         for (const auto& obj : object_files) {
