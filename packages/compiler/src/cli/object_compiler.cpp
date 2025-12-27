@@ -74,8 +74,8 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
 
     // Build clang command
     std::ostringstream cmd;
-    cmd << clang_path; // Don't quote clang path (no spaces in standard paths)
-    cmd << " -c";      // Compile only, don't link
+    cmd << "\"" << clang_path << "\""; // Quote path for spaces (e.g., C:/Program Files/...)
+    cmd << " -c";                      // Compile only, don't link
 
     // Optimization level
     cmd << " " << get_optimization_flag(options.optimization_level);
@@ -162,7 +162,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
     switch (options.output_type) {
     case LinkOptions::OutputType::Executable: {
         // Link executable using clang
-        cmd << clang_path; // Don't quote clang path
+        cmd << "\"" << clang_path << "\""; // Quote path for spaces
 
         // Output file
         cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
@@ -221,7 +221,7 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 
     case LinkOptions::OutputType::DynamicLib: {
         // Shared library using clang
-        cmd << clang_path; // Don't quote clang path
+        cmd << "\"" << clang_path << "\""; // Quote path for spaces
         cmd << " -shared";
 
 #ifdef _WIN32
