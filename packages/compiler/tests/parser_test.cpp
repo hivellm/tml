@@ -534,3 +534,62 @@ TEST_F(ParserTest, ErrorPropagation) {
 
 // NOTE: Range operators (to/through) not yet implemented in parser
 // TODO: Implement range expression parsing for 'to' and 'through' keywords
+
+// ============================================================================
+// Use Declaration Tests
+// ============================================================================
+
+TEST_F(ParserTest, UseDeclaration) {
+    auto result = parse("use std::io");
+    ASSERT_TRUE(is_ok(result));
+    auto& module = unwrap(result);
+    ASSERT_EQ(module.decls.size(), 1);
+    EXPECT_TRUE(module.decls[0]->is<UseDecl>());
+
+    auto& use_decl = module.decls[0]->as<UseDecl>();
+    ASSERT_EQ(use_decl.path.segments.size(), 2);
+    EXPECT_EQ(use_decl.path.segments[0], "std");
+    EXPECT_EQ(use_decl.path.segments[1], "io");
+}
+
+TEST_F(ParserTest, UseDeclarationWithAlias) {
+    auto result = parse("use std::io::Read as Reader");
+    ASSERT_TRUE(is_ok(result));
+    auto& module = unwrap(result);
+    ASSERT_EQ(module.decls.size(), 1);
+    EXPECT_TRUE(module.decls[0]->is<UseDecl>());
+
+    auto& use_decl = module.decls[0]->as<UseDecl>();
+    ASSERT_TRUE(use_decl.alias.has_value());
+    EXPECT_EQ(use_decl.alias.value(), "Reader");
+}
+
+TEST_F(ParserTest, UseDeclarationGrouped) {
+    auto result = parse("use std::io::{Read, Write}");
+    ASSERT_TRUE(is_ok(result));
+    auto& module = unwrap(result);
+    ASSERT_EQ(module.decls.size(), 1);
+    EXPECT_TRUE(module.decls[0]->is<UseDecl>());
+
+    auto& use_decl = module.decls[0]->as<UseDecl>();
+    ASSERT_EQ(use_decl.path.segments.size(), 2);
+    EXPECT_EQ(use_decl.path.segments[0], "std");
+    EXPECT_EQ(use_decl.path.segments[1], "io");
+
+    ASSERT_TRUE(use_decl.symbols.has_value());
+    auto& symbols = use_decl.symbols.value();
+    ASSERT_EQ(symbols.size(), 2);
+    EXPECT_EQ(symbols[0], "Read");
+    EXPECT_EQ(symbols[1], "Write");
+}
+
+TEST_F(ParserTest, UseDeclarationGroupedMultiple) {
+    auto result = parse("use std::math::{abs, sqrt, pow, sin, cos}");
+    ASSERT_TRUE(is_ok(result));
+    auto& module = unwrap(result);
+    ASSERT_EQ(module.decls.size(), 1);
+
+    auto& use_decl = module.decls[0]->as<UseDecl>();
+    ASSERT_TRUE(use_decl.symbols.has_value());
+    EXPECT_EQ(use_decl.symbols.value().size(), 5);
+}

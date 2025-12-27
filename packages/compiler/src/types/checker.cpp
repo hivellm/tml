@@ -534,6 +534,10 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     // Register default implementations from the behavior
     if (impl.trait_path && !impl.trait_path->segments.empty()) {
         std::string behavior_name = impl.trait_path->segments.back();
+
+        // Register that this type implements this behavior (for where clause checking)
+        env_.register_impl(type_name, behavior_name);
+
         auto behavior_def = env_.lookup_behavior(behavior_name);
         if (behavior_def) {
             for (const auto& behavior_method : behavior_def->methods) {
@@ -768,7 +772,19 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             }
         }
 
-        error("Undefined variable: " + ident.name, span);
+        // Build error message with suggestions
+        std::string msg = "Undefined variable: " + ident.name;
+        auto all_names = get_all_known_names();
+        auto similar = find_similar_names(ident.name, all_names);
+        if (!similar.empty()) {
+            msg += ". Did you mean: ";
+            for (size_t i = 0; i < similar.size(); ++i) {
+                if (i > 0) msg += ", ";
+                msg += "`" + similar[i] + "`";
+            }
+            msg += "?";
+        }
+        error(msg, span);
         return make_unit();
     }
     return sym->type;
@@ -1736,7 +1752,19 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             }
         }
 
-        error("Undefined: " + segments[0], span);
+        // Build error message with suggestions
+        std::string msg = "Undefined: " + segments[0];
+        auto all_names = get_all_known_names();
+        auto similar = find_similar_names(segments[0], all_names);
+        if (!similar.empty()) {
+            msg += ". Did you mean: ";
+            for (size_t i = 0; i < similar.size(); ++i) {
+                if (i > 0) msg += ", ";
+                msg += "`" + similar[i] + "`";
+            }
+            msg += "?";
+        }
+        error(msg, span);
     }
 
     if (segments.size() == 2) {
@@ -2005,6 +2033,99 @@ bool TypeChecker::expr_has_return(const parser::Expr& expr) {
             return false;
         }
     }, expr.kind);
+}
+
+// ============================================================================
+// Error Message Improvements
+// ============================================================================
+
+auto TypeChecker::levenshtein_distance(const std::string& s1, const std::string& s2) -> size_t {
+    const size_t m = s1.size();
+    const size_t n = s2.size();
+
+    if (m == 0) return n;
+    if (n == 0) return m;
+
+    std::vector<std::vector<size_t>> dp(m + 1, std::vector<size_t>(n + 1));
+
+    for (size_t i = 0; i <= m; ++i) dp[i][0] = i;
+    for (size_t j = 0; j <= n; ++j) dp[0][j] = j;
+
+    for (size_t i = 1; i <= m; ++i) {
+        for (size_t j = 1; j <= n; ++j) {
+            size_t cost = (s1[i - 1] == s2[j - 1]) ? 0 : 1;
+            dp[i][j] = std::min({
+                dp[i - 1][j] + 1,      // deletion
+                dp[i][j - 1] + 1,      // insertion
+                dp[i - 1][j - 1] + cost // substitution
+            });
+        }
+    }
+
+    return dp[m][n];
+}
+
+auto TypeChecker::get_all_known_names() -> std::vector<std::string> {
+    std::vector<std::string> names;
+
+    // Get variable names from current scope
+    auto scope = env_.current_scope();
+    while (scope) {
+        for (const auto& [name, _] : scope->symbols()) {
+            names.push_back(name);
+        }
+        scope = scope->parent();
+    }
+
+    // Get function names
+    for (const auto& name : env_.all_func_names()) {
+        names.push_back(name);
+    }
+
+    // Get struct/type names
+    for (const auto& [name, _] : env_.all_structs()) {
+        names.push_back(name);
+    }
+
+    // Get enum names
+    for (const auto& [name, _] : env_.all_enums()) {
+        names.push_back(name);
+    }
+
+    // Get behavior names
+    for (const auto& [name, _] : env_.all_behaviors()) {
+        names.push_back(name);
+    }
+
+    return names;
+}
+
+auto TypeChecker::find_similar_names(const std::string& name, const std::vector<std::string>& candidates, size_t max_suggestions) -> std::vector<std::string> {
+    std::vector<std::pair<size_t, std::string>> scored;
+
+    // Maximum distance threshold: shorter strings need closer matches
+    size_t max_distance = std::max<size_t>(2, name.length() / 2);
+
+    for (const auto& candidate : candidates) {
+        // Skip exact matches
+        if (candidate == name) continue;
+
+        size_t dist = levenshtein_distance(name, candidate);
+        if (dist <= max_distance) {
+            scored.emplace_back(dist, candidate);
+        }
+    }
+
+    // Sort by distance (smaller is better)
+    std::sort(scored.begin(), scored.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::vector<std::string> result;
+    for (size_t i = 0; i < std::min(max_suggestions, scored.size()); ++i) {
+        result.push_back(scored[i].second);
+    }
+
+    return result;
 }
 
 } // namespace tml::types

@@ -100,6 +100,7 @@ namespace tml::types
         [[nodiscard]] auto lookup(const std::string &name) const -> std::optional<Symbol>;
         [[nodiscard]] auto lookup_local(const std::string &name) const -> std::optional<Symbol>;
         [[nodiscard]] auto parent() const -> std::shared_ptr<Scope>;
+        [[nodiscard]] auto symbols() const -> const std::unordered_map<std::string, Symbol>& { return symbols_; }
 
     private:
         std::unordered_map<std::string, Symbol> symbols_;
@@ -132,8 +133,11 @@ namespace tml::types
         void register_impl(const std::string& type_name, const std::string& behavior_name);
         [[nodiscard]] bool type_implements(const std::string& type_name, const std::string& behavior_name) const;
 
-        // Get all enums (for enum constructor lookup)
+        // Get all definitions (for error message suggestions and enum lookup)
         [[nodiscard]] auto all_enums() const -> const std::unordered_map<std::string, EnumDef> &;
+        [[nodiscard]] auto all_structs() const -> const std::unordered_map<std::string, StructDef> &;
+        [[nodiscard]] auto all_behaviors() const -> const std::unordered_map<std::string, BehaviorDef> &;
+        [[nodiscard]] auto all_func_names() const -> std::vector<std::string>;
 
         // Scopes
         void push_scope();

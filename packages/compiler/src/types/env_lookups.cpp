@@ -188,6 +188,22 @@ auto TypeEnv::all_enums() const -> const std::unordered_map<std::string, EnumDef
     return enums_;
 }
 
+auto TypeEnv::all_structs() const -> const std::unordered_map<std::string, StructDef>& {
+    return structs_;
+}
+
+auto TypeEnv::all_behaviors() const -> const std::unordered_map<std::string, BehaviorDef>& {
+    return behaviors_;
+}
+
+auto TypeEnv::all_func_names() const -> std::vector<std::string> {
+    std::vector<std::string> names;
+    for (const auto& [name, _] : functions_) {
+        names.push_back(name);
+    }
+    return names;
+}
+
 auto TypeEnv::get_module(const std::string &module_path) const -> std::optional<Module> {
     if (!module_registry_) return std::nullopt;
     return module_registry_->get_module(module_path);

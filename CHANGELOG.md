@@ -8,6 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Where Clause Type Checking** (2025-12-27)
+  - Full where clause constraint enforcement at call sites
+  - Register behavior implementations via `impl Behavior for Type`
+  - Type checking validates that type arguments satisfy all required behaviors
+  - Error messages: "Type 'X' does not implement behavior 'Y' required by constraint on T"
+  - Tests added: `WhereClauseParsingAndStorage`, `WhereClauseWithPrimitiveType`, etc.
+  - Files modified:
+    - `src/types/checker.cpp` - Added `register_impl()` call in `check_impl_decl()`, constraint checking in call handling
+    - `tests/types_test.cpp` - Added 5 new where clause tests
+
+- **Grouped Use Imports** (2025-12-27)
+  - Support for `use std::io::{Read, Write}` syntax
+  - Parser handles grouped imports and stores symbols in `UseDecl.symbols`
+  - Type checker imports each symbol individually from the module
+  - Tests added: `UseDeclaration`, `UseDeclarationGrouped`, `UseDeclarationGroupedMultiple`
+  - Files modified:
+    - `src/parser/parser_decl.cpp` - Already implemented, verified working
+    - `tests/parser_test.cpp` - Added 4 new use declaration tests
+
+- **Error Message Improvements** (2025-12-27)
+  - Similar name suggestions for undefined identifiers using Levenshtein distance
+  - Example: "Undefined variable: valeu. Did you mean: `value`?"
+  - Suggestions work for variables, functions, types, enums, and behaviors
+  - Maximum 3 suggestions shown, ordered by similarity
+  - Distance threshold scales with name length (min 2, max name.length/2)
+  - Files modified:
+    - `include/tml/types/checker.hpp` - Added `find_similar_names()`, `get_all_known_names()`, `levenshtein_distance()`
+    - `include/tml/types/env.hpp` - Added `all_structs()`, `all_behaviors()`, `all_func_names()`, `Scope::symbols()`
+    - `src/types/checker.cpp` - Implemented suggestion functions, updated error messages
+    - `src/types/env_lookups.cpp` - Implemented new accessor methods
+
 - **Advanced Borrow Checker Features** (2025-12-27)
   - Reborrow handling: allow `&mut T -> &T` coercion and reborrowing from references
   - Two-phase borrow support: method calls like `vec.push(vec.len())` now work correctly

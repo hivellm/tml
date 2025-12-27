@@ -726,3 +726,127 @@ TEST_F(TypeCheckerTest, FFIQualifiedLookup) {
     // Both should refer to the same function
     EXPECT_EQ(direct->name, qualified->name) << "Both lookups should find same function";
 }
+
+// ============================================================================
+// Where Clause Type Checking Tests
+// ============================================================================
+
+TEST_F(TypeCheckerTest, WhereClauseParsingAndStorage) {
+    auto env = check_ok(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        func compare[T](a: T, b: T) -> Bool where T: Eq {
+            return true
+        }
+    )");
+
+    auto func = env.lookup_func("compare");
+    ASSERT_TRUE(func.has_value());
+    EXPECT_EQ(func->where_constraints.size(), 1);
+    EXPECT_EQ(func->where_constraints[0].type_param, "T");
+    EXPECT_EQ(func->where_constraints[0].required_behaviors.size(), 1);
+    EXPECT_EQ(func->where_constraints[0].required_behaviors[0], "Eq");
+}
+
+TEST_F(TypeCheckerTest, WhereClauseWithPrimitiveType) {
+    // I32 implements Eq by default, so this should pass
+    check_ok(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        func compare[T](a: T, b: T) -> Bool where T: Eq {
+            return true
+        }
+
+        func test() -> Bool {
+            return compare(1, 2)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, WhereClauseWithUserDefinedType) {
+    // User-defined type that implements Eq - use TML's `type` keyword for structs
+    check_ok(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        type Point {
+            x: I32,
+            y: I32,
+        }
+
+        impl Eq for Point {
+            func eq(self: ref This, other: ref This) -> Bool {
+                return true
+            }
+        }
+
+        func compare[T](a: T, b: T) -> Bool where T: Eq {
+            return true
+        }
+    )");
+
+    // Verify Point now implements Eq
+    auto result = check(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        type Point {
+            x: I32,
+            y: I32,
+        }
+
+        impl Eq for Point {
+            func eq(self: ref This, other: ref This) -> Bool {
+                return true
+            }
+        }
+    )");
+    ASSERT_TRUE(is_ok(result));
+    auto& env = std::get<TypeEnv>(result);
+    EXPECT_TRUE(env.type_implements("Point", "Eq"));
+}
+
+TEST_F(TypeCheckerTest, WhereClauseViolation) {
+    // Verify that a type not implementing a behavior cannot be used
+    // where that behavior is required
+    auto result = check(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        type NoEq {
+            x: I32,
+        }
+    )");
+    ASSERT_TRUE(is_ok(result));
+    auto& env = std::get<TypeEnv>(result);
+
+    // NoEq should NOT implement Eq
+    EXPECT_FALSE(env.type_implements("NoEq", "Eq"));
+}
+
+TEST_F(TypeCheckerTest, WhereClauseMultipleBehaviors) {
+    check_ok(R"(
+        behavior Eq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        behavior Hash {
+            func hash(self: ref This) -> I64
+        }
+
+        func hash_compare[T](a: T, b: T) -> Bool where T: Eq, T: Hash {
+            return true
+        }
+
+        func test() -> Bool {
+            return hash_compare(1, 2)
+        }
+    )");
+}

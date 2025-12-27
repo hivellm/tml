@@ -104,6 +104,11 @@ private:
     bool expr_has_return(const parser::Expr& expr);
 
     void error(const std::string& message, SourceSpan span);
+
+    // Error message improvements
+    auto find_similar_names(const std::string& name, const std::vector<std::string>& candidates, size_t max_suggestions = 3) -> std::vector<std::string>;
+    auto get_all_known_names() -> std::vector<std::string>;
+    auto levenshtein_distance(const std::string& s1, const std::string& s2) -> size_t;
 };
 
 } // namespace tml::types
