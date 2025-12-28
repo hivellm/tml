@@ -17,9 +17,15 @@ auto LLVMIRGen::try_gen_builtin_collections(
             emit_line("  " + result + " = call ptr @list_create(i64 4)");
             return result;
         } else {
-            std::string i32_cap = gen_expr(*call.args[0]);
-            std::string cap = fresh_reg();
-            emit_line("  " + cap + " = sext i32 " + i32_cap + " to i64");
+            std::string cap_val = gen_expr(*call.args[0]);
+            std::string cap_type = last_expr_type_;
+            std::string cap;
+            if (cap_type == "i64") {
+                cap = cap_val;  // Already i64, no conversion needed
+            } else {
+                cap = fresh_reg();
+                emit_line("  " + cap + " = sext i32 " + cap_val + " to i64");
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @list_create(i64 " + cap + ")");
             return result;
@@ -39,9 +45,15 @@ auto LLVMIRGen::try_gen_builtin_collections(
     if (fn_name == "list_push") {
         if (call.args.size() >= 2) {
             std::string list = gen_expr(*call.args[0]);
-            std::string i32_value = gen_expr(*call.args[1]);
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
+            std::string val_expr = gen_expr(*call.args[1]);
+            std::string val_type = last_expr_type_;
+            std::string value;
+            if (val_type == "i64") {
+                value = val_expr;
+            } else {
+                value = fresh_reg();
+                emit_line("  " + value + " = sext i32 " + val_expr + " to i64");
+            }
             emit_line("  call void @list_push(ptr " + list + ", i64 " + value + ")");
         }
         return "0";
@@ -64,9 +76,15 @@ auto LLVMIRGen::try_gen_builtin_collections(
     if (fn_name == "list_get") {
         if (call.args.size() >= 2) {
             std::string list = gen_expr(*call.args[0]);
-            std::string i32_index = gen_expr(*call.args[1]);
-            std::string index = fresh_reg();
-            emit_line("  " + index + " = sext i32 " + i32_index + " to i64");
+            std::string idx_expr = gen_expr(*call.args[1]);
+            std::string idx_type = last_expr_type_;
+            std::string index;
+            if (idx_type == "i64") {
+                index = idx_expr;
+            } else {
+                index = fresh_reg();
+                emit_line("  " + index + " = sext i32 " + idx_expr + " to i64");
+            }
             std::string i64_result = fresh_reg();
             emit_line("  " + i64_result + " = call i64 @list_get(ptr " + list + ", i64 " + index +
                       ")");
@@ -81,12 +99,24 @@ auto LLVMIRGen::try_gen_builtin_collections(
     if (fn_name == "list_set") {
         if (call.args.size() >= 3) {
             std::string list = gen_expr(*call.args[0]);
-            std::string i32_index = gen_expr(*call.args[1]);
-            std::string index = fresh_reg();
-            emit_line("  " + index + " = sext i32 " + i32_index + " to i64");
-            std::string i32_value = gen_expr(*call.args[2]);
-            std::string value = fresh_reg();
-            emit_line("  " + value + " = sext i32 " + i32_value + " to i64");
+            std::string idx_expr = gen_expr(*call.args[1]);
+            std::string idx_type = last_expr_type_;
+            std::string index;
+            if (idx_type == "i64") {
+                index = idx_expr;
+            } else {
+                index = fresh_reg();
+                emit_line("  " + index + " = sext i32 " + idx_expr + " to i64");
+            }
+            std::string val_expr = gen_expr(*call.args[2]);
+            std::string val_type = last_expr_type_;
+            std::string value;
+            if (val_type == "i64") {
+                value = val_expr;
+            } else {
+                value = fresh_reg();
+                emit_line("  " + value + " = sext i32 " + val_expr + " to i64");
+            }
             emit_line("  call void @list_set(ptr " + list + ", i64 " + index + ", i64 " + value +
                       ")");
         }

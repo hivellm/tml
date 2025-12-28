@@ -146,7 +146,11 @@
         },
         {
           "name": "constant.language.enum-variant.tml",
-          "match": "\\b(Just|Nothing|Ok|Err)\\b"
+          "match": "\\b(Just|Nothing|Ok|Err|Less|Equal|Greater)\\b"
+        },
+        {
+          "name": "storage.type.builtin.ordering.tml",
+          "match": "\\b(Ordering)\\b"
         },
         {
           "name": "storage.type.pointer.tml",
@@ -314,6 +318,21 @@
         {
           "name": "support.function.builtin.meta.tml",
           "match": "\\b(size_of|align_of|drop|forget)\\b"
+        },
+        {
+          "name": "support.function.builtin.type-method.tml",
+          "match": "\\.(is_just|is_nothing|is_ok|is_err|unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|unwrap_err|expect|expect_err|map|map_or|map_or_else|map_err|and_then|alt|or_else|xor|also|filter|ok_or|ok_or_else|ok|err|zip|zip_with|flatten|iter|contains)\\b",
+          "comment": "Maybe[T] and Outcome[T,E] builtin methods"
+        },
+        {
+          "name": "support.function.builtin.primitive-method.tml",
+          "match": "\\.(hash|duplicate|to_string|debug_string|cmp|is_less|is_equal|is_greater)\\b",
+          "comment": "Primitive type methods"
+        },
+        {
+          "name": "support.function.builtin.static-method.tml",
+          "match": "::(from|default)\\b",
+          "comment": "Static type methods like I32::from(), I32::default()"
         }
       ]
     },

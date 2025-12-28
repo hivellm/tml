@@ -726,3 +726,121 @@ TEST_F(LexerTest, RegularString) {
     ASSERT_GE(tokens.size(), 1);
     EXPECT_EQ(tokens[0].kind, TokenKind::StringLiteral);
 }
+
+// ============================================================================
+// Symbol Logical Operators (&&, ||)
+// ============================================================================
+
+TEST_F(LexerTest, LogicalAndSymbol) {
+    // && should be tokenized as AndAnd
+    auto token = lex_one("&&");
+    EXPECT_EQ(token.kind, TokenKind::AndAnd);
+}
+
+TEST_F(LexerTest, LogicalOrSymbol) {
+    // || should be tokenized as OrOr
+    auto token = lex_one("||");
+    EXPECT_EQ(token.kind, TokenKind::OrOr);
+}
+
+TEST_F(LexerTest, LogicalNotSymbolPrefix) {
+    // ! should be tokenized as Bang (can be used as prefix NOT)
+    auto token = lex_one("!");
+    EXPECT_EQ(token.kind, TokenKind::Bang);
+}
+
+TEST_F(LexerTest, LogicalOperatorsInExpression) {
+    // Test && and || in a complete expression
+    auto tokens = lex("a && b || !c");
+
+    ASSERT_GE(tokens.size(), 6);
+    EXPECT_EQ(tokens[0].kind, TokenKind::Identifier); // a
+    EXPECT_EQ(tokens[1].kind, TokenKind::AndAnd);     // &&
+    EXPECT_EQ(tokens[2].kind, TokenKind::Identifier); // b
+    EXPECT_EQ(tokens[3].kind, TokenKind::OrOr);       // ||
+    EXPECT_EQ(tokens[4].kind, TokenKind::Bang);       // !
+    EXPECT_EQ(tokens[5].kind, TokenKind::Identifier); // c
+}
+
+TEST_F(LexerTest, MixedLogicalOperators) {
+    // Test mixing word and symbol operators
+    auto tokens = lex("a and b && c or d || e");
+
+    // Should have: a and b && c or d || e
+    int and_count = 0, andand_count = 0, or_count = 0, oror_count = 0;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::KwAnd)
+            and_count++;
+        if (token.kind == TokenKind::AndAnd)
+            andand_count++;
+        if (token.kind == TokenKind::KwOr)
+            or_count++;
+        if (token.kind == TokenKind::OrOr)
+            oror_count++;
+    }
+    EXPECT_EQ(and_count, 1);
+    EXPECT_EQ(andand_count, 1);
+    EXPECT_EQ(or_count, 1);
+    EXPECT_EQ(oror_count, 1);
+}
+
+TEST_F(LexerTest, BitwiseVsLogical) {
+    // Test that & and && are different, | and || are different
+    auto tokens = lex("a & b && c | d || e");
+
+    int bitand_count = 0, andand_count = 0, bitor_count = 0, oror_count = 0;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::BitAnd)
+            bitand_count++;
+        if (token.kind == TokenKind::AndAnd)
+            andand_count++;
+        if (token.kind == TokenKind::BitOr)
+            bitor_count++;
+        if (token.kind == TokenKind::OrOr)
+            oror_count++;
+    }
+    EXPECT_EQ(bitand_count, 1);
+    EXPECT_EQ(andand_count, 1);
+    EXPECT_EQ(bitor_count, 1);
+    EXPECT_EQ(oror_count, 1);
+}
+
+TEST_F(LexerTest, LogicalOperatorsWithParens) {
+    // Test logical operators with parentheses
+    auto tokens = lex("(a && b) || !(c && d)");
+
+    // Verify no error tokens
+    for (const auto& token : tokens) {
+        EXPECT_NE(token.kind, TokenKind::Error) << "Unexpected error token: " << token.lexeme;
+    }
+
+    // Count operators
+    int andand_count = 0, oror_count = 0, bang_count = 0;
+    for (const auto& token : tokens) {
+        if (token.kind == TokenKind::AndAnd)
+            andand_count++;
+        if (token.kind == TokenKind::OrOr)
+            oror_count++;
+        if (token.kind == TokenKind::Bang)
+            bang_count++;
+    }
+    EXPECT_EQ(andand_count, 2);
+    EXPECT_EQ(oror_count, 1);
+    EXPECT_EQ(bang_count, 1);
+}
+
+TEST_F(LexerTest, AsKeyword) {
+    // Test 'as' keyword for type casting
+    auto token = lex_one("as");
+    EXPECT_EQ(token.kind, TokenKind::KwAs);
+}
+
+TEST_F(LexerTest, AsCastExpression) {
+    // Test 'as' in a cast expression
+    auto tokens = lex("x as I64");
+
+    ASSERT_GE(tokens.size(), 3);
+    EXPECT_EQ(tokens[0].kind, TokenKind::Identifier); // x
+    EXPECT_EQ(tokens[1].kind, TokenKind::KwAs);       // as
+    EXPECT_EQ(tokens[2].kind, TokenKind::Identifier); // I64
+}

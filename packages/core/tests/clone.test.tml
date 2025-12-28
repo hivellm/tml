@@ -1,6 +1,6 @@
 // Tests for core::clone module
+// Note: duplicate() is a builtin method for primitive types
 use test
-use core::clone
 
 @test
 func test_i32_duplicate() -> I32 {

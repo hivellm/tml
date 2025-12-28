@@ -80,6 +80,22 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             continue;
         }
 
+        // Handle type cast: expr as Type
+        if (check(lexer::TokenKind::KwAs)) {
+            advance(); // consume 'as'
+
+            auto target_type = parse_type();
+            if (is_err(target_type))
+                return unwrap_err(target_type);
+
+            auto span = SourceSpan::merge(unwrap(left)->span, unwrap(target_type)->span);
+            left = make_box<Expr>(Expr{.kind = CastExpr{.expr = std::move(unwrap(left)),
+                                                        .target = std::move(unwrap(target_type)),
+                                                        .span = span},
+                                       .span = span});
+            continue;
+        }
+
         // Infix operators
         auto op = token_to_binary_op(peek().kind);
         if (!op) {
@@ -198,7 +214,26 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
             return unwrap_err(name_result);
         auto name = std::string(unwrap(name_result).lexeme);
 
-        // Check if it's a method call
+        // Check for generic type arguments: .method[T, U]
+        std::vector<TypePtr> type_args;
+        if (check(lexer::TokenKind::LBracket)) {
+            advance(); // consume '['
+            if (!check(lexer::TokenKind::RBracket)) {
+                do {
+                    skip_newlines();
+                    auto type_result = parse_type();
+                    if (is_err(type_result))
+                        return unwrap_err(type_result);
+                    type_args.push_back(std::move(unwrap(type_result)));
+                    skip_newlines();
+                } while (match(lexer::TokenKind::Comma));
+            }
+            auto rbracket = expect(lexer::TokenKind::RBracket, "Expected ']' after type arguments");
+            if (is_err(rbracket))
+                return unwrap_err(rbracket);
+        }
+
+        // Check if it's a method call (with or without type args)
         if (check(lexer::TokenKind::LParen)) {
             advance();
             auto args = parse_call_args();
@@ -212,9 +247,17 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
             auto span = SourceSpan::merge(start_span, previous().span);
             return make_box<Expr>(Expr{.kind = MethodCallExpr{.receiver = std::move(left),
                                                               .method = std::move(name),
+                                                              .type_args = std::move(type_args),
                                                               .args = std::move(unwrap(args)),
                                                               .span = span},
                                        .span = span});
+        }
+
+        // If we had type args but no parens, that's an error
+        if (!type_args.empty()) {
+            return ParseError{.message = "Expected '(' after method type arguments",
+                              .span = peek().span,
+                              .notes = {}};
         }
 
         auto span = SourceSpan::merge(start_span, previous().span);

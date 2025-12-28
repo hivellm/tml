@@ -332,7 +332,7 @@ pub behavior Not {
     type Output
 
     /// Performs the `not` operation.
-    func not(this) -> This::Output
+    func negate(this) -> This::Output
 }
 
 // ============================================================================
@@ -804,7 +804,7 @@ impl Neg for F64 {
 /// Enables `not true` -> `false` and `not false` -> `true`.
 impl Not for Bool {
     type Output = Bool
-    pub func not(this) -> Bool { return not this }
+    pub func negate(this) -> Bool { return not this }
 }
 
 // ============================================================================

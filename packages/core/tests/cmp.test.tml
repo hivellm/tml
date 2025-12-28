@@ -1,6 +1,6 @@
 // Tests for core::cmp module
+// Note: Ordering is a builtin type with methods: is_less, is_equal, is_greater, reverse, then_cmp
 use test
-use core::cmp
 
 @test
 func test_ordering_is_less() -> I32 {
@@ -38,12 +38,12 @@ func test_ordering_reverse() -> I32 {
 }
 
 @test
-func test_ordering_then() -> I32 {
-    let ord: Ordering = Ordering::Equal.then(Ordering::Less)
-    assert(ord.is_less() == true, "Equal.then(Less) should be Less")
+func test_ordering_then_cmp() -> I32 {
+    let ord: Ordering = Ordering::Equal.then_cmp(Ordering::Less)
+    assert(ord.is_less() == true, "Equal.then_cmp(Less) should be Less")
 
-    let ord2: Ordering = Ordering::Greater.then(Ordering::Less)
-    assert(ord2.is_greater() == true, "Greater.then(Less) should be Greater")
+    let ord2: Ordering = Ordering::Greater.then_cmp(Ordering::Less)
+    assert(ord2.is_greater() == true, "Greater.then_cmp(Less) should be Greater")
     return 0
 }
 

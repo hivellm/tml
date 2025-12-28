@@ -111,6 +111,8 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
                 return check_range(e);
             } else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
                 return check_interp_string(e);
+            } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
+                return check_cast(e);
             } else {
                 return make_unit();
             }
@@ -325,8 +327,20 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
     case parser::UnaryOp::BitNot:
         return operand;
     case parser::UnaryOp::Ref:
+        // Reborrowing: ref (ref T) -> ref T (like Rust's automatic reborrow)
+        if (operand->is<RefType>()) {
+            return make_ref(operand->as<RefType>().inner, false);
+        }
         return make_ref(operand, false);
     case parser::UnaryOp::RefMut:
+        // Reborrowing: mut ref (mut ref T) -> mut ref T (like Rust's automatic reborrow)
+        if (operand->is<RefType>() && operand->as<RefType>().is_mut) {
+            return operand; // Already a mutable ref, just return it
+        }
+        // Allow reborrow from mutable to mutable
+        if (operand->is<RefType>()) {
+            return make_ref(operand->as<RefType>().inner, true);
+        }
         return make_ref(operand, true);
     case parser::UnaryOp::Deref:
         if (operand->is<RefType>()) {
@@ -439,6 +453,88 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         }
     }
 
+    // Check for static method calls on primitive types via PathExpr (e.g., I32::default())
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>();
+        if (path.path.segments.size() == 2) {
+            const std::string& type_name = path.path.segments[0];
+            const std::string& method = path.path.segments[1];
+
+            bool is_primitive_type =
+                type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                type_name == "I64" || type_name == "I128" ||
+                type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+                type_name == "U64" || type_name == "U128" ||
+                type_name == "F32" || type_name == "F64" ||
+                type_name == "Bool" || type_name == "Str";
+
+            if (is_primitive_type && method == "default") {
+                if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
+                if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
+                if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
+                if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
+                if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
+                if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
+                if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
+                if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
+                if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
+                if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
+                if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
+                if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
+                if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
+                if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+            }
+
+            // Handle Type::from(value) for type conversion
+            if (is_primitive_type && method == "from" && !call.args.empty()) {
+                // Type check the argument (source type)
+                check_expr(*call.args[0]);
+                // Return the target type
+                if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
+                if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
+                if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
+                if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
+                if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
+                if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
+                if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
+                if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
+                if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
+                if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
+                if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
+                if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
+                if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
+                if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+            }
+
+            // Handle imported type static methods (e.g., Layout::from_size_align)
+            if (!is_primitive_type) {
+                // Try to resolve type_name as an imported symbol
+                auto imported_path = env_.resolve_imported_symbol(type_name);
+                if (imported_path.has_value()) {
+                    std::string module_path;
+                    size_t pos = imported_path->rfind("::");
+                    if (pos != std::string::npos) {
+                        module_path = imported_path->substr(0, pos);
+                    }
+
+                    // Look up the qualified function name in the module
+                    std::string qualified_func = type_name + "::" + method;
+                    auto module = env_.get_module(module_path);
+                    if (module) {
+                        auto func_it = module->functions.find(qualified_func);
+                        if (func_it != module->functions.end()) {
+                            // Type check arguments
+                            for (const auto& arg : call.args) {
+                                check_expr(*arg);
+                            }
+                            return func_it->second.return_type;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Fallback: check callee type
     auto callee_type = check_expr(*call.callee);
     if (callee_type->is<FuncType>()) {
@@ -457,7 +553,52 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
 }
 
 auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypePtr {
+    // Check for static method calls on primitive type names (e.g., I32::default())
+    if (call.receiver->is<parser::IdentExpr>()) {
+        const auto& type_name = call.receiver->as<parser::IdentExpr>().name;
+        // Check if this is a primitive type name used as a static receiver
+        bool is_primitive_type =
+            type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+            type_name == "I64" || type_name == "I128" ||
+            type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+            type_name == "U64" || type_name == "U128" ||
+            type_name == "F32" || type_name == "F64" ||
+            type_name == "Bool" || type_name == "Str";
+
+        if (is_primitive_type && call.method == "default") {
+            // Return the primitive type itself
+            if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
+            if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
+            if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
+            if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
+            if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
+            if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
+            if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
+            if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
+            if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
+            if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
+            if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
+            if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
+            if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
+            if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+        }
+    }
+
     auto receiver_type = check_expr(*call.receiver);
+
+    // Helper lambda to apply type arguments to a function signature
+    auto apply_type_args = [&](const FuncSig& func) -> TypePtr {
+        if (!call.type_args.empty() && !func.type_params.empty()) {
+            // Build substitution map from explicit type arguments
+            // Need to resolve parser types to semantic types
+            std::unordered_map<std::string, TypePtr> subs;
+            for (size_t i = 0; i < func.type_params.size() && i < call.type_args.size(); ++i) {
+                subs[func.type_params[i]] = resolve_type(*call.type_args[i]);
+            }
+            return substitute_type(func.return_type, subs);
+        }
+        return func.return_type;
+    };
 
     if (receiver_type->is<NamedType>()) {
         auto& named = receiver_type->as<NamedType>();
@@ -465,7 +606,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         auto func = env_.lookup_func(qualified);
         if (func) {
-            return func->return_type;
+            return apply_type_args(*func);
         }
 
         if (!named.module_path.empty()) {
@@ -473,7 +614,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (module) {
                 auto func_it = module->functions.find(qualified);
                 if (func_it != module->functions.end()) {
-                    return func_it->second.return_type;
+                    return apply_type_args(func_it->second);
                 }
             }
         }
@@ -490,7 +631,7 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (module) {
                 auto func_it = module->functions.find(qualified);
                 if (func_it != module->functions.end()) {
-                    return func_it->second.return_type;
+                    return apply_type_args(func_it->second);
                 }
             }
         }
@@ -502,13 +643,311 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         if (behavior_def) {
             for (const auto& method : behavior_def->methods) {
                 if (method.name == call.method) {
-                    return method.return_type;
+                    return apply_type_args(method);
                 }
             }
             error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
                   call.receiver->span);
         }
     }
+
+    // Handle primitive type builtin methods (core::ops)
+    if (receiver_type->is<PrimitiveType>()) {
+        auto& prim = receiver_type->as<PrimitiveType>();
+        auto kind = prim.kind;
+
+        // Integer and float arithmetic methods
+        bool is_numeric = (kind == PrimitiveKind::I8 || kind == PrimitiveKind::I16 ||
+                           kind == PrimitiveKind::I32 || kind == PrimitiveKind::I64 ||
+                           kind == PrimitiveKind::I128 || kind == PrimitiveKind::U8 ||
+                           kind == PrimitiveKind::U16 || kind == PrimitiveKind::U32 ||
+                           kind == PrimitiveKind::U64 || kind == PrimitiveKind::U128 ||
+                           kind == PrimitiveKind::F32 || kind == PrimitiveKind::F64);
+        bool is_integer = (kind == PrimitiveKind::I8 || kind == PrimitiveKind::I16 ||
+                           kind == PrimitiveKind::I32 || kind == PrimitiveKind::I64 ||
+                           kind == PrimitiveKind::I128 || kind == PrimitiveKind::U8 ||
+                           kind == PrimitiveKind::U16 || kind == PrimitiveKind::U32 ||
+                           kind == PrimitiveKind::U64 || kind == PrimitiveKind::U128);
+
+        // Arithmetic operations that return Self
+        if (is_numeric && (call.method == "add" || call.method == "sub" ||
+                           call.method == "mul" || call.method == "div" ||
+                           call.method == "neg")) {
+            return receiver_type;
+        }
+
+        // Integer-only operations
+        if (is_integer && call.method == "rem") {
+            return receiver_type;
+        }
+
+        // Bool methods
+        if (kind == PrimitiveKind::Bool && call.method == "negate") {
+            return receiver_type;
+        }
+
+        // Comparison methods - cmp returns Ordering, max/min return Self
+        if (is_numeric) {
+            if (call.method == "cmp") {
+                return std::make_shared<Type>(Type{NamedType{"Ordering", "", {}}});
+            }
+            if (call.method == "max" || call.method == "min") {
+                return receiver_type;
+            }
+        }
+
+        // duplicate() returns Self for all primitives (copy semantics)
+        if (call.method == "duplicate") {
+            return receiver_type;
+        }
+
+        // to_string() returns Str for all primitives (Display behavior)
+        if (call.method == "to_string") {
+            return make_primitive(PrimitiveKind::Str);
+        }
+
+        // hash() returns I64 for all primitives (Hash behavior)
+        if (call.method == "hash") {
+            return make_primitive(PrimitiveKind::I64);
+        }
+
+        // to_owned() returns Self for all primitives (ToOwned behavior)
+        if (call.method == "to_owned") {
+            return receiver_type;
+        }
+
+        // borrow() returns ref Self for all primitives (Borrow behavior)
+        if (call.method == "borrow") {
+            return std::make_shared<Type>(RefType{false, receiver_type});
+        }
+
+        // borrow_mut() returns mut ref Self for all primitives (BorrowMut behavior)
+        if (call.method == "borrow_mut") {
+            return std::make_shared<Type>(RefType{true, receiver_type});
+        }
+    }
+
+    // Handle Ordering enum methods
+    if (receiver_type->is<NamedType>()) {
+        auto& named = receiver_type->as<NamedType>();
+        if (named.name == "Ordering") {
+            // is_less, is_equal, is_greater return Bool
+            if (call.method == "is_less" || call.method == "is_equal" ||
+                call.method == "is_greater") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+            // reverse, then_cmp return Ordering
+            if (call.method == "reverse" || call.method == "then_cmp") {
+                return receiver_type;
+            }
+            // to_string, debug_string return Str
+            if (call.method == "to_string" || call.method == "debug_string") {
+                return make_primitive(PrimitiveKind::Str);
+            }
+        }
+
+        // Handle Maybe[T] methods
+        if (named.name == "Maybe" && !named.type_args.empty()) {
+            TypePtr inner_type = named.type_args[0];
+
+            // is_just(), is_nothing() return Bool
+            if (call.method == "is_just" || call.method == "is_nothing") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // unwrap(), expect(msg) return T
+            if (call.method == "unwrap" || call.method == "expect") {
+                return inner_type;
+            }
+
+            // unwrap_or(default), unwrap_or_else(f), unwrap_or_default() return T
+            if (call.method == "unwrap_or" || call.method == "unwrap_or_else" ||
+                call.method == "unwrap_or_default") {
+                return inner_type;
+            }
+
+            // map(f) returns Maybe[U] (same structure)
+            if (call.method == "map") {
+                return receiver_type;
+            }
+
+            // and_then(f) returns Maybe[U]
+            if (call.method == "and_then") {
+                return receiver_type;
+            }
+
+            // or_else(f) returns Maybe[T]
+            if (call.method == "or_else") {
+                return receiver_type;
+            }
+
+            // contains(value) returns Bool
+            if (call.method == "contains") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // filter(predicate) returns Maybe[T]
+            if (call.method == "filter") {
+                return receiver_type;
+            }
+
+            // alt(other) returns Maybe[T]
+            if (call.method == "alt") {
+                return receiver_type;
+            }
+
+            // xor(other) returns Maybe[T]
+            if (call.method == "xor") {
+                return receiver_type;
+            }
+
+            // also(other) returns Maybe[U] - returns the other Maybe type
+            if (call.method == "also") {
+                if (!call.args.empty()) {
+                    return check_expr(*call.args[0]);
+                }
+                return receiver_type;
+            }
+
+            // map_or(default, f) returns U
+            if (call.method == "map_or") {
+                if (call.args.size() >= 1) {
+                    return check_expr(*call.args[0]); // Type of default
+                }
+                return inner_type;
+            }
+
+            // ok_or(err) returns Outcome[T, E]
+            if (call.method == "ok_or") {
+                if (call.args.size() >= 1) {
+                    TypePtr err_type = check_expr(*call.args[0]);
+                    std::vector<TypePtr> type_args = {inner_type, err_type};
+                    return std::make_shared<Type>(NamedType{"Outcome", "", std::move(type_args)});
+                }
+                return receiver_type;
+            }
+
+            // ok_or_else(f) returns Outcome[T, E]
+            if (call.method == "ok_or_else") {
+                // For now, return a generic Outcome type
+                // The actual error type comes from the closure
+                return receiver_type; // Simplified - would need proper inference
+            }
+        }
+
+        // Handle Outcome[T, E] methods
+        if (named.name == "Outcome" && named.type_args.size() >= 2) {
+            TypePtr ok_type = named.type_args[0];
+            TypePtr err_type = named.type_args[1];
+
+            // is_ok(), is_err() return Bool
+            if (call.method == "is_ok" || call.method == "is_err") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // is_ok_and(predicate), is_err_and(predicate) return Bool
+            if (call.method == "is_ok_and" || call.method == "is_err_and") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // unwrap() returns T
+            if (call.method == "unwrap" || call.method == "expect") {
+                return ok_type;
+            }
+
+            // unwrap_err() returns E
+            if (call.method == "unwrap_err" || call.method == "expect_err") {
+                return err_type;
+            }
+
+            // unwrap_or(default), unwrap_or_else(f), unwrap_or_default() return T
+            if (call.method == "unwrap_or" || call.method == "unwrap_or_else" ||
+                call.method == "unwrap_or_default") {
+                return ok_type;
+            }
+
+            // map(f) returns Outcome[U, E] - same structure, potentially different T
+            if (call.method == "map") {
+                return receiver_type; // Same Outcome type structure
+            }
+
+            // map_err(f) returns Outcome[T, F] - same structure, potentially different E
+            if (call.method == "map_err") {
+                return receiver_type;
+            }
+
+            // map_or(default, f) returns U (the default/mapped type)
+            if (call.method == "map_or") {
+                if (call.args.size() >= 1) {
+                    return check_expr(*call.args[0]); // Type of default
+                }
+                return ok_type;
+            }
+
+            // map_or_else(default_f, map_f) returns U
+            if (call.method == "map_or_else") {
+                return ok_type; // Simplified - returns same type as ok
+            }
+
+            // and_then(f) returns Outcome[U, E]
+            if (call.method == "and_then") {
+                return receiver_type;
+            }
+
+            // or_else(f) returns Outcome[T, F]
+            if (call.method == "or_else") {
+                return receiver_type;
+            }
+
+            // alt(other) returns Outcome[T, E]
+            if (call.method == "alt") {
+                return receiver_type;
+            }
+
+            // also(other) returns Outcome[U, E]
+            if (call.method == "also") {
+                if (!call.args.empty()) {
+                    return check_expr(*call.args[0]);
+                }
+                return receiver_type;
+            }
+
+            // ok() returns Maybe[T]
+            if (call.method == "ok") {
+                std::vector<TypePtr> type_args = {ok_type};
+                return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+            }
+
+            // err() returns Maybe[E]
+            if (call.method == "err") {
+                std::vector<TypePtr> type_args = {err_type};
+                return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+            }
+
+            // contains(ref T), contains_err(ref E) return Bool
+            if (call.method == "contains" || call.method == "contains_err") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+
+            // flatten() for Outcome[Outcome[T, E], E] returns Outcome[T, E]
+            if (call.method == "flatten") {
+                if (ok_type->is<NamedType>()) {
+                    auto& inner_named = ok_type->as<NamedType>();
+                    if (inner_named.name == "Outcome" && !inner_named.type_args.empty()) {
+                        return ok_type; // Return the inner Outcome type
+                    }
+                }
+                return receiver_type;
+            }
+
+            // iter() returns OutcomeIter[T]
+            if (call.method == "iter") {
+                std::vector<TypePtr> type_args = {ok_type};
+                return std::make_shared<Type>(NamedType{"OutcomeIter", "", type_args});
+            }
+        }
+    }
+
     return make_unit();
 }
 
@@ -596,6 +1035,18 @@ auto TypeChecker::check_interp_string(const parser::InterpolatedStringExpr& inte
         }
     }
     return make_str();
+}
+
+auto TypeChecker::check_cast(const parser::CastExpr& cast) -> TypePtr {
+    // Check the source expression
+    auto source_type = check_expr(*cast.expr);
+    (void)source_type; // We allow any source type for now
+
+    // Resolve the target type
+    auto target_type = resolve_type(*cast.target);
+
+    // Return the target type - the actual cast is handled by codegen
+    return target_type;
 }
 
 } // namespace tml::types

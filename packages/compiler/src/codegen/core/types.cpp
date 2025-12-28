@@ -42,13 +42,14 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "Unit")
         return "void";
 
-    // Collection types - all are pointers to runtime structs
+    // Collection types - wrapper structs containing handles to runtime data
+    // These are struct { ptr } where the ptr is the runtime handle
     if (name == "List" || name == "Vec" || name == "Array")
-        return "ptr";
+        return "%struct.List";
     if (name == "HashMap" || name == "Map" || name == "Dict")
-        return "ptr";
+        return "%struct.HashMap";
     if (name == "Buffer")
-        return "ptr";
+        return "%struct.Buffer";
     if (name == "Channel")
         return "ptr";
     if (name == "Mutex")
@@ -473,6 +474,46 @@ void LLVMIRGen::unify_types(const parser::Type& pattern, const types::TypePtr& c
             }
         },
         pattern.kind);
+}
+
+// ============ LLVM Type to Semantic Type ============
+// Converts common LLVM type strings back to semantic types
+
+auto LLVMIRGen::semantic_type_from_llvm(const std::string& llvm_type) -> types::TypePtr {
+    // Primitive types
+    if (llvm_type == "i8")
+        return types::make_primitive(types::PrimitiveKind::I8);
+    if (llvm_type == "i16")
+        return types::make_primitive(types::PrimitiveKind::I16);
+    if (llvm_type == "i32")
+        return types::make_primitive(types::PrimitiveKind::I32);
+    if (llvm_type == "i64")
+        return types::make_primitive(types::PrimitiveKind::I64);
+    if (llvm_type == "i128")
+        return types::make_primitive(types::PrimitiveKind::I128);
+    if (llvm_type == "float")
+        return types::make_primitive(types::PrimitiveKind::F32);
+    if (llvm_type == "double")
+        return types::make_primitive(types::PrimitiveKind::F64);
+    if (llvm_type == "i1")
+        return types::make_primitive(types::PrimitiveKind::Bool);
+    if (llvm_type == "ptr")
+        return types::make_primitive(types::PrimitiveKind::Str);
+    if (llvm_type == "void" || llvm_type == "{}")
+        return types::make_unit();
+
+    // For struct types like %struct.TypeName, extract the type name
+    if (llvm_type.substr(0, 8) == "%struct.") {
+        std::string type_name = llvm_type.substr(8);
+        // Check if it's a mangled generic type (contains "__")
+        // For now, just create a simple NamedType
+        auto result = std::make_shared<types::Type>();
+        result->kind = types::NamedType{type_name, "", {}};
+        return result;
+    }
+
+    // Default: return I32
+    return types::make_primitive(types::PrimitiveKind::I32);
 }
 
 } // namespace tml::codegen

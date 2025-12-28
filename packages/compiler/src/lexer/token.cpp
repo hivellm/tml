@@ -97,6 +97,10 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "or";
     case TokenKind::KwNot:
         return "not";
+    case TokenKind::AndAnd:
+        return "&&";
+    case TokenKind::OrOr:
+        return "||";
 
     // Keywords - types
     case TokenKind::KwThis:

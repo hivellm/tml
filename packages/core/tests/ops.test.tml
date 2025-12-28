@@ -1,6 +1,6 @@
 // Tests for core::ops module
+// Note: Primitive type methods (add, sub, mul, etc.) are builtin
 use test
-use core::ops
 
 @test
 func test_i32_add() -> I32 {
@@ -56,14 +56,14 @@ func test_i32_neg() -> I32 {
 }
 
 @test
-func test_bool_not() -> I32 {
+func test_bool_negate() -> I32 {
     let a: Bool = true
-    let b: Bool = a.not()
-    assert(b == false, "true.not() should be false")
+    let b: Bool = a.negate()
+    assert(b == false, "true.negate() should be false")
 
     let c: Bool = false
-    let d: Bool = c.not()
-    assert(d == true, "false.not() should be true")
+    let d: Bool = c.negate()
+    assert(d == true, "false.negate() should be true")
     return 0
 }
 

@@ -462,13 +462,13 @@ impl[T, E] Outcome[T, E] {
     /// ```tml
     /// let x: Outcome[I64, Str] = Ok(2)
     /// let y: Outcome[I64, Str] = Err("late error")
-    /// assert(x.or(y) == Ok(2))
+    /// assert(x.alt(y) == Ok(2))
     ///
     /// let x: Outcome[I64, Str] = Err("early error")
     /// let y: Outcome[I64, Str] = Ok(100)
-    /// assert(x.or(y) == Ok(100))
+    /// assert(x.alt(y) == Ok(100))
     /// ```
-    pub func or(this, other: Outcome[T, E]) -> Outcome[T, E] {
+    pub func alt(this, other: Outcome[T, E]) -> Outcome[T, E] {
         when this {
             Ok(val) => return Ok(val),
             Err(_) => return other
@@ -482,13 +482,13 @@ impl[T, E] Outcome[T, E] {
     /// ```tml
     /// let x: Outcome[I64, Str] = Ok(2)
     /// let y: Outcome[Str, Str] = Ok("hello")
-    /// assert(x.and(y) == Ok("hello"))
+    /// assert(x.also(y) == Ok("hello"))
     ///
     /// let x: Outcome[I64, Str] = Err("error")
     /// let y: Outcome[Str, Str] = Ok("hello")
-    /// assert(x.and(y) == Err("error"))
+    /// assert(x.also(y) == Err("error"))
     /// ```
-    pub func and[U](this, other: Outcome[U, E]) -> Outcome[U, E] {
+    pub func also[U](this, other: Outcome[U, E]) -> Outcome[U, E] {
         when this {
             Ok(_) => return other,
             Err(err) => return Err(err)

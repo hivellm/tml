@@ -266,11 +266,14 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
                 }
             }
 
-            // Extract behavior names
+            // Extract behavior names from type pointers
             std::vector<std::string> behavior_names;
-            for (const auto& behavior_path : behaviors) {
-                if (!behavior_path.segments.empty()) {
-                    behavior_names.push_back(behavior_path.segments.back());
+            for (const auto& behavior_type : behaviors) {
+                if (behavior_type->is<parser::NamedType>()) {
+                    const auto& named = behavior_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        behavior_names.push_back(named.path.segments.back());
+                    }
                 }
             }
 
@@ -406,8 +409,15 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     }
 
     // Register default implementations from the behavior
-    if (impl.trait_path && !impl.trait_path->segments.empty()) {
-        std::string behavior_name = impl.trait_path->segments.back();
+    // Extract behavior name from trait_type (TypePtr -> NamedType -> path.segments.back())
+    std::string behavior_name;
+    if (impl.trait_type && impl.trait_type->is<parser::NamedType>()) {
+        const auto& named = impl.trait_type->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            behavior_name = named.path.segments.back();
+        }
+    }
+    if (!behavior_name.empty()) {
 
         // Register that this type implements this behavior (for where clause checking)
         env_.register_impl(type_name, behavior_name);
@@ -463,11 +473,28 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
     // Set current_self_type_ so 'This' resolves correctly
     current_self_type_ = resolve_type(*impl.self_type);
 
+    // Collect associated type bindings (e.g., type Owned = I32)
+    current_associated_types_.clear();
+    for (const auto& binding : impl.type_bindings) {
+        current_associated_types_[binding.name] = resolve_type(*binding.type);
+    }
+
+    // Collect generic type parameter names (e.g., T in impl[T] ...)
+    current_type_params_.clear();
+    for (const auto& param : impl.generics) {
+        // For now, map generic params to a placeholder type
+        auto type_var = std::make_shared<Type>();
+        type_var->kind = NamedType{param.name, "", {}};
+        current_type_params_[param.name] = type_var;
+    }
+
     for (const auto& method : impl.methods) {
         check_func_body(method);
     }
 
     current_self_type_ = nullptr;
+    current_associated_types_.clear();
+    current_type_params_.clear();
 }
 
 } // namespace tml::types

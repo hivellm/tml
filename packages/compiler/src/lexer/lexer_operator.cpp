@@ -140,6 +140,10 @@ auto Lexer::lex_operator() -> Token {
         return make_token(TokenKind::Gt);
 
     case '&':
+        if (peek() == '&') {
+            advance();
+            return make_token(TokenKind::AndAnd);
+        }
         if (peek() == '=') {
             advance();
             return make_token(TokenKind::BitAndAssign);
@@ -147,6 +151,10 @@ auto Lexer::lex_operator() -> Token {
         return make_token(TokenKind::BitAnd);
 
     case '|':
+        if (peek() == '|') {
+            advance();
+            return make_token(TokenKind::OrOr);
+        }
         if (peek() == '=') {
             advance();
             return make_token(TokenKind::BitOrAssign);

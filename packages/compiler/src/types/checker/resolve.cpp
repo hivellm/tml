@@ -96,9 +96,40 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
     if (path.segments.empty())
         return make_unit();
 
+    // Handle multi-segment paths like This::Owned or T::Owned
+    if (path.segments.size() == 2) {
+        const auto& first = path.segments[0];
+        const auto& second = path.segments[1];
+
+        // Handle This::AssociatedType (e.g., This::Owned)
+        if (first == "This" && current_self_type_) {
+            auto it = current_associated_types_.find(second);
+            if (it != current_associated_types_.end()) {
+                return it->second;
+            }
+            // Fall through to try as a regular path
+        }
+
+        // Handle T::AssociatedType where T is a type parameter (e.g., T::Owned)
+        auto param_it = current_type_params_.find(first);
+        if (param_it != current_type_params_.end()) {
+            // For now, if T is a type parameter and second is an associated type name,
+            // return the associated type. This is a simplification - in full Rust semantics,
+            // we'd need to look up which trait T implements to find the associated type.
+            auto assoc_it = current_associated_types_.find(second);
+            if (assoc_it != current_associated_types_.end()) {
+                return assoc_it->second;
+            }
+            // If the associated type is not defined locally, return a named type placeholder
+            auto type = std::make_shared<Type>();
+            type->kind = NamedType{second, "", {}};
+            return type;
+        }
+    }
+
     const auto& name = path.segments.back();
 
-    // Handle 'This' type in impl blocks
+    // Handle 'This' type in impl blocks (single segment case)
     if (name == "This" && current_self_type_) {
         return current_self_type_;
     }

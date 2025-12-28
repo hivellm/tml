@@ -20,12 +20,19 @@ a or b
 | `U8`, `U16`, `U32`, `U64`, `U128` | `&`, `\|`, `^`, `~`, `<<`, `>>` |
 
 ```tml
+// Static methods (Type::method syntax)
+I32::default()       // returns 0
+I32::from(x)         // type conversion from other numeric types
+
 // Common methods
 x.abs()              // absolute value (signed)
 x.signum()           // sign: -1, 0, or 1
 x.pow(n)             // power
-x.to_string()        // conversion
+x.to_string()        // conversion to string
 x.to_i32()           // conversion between types
+x.duplicate()        // returns a copy
+x.hash()             // returns I64 hash value
+x.cmp(other)         // returns Ordering (Less, Equal, Greater)
 x.checked_add(y)     // Maybe[T], Nothing on overflow
 x.saturating_add(y)  // saturates at MAX/MIN
 x.wrapping_add(y)    // wraps on overflow
@@ -33,6 +40,20 @@ x.wrapping_add(y)    // wraps on overflow
 // Constants
 I32.MIN, I32.MAX
 U64.MIN, U64.MAX
+```
+
+**Type Conversions:**
+
+```tml
+// Using Type::from() for explicit conversions
+let a: I32 = I32::from(42i8)     // widen I8 to I32
+let b: I64 = I64::from(100i32)   // widen I32 to I64
+let c: F64 = F64::from(42)       // int to float
+let d: I32 = I32::from(3.14f64)  // float to int (truncates)
+
+// Using as keyword for inline conversions
+let x: I64 = 42 as I64
+let y: F32 = 3.14 as F32
 ```
 
 ### 1.3 Floats
@@ -188,18 +209,46 @@ set.is_superset(other)
 Just(value)
 Nothing
 
+// Querying
 opt.is_just()        // Bool
 opt.is_nothing()     // Bool
+opt.contains(ref value)  // Bool (true if Just and contains value)
+
+// Extracting values
 opt.unwrap()         // T (panic if Nothing)
-opt.unwrap_or(default)
-opt.unwrap_or_else(func)
+opt.unwrap_or(default)   // T (returns default if Nothing)
+opt.unwrap_or_else(func) // T (calls func if Nothing)
+opt.unwrap_or_default()  // T (uses T::default() if Nothing)
 opt.expect(msg)      // T (panic with msg if Nothing)
+
+// Transforming
 opt.map(func)        // Maybe[U]
+opt.map_or(default, func)      // U (returns default if Nothing)
+opt.map_or_else(default_fn, func)  // U
+
+// Chaining
 opt.and_then(func)   // Maybe[U]
-opt.or(other)        // Maybe[T]
+opt.alt(other)       // Maybe[T] (returns other if Nothing)
 opt.or_else(func)    // Maybe[T]
+opt.xor(other)       // Maybe[T] (returns Just if exactly one is Just)
+opt.also(other)      // Maybe[U] (returns other if self is Just)
+
+// Filtering
 opt.filter(func)     // Maybe[T]
-opt.to_outcome(err)  // Outcome[T, E]
+
+// Converting
+opt.ok_or(err)       // Outcome[T, E]
+opt.ok_or_else(err_fn)   // Outcome[T, E]
+
+// Combining
+opt.zip(other)       // Maybe[(T, U)]
+opt.zip_with(other, func)  // Maybe[V]
+
+// Flattening
+opt.flatten()        // Maybe[T] (when opt is Maybe[Maybe[T]])
+
+// Iteration
+opt.iter()           // Iterator over 0 or 1 elements
 ```
 
 ## 4. Outcome[T, E]
@@ -208,19 +257,41 @@ opt.to_outcome(err)  // Outcome[T, E]
 Ok(value)
 Err(error)
 
+// Querying
 res.is_ok()          // Bool
 res.is_err()         // Bool
+res.is_ok_and(func)  // Bool (true if Ok and func returns true)
+res.is_err_and(func) // Bool (true if Err and func returns true)
+
+// Extracting values
 res.unwrap()         // T (panic if Err)
 res.unwrap_err()     // E (panic if Ok)
-res.unwrap_or(default)
-res.expect(msg)
+res.unwrap_or(default)   // T (returns default if Err)
+res.unwrap_or_else(func) // T (calls func(err) if Err)
+res.unwrap_or_default()  // T (uses T::default() if Err)
+res.expect(msg)      // T (panic with msg if Err)
+res.expect_err(msg)  // E (panic with msg if Ok)
+
+// Transforming
 res.map(func)        // Outcome[U, E]
 res.map_err(func)    // Outcome[T, F]
+res.map_or(default, func)      // U (returns default if Err)
+res.map_or_else(err_fn, ok_fn) // U
+
+// Chaining
 res.and_then(func)   // Outcome[U, E]
 res.or(other)        // Outcome[T, E]
 res.or_else(func)    // Outcome[T, F]
-res.to_maybe()       // Maybe[T]
+
+// Converting to Maybe
+res.ok()             // Maybe[T]
 res.err()            // Maybe[E]
+
+// Iteration
+res.iter()           // Iterator over 0 or 1 Ok values
+
+// Flattening
+res.flatten()        // Outcome[T, E] (when res is Outcome[Outcome[T, E], E])
 ```
 
 ## 5. Ranges
@@ -653,13 +724,29 @@ behavior Equal {
 // Usage: a == b, a != b
 ```
 
-### 8.2 Ordered
+### 8.2 Ordering Enum
 
 ```tml
-type Ordering = Less | Equal | Greater
+// Builtin enum for comparison results
+enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
 
+// Methods
+ord.is_less() -> Bool
+ord.is_equal() -> Bool
+ord.is_greater() -> Bool
+ord.to_string() -> Str      // "Less", "Equal", or "Greater"
+ord.debug_string() -> Str   // "Ordering::Less", etc.
+```
+
+### 8.3 Ordered Behavior
+
+```tml
 behavior Ordered: Equal {
-    func compare(this, other: This) -> Ordering
+    func cmp(this, other: This) -> Ordering
 
     func lt(this, other: This) -> Bool
     func le(this, other: This) -> Bool
@@ -670,9 +757,16 @@ behavior Ordered: Equal {
 }
 
 // Usage: a < b, a <= b, a > b, a >= b
+// Using cmp() directly:
+let order: Ordering = a.cmp(b)
+when order {
+    Less -> println("a < b"),
+    Equal -> println("a == b"),
+    Greater -> println("a > b"),
+}
 ```
 
-### 8.3 Duplicate
+### 8.4 Duplicate
 
 ```tml
 behavior Duplicate {
@@ -682,7 +776,7 @@ behavior Duplicate {
 let copy: T = original.duplicate()
 ```
 
-### 8.4 Default
+### 8.5 Default
 
 ```tml
 behavior Default {
@@ -694,7 +788,7 @@ let s: String = String.default() // ""
 let l: List[I32] = List.default()   // []
 ```
 
-### 8.5 Debug
+### 8.6 Debug
 
 ```tml
 behavior Debug {
@@ -704,7 +798,7 @@ behavior Debug {
 print(value.debug())
 ```
 
-### 8.6 Hashable
+### 8.7 Hashable
 
 ```tml
 behavior Hashable {
@@ -714,7 +808,7 @@ behavior Hashable {
 // Required to use as key in Map/Set
 ```
 
-### 8.7 Addable, Subtractable, Multipliable, Divisible
+### 8.8 Addable, Subtractable, Multipliable, Divisible
 
 ```tml
 behavior Addable[Rhs = This] {
@@ -725,7 +819,7 @@ behavior Addable[Rhs = This] {
 // Similar for Subtractable, Multipliable, Divisible, Remainder
 ```
 
-### 8.8 From / Into
+### 8.9 From / Into
 
 ```tml
 behavior From[T] {

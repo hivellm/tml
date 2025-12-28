@@ -13,6 +13,20 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         return;
     }
 
+    // Skip builtin types that are already declared in the runtime
+    if (s.name == "File" || s.name == "Path" || s.name == "Ordering") {
+        // Register field info for builtin structs but don't emit type definition
+        std::string type_name = "%struct." + s.name;
+        std::vector<FieldInfo> fields;
+        for (size_t i = 0; i < s.fields.size(); ++i) {
+            std::string ft = llvm_type_ptr(s.fields[i].type);
+            fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
+        }
+        struct_types_[s.name] = type_name;
+        struct_fields_[s.name] = fields;
+        return;
+    }
+
     // Non-generic struct: generate immediately
     std::string type_name = "%struct." + s.name;
 
@@ -254,6 +268,43 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         // Complex enum with data
         // Calculate max size with substituted types
         // Use for_data=true since these are data fields (Unit -> "{}" not "void")
+
+        // Helper lambda to calculate size of an LLVM type
+        auto calc_type_size = [this](const std::string& ty) -> size_t {
+            if (ty == "{}" || ty == "void")
+                return 0; // Unit type has zero size
+            if (ty == "i8")
+                return 1;
+            if (ty == "i16")
+                return 2;
+            if (ty == "i32" || ty == "float" || ty == "i1")
+                return 4;
+            if (ty == "i64" || ty == "double" || ty == "ptr")
+                return 8;
+            if (ty == "i128")
+                return 16;
+            // Check if it's a struct type
+            if (ty.starts_with("%struct.")) {
+                std::string struct_name = ty.substr(8); // Remove "%struct."
+                auto it = struct_fields_.find(struct_name);
+                if (it != struct_fields_.end()) {
+                    size_t struct_size = 0;
+                    for (const auto& field : it->second) {
+                        // Recursively calculate field size
+                        if (field.llvm_type == "i8") struct_size += 1;
+                        else if (field.llvm_type == "i16") struct_size += 2;
+                        else if (field.llvm_type == "i32" || field.llvm_type == "float" || field.llvm_type == "i1") struct_size += 4;
+                        else if (field.llvm_type == "i64" || field.llvm_type == "double" || field.llvm_type == "ptr") struct_size += 8;
+                        else if (field.llvm_type == "i128") struct_size += 16;
+                        else if (field.llvm_type.starts_with("%struct.")) struct_size += 8; // Nested struct - assume pointer size
+                        else struct_size += 8; // Default
+                    }
+                    return struct_size > 0 ? struct_size : 8;
+                }
+            }
+            return 8; // Default size
+        };
+
         size_t max_size = 0;
         for (const auto& variant : decl.variants) {
             size_t size = 0;
@@ -261,36 +312,14 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 for (const auto& field_type : *variant.tuple_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field_type, subs);
                     std::string ty = llvm_type_from_semantic(resolved, true);
-                    if (ty == "{}" || ty == "void")
-                        size += 0; // Unit type has zero size
-                    else if (ty == "i8")
-                        size += 1;
-                    else if (ty == "i16")
-                        size += 2;
-                    else if (ty == "i32" || ty == "float" || ty == "i1")
-                        size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr")
-                        size += 8;
-                    else
-                        size += 8;
+                    size += calc_type_size(ty);
                 }
             }
             if (variant.struct_fields.has_value()) {
                 for (const auto& field : *variant.struct_fields) {
                     types::TypePtr resolved = resolve_parser_type_with_subs(*field.type, subs);
                     std::string ty = llvm_type_from_semantic(resolved, true);
-                    if (ty == "{}" || ty == "void")
-                        size += 0; // Unit type has zero size
-                    else if (ty == "i8")
-                        size += 1;
-                    else if (ty == "i16")
-                        size += 2;
-                    else if (ty == "i32" || ty == "float" || ty == "i1")
-                        size += 4;
-                    else if (ty == "i64" || ty == "double" || ty == "ptr")
-                        size += 8;
-                    else
-                        size += 8;
+                    size += calc_type_size(ty);
                 }
             }
             max_size = std::max(max_size, size);
@@ -470,6 +499,13 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 }
 
 void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
+    // Skip builtin types that have hard-coded implementations in method.cpp
+    // These use lowlevel blocks in TML source but are handled directly by codegen
+    if (type_name == "File" || type_name == "Path" || type_name == "List" ||
+        type_name == "HashMap" || type_name == "Buffer") {
+        return;
+    }
+
     // Skip generic methods for now (they will be instantiated when called)
     if (!method.generics.empty()) {
         return;
@@ -488,27 +524,34 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     }
     current_ret_type_ = ret_type;
 
-    // Build parameter list - methods have an implicit 'this' parameter
+    // Build parameter list
     std::string params;
-    std::string param_types = "ptr"; // 'this' is always a pointer
+    std::string param_types;
 
-    // Check if first param is 'this' or 'mut this'
+    // Check if first param is 'this' or 'mut this' (instance method vs static)
     size_t param_start = 0;
+    bool is_instance_method = false;
     if (!method.params.empty()) {
         const auto& first_param = method.params[0];
         std::string first_name = get_param_name(first_param);
         if (first_name == "this") {
+            is_instance_method = true;
             param_start = 1; // Skip 'this' in param loop since we handle it specially
         }
     }
 
-    // Add 'this' pointer as first parameter
-    params = "ptr %this";
+    // Add 'this' pointer as first parameter only for instance methods
+    if (is_instance_method) {
+        params = "ptr %this";
+        param_types = "ptr";
+    }
 
     // Add remaining parameters
     for (size_t i = param_start; i < method.params.size(); ++i) {
-        params += ", ";
-        param_types += ", ";
+        if (!params.empty()) {
+            params += ", ";
+            param_types += ", ";
+        }
         std::string param_type = llvm_type_ptr(method.params[i].type);
         std::string param_name = get_param_name(method.params[i]);
         params += param_type + " %" + param_name;
@@ -521,8 +564,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
 
-    // Register 'this' in locals - it's already a pointer, don't store it
-    locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
+    // Register 'this' in locals only for instance methods
+    if (is_instance_method) {
+        locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
+    }
 
     // Register other parameters in locals by creating allocas
     for (size_t i = param_start; i < method.params.size(); ++i) {

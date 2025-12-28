@@ -175,6 +175,9 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
     std::string result = fresh_reg();
     emit_line("  " + result + " = load " + struct_type + ", ptr " + ptr);
 
+    // Set last_expr_type_ for proper type tracking (e.g., for enum payloads)
+    last_expr_type_ = struct_type;
+
     return result;
 }
 
@@ -287,6 +290,14 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     if (struct_type.empty() || struct_ptr.empty()) {
         report_error("Cannot resolve field access object", field.span);
         return "0";
+    }
+
+    // If struct_type is ptr, infer the actual struct type from the expression
+    if (struct_type == "ptr") {
+        types::TypePtr semantic_type = infer_expr_type(*field.object);
+        if (semantic_type) {
+            struct_type = llvm_type_from_semantic(semantic_type);
+        }
     }
 
     // Get struct type name

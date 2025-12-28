@@ -25,6 +25,10 @@ void LLVMIRGen::emit_runtime_decls() {
     // File I/O types (from std::file)
     emit_line("%struct.File = type { ptr }"); // handle field
     emit_line("%struct.Path = type { ptr }"); // path string field
+
+    // Core comparison type (core::cmp)
+    // Ordering is a simple enum: Less=0, Equal=1, Greater=2
+    emit_line("%struct.Ordering = type { i32 }");
     emit_line("");
 
     // External C functions
@@ -108,6 +112,13 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare double @float_abs(double)");
     emit_line("declare double @float_sqrt(double)");
     emit_line("declare double @float_pow(double, i32)");
+    emit_line("");
+
+    // Integer to string conversion
+    emit_line("; Integer to string");
+    emit_line("declare ptr @i32_to_string(i32)");
+    emit_line("declare ptr @i64_to_string(i64)");
+    emit_line("declare ptr @bool_to_string(i1)");
     emit_line("");
 
     // Overloaded abs functions
@@ -464,6 +475,18 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 }
 
                 if (!type_name.empty()) {
+                    // For generic types (like Maybe[T]), ensure the generic struct type exists
+                    // This is needed because impl methods use the base type name
+                    auto enum_it = pending_generic_enums_.find(type_name);
+                    if (enum_it != pending_generic_enums_.end()) {
+                        // Check if generic struct type already declared
+                        if (struct_types_.find(type_name) == struct_types_.end()) {
+                            // Emit generic type definition with i64 payload (fits all instantiations)
+                            type_defs_buffer_ << "%struct." << type_name << " = type { i32, i64 }\n";
+                            struct_types_[type_name] = "%struct." + type_name;
+                        }
+                    }
+
                     // First pass: pre-instantiate generic types used in method signatures
                     for (const auto& method : impl.methods) {
                         if (method.return_type.has_value()) {

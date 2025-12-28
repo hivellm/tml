@@ -31,7 +31,48 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         // Special handling for 'this' in impl methods
         if (ident.name == "this" && !current_impl_type_.empty()) {
             auto result = std::make_shared<types::Type>();
-            result->kind = types::NamedType{current_impl_type_, "", {}};
+            // current_impl_type_ might be a mangled name like Maybe__I32
+            // Check if it contains __ separator (indicates generic type)
+            auto sep_pos = current_impl_type_.find("__");
+            if (sep_pos != std::string::npos) {
+                // Parse mangled name: Maybe__I32 -> Maybe[I32]
+                std::string base_name = current_impl_type_.substr(0, sep_pos);
+                std::string type_args_str = current_impl_type_.substr(sep_pos + 2);
+
+                // Split type args by __ and create nested types
+                std::vector<types::TypePtr> type_args;
+                size_t pos = 0;
+                while (pos < type_args_str.size()) {
+                    auto next_sep = type_args_str.find("__", pos);
+                    std::string arg = (next_sep == std::string::npos)
+                                          ? type_args_str.substr(pos)
+                                          : type_args_str.substr(pos, next_sep - pos);
+
+                    // Create type for this arg
+                    types::TypePtr arg_type;
+                    if (arg == "I32") arg_type = types::make_i32();
+                    else if (arg == "I64") arg_type = types::make_i64();
+                    else if (arg == "Bool") arg_type = types::make_bool();
+                    else if (arg == "Str") arg_type = types::make_str();
+                    else if (arg == "F32") arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                    else if (arg == "F64") arg_type = types::make_f64();
+                    else {
+                        // Unknown type, use as named type
+                        auto t = std::make_shared<types::Type>();
+                        t->kind = types::NamedType{arg, "", {}};
+                        arg_type = t;
+                    }
+                    type_args.push_back(arg_type);
+
+                    if (next_sep == std::string::npos) break;
+                    pos = next_sep + 2;
+                }
+
+                result->kind = types::NamedType{base_name, "", std::move(type_args)};
+            } else {
+                // Non-generic type
+                result->kind = types::NamedType{current_impl_type_, "", {}};
+            }
             return result;
         }
 
@@ -185,6 +226,17 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return result;
         }
     }
+    // Handle path expressions (enum variants like Ordering::Less)
+    if (expr.is<parser::PathExpr>()) {
+        const auto& path = expr.as<parser::PathExpr>();
+        if (path.path.segments.size() >= 2) {
+            // First segment is the enum type name
+            std::string enum_name = path.path.segments[0];
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::NamedType{enum_name, "", {}};
+            return result;
+        }
+    }
     // Handle field access expressions
     if (expr.is<parser::FieldExpr>()) {
         const auto& field = expr.as<parser::FieldExpr>();
@@ -309,6 +361,152 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 }
             }
         }
+    }
+    // Handle method call expressions (need to know return type of methods)
+    if (expr.is<parser::MethodCallExpr>()) {
+        const auto& call = expr.as<parser::MethodCallExpr>();
+
+        // Check for static method calls on primitive types (e.g., I32::default())
+        if (call.receiver->is<parser::IdentExpr>()) {
+            const auto& type_name = call.receiver->as<parser::IdentExpr>().name;
+            if (call.method == "default") {
+                if (type_name == "I8") return types::make_primitive(types::PrimitiveKind::I8);
+                if (type_name == "I16") return types::make_primitive(types::PrimitiveKind::I16);
+                if (type_name == "I32") return types::make_i32();
+                if (type_name == "I64") return types::make_i64();
+                if (type_name == "I128") return types::make_primitive(types::PrimitiveKind::I128);
+                if (type_name == "U8") return types::make_primitive(types::PrimitiveKind::U8);
+                if (type_name == "U16") return types::make_primitive(types::PrimitiveKind::U16);
+                if (type_name == "U32") return types::make_primitive(types::PrimitiveKind::U32);
+                if (type_name == "U64") return types::make_primitive(types::PrimitiveKind::U64);
+                if (type_name == "U128") return types::make_primitive(types::PrimitiveKind::U128);
+                if (type_name == "F32") return types::make_primitive(types::PrimitiveKind::F32);
+                if (type_name == "F64") return types::make_primitive(types::PrimitiveKind::F64);
+                if (type_name == "Bool") return types::make_bool();
+                if (type_name == "Str") return types::make_str();
+            }
+        }
+
+        types::TypePtr receiver_type = infer_expr_type(*call.receiver);
+
+        // Check for Ordering methods
+        if (receiver_type && receiver_type->is<types::NamedType>()) {
+            const auto& named = receiver_type->as<types::NamedType>();
+            if (named.name == "Ordering") {
+                // is_less, is_equal, is_greater return Bool
+                if (call.method == "is_less" || call.method == "is_equal" ||
+                    call.method == "is_greater") {
+                    return types::make_bool();
+                }
+                // reverse, then_cmp return Ordering
+                if (call.method == "reverse" || call.method == "then_cmp") {
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{"Ordering", "", {}};
+                    return result;
+                }
+            }
+
+            // Outcome[T, E] methods that return T
+            if (named.name == "Outcome" && !named.type_args.empty()) {
+                if (call.method == "unwrap" || call.method == "unwrap_or" ||
+                    call.method == "unwrap_or_else" || call.method == "expect") {
+                    return named.type_args[0]; // Return T
+                }
+                // is_ok, is_err return Bool
+                if (call.method == "is_ok" || call.method == "is_err") {
+                    return types::make_bool();
+                }
+            }
+
+            // Maybe[T] methods that return T
+            if (named.name == "Maybe" && !named.type_args.empty()) {
+                if (call.method == "unwrap" || call.method == "unwrap_or" ||
+                    call.method == "unwrap_or_else" || call.method == "expect") {
+                    return named.type_args[0]; // Return T
+                }
+                // is_just, is_nothing return Bool
+                if (call.method == "is_just" || call.method == "is_nothing") {
+                    return types::make_bool();
+                }
+            }
+        }
+
+        // Check for primitive type methods
+        if (receiver_type && receiver_type->is<types::PrimitiveType>()) {
+            const auto& prim = receiver_type->as<types::PrimitiveType>();
+            auto kind = prim.kind;
+
+            bool is_numeric = (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
+                               kind == types::PrimitiveKind::I32 ||
+                               kind == types::PrimitiveKind::I64 ||
+                               kind == types::PrimitiveKind::I128 ||
+                               kind == types::PrimitiveKind::U8 || kind == types::PrimitiveKind::U16 ||
+                               kind == types::PrimitiveKind::U32 ||
+                               kind == types::PrimitiveKind::U64 ||
+                               kind == types::PrimitiveKind::U128 ||
+                               kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
+
+            // cmp returns Ordering
+            if (is_numeric && call.method == "cmp") {
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"Ordering", "", {}};
+                return result;
+            }
+
+            // max, min return the same type
+            if (is_numeric && (call.method == "max" || call.method == "min")) {
+                return receiver_type;
+            }
+
+            // Arithmetic methods return the same type
+            if (is_numeric && (call.method == "add" || call.method == "sub" ||
+                               call.method == "mul" || call.method == "div" ||
+                               call.method == "rem" || call.method == "neg")) {
+                return receiver_type;
+            }
+
+            // negate returns Bool
+            if (kind == types::PrimitiveKind::Bool && call.method == "negate") {
+                return receiver_type;
+            }
+
+            // duplicate returns the same type (copy semantics)
+            if (call.method == "duplicate") {
+                return receiver_type;
+            }
+
+            // to_string returns Str (Display behavior)
+            if (call.method == "to_string") {
+                return types::make_str();
+            }
+
+            // hash returns I64
+            if (call.method == "hash") {
+                return types::make_i64();
+            }
+
+            // to_owned returns the same type (ToOwned behavior)
+            if (call.method == "to_owned") {
+                return receiver_type;
+            }
+
+            // borrow returns ref T (Borrow behavior)
+            if (call.method == "borrow") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind = types::RefType{false, receiver_type};
+                return ref_type;
+            }
+
+            // borrow_mut returns mut ref T (BorrowMut behavior)
+            if (call.method == "borrow_mut") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind = types::RefType{true, receiver_type};
+                return ref_type;
+            }
+        }
+
+        // Default: try to return receiver type
+        return receiver_type ? receiver_type : types::make_i32();
     }
     // Default: I32
     return types::make_i32();

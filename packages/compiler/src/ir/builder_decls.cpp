@@ -143,8 +143,11 @@ auto IRBuilder::build_trait(const parser::TraitDecl& trait) -> IRBehavior {
 
     // Build super behaviors
     for (const auto& super : trait.super_traits) {
-        if (!super.segments.empty()) {
-            ir_behavior.super_behaviors.push_back(super.segments[0]);
+        if (super && super->is<parser::NamedType>()) {
+            const auto& named = super->as<parser::NamedType>();
+            if (!named.path.segments.empty()) {
+                ir_behavior.super_behaviors.push_back(named.path.segments[0]);
+            }
         }
     }
 
@@ -201,9 +204,10 @@ auto IRBuilder::build_impl(const parser::ImplDecl& impl) -> IRImpl {
     }
 
     // Behavior being implemented (if any)
-    if (impl.trait_path) {
-        if (!impl.trait_path->segments.empty()) {
-            ir_impl.behavior = impl.trait_path->segments[0];
+    if (impl.trait_type && impl.trait_type->is<parser::NamedType>()) {
+        const auto& named = impl.trait_type->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            ir_impl.behavior = named.path.segments[0];
         }
     }
 

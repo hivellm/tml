@@ -545,15 +545,15 @@ auto Parser::parse_trait_decl(Visibility vis,
         generics = std::move(unwrap(gen_result));
     }
 
-    // Super traits (behavior Foo: Bar + Baz)
-    std::vector<TypePath> super_traits;
+    // Super traits (behavior Foo: Bar + Baz, behavior Foo[T]: Borrow[T])
+    std::vector<TypePtr> super_traits;
     if (match(lexer::TokenKind::Colon)) {
         do {
             skip_newlines();
-            auto trait_path = parse_type_path();
-            if (is_err(trait_path))
-                return unwrap_err(trait_path);
-            super_traits.push_back(std::move(unwrap(trait_path)));
+            auto trait_type = parse_type();
+            if (is_err(trait_type))
+                return unwrap_err(trait_type);
+            super_traits.push_back(std::move(unwrap(trait_type)));
             skip_newlines();
         } while (match(lexer::TokenKind::Plus));
     }
@@ -652,7 +652,7 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
     if (is_err(first_type))
         return unwrap_err(first_type);
 
-    std::optional<TypePath> trait_path;
+    TypePtr trait_type = nullptr;
     TypePtr self_type;
 
     skip_newlines();
@@ -660,11 +660,7 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
     // Check for 'for' keyword (impl Trait for Type)
     if (match(lexer::TokenKind::KwFor)) {
         // First type was the trait, now parse self type
-        // Extract TypePath from the first type if it's a named type
-        auto& first = unwrap(first_type);
-        if (first->is<NamedType>()) {
-            trait_path = std::move(first->as<NamedType>().path);
-        }
+        trait_type = std::move(unwrap(first_type));
 
         auto st = parse_type();
         if (is_err(st))
@@ -674,6 +670,14 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
         // No trait, just impl Type
         self_type = std::move(unwrap(first_type));
     }
+
+    // Parse optional where clause
+    skip_newlines();
+    std::optional<WhereClause> where_clause;
+    auto where_result = parse_where_clause();
+    if (is_err(where_result))
+        return unwrap_err(where_result);
+    where_clause = std::move(unwrap(where_result));
 
     // Parse body
     skip_newlines();
@@ -730,11 +734,11 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
     auto end_span = previous().span;
 
     auto impl_decl = ImplDecl{.generics = std::move(generics),
-                              .trait_path = std::move(trait_path),
+                              .trait_type = std::move(trait_type),
                               .self_type = std::move(self_type),
                               .type_bindings = std::move(type_bindings),
                               .methods = std::move(methods),
-                              .where_clause = std::nullopt,
+                              .where_clause = std::move(where_clause),
                               .span = SourceSpan::merge(start_span, end_span)};
 
     return make_box<Decl>(
@@ -896,9 +900,30 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 }
 
 auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
-    (void)vis; // TODO: Will be used when implementing mod parsing
-    return ParseError{
-        .message = "Mod parsing not yet implemented", .span = peek().span, .notes = {}};
+    auto start_span = peek().span;
+
+    // Consume 'mod' keyword
+    advance(); // consume 'mod'
+
+    // Parse module name
+    if (!check(lexer::TokenKind::Identifier)) {
+        return ParseError{
+            .message = "Expected module name after 'mod'", .span = peek().span, .notes = {}};
+    }
+    std::string name = std::string(advance().lexeme);
+
+    // For now, only support external module references (mod foo;)
+    // Inline modules (mod foo { ... }) not yet supported
+    auto end_span = previous().span;
+
+    ModDecl mod_decl{
+        .vis = vis,
+        .name = std::move(name),
+        .items = std::nullopt, // External module reference
+        .span = SourceSpan::merge(start_span, end_span)};
+
+    return make_box<Decl>(
+        Decl{.kind = std::move(mod_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
 // ============================================================================
@@ -956,9 +981,10 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
     auto start_span = peek().span;
     advance(); // consume 'where'
 
-    std::vector<std::pair<TypePtr, std::vector<TypePath>>> constraints;
+    std::vector<std::pair<TypePtr, std::vector<TypePtr>>> constraints;
+    std::vector<std::pair<TypePtr, TypePtr>> type_equalities;
 
-    // Parse constraints: T: Trait, U: Trait2, ...
+    // Parse constraints: T: Trait, U: Trait2, T = U, T: Trait[A, B], ...
     do {
         // Parse type parameter (e.g., T)
         auto type_result = parse_type();
@@ -966,28 +992,39 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
             return unwrap_err(type_result);
         auto type_param = std::move(unwrap(type_result));
 
-        // Expect ':'
-        auto colon =
-            expect(lexer::TokenKind::Colon, "Expected ':' after type parameter in where clause");
-        if (is_err(colon))
-            return unwrap_err(colon);
+        // Check for ':' (trait bound) or '=' (type equality)
+        if (match(lexer::TokenKind::Colon)) {
+            // Parse trait bounds (e.g., Trait1 or Trait1 + Trait2 or Trait[A, B])
+            std::vector<TypePtr> bounds;
 
-        // Parse trait bounds (e.g., Trait1 or Trait1 + Trait2)
-        std::vector<TypePath> bounds;
+            do {
+                // Parse trait bound as a type to support generic arguments
+                auto bound_result = parse_type();
+                if (is_err(bound_result))
+                    return unwrap_err(bound_result);
+                bounds.push_back(std::move(unwrap(bound_result)));
 
-        do {
-            auto path_result = parse_type_path();
-            if (is_err(path_result))
-                return unwrap_err(path_result);
-            bounds.push_back(std::move(unwrap(path_result)));
+                // Check for '+' to continue parsing bounds
+                if (!match(lexer::TokenKind::Plus)) {
+                    break;
+                }
+            } while (true);
 
-            // Check for '+' to continue parsing bounds
-            if (!match(lexer::TokenKind::Plus)) {
-                break;
-            }
-        } while (true);
+            constraints.push_back({std::move(type_param), std::move(bounds)});
+        } else if (match(lexer::TokenKind::Assign)) {
+            // Parse type equality: T = U
+            auto rhs_result = parse_type();
+            if (is_err(rhs_result))
+                return unwrap_err(rhs_result);
+            auto rhs_type = std::move(unwrap(rhs_result));
 
-        constraints.push_back({std::move(type_param), std::move(bounds)});
+            type_equalities.push_back({std::move(type_param), std::move(rhs_type)});
+        } else {
+            return ParseError{
+                "Expected ':' or '=' after type parameter in where clause",
+                peek().span,
+                {}};
+        }
 
         // Check for ',' to continue parsing constraints
         if (!match(lexer::TokenKind::Comma)) {
@@ -1000,6 +1037,7 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
     auto end_span = previous().span;
 
     return std::optional<WhereClause>(WhereClause{.constraints = std::move(constraints),
+                                                  .type_equalities = std::move(type_equalities),
                                                   .span = SourceSpan::merge(start_span, end_span)});
 }
 

@@ -40,6 +40,8 @@ private:
     std::vector<TypeError> errors_;
     TypePtr current_return_type_ = nullptr;
     TypePtr current_self_type_ = nullptr; // For resolving 'This' in impl blocks
+    std::unordered_map<std::string, TypePtr> current_associated_types_; // For resolving 'This::Owned', etc.
+    std::unordered_map<std::string, TypePtr> current_type_params_; // Maps generic type param names to their types
     int loop_depth_ = 0;
     bool in_lowlevel_ = false; // When true, & returns pointer instead of reference
 
@@ -85,6 +87,7 @@ private:
     auto check_range(const parser::RangeExpr& range) -> TypePtr;
     auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
     auto check_interp_string(const parser::InterpolatedStringExpr& interp) -> TypePtr;
+    auto check_cast(const parser::CastExpr& cast) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

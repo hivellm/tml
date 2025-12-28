@@ -367,7 +367,14 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
     // Store the value
     if (let.init.has_value()) {
-        emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
+        // Handle float/double type mismatch - need to convert if storing double to float
+        if (var_type == "float" && last_expr_type_ == "double") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fptrunc double " + init_val + " to float");
+            emit_line("  store float " + conv + ", ptr " + alloca_reg);
+        } else {
+            emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
+        }
     }
 
     // Map variable name to alloca with type info

@@ -11,8 +11,14 @@ void LLVMIRGen::register_impl(const parser::ImplDecl* impl) {
     pending_impls_.push_back(impl);
 
     // Eagerly populate behavior_method_order_ and vtables_ for dyn dispatch
-    if (impl->trait_path && !impl->trait_path->segments.empty()) {
-        std::string behavior_name = impl->trait_path->segments.back();
+    std::string behavior_name;
+    if (impl->trait_type && impl->trait_type->is<parser::NamedType>()) {
+        const auto& named = impl->trait_type->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            behavior_name = named.path.segments.back();
+        }
+    }
+    if (!behavior_name.empty()) {
 
         // Populate behavior_method_order_ only once per behavior
         if (behavior_method_order_.find(behavior_name) == behavior_method_order_.end()) {
@@ -64,7 +70,7 @@ auto LLVMIRGen::get_vtable(const std::string& type_name,
 void LLVMIRGen::emit_vtables() {
     // For each registered impl block, generate a vtable
     for (const auto* impl : pending_impls_) {
-        if (!impl->trait_path)
+        if (!impl->trait_type)
             continue; // Skip inherent impls
 
         // Get the type name and behavior name
@@ -77,8 +83,11 @@ void LLVMIRGen::emit_vtables() {
         }
 
         std::string behavior_name;
-        if (!impl->trait_path->segments.empty()) {
-            behavior_name = impl->trait_path->segments.back();
+        if (impl->trait_type->is<parser::NamedType>()) {
+            const auto& named = impl->trait_type->as<parser::NamedType>();
+            if (!named.path.segments.empty()) {
+                behavior_name = named.path.segments.back();
+            }
         }
 
         if (type_name.empty() || behavior_name.empty())

@@ -960,3 +960,180 @@ TEST_F(CodegenBuiltinsTest, PrintI32) {
     )");
     expect_ir_contains(ir, "@printf", "IR should call printf for integer");
 }
+
+// ============================================================================
+// Assert Builtin Tests
+// ============================================================================
+
+TEST_F(CodegenBuiltinsTest, AssertEqI32) {
+    std::string ir = generate(R"(
+        func main() {
+            assert_eq(1, 1)
+        }
+    )");
+    expect_ir_contains(ir, "icmp eq i32", "IR should compare i32 values");
+    expect_ir_contains(ir, "@panic", "IR should call panic on failure");
+}
+
+TEST_F(CodegenBuiltinsTest, AssertEqI64) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: I64 = 100
+            let b: I64 = 100
+            assert_eq(a, b)
+        }
+    )");
+    expect_ir_contains(ir, "icmp eq i64", "IR should compare i64 values");
+}
+
+TEST_F(CodegenBuiltinsTest, AssertEqBool) {
+    std::string ir = generate(R"(
+        func main() {
+            assert_eq(true, true)
+        }
+    )");
+    expect_ir_contains(ir, "icmp eq i1", "IR should compare bool values");
+}
+
+TEST_F(CodegenBuiltinsTest, AssertEqStr) {
+    std::string ir = generate(R"(
+        func main() {
+            assert_eq("hello", "hello")
+        }
+    )");
+    expect_ir_contains(ir, "@str_eq", "IR should call str_eq for string comparison");
+}
+
+// ============================================================================
+// Logical Operator Tests (&&, ||, !)
+// ============================================================================
+
+TEST_F(CodegenBuiltinsTest, LogicalAndOperator) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = false
+            let c: Bool = a && b
+        }
+    )");
+    // && uses LLVM and instruction on i1
+    expect_ir_contains(ir, "and i1", "IR should use 'and i1' for &&");
+}
+
+TEST_F(CodegenBuiltinsTest, LogicalOrOperator) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = false
+            let c: Bool = a || b
+        }
+    )");
+    // || uses LLVM or instruction on i1
+    expect_ir_contains(ir, "or i1", "IR should use 'or i1' for ||");
+}
+
+TEST_F(CodegenBuiltinsTest, LogicalNotOperator) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = !a
+        }
+    )");
+    expect_ir_contains(ir, "xor i1", "IR should use xor for logical not");
+}
+
+TEST_F(CodegenBuiltinsTest, LogicalAndKeyword) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = false
+            let c: Bool = a and b
+        }
+    )");
+    expect_ir_contains(ir, "and i1", "IR should use 'and i1' for 'and'");
+}
+
+TEST_F(CodegenBuiltinsTest, LogicalOrKeyword) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = false
+            let c: Bool = a or b
+        }
+    )");
+    expect_ir_contains(ir, "or i1", "IR should use 'or i1' for 'or'");
+}
+
+TEST_F(CodegenBuiltinsTest, LogicalNotKeyword) {
+    std::string ir = generate(R"(
+        func main() {
+            let a: Bool = true
+            let b: Bool = not a
+        }
+    )");
+    expect_ir_contains(ir, "xor i1", "IR should use xor for 'not'");
+}
+
+// ============================================================================
+// Type Cast Tests (as)
+// ============================================================================
+
+TEST_F(CodegenBuiltinsTest, CastI32ToI64) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: I32 = 42
+            let y: I64 = x as I64
+        }
+    )");
+    expect_ir_contains(ir, "sext i32", "IR should sign-extend i32 to i64");
+}
+
+TEST_F(CodegenBuiltinsTest, CastI64ToI32) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: I64 = 42
+            let y: I32 = x as I32
+        }
+    )");
+    expect_ir_contains(ir, "trunc i64", "IR should truncate i64 to i32");
+}
+
+TEST_F(CodegenBuiltinsTest, CastI32ToF64) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: I32 = 42
+            let y: F64 = x as F64
+        }
+    )");
+    expect_ir_contains(ir, "sitofp i32", "IR should convert i32 to f64");
+}
+
+TEST_F(CodegenBuiltinsTest, CastF64ToI32) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: F64 = 3.14
+            let y: I32 = x as I32
+        }
+    )");
+    expect_ir_contains(ir, "fptosi double", "IR should convert f64 to i32");
+}
+
+TEST_F(CodegenBuiltinsTest, CastBoolToI32) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: Bool = true
+            let y: I32 = x as I32
+        }
+    )");
+    expect_ir_contains(ir, "zext i1", "IR should zero-extend bool to i32");
+}
+
+TEST_F(CodegenBuiltinsTest, CastI32ToBool) {
+    std::string ir = generate(R"(
+        func main() {
+            let x: I32 = 1
+            let y: Bool = x as Bool
+        }
+    )");
+    expect_ir_contains(ir, "icmp ne i32", "IR should compare i32 != 0 for bool cast");
+}

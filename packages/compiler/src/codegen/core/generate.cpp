@@ -17,6 +17,70 @@ auto LLVMIRGen::generate(const parser::Module& module)
     temp_counter_ = 0;
     label_counter_ = 0;
 
+    // Register builtin enums
+    // Ordering enum: Less=0, Equal=1, Greater=2
+    enum_variants_["Ordering::Less"] = 0;
+    enum_variants_["Ordering::Equal"] = 1;
+    enum_variants_["Ordering::Greater"] = 2;
+
+    // Register builtin generic enums: Maybe[T], Outcome[T, E]
+    // These need to be stored in builtin_enum_decls_ to keep the AST alive
+    {
+        // Maybe[T] { Just(T), Nothing }
+        auto maybe_decl = std::make_unique<parser::EnumDecl>();
+        maybe_decl->name = "Maybe";
+        maybe_decl->generics.push_back(parser::GenericParam{"T"});
+
+        // Just(T) variant
+        parser::EnumVariant just_variant;
+        just_variant.name = "Just";
+        auto t_type = std::make_unique<parser::Type>();
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        std::vector<parser::TypePtr> just_fields;
+        just_fields.push_back(std::move(t_type));
+        just_variant.tuple_fields = std::move(just_fields);
+        maybe_decl->variants.push_back(std::move(just_variant));
+
+        // Nothing variant
+        parser::EnumVariant nothing_variant;
+        nothing_variant.name = "Nothing";
+        maybe_decl->variants.push_back(std::move(nothing_variant));
+
+        pending_generic_enums_["Maybe"] = maybe_decl.get();
+        builtin_enum_decls_.push_back(std::move(maybe_decl));
+    }
+
+    {
+        // Outcome[T, E] { Ok(T), Err(E) }
+        auto outcome_decl = std::make_unique<parser::EnumDecl>();
+        outcome_decl->name = "Outcome";
+        outcome_decl->generics.push_back(parser::GenericParam{"T"});
+        outcome_decl->generics.push_back(parser::GenericParam{"E"});
+
+        // Ok(T) variant
+        parser::EnumVariant ok_variant;
+        ok_variant.name = "Ok";
+        auto t_type = std::make_unique<parser::Type>();
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        std::vector<parser::TypePtr> ok_fields;
+        ok_fields.push_back(std::move(t_type));
+        ok_variant.tuple_fields = std::move(ok_fields);
+        outcome_decl->variants.push_back(std::move(ok_variant));
+
+        // Err(E) variant
+        parser::EnumVariant err_variant;
+        err_variant.name = "Err";
+        auto e_type = std::make_unique<parser::Type>();
+        e_type->kind = parser::NamedType{parser::TypePath{{"E"}}};
+        std::vector<parser::TypePtr> err_fields;
+        err_fields.push_back(std::move(e_type));
+        err_variant.tuple_fields = std::move(err_fields);
+        outcome_decl->variants.push_back(std::move(err_variant));
+
+        pending_generic_enums_["Outcome"] = outcome_decl.get();
+        builtin_enum_decls_.push_back(std::move(outcome_decl));
+    }
+
     emit_header();
     emit_runtime_decls();
     emit_module_lowlevel_decls();
@@ -111,6 +175,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 }
             }
             if (!type_name.empty()) {
+                // Skip builtin types that have hard-coded implementations in method.cpp
+                if (type_name == "File" || type_name == "Path" || type_name == "List" ||
+                    type_name == "HashMap" || type_name == "Buffer") {
+                    continue;
+                }
                 for (const auto& method : impl.methods) {
                     // Generate method with mangled name TypeName_MethodName
                     std::string method_name = type_name + "_" + method.name;
@@ -211,8 +280,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
                 }
 
                 // Generate default implementations for missing methods
-                if (impl.trait_path && !impl.trait_path->segments.empty()) {
-                    std::string trait_name = impl.trait_path->segments.back();
+                std::string trait_name;
+                if (impl.trait_type && impl.trait_type->is<parser::NamedType>()) {
+                    const auto& named = impl.trait_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        trait_name = named.path.segments.back();
+                    }
+                }
+                if (!trait_name.empty()) {
                     auto trait_it = trait_decls_.find(trait_name);
                     if (trait_it != trait_decls_.end()) {
                         const auto* trait_decl = trait_it->second;

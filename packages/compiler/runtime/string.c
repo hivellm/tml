@@ -382,3 +382,26 @@ const char* f64_to_str(double n) {
     snprintf(f64_buffer, sizeof(f64_buffer), "%g", n);
     return f64_buffer;
 }
+
+// ============================================================================
+// Type to_string methods (for Display behavior)
+// ============================================================================
+
+// i32_to_string(n: I32) -> Str
+static char i32_to_string_buffer[16];
+const char* i32_to_string(int32_t n) {
+    snprintf(i32_to_string_buffer, sizeof(i32_to_string_buffer), "%d", n);
+    return i32_to_string_buffer;
+}
+
+// i64_to_string(n: I64) -> Str
+static char i64_to_string_buffer[32];
+const char* i64_to_string(int64_t n) {
+    snprintf(i64_to_string_buffer, sizeof(i64_to_string_buffer), "%lld", (long long)n);
+    return i64_to_string_buffer;
+}
+
+// bool_to_string(b: Bool) -> Str
+const char* bool_to_string(int b) {
+    return b ? "true" : "false";
+}

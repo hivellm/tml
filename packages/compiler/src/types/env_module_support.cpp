@@ -57,9 +57,13 @@ void TypeEnv::import_all_from(const std::string& module_path) {
         return; // Module not found
     }
 
-    // Import all functions
+    // Import all functions (skip qualified method names like Type::method - those are
+    // resolved through their type import)
     for (const auto& [name, func_sig] : module->functions) {
-        import_symbol(module_path, name, std::nullopt);
+        // Only import free functions, not impl methods (which contain ::)
+        if (name.find("::") == std::string::npos) {
+            import_symbol(module_path, name, std::nullopt);
+        }
     }
 
     // Import all structs
@@ -167,14 +171,12 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
         // Single file module
         auto parsed = parse_tml_file(file_path);
         if (!parsed) {
-            TML_DEBUG_LN("[MODULE] Failed to parse: " << file_path);
             return false;
         }
         all_parsed.push_back(std::move(*parsed));
     }
 
     if (all_parsed.empty()) {
-        TML_DEBUG_LN("[MODULE] No valid files found for: " << module_path);
         return false;
     }
     TML_DEBUG_LN("[MODULE] Parsed " << all_parsed.size() << " files for module: " << module_path);
@@ -461,6 +463,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     mod.has_pure_tml_functions = true;
                 }
             }
+            // Also check impl blocks for public methods with bodies
+            else if (decl->is<parser::ImplDecl>()) {
+                const auto& impl = decl->as<parser::ImplDecl>();
+                for (const auto& method : impl.methods) {
+                    if (method.vis == parser::Visibility::Public && !method.is_unsafe &&
+                        method.body.has_value()) {
+                        mod.has_pure_tml_functions = true;
+                        break;
+                    }
+                }
+            }
         }
         if (!src.empty()) {
             combined_source += src + "\n";
@@ -519,6 +532,9 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         // Extract module name: "core::mem" -> "mem"
         std::string module_name = module_path.substr(6);
 
+        // Get current working directory for reference
+        auto cwd = std::filesystem::current_path();
+
         // Try multiple possible paths for the module file
         std::vector<std::filesystem::path> search_paths = {
             std::filesystem::path("packages") / "core" / "src" / (module_name + ".tml"),
@@ -526,19 +542,20 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
             std::filesystem::path("..") / ".." / "core" / "src" /
                 (module_name + ".tml"), // From build/
             std::filesystem::path("..") / "packages" / "core" / "src" /
-                (module_name + ".tml"),                                    // From tests/
-            std::filesystem::path("core") / "src" / (module_name + ".tml") // From packages/
+                (module_name + ".tml"),                                     // From tests/
+            std::filesystem::path("core") / "src" / (module_name + ".tml"), // From packages/
+            // Add absolute paths based on CWD
+            cwd / "packages" / "core" / "src" / (module_name + ".tml"),
+            cwd / "packages" / "core" / "src" / module_name / "mod.tml",
         };
 
         for (const auto& module_file : search_paths) {
             if (std::filesystem::exists(module_file)) {
-                TML_DEBUG_LN("[MODULE] Found core module at: " << module_file);
                 return load_module_from_file(module_path, module_file.string());
             }
         }
 
-        // Module file not found - this is a real error, not debug
-        std::cerr << "error: Core module file not found: " << module_path << "\n";
+        // Module file not found
         return false;
     }
 

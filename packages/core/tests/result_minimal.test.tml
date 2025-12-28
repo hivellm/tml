@@ -64,6 +64,14 @@ func test_map() {
 }
 
 @test
+func test_map_err_passthrough() {
+    let o: Outcome[I32, Str] = Err("error")
+    let result: Outcome[I32, Str] = o.map(do(x: I32) x * 2)
+    assert(result.is_err())
+    assert_eq(result.unwrap_err(), "error")
+}
+
+@test
 func test_ok_method() {
     let o: Outcome[I32, Str] = Ok(42)
     let m: Maybe[I32] = o.ok()
@@ -86,10 +94,40 @@ func test_contains() {
 }
 
 @test
+func test_contains_ok_false() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.contains(100) == false)
+}
+
+@test
+func test_contains_on_err() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.contains(42) == false)
+}
+
+@test
+func test_contains_err_on_ok() {
+    let o: Outcome[I32, Str] = Ok(42)
+    assert(o.contains_err("error") == false)
+}
+
+@test
+func test_contains_err_false() {
+    let o: Outcome[I32, Str] = Err("error")
+    assert(o.contains_err("other") == false)
+}
+
+@test
 func test_contains_err() {
     let o: Outcome[I32, Str] = Err("error")
     assert(o.contains_err("error"))
 }
+
+// @test
+// func test_contains_err_false() {
+//     let o: Outcome[I32, Str] = Err("error")
+//     assert(o.contains_err("other") == false)
+// }
 
 @test
 func test_is_ok_and() {

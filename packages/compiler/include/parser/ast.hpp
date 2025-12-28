@@ -297,10 +297,11 @@ struct CallExpr {
     SourceSpan span;
 };
 
-// Method call: obj.method(a, b)
+// Method call: obj.method(a, b) or obj.method[T](a, b)
 struct MethodCallExpr {
     ExprPtr receiver;
     std::string method;
+    std::vector<TypePtr> type_args;  // Generic type arguments: method[T, U]
     std::vector<ExprPtr> args;
     SourceSpan span;
 };
@@ -607,9 +608,13 @@ struct Decorator {
     SourceSpan span;
 };
 
-// Where clause: where T: Clone, U: Hash
+// Where clause: where T: Clone, U: Hash, T = U
 struct WhereClause {
-    std::vector<std::pair<TypePtr, std::vector<TypePath>>> constraints;
+    // Trait bounds: T: Trait1 + Trait2 or T: Trait[A, B]
+    // Each constraint is a type param and a list of trait bounds (as types to support generics)
+    std::vector<std::pair<TypePtr, std::vector<TypePtr>>> constraints;
+    // Type equalities: T = U (pairs of types that must be equal)
+    std::vector<std::pair<TypePtr, TypePtr>> type_equalities;
     SourceSpan span;
 };
 
@@ -698,7 +703,7 @@ struct TraitDecl {
     Visibility vis;
     std::string name;
     std::vector<GenericParam> generics;
-    std::vector<TypePath> super_traits;
+    std::vector<TypePtr> super_traits; // Changed from TypePath to TypePtr for generic support
     std::vector<AssociatedType> associated_types; // Associated types
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
@@ -708,7 +713,7 @@ struct TraitDecl {
 // Impl block
 struct ImplDecl {
     std::vector<GenericParam> generics;
-    std::optional<TypePath> trait_path;
+    TypePtr trait_type; // Changed from TypePath to TypePtr for generic support (e.g., impl Borrow[T] for X)
     TypePtr self_type;
     std::vector<AssociatedTypeBinding> type_bindings; // Associated type bindings
     std::vector<FuncDecl> methods;

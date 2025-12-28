@@ -363,13 +363,13 @@ impl[T] Maybe[T] {
     /// ```tml
     /// let x: Maybe[I64] = Just(2)
     /// let y: Maybe[I64] = Nothing
-    /// assert(x.or(y) == Just(2))
+    /// assert(x.alt(y) == Just(2))
     ///
     /// let x: Maybe[I64] = Nothing
     /// let y: Maybe[I64] = Just(100)
-    /// assert(x.or(y) == Just(100))
+    /// assert(x.alt(y) == Just(100))
     /// ```
-    pub func or(this, other: Maybe[T]) -> Maybe[T] {
+    pub func alt(this, other: Maybe[T]) -> Maybe[T] {
         when this {
             Just(val) => return Just(val),
             Nothing => return other
@@ -430,13 +430,13 @@ impl[T] Maybe[T] {
     /// ```tml
     /// let x: Maybe[I64] = Just(2)
     /// let y: Maybe[Str] = Nothing
-    /// assert(x.and(y) == Nothing)
+    /// assert(x.also(y) == Nothing)
     ///
     /// let x: Maybe[I64] = Just(2)
     /// let y: Maybe[Str] = Just("hello")
-    /// assert(x.and(y) == Just("hello"))
+    /// assert(x.also(y) == Just("hello"))
     /// ```
-    pub func and[U](this, other: Maybe[U]) -> Maybe[U] {
+    pub func also[U](this, other: Maybe[U]) -> Maybe[U] {
         when this {
             Just(_) => return other,
             Nothing => return Nothing

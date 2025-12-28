@@ -1,6 +1,6 @@
 // Tests for core::default module
+// Note: default() is a builtin static method for primitive types
 use test
-use core::default
 
 @test
 func test_i32_default() -> I32 {

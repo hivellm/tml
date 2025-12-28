@@ -25,6 +25,148 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return "0";
     }
 
+    // ============ PRIMITIVE TYPE STATIC METHODS ============
+    // Handle Type::default() calls for primitive types
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>().path;
+        if (path.segments.size() == 2) {
+            const std::string& type_name = path.segments[0];
+            const std::string& method = path.segments[1];
+
+            bool is_primitive_type =
+                type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                type_name == "I64" || type_name == "I128" ||
+                type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+                type_name == "U64" || type_name == "U128" ||
+                type_name == "F32" || type_name == "F64" ||
+                type_name == "Bool" || type_name == "Str";
+
+            if (is_primitive_type && method == "default") {
+                // Integer types: default is 0
+                if (type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                    type_name == "I64" || type_name == "I128" ||
+                    type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+                    type_name == "U64" || type_name == "U128") {
+                    std::string llvm_ty;
+                    if (type_name == "I8" || type_name == "U8") llvm_ty = "i8";
+                    else if (type_name == "I16" || type_name == "U16") llvm_ty = "i16";
+                    else if (type_name == "I32" || type_name == "U32") llvm_ty = "i32";
+                    else if (type_name == "I64" || type_name == "U64") llvm_ty = "i64";
+                    else llvm_ty = "i128";
+                    last_expr_type_ = llvm_ty;
+                    return "0";
+                }
+                // Float types: default is 0.0
+                if (type_name == "F32") {
+                    last_expr_type_ = "float";
+                    return "0.0";
+                }
+                if (type_name == "F64") {
+                    last_expr_type_ = "double";
+                    return "0.0";
+                }
+                // Bool: default is false
+                if (type_name == "Bool") {
+                    last_expr_type_ = "i1";
+                    return "false";
+                }
+                // Str: default is empty string
+                if (type_name == "Str") {
+                    std::string empty_str = add_string_literal("");
+                    last_expr_type_ = "ptr";
+                    return empty_str;
+                }
+            }
+
+            // Handle Type::from(value) calls for type conversion
+            if (is_primitive_type && method == "from" && !call.args.empty()) {
+                // Generate the source value
+                std::string src_val = gen_expr(*call.args[0]);
+                std::string src_type = last_expr_type_;
+
+                // Determine target LLVM type
+                std::string target_ty;
+                bool target_is_float = false;
+                bool target_is_signed = true;
+                if (type_name == "I8") target_ty = "i8";
+                else if (type_name == "I16") target_ty = "i16";
+                else if (type_name == "I32") target_ty = "i32";
+                else if (type_name == "I64") target_ty = "i64";
+                else if (type_name == "I128") target_ty = "i128";
+                else if (type_name == "U8") { target_ty = "i8"; target_is_signed = false; }
+                else if (type_name == "U16") { target_ty = "i16"; target_is_signed = false; }
+                else if (type_name == "U32") { target_ty = "i32"; target_is_signed = false; }
+                else if (type_name == "U64") { target_ty = "i64"; target_is_signed = false; }
+                else if (type_name == "U128") { target_ty = "i128"; target_is_signed = false; }
+                else if (type_name == "F32") { target_ty = "float"; target_is_float = true; }
+                else if (type_name == "F64") { target_ty = "double"; target_is_float = true; }
+
+                // Determine source type properties
+                bool src_is_float = (src_type == "float" || src_type == "double");
+
+                // If types are the same, just return the value
+                if (src_type == target_ty) {
+                    last_expr_type_ = target_ty;
+                    return src_val;
+                }
+
+                std::string result = fresh_reg();
+
+                // Get bit widths for integer types
+                auto get_bit_width = [](const std::string& ty) -> int {
+                    if (ty == "i8") return 8;
+                    if (ty == "i16") return 16;
+                    if (ty == "i32") return 32;
+                    if (ty == "i64") return 64;
+                    if (ty == "i128") return 128;
+                    if (ty == "float") return 32;
+                    if (ty == "double") return 64;
+                    return 0;
+                };
+
+                int src_width = get_bit_width(src_type);
+                int target_width = get_bit_width(target_ty);
+
+                if (src_is_float && target_is_float) {
+                    // Float to float conversion
+                    if (src_width < target_width) {
+                        emit_line("  " + result + " = fpext " + src_type + " " + src_val + " to " + target_ty);
+                    } else {
+                        emit_line("  " + result + " = fptrunc " + src_type + " " + src_val + " to " + target_ty);
+                    }
+                } else if (src_is_float && !target_is_float) {
+                    // Float to int conversion
+                    if (target_is_signed) {
+                        emit_line("  " + result + " = fptosi " + src_type + " " + src_val + " to " + target_ty);
+                    } else {
+                        emit_line("  " + result + " = fptoui " + src_type + " " + src_val + " to " + target_ty);
+                    }
+                } else if (!src_is_float && target_is_float) {
+                    // Int to float conversion
+                    // Assume source is signed for now (most common case for From trait)
+                    emit_line("  " + result + " = sitofp " + src_type + " " + src_val + " to " + target_ty);
+                } else {
+                    // Int to int conversion
+                    if (src_width < target_width) {
+                        // Extension - use sext for signed, zext for unsigned
+                        // For From trait, we typically extend signed types
+                        emit_line("  " + result + " = sext " + src_type + " " + src_val + " to " + target_ty);
+                    } else if (src_width > target_width) {
+                        // Truncation
+                        emit_line("  " + result + " = trunc " + src_type + " " + src_val + " to " + target_ty);
+                    } else {
+                        // Same width, just a bitcast (e.g., I32 to U32)
+                        last_expr_type_ = target_ty;
+                        return src_val;
+                    }
+                }
+
+                last_expr_type_ = target_ty;
+                return result;
+            }
+        }
+    }
+
     // ============ BUILTIN HANDLERS ============
     // Try each category of builtins. If any handler returns a value, use it.
 
@@ -381,7 +523,14 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         mangled = func_it->second.llvm_name;
     } else {
         // Default: user-defined TML function with tml_ prefix
-        mangled = "@tml_" + fn_name;
+        // Replace :: with _ for valid LLVM IR identifiers (matches impl method naming convention)
+        std::string sanitized_name = fn_name;
+        size_t pos = 0;
+        while ((pos = sanitized_name.find("::", pos)) != std::string::npos) {
+            sanitized_name.replace(pos, 2, "_");
+            pos += 1;
+        }
+        mangled = "@tml_" + sanitized_name;
     }
 
     // Determine return type

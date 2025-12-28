@@ -89,6 +89,7 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
 
     // End block
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     // Only generate phi if BOTH branches have trailing expressions (return values)
@@ -168,6 +169,7 @@ auto LLVMIRGen::gen_ternary(const parser::TernaryExpr& ternary) -> std::string {
 
     // End block - load result
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     std::string result = fresh_reg();
@@ -182,6 +184,14 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
     std::string scrutinee = gen_expr(*if_let.scrutinee);
     std::string scrutinee_type = last_expr_type_;
 
+    // If scrutinee_type is ptr, infer the actual struct type from the expression
+    if (scrutinee_type == "ptr") {
+        types::TypePtr semantic_type = infer_expr_type(*if_let.scrutinee);
+        if (semantic_type) {
+            scrutinee_type = llvm_type_from_semantic(semantic_type);
+        }
+    }
+
     std::string label_then = fresh_label("iflet.then");
     std::string label_else = fresh_label("iflet.else");
     std::string label_end = fresh_label("iflet.end");
@@ -192,10 +202,18 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
         const auto& enum_pat = if_let.pattern->as<parser::EnumPattern>();
         std::string variant_name = enum_pat.path.segments.back();
 
-        // Allocate space for scrutinee
-        std::string scrutinee_ptr = fresh_reg();
-        emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
-        emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+        // Get pointer to scrutinee (either use directly if already ptr, or alloca/store)
+        std::string scrutinee_ptr;
+        bool was_ptr = (last_expr_type_ == "ptr");
+        if (was_ptr) {
+            // scrutinee is already a pointer, use it directly
+            scrutinee_ptr = scrutinee;
+        } else {
+            // Allocate space for scrutinee
+            scrutinee_ptr = fresh_reg();
+            emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+            emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+        }
 
         // Extract tag
         std::string tag_ptr = fresh_reg();
@@ -303,6 +321,7 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
 
     // End block
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     return "0";
@@ -348,6 +367,7 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     }
 
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -395,6 +415,7 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
 
     // End block
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -555,6 +576,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 
     // End block
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -580,10 +602,21 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
     std::string scrutinee = gen_expr(*when.scrutinee);
     std::string scrutinee_type = last_expr_type_;
 
-    // Allocate space for scrutinee if needed
-    std::string scrutinee_ptr = fresh_reg();
-    emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
-    emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+    // If scrutinee_type is ptr, infer the actual struct type from the expression
+    std::string scrutinee_ptr;
+    if (scrutinee_type == "ptr") {
+        types::TypePtr semantic_type = infer_expr_type(*when.scrutinee);
+        if (semantic_type) {
+            scrutinee_type = llvm_type_from_semantic(semantic_type);
+        }
+        // scrutinee is already a pointer, use it directly
+        scrutinee_ptr = scrutinee;
+    } else {
+        // Allocate space for scrutinee and store the value
+        scrutinee_ptr = fresh_reg();
+        emit_line("  " + scrutinee_ptr + " = alloca " + scrutinee_type);
+        emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
+    }
 
     // Extract tag (assumes enum is { i32, i64 })
     std::string tag_ptr = fresh_reg();
@@ -752,6 +785,7 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
 
     // End label
     emit_line(label_end + ":");
+    current_block_ = label_end;
     block_terminated_ = false;
 
     // If result type is void, don't load anything

@@ -158,9 +158,11 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         return precedence::TERNARY;
 
     case lexer::TokenKind::KwOr:
+    case lexer::TokenKind::OrOr:
         return precedence::OR;
 
     case lexer::TokenKind::KwAnd:
+    case lexer::TokenKind::AndAnd:
         return precedence::AND;
 
     case lexer::TokenKind::Eq:
@@ -192,6 +194,9 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
     case lexer::TokenKind::Slash:
     case lexer::TokenKind::Percent:
         return precedence::FACTOR;
+
+    case lexer::TokenKind::KwAs:
+        return precedence::CAST;
 
     case lexer::TokenKind::LParen:
     case lexer::TokenKind::LBracket:
@@ -259,8 +264,10 @@ auto Parser::token_to_binary_op(lexer::TokenKind kind) -> std::optional<BinaryOp
         return BinaryOp::Ge;
 
     case lexer::TokenKind::KwAnd:
+    case lexer::TokenKind::AndAnd:
         return BinaryOp::And;
     case lexer::TokenKind::KwOr:
+    case lexer::TokenKind::OrOr:
         return BinaryOp::Or;
 
     case lexer::TokenKind::BitAnd:
@@ -307,6 +314,7 @@ auto Parser::token_to_unary_op(lexer::TokenKind kind) -> std::optional<UnaryOp> 
     case lexer::TokenKind::Minus:
         return UnaryOp::Neg;
     case lexer::TokenKind::KwNot:
+    case lexer::TokenKind::Bang: // ! as prefix is logical NOT (same as 'not')
         return UnaryOp::Not;
     case lexer::TokenKind::BitNot:
         return UnaryOp::BitNot;

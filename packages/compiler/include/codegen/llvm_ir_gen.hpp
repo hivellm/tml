@@ -4,6 +4,7 @@
 #include "parser/ast.hpp"
 #include "types/checker.hpp"
 
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -183,6 +184,9 @@ private:
     // valid)
     std::vector<parser::Module> imported_module_asts_;
 
+    // Storage for builtin generic enum declarations (keeps AST alive)
+    std::vector<std::unique_ptr<parser::EnumDecl>> builtin_enum_decls_;
+
     // Helper methods
     auto fresh_reg() -> std::string;
     auto fresh_label(const std::string& prefix = "L") -> std::string;
@@ -224,6 +228,9 @@ private:
     auto resolve_parser_type_with_subs(const parser::Type& type,
                                        const std::unordered_map<std::string, types::TypePtr>& subs)
         -> types::TypePtr;
+
+    // Helper: convert LLVM type string back to semantic type (for common primitives)
+    auto semantic_type_from_llvm(const std::string& llvm_type) -> types::TypePtr;
 
     // Helper: unify a parser type pattern with a semantic type to extract type bindings
     // Example: unify(Maybe[T], Maybe[I32], {T}) -> {T: I32}
@@ -274,9 +281,19 @@ private:
     auto gen_index(const parser::IndexExpr& idx) -> std::string;
     auto gen_path(const parser::PathExpr& path) -> std::string;
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
+
+    // Method call helpers - split into separate files for maintainability
+    auto gen_maybe_method(const parser::MethodCallExpr& call, const std::string& receiver,
+                          const std::string& enum_type_name, const std::string& tag_val,
+                          const types::NamedType& named) -> std::optional<std::string>;
+    auto gen_outcome_method(const parser::MethodCallExpr& call, const std::string& receiver,
+                            const std::string& enum_type_name, const std::string& tag_val,
+                            const types::NamedType& named) -> std::optional<std::string>;
+
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
+    auto gen_cast(const parser::CastExpr& cast) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format, const std::vector<parser::ExprPtr>& args,

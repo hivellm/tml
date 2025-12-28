@@ -15,8 +15,8 @@ namespace precedence {
 constexpr int NONE = 0;
 constexpr int ASSIGN = 1;     // =, +=, etc.
 constexpr int TERNARY = 2;    // ? :
-constexpr int OR = 3;         // ||
-constexpr int AND = 4;        // &&
+constexpr int OR = 3;         // || / or
+constexpr int AND = 4;        // && / and
 constexpr int COMPARISON = 5; // ==, !=, <, >, <=, >=
 constexpr int BITOR = 6;      // |
 constexpr int BITXOR = 7;     // ^
@@ -24,9 +24,10 @@ constexpr int BITAND = 8;     // &
 constexpr int SHIFT = 9;      // <<, >>
 constexpr int TERM = 10;      // +, -
 constexpr int FACTOR = 11;    // *, /, %
-constexpr int UNARY = 12;     // -, !, ~, &, *
-constexpr int CALL = 13;      // (), [], .
-constexpr int RANGE = 14;     // .., ..=
+constexpr int CAST = 12;      // as (type casting)
+constexpr int UNARY = 13;     // -, !, ~, &, *
+constexpr int CALL = 14;      // (), [], .
+constexpr int RANGE = 15;     // .., ..=
 } // namespace precedence
 
 // Parser error

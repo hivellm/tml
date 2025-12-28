@@ -156,10 +156,10 @@ impl Ordering {
     /// # Examples
     ///
     /// ```tml
-    /// let result = Equal.then(Less)
+    /// let result = Equal.then_cmp(Less)
     /// assert_eq(result, Less)
     ///
-    /// let result = Less.then(Equal)
+    /// let result = Less.then_cmp(Equal)
     /// assert_eq(result, Less)
     /// ```
     ///
@@ -167,10 +167,10 @@ impl Ordering {
     ///
     /// ```tml
     /// func cmp_tuple(a: (I32, I32), b: (I32, I32)) -> Ordering {
-    ///     return a.0.cmp(ref b.0).then(a.1.cmp(ref b.1))
+    ///     return a.0.cmp(ref b.0).then_cmp(a.1.cmp(ref b.1))
     /// }
     /// ```
-    pub func then(this, other: Ordering) -> Ordering {
+    pub func then_cmp(this, other: Ordering) -> Ordering {
         when this {
             Ordering::Equal => return other,
             _ => return this,
@@ -399,7 +399,7 @@ pub behavior PartialOrd: PartialEq {
 /// impl Ord for Point {
 ///     func cmp(this, other: ref Point) -> Ordering {
 ///         // Compare by x, then by y
-///         return this.x.cmp(ref other.x).then(this.y.cmp(ref other.y))
+///         return this.x.cmp(ref other.x).then_cmp(this.y.cmp(ref other.y))
 ///     }
 /// }
 /// ```

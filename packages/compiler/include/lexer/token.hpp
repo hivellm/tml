@@ -61,10 +61,12 @@ enum class TokenKind : uint8_t {
     KwContinue, // continue
     KwReturn,   // return
 
-    // Keywords - logical operators (TML uses words, not symbols)
-    KwAnd, // and
-    KwOr,  // or
-    KwNot, // not
+    // Keywords - logical operators (TML supports both words and symbols)
+    KwAnd,   // and (alias for &&)
+    KwOr,    // or (alias for ||)
+    KwNot,   // not (alias for !)
+    AndAnd,  // && (logical AND)
+    OrOr,    // || (logical OR)
 
     // Keywords - types
     KwThis,     // this (self value)
@@ -134,7 +136,7 @@ enum class TokenKind : uint8_t {
     Colon,       // :
     ColonColon,  // ::
     Question,    // ? (ternary operator)
-    Bang,        // ! (error propagation)
+    Bang,        // ! (logical NOT / error propagation)
     At,          // @
     Pipe,        // | (in patterns)
     Dollar,      // $ (splice in quote)

@@ -69,6 +69,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_lowlevel(expr.as<parser::LowlevelExpr>());
     } else if (expr.is<parser::InterpolatedStringExpr>()) {
         return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
+    } else if (expr.is<parser::CastExpr>()) {
+        return gen_cast(expr.as<parser::CastExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);
@@ -302,7 +304,26 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // Dereferenced pointer assignment: *ptr = value
                 // Get the pointer (not the dereferenced value!)
                 std::string ptr = gen_expr(*unary.operand);
-                emit_line("  store i32 " + right + ", ptr " + ptr);
+
+                // Infer the inner type from the operand's type
+                types::TypePtr operand_type = infer_expr_type(*unary.operand);
+                std::string inner_llvm_type = "i32"; // default
+
+                if (operand_type) {
+                    if (std::holds_alternative<types::RefType>(operand_type->kind)) {
+                        const auto& ref_type = std::get<types::RefType>(operand_type->kind);
+                        if (ref_type.inner) {
+                            inner_llvm_type = llvm_type_from_semantic(ref_type.inner);
+                        }
+                    } else if (std::holds_alternative<types::PtrType>(operand_type->kind)) {
+                        const auto& ptr_type = std::get<types::PtrType>(operand_type->kind);
+                        if (ptr_type.inner) {
+                            inner_llvm_type = llvm_type_from_semantic(ptr_type.inner);
+                        }
+                    }
+                }
+
+                emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr);
             }
         } else if (bin.left->is<parser::FieldExpr>()) {
             // Field assignment: obj.field = value or this.field = value
@@ -532,6 +553,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Check if either operand is Bool (i1)
     bool is_bool = (left_type == "i1" || right_type == "i1");
 
+    // Check if BOTH operands are strings (ptr) - only then use str_eq
+    bool is_string = (left_type == "ptr" && right_type == "ptr");
+
     // Determine the integer type to use
     std::string int_type = is_bool ? "i1" : (is_i64 ? "i64" : "i32");
 
@@ -576,10 +600,15 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
         last_expr_type_ = int_type;
         break;
-    // Comparisons return i1 (use fcmp for floats, icmp for integers)
+    // Comparisons return i1 (use fcmp for floats, icmp for integers, str_eq for strings)
     case parser::BinaryOp::Eq:
         if (is_float) {
             emit_line("  " + result + " = fcmp oeq double " + left + ", " + right);
+        } else if (is_string) {
+            // String comparison using str_eq runtime function (returns i32, convert to i1)
+            std::string eq_i32 = fresh_reg();
+            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
+            emit_line("  " + result + " = icmp ne i32 " + eq_i32 + ", 0");
         } else {
             emit_line("  " + result + " = icmp eq " + int_type + " " + left + ", " + right);
         }
@@ -588,6 +617,11 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     case parser::BinaryOp::Ne:
         if (is_float) {
             emit_line("  " + result + " = fcmp one double " + left + ", " + right);
+        } else if (is_string) {
+            // String comparison: NOT str_eq (str_eq returns i32, convert to i1)
+            std::string eq_i32 = fresh_reg();
+            emit_line("  " + eq_i32 + " = call i32 @str_eq(ptr " + left + ", ptr " + right + ")");
+            emit_line("  " + result + " = icmp eq i32 " + eq_i32 + ", 0");
         } else {
             emit_line("  " + result + " = icmp ne " + int_type + " " + left + ", " + right);
         }
@@ -685,8 +719,27 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
     if (unary.op == parser::UnaryOp::Deref) {
         std::string ptr = gen_expr(*unary.operand);
         std::string result = fresh_reg();
-        // Assume dereferencing i32* for now
-        emit_line("  " + result + " = load i32, ptr " + ptr);
+
+        // Infer the inner type from the operand's type
+        types::TypePtr operand_type = infer_expr_type(*unary.operand);
+        std::string inner_llvm_type = "i32"; // default
+
+        if (operand_type) {
+            if (std::holds_alternative<types::RefType>(operand_type->kind)) {
+                const auto& ref_type = std::get<types::RefType>(operand_type->kind);
+                if (ref_type.inner) {
+                    inner_llvm_type = llvm_type_from_semantic(ref_type.inner);
+                }
+            } else if (std::holds_alternative<types::PtrType>(operand_type->kind)) {
+                const auto& ptr_type = std::get<types::PtrType>(operand_type->kind);
+                if (ptr_type.inner) {
+                    inner_llvm_type = llvm_type_from_semantic(ptr_type.inner);
+                }
+            }
+        }
+
+        emit_line("  " + result + " = load " + inner_llvm_type + ", ptr " + ptr);
+        last_expr_type_ = inner_llvm_type;
         return result;
     }
 
@@ -1009,6 +1062,140 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
 
     last_expr_type_ = "ptr";
     return result;
+}
+
+auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
+    // Generate the source expression
+    std::string src = gen_expr(*cast.expr);
+    std::string src_type = last_expr_type_;
+
+    // Get the target type
+    std::string target_type = llvm_type_ptr(cast.target);
+
+    // If types are the same, just return the source
+    if (src_type == target_type) {
+        return src;
+    }
+
+    std::string result = fresh_reg();
+
+    // Helper to get bit width
+    auto get_bit_width = [](const std::string& ty) -> int {
+        if (ty == "i8") return 8;
+        if (ty == "i16") return 16;
+        if (ty == "i32") return 32;
+        if (ty == "i64") return 64;
+        if (ty == "i128") return 128;
+        return 0;
+    };
+
+    // Integer type check
+    auto is_int_type = [](const std::string& ty) -> bool {
+        return ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128";
+    };
+
+    // Integer conversions with proper bit-width comparison
+    if (is_int_type(src_type) && is_int_type(target_type)) {
+        int src_bits = get_bit_width(src_type);
+        int target_bits = get_bit_width(target_type);
+
+        if (src_bits < target_bits) {
+            // Widening: use sext for signed extension
+            emit_line("  " + result + " = sext " + src_type + " " + src + " to " + target_type);
+            last_expr_type_ = target_type;
+            return result;
+        } else if (src_bits > target_bits) {
+            // Narrowing: use trunc
+            emit_line("  " + result + " = trunc " + src_type + " " + src + " to " + target_type);
+            last_expr_type_ = target_type;
+            return result;
+        }
+        // Same width: fall through (shouldn't happen, checked earlier)
+    }
+
+    // Float to int conversions
+    if ((src_type == "double" || src_type == "float") &&
+        (target_type == "i64" || target_type == "i32" || target_type == "i16" || target_type == "i8")) {
+        emit_line("  " + result + " = fptosi " + src_type + " " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Int to float conversions
+    if ((src_type == "i64" || src_type == "i32" || src_type == "i16" || src_type == "i8") &&
+        (target_type == "double" || target_type == "float")) {
+        emit_line("  " + result + " = sitofp " + src_type + " " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Float widening (float to double)
+    if (src_type == "float" && target_type == "double") {
+        emit_line("  " + result + " = fpext float " + src + " to double");
+        last_expr_type_ = "double";
+        return result;
+    }
+
+    // Float narrowing (double to float)
+    if (src_type == "double" && target_type == "float") {
+        emit_line("  " + result + " = fptrunc double " + src + " to float");
+        last_expr_type_ = "float";
+        return result;
+    }
+
+    // Bool to int
+    if (src_type == "i1" && (target_type == "i8" || target_type == "i16" ||
+                             target_type == "i32" || target_type == "i64")) {
+        emit_line("  " + result + " = zext i1 " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Int to bool (non-zero check)
+    if ((src_type == "i8" || src_type == "i16" || src_type == "i32" || src_type == "i64") &&
+        target_type == "i1") {
+        emit_line("  " + result + " = icmp ne " + src_type + " " + src + ", 0");
+        last_expr_type_ = "i1";
+        return result;
+    }
+
+    // Pointer casts (ptr to ptr)
+    if (src_type == "ptr" && target_type == "ptr") {
+        last_expr_type_ = "ptr";
+        return src; // No conversion needed in opaque pointer mode
+    }
+
+    // Int to pointer
+    if ((src_type == "i64" || src_type == "i32") && target_type == "ptr") {
+        std::string int_val = src;
+        if (src_type == "i32") {
+            std::string ext_reg = fresh_reg();
+            emit_line("  " + ext_reg + " = zext i32 " + src + " to i64");
+            int_val = ext_reg;
+        }
+        emit_line("  " + result + " = inttoptr i64 " + int_val + " to ptr");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // Pointer to int
+    if (src_type == "ptr" && (target_type == "i64" || target_type == "i32")) {
+        std::string ptr_int = fresh_reg();
+        emit_line("  " + ptr_int + " = ptrtoint ptr " + src + " to i64");
+        if (target_type == "i64") {
+            last_expr_type_ = "i64";
+            return ptr_int;
+        } else {
+            emit_line("  " + result + " = trunc i64 " + ptr_int + " to i32");
+            last_expr_type_ = "i32";
+            return result;
+        }
+    }
+
+    // Fallback: bitcast for same-size types
+    emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
+    last_expr_type_ = target_type;
+    return src; // Return source unchanged
 }
 
 } // namespace tml::codegen

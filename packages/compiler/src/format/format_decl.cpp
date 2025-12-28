@@ -71,22 +71,33 @@ void Formatter::format_generics(const std::vector<parser::GenericParam>& generic
 }
 
 void Formatter::format_where_clause(const std::optional<parser::WhereClause>& where) {
-    if (!where.has_value() || where->constraints.empty())
+    if (!where.has_value() || (where->constraints.empty() && where->type_equalities.empty()))
         return;
 
     output_ << "\n";
     emit_indent();
     output_ << "where ";
-    for (size_t i = 0; i < where->constraints.size(); ++i) {
-        if (i > 0)
+    bool first = true;
+
+    // Format trait bounds
+    for (const auto& [type, bounds] : where->constraints) {
+        if (!first)
             output_ << ", ";
-        const auto& [type, bounds] = where->constraints[i];
+        first = false;
         output_ << format_type_ptr(type) << ": ";
         for (size_t j = 0; j < bounds.size(); ++j) {
             if (j > 0)
                 output_ << " + ";
-            output_ << format_type_path(bounds[j]);
+            output_ << format_type_ptr(bounds[j]);
         }
+    }
+
+    // Format type equalities
+    for (const auto& [lhs, rhs] : where->type_equalities) {
+        if (!first)
+            output_ << ", ";
+        first = false;
+        output_ << format_type_ptr(lhs) << " = " << format_type_ptr(rhs);
     }
 }
 
@@ -237,7 +248,7 @@ void Formatter::format_trait_decl(const parser::TraitDecl& t) {
         for (size_t i = 0; i < t.super_traits.size(); ++i) {
             if (i > 0)
                 output_ << " + ";
-            output_ << format_type_path(t.super_traits[i]);
+            output_ << format_type_ptr(t.super_traits[i]);
         }
     }
 
@@ -261,8 +272,8 @@ void Formatter::format_impl_decl(const parser::ImplDecl& impl) {
     format_generics(impl.generics);
     output_ << " ";
 
-    if (impl.trait_path.has_value()) {
-        output_ << format_type_path(impl.trait_path.value()) << " for ";
+    if (impl.trait_type) {
+        output_ << format_type_ptr(impl.trait_type) << " for ";
     }
 
     output_ << format_type_ptr(impl.self_type);

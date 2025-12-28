@@ -674,3 +674,156 @@ TEST_F(ParserTest, InterpolatedStringEscapedBrace) {
     // Escaped braces make this a regular string
     EXPECT_TRUE(unwrap(result)->is<LiteralExpr>());
 }
+
+// ============================================================================
+// Symbol Logical Operators (&&, ||, !)
+// ============================================================================
+
+TEST_F(ParserTest, LogicalAndSymbol) {
+    // Test && operator parses as And
+    auto result = parse_expr("a && b");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& bin = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(bin.op, BinaryOp::And);
+}
+
+TEST_F(ParserTest, LogicalOrSymbol) {
+    // Test || operator parses as Or
+    auto result = parse_expr("a || b");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& bin = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(bin.op, BinaryOp::Or);
+}
+
+TEST_F(ParserTest, LogicalNotSymbol) {
+    // Test ! as prefix NOT operator
+    auto result = parse_expr("!a");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<UnaryExpr>());
+
+    auto& unary = unwrap(result)->as<UnaryExpr>();
+    EXPECT_EQ(unary.op, UnaryOp::Not);
+}
+
+TEST_F(ParserTest, LogicalOperatorPrecedence) {
+    // Test && has higher precedence than ||
+    // a || b && c should parse as a || (b && c)
+    auto result = parse_expr("a || b && c");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& or_expr = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(or_expr.op, BinaryOp::Or);
+    EXPECT_TRUE(or_expr.right->is<BinaryExpr>());
+
+    auto& and_expr = or_expr.right->as<BinaryExpr>();
+    EXPECT_EQ(and_expr.op, BinaryOp::And);
+}
+
+TEST_F(ParserTest, MixedLogicalOperators) {
+    // Test mixing word and symbol operators
+    // a and b || c should parse correctly
+    auto result = parse_expr("a and b || c");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& or_expr = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(or_expr.op, BinaryOp::Or);
+    EXPECT_TRUE(or_expr.left->is<BinaryExpr>());
+
+    auto& and_expr = or_expr.left->as<BinaryExpr>();
+    EXPECT_EQ(and_expr.op, BinaryOp::And);
+}
+
+TEST_F(ParserTest, LogicalNotWithParens) {
+    // Test !(a && b)
+    auto result = parse_expr("!(a && b)");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<UnaryExpr>());
+
+    auto& not_expr = unwrap(result)->as<UnaryExpr>();
+    EXPECT_EQ(not_expr.op, UnaryOp::Not);
+    EXPECT_TRUE(not_expr.operand->is<BinaryExpr>());
+
+    auto& and_expr = not_expr.operand->as<BinaryExpr>();
+    EXPECT_EQ(and_expr.op, BinaryOp::And);
+}
+
+TEST_F(ParserTest, ComplexLogicalExpression) {
+    // Test complex expression: (a && b) || (!c && d)
+    auto result = parse_expr("(a && b) || (!c && d)");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& or_expr = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(or_expr.op, BinaryOp::Or);
+}
+
+// ============================================================================
+// Type Casting (as)
+// ============================================================================
+
+TEST_F(ParserTest, SimpleCast) {
+    // Test simple cast: x as I64
+    auto result = parse_expr("x as I64");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<CastExpr>());
+
+    auto& cast = unwrap(result)->as<CastExpr>();
+    EXPECT_TRUE(cast.expr->is<IdentExpr>());
+}
+
+TEST_F(ParserTest, CastWithExpression) {
+    // Test cast with expression: (a + b) as I64
+    auto result = parse_expr("(a + b) as I64");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<CastExpr>());
+
+    auto& cast = unwrap(result)->as<CastExpr>();
+    EXPECT_TRUE(cast.expr->is<BinaryExpr>());
+}
+
+TEST_F(ParserTest, CastPrecedence) {
+    // Test cast has higher precedence than comparison
+    // a as I64 == b should parse as (a as I64) == b
+    auto result = parse_expr("a as I64 == b");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& cmp = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(cmp.op, BinaryOp::Eq);
+    EXPECT_TRUE(cmp.left->is<CastExpr>());
+}
+
+TEST_F(ParserTest, ChainedCasts) {
+    // Test chained casts: x as I64 as F64
+    auto result = parse_expr("x as I64 as F64");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<CastExpr>());
+
+    auto& outer_cast = unwrap(result)->as<CastExpr>();
+    EXPECT_TRUE(outer_cast.expr->is<CastExpr>());
+}
+
+TEST_F(ParserTest, CastInBinaryExpr) {
+    // Test cast in binary expression: a as I64 + b as I64
+    auto result = parse_expr("a as I64 + b as I64");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<BinaryExpr>());
+
+    auto& add = unwrap(result)->as<BinaryExpr>();
+    EXPECT_EQ(add.op, BinaryOp::Add);
+    EXPECT_TRUE(add.left->is<CastExpr>());
+    EXPECT_TRUE(add.right->is<CastExpr>());
+}
+
+TEST_F(ParserTest, CastToGenericType) {
+    // Test cast to generic type: x as List[I32]
+    auto result = parse_expr("x as List[I32]");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<CastExpr>());
+}

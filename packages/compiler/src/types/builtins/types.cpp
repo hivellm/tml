@@ -22,6 +22,37 @@ void TypeEnv::init_builtin_types() {
     builtins_["Str"] = make_primitive(PrimitiveKind::Str);
     builtins_["Unit"] = make_unit();
 
+    // Ordering enum (core::cmp)
+    // Ordering { Less, Equal, Greater }
+    define_enum(EnumDef{
+        .name = "Ordering",
+        .type_params = {},
+        .variants = {{"Less", {}}, {"Equal", {}}, {"Greater", {}}},
+        .span = {}});
+
+    // Maybe[T] enum (core::option)
+    // Maybe[T] { Just(T), Nothing }
+    {
+        auto T = std::make_shared<Type>(GenericType{"T"});
+        define_enum(EnumDef{
+            .name = "Maybe",
+            .type_params = {"T"},
+            .variants = {{"Just", {T}}, {"Nothing", {}}},
+            .span = {}});
+    }
+
+    // Outcome[T, E] enum (core::result)
+    // Outcome[T, E] { Ok(T), Err(E) }
+    {
+        auto T = std::make_shared<Type>(GenericType{"T"});
+        auto E = std::make_shared<Type>(GenericType{"E"});
+        define_enum(EnumDef{
+            .name = "Outcome",
+            .type_params = {"T", "E"},
+            .variants = {{"Ok", {T}}, {"Err", {E}}},
+            .span = {}});
+    }
+
     // Register builtin behavior implementations for integer types
     std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128",
                                               "U8", "U16", "U32", "U64", "U128"};

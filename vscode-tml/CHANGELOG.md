@@ -2,6 +2,31 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.6.0] - 2025-12-27
+
+### Added
+- **Type Conversion Support** - Syntax highlighting for type conversion methods
+  - `Type::from(value)` - Static type conversion methods (e.g., `I32::from(x)`)
+  - `Type::default()` - Default value constructors for all primitive types
+
+- **Hash Method Support** - `.hash()` method for all primitive types returning `I64`
+
+- **Maybe[T] and Outcome[T,E] Builtin Enums** - First-class support for optional and result types
+  - `Maybe[T]` with `Just(T)` and `Nothing` variants
+  - `Outcome[T,E]` with `Ok(T)` and `Err(E)` variants
+  - Methods: `is_just()`, `is_nothing()`, `unwrap()`, `unwrap_or()`, `expect()`
+  - Methods: `is_ok()`, `is_err()`, `unwrap()`, `unwrap_err()`, `expect()`, `expect_err()`
+
+- **Primitive Type Methods** - Enhanced method support
+  - `.duplicate()` - Clone/copy semantics for primitives
+  - `.to_string()` - String conversion for primitives and Ordering
+  - `.debug_string()` - Debug representation for Ordering
+  - `.cmp()` - Comparison returning Ordering enum
+
+### Changed
+- Updated syntax grammar to properly highlight builtin type methods
+- Improved support for generic type parameters in Maybe[T] and Outcome[T,E]
+
 ## [0.5.0] - 2025-12-26
 
 ### Added
