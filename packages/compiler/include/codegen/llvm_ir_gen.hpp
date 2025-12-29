@@ -294,6 +294,7 @@ private:
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
+    auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format, const std::vector<parser::ExprPtr>& args,
@@ -302,30 +303,30 @@ private:
     // ============ Builtin Function Handlers ============
     // Each returns std::optional<std::string> - if handled, returns the result register
     // If not handled, returns std::nullopt to fall through to user-defined functions
-    auto try_gen_builtin_io(const std::string& fn_name,
-                            const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_mem(const std::string& fn_name,
-                             const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_atomic(const std::string& fn_name,
-                                const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_sync(const std::string& fn_name,
-                              const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_time(const std::string& fn_name,
-                              const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_math(const std::string& fn_name,
-                              const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_collections(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string>;
-    auto try_gen_builtin_string(const std::string& fn_name,
-                                const parser::CallExpr& call) -> std::optional<std::string>;
+    auto try_gen_builtin_io(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_mem(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_atomic(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_sync(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_math(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_collections(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);
 
     // Struct field access helpers
     auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;
-    auto get_field_type(const std::string& struct_name,
-                        const std::string& field_name) -> std::string;
+    auto get_field_type(const std::string& struct_name, const std::string& field_name)
+        -> std::string;
 
     // Type inference for generics instantiation
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;

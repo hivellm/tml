@@ -182,8 +182,8 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
 }
 
 // Helper to get field index for struct types - uses dynamic registry
-auto LLVMIRGen::get_field_index(const std::string& struct_name,
-                                const std::string& field_name) -> int {
+auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::string& field_name)
+    -> int {
     // First check the dynamic struct_fields_ registry
     auto it = struct_fields_.find(struct_name);
     if (it != struct_fields_.end()) {
@@ -213,8 +213,8 @@ auto LLVMIRGen::get_field_index(const std::string& struct_name,
 }
 
 // Helper to get field type for struct types - uses dynamic registry
-auto LLVMIRGen::get_field_type(const std::string& struct_name,
-                               const std::string& field_name) -> std::string {
+auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string& field_name)
+    -> std::string {
     // First check the dynamic struct_fields_ registry
     auto it = struct_fields_.find(struct_name);
     if (it != struct_fields_.end()) {

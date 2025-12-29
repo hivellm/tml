@@ -5,8 +5,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_sync(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // ============ SPINLOCK PRIMITIVES ============
 

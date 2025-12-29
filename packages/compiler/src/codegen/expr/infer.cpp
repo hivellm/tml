@@ -50,13 +50,58 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
                     // Create type for this arg
                     types::TypePtr arg_type;
-                    if (arg == "I32") arg_type = types::make_i32();
-                    else if (arg == "I64") arg_type = types::make_i64();
-                    else if (arg == "Bool") arg_type = types::make_bool();
-                    else if (arg == "Str") arg_type = types::make_str();
-                    else if (arg == "F32") arg_type = types::make_primitive(types::PrimitiveKind::F32);
-                    else if (arg == "F64") arg_type = types::make_f64();
-                    else {
+                    if (arg == "I32")
+                        arg_type = types::make_i32();
+                    else if (arg == "I64")
+                        arg_type = types::make_i64();
+                    else if (arg == "Bool")
+                        arg_type = types::make_bool();
+                    else if (arg == "Str")
+                        arg_type = types::make_str();
+                    else if (arg == "F32")
+                        arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                    else if (arg == "F64")
+                        arg_type = types::make_f64();
+                    else if (arg.starts_with("tuple_")) {
+                        // Parse tuple type: tuple_Layout_I64 -> TupleType{Layout, I64}
+                        std::string tuple_args = arg.substr(6); // Remove "tuple_"
+                        std::vector<types::TypePtr> elements;
+                        size_t tuple_pos = 0;
+                        while (tuple_pos < tuple_args.size()) {
+                            auto next_underscore = tuple_args.find('_', tuple_pos);
+                            std::string elem_name =
+                                (next_underscore == std::string::npos)
+                                    ? tuple_args.substr(tuple_pos)
+                                    : tuple_args.substr(tuple_pos, next_underscore - tuple_pos);
+
+                            // Create type for this element
+                            types::TypePtr elem_type;
+                            if (elem_name == "I32")
+                                elem_type = types::make_i32();
+                            else if (elem_name == "I64")
+                                elem_type = types::make_i64();
+                            else if (elem_name == "Bool")
+                                elem_type = types::make_bool();
+                            else if (elem_name == "Str")
+                                elem_type = types::make_str();
+                            else if (elem_name == "F32")
+                                elem_type = types::make_primitive(types::PrimitiveKind::F32);
+                            else if (elem_name == "F64")
+                                elem_type = types::make_f64();
+                            else {
+                                // Named type (struct)
+                                auto et = std::make_shared<types::Type>();
+                                et->kind = types::NamedType{elem_name, "", {}};
+                                elem_type = et;
+                            }
+                            elements.push_back(elem_type);
+
+                            if (next_underscore == std::string::npos)
+                                break;
+                            tuple_pos = next_underscore + 1;
+                        }
+                        arg_type = types::make_tuple(std::move(elements));
+                    } else {
                         // Unknown type, use as named type
                         auto t = std::make_shared<types::Type>();
                         t->kind = types::NamedType{arg, "", {}};
@@ -64,7 +109,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     }
                     type_args.push_back(arg_type);
 
-                    if (next_sep == std::string::npos) break;
+                    if (next_sep == std::string::npos)
+                        break;
                     pos = next_sep + 2;
                 }
 
@@ -132,7 +178,48 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             arg_type = types::make_f64();
                         else if (arg == "Unit")
                             arg_type = types::make_unit();
-                        else {
+                        else if (arg.starts_with("tuple_")) {
+                            // Parse tuple type: tuple_Layout_I64 -> TupleType{Layout, I64}
+                            std::string tuple_args = arg.substr(6); // Remove "tuple_"
+                            std::vector<types::TypePtr> elements;
+                            size_t tuple_pos = 0;
+                            while (tuple_pos < tuple_args.size()) {
+                                auto next_underscore = tuple_args.find('_', tuple_pos);
+                                std::string elem_name =
+                                    (next_underscore == std::string::npos)
+                                        ? tuple_args.substr(tuple_pos)
+                                        : tuple_args.substr(tuple_pos, next_underscore - tuple_pos);
+
+                                // Create type for this element
+                                types::TypePtr elem_type;
+                                if (elem_name == "I32")
+                                    elem_type = types::make_i32();
+                                else if (elem_name == "I64")
+                                    elem_type = types::make_i64();
+                                else if (elem_name == "Bool")
+                                    elem_type = types::make_bool();
+                                else if (elem_name == "Str")
+                                    elem_type = types::make_str();
+                                else if (elem_name == "F32")
+                                    elem_type = types::make_primitive(types::PrimitiveKind::F32);
+                                else if (elem_name == "F64")
+                                    elem_type = types::make_f64();
+                                else if (elem_name == "Unit")
+                                    elem_type = types::make_unit();
+                                else {
+                                    // Named type (struct)
+                                    auto et = std::make_shared<types::Type>();
+                                    et->kind = types::NamedType{elem_name, "", {}};
+                                    elem_type = et;
+                                }
+                                elements.push_back(elem_type);
+
+                                if (next_underscore == std::string::npos)
+                                    break;
+                                tuple_pos = next_underscore + 1;
+                            }
+                            arg_type = types::make_tuple(std::move(elements));
+                        } else {
                             // Named type without generics
                             auto t = std::make_shared<types::Type>();
                             t->kind = types::NamedType{arg, "", {}};
@@ -309,6 +396,14 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         const auto& if_expr = expr.as<parser::IfExpr>();
         return infer_expr_type(*if_expr.then_branch);
     }
+    // Handle when expressions: infer from first arm's body
+    if (expr.is<parser::WhenExpr>()) {
+        const auto& when = expr.as<parser::WhenExpr>();
+        if (!when.arms.empty()) {
+            return infer_expr_type(*when.arms[0].body);
+        }
+        return types::make_unit();
+    }
     // Handle call expressions (including enum constructors like Just, Ok, Err)
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
@@ -370,20 +465,34 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         if (call.receiver->is<parser::IdentExpr>()) {
             const auto& type_name = call.receiver->as<parser::IdentExpr>().name;
             if (call.method == "default") {
-                if (type_name == "I8") return types::make_primitive(types::PrimitiveKind::I8);
-                if (type_name == "I16") return types::make_primitive(types::PrimitiveKind::I16);
-                if (type_name == "I32") return types::make_i32();
-                if (type_name == "I64") return types::make_i64();
-                if (type_name == "I128") return types::make_primitive(types::PrimitiveKind::I128);
-                if (type_name == "U8") return types::make_primitive(types::PrimitiveKind::U8);
-                if (type_name == "U16") return types::make_primitive(types::PrimitiveKind::U16);
-                if (type_name == "U32") return types::make_primitive(types::PrimitiveKind::U32);
-                if (type_name == "U64") return types::make_primitive(types::PrimitiveKind::U64);
-                if (type_name == "U128") return types::make_primitive(types::PrimitiveKind::U128);
-                if (type_name == "F32") return types::make_primitive(types::PrimitiveKind::F32);
-                if (type_name == "F64") return types::make_primitive(types::PrimitiveKind::F64);
-                if (type_name == "Bool") return types::make_bool();
-                if (type_name == "Str") return types::make_str();
+                if (type_name == "I8")
+                    return types::make_primitive(types::PrimitiveKind::I8);
+                if (type_name == "I16")
+                    return types::make_primitive(types::PrimitiveKind::I16);
+                if (type_name == "I32")
+                    return types::make_i32();
+                if (type_name == "I64")
+                    return types::make_i64();
+                if (type_name == "I128")
+                    return types::make_primitive(types::PrimitiveKind::I128);
+                if (type_name == "U8")
+                    return types::make_primitive(types::PrimitiveKind::U8);
+                if (type_name == "U16")
+                    return types::make_primitive(types::PrimitiveKind::U16);
+                if (type_name == "U32")
+                    return types::make_primitive(types::PrimitiveKind::U32);
+                if (type_name == "U64")
+                    return types::make_primitive(types::PrimitiveKind::U64);
+                if (type_name == "U128")
+                    return types::make_primitive(types::PrimitiveKind::U128);
+                if (type_name == "F32")
+                    return types::make_primitive(types::PrimitiveKind::F32);
+                if (type_name == "F64")
+                    return types::make_primitive(types::PrimitiveKind::F64);
+                if (type_name == "Bool")
+                    return types::make_bool();
+                if (type_name == "Str")
+                    return types::make_str();
             }
         }
 
@@ -436,15 +545,13 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             const auto& prim = receiver_type->as<types::PrimitiveType>();
             auto kind = prim.kind;
 
-            bool is_numeric = (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
-                               kind == types::PrimitiveKind::I32 ||
-                               kind == types::PrimitiveKind::I64 ||
-                               kind == types::PrimitiveKind::I128 ||
-                               kind == types::PrimitiveKind::U8 || kind == types::PrimitiveKind::U16 ||
-                               kind == types::PrimitiveKind::U32 ||
-                               kind == types::PrimitiveKind::U64 ||
-                               kind == types::PrimitiveKind::U128 ||
-                               kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
+            bool is_numeric =
+                (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
+                 kind == types::PrimitiveKind::I32 || kind == types::PrimitiveKind::I64 ||
+                 kind == types::PrimitiveKind::I128 || kind == types::PrimitiveKind::U8 ||
+                 kind == types::PrimitiveKind::U16 || kind == types::PrimitiveKind::U32 ||
+                 kind == types::PrimitiveKind::U64 || kind == types::PrimitiveKind::U128 ||
+                 kind == types::PrimitiveKind::F32 || kind == types::PrimitiveKind::F64);
 
             // cmp returns Ordering
             if (is_numeric && call.method == "cmp") {
@@ -459,9 +566,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             }
 
             // Arithmetic methods return the same type
-            if (is_numeric && (call.method == "add" || call.method == "sub" ||
-                               call.method == "mul" || call.method == "div" ||
-                               call.method == "rem" || call.method == "neg")) {
+            if (is_numeric &&
+                (call.method == "add" || call.method == "sub" || call.method == "mul" ||
+                 call.method == "div" || call.method == "rem" || call.method == "neg")) {
                 return receiver_type;
             }
 
@@ -505,8 +612,58 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             }
         }
 
+        // Check for user-defined struct methods by looking up function signature
+        if (receiver_type && receiver_type->is<types::NamedType>()) {
+            const auto& named = receiver_type->as<types::NamedType>();
+            std::string qualified_name = named.name + "::" + call.method;
+
+            // Look up function in environment
+            auto func_sig = env_.lookup_func(qualified_name);
+            if (func_sig) {
+                return func_sig->return_type;
+            }
+
+            // Also check imported modules if the receiver has a module path
+            if (!named.module_path.empty()) {
+                auto module = env_.get_module(named.module_path);
+                if (module) {
+                    auto func_it = module->functions.find(qualified_name);
+                    if (func_it != module->functions.end()) {
+                        return func_it->second.return_type;
+                    }
+                }
+            }
+
+            // Check via imported symbol resolution
+            auto imported_path = env_.resolve_imported_symbol(named.name);
+            if (imported_path.has_value()) {
+                std::string module_path;
+                size_t pos = imported_path->rfind("::");
+                if (pos != std::string::npos) {
+                    module_path = imported_path->substr(0, pos);
+                }
+
+                auto module = env_.get_module(module_path);
+                if (module) {
+                    auto func_it = module->functions.find(qualified_name);
+                    if (func_it != module->functions.end()) {
+                        return func_it->second.return_type;
+                    }
+                }
+            }
+        }
+
         // Default: try to return receiver type
         return receiver_type ? receiver_type : types::make_i32();
+    }
+    // Handle tuple expressions
+    if (expr.is<parser::TupleExpr>()) {
+        const auto& tuple = expr.as<parser::TupleExpr>();
+        std::vector<types::TypePtr> element_types;
+        for (const auto& elem : tuple.elements) {
+            element_types.push_back(infer_expr_type(*elem));
+        }
+        return types::make_tuple(std::move(element_types));
     }
     // Default: I32
     return types::make_i32();

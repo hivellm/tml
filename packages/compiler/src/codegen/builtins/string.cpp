@@ -11,8 +11,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name,
-                                       const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // str_len(s) -> I32
     if (fn_name == "str_len") {

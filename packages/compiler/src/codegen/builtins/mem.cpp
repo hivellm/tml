@@ -6,8 +6,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
-                                    const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // Memory allocation: alloc(size) -> ptr
     // Always inline as malloc call (registered as builtin for type checking)
@@ -19,8 +19,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string size64 = fresh_reg();
             emit_line("  " + size64 + " = sext i32 " + size + " to i64");
             emit_line("  " + result + " = call ptr @malloc(i64 " + size64 + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -40,8 +42,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string size = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @mem_alloc(i64 " + size + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -51,8 +55,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string size = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @mem_alloc_zeroed(i64 " + size + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -64,8 +70,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @mem_realloc(ptr " + ptr + ", i64 " + size +
                       ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -130,8 +138,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @mem_compare(ptr " + a + ", ptr " + b +
                       ", i64 " + size + ")");
+            last_expr_type_ = "i32";
             return result;
         }
+        last_expr_type_ = "i32";
         return "0";
     }
 
@@ -144,8 +154,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @mem_eq(ptr " + a + ", ptr " + b + ", i64 " +
                       size + ")");
+            last_expr_type_ = "i32";
             return result;
         }
+        last_expr_type_ = "i32";
         return "0";
     }
 
@@ -155,8 +167,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string ptr = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = load i32, ptr " + ptr);
+            last_expr_type_ = "i32";
             return result;
         }
+        last_expr_type_ = "i32";
         return "0";
     }
 
@@ -177,8 +191,10 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name,
             std::string offset = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i32 " + offset);
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 

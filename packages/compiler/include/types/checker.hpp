@@ -20,8 +20,8 @@ class TypeChecker {
 public:
     TypeChecker();
 
-    [[nodiscard]] auto
-    check_module(const parser::Module& module) -> Result<TypeEnv, std::vector<TypeError>>;
+    [[nodiscard]] auto check_module(const parser::Module& module)
+        -> Result<TypeEnv, std::vector<TypeError>>;
 
     [[nodiscard]] auto errors() const -> const std::vector<TypeError>& {
         return errors_;
@@ -40,8 +40,10 @@ private:
     std::vector<TypeError> errors_;
     TypePtr current_return_type_ = nullptr;
     TypePtr current_self_type_ = nullptr; // For resolving 'This' in impl blocks
-    std::unordered_map<std::string, TypePtr> current_associated_types_; // For resolving 'This::Owned', etc.
-    std::unordered_map<std::string, TypePtr> current_type_params_; // Maps generic type param names to their types
+    std::unordered_map<std::string, TypePtr>
+        current_associated_types_; // For resolving 'This::Owned', etc.
+    std::unordered_map<std::string, TypePtr>
+        current_type_params_; // Maps generic type param names to their types
     int loop_depth_ = 0;
     bool in_lowlevel_ = false; // When true, & returns pointer instead of reference
 

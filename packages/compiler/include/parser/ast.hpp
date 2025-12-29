@@ -301,7 +301,7 @@ struct CallExpr {
 struct MethodCallExpr {
     ExprPtr receiver;
     std::string method;
-    std::vector<TypePtr> type_args;  // Generic type arguments: method[T, U]
+    std::vector<TypePtr> type_args; // Generic type arguments: method[T, U]
     std::vector<ExprPtr> args;
     SourceSpan span;
 };
@@ -713,7 +713,8 @@ struct TraitDecl {
 // Impl block
 struct ImplDecl {
     std::vector<GenericParam> generics;
-    TypePtr trait_type; // Changed from TypePath to TypePtr for generic support (e.g., impl Borrow[T] for X)
+    TypePtr trait_type; // Changed from TypePath to TypePtr for generic support (e.g., impl
+                        // Borrow[T] for X)
     TypePtr self_type;
     std::vector<AssociatedTypeBinding> type_bindings; // Associated type bindings
     std::vector<FuncDecl> methods;
@@ -802,8 +803,8 @@ auto make_ident_expr(std::string name, SourceSpan span) -> ExprPtr;
 auto make_binary_expr(BinaryOp op, ExprPtr left, ExprPtr right, SourceSpan span) -> ExprPtr;
 auto make_unary_expr(UnaryOp op, ExprPtr operand, SourceSpan span) -> ExprPtr;
 auto make_call_expr(ExprPtr callee, std::vector<ExprPtr> args, SourceSpan span) -> ExprPtr;
-auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr,
-                     SourceSpan span) -> ExprPtr;
+auto make_block_expr(std::vector<StmtPtr> stmts, std::optional<ExprPtr> expr, SourceSpan span)
+    -> ExprPtr;
 
 // Create type helpers
 auto make_named_type(std::string name, SourceSpan span) -> TypePtr;

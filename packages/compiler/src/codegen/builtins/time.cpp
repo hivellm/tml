@@ -5,13 +5,14 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
-                                     const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // time_ms() -> I32 - Current time in milliseconds
     if (fn_name == "time_ms") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i32 @time_ms()");
+        last_expr_type_ = "i32";
         return result;
     }
 
@@ -19,6 +20,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
     if (fn_name == "time_us") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i64 @time_us()");
+        last_expr_type_ = "i64";
         return result;
     }
 
@@ -26,6 +28,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
     if (fn_name == "time_ns") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i64 @time_ns()");
+        last_expr_type_ = "i64";
         return result;
     }
 
@@ -35,6 +38,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @elapsed_secs(i32 " + start + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
         return "0";
@@ -46,6 +50,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @elapsed_ms(i32 " + start + ")");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -57,6 +62,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @elapsed_us(i64 " + start + ")");
+            last_expr_type_ = "i64";
             return result;
         }
         return "0";
@@ -68,6 +74,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
             std::string start = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i64 @elapsed_ns(i64 " + start + ")");
+            last_expr_type_ = "i64";
             return result;
         }
         return "0";
@@ -132,6 +139,7 @@ auto LLVMIRGen::try_gen_builtin_time(const std::string& fn_name,
             std::string duration = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @duration_format_secs(i64 " + duration + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
         return "0";

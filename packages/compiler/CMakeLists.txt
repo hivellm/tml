@@ -166,6 +166,7 @@ add_library(tml_codegen STATIC
     # Expression codegen (split for maintainability)
     src/codegen/expr/infer.cpp
     src/codegen/expr/struct.cpp
+    src/codegen/expr/tuple.cpp
     src/codegen/expr/print.cpp
     src/codegen/expr/collections.cpp
     src/codegen/expr/method.cpp

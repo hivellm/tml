@@ -62,11 +62,11 @@ enum class TokenKind : uint8_t {
     KwReturn,   // return
 
     // Keywords - logical operators (TML supports both words and symbols)
-    KwAnd,   // and (alias for &&)
-    KwOr,    // or (alias for ||)
-    KwNot,   // not (alias for !)
-    AndAnd,  // && (logical AND)
-    OrOr,    // || (logical OR)
+    KwAnd,  // and (alias for &&)
+    KwOr,   // or (alias for ||)
+    KwNot,  // not (alias for !)
+    AndAnd, // && (logical AND)
+    OrOr,   // || (logical OR)
 
     // Keywords - types
     KwThis,     // this (self value)

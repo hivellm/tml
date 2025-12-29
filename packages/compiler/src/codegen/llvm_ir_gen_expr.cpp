@@ -71,6 +71,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
     } else if (expr.is<parser::CastExpr>()) {
         return gen_cast(expr.as<parser::CastExpr>());
+    } else if (expr.is<parser::TupleExpr>()) {
+        return gen_tuple(expr.as<parser::TupleExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);
@@ -79,10 +81,20 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
 
 auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
     switch (lit.token.kind) {
-    case lexer::TokenKind::IntLiteral:
+    case lexer::TokenKind::IntLiteral: {
         // Use the actual numeric value, not the lexeme (handles 0x, 0b, etc.)
-        last_expr_type_ = "i32";
-        return std::to_string(lit.token.int_value().value);
+        uint64_t val = lit.token.int_value().value;
+        // Check if value fits in signed i32 range (-2^31 to 2^31-1)
+        // For unsigned values, check if it fits in 0 to 2^31-1 (positive i32)
+        constexpr uint64_t MAX_I32 = 2147483647ULL; // 2^31 - 1
+        if (val > MAX_I32) {
+            // Value too large for i32, use i64 directly
+            last_expr_type_ = "i64";
+        } else {
+            last_expr_type_ = "i32";
+        }
+        return std::to_string(val);
+    }
     case lexer::TokenKind::FloatLiteral:
         last_expr_type_ = "double";
         return std::to_string(lit.token.float_value().value);
@@ -561,7 +573,12 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
     switch (bin.op) {
     case parser::BinaryOp::Add:
-        if (is_float) {
+        if (is_string) {
+            // String concatenation using str_concat
+            emit_line("  " + result + " = call ptr @str_concat(ptr " + left + ", ptr " + right +
+                      ")");
+            last_expr_type_ = "ptr";
+        } else if (is_float) {
             emit_line("  " + result + " = fadd double " + left + ", " + right);
             last_expr_type_ = "double";
         } else {
@@ -1081,11 +1098,16 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
 
     // Helper to get bit width
     auto get_bit_width = [](const std::string& ty) -> int {
-        if (ty == "i8") return 8;
-        if (ty == "i16") return 16;
-        if (ty == "i32") return 32;
-        if (ty == "i64") return 64;
-        if (ty == "i128") return 128;
+        if (ty == "i8")
+            return 8;
+        if (ty == "i16")
+            return 16;
+        if (ty == "i32")
+            return 32;
+        if (ty == "i64")
+            return 64;
+        if (ty == "i128")
+            return 128;
         return 0;
     };
 
@@ -1115,7 +1137,8 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
 
     // Float to int conversions
     if ((src_type == "double" || src_type == "float") &&
-        (target_type == "i64" || target_type == "i32" || target_type == "i16" || target_type == "i8")) {
+        (target_type == "i64" || target_type == "i32" || target_type == "i16" ||
+         target_type == "i8")) {
         emit_line("  " + result + " = fptosi " + src_type + " " + src + " to " + target_type);
         last_expr_type_ = target_type;
         return result;
@@ -1144,8 +1167,8 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     }
 
     // Bool to int
-    if (src_type == "i1" && (target_type == "i8" || target_type == "i16" ||
-                             target_type == "i32" || target_type == "i64")) {
+    if (src_type == "i1" && (target_type == "i8" || target_type == "i16" || target_type == "i32" ||
+                             target_type == "i64")) {
         emit_line("  " + result + " = zext i1 " + src + " to " + target_type);
         last_expr_type_ = target_type;
         return result;

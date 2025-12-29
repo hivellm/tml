@@ -114,6 +114,20 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
             behavior_name = dyn.behavior.segments.back();
         }
         return "%dyn." + behavior_name;
+    } else if (type.is<parser::TupleType>()) {
+        // Tuple types are anonymous structs: { type1, type2, ... }
+        const auto& tuple = type.as<parser::TupleType>();
+        if (tuple.elements.empty()) {
+            return "{}";
+        }
+        std::string result = "{ ";
+        for (size_t i = 0; i < tuple.elements.size(); ++i) {
+            if (i > 0)
+                result += ", ";
+            result += llvm_type_ptr(tuple.elements[i]);
+        }
+        result += " }";
+        return result;
     }
     return "i32"; // Default
 }
@@ -191,6 +205,20 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         return "i32";
     } else if (type->is<types::RefType>() || type->is<types::PtrType>()) {
         return "ptr";
+    } else if (type->is<types::TupleType>()) {
+        // Tuple types are anonymous structs in LLVM: { element1, element2, ... }
+        const auto& tuple = type->as<types::TupleType>();
+        if (tuple.elements.empty()) {
+            return "{}";
+        }
+        std::string result = "{ ";
+        for (size_t i = 0; i < tuple.elements.size(); ++i) {
+            if (i > 0)
+                result += ", ";
+            result += llvm_type_from_semantic(tuple.elements[i], true);
+        }
+        result += " }";
+        return result;
     } else if (type->is<types::FuncType>()) {
         // Function types are pointers in LLVM
         return "ptr";
@@ -242,6 +270,17 @@ auto LLVMIRGen::mangle_type(const types::TypePtr& type) -> std::string {
     } else if (type->is<types::ArrayType>()) {
         const auto& arr = type->as<types::ArrayType>();
         return "arr_" + mangle_type(arr.element) + "_" + std::to_string(arr.size);
+    } else if (type->is<types::TupleType>()) {
+        // Tuple type: (A, B, C) -> "tuple_A_B_C"
+        const auto& tuple = type->as<types::TupleType>();
+        if (tuple.elements.empty()) {
+            return "tuple_empty";
+        }
+        std::string result = "tuple";
+        for (const auto& elem : tuple.elements) {
+            result += "_" + mangle_type(elem);
+        }
+        return result;
     } else if (type->is<types::GenericType>()) {
         // Uninstantiated generic - shouldn't reach codegen normally
         return type->as<types::GenericType>().name;
@@ -280,8 +319,8 @@ auto LLVMIRGen::mangle_func_name(const std::string& base_name,
 // Converts parser::Type to types::TypePtr, applying generic substitutions
 
 auto LLVMIRGen::resolve_parser_type_with_subs(
-    const parser::Type& type,
-    const std::unordered_map<std::string, types::TypePtr>& subs) -> types::TypePtr {
+    const parser::Type& type, const std::unordered_map<std::string, types::TypePtr>& subs)
+    -> types::TypePtr {
     return std::visit(
         [this, &subs](const auto& t) -> types::TypePtr {
             using T = std::decay_t<decltype(t)>;

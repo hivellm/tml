@@ -167,9 +167,9 @@ struct Type {
 // Generic type substitution
 // Replaces GenericType instances with concrete types from the substitution map
 // e.g., substitute_type(List[T], {T -> I32}) returns List[I32]
-[[nodiscard]] auto
-substitute_type(const TypePtr& type,
-                const std::unordered_map<std::string, TypePtr>& substitutions) -> TypePtr;
+[[nodiscard]] auto substitute_type(const TypePtr& type,
+                                   const std::unordered_map<std::string, TypePtr>& substitutions)
+    -> TypePtr;
 
 // Helper to convert primitive kind to string name
 [[nodiscard]] auto primitive_kind_to_string(PrimitiveKind kind) -> std::string;

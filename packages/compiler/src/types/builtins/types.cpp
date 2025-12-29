@@ -24,21 +24,19 @@ void TypeEnv::init_builtin_types() {
 
     // Ordering enum (core::cmp)
     // Ordering { Less, Equal, Greater }
-    define_enum(EnumDef{
-        .name = "Ordering",
-        .type_params = {},
-        .variants = {{"Less", {}}, {"Equal", {}}, {"Greater", {}}},
-        .span = {}});
+    define_enum(EnumDef{.name = "Ordering",
+                        .type_params = {},
+                        .variants = {{"Less", {}}, {"Equal", {}}, {"Greater", {}}},
+                        .span = {}});
 
     // Maybe[T] enum (core::option)
     // Maybe[T] { Just(T), Nothing }
     {
         auto T = std::make_shared<Type>(GenericType{"T"});
-        define_enum(EnumDef{
-            .name = "Maybe",
-            .type_params = {"T"},
-            .variants = {{"Just", {T}}, {"Nothing", {}}},
-            .span = {}});
+        define_enum(EnumDef{.name = "Maybe",
+                            .type_params = {"T"},
+                            .variants = {{"Just", {T}}, {"Nothing", {}}},
+                            .span = {}});
     }
 
     // Outcome[T, E] enum (core::result)
@@ -46,11 +44,10 @@ void TypeEnv::init_builtin_types() {
     {
         auto T = std::make_shared<Type>(GenericType{"T"});
         auto E = std::make_shared<Type>(GenericType{"E"});
-        define_enum(EnumDef{
-            .name = "Outcome",
-            .type_params = {"T", "E"},
-            .variants = {{"Ok", {T}}, {"Err", {E}}},
-            .span = {}});
+        define_enum(EnumDef{.name = "Outcome",
+                            .type_params = {"T", "E"},
+                            .variants = {{"Ok", {T}}, {"Err", {E}}},
+                            .span = {}});
     }
 
     // Register builtin behavior implementations for integer types

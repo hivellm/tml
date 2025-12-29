@@ -164,15 +164,16 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
         }
 
         // Check if it's a type name
-        auto struct_def = env_.lookup_struct(ident.name);
-        if (struct_def) {
+        // First check locally defined types (with empty module_path)
+        auto local_struct_it = env_.all_structs().find(ident.name);
+        if (local_struct_it != env_.all_structs().end()) {
             auto type = std::make_shared<Type>();
             type->kind = NamedType{ident.name, "", {}};
             return type;
         }
 
-        auto enum_def = env_.lookup_enum(ident.name);
-        if (enum_def) {
+        auto local_enum_it = env_.all_enums().find(ident.name);
+        if (local_enum_it != env_.all_enums().end()) {
             auto type = std::make_shared<Type>();
             type->kind = NamedType{ident.name, "", {}};
             return type;
@@ -462,27 +463,40 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
 
             bool is_primitive_type =
                 type_name == "I8" || type_name == "I16" || type_name == "I32" ||
-                type_name == "I64" || type_name == "I128" ||
-                type_name == "U8" || type_name == "U16" || type_name == "U32" ||
-                type_name == "U64" || type_name == "U128" ||
-                type_name == "F32" || type_name == "F64" ||
+                type_name == "I64" || type_name == "I128" || type_name == "U8" ||
+                type_name == "U16" || type_name == "U32" || type_name == "U64" ||
+                type_name == "U128" || type_name == "F32" || type_name == "F64" ||
                 type_name == "Bool" || type_name == "Str";
 
             if (is_primitive_type && method == "default") {
-                if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
-                if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
-                if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
-                if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
-                if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
-                if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
-                if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
-                if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
-                if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
-                if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
-                if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
-                if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
-                if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
-                if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+                if (type_name == "I8")
+                    return make_primitive(PrimitiveKind::I8);
+                if (type_name == "I16")
+                    return make_primitive(PrimitiveKind::I16);
+                if (type_name == "I32")
+                    return make_primitive(PrimitiveKind::I32);
+                if (type_name == "I64")
+                    return make_primitive(PrimitiveKind::I64);
+                if (type_name == "I128")
+                    return make_primitive(PrimitiveKind::I128);
+                if (type_name == "U8")
+                    return make_primitive(PrimitiveKind::U8);
+                if (type_name == "U16")
+                    return make_primitive(PrimitiveKind::U16);
+                if (type_name == "U32")
+                    return make_primitive(PrimitiveKind::U32);
+                if (type_name == "U64")
+                    return make_primitive(PrimitiveKind::U64);
+                if (type_name == "U128")
+                    return make_primitive(PrimitiveKind::U128);
+                if (type_name == "F32")
+                    return make_primitive(PrimitiveKind::F32);
+                if (type_name == "F64")
+                    return make_primitive(PrimitiveKind::F64);
+                if (type_name == "Bool")
+                    return make_primitive(PrimitiveKind::Bool);
+                if (type_name == "Str")
+                    return make_primitive(PrimitiveKind::Str);
             }
 
             // Handle Type::from(value) for type conversion
@@ -490,20 +504,34 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                 // Type check the argument (source type)
                 check_expr(*call.args[0]);
                 // Return the target type
-                if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
-                if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
-                if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
-                if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
-                if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
-                if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
-                if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
-                if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
-                if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
-                if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
-                if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
-                if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
-                if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
-                if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+                if (type_name == "I8")
+                    return make_primitive(PrimitiveKind::I8);
+                if (type_name == "I16")
+                    return make_primitive(PrimitiveKind::I16);
+                if (type_name == "I32")
+                    return make_primitive(PrimitiveKind::I32);
+                if (type_name == "I64")
+                    return make_primitive(PrimitiveKind::I64);
+                if (type_name == "I128")
+                    return make_primitive(PrimitiveKind::I128);
+                if (type_name == "U8")
+                    return make_primitive(PrimitiveKind::U8);
+                if (type_name == "U16")
+                    return make_primitive(PrimitiveKind::U16);
+                if (type_name == "U32")
+                    return make_primitive(PrimitiveKind::U32);
+                if (type_name == "U64")
+                    return make_primitive(PrimitiveKind::U64);
+                if (type_name == "U128")
+                    return make_primitive(PrimitiveKind::U128);
+                if (type_name == "F32")
+                    return make_primitive(PrimitiveKind::F32);
+                if (type_name == "F64")
+                    return make_primitive(PrimitiveKind::F64);
+                if (type_name == "Bool")
+                    return make_primitive(PrimitiveKind::Bool);
+                if (type_name == "Str")
+                    return make_primitive(PrimitiveKind::Str);
             }
 
             // Handle imported type static methods (e.g., Layout::from_size_align)
@@ -557,30 +585,42 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
     if (call.receiver->is<parser::IdentExpr>()) {
         const auto& type_name = call.receiver->as<parser::IdentExpr>().name;
         // Check if this is a primitive type name used as a static receiver
-        bool is_primitive_type =
-            type_name == "I8" || type_name == "I16" || type_name == "I32" ||
-            type_name == "I64" || type_name == "I128" ||
-            type_name == "U8" || type_name == "U16" || type_name == "U32" ||
-            type_name == "U64" || type_name == "U128" ||
-            type_name == "F32" || type_name == "F64" ||
-            type_name == "Bool" || type_name == "Str";
+        bool is_primitive_type = type_name == "I8" || type_name == "I16" || type_name == "I32" ||
+                                 type_name == "I64" || type_name == "I128" || type_name == "U8" ||
+                                 type_name == "U16" || type_name == "U32" || type_name == "U64" ||
+                                 type_name == "U128" || type_name == "F32" || type_name == "F64" ||
+                                 type_name == "Bool" || type_name == "Str";
 
         if (is_primitive_type && call.method == "default") {
             // Return the primitive type itself
-            if (type_name == "I8") return make_primitive(PrimitiveKind::I8);
-            if (type_name == "I16") return make_primitive(PrimitiveKind::I16);
-            if (type_name == "I32") return make_primitive(PrimitiveKind::I32);
-            if (type_name == "I64") return make_primitive(PrimitiveKind::I64);
-            if (type_name == "I128") return make_primitive(PrimitiveKind::I128);
-            if (type_name == "U8") return make_primitive(PrimitiveKind::U8);
-            if (type_name == "U16") return make_primitive(PrimitiveKind::U16);
-            if (type_name == "U32") return make_primitive(PrimitiveKind::U32);
-            if (type_name == "U64") return make_primitive(PrimitiveKind::U64);
-            if (type_name == "U128") return make_primitive(PrimitiveKind::U128);
-            if (type_name == "F32") return make_primitive(PrimitiveKind::F32);
-            if (type_name == "F64") return make_primitive(PrimitiveKind::F64);
-            if (type_name == "Bool") return make_primitive(PrimitiveKind::Bool);
-            if (type_name == "Str") return make_primitive(PrimitiveKind::Str);
+            if (type_name == "I8")
+                return make_primitive(PrimitiveKind::I8);
+            if (type_name == "I16")
+                return make_primitive(PrimitiveKind::I16);
+            if (type_name == "I32")
+                return make_primitive(PrimitiveKind::I32);
+            if (type_name == "I64")
+                return make_primitive(PrimitiveKind::I64);
+            if (type_name == "I128")
+                return make_primitive(PrimitiveKind::I128);
+            if (type_name == "U8")
+                return make_primitive(PrimitiveKind::U8);
+            if (type_name == "U16")
+                return make_primitive(PrimitiveKind::U16);
+            if (type_name == "U32")
+                return make_primitive(PrimitiveKind::U32);
+            if (type_name == "U64")
+                return make_primitive(PrimitiveKind::U64);
+            if (type_name == "U128")
+                return make_primitive(PrimitiveKind::U128);
+            if (type_name == "F32")
+                return make_primitive(PrimitiveKind::F32);
+            if (type_name == "F64")
+                return make_primitive(PrimitiveKind::F64);
+            if (type_name == "Bool")
+                return make_primitive(PrimitiveKind::Bool);
+            if (type_name == "Str")
+                return make_primitive(PrimitiveKind::Str);
         }
     }
 
@@ -670,9 +710,8 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                            kind == PrimitiveKind::U64 || kind == PrimitiveKind::U128);
 
         // Arithmetic operations that return Self
-        if (is_numeric && (call.method == "add" || call.method == "sub" ||
-                           call.method == "mul" || call.method == "div" ||
-                           call.method == "neg")) {
+        if (is_numeric && (call.method == "add" || call.method == "sub" || call.method == "mul" ||
+                           call.method == "div" || call.method == "neg")) {
             return receiver_type;
         }
 

@@ -217,8 +217,8 @@ public:
 
     // Check an entire module
     // Returns true on success, vector of errors on failure
-    [[nodiscard]] auto
-    check_module(const parser::Module& module) -> Result<bool, std::vector<BorrowError>>;
+    [[nodiscard]] auto check_module(const parser::Module& module)
+        -> Result<bool, std::vector<BorrowError>>;
 
     // Get accumulated errors
     [[nodiscard]] auto errors() const -> const std::vector<BorrowError>& {

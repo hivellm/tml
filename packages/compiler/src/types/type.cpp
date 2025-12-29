@@ -57,8 +57,8 @@ auto make_func(std::vector<TypePtr> params, TypePtr ret) -> TypePtr {
     return type;
 }
 
-auto make_closure(std::vector<TypePtr> params, TypePtr ret,
-                  std::vector<CapturedVar> captures) -> TypePtr {
+auto make_closure(std::vector<TypePtr> params, TypePtr ret, std::vector<CapturedVar> captures)
+    -> TypePtr {
     auto type = std::make_shared<Type>();
     type->kind = ClosureType{std::move(params), std::move(ret), std::move(captures)};
     type->id = next_type_id++;
@@ -305,8 +305,8 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
 }
 
 // Generic type substitution - replaces GenericType with concrete types
-auto substitute_type(const TypePtr& type,
-                     const std::unordered_map<std::string, TypePtr>& subs) -> TypePtr {
+auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, TypePtr>& subs)
+    -> TypePtr {
     if (!type)
         return type;
     if (subs.empty())

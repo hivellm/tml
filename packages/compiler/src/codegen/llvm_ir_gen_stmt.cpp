@@ -372,6 +372,56 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             std::string conv = fresh_reg();
             emit_line("  " + conv + " = fptrunc double " + init_val + " to float");
             emit_line("  store float " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i64" && last_expr_type_ == "i32") {
+            // Sign extend i32 to i64
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i32 " + init_val + " to i64");
+            emit_line("  store i64 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i64" && last_expr_type_ == "i16") {
+            // Sign extend i16 to i64
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i16 " + init_val + " to i64");
+            emit_line("  store i64 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i64" && last_expr_type_ == "i8") {
+            // Sign extend i8 to i64
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i8 " + init_val + " to i64");
+            emit_line("  store i64 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i32" && last_expr_type_ == "i16") {
+            // Sign extend i16 to i32
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i16 " + init_val + " to i32");
+            emit_line("  store i32 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i32" && last_expr_type_ == "i8") {
+            // Sign extend i8 to i32
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext i8 " + init_val + " to i32");
+            emit_line("  store i32 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i32" && last_expr_type_ == "i64") {
+            // Truncate i64 to i32 (for cases like -2147483648 which overflows i32 literal)
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i64 " + init_val + " to i32");
+            emit_line("  store i32 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i16" && last_expr_type_ == "i64") {
+            // Truncate i64 to i16
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i64 " + init_val + " to i16");
+            emit_line("  store i16 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i8" && last_expr_type_ == "i64") {
+            // Truncate i64 to i8
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i64 " + init_val + " to i8");
+            emit_line("  store i8 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i16" && last_expr_type_ == "i32") {
+            // Truncate i32 to i16
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i32 " + init_val + " to i16");
+            emit_line("  store i16 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type == "i8" && last_expr_type_ == "i32") {
+            // Truncate i32 to i8
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = trunc i32 " + init_val + " to i8");
+            emit_line("  store i8 " + conv + ", ptr " + alloca_reg);
         } else {
             emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
         }

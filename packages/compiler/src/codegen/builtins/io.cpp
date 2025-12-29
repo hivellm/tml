@@ -5,8 +5,8 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name,
-                                   const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // Handle builtin print/println - unified for all types
     if (fn_name == "print" || fn_name == "println") {

@@ -5,8 +5,9 @@
 
 namespace tml::codegen {
 
-auto LLVMIRGen::try_gen_builtin_collections(
-    const std::string& fn_name, const parser::CallExpr& call) -> std::optional<std::string> {
+auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
+                                            const parser::CallExpr& call)
+    -> std::optional<std::string> {
 
     // ============ LIST FUNCTIONS ============
 
@@ -21,7 +22,7 @@ auto LLVMIRGen::try_gen_builtin_collections(
             std::string cap_type = last_expr_type_;
             std::string cap;
             if (cap_type == "i64") {
-                cap = cap_val;  // Already i64, no conversion needed
+                cap = cap_val; // Already i64, no conversion needed
             } else {
                 cap = fresh_reg();
                 emit_line("  " + cap + " = sext i32 " + cap_val + " to i64");

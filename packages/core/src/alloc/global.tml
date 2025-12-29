@@ -1,8 +1,220 @@
 //! Global memory allocator interface.
 //!
-//! This module defines the GlobalAlloc behavior for custom global allocators.
+//! This module provides the `GlobalAlloc` behavior for implementing
+//! custom global allocators that can be registered with `@global_allocator`.
 
-// GlobalAlloc requires lowlevel intrinsics not yet supported.
-// This file is kept for compatibility with the module structure.
+// Note: Layout and LayoutError are defined in layout.tml which is loaded
+// together with this file as part of the core::alloc module.
 
-// The behavior will be implemented when lowlevel block support is added.
+// ============================================================================
+// GlobalAlloc Behavior
+// ============================================================================
+
+/// A memory allocator that can be registered as the standard library's default
+/// through the `@global_allocator` attribute.
+///
+/// Some of the methods require that a memory block be currently
+/// allocated via an allocator. This means that:
+///
+/// * the starting address for that memory block was previously returned by
+///   a call to `alloc` or `realloc`, and
+///
+/// * the memory block has not been subsequently deallocated.
+///
+/// # Safety
+///
+/// The `GlobalAlloc` trait is an unsafe trait for a number of reasons:
+///
+/// * Global allocators are typically implemented using `lowlevel` blocks.
+///
+/// * Implementors must ensure thread-safety.
+///
+/// * It is platform-dependent what happens when the first allocation request
+///   is made before the allocator is initialized.
+///
+/// # Example
+///
+/// ```tml
+/// type MyAllocator {}
+///
+/// impl GlobalAlloc for MyAllocator {
+///     func alloc(ref this, layout: Layout) -> Ptr[U8] {
+///         // ... implementation using lowlevel malloc
+///     }
+///
+///     func dealloc(ref this, ptr: Ptr[U8], layout: Layout) {
+///         // ... implementation using lowlevel free
+///     }
+/// }
+///
+/// @global_allocator
+/// static GLOBAL: MyAllocator = MyAllocator {}
+/// ```
+pub behavior GlobalAlloc {
+    /// Allocate memory as described by the given `layout`.
+    ///
+    /// Returns a pointer to newly-allocated memory,
+    /// or null to indicate allocation failure.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because undefined behavior can result
+    /// if the caller does not ensure that `layout` has non-zero size.
+    ///
+    /// The allocated block of memory may or may not be initialized.
+    ///
+    /// # Errors
+    ///
+    /// Returning a null pointer indicates that either memory is exhausted
+    /// or `layout` does not meet allocator's size or alignment constraints.
+    func alloc(mut this, layout: Layout) -> Ptr[U8]
+
+    /// Deallocate the block of memory at the given `ptr` pointer with the given `layout`.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because undefined behavior can result
+    /// if the caller does not ensure all of the following:
+    ///
+    /// * `ptr` must denote a block of memory currently allocated via
+    ///   this allocator,
+    ///
+    /// * `layout` must be the same layout that was used
+    ///   to allocate that block of memory.
+    func dealloc(mut this, ptr: Ptr[U8], layout: Layout)
+
+    /// Behaves like `alloc`, but also ensures that the contents
+    /// are set to zero before being returned.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe for the same reasons that `alloc` is.
+    /// Additionally, the behavior is undefined if zero-initializing
+    /// the memory fails.
+    ///
+    /// # Default Implementation
+    ///
+    /// The default implementation calls `alloc` and then zeroes the
+    /// memory using `write_bytes`. Implementors can override this
+    /// for better performance (e.g., using `calloc`).
+    func alloc_zeroed(mut this, layout: Layout) -> Ptr[U8]
+
+    /// Shrink or grow a block of memory to the given `new_size` in bytes.
+    /// The block is described by the given `ptr` pointer and `layout`.
+    ///
+    /// Returns a pointer to newly-allocated memory, or null if reallocation
+    /// failed.
+    ///
+    /// If the reallocation is successful, the old pointer becomes invalid
+    /// and should not be used.
+    ///
+    /// The contents of the returned memory will be unchanged up to the
+    /// lesser of the new and old sizes.
+    ///
+    /// If `new_size` is greater than `layout.size()`, the contents of the
+    /// new portion of the memory are undefined.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because undefined behavior can result
+    /// if the caller does not ensure all of the following:
+    ///
+    /// * `ptr` must be currently allocated via this allocator,
+    ///
+    /// * `layout` must be the same layout that was used to allocate that block
+    ///   of memory,
+    ///
+    /// * `new_size` must be greater than zero.
+    ///
+    /// * `new_size`, when rounded up to the nearest multiple of `layout.align()`,
+    ///   must not overflow (i.e., the rounded value must be less than or equal to
+    ///   `I64::MAX`).
+    ///
+    /// # Default Implementation
+    ///
+    /// The default implementation allocates new memory, copies the old data,
+    /// and deallocates the old memory. Implementors can override this for
+    /// better performance (e.g., using system `realloc`).
+    func realloc(mut this, ptr: Ptr[U8], layout: Layout, new_size: I64) -> Ptr[U8]
+}
+
+// ============================================================================
+// Global Allocator Utilities
+// ============================================================================
+
+/// Handle allocation failure by calling the out-of-memory handler.
+///
+/// This function is called when a memory allocation fails and the allocator
+/// cannot recover. The default behavior is to abort the program.
+///
+/// Note: This is a placeholder. The actual implementation would use
+/// lowlevel code to handle OOM situations.
+pub func handle_alloc_error(layout: Layout) {
+    // In a real implementation, this would:
+    // 1. Call the registered OOM handler
+    // 2. If no handler, abort the program
+    //
+    // For now, we just print an error message and the program will continue.
+    // A proper implementation would abort/panic here.
+    println("memory allocation of " + layout.size().to_string() + " bytes failed")
+}
+
+/// The default alignment for general-purpose memory allocations.
+///
+/// This is typically the maximum alignment required by any fundamental type
+/// on the platform (e.g., 16 bytes on x86-64 for SSE registers).
+pub func default_alloc_align() -> I64 {
+    return 16  // Suitable for most platforms
+}
+
+/// The minimum allocation size.
+///
+/// Allocations smaller than this may be rounded up by the allocator.
+pub func min_alloc_size() -> I64 {
+    return 16  // Common minimum for malloc implementations
+}
+
+// ============================================================================
+// Layout Presets for Common Types
+// ============================================================================
+
+/// Creates a layout suitable for a single byte (U8/I8).
+pub func layout_u8() -> Layout {
+    return Layout::from_size_align_unchecked(1, 1)
+}
+
+/// Creates a layout suitable for a 16-bit value (U16/I16).
+pub func layout_u16() -> Layout {
+    return Layout::from_size_align_unchecked(2, 2)
+}
+
+/// Creates a layout suitable for a 32-bit value (U32/I32/F32).
+pub func layout_u32() -> Layout {
+    return Layout::from_size_align_unchecked(4, 4)
+}
+
+/// Creates a layout suitable for a 64-bit value (U64/I64/F64).
+pub func layout_u64() -> Layout {
+    return Layout::from_size_align_unchecked(8, 8)
+}
+
+/// Creates a layout suitable for a 128-bit value (U128/I128).
+pub func layout_u128() -> Layout {
+    return Layout::from_size_align_unchecked(16, 16)
+}
+
+/// Creates a layout suitable for a pointer-sized value.
+pub func layout_ptr() -> Layout {
+    // Assuming 64-bit platform
+    return Layout::from_size_align_unchecked(8, 8)
+}
+
+/// Creates a layout for a byte array of the given size.
+pub func layout_bytes(size: I64) -> Outcome[Layout, LayoutError] {
+    return Layout::from_size_align(size, 1)
+}
+
+/// Creates a layout for an aligned byte array.
+pub func layout_bytes_aligned(size: I64, align: I64) -> Outcome[Layout, LayoutError] {
+    return Layout::from_size_align(size, align)
+}

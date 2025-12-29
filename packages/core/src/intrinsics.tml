@@ -1,0 +1,399 @@
+//! Compiler intrinsics.
+//!
+//! This module exposes low-level operations that are implemented directly
+//! by the compiler. These are the primitive building blocks used to implement
+//! higher-level operations in the standard library.
+//!
+//! **WARNING**: These functions are highly unsafe and should generally not be
+//! used directly. Use the safe wrappers in other modules instead.
+//!
+//! # Categories
+//!
+//! ## Arithmetic Operations
+//! - [`llvm_add`], [`llvm_sub`], [`llvm_mul`], [`llvm_div`], [`llvm_rem`]
+//! - [`llvm_neg`] (unary negation)
+//!
+//! ## Comparison Operations
+//! - [`llvm_eq`], [`llvm_ne`], [`llvm_lt`], [`llvm_le`], [`llvm_gt`], [`llvm_ge`]
+//!
+//! ## Bitwise Operations
+//! - [`llvm_and`], [`llvm_or`], [`llvm_xor`], [`llvm_not`]
+//! - [`llvm_shl`], [`llvm_shr`]
+//!
+//! ## Memory Operations
+//! - [`ptr_read`], [`ptr_write`], [`ptr_offset`]
+//! - [`copy_nonoverlapping`], [`copy`]
+//!
+//! ## Type Information
+//! - [`size_of`], [`align_of`], [`type_id`]
+//!
+//! ## Unsafe Conversions
+//! - [`transmute`]
+//!
+//! # Example (Internal Use Only)
+//!
+//! ```tml
+//! // Inside core::ops - implementing Add for I32
+//! impl Add for I32 {
+//!     pub func add(this, other: I32) -> I32 {
+//!         return lowlevel { llvm_add(this, other) }
+//!     }
+//! }
+//! ```
+
+// ============================================================================
+// Arithmetic Intrinsics
+// ============================================================================
+
+/// Adds two values. Maps to LLVM `add` instruction.
+/// For integers: wrapping addition (no overflow check).
+/// For floats: IEEE 754 addition.
+@intrinsic
+pub func llvm_add[T](a: T, b: T) -> T
+
+/// Subtracts b from a. Maps to LLVM `sub` instruction.
+@intrinsic
+pub func llvm_sub[T](a: T, b: T) -> T
+
+/// Multiplies two values. Maps to LLVM `mul` instruction.
+@intrinsic
+pub func llvm_mul[T](a: T, b: T) -> T
+
+/// Divides a by b. Maps to LLVM `sdiv`/`udiv`/`fdiv` instruction.
+/// For integers: truncating division.
+/// For floats: IEEE 754 division.
+/// **WARNING**: Division by zero is undefined behavior.
+@intrinsic
+pub func llvm_div[T](a: T, b: T) -> T
+
+/// Computes remainder of a divided by b. Maps to LLVM `srem`/`urem`/`frem`.
+/// **WARNING**: Division by zero is undefined behavior.
+@intrinsic
+pub func llvm_rem[T](a: T, b: T) -> T
+
+/// Negates a value. Maps to LLVM `sub 0, x` or `fneg`.
+@intrinsic
+pub func llvm_neg[T](a: T) -> T
+
+// ============================================================================
+// Comparison Intrinsics
+// ============================================================================
+
+/// Equality comparison. Maps to LLVM `icmp eq` or `fcmp oeq`.
+@intrinsic
+pub func llvm_eq[T](a: T, b: T) -> Bool
+
+/// Inequality comparison. Maps to LLVM `icmp ne` or `fcmp one`.
+@intrinsic
+pub func llvm_ne[T](a: T, b: T) -> Bool
+
+/// Less than comparison. Maps to LLVM `icmp slt/ult` or `fcmp olt`.
+@intrinsic
+pub func llvm_lt[T](a: T, b: T) -> Bool
+
+/// Less than or equal. Maps to LLVM `icmp sle/ule` or `fcmp ole`.
+@intrinsic
+pub func llvm_le[T](a: T, b: T) -> Bool
+
+/// Greater than comparison. Maps to LLVM `icmp sgt/ugt` or `fcmp ogt`.
+@intrinsic
+pub func llvm_gt[T](a: T, b: T) -> Bool
+
+/// Greater than or equal. Maps to LLVM `icmp sge/uge` or `fcmp oge`.
+@intrinsic
+pub func llvm_ge[T](a: T, b: T) -> Bool
+
+// ============================================================================
+// Bitwise Intrinsics
+// ============================================================================
+
+/// Bitwise AND. Maps to LLVM `and` instruction.
+@intrinsic
+pub func llvm_and[T](a: T, b: T) -> T
+
+/// Bitwise OR. Maps to LLVM `or` instruction.
+@intrinsic
+pub func llvm_or[T](a: T, b: T) -> T
+
+/// Bitwise XOR. Maps to LLVM `xor` instruction.
+@intrinsic
+pub func llvm_xor[T](a: T, b: T) -> T
+
+/// Bitwise NOT. Maps to LLVM `xor x, -1`.
+@intrinsic
+pub func llvm_not[T](a: T) -> T
+
+/// Shift left. Maps to LLVM `shl` instruction.
+@intrinsic
+pub func llvm_shl[T](a: T, b: T) -> T
+
+/// Shift right. Maps to LLVM `ashr` (signed) or `lshr` (unsigned).
+@intrinsic
+pub func llvm_shr[T](a: T, b: T) -> T
+
+// ============================================================================
+// Checked Arithmetic (returns Maybe[T])
+// ============================================================================
+
+/// Add with overflow check. Returns Nothing on overflow.
+@intrinsic
+pub func checked_add[T](a: T, b: T) -> Maybe[T]
+
+/// Subtract with overflow check. Returns Nothing on overflow.
+@intrinsic
+pub func checked_sub[T](a: T, b: T) -> Maybe[T]
+
+/// Multiply with overflow check. Returns Nothing on overflow.
+@intrinsic
+pub func checked_mul[T](a: T, b: T) -> Maybe[T]
+
+/// Divide with zero check. Returns Nothing on division by zero.
+@intrinsic
+pub func checked_div[T](a: T, b: T) -> Maybe[T]
+
+// ============================================================================
+// Saturating Arithmetic
+// ============================================================================
+
+/// Add with saturation. Clamps to min/max on overflow.
+@intrinsic
+pub func saturating_add[T](a: T, b: T) -> T
+
+/// Subtract with saturation. Clamps to min/max on overflow.
+@intrinsic
+pub func saturating_sub[T](a: T, b: T) -> T
+
+/// Multiply with saturation. Clamps to min/max on overflow.
+@intrinsic
+pub func saturating_mul[T](a: T, b: T) -> T
+
+// ============================================================================
+// Memory Intrinsics
+// ============================================================================
+
+/// Reads the value at a raw pointer.
+/// **UNSAFE**: Pointer must be valid and properly aligned.
+@intrinsic
+pub func ptr_read[T](ptr: Ptr[T]) -> T
+
+/// Writes a value to a raw pointer.
+/// **UNSAFE**: Pointer must be valid and properly aligned.
+@intrinsic
+pub func ptr_write[T](ptr: Ptr[T], val: T)
+
+/// Computes an offset from a pointer.
+/// **UNSAFE**: Result must stay within allocated object or one past end.
+@intrinsic
+pub func ptr_offset[T](ptr: Ptr[T], count: I64) -> Ptr[T]
+
+/// Copies bytes from src to dst. Regions must not overlap.
+/// **UNSAFE**: Pointers must be valid. Use `copy` for overlapping regions.
+@intrinsic
+pub func copy_nonoverlapping[T](src: Ptr[T], dst: Ptr[T], count: I64)
+
+/// Copies bytes from src to dst. Safe for overlapping regions.
+/// **UNSAFE**: Pointers must be valid.
+@intrinsic
+pub func copy[T](src: Ptr[T], dst: Ptr[T], count: I64)
+
+/// Sets count bytes at dst to val.
+/// **UNSAFE**: Pointer must be valid.
+@intrinsic
+pub func write_bytes[T](dst: Ptr[T], val: U8, count: I64)
+
+// ============================================================================
+// Type Information Intrinsics
+// ============================================================================
+
+/// Returns the size of type T in bytes.
+@intrinsic
+pub func size_of[T]() -> I64
+
+/// Returns the minimum alignment of type T in bytes.
+@intrinsic
+pub func align_of[T]() -> I64
+
+/// Returns a unique identifier for type T.
+@intrinsic
+pub func type_id[T]() -> U64
+
+/// Returns the name of type T as a string (for debugging).
+@intrinsic
+pub func type_name[T]() -> Str
+
+// ============================================================================
+// Unsafe Conversions
+// ============================================================================
+
+/// Reinterprets the bits of one type as another type.
+/// **EXTREMELY UNSAFE**: Types must have same size. No validation performed.
+@intrinsic
+pub func transmute[T, U](val: T) -> U
+
+/// Converts between numeric types (zero-extend, sign-extend, truncate).
+/// For integer-to-float or float-to-integer conversions.
+@intrinsic
+pub func cast[T, U](val: T) -> U
+
+// ============================================================================
+// Volatile Memory Operations (for memory-mapped I/O)
+// ============================================================================
+
+/// Volatile read. Compiler cannot optimize away or reorder.
+@intrinsic
+pub func volatile_read[T](ptr: Ptr[T]) -> T
+
+/// Volatile write. Compiler cannot optimize away or reorder.
+@intrinsic
+pub func volatile_write[T](ptr: Ptr[T], val: T)
+
+// ============================================================================
+// Atomic Operations
+// ============================================================================
+
+/// Atomic load with sequential consistency.
+@intrinsic
+pub func atomic_load[T](ptr: Ptr[T]) -> T
+
+/// Atomic store with sequential consistency.
+@intrinsic
+pub func atomic_store[T](ptr: Ptr[T], val: T)
+
+/// Atomic compare-and-swap. Returns (success, old_value).
+@intrinsic
+pub func atomic_cmpxchg[T](ptr: Ptr[T], expected: T, desired: T) -> (Bool, T)
+
+/// Atomic fetch-and-add. Returns old value.
+@intrinsic
+pub func atomic_add[T](ptr: Ptr[T], val: T) -> T
+
+/// Atomic fetch-and-sub. Returns old value.
+@intrinsic
+pub func atomic_sub[T](ptr: Ptr[T], val: T) -> T
+
+/// Atomic fetch-and-and. Returns old value.
+@intrinsic
+pub func atomic_and[T](ptr: Ptr[T], val: T) -> T
+
+/// Atomic fetch-and-or. Returns old value.
+@intrinsic
+pub func atomic_or[T](ptr: Ptr[T], val: T) -> T
+
+/// Atomic fetch-and-xor. Returns old value.
+@intrinsic
+pub func atomic_xor[T](ptr: Ptr[T], val: T) -> T
+
+// ============================================================================
+// Compiler Hints
+// ============================================================================
+
+/// Indicates that this code path is unreachable.
+/// **UNSAFE**: If reached, behavior is undefined.
+/// Note: Returns Unit but never actually returns (diverges).
+@intrinsic
+pub func unreachable() -> Unit
+
+/// Assumes the condition is true. Enables optimizations.
+/// **UNSAFE**: If condition is false, behavior is undefined.
+@intrinsic
+pub func assume(cond: Bool)
+
+/// Hints to the compiler that this branch is likely to be taken.
+@intrinsic
+pub func likely(cond: Bool) -> Bool
+
+/// Hints to the compiler that this branch is unlikely to be taken.
+@intrinsic
+pub func unlikely(cond: Bool) -> Bool
+
+/// Memory fence for synchronization.
+@intrinsic
+pub func fence()
+
+// ============================================================================
+// Bit Manipulation
+// ============================================================================
+
+/// Count leading zeros.
+@intrinsic
+pub func ctlz[T](val: T) -> T
+
+/// Count trailing zeros.
+@intrinsic
+pub func cttz[T](val: T) -> T
+
+/// Population count (number of 1 bits).
+@intrinsic
+pub func ctpop[T](val: T) -> T
+
+/// Byte swap (for endianness conversion).
+@intrinsic
+pub func bswap[T](val: T) -> T
+
+/// Bit reverse.
+@intrinsic
+pub func bitreverse[T](val: T) -> T
+
+// ============================================================================
+// Math Intrinsics
+// ============================================================================
+
+/// Square root. Maps to LLVM `llvm.sqrt`.
+@intrinsic
+pub func sqrt[T](val: T) -> T
+
+/// Sine. Maps to LLVM `llvm.sin`.
+@intrinsic
+pub func sin[T](val: T) -> T
+
+/// Cosine. Maps to LLVM `llvm.cos`.
+@intrinsic
+pub func cos[T](val: T) -> T
+
+/// Natural logarithm. Maps to LLVM `llvm.log`.
+@intrinsic
+pub func log[T](val: T) -> T
+
+/// Exponential (e^x). Maps to LLVM `llvm.exp`.
+@intrinsic
+pub func exp[T](val: T) -> T
+
+/// Power (x^y). Maps to LLVM `llvm.pow`.
+@intrinsic
+pub func pow[T](base: T, exp: T) -> T
+
+/// Floor (round down).
+@intrinsic
+pub func floor[T](val: T) -> T
+
+/// Ceiling (round up).
+@intrinsic
+pub func ceil[T](val: T) -> T
+
+/// Round to nearest integer.
+@intrinsic
+pub func round[T](val: T) -> T
+
+/// Truncate toward zero.
+@intrinsic
+pub func trunc[T](val: T) -> T
+
+/// Fused multiply-add: (a * b) + c with single rounding.
+@intrinsic
+pub func fma[T](a: T, b: T, c: T) -> T
+
+/// Minimum of two values.
+@intrinsic
+pub func minnum[T](a: T, b: T) -> T
+
+/// Maximum of two values.
+@intrinsic
+pub func maxnum[T](a: T, b: T) -> T
+
+/// Absolute value.
+@intrinsic
+pub func fabs[T](val: T) -> T
+
+/// Copy sign from b to a.
+@intrinsic
+pub func copysign[T](a: T, b: T) -> T

@@ -57,8 +57,8 @@ void LLVMIRGen::emit_dyn_type(const std::string& behavior_name) {
     emit_line("%dyn." + behavior_name + " = type { ptr, ptr }");
 }
 
-auto LLVMIRGen::get_vtable(const std::string& type_name,
-                           const std::string& behavior_name) -> std::string {
+auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& behavior_name)
+    -> std::string {
     std::string key = type_name + "::" + behavior_name;
     auto it = vtables_.find(key);
     if (it != vtables_.end()) {

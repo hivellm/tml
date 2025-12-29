@@ -29,16 +29,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
     if (has_type_name) {
         // Check if this is a known struct type (not a variable)
-        bool is_type_name = struct_types_.count(type_name) > 0 || type_name == "List" ||
-                            type_name == "HashMap" || type_name == "Buffer" ||
-                            type_name == "File" || type_name == "Path" ||
-                            // Primitive types for static methods like I32::default()
-                            type_name == "I8" || type_name == "I16" || type_name == "I32" ||
-                            type_name == "I64" || type_name == "I128" ||
-                            type_name == "U8" || type_name == "U16" || type_name == "U32" ||
-                            type_name == "U64" || type_name == "U128" ||
-                            type_name == "F32" || type_name == "F64" ||
-                            type_name == "Bool" || type_name == "Str";
+        bool is_type_name =
+            struct_types_.count(type_name) > 0 || type_name == "List" || type_name == "HashMap" ||
+            type_name == "Buffer" || type_name == "File" || type_name == "Path" ||
+            // Primitive types for static methods like I32::default()
+            type_name == "I8" || type_name == "I16" || type_name == "I32" || type_name == "I64" ||
+            type_name == "I128" || type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+            type_name == "U64" || type_name == "U128" || type_name == "F32" || type_name == "F64" ||
+            type_name == "Bool" || type_name == "Str";
 
         // Also check it's not a local variable
         if (is_type_name && locals_.count(type_name) == 0) {
@@ -392,15 +390,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (method == "default") {
                 // Integer types: default is 0
                 if (type_name == "I8" || type_name == "I16" || type_name == "I32" ||
-                    type_name == "I64" || type_name == "I128" ||
-                    type_name == "U8" || type_name == "U16" || type_name == "U32" ||
-                    type_name == "U64" || type_name == "U128") {
+                    type_name == "I64" || type_name == "I128" || type_name == "U8" ||
+                    type_name == "U16" || type_name == "U32" || type_name == "U64" ||
+                    type_name == "U128") {
                     std::string llvm_ty;
-                    if (type_name == "I8" || type_name == "U8") llvm_ty = "i8";
-                    else if (type_name == "I16" || type_name == "U16") llvm_ty = "i16";
-                    else if (type_name == "I32" || type_name == "U32") llvm_ty = "i32";
-                    else if (type_name == "I64" || type_name == "U64") llvm_ty = "i64";
-                    else llvm_ty = "i128";
+                    if (type_name == "I8" || type_name == "U8")
+                        llvm_ty = "i8";
+                    else if (type_name == "I16" || type_name == "U16")
+                        llvm_ty = "i16";
+                    else if (type_name == "I32" || type_name == "U32")
+                        llvm_ty = "i32";
+                    else if (type_name == "I64" || type_name == "U64")
+                        llvm_ty = "i64";
+                    else
+                        llvm_ty = "i128";
                     last_expr_type_ = llvm_ty;
                     return "0";
                 }
@@ -769,14 +772,20 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 std::string cmp_lt = fresh_reg();
                 std::string cmp_eq = fresh_reg();
                 if (is_float) {
-                    emit_line("  " + cmp_lt + " = fcmp olt " + llvm_ty + " " + receiver + ", " + other);
-                    emit_line("  " + cmp_eq + " = fcmp oeq " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp_lt + " = fcmp olt " + llvm_ty + " " + receiver + ", " +
+                              other);
+                    emit_line("  " + cmp_eq + " = fcmp oeq " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else if (is_signed) {
-                    emit_line("  " + cmp_lt + " = icmp slt " + llvm_ty + " " + receiver + ", " + other);
-                    emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp_lt + " = icmp slt " + llvm_ty + " " + receiver + ", " +
+                              other);
+                    emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else {
-                    emit_line("  " + cmp_lt + " = icmp ult " + llvm_ty + " " + receiver + ", " + other);
-                    emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp_lt + " = icmp ult " + llvm_ty + " " + receiver + ", " +
+                              other);
+                    emit_line("  " + cmp_eq + " = icmp eq " + llvm_ty + " " + receiver + ", " +
+                              other);
                 }
                 // Less = 0, Equal = 1, Greater = 2
                 // if lt: 0, else (if eq: 1, else 2)
@@ -786,7 +795,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 emit_line("  " + tag + " = select i1 " + cmp_lt + ", i32 0, i32 " + sel1);
                 // Create Ordering struct with the tag
                 std::string result = fresh_reg();
-                emit_line("  " + result + " = insertvalue %struct.Ordering undef, i32 " + tag + ", 0");
+                emit_line("  " + result + " = insertvalue %struct.Ordering undef, i32 " + tag +
+                          ", 0");
                 last_expr_type_ = "%struct.Ordering";
                 return result;
             }
@@ -800,11 +810,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 std::string other = gen_expr(*call.args[0]);
                 std::string cmp = fresh_reg();
                 if (is_float) {
-                    emit_line("  " + cmp + " = fcmp ogt " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = fcmp ogt " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else if (is_signed) {
-                    emit_line("  " + cmp + " = icmp sgt " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = icmp sgt " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else {
-                    emit_line("  " + cmp + " = icmp ugt " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = icmp ugt " + llvm_ty + " " + receiver + ", " +
+                              other);
                 }
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = select i1 " + cmp + ", " + llvm_ty + " " + receiver +
@@ -822,11 +835,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 std::string other = gen_expr(*call.args[0]);
                 std::string cmp = fresh_reg();
                 if (is_float) {
-                    emit_line("  " + cmp + " = fcmp olt " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = fcmp olt " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else if (is_signed) {
-                    emit_line("  " + cmp + " = icmp slt " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = icmp slt " + llvm_ty + " " + receiver + ", " +
+                              other);
                 } else {
-                    emit_line("  " + cmp + " = icmp ult " + llvm_ty + " " + receiver + ", " + other);
+                    emit_line("  " + cmp + " = icmp ult " + llvm_ty + " " + receiver + ", " +
+                              other);
                 }
                 std::string result = fresh_reg();
                 emit_line("  " + result + " = select i1 " + cmp + ", " + llvm_ty + " " + receiver +
@@ -966,7 +982,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // Extract the tag first
             std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver + ", 0");
+            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver +
+                      ", 0");
 
             // Dispatch to helper function
             auto result = gen_maybe_method(call, receiver, enum_type_name, tag_val, named);
@@ -983,7 +1000,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
             // Extract the tag first
             std::string tag_val = fresh_reg();
-            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver + ", 0");
+            emit_line("  " + tag_val + " = extractvalue " + enum_type_name + " " + receiver +
+                      ", 0");
 
             // Dispatch to helper function
             auto result = gen_outcome_method(call, receiver, enum_type_name, tag_val, named);
@@ -1054,74 +1072,74 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named = receiver_type->as<types::NamedType>();
         // Skip builtin types - their impl methods are not generated
-        bool is_builtin_type = (named.name == "List" || named.name == "HashMap" ||
-                                named.name == "Buffer" || named.name == "File" ||
-                                named.name == "Path");
+        bool is_builtin_type =
+            (named.name == "List" || named.name == "HashMap" || named.name == "Buffer" ||
+             named.name == "File" || named.name == "Path");
         if (!is_builtin_type) {
             // Use base type name for method lookup (Maybe, not Maybe__I32)
             // Impl methods are generated for the generic type, not each instantiation
             std::string qualified_name = named.name + "::" + method;
             auto func_sig = env_.lookup_func(qualified_name);
             if (func_sig) {
-            // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
-            std::string fn_name = "@tml_" + named.name + "_" + method;
+                // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
+                std::string fn_name = "@tml_" + named.name + "_" + method;
 
-            // Get receiver pointer
-            std::string impl_receiver_ptr;
-            if (call.receiver->is<parser::IdentExpr>()) {
-                const auto& ident = call.receiver->as<parser::IdentExpr>();
-                auto it = locals_.find(ident.name);
-                if (it != locals_.end()) {
-                    if (it->second.type == "ptr") {
-                        impl_receiver_ptr = receiver;
+                // Get receiver pointer
+                std::string impl_receiver_ptr;
+                if (call.receiver->is<parser::IdentExpr>()) {
+                    const auto& ident = call.receiver->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    if (it != locals_.end()) {
+                        if (it->second.type == "ptr") {
+                            impl_receiver_ptr = receiver;
+                        } else {
+                            impl_receiver_ptr = it->second.reg;
+                        }
                     } else {
-                        impl_receiver_ptr = it->second.reg;
+                        impl_receiver_ptr = receiver;
                     }
                 } else {
                     impl_receiver_ptr = receiver;
                 }
-            } else {
-                impl_receiver_ptr = receiver;
-            }
 
-            // Build argument list: self (receiver ptr) + args
-            std::vector<std::pair<std::string, std::string>> typed_args;
-            typed_args.push_back({"ptr", impl_receiver_ptr});
+                // Build argument list: self (receiver ptr) + args
+                std::vector<std::pair<std::string, std::string>> typed_args;
+                typed_args.push_back({"ptr", impl_receiver_ptr});
 
-            // Get parameter types from function signature
-            // params[0] is 'this', so real args start at index 1
-            for (size_t i = 0; i < call.args.size(); ++i) {
-                std::string val = gen_expr(*call.args[i]);
-                std::string arg_type = "i32"; // default
-                // Get type from func_sig if available (params[i+1] because params[0] is 'this')
-                if (func_sig && i + 1 < func_sig->params.size()) {
-                    arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                // Get parameter types from function signature
+                // params[0] is 'this', so real args start at index 1
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string val = gen_expr(*call.args[i]);
+                    std::string arg_type = "i32"; // default
+                    // Get type from func_sig if available (params[i+1] because params[0] is 'this')
+                    if (func_sig && i + 1 < func_sig->params.size()) {
+                        arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                    }
+                    typed_args.push_back({arg_type, val});
                 }
-                typed_args.push_back({arg_type, val});
-            }
 
-            std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+                std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
 
-            std::string args_str;
-            for (size_t i = 0; i < typed_args.size(); ++i) {
-                if (i > 0)
-                    args_str += ", ";
-                args_str += typed_args[i].first + " " + typed_args[i].second;
-            }
+                std::string args_str;
+                for (size_t i = 0; i < typed_args.size(); ++i) {
+                    if (i > 0)
+                        args_str += ", ";
+                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                }
 
-            std::string result = fresh_reg();
-            if (ret_type == "void") {
-                emit_line("  call void " + fn_name + "(" + args_str + ")");
-                last_expr_type_ = "void";
-                return "void";
-            } else {
-                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str +
-                          ")");
-                last_expr_type_ = ret_type;
-                return result;
+                std::string result = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return "void";
+                } else {
+                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
             }
-        }
-        }  // if (!is_builtin_type)
+        } // if (!is_builtin_type)
     }
 
     // Extract handle from collection struct types (List, HashMap, Buffer)
@@ -1159,7 +1177,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
         std::string val = gen_expr(*call.args[0]);
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @list_push(ptr " + collection_handle + ", i32 " + val + ")");
+        emit_line("  " + result + " = call i32 @list_push(ptr " + collection_handle + ", i32 " +
+                  val + ")");
         return result;
     }
     if (receiver_type_name == "List" && method == "pop") {
@@ -1180,15 +1199,16 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string key_i64 = fresh_reg();
             emit_line("  " + key_i64 + " = sext i32 " + arg + " to i64");
             std::string result_i64 = fresh_reg();
-            emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + collection_handle + ", i64 " +
-                      key_i64 + ")");
+            emit_line("  " + result_i64 + " = call i64 @hashmap_get(ptr " + collection_handle +
+                      ", i64 " + key_i64 + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
             return result;
         }
         // Default: List - get(index: I32) -> I32
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i32 @list_get(ptr " + collection_handle + ", i32 " + arg + ")");
+        emit_line("  " + result + " = call i32 @list_get(ptr " + collection_handle + ", i32 " +
+                  arg + ")");
         return result;
     }
     // Type-aware set method (only for List/HashMap collection types)
@@ -1206,13 +1226,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string val_i64 = fresh_reg();
             emit_line("  " + key_i64 + " = sext i32 " + arg1 + " to i64");
             emit_line("  " + val_i64 + " = sext i32 " + arg2 + " to i64");
-            emit_line("  call void @hashmap_set(ptr " + collection_handle + ", i64 " + key_i64 + ", i64 " +
-                      val_i64 + ")");
+            emit_line("  call void @hashmap_set(ptr " + collection_handle + ", i64 " + key_i64 +
+                      ", i64 " + val_i64 + ")");
             return "void";
         }
         // Default: List - set(index: I32, value: I32) -> Unit
-        emit_line("  call void @list_set(ptr " + collection_handle + ", i32 " + arg1 + ", i32 " + arg2 +
-                  ")");
+        emit_line("  call void @list_set(ptr " + collection_handle + ", i32 " + arg1 + ", i32 " +
+                  arg2 + ")");
         return "void";
     }
     if (method == "clear") {
@@ -1242,8 +1262,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         std::string key_i64 = fresh_reg();
         emit_line("  " + key_i64 + " = sext i32 " + key + " to i64");
         std::string result = fresh_reg();
-        emit_line("  " + result + " = call i1 @hashmap_has(ptr " + collection_handle + ", i64 " + key_i64 +
-                  ")");
+        emit_line("  " + result + " = call i1 @hashmap_has(ptr " + collection_handle + ", i64 " +
+                  key_i64 + ")");
         return result;
     }
     if (method == "remove") {
@@ -1299,7 +1319,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         // Convert i32 to i64 if needed
         std::string val_i64 = fresh_reg();
         emit_line("  " + val_i64 + " = sext i32 " + val + " to i64");
-        emit_line("  call void @buffer_write_i64(ptr " + collection_handle + ", i64 " + val_i64 + ")");
+        emit_line("  call void @buffer_write_i64(ptr " + collection_handle + ", i64 " + val_i64 +
+                  ")");
         return "void";
     }
     if (method == "read_i32") {
@@ -1309,7 +1330,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
     if (method == "read_i64") {
         std::string result_i64 = fresh_reg();
-        emit_line("  " + result_i64 + " = call i64 @buffer_read_i64(ptr " + collection_handle + ")");
+        emit_line("  " + result_i64 + " = call i64 @buffer_read_i64(ptr " + collection_handle +
+                  ")");
         // Truncate to i32 for now
         std::string result = fresh_reg();
         emit_line("  " + result + " = trunc i64 " + result_i64 + " to i32");
@@ -1338,120 +1360,120 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // Skip builtin types (List, HashMap, Buffer) - their methods are handled explicitly above
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named2 = receiver_type->as<types::NamedType>();
-        bool is_builtin_type2 = (named2.name == "List" || named2.name == "HashMap" ||
-                                 named2.name == "Buffer" || named2.name == "File" ||
-                                 named2.name == "Path");
+        bool is_builtin_type2 =
+            (named2.name == "List" || named2.name == "HashMap" || named2.name == "Buffer" ||
+             named2.name == "File" || named2.name == "Path");
         if (is_builtin_type2) {
             // Fall through to report unknown method error
         } else {
-        std::string qualified_name = named2.name + "::" + method;
-        auto func_sig = env_.lookup_func(qualified_name);
+            std::string qualified_name = named2.name + "::" + method;
+            auto func_sig = env_.lookup_func(qualified_name);
 
-        // If not found locally, try looking in the module the type is from
-        if (!func_sig) {
-            std::string module_path = named2.module_path;
+            // If not found locally, try looking in the module the type is from
+            if (!func_sig) {
+                std::string module_path = named2.module_path;
 
-            // If module_path is empty, try to resolve via imported symbol
-            if (module_path.empty()) {
-                auto import_path = env_.resolve_imported_symbol(named2.name);
-                if (import_path) {
-                    auto pos = import_path->rfind("::");
-                    if (pos != std::string::npos) {
-                        module_path = import_path->substr(0, pos);
+                // If module_path is empty, try to resolve via imported symbol
+                if (module_path.empty()) {
+                    auto import_path = env_.resolve_imported_symbol(named2.name);
+                    if (import_path) {
+                        auto pos = import_path->rfind("::");
+                        if (pos != std::string::npos) {
+                            module_path = import_path->substr(0, pos);
+                        }
+                    }
+                }
+
+                // Look up in the module
+                if (!module_path.empty()) {
+                    auto module = env_.get_module(module_path);
+                    if (module) {
+                        auto func_it = module->functions.find(qualified_name);
+                        if (func_it != module->functions.end()) {
+                            func_sig = func_it->second;
+                        }
+                    }
+                }
+
+                // If still not found and we're generating module code, search all loaded modules
+                // (for module-internal calls where the type isn't "imported")
+                if (!func_sig && env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto func_it = mod.functions.find(qualified_name);
+                        if (func_it != mod.functions.end()) {
+                            func_sig = func_it->second;
+                            break;
+                        }
                     }
                 }
             }
+            if (func_sig) {
+                // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
+                std::string fn_name = "@tml_" + named2.name + "_" + method;
 
-            // Look up in the module
-            if (!module_path.empty()) {
-                auto module = env_.get_module(module_path);
-                if (module) {
-                    auto func_it = module->functions.find(qualified_name);
-                    if (func_it != module->functions.end()) {
-                        func_sig = func_it->second;
-                    }
-                }
-            }
-
-            // If still not found and we're generating module code, search all loaded modules
-            // (for module-internal calls where the type isn't "imported")
-            if (!func_sig && env_.module_registry()) {
-                const auto& all_modules = env_.module_registry()->get_all_modules();
-                for (const auto& [mod_name, mod] : all_modules) {
-                    auto func_it = mod.functions.find(qualified_name);
-                    if (func_it != mod.functions.end()) {
-                        func_sig = func_it->second;
-                        break;
-                    }
-                }
-            }
-        }
-        if (func_sig) {
-            // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
-            std::string fn_name = "@tml_" + named2.name + "_" + method;
-
-            // Get receiver pointer (not the loaded value)
-            // For identifiers, use the alloca directly
-            std::string impl_receiver_ptr;
-            if (call.receiver->is<parser::IdentExpr>()) {
-                const auto& ident = call.receiver->as<parser::IdentExpr>();
-                auto it = locals_.find(ident.name);
-                if (it != locals_.end()) {
-                    // If the variable stores a pointer (like 'this' parameter),
-                    // we need to load it to get the actual pointer value
-                    if (it->second.type == "ptr") {
-                        impl_receiver_ptr = receiver; // Use the loaded value
+                // Get receiver pointer (not the loaded value)
+                // For identifiers, use the alloca directly
+                std::string impl_receiver_ptr;
+                if (call.receiver->is<parser::IdentExpr>()) {
+                    const auto& ident = call.receiver->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    if (it != locals_.end()) {
+                        // If the variable stores a pointer (like 'this' parameter),
+                        // we need to load it to get the actual pointer value
+                        if (it->second.type == "ptr") {
+                            impl_receiver_ptr = receiver; // Use the loaded value
+                        } else {
+                            impl_receiver_ptr = it->second.reg; // Use alloca pointer directly
+                        }
                     } else {
-                        impl_receiver_ptr = it->second.reg; // Use alloca pointer directly
+                        impl_receiver_ptr = receiver; // Fall back to generated value
                     }
                 } else {
-                    impl_receiver_ptr = receiver; // Fall back to generated value
+                    // For other expressions, receiver is already a pointer
+                    impl_receiver_ptr = receiver;
                 }
-            } else {
-                // For other expressions, receiver is already a pointer
-                impl_receiver_ptr = receiver;
-            }
 
-            // Build argument list: self (receiver ptr) + args
-            std::vector<std::pair<std::string, std::string>> typed_args;
-            typed_args.push_back({"ptr", impl_receiver_ptr}); // self reference
+                // Build argument list: self (receiver ptr) + args
+                std::vector<std::pair<std::string, std::string>> typed_args;
+                typed_args.push_back({"ptr", impl_receiver_ptr}); // self reference
 
-            // Get parameter types from function signature
-            // params[0] is 'this', so real args start at index 1
-            for (size_t i = 0; i < call.args.size(); ++i) {
-                std::string val = gen_expr(*call.args[i]);
-                std::string arg_type = "i32"; // default
-                // Get type from func_sig if available (params[i+1] because params[0] is 'this')
-                if (func_sig && i + 1 < func_sig->params.size()) {
-                    arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                // Get parameter types from function signature
+                // params[0] is 'this', so real args start at index 1
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string val = gen_expr(*call.args[i]);
+                    std::string arg_type = "i32"; // default
+                    // Get type from func_sig if available (params[i+1] because params[0] is 'this')
+                    if (func_sig && i + 1 < func_sig->params.size()) {
+                        arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                    }
+                    typed_args.push_back({arg_type, val});
                 }
-                typed_args.push_back({arg_type, val});
-            }
 
-            // Get return type
-            std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+                // Get return type
+                std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
 
-            // Build call
-            std::string args_str;
-            for (size_t i = 0; i < typed_args.size(); ++i) {
-                if (i > 0)
-                    args_str += ", ";
-                args_str += typed_args[i].first + " " + typed_args[i].second;
-            }
+                // Build call
+                std::string args_str;
+                for (size_t i = 0; i < typed_args.size(); ++i) {
+                    if (i > 0)
+                        args_str += ", ";
+                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                }
 
-            std::string result = fresh_reg();
-            if (ret_type == "void") {
-                emit_line("  call void " + fn_name + "(" + args_str + ")");
-                last_expr_type_ = "void";
-                return "void";
-            } else {
-                emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str +
-                          ")");
-                last_expr_type_ = ret_type; // Set expression type for when/match expressions
-                return result;
+                std::string result = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return "void";
+                } else {
+                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type; // Set expression type for when/match expressions
+                    return result;
+                }
             }
-        }
-        }  // close else block for builtin type check
+        } // close else block for builtin type check
     }
 
     // Handle dyn dispatch: call method through vtable

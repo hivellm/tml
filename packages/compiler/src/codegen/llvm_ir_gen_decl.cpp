@@ -4,6 +4,8 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/type.hpp"
 
+#include <functional>
+
 namespace tml::codegen {
 
 void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
@@ -95,8 +97,9 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
 
 // Request instantiation of a generic struct - returns mangled name
 // Immediately generates the type definition to type_defs_buffer_ if not already generated
-auto LLVMIRGen::require_struct_instantiation(
-    const std::string& base_name, const std::vector<types::TypePtr>& type_args) -> std::string {
+auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
+                                             const std::vector<types::TypePtr>& type_args)
+    -> std::string {
     // Generate mangled name
     std::string mangled = mangle_struct_name(base_name, type_args);
 
@@ -270,7 +273,8 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         // Use for_data=true since these are data fields (Unit -> "{}" not "void")
 
         // Helper lambda to calculate size of an LLVM type
-        auto calc_type_size = [this](const std::string& ty) -> size_t {
+        std::function<size_t(const std::string&)> calc_type_size;
+        calc_type_size = [this, &calc_type_size](const std::string& ty) -> size_t {
             if (ty == "{}" || ty == "void")
                 return 0; // Unit type has zero size
             if (ty == "i8")
@@ -283,6 +287,24 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 return 8;
             if (ty == "i128")
                 return 16;
+            // Check if it's an anonymous struct/tuple type like "{ %struct.Layout, i64 }"
+            if (ty.starts_with("{ ") && ty.ends_with(" }")) {
+                std::string inner = ty.substr(2, ty.size() - 4); // Remove "{ " and " }"
+                size_t tuple_size = 0;
+                size_t pos = 0;
+                while (pos < inner.size()) {
+                    // Find the next element (separated by ", ")
+                    size_t next_comma = inner.find(", ", pos);
+                    std::string elem = (next_comma == std::string::npos)
+                                           ? inner.substr(pos)
+                                           : inner.substr(pos, next_comma - pos);
+                    tuple_size += calc_type_size(elem);
+                    if (next_comma == std::string::npos)
+                        break;
+                    pos = next_comma + 2;
+                }
+                return tuple_size > 0 ? tuple_size : 8;
+            }
             // Check if it's a struct type
             if (ty.starts_with("%struct.")) {
                 std::string struct_name = ty.substr(8); // Remove "%struct."
@@ -290,14 +312,7 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
                 if (it != struct_fields_.end()) {
                     size_t struct_size = 0;
                     for (const auto& field : it->second) {
-                        // Recursively calculate field size
-                        if (field.llvm_type == "i8") struct_size += 1;
-                        else if (field.llvm_type == "i16") struct_size += 2;
-                        else if (field.llvm_type == "i32" || field.llvm_type == "float" || field.llvm_type == "i1") struct_size += 4;
-                        else if (field.llvm_type == "i64" || field.llvm_type == "double" || field.llvm_type == "ptr") struct_size += 8;
-                        else if (field.llvm_type == "i128") struct_size += 16;
-                        else if (field.llvm_type.starts_with("%struct.")) struct_size += 8; // Nested struct - assume pointer size
-                        else struct_size += 8; // Default
+                        struct_size += calc_type_size(field.llvm_type);
                     }
                     return struct_size > 0 ? struct_size : 8;
                 }
@@ -329,9 +344,17 @@ void LLVMIRGen::gen_enum_instantiation(const parser::EnumDecl& decl,
         if (max_size == 0)
             max_size = 8;
 
-        // Emit to type_defs_buffer_ instead of output_ to ensure type is defined before use
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size)
-                          << " x i8] }\n";
+        // Calculate alignment needed for payload (max alignment of any variant)
+        // Use [N x i64] instead of [N x i8] to ensure 8-byte alignment of the payload data.
+        // This is necessary because payloads may contain i64/double/structs that require
+        // 8-byte alignment. Using i8 array would place data at offset 4 after the i32 tag,
+        // causing alignment issues.
+        //
+        // We round up max_size to the nearest multiple of 8, then divide by 8 to get
+        // the number of i64 elements needed.
+        size_t num_i64 = (max_size + 7) / 8;
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(num_i64)
+                          << " x i64] }\n";
         struct_types_[mangled] = type_name;
 
         int tag = 0;

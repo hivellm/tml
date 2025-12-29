@@ -163,8 +163,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     }
 }
 
-auto Parser::parse_func_decl(Visibility vis,
-                             std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Check for async/unsafe modifiers
@@ -299,8 +299,8 @@ auto Parser::parse_func_decl(Visibility vis,
         Decl{.kind = std::move(func), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_struct_decl(Visibility vis,
-                               std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
@@ -384,8 +384,8 @@ auto Parser::parse_struct_decl(Visibility vis,
         Decl{.kind = std::move(struct_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_enum_decl(Visibility vis,
-                             std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // 'type' keyword already consumed by parse_decl
@@ -521,8 +521,8 @@ auto Parser::parse_enum_decl(Visibility vis,
         Decl{.kind = std::move(enum_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_trait_decl(Visibility vis,
-                              std::vector<Decorator> decorators) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Consume 'behavior' keyword
@@ -916,11 +916,10 @@ auto Parser::parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     // Inline modules (mod foo { ... }) not yet supported
     auto end_span = previous().span;
 
-    ModDecl mod_decl{
-        .vis = vis,
-        .name = std::move(name),
-        .items = std::nullopt, // External module reference
-        .span = SourceSpan::merge(start_span, end_span)};
+    ModDecl mod_decl{.vis = vis,
+                     .name = std::move(name),
+                     .items = std::nullopt, // External module reference
+                     .span = SourceSpan::merge(start_span, end_span)};
 
     return make_box<Decl>(
         Decl{.kind = std::move(mod_decl), .span = SourceSpan::merge(start_span, end_span)});
@@ -1021,9 +1020,7 @@ auto Parser::parse_where_clause() -> Result<std::optional<WhereClause>, ParseErr
             type_equalities.push_back({std::move(type_param), std::move(rhs_type)});
         } else {
             return ParseError{
-                "Expected ':' or '=' after type parameter in where clause",
-                peek().span,
-                {}};
+                "Expected ':' or '=' after type parameter in where clause", peek().span, {}};
         }
 
         // Check for ',' to continue parsing constraints

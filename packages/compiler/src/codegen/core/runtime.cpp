@@ -481,8 +481,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                     if (enum_it != pending_generic_enums_.end()) {
                         // Check if generic struct type already declared
                         if (struct_types_.find(type_name) == struct_types_.end()) {
-                            // Emit generic type definition with i64 payload (fits all instantiations)
-                            type_defs_buffer_ << "%struct." << type_name << " = type { i32, i64 }\n";
+                            // Emit generic type definition with i64 payload (fits all
+                            // instantiations)
+                            type_defs_buffer_ << "%struct." << type_name
+                                              << " = type { i32, i64 }\n";
                             struct_types_[type_name] = "%struct." + type_name;
                         }
                     }

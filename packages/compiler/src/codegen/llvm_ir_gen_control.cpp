@@ -716,32 +716,152 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
 
             if (enum_pat.payload.has_value() && !enum_pat.payload->empty()) {
-                // Extract payload value
+                // Extract payload pointer (points to the data bytes of the enum)
                 std::string payload_ptr = fresh_reg();
                 emit_line("  " + payload_ptr + " = getelementptr inbounds " + scrutinee_type +
                           ", ptr " + scrutinee_ptr + ", i32 0, i32 1");
-                std::string payload = fresh_reg();
-                emit_line("  " + payload + " = load i64, ptr " + payload_ptr);
 
-                // Bind to first pattern variable (simplified - only handles single payload)
-                if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                // Get the semantic type of the scrutinee to find the payload type
+                types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+
+                // Check if the payload pattern is a TuplePattern
+                if (enum_pat.payload->at(0)->is<parser::TuplePattern>()) {
+                    const auto& tuple_pat = enum_pat.payload->at(0)->as<parser::TuplePattern>();
+
+                    // Get the tuple type from the enum's type arguments
+                    // For Outcome[T, E], Ok's payload is T
+                    // For Maybe[T], Just's payload is T
+                    types::TypePtr payload_type = nullptr;
+                    if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                        const auto& named = scrutinee_semantic->as<types::NamedType>();
+                        std::string variant_name;
+                        if (!enum_pat.path.segments.empty()) {
+                            variant_name = enum_pat.path.segments.back();
+                        }
+
+                        // For Outcome: Ok uses type_args[0] (T), Err uses type_args[1] (E)
+                        if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                            if (variant_name == "Ok") {
+                                payload_type = named.type_args[0];
+                            } else if (variant_name == "Err") {
+                                payload_type = named.type_args[1];
+                            }
+                        }
+                        // For Maybe: Just uses type_args[0] (T)
+                        else if (named.name == "Maybe" && !named.type_args.empty()) {
+                            if (variant_name == "Just") {
+                                payload_type = named.type_args[0];
+                            }
+                        }
+                    }
+
+                    // The payload is a tuple stored as an anonymous struct
+                    // Get the element types from the payload_type if it's a TupleType
+                    std::vector<types::TypePtr> element_types;
+                    if (payload_type && payload_type->is<types::TupleType>()) {
+                        element_types = payload_type->as<types::TupleType>().elements;
+                    }
+
+                    // Get the LLVM type of the tuple for proper GEP
+                    std::string tuple_llvm_type =
+                        payload_type ? llvm_type_from_semantic(payload_type, true) : "{ i64, i64 }";
+
+                    // For each element in the tuple pattern, extract and bind
+                    for (size_t i = 0; i < tuple_pat.elements.size(); ++i) {
+                        const auto& elem_pat = tuple_pat.elements[i];
+
+                        if (elem_pat->is<parser::IdentPattern>()) {
+                            const auto& ident = elem_pat->as<parser::IdentPattern>();
+
+                            // Skip wildcard patterns like _stride
+                            if (ident.name.empty() || ident.name[0] == '_') {
+                                continue;
+                            }
+
+                            // Get the element type (from inference or default to i64)
+                            std::string elem_type = "i64";
+                            types::TypePtr elem_semantic_type = nullptr;
+                            if (i < element_types.size()) {
+                                elem_semantic_type = element_types[i];
+                                elem_type = llvm_type_from_semantic(elem_semantic_type, true);
+                            }
+
+                            // Extract the i-th element from the tuple
+                            // The tuple is stored at payload_ptr as tuple_llvm_type
+                            std::string elem_ptr = fresh_reg();
+                            emit_line("  " + elem_ptr + " = getelementptr inbounds " +
+                                      tuple_llvm_type + ", ptr " + payload_ptr + ", i32 0, i32 " +
+                                      std::to_string(i));
+
+                            // For struct types, we just use the pointer directly
+                            // For primitives, we load the value
+                            if (elem_type.starts_with("%struct.") || elem_type.starts_with("{")) {
+                                // Struct/tuple type - variable is the pointer
+                                locals_[ident.name] =
+                                    VarInfo{elem_ptr, elem_type, elem_semantic_type, std::nullopt};
+                            } else {
+                                // Primitive type - load and store
+                                std::string elem_val = fresh_reg();
+                                emit_line("  " + elem_val + " = load " + elem_type + ", ptr " +
+                                          elem_ptr);
+
+                                std::string var_alloca = fresh_reg();
+                                emit_line("  " + var_alloca + " = alloca " + elem_type);
+                                emit_line("  store " + elem_type + " " + elem_val + ", ptr " +
+                                          var_alloca);
+                                locals_[ident.name] = VarInfo{var_alloca, elem_type,
+                                                              elem_semantic_type, std::nullopt};
+                            }
+                        } else if (elem_pat->is<parser::WildcardPattern>()) {
+                            // Wildcard _ - skip binding
+                            continue;
+                        }
+                    }
+                } else if (enum_pat.payload->at(0)->is<parser::IdentPattern>()) {
+                    // Simple ident pattern - original behavior
                     const auto& ident = enum_pat.payload->at(0)->as<parser::IdentPattern>();
 
-                    // Convert i64 back to i32 if needed
-                    std::string bound_val = payload;
-                    std::string bound_type = "i64";
+                    // Get payload type from enum type args
+                    types::TypePtr payload_type = nullptr;
+                    if (scrutinee_semantic && scrutinee_semantic->is<types::NamedType>()) {
+                        const auto& named = scrutinee_semantic->as<types::NamedType>();
+                        std::string variant_name;
+                        if (!enum_pat.path.segments.empty()) {
+                            variant_name = enum_pat.path.segments.back();
+                        }
 
-                    // For now, assume payloads are i32 and convert
-                    std::string converted = fresh_reg();
-                    emit_line("  " + converted + " = trunc i64 " + payload + " to i32");
-                    bound_val = converted;
-                    bound_type = "i32";
+                        if (named.name == "Outcome" && named.type_args.size() >= 2) {
+                            if (variant_name == "Ok") {
+                                payload_type = named.type_args[0];
+                            } else if (variant_name == "Err") {
+                                payload_type = named.type_args[1];
+                            }
+                        } else if (named.name == "Maybe" && !named.type_args.empty()) {
+                            if (variant_name == "Just") {
+                                payload_type = named.type_args[0];
+                            }
+                        }
+                    }
 
-                    // Allocate and store bound variable
-                    std::string var_alloca = fresh_reg();
-                    emit_line("  " + var_alloca + " = alloca " + bound_type);
-                    emit_line("  store " + bound_type + " " + bound_val + ", ptr " + var_alloca);
-                    locals_[ident.name] = VarInfo{var_alloca, bound_type, nullptr, std::nullopt};
+                    std::string bound_type =
+                        payload_type ? llvm_type_from_semantic(payload_type, true) : "i64";
+
+                    // For struct/tuple types, the variable is a pointer to the payload
+                    if (bound_type.starts_with("%struct.") || bound_type.starts_with("{")) {
+                        locals_[ident.name] =
+                            VarInfo{payload_ptr, bound_type, payload_type, std::nullopt};
+                    } else {
+                        // For primitives, load from payload
+                        std::string payload = fresh_reg();
+                        emit_line("  " + payload + " = load " + bound_type + ", ptr " +
+                                  payload_ptr);
+
+                        std::string var_alloca = fresh_reg();
+                        emit_line("  " + var_alloca + " = alloca " + bound_type);
+                        emit_line("  store " + bound_type + " " + payload + ", ptr " + var_alloca);
+                        locals_[ident.name] =
+                            VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
+                    }
                 }
             }
         }

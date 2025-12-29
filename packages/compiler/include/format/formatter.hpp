@@ -106,8 +106,8 @@ private:
     // Operator helpers
     auto binary_op_str(parser::BinaryOp op) -> std::string;
     auto unary_op_str(parser::UnaryOp op) -> std::string;
-    auto needs_parens(const parser::Expr& expr, const parser::BinaryExpr& parent,
-                      bool is_right) -> bool;
+    auto needs_parens(const parser::Expr& expr, const parser::BinaryExpr& parent, bool is_right)
+        -> bool;
 };
 
 } // namespace tml::format

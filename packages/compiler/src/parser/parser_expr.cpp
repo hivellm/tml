@@ -999,8 +999,8 @@ auto Parser::parse_closure_expr() -> Result<ExprPtr, ParseError> {
              .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_struct_expr(TypePath path,
-                               std::optional<GenericArgs> generics) -> Result<ExprPtr, ParseError> {
+auto Parser::parse_struct_expr(TypePath path, std::optional<GenericArgs> generics)
+    -> Result<ExprPtr, ParseError> {
     auto start_span = path.span;
 
     auto lbrace = expect(lexer::TokenKind::LBrace, "Expected '{'");

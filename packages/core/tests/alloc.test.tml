@@ -1,6 +1,6 @@
 // Tests for core::alloc module
 use test
-use core::alloc
+use core::alloc::{Layout, LayoutError, AllocError, is_power_of_two, is_valid_align, align_up, is_aligned}
 
 // ============================================================================
 // Layout Basic Tests
@@ -9,75 +9,208 @@ use core::alloc
 @test
 func test_layout_unchecked() {
     let layout: Layout = Layout::from_size_align_unchecked(50, 4)
-    assert_eq(layout.size(), 50)
-    assert_eq(layout.align(), 4)
+    let size: I64 = layout.size()
+    let align: I64 = layout.align()
+    let expected_size: I64 = 50
+    let expected_align: I64 = 4
+    assert_eq(size, expected_size, "size mismatch")
+    assert_eq(align, expected_align, "align mismatch")
 }
 
 @test
 func test_layout_from_size_align_valid() {
-    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(100, 8)
-    assert(result.is_ok())
-    let layout: Layout = result.unwrap()
-    assert_eq(layout.size(), 100)
-    assert_eq(layout.align(), 8)
+    let size: I64 = 100
+    let align: I64 = 8
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    let check: Bool = result.is_ok()
+    assert(check, "from_size_align should succeed")
 }
 
 @test
-func test_layout_from_size_align_power_of_two() {
-    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(100, 16)
-    assert(result.is_ok())
-    let layout: Layout = result.unwrap()
-    assert_eq(layout.align(), 16)
+func test_layout_from_size_align_invalid_align_zero() {
+    let size: I64 = 100
+    let align: I64 = 0
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    let check: Bool = result.is_err()
+    assert(check, "align=0 should fail")
 }
 
 @test
-func test_layout_from_size_align_invalid_align() {
-    // Alignment 3 is not a power of two
-    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(100, 3)
-    assert(result.is_err())
+func test_layout_from_size_align_invalid_align_not_power_of_two() {
+    let size: I64 = 100
+    let align: I64 = 3
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    let check: Bool = result.is_err()
+    assert(check, "align=3 should fail (not power of two)")
 }
 
 @test
-func test_layout_from_size_align_zero_align() {
-    // Alignment 0 is invalid
-    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(100, 0)
-    assert(result.is_err())
+func test_layout_from_size_align_invalid_negative_size() {
+    let neg_one: I64 = 0 - 1  // Workaround: -1 literal produces i32
+    let size: I64 = neg_one
+    let align: I64 = 8
+    let result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    let check: Bool = result.is_err()
+    assert(check, "size=-1 should fail")
 }
 
 // ============================================================================
-// Layout Padding Tests
+// Layout Accessors
 // ============================================================================
 
 @test
-func test_layout_padding_needed_aligned() {
-    let layout: Layout = Layout::from_size_align_unchecked(8, 8)
-    // 8 is already aligned to 8, no padding needed
-    assert_eq(layout.padding_needed_for(8), 0)
+func test_layout_size() {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 16)
+    let size: I64 = layout.size()
+    let expected: I64 = 64
+    assert_eq(size, expected, "size should be 64")
 }
 
 @test
-func test_layout_padding_needed_unaligned() {
+func test_layout_align() {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 16)
+    let align: I64 = layout.align()
+    let expected: I64 = 16
+    assert_eq(align, expected, "align should be 16")
+}
+
+// ============================================================================
+// Layout Calculations
+// ============================================================================
+
+@test
+func test_layout_padding_needed_for_aligned() {
     let layout: Layout = Layout::from_size_align_unchecked(8, 8)
-    // 5 needs 3 bytes of padding to reach 8
-    assert_eq(layout.padding_needed_for(5), 3)
+    let padding: I64 = layout.padding_needed_for(16)
+    let expected: I64 = 0
+    assert_eq(padding, expected, "16 is already 8-aligned")
 }
 
 @test
-func test_layout_padding_needed_for_4() {
-    let layout: Layout = Layout::from_size_align_unchecked(4, 4)
-    // 7 needs 1 byte to reach 8 (next multiple of 4)
-    assert_eq(layout.padding_needed_for(7), 1)
+func test_layout_padding_needed_for_unaligned() {
+    let layout: Layout = Layout::from_size_align_unchecked(8, 8)
+    let padding: I64 = layout.padding_needed_for(10)
+    let expected: I64 = 6
+    assert_eq(padding, expected, "10 needs 6 bytes padding for 8-alignment")
 }
 
 @test
 func test_layout_pad_to_align() {
-    let layout: Layout = Layout::from_size_align_unchecked(5, 4)
-    let padded_result: Outcome[Layout, LayoutError] = layout.pad_to_align()
-    assert(padded_result.is_ok())
-    let padded: Layout = padded_result.unwrap()
-    // Size 5 padded to alignment 4 = 8
-    assert_eq(padded.size(), 8)
-    assert_eq(padded.align(), 4)
+    let layout: Layout = Layout::from_size_align_unchecked(10, 8)
+    let result: Outcome[Layout, LayoutError] = layout.pad_to_align()
+    assert(result.is_ok(), "pad_to_align should succeed")
+    when result {
+        Ok(padded) => {
+            let expected_size: I64 = 16
+            assert_eq(padded.size(), expected_size, "padded size should be 16")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+// ============================================================================
+// Layout Repeat
+// ============================================================================
+
+@test
+func test_layout_repeat() {
+    let layout: Layout = Layout::from_size_align_unchecked(8, 4)
+    let n: I64 = 3
+    let result: Outcome[(Layout, I64), LayoutError] = layout.repeat(n)
+    assert(result.is_ok(), "repeat should succeed")
+    when result {
+        Ok((repeated_layout, stride)) => {
+            let expected_stride: I64 = 8
+            let expected_size: I64 = 24
+            assert_eq(stride, expected_stride, "stride should be 8")
+            assert_eq(repeated_layout.size(), expected_size, "size should be 24")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+// ============================================================================
+// Layout Extend
+// ============================================================================
+
+@test
+func test_layout_extend() {
+    let a: Layout = Layout::from_size_align_unchecked(8, 4)
+    let b: Layout = Layout::from_size_align_unchecked(4, 4)
+    let result: Outcome[(Layout, I64), LayoutError] = a.extend(b)
+    assert(result.is_ok(), "extend should succeed")
+    when result {
+        Ok((extended, offset)) => {
+            let expected_offset: I64 = 8
+            let expected_size: I64 = 12
+            assert_eq(offset, expected_offset, "offset should be 8")
+            assert_eq(extended.size(), expected_size, "size should be 12")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+// ============================================================================
+// Layout Utility Functions
+// ============================================================================
+
+@test
+func test_is_power_of_two() {
+    assert(is_power_of_two(1), "1 is power of two")
+    assert(is_power_of_two(2), "2 is power of two")
+    assert(is_power_of_two(4), "4 is power of two")
+    assert(is_power_of_two(8), "8 is power of two")
+    assert(is_power_of_two(16), "16 is power of two")
+    assert(not is_power_of_two(0), "0 is not power of two")
+    assert(not is_power_of_two(3), "3 is not power of two")
+    assert(not is_power_of_two(6), "6 is not power of two")
+}
+
+@test
+func test_is_valid_align() {
+    assert(is_valid_align(1), "1 is valid align")
+    assert(is_valid_align(2), "2 is valid align")
+    assert(is_valid_align(8), "8 is valid align")
+    assert(not is_valid_align(0), "0 is not valid align")
+    assert(not is_valid_align(3), "3 is not valid align")
+    let neg_one: I64 = 0 - 1
+    assert(not is_valid_align(neg_one), "-1 is not valid align")
+}
+
+@test
+func test_align_up() {
+    let result1: I64 = align_up(10, 8)
+    let expected1: I64 = 16
+    assert_eq(result1, expected1, "align_up(10, 8) should be 16")
+
+    let result2: I64 = align_up(16, 8)
+    let expected2: I64 = 16
+    assert_eq(result2, expected2, "align_up(16, 8) should be 16")
+
+    let result3: I64 = align_up(0, 8)
+    let expected3: I64 = 0
+    assert_eq(result3, expected3, "align_up(0, 8) should be 0")
+}
+
+@test
+func test_is_aligned() {
+    assert(is_aligned(0, 8), "0 is 8-aligned")
+    assert(is_aligned(8, 8), "8 is 8-aligned")
+    assert(is_aligned(16, 8), "16 is 8-aligned")
+    assert(not is_aligned(1, 8), "1 is not 8-aligned")
+    assert(not is_aligned(7, 8), "7 is not 8-aligned")
+}
+
+// ============================================================================
+// LayoutError Tests
+// ============================================================================
+
+@test
+func test_layout_error_to_string() {
+    let err: LayoutError = LayoutError::new()
+    let msg: Str = err.to_string()
+    let expected: Str = "invalid parameters to Layout::from_size_align"
+    assert_eq(msg, expected, "error message mismatch")
 }
 
 // ============================================================================
@@ -87,15 +220,7 @@ func test_layout_pad_to_align() {
 @test
 func test_alloc_error_new() {
     let err: AllocError = AllocError::new()
-    assert(true)
-}
-
-// ============================================================================
-// LayoutError Tests
-// ============================================================================
-
-@test
-func test_layout_error_new() {
-    let err: LayoutError = LayoutError::new()
-    assert(true)
+    let msg: Str = err.to_string()
+    let expected: Str = "memory allocation failed"
+    assert_eq(msg, expected, "AllocError message mismatch")
 }

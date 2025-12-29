@@ -266,6 +266,26 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             }
             return std::make_shared<Type>(
                 Type{FuncType{std::move(param_types), return_type, false}});
+        } else if (type.is<parser::TupleType>()) {
+            const auto& tuple_type = type.as<parser::TupleType>();
+            std::vector<TypePtr> element_types;
+            for (const auto& elem : tuple_type.elements) {
+                element_types.push_back(resolve_simple_type(*elem));
+            }
+            return make_tuple(std::move(element_types));
+        } else if (type.is<parser::PtrType>()) {
+            const auto& ptr = type.as<parser::PtrType>();
+            auto inner = resolve_simple_type(*ptr.inner);
+            return std::make_shared<Type>(Type{PtrType{ptr.is_mut, inner}});
+        } else if (type.is<parser::ArrayType>()) {
+            const auto& arr = type.as<parser::ArrayType>();
+            auto element = resolve_simple_type(*arr.element);
+            // Size needs const evaluation - use 0 as placeholder
+            return make_array(element, 0);
+        } else if (type.is<parser::SliceType>()) {
+            const auto& slice = type.as<parser::SliceType>();
+            auto element = resolve_simple_type(*slice.element);
+            return make_slice(element);
         }
 
         // Fallback: return I32 for unknown types

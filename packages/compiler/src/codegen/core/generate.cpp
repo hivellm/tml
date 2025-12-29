@@ -609,6 +609,17 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
         const auto& bin = expr.as<parser::BinaryExpr>();
         switch (bin.op) {
         case parser::BinaryOp::Add:
+            // Check if operands are strings (string concatenation)
+            if (infer_print_type(*bin.left) == PrintArgType::Str ||
+                infer_print_type(*bin.right) == PrintArgType::Str) {
+                return PrintArgType::Str;
+            }
+            // Check if operands are float
+            if (infer_print_type(*bin.left) == PrintArgType::Float ||
+                infer_print_type(*bin.right) == PrintArgType::Float) {
+                return PrintArgType::Float;
+            }
+            return PrintArgType::Int;
         case parser::BinaryOp::Sub:
         case parser::BinaryOp::Mul:
         case parser::BinaryOp::Div:
@@ -659,6 +670,14 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
             }
         }
         return PrintArgType::Int; // Assume functions return int
+    }
+    if (expr.is<parser::MethodCallExpr>()) {
+        const auto& call = expr.as<parser::MethodCallExpr>();
+        // to_string() methods return strings
+        if (call.method == "to_string" || call.method == "debug_string") {
+            return PrintArgType::Str;
+        }
+        return PrintArgType::Unknown;
     }
     return PrintArgType::Unknown;
 }
