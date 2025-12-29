@@ -301,13 +301,19 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     return_type = make_unit();
                 }
 
+                // Extract type parameters from generic declaration
+                std::vector<std::string> type_params;
+                for (const auto& gp : func.generics) {
+                    type_params.push_back(gp.name);
+                }
+
                 // Create function signature
                 FuncSig sig{
                     func.name,
                     param_types,
                     return_type,
-                    {},    // type_params
-                    false, // is_async
+                    std::move(type_params), // type_params
+                    false,                  // is_async
                     builtin_span,
                     StabilityLevel::Stable,
                     "",            // deprecated_message
@@ -430,12 +436,18 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     // Create qualified function name: Type::method
                     std::string qualified_name = type_name + "::" + func.name;
 
+                    // Extract type parameters from generic declaration
+                    std::vector<std::string> method_type_params;
+                    for (const auto& gp : func.generics) {
+                        method_type_params.push_back(gp.name);
+                    }
+
                     FuncSig sig{
                         qualified_name,
                         param_types,
                         return_type,
-                        {},    // type_params
-                        false, // is_async
+                        std::move(method_type_params), // type_params
+                        false,                         // is_async
                         builtin_span,
                         StabilityLevel::Stable,
                         "",            // deprecated_message
