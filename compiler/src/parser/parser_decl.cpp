@@ -837,6 +837,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
         return unwrap_err(use_result);
 
     // Parse path manually to handle grouped imports: std::time::{Instant, Duration}
+    // and glob imports: std::time::*
     TypePath path;
 
     // First segment
@@ -848,19 +849,36 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 
     // Continue parsing path segments
     std::optional<std::vector<std::string>> symbols;
+    bool is_glob = false;
+
     while (match(lexer::TokenKind::ColonColon)) {
+        // Check for glob import: *
+        if (match(lexer::TokenKind::Star)) {
+            is_glob = true;
+            break;
+        }
+
         // Check for grouped imports: {Instant, Duration}
         if (check(lexer::TokenKind::LBrace)) {
             advance(); // consume '{'
             std::vector<std::string> names;
+            skip_newlines();
 
-            do {
+            while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
                 auto name_result =
                     expect(lexer::TokenKind::Identifier, "Expected identifier in use group");
                 if (is_err(name_result))
                     return unwrap_err(name_result);
                 names.push_back(std::string(unwrap(name_result).lexeme));
-            } while (match(lexer::TokenKind::Comma));
+
+                skip_newlines();
+                if (!check(lexer::TokenKind::RBrace)) {
+                    if (!match(lexer::TokenKind::Comma)) {
+                        break;
+                    }
+                    skip_newlines();
+                }
+            }
 
             auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}'");
             if (is_err(rbrace))
@@ -878,9 +896,9 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
         path.span = SourceSpan::merge(path.span, unwrap(seg).span);
     }
 
-    // Optional alias: as Alias
+    // Optional alias: as Alias (not valid for glob imports)
     std::optional<std::string> alias;
-    if (match(lexer::TokenKind::KwAs)) {
+    if (!is_glob && match(lexer::TokenKind::KwAs)) {
         auto alias_result = expect(lexer::TokenKind::Identifier, "Expected alias name");
         if (is_err(alias_result))
             return unwrap_err(alias_result);
@@ -893,6 +911,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
                        .path = std::move(path),
                        .alias = alias,
                        .symbols = std::move(symbols),
+                       .is_glob = is_glob,
                        .span = SourceSpan::merge(start_span, end_span)};
 
     return make_box<Decl>(

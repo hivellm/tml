@@ -1,0 +1,303 @@
+//! Array iterator types.
+//!
+//! This module contains the iterator implementation for arrays.
+//!
+//! # Overview
+//!
+//! Arrays can be iterated by value, yielding owned elements:
+//!
+//! ```tml
+//! let arr = [1, 2, 3]
+//! for x in arr {
+//!     println(x.to_string())
+//! }
+//! ```
+//!
+//! The main type in this module is [`ArrayIter`], which is the iterator
+//! returned by the array's `into_iter()` method.
+
+use core::iter::{Iterator, IntoIterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator}
+use core::clone::Duplicate
+use core::default::Default
+use core::fmt::Debug
+
+// ============================================================================
+// ArrayIter - By-value Iterator
+// ============================================================================
+
+/// An iterator that moves out of an array.
+///
+/// This struct is created by the [`into_iter`] method on arrays
+/// (provided by the [`IntoIterator`] trait).
+///
+/// # Examples
+///
+/// ```tml
+/// let arr = [1, 2, 3]
+/// let mut iter = arr.into_iter()
+///
+/// assert_eq(iter.next(), Just(1))
+/// assert_eq(iter.next(), Just(2))
+/// assert_eq(iter.next(), Just(3))
+/// assert_eq(iter.next(), Nothing)
+/// ```
+pub type ArrayIter[T, const N: I64] {
+    /// The underlying array data
+    data: [T; N],
+    /// The current front index
+    start: I64,
+    /// The current back index (exclusive)
+    end: I64
+}
+
+impl[T, const N: I64] ArrayIter[T, N] {
+    /// Creates a new array iterator.
+    ///
+    /// This is typically not called directly; instead use `arr.into_iter()`.
+    pub func new(data: [T; N]) -> ArrayIter[T, N] {
+        return ArrayIter {
+            data: data,
+            start: 0,
+            end: N
+        }
+    }
+
+    /// Returns a slice of the remaining elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let arr = [1, 2, 3]
+    /// let mut iter = arr.into_iter()
+    ///
+    /// iter.next()
+    /// let remaining = iter.as_slice()
+    /// assert_eq(remaining.len(), 2)
+    /// ```
+    pub func as_slice(this) -> Slice[T] {
+        return Slice {
+            data: lowlevel { array_offset_ptr(this.data, this.start) },
+            len: this.end - this.start
+        }
+    }
+
+    /// Returns a mutable slice of the remaining elements.
+    pub func as_mut_slice(mut this) -> MutSlice[T] {
+        return MutSlice {
+            data: lowlevel { array_offset_mut_ptr(this.data, this.start) },
+            len: this.end - this.start
+        }
+    }
+}
+
+// ============================================================================
+// Iterator Implementation
+// ============================================================================
+
+impl[T, const N: I64] Iterator for ArrayIter[T, N] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.start >= this.end {
+            return Nothing
+        }
+        let elem: T = lowlevel { array_take(this.data, this.start) }
+        this.start = this.start + 1
+        return Just(elem)
+    }
+
+    pub func count(mut this) -> I64 {
+        let remaining: I64 = this.end - this.start
+        this.start = this.end
+        return remaining
+    }
+
+    pub func last(mut this) -> Maybe[T] {
+        if this.start >= this.end {
+            return Nothing
+        }
+        let last_idx: I64 = this.end - 1
+        this.end = this.start  // Mark as exhausted
+        return Just(lowlevel { array_take(this.data, last_idx) })
+    }
+
+    pub func nth(mut this, n: I64) -> Maybe[T] {
+        let target: I64 = this.start + n
+        if target >= this.end {
+            this.start = this.end
+            return Nothing
+        }
+        this.start = target + 1
+        return Just(lowlevel { array_take(this.data, target) })
+    }
+
+    pub func advance_by(mut this, n: I64) -> I64 {
+        let remaining: I64 = this.end - this.start
+        let advance: I64 = if n > remaining then remaining else n
+        this.start = this.start + advance
+        return advance
+    }
+}
+
+// ============================================================================
+// DoubleEndedIterator Implementation
+// ============================================================================
+
+impl[T, const N: I64] DoubleEndedIterator for ArrayIter[T, N] {
+    pub func next_back(mut this) -> Maybe[T] {
+        if this.start >= this.end {
+            return Nothing
+        }
+        this.end = this.end - 1
+        return Just(lowlevel { array_take(this.data, this.end) })
+    }
+
+    pub func nth_back(mut this, n: I64) -> Maybe[T] {
+        let target: I64 = this.end - 1 - n
+        if target < this.start {
+            this.end = this.start
+            return Nothing
+        }
+        this.end = target
+        return Just(lowlevel { array_take(this.data, target) })
+    }
+
+    pub func advance_back_by(mut this, n: I64) -> I64 {
+        let remaining: I64 = this.end - this.start
+        let advance: I64 = if n > remaining then remaining else n
+        this.end = this.end - advance
+        return advance
+    }
+}
+
+// ============================================================================
+// ExactSizeIterator Implementation
+// ============================================================================
+
+impl[T, const N: I64] ExactSizeIterator for ArrayIter[T, N] {
+    pub func len(this) -> I64 {
+        return this.end - this.start
+    }
+
+    pub func is_empty_exact(this) -> Bool {
+        return this.start >= this.end
+    }
+}
+
+// ============================================================================
+// FusedIterator Implementation
+// ============================================================================
+
+impl[T, const N: I64] FusedIterator for ArrayIter[T, N] {}
+
+// ============================================================================
+// Other Trait Implementations
+// ============================================================================
+
+impl[T: Duplicate, const N: I64] Duplicate for ArrayIter[T, N] {
+    pub func duplicate(this) -> ArrayIter[T, N] {
+        // Clone the remaining elements
+        let new_data: [T; N] = lowlevel { array_uninit() }
+        let mut i: I64 = this.start
+        loop {
+            if i >= this.end {
+                break
+            }
+            let elem: T = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(new_data, i, elem.duplicate()) }
+            i = i + 1
+        }
+        return ArrayIter {
+            data: new_data,
+            start: this.start,
+            end: this.end
+        }
+    }
+}
+
+impl[T: Debug, const N: I64] Debug for ArrayIter[T, N] {
+    pub func debug_string(this) -> Str {
+        let mut result: Str = "ArrayIter { remaining: ["
+        let mut i: I64 = this.start
+        loop {
+            if i >= this.end {
+                break
+            }
+            if i > this.start {
+                result = result + ", "
+            }
+            let elem: ref T = lowlevel { array_get_ref(this.data, i) }
+            result = result + elem.debug_string()
+            i = i + 1
+        }
+        return result + "] }"
+    }
+}
+
+impl[T, const N: I64] Default for ArrayIter[T, N] where N = 0 {
+    pub func default() -> ArrayIter[T, 0] {
+        return ArrayIter {
+            data: [],
+            start: 0,
+            end: 0
+        }
+    }
+}
+
+// ============================================================================
+// IntoIterator for Array
+// ============================================================================
+
+impl[T, const N: I64] IntoIterator for Array[T, N] {
+    type Item = T
+    type IntoIter = ArrayIter[T, N]
+
+    pub func into_iter(this) -> ArrayIter[T, N] {
+        return ArrayIter::new(this.data)
+    }
+}
+
+// ============================================================================
+// Array iter() and iter_mut() Methods
+// ============================================================================
+
+use core::slice::{Slice, MutSlice}
+use core::slice::iter::{SliceIter, SliceIterMut}
+
+impl[T, const N: I64] Array[T, N] {
+    /// Returns an iterator over references to the array elements.
+    ///
+    /// This does not consume the array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let arr = [1, 2, 3]
+    /// let mut sum = 0
+    /// for x in arr.iter() {
+    ///     sum = sum + *x
+    /// }
+    /// assert_eq(sum, 6)
+    /// assert_eq(arr[0], 1)  // arr still usable
+    /// ```
+    pub func iter(this) -> SliceIter[T] {
+        return this.as_slice().iter()
+    }
+
+    /// Returns an iterator over mutable references to the array elements.
+    ///
+    /// This allows modifying elements in place.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut arr = [1, 2, 3]
+    /// for x in arr.iter_mut() {
+    ///     *x = *x * 2
+    /// }
+    /// assert_eq(arr, [2, 4, 6])
+    /// ```
+    pub func iter_mut(mut this) -> SliceIterMut[T] {
+        return this.as_mut_slice().iter_mut()
+    }
+}

@@ -1,36 +1,175 @@
 # TML Standard Library: Iterators
 
-> `std::iter` — Iterator types and basic combinators for lazy iteration.
+> `core::iter` — Iterator types and combinators for lazy iteration.
 
 ## Overview
 
-The iterator module provides the fundamental `Iterator` behavior and basic range types for lazy, composable iteration over sequences. The current implementation focuses on core functionality with range-based iteration and essential combinators.
+The iterator module provides the fundamental `Iterator` behavior, source iterators, and adapter types for lazy, composable iteration over sequences. The implementation is split between `core::iter` (fundamental types) and `std::iter` (higher-level utilities).
 
 ## Import
 
 ```tml
-use std::iter
+use core::iter::*
 ```
 
 ---
 
-## Current Implementation Status (v0.1)
+## Current Implementation Status (v0.3)
 
-### ✅ Implemented
-- `Iterator` behavior with `next()` method
-- `IntoIterator` behavior for type conversion
+### ✅ Implemented (core::iter)
+- `Iterator` behavior with `next()` method and associated `Item` type
+- `IntoIterator` and `FromIterator` behaviors
+- `DoubleEndedIterator`, `ExactSizeIterator`, `FusedIterator` behaviors
+- Source iterators: `EmptyI32`, `EmptyI64`, `OnceI32`, `OnceI64`, `RepeatNI32`, `RepeatNI64`
+- Factory functions: `empty_i32()`, `once_i32()`, `repeat_n_i32()`, etc.
+- Adapter types: `Take`, `Skip`, `Chain`, `Enumerate`, `Zip`, `StepBy`, `Fuse`
+- All adapters implement `Iterator` with proper type associations
+
+### ✅ Implemented (std::iter)
 - `Range` type for integer iteration
 - Basic combinators: `take()`, `skip()`, `sum()`, `count()`
 - Range constructors: `range()`, `range_inclusive()`, `range_step()`
 
 ### 🚧 Planned (Future Releases)
-- Advanced combinators: `map()`, `filter()`, `flat_map()`, `enumerate()`, `zip()`
+- Advanced combinators: `map()`, `filter()`, `flat_map()`
 - Closure-based combinators: `fold()`, `any()`, `all()`
 - Collection conversion: `collect()`, `to_vec()`
-- Adapter types: `Map`, `Filter`, `Chain`, `Peekable`
-- Iterator constructors: `empty()`, `once()`, `repeat()`, `from_fn()`
+- Generic iterator constructors
 
 **Note**: Some combinators (`fold`, `any`, `all`) are implemented but temporarily disabled due to compiler limitations with function pointer type inference. They will be enabled when the compiler's closure support is complete.
+
+---
+
+## Source Iterators (core::iter)
+
+### EmptyI32 / EmptyI64
+
+An iterator that yields nothing.
+
+```tml
+use core::iter::*
+
+func empty_example() {
+    var e: EmptyI32 = empty_i32()
+    when e.next() {
+        Just(_) => println("unexpected"),
+        Nothing => println("empty as expected")
+    }
+}
+```
+
+### OnceI32 / OnceI64
+
+An iterator that yields exactly one element.
+
+```tml
+use core::iter::*
+
+func once_example() {
+    var o: OnceI32 = once_i32(42)
+    when o.next() {
+        Just(n) => println(n),  // Prints: 42
+        Nothing => {}
+    }
+    when o.next() {
+        Just(_) => {},
+        Nothing => println("exhausted")  // Prints: exhausted
+    }
+}
+```
+
+### RepeatNI32 / RepeatNI64
+
+An iterator that repeats a value a fixed number of times.
+
+```tml
+use core::iter::*
+
+func repeat_example() {
+    var r: RepeatNI32 = repeat_n_i32(7, 3)  // Repeat 7 three times
+    loop {
+        when r.next() {
+            Just(n) => println(n),  // Prints: 7, 7, 7
+            Nothing => break
+        }
+    }
+}
+```
+
+---
+
+## Iterator Adapters (core::iter)
+
+### Take
+
+Yields at most `n` elements from the underlying iterator.
+
+```tml
+pub type Take[I] { iter: I, remaining: I64 }
+
+pub func take[I: Iterator](iter: I, n: I64) -> Take[I]
+```
+
+### Skip
+
+Skips the first `n` elements from the underlying iterator.
+
+```tml
+pub type Skip[I] { iter: I, remaining: I64 }
+
+pub func skip[I: Iterator](iter: I, n: I64) -> Skip[I]
+```
+
+### Chain
+
+Chains two iterators together, yielding all elements from the first, then all from the second.
+
+```tml
+pub type Chain[A, B] { first: Maybe[A], second: B }
+
+pub func chain[A: Iterator, B: Iterator](first: A, second: B) -> Chain[A, B]
+    where A::Item = B::Item
+```
+
+### Enumerate
+
+Yields pairs of (index, element) where index starts at 0.
+
+```tml
+pub type Enumerate[I] { iter: I, index: I64 }
+
+pub func enumerate[I: Iterator](iter: I) -> Enumerate[I]
+```
+
+### Zip
+
+Zips two iterators together, yielding pairs until either is exhausted.
+
+```tml
+pub type Zip[A, B] { first: A, second: B }
+
+pub func zip[A: Iterator, B: Iterator](first: A, second: B) -> Zip[A, B]
+```
+
+### StepBy
+
+Yields every `step`-th element from the underlying iterator.
+
+```tml
+pub type StepBy[I] { iter: I, step: I64, first_take: Bool }
+
+pub func step_by[I: Iterator](iter: I, step: I64) -> StepBy[I]
+```
+
+### Fuse
+
+Ensures the iterator returns `Nothing` forever after the first `Nothing`.
+
+```tml
+pub type Fuse[I] { iter: Maybe[I] }
+
+pub func fuse[I: Iterator](iter: I) -> Fuse[I]
+```
 
 ---
 
@@ -358,30 +497,35 @@ The iterator combinators work correctly thanks to the module method lookup syste
 
 ## Future Roadmap
 
-### Phase 1 (Current) - Basic Iteration
-- ✅ Iterator and IntoIterator behaviors
-- ✅ Range type with I32
+### Phase 1 (Complete) - Basic Iteration
+- ✅ Iterator, IntoIterator, FromIterator behaviors
+- ✅ DoubleEndedIterator, ExactSizeIterator, FusedIterator behaviors
+- ✅ Range type with I32 (std::iter)
 - ✅ Basic combinators (take, skip, sum, count)
 
-### Phase 2 - Core Combinators
-- ⏳ Transforming: `map()`, `flat_map()`, `flatten()`, `inspect()`
-- ⏳ Filtering: `filter()`, `filter_map()`, `take_while()`, `skip_while()`
-- ⏳ Combining: `chain()`, `zip()`, `enumerate()`
+### Phase 2 (Complete) - Source Iterators
+- ✅ `empty_i32()`, `empty_i64()` - Empty iterators
+- ✅ `once_i32()`, `once_i64()` - Single-element iterators
+- ✅ `repeat_n_i32()`, `repeat_n_i64()` - Fixed-count repetition
 
-### Phase 3 - Advanced Features
+### Phase 3 (Complete) - Core Adapters
+- ✅ `Take`, `Skip` - Limiting adapters
+- ✅ `Chain` - Concatenation adapter
+- ✅ `Enumerate` - Index pairing adapter
+- ✅ `Zip` - Pair combining adapter
+- ✅ `StepBy` - Stepping adapter
+- ✅ `Fuse` - Safety adapter
+
+### Phase 4 - Transforming Adapters (Planned)
+- ⏳ `Map`, `Filter`, `FilterMap` - Requires closure support
+- ⏳ `FlatMap`, `Flatten` - Nested iteration
+- ⏳ `Inspect` - Side-effect adapter
+
+### Phase 5 - Advanced Features (Planned)
 - ⏳ Consuming: `fold()`, `reduce()`, `collect()`, `find()`, `position()`
 - ⏳ Aggregating: `min()`, `max()`, `sum()` (generic), `product()`
 - ⏳ Testing: `any()`, `all()`, `eq()`, `cmp()`
-
-### Phase 4 - Adapter Types
-- ⏳ `Map`, `Filter`, `Take`, `Skip`, `Chain`, `Zip`
-- ⏳ `Peekable`, `Enumerate`, `Cycle`, `Rev`
-- ⏳ Double-ended iterators
-
-### Phase 5 - Constructors
-- ⏳ `empty()`, `once()`, `repeat()`, `repeat_n()`
-- ⏳ `from_fn()`, `successors()`
-- ⏳ Generic range types: `Range[T: Numeric]`
+- ⏳ Generic iterator constructors
 
 ---
 

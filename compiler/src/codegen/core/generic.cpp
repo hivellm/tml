@@ -93,6 +93,28 @@ void LLVMIRGen::generate_pending_instantiations() {
         }
         if (new_types)
             changed = true;
+
+        // Generate pending impl method instantiations
+        while (!pending_impl_method_instantiations_.empty()) {
+            auto pending = std::move(pending_impl_method_instantiations_);
+            pending_impl_method_instantiations_.clear();
+
+            for (const auto& pim : pending) {
+                auto impl_it = pending_generic_impls_.find(pim.base_type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    const auto& impl = *impl_it->second;
+                    // Find the method in the impl block
+                    for (const auto& m : impl.methods) {
+                        if (m.name == pim.method_name) {
+                            gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
+                                                          impl.generics);
+                            break;
+                        }
+                    }
+                }
+            }
+            changed = true;
+        }
     }
 }
 

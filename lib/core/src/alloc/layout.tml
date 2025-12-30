@@ -128,6 +128,34 @@ impl Layout {
         return Layout { size_: size, align_: align }
     }
 
+    /// Creates a layout describing the record for a `[T; n]` array.
+    ///
+    /// This is a convenience method equivalent to `Layout::array(size_of[T](), align_of[T](), n)`.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// // Layout for an array of 10 I32 values
+    /// let layout: Outcome[Layout, LayoutError] = Layout::array_of(4, 4, 10)
+    /// ```
+    pub func array_of(elem_size: I64, elem_align: I64, n: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::array(elem_size, elem_align, n)
+    }
+
+    /// Creates a new layout with the given size, using the same alignment.
+    ///
+    /// Returns `Err` if the new size is invalid.
+    pub func with_size(this, new_size: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::from_size_align(new_size, this.align_)
+    }
+
+    /// Creates a new layout with the given alignment, keeping the same size.
+    ///
+    /// Returns `Err` if the new alignment is invalid.
+    pub func with_align(this, new_align: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::from_size_align(this.size_, new_align)
+    }
+
     // ========================================================================
     // Accessors
     // ========================================================================
@@ -144,6 +172,31 @@ impl Layout {
     ///
     /// The returned alignment is guaranteed to be a power of two.
     pub func align(this) -> I64 {
+        return this.align_
+    }
+
+    /// Returns `true` if this layout has zero size.
+    pub func is_zero_sized(this) -> Bool {
+        return this.size_ == 0
+    }
+
+    /// Creates a dangling pointer that is well-aligned for this layout.
+    ///
+    /// This returns a non-null pointer that should never be dereferenced.
+    /// It's useful as a placeholder when allocating zero-sized types.
+    ///
+    /// The returned value is the alignment of this layout, cast to a pointer.
+    /// This ensures the pointer is properly aligned.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let layout: Layout = Layout::from_size_align_unchecked(0, 8)
+    /// let ptr: I64 = layout.dangling()  // Returns 8 (the alignment)
+    /// ```
+    pub func dangling(this) -> I64 {
+        // Return the alignment value itself as a "dangling" pointer.
+        // This is a non-null, well-aligned address that should never be dereferenced.
         return this.align_
     }
 

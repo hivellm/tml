@@ -8,6 +8,7 @@
 #include "parser/parser.hpp"
 
 #include <filesystem>
+#include <iostream>
 
 namespace tml::codegen {
 
@@ -384,9 +385,17 @@ void LLVMIRGen::emit_module_lowlevel_decls() {
                     params_str += llvm_type_from_semantic(func_sig.params[i]);
                 }
 
+                // Sanitize function name: replace :: with _ for valid LLVM identifiers
+                std::string sanitized_name = func_name;
+                size_t pos = 0;
+                while ((pos = sanitized_name.find("::", pos)) != std::string::npos) {
+                    sanitized_name.replace(pos, 2, "_");
+                    pos += 1;
+                }
+
                 // Emit declaration with tml_ prefix
-                emit_line("declare " + llvm_ret_type + " @tml_" + func_name + "(" + params_str +
-                          ")");
+                emit_line("declare " + llvm_ret_type + " @tml_" + sanitized_name + "(" +
+                          params_str + ")");
             }
         }
     }
@@ -435,7 +444,14 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         emit_line("; Module: " + module_name);
 
         // Set module prefix for function name generation
-        current_module_prefix_ = module_name;
+        // Replace :: with _ to create valid LLVM identifiers (e.g., core::alloc -> core_alloc)
+        std::string sanitized_prefix = module_name;
+        size_t pos = 0;
+        while ((pos = sanitized_prefix.find("::", pos)) != std::string::npos) {
+            sanitized_prefix.replace(pos, 2, "_");
+            pos += 1;
+        }
+        current_module_prefix_ = sanitized_prefix;
 
         // First pass: register struct/enum declarations (including generic ones)
         for (const auto& decl : parsed_module.decls) {
@@ -467,6 +483,14 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // Also handle impl blocks - generate methods for imported types
             else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl = decl->as<parser::ImplDecl>();
+
+                // Skip generic impls - they need to be instantiated on demand
+                // Generic impls have type parameters like impl[T] or impl[I: Iterator]
+                if (!impl.generics.empty()) {
+                    TML_DEBUG_LN("[MODULE] Skipping generic impl with " << impl.generics.size()
+                                                                        << " type params");
+                    continue;
+                }
 
                 // Get the type name for the impl
                 std::string type_name;

@@ -123,6 +123,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     value = std::to_string(lit.token.int_value().value);
                 } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
                     value = (lit.token.lexeme == "true") ? "1" : "0";
+                } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
+                    value = "null";
                 }
                 global_constants_[const_decl.name] = value;
             }
@@ -180,6 +182,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     type_name == "HashMap" || type_name == "Buffer") {
                     continue;
                 }
+                // Skip generic impl blocks - they will be instantiated when methods are called
+                // (e.g., impl[T] Container[T] { ... } is not generated directly)
+                if (!impl.generics.empty()) {
+                    // Store the generic impl block for later instantiation
+                    pending_generic_impls_[type_name] = &impl;
+                    continue;
+                }
+                // Populate associated types from impl type_bindings
+                current_associated_types_.clear();
+                for (const auto& binding : impl.type_bindings) {
+                    types::TypePtr resolved = resolve_parser_type_with_subs(*binding.type, {});
+                    current_associated_types_[binding.name] = resolved;
+                }
                 for (const auto& method : impl.methods) {
                     // Generate method with mangled name TypeName_MethodName
                     std::string method_name = type_name + "_" + method.name;
@@ -198,6 +213,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     // Build parameter list (including 'this')
                     std::string params;
                     std::string param_types;
+                    std::vector<std::string> param_types_vec;
                     for (size_t i = 0; i < method.params.size(); ++i) {
                         if (i > 0) {
                             params += ", ";
@@ -217,11 +233,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         }
                         params += param_type + " %" + param_name;
                         param_types += param_type;
+                        param_types_vec.push_back(param_type);
                     }
 
                     // Register function
                     std::string func_type = ret_type + " (" + param_types + ")";
-                    functions_[method_name] = FuncInfo{"@tml_" + method_name, func_type, ret_type};
+                    functions_[method_name] =
+                        FuncInfo{"@tml_" + method_name, func_type, ret_type, param_types_vec};
 
                     // Generate function
                     emit_line("");
@@ -329,6 +347,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             // Build parameter list
                             std::string params;
                             std::string param_types;
+                            std::vector<std::string> param_types_vec;
                             for (size_t i = 0; i < trait_method.params.size(); ++i) {
                                 if (i > 0) {
                                     params += ", ";
@@ -351,12 +370,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 }
                                 params += param_type + " %" + param_name;
                                 param_types += param_type;
+                                param_types_vec.push_back(param_type);
                             }
 
                             // Register function
                             std::string func_type = ret_type + " (" + param_types + ")";
-                            functions_[method_name] =
-                                FuncInfo{"@tml_" + method_name, func_type, ret_type};
+                            functions_[method_name] = FuncInfo{"@tml_" + method_name, func_type,
+                                                               ret_type, param_types_vec};
 
                             // Generate function
                             emit_line("");

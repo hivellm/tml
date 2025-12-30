@@ -140,8 +140,23 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
         type_params.push_back(param.name);
     }
 
+    // Collect associated type declarations
+    std::vector<AssociatedTypeDef> associated_types;
+    for (const auto& assoc : decl.associated_types) {
+        std::vector<std::string> bounds;
+        for (const auto& bound : assoc.bounds) {
+            // Convert TypePath to string (just use the last segment for now)
+            if (!bound.segments.empty()) {
+                bounds.push_back(bound.segments.back());
+            }
+        }
+        associated_types.push_back(AssociatedTypeDef{
+            .name = assoc.name, .bounds = std::move(bounds), .default_type = std::nullopt});
+    }
+
     env_.define_behavior(BehaviorDef{.name = decl.name,
                                      .type_params = std::move(type_params),
+                                     .associated_types = std::move(associated_types),
                                      .methods = std::move(methods),
                                      .super_behaviors = {},
                                      .methods_with_defaults = std::move(methods_with_defaults),
@@ -163,6 +178,23 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         if (i > 0)
             module_path += "::";
         module_path += use_decl.path.segments[i];
+    }
+
+    // Handle glob imports: use std::math::*
+    if (use_decl.is_glob) {
+        // Load the module
+        env_.load_native_module(module_path);
+        auto module_opt = env_.get_module(module_path);
+
+        if (!module_opt.has_value()) {
+            errors_.push_back(
+                TypeError{"Module '" + module_path + "' not found", use_decl.span, {}});
+            return;
+        }
+
+        // Import all from module
+        env_.import_all_from(module_path);
+        return;
     }
 
     // Handle grouped imports: use std::math::{abs, sqrt, pow}
@@ -384,12 +416,34 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
 
 void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
     // Get the type name from self_type
-    std::string type_name = type_to_string(resolve_type(*impl.self_type));
+    // For generic impl blocks (impl[T] Container[T]), use just the base type name
+    // so that method lookup works (Container::get, not Container[T]::get)
+    auto resolved_self = resolve_type(*impl.self_type);
+    std::string type_name;
+    if (resolved_self->is<NamedType>()) {
+        type_name = resolved_self->as<NamedType>().name;
+    } else {
+        type_name = type_to_string(resolved_self);
+    }
 
     // Collect method names that impl provides
     std::set<std::string> impl_method_names;
     for (const auto& method : impl.methods) {
         impl_method_names.insert(method.name);
+    }
+
+    // Collect impl block's generic parameters (e.g., T in impl[T] Container[T])
+    std::vector<std::string> impl_type_params;
+    for (const auto& param : impl.generics) {
+        impl_type_params.push_back(param.name);
+    }
+
+    // Set up current_self_type_ and current_associated_types_ before resolving method types
+    // This allows types like This::Item to be resolved correctly
+    current_self_type_ = resolved_self;
+    current_associated_types_.clear();
+    for (const auto& binding : impl.type_bindings) {
+        current_associated_types_[binding.name] = resolve_type(*binding.type);
     }
 
     // Register all methods in the impl block
@@ -403,7 +457,7 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         env_.define_func(FuncSig{.name = qualified_name,
                                  .params = std::move(params),
                                  .return_type = std::move(ret),
-                                 .type_params = {},
+                                 .type_params = impl_type_params,
                                  .is_async = method.is_async,
                                  .span = method.span});
     }

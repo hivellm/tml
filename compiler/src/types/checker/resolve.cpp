@@ -2,7 +2,10 @@
 // Handles: resolve_type, resolve_type_path, error, block_has_return, stmt_has_return,
 // expr_has_return
 
+#include "common.hpp"
 #include "types/checker.hpp"
+
+#include <iostream>
 
 namespace tml::types {
 
@@ -36,9 +39,18 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 type_ptr->kind = types::PtrType{t.is_mut, resolve_type(*t.inner)};
                 return type_ptr;
             } else if constexpr (std::is_same_v<T, parser::ArrayType>) {
-                // Size is an expression - would need const evaluation
-                // For now, use 0 as placeholder
-                return make_array(resolve_type(*t.element), 0);
+                // Evaluate array size from expression (must be compile-time constant)
+                size_t arr_size = 0;
+                if (t.size) {
+                    if (t.size->template is<parser::LiteralExpr>()) {
+                        const auto& lit = t.size->template as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            const auto& val = lit.token.int_value();
+                            arr_size = static_cast<size_t>(val.value);
+                        }
+                    }
+                }
+                return make_array(resolve_type(*t.element), arr_size);
             } else if constexpr (std::is_same_v<T, parser::SliceType>) {
                 return make_slice(resolve_type(*t.element));
             } else if constexpr (std::is_same_v<T, parser::InferType>) {
@@ -75,9 +87,9 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                     param_types.push_back(resolve_type(*param));
                 }
                 TypePtr ret = t.return_type ? resolve_type(*t.return_type) : make_unit();
-                auto type = std::make_shared<Type>();
-                type->kind = types::FuncType{param_types, ret, false};
-                return type;
+                auto result = std::make_shared<Type>();
+                result->kind = types::FuncType{param_types, ret, false};
+                return result;
             } else if constexpr (std::is_same_v<T, parser::TupleType>) {
                 // Convert parser TupleType to semantic TupleType
                 std::vector<TypePtr> element_types;

@@ -23,6 +23,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
 
     // Variables
     {"let", TokenKind::KwLet},
+    {"var", TokenKind::KwVar},
     {"const", TokenKind::KwConst},
 
     // Control flow
@@ -74,6 +75,9 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     // Booleans (special - become BoolLiteral)
     {"true", TokenKind::BoolLiteral},
     {"false", TokenKind::BoolLiteral},
+
+    // Null literal
+    {"null", TokenKind::NullLiteral},
 };
 
 } // anonymous namespace

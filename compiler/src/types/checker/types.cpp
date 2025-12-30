@@ -34,8 +34,18 @@ auto TypeChecker::check_array(const parser::ArrayExpr& array) -> TypePtr {
             } else {
                 // [expr; count] form
                 auto elem_type = check_expr(*arr.first);
-                check_expr(*arr.second);         // The count expression
-                return make_array(elem_type, 0); // Size unknown at compile time
+                check_expr(*arr.second); // The count expression
+
+                // Evaluate array size from count expression (must be compile-time constant)
+                size_t arr_size = 0;
+                if (arr.second->template is<parser::LiteralExpr>()) {
+                    const auto& lit = arr.second->template as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        const auto& val = lit.token.int_value();
+                        arr_size = static_cast<size_t>(val.value);
+                    }
+                }
+                return make_array(elem_type, arr_size);
             }
         },
         array.kind);

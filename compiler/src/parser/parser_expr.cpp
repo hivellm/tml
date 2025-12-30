@@ -312,7 +312,7 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
     // Literals
     if (check(lexer::TokenKind::IntLiteral) || check(lexer::TokenKind::FloatLiteral) ||
         check(lexer::TokenKind::StringLiteral) || check(lexer::TokenKind::CharLiteral) ||
-        check(lexer::TokenKind::BoolLiteral)) {
+        check(lexer::TokenKind::BoolLiteral) || check(lexer::TokenKind::NullLiteral)) {
         return parse_literal_expr();
     }
 

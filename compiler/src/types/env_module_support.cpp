@@ -108,24 +108,39 @@ auto TypeEnv::all_imports() const -> const std::unordered_map<std::string, Impor
     return imported_symbols_;
 }
 
+// Result type for parse_tml_file that includes error information
+struct ParseResult {
+    bool success;
+    std::vector<parser::DeclPtr> decls;
+    std::string source_code;
+    std::vector<parser::ParseError> errors;
+    std::vector<lexer::LexerError> lex_errors;
+};
+
 // Helper to parse a single TML file and extract public functions
-static std::optional<std::pair<std::vector<parser::DeclPtr>, std::string>>
-parse_tml_file(const std::string& file_path) {
+static ParseResult parse_tml_file(const std::string& file_path) {
+    ParseResult result;
+    result.success = false;
+
     std::ifstream file(file_path);
     if (!file) {
-        return std::nullopt;
+        result.errors.push_back(parser::ParseError{
+            "Failed to open file: " + file_path, SourceSpan{}, {} // notes
+        });
+        return result;
     }
 
-    std::string source_code((std::istreambuf_iterator<char>(file)),
-                            std::istreambuf_iterator<char>());
+    result.source_code =
+        std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
 
-    auto source = lexer::Source::from_string(source_code, file_path);
+    auto source = lexer::Source::from_string(result.source_code, file_path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        return std::nullopt;
+        result.lex_errors = lex.errors();
+        return result;
     }
 
     parser::Parser parser(std::move(tokens));
@@ -133,11 +148,14 @@ parse_tml_file(const std::string& file_path) {
     auto parse_result = parser.parse_module(module_name);
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-        return std::nullopt;
+        result.errors = std::get<std::vector<parser::ParseError>>(std::move(parse_result));
+        return result;
     }
 
     auto parsed_module = std::get<parser::Module>(std::move(parse_result));
-    return std::make_pair(std::move(parsed_module.decls), source_code);
+    result.decls = std::move(parsed_module.decls);
+    result.success = true;
+    return result;
 }
 
 bool TypeEnv::load_module_from_file(const std::string& module_path, const std::string& file_path) {
@@ -152,6 +170,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
     // Collect all declarations to process
     std::vector<std::pair<std::vector<parser::DeclPtr>, std::string>> all_parsed;
+    bool had_errors = false;
 
     // Check if this is a mod.tml file - if so, load all sibling .tml files
     auto fs_path = std::filesystem::path(file_path);
@@ -167,25 +186,85 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 auto entry_path = entry.path().string();
                 TML_DEBUG_LN("[MODULE]   Parsing: " << entry.path().filename());
                 auto parsed = parse_tml_file(entry_path);
-                if (parsed) {
+                if (parsed.success) {
                     TML_DEBUG_LN("[MODULE]   OK: " << entry.path().filename());
-                    all_parsed.push_back(std::move(*parsed));
+                    all_parsed.push_back(
+                        std::make_pair(std::move(parsed.decls), std::move(parsed.source_code)));
                 } else {
-                    TML_DEBUG_LN("[MODULE]   FAILED: " << entry.path().filename());
+                    had_errors = true;
+                    std::cerr << "\n=== MODULE PARSE ERROR ===\n";
+                    std::cerr << "Failed to parse: " << entry_path << "\n";
+
+                    // Print lexer errors
+                    for (const auto& err : parsed.lex_errors) {
+                        std::cerr << entry_path << ":" << err.span.start.line << ":"
+                                  << err.span.start.column << ": lexer error: " << err.message
+                                  << "\n";
+                    }
+
+                    // Print parser errors (limit to first 5 to avoid spam)
+                    int error_count = 0;
+                    for (const auto& err : parsed.errors) {
+                        std::cerr << entry_path << ":" << err.span.start.line << ":"
+                                  << err.span.start.column << ": error: " << err.message << "\n";
+                        if (++error_count >= 5) {
+                            if (parsed.errors.size() > 5) {
+                                std::cerr << "... and " << (parsed.errors.size() - 5)
+                                          << " more errors\n";
+                            }
+                            break;
+                        }
+                    }
+                    std::cerr << "=========================\n\n";
                 }
             }
         }
     } else {
         // Single file module
         auto parsed = parse_tml_file(file_path);
-        if (!parsed) {
-            return false;
+        if (!parsed.success) {
+            std::cerr << "\n=== MODULE PARSE ERROR ===\n";
+            std::cerr << "Failed to parse: " << file_path << "\n";
+
+            // Print lexer errors
+            for (const auto& err : parsed.lex_errors) {
+                std::cerr << file_path << ":" << err.span.start.line << ":" << err.span.start.column
+                          << ": lexer error: " << err.message << "\n";
+            }
+
+            // Print parser errors
+            int error_count = 0;
+            for (const auto& err : parsed.errors) {
+                std::cerr << file_path << ":" << err.span.start.line << ":" << err.span.start.column
+                          << ": error: " << err.message << "\n";
+                if (++error_count >= 5) {
+                    if (parsed.errors.size() > 5) {
+                        std::cerr << "... and " << (parsed.errors.size() - 5) << " more errors\n";
+                    }
+                    break;
+                }
+            }
+            std::cerr << "=========================\n\n";
+
+            // Panic - abort compilation
+            std::cerr << "FATAL: Cannot continue - module '" << module_path
+                      << "' failed to parse\n";
+            std::exit(1);
         }
-        all_parsed.push_back(std::move(*parsed));
+        all_parsed.push_back(
+            std::make_pair(std::move(parsed.decls), std::move(parsed.source_code)));
+    }
+
+    // If any file in a directory module failed to parse, abort
+    if (had_errors) {
+        std::cerr << "FATAL: Cannot continue - module '" << module_path << "' has parse errors\n";
+        std::exit(1);
     }
 
     if (all_parsed.empty()) {
-        return false;
+        std::cerr << "FATAL: Module '" << module_path
+                  << "' is empty or all files failed to parse\n";
+        std::exit(1);
     }
     TML_DEBUG_LN("[MODULE] Parsed " << all_parsed.size() << " files for module: " << module_path);
 

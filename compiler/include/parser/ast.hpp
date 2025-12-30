@@ -740,12 +740,13 @@ struct ConstDecl {
     SourceSpan span;
 };
 
-// Use declaration: use std::io::Read or use std::math::{abs, sqrt}
+// Use declaration: use std::io::Read or use std::math::{abs, sqrt} or use std::math::*
 struct UseDecl {
     Visibility vis;
     TypePath path;
     std::optional<std::string> alias;                // as Alias
     std::optional<std::vector<std::string>> symbols; // For grouped imports: {abs, sqrt}
+    bool is_glob = false;                            // For glob imports: use module::*
     SourceSpan span;
 };
 

@@ -21,6 +21,7 @@ enum class TokenKind : uint8_t {
     StringLiteral, // "hello", "line\nbreak"
     CharLiteral,   // 'a', '\n', '\u{1F600}'
     BoolLiteral,   // true, false
+    NullLiteral,   // null
 
     // Interpolated string tokens: "Hello {name}!"
     InterpStringStart,  // "Hello { - string start up to first interpolation
@@ -44,6 +45,7 @@ enum class TokenKind : uint8_t {
 
     // Keywords - variables
     KwLet,   // let
+    KwVar,   // var (alias for let mut)
     KwConst, // const
 
     // Keywords - control flow

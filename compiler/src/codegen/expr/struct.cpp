@@ -3,6 +3,8 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 
+#include <iostream>
+
 namespace tml::codegen {
 
 // Generate struct expression, returning pointer to allocated struct
@@ -296,7 +298,26 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     if (struct_type == "ptr") {
         types::TypePtr semantic_type = infer_expr_type(*field.object);
         if (semantic_type) {
-            struct_type = llvm_type_from_semantic(semantic_type);
+            // If the semantic type is a reference or pointer, get the inner type
+            // and load the pointer from the alloca first
+            if (semantic_type->is<types::RefType>()) {
+                const auto& ref = semantic_type->as<types::RefType>();
+                struct_type = llvm_type_from_semantic(ref.inner);
+                // struct_ptr points to an alloca containing a pointer to the struct
+                // We need to load the pointer first
+                std::string loaded_ptr = fresh_reg();
+                emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                struct_ptr = loaded_ptr;
+            } else if (semantic_type->is<types::PtrType>()) {
+                const auto& ptr = semantic_type->as<types::PtrType>();
+                struct_type = llvm_type_from_semantic(ptr.inner);
+                // Same - load the pointer from the alloca
+                std::string loaded_ptr = fresh_reg();
+                emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                struct_ptr = loaded_ptr;
+            } else {
+                struct_type = llvm_type_from_semantic(semantic_type);
+            }
         }
     }
 

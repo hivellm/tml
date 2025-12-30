@@ -63,7 +63,7 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
     // Literal pattern
     if (check(lexer::TokenKind::IntLiteral) || check(lexer::TokenKind::FloatLiteral) ||
         check(lexer::TokenKind::StringLiteral) || check(lexer::TokenKind::CharLiteral) ||
-        check(lexer::TokenKind::BoolLiteral)) {
+        check(lexer::TokenKind::BoolLiteral) || check(lexer::TokenKind::NullLiteral)) {
         auto token = advance();
         return make_box<Pattern>(
             Pattern{.kind = LiteralPattern{.literal = std::move(token), .span = start_span},

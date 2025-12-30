@@ -1,0 +1,152 @@
+// Iterator tests - testing the core::iter module implementations
+use test
+use core::iter::*
+
+// ============================================================================
+// Test: EmptyI32 iterator
+// ============================================================================
+
+@test
+func test_empty_i32() -> I32 {
+    var e: EmptyI32 = empty_i32()
+
+    when e.next() {
+        Just(_) => assert(false, "empty iterator should return Nothing"),
+        Nothing => {}
+    }
+
+    // Call again - should still be Nothing
+    when e.next() {
+        Just(_) => assert(false, "empty iterator should always return Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: OnceI32 iterator
+// ============================================================================
+
+@test
+func test_once_i32() -> I32 {
+    var o: OnceI32 = once_i32(42)
+
+    // First call should return the value
+    when o.next() {
+        Just(n) => assert_eq(n, 42, "once should return 42"),
+        Nothing => assert(false, "first call should not be Nothing")
+    }
+
+    // Second call should be Nothing
+    when o.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI32 iterator
+// ============================================================================
+
+@test
+func test_repeat_n_i32() -> I32 {
+    var r: RepeatNI32 = repeat_n_i32(7, 3)
+
+    // Should get 7 three times
+    when r.next() {
+        Just(n) => assert_eq(n, 7, "first value should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(n) => assert_eq(n, 7, "second value should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(n) => assert_eq(n, 7, "third value should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    // Fourth call should be Nothing
+    when r.next() {
+        Just(_) => assert(false, "fourth call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI32 with zero count
+// ============================================================================
+
+@test
+func test_repeat_n_zero() -> I32 {
+    var r: RepeatNI32 = repeat_n_i32(99, 0)
+
+    // Should immediately return Nothing
+    when r.next() {
+        Just(_) => assert(false, "repeat_n(0) should return Nothing immediately"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: OnceI64 iterator
+// ============================================================================
+
+@test
+func test_once_i64() -> I32 {
+    var o: OnceI64 = once_i64(123 as I64)
+
+    when o.next() {
+        Just(n) => assert_eq(n, 123 as I64, "once_i64 should return 123"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when o.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: Multiple iterators are independent
+// ============================================================================
+
+@test
+func test_multiple_once() -> I32 {
+    var o1: OnceI32 = once_i32(1)
+    var o2: OnceI32 = once_i32(2)
+
+    when o1.next() {
+        Just(n) => assert_eq(n, 1, "o1 should return 1"),
+        Nothing => assert(false, "o1 should not be Nothing")
+    }
+
+    when o2.next() {
+        Just(n) => assert_eq(n, 2, "o2 should return 2"),
+        Nothing => assert(false, "o2 should not be Nothing")
+    }
+
+    // Both should now be exhausted
+    when o1.next() {
+        Just(_) => assert(false, "o1 should be exhausted"),
+        Nothing => {}
+    }
+
+    when o2.next() {
+        Just(_) => assert(false, "o2 should be exhausted"),
+        Nothing => {}
+    }
+
+    return 0
+}

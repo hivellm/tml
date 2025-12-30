@@ -4,6 +4,8 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/module.hpp"
 
+#include <iostream>
+
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::string {
@@ -1059,6 +1061,16 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             last_expr_type_ = "i64";
             return result;
         }
+        // Str type - use str_len (returns I32, extend to I64)
+        if (receiver_type_name == "Str" || last_expr_type_ == "ptr") {
+            // For Str (ptr type), call str_len and sign-extend to i64
+            std::string i32_result = fresh_reg();
+            emit_line("  " + i32_result + " = call i32 @str_len(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = sext i32 " + i32_result + " to i64");
+            last_expr_type_ = "i64";
+            return result;
+        }
         // Default: List
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i64 @list_len(ptr " + handle + ")");
@@ -1081,8 +1093,38 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             std::string qualified_name = named.name + "::" + method;
             auto func_sig = env_.lookup_func(qualified_name);
             if (func_sig) {
+                // For generic impl blocks, queue specialized method for later generation
+                std::string mangled_type_name = named.name;
+                std::unordered_map<std::string, types::TypePtr> type_subs;
+
+                if (!named.type_args.empty()) {
+                    mangled_type_name = mangle_struct_name(named.name, named.type_args);
+                    std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
+
+                    // Build substitution map: T -> I32, etc. (used for both queueing and call gen)
+                    auto impl_it = pending_generic_impls_.find(named.name);
+                    if (impl_it != pending_generic_impls_.end()) {
+                        const auto& impl = *impl_it->second;
+                        for (size_t i = 0; i < impl.generics.size() && i < named.type_args.size();
+                             ++i) {
+                            type_subs[impl.generics[i].name] = named.type_args[i];
+                        }
+                    }
+
+                    // Queue the specialized method for later generation if not already done
+                    if (generated_impl_methods_.find(mangled_method_name) ==
+                        generated_impl_methods_.end()) {
+                        if (impl_it != pending_generic_impls_.end()) {
+                            // Queue for later generation (after current function completes)
+                            pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                mangled_type_name, method, type_subs, named.name});
+                            generated_impl_methods_.insert(mangled_method_name);
+                        }
+                    }
+                }
+
                 // Generate call to impl method: @tml_TypeName_MethodName(this_ptr, args...)
-                std::string fn_name = "@tml_" + named.name + "_" + method;
+                std::string fn_name = "@tml_" + mangled_type_name + "_" + method;
 
                 // Get receiver pointer
                 std::string impl_receiver_ptr;
@@ -1106,19 +1148,29 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 std::vector<std::pair<std::string, std::string>> typed_args;
                 typed_args.push_back({"ptr", impl_receiver_ptr});
 
-                // Get parameter types from function signature
+                // Get parameter types from function signature with type substitution
                 // params[0] is 'this', so real args start at index 1
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string val = gen_expr(*call.args[i]);
                     std::string arg_type = "i32"; // default
                     // Get type from func_sig if available (params[i+1] because params[0] is 'this')
                     if (func_sig && i + 1 < func_sig->params.size()) {
-                        arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                        auto param_type = func_sig->params[i + 1];
+                        // Apply type substitution for generic parameters
+                        if (!type_subs.empty()) {
+                            param_type = types::substitute_type(param_type, type_subs);
+                        }
+                        arg_type = llvm_type_from_semantic(param_type);
                     }
                     typed_args.push_back({arg_type, val});
                 }
 
-                std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+                // Calculate return type with substitution
+                auto return_type = func_sig->return_type;
+                if (!type_subs.empty()) {
+                    return_type = types::substitute_type(return_type, type_subs);
+                }
+                std::string ret_type = llvm_type_from_semantic(return_type);
 
                 std::string args_str;
                 for (size_t i = 0; i < typed_args.size(); ++i) {
@@ -1358,6 +1410,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // Try to find impl method using type inference
     // receiver_type already computed above for Ptr handling
     // Skip builtin types (List, HashMap, Buffer) - their methods are handled explicitly above
+    TML_DEBUG_LN("[METHOD] receiver_type for method '"
+                 << method << "': " << (receiver_type ? "exists" : "null"));
+    if (receiver_type) {
+        TML_DEBUG_LN("[METHOD] receiver_type kind index: " << receiver_type->kind.index());
+    }
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named2 = receiver_type->as<types::NamedType>();
         bool is_builtin_type2 =
@@ -1367,6 +1424,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             // Fall through to report unknown method error
         } else {
             std::string qualified_name = named2.name + "::" + method;
+            TML_DEBUG_LN("[METHOD] Looking for impl method: " << qualified_name << " on type "
+                                                              << named2.name);
             auto func_sig = env_.lookup_func(qualified_name);
 
             // If not found locally, try looking in the module the type is from

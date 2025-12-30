@@ -1,0 +1,894 @@
+//! Utilities for the array primitive type.
+//!
+//! Arrays are fixed-size, stack-allocated collections of elements of the same type.
+//! Unlike slices, arrays have a known length at compile time, represented by the
+//! const generic parameter `N`.
+//!
+//! This module provides:
+//!
+//! - [`Array`]: The fixed-size array type `[T; N]`
+//! - [`ArrayIter`]: An iterator that consumes an array by value
+//! - Helper functions for creating arrays: [`from_fn`], [`repeat`]
+//! - Error type: [`TryFromSliceError`]
+//!
+//! # Module Structure
+//!
+//! - [`mod.tml`]: Core array type and methods
+//! - [`iter`]: Iterator implementation for arrays
+//!
+//! # Examples
+//!
+//! Basic usage:
+//!
+//! ```tml
+//! let arr: Array[I32, 5] = [1, 2, 3, 4, 5]
+//!
+//! // Access elements
+//! assert_eq(arr.get(0), Just(ref 1))
+//! assert_eq(arr.len(), 5)
+//!
+//! // Transform elements
+//! let doubled = arr.map(do(x) x * 2)
+//! assert_eq(doubled, [2, 4, 6, 8, 10])
+//! ```
+//!
+//! Creating arrays with `from_fn`:
+//!
+//! ```tml
+//! // Create array where each element is its index squared
+//! let squares: Array[I32, 5] = from_fn(do(i) (i as I32) * (i as I32))
+//! assert_eq(squares, [0, 1, 4, 9, 16])
+//! ```
+//!
+//! Iteration:
+//!
+//! ```tml
+//! let arr = [1, 2, 3]
+//! for elem in arr {
+//!     println(elem.to_string())
+//! }
+//! ```
+
+pub mod iter  // ArrayIter, IntoIter
+
+// Re-export iterator types
+pub use iter::{ArrayIter}
+
+use core::cmp::{Ordering, PartialEq, Eq, PartialOrd, Ord}
+use core::clone::{Duplicate, Copy}
+use core::hash::{Hash}
+use core::default::Default
+use core::fmt::{Display, Debug}
+use core::iter::{Iterator, IntoIterator, FromIterator}
+use core::convert::{TryFrom, AsRef, AsMut}
+use core::slice::{Slice, MutSlice}
+
+// ============================================================================
+// Array Type
+// ============================================================================
+
+/// A fixed-size array of `N` elements of type `T`.
+///
+/// Arrays are stack-allocated and have a known size at compile time.
+/// This makes them more efficient than dynamically-sized collections
+/// for small, fixed-size data.
+///
+/// # Representation
+///
+/// An array `[T; N]` consists of `N` contiguous elements of type `T`.
+/// The memory layout is equivalent to `N` consecutive `T` values.
+///
+/// # Examples
+///
+/// ```tml
+/// // Create an array
+/// let arr: Array[I32, 3] = [1, 2, 3]
+///
+/// // Access elements
+/// assert_eq(arr[0], 1)
+/// assert_eq(arr.len(), 3)
+///
+/// // Iterate
+/// for x in arr {
+///     println(x.to_string())
+/// }
+/// ```
+pub type Array[T, const N: I64] {
+    data: [T; N]
+}
+
+// ============================================================================
+// Core Array Methods
+// ============================================================================
+
+impl[T, const N: I64] Array[T, N] {
+    /// Returns the number of elements in the array.
+    ///
+    /// This is always the compile-time constant `N`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a: Array[I32, 5] = [1, 2, 3, 4, 5]
+    /// assert_eq(a.len(), 5)
+    /// ```
+    pub func len(this) -> I64 {
+        return N
+    }
+
+    /// Returns `true` if the array has a length of 0.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a: Array[I32, 0] = []
+    /// assert(a.is_empty())
+    ///
+    /// let b: Array[I32, 3] = [1, 2, 3]
+    /// assert(b.is_empty() == false)
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return N == 0
+    }
+
+    /// Returns a reference to an element, or `Nothing` if the index is
+    /// out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = [1, 2, 4]
+    /// assert_eq(x.get(1), Just(ref 2))
+    /// assert_eq(x.get(3), Nothing)
+    /// ```
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= N {
+            return Nothing
+        }
+        return Just(lowlevel { array_get(this.data, index) })
+    }
+
+    /// Returns a mutable reference to an element, or `Nothing` if the
+    /// index is out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut x = [0, 1, 2]
+    /// when x.get_mut(1) {
+    ///     Just(elem) => *elem = 42,
+    ///     Nothing => {}
+    /// }
+    /// assert_eq(x, [0, 42, 2])
+    /// ```
+    pub func get_mut(mut this, index: I64) -> Maybe[mut ref T] {
+        if index < 0 or index >= N {
+            return Nothing
+        }
+        return Just(lowlevel { array_get_mut(this.data, index) })
+    }
+
+    /// Returns a reference to the first element of the array, or `Nothing`
+    /// if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert_eq(v.first(), Just(ref 10))
+    ///
+    /// let w: Array[I32, 0] = []
+    /// assert_eq(w.first(), Nothing)
+    /// ```
+    pub func first(this) -> Maybe[ref T] {
+        return this.get(0)
+    }
+
+    /// Returns a mutable reference to the first element of the array, or
+    /// `Nothing` if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut x = [0, 1, 2]
+    /// when x.first_mut() {
+    ///     Just(first) => *first = 5,
+    ///     Nothing => {}
+    /// }
+    /// assert_eq(x, [5, 1, 2])
+    /// ```
+    pub func first_mut(mut this) -> Maybe[mut ref T] {
+        return this.get_mut(0)
+    }
+
+    /// Returns a reference to the last element of the array, or `Nothing`
+    /// if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [10, 40, 30]
+    /// assert_eq(v.last(), Just(ref 30))
+    ///
+    /// let w: Array[I32, 0] = []
+    /// assert_eq(w.last(), Nothing)
+    /// ```
+    pub func last(this) -> Maybe[ref T] {
+        if N == 0 {
+            return Nothing
+        }
+        return this.get(N - 1)
+    }
+
+    /// Returns a mutable reference to the last element of the array, or
+    /// `Nothing` if it is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut x = [0, 1, 2]
+    /// when x.last_mut() {
+    ///     Just(last) => *last = 10,
+    ///     Nothing => {}
+    /// }
+    /// assert_eq(x, [0, 1, 10])
+    /// ```
+    pub func last_mut(mut this) -> Maybe[mut ref T] {
+        if N == 0 {
+            return Nothing
+        }
+        return this.get_mut(N - 1)
+    }
+
+    /// Returns an array of the same size as `this`, with function `f`
+    /// applied to each element in order.
+    ///
+    /// This is the array equivalent of `Iterator::map`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = [1, 2, 3]
+    /// let y = x.map(do(v) v + 1)
+    /// assert_eq(y, [2, 3, 4])
+    ///
+    /// let x = [1, 2, 3]
+    /// let y = x.map(do(v) v as F64 * 0.5)
+    /// assert_eq(y, [0.5, 1.0, 1.5])
+    /// ```
+    pub func map[U](this, f: func(T) -> U) -> Array[U, N] {
+        let result: Array[U, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let elem: T = lowlevel { array_get(this.data, i) }
+            let mapped: U = f(elem)
+            lowlevel { array_set(result.data, i, mapped) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// A fallible function `f` applied to each element in the array.
+    ///
+    /// If `f` returns `Err(e)` for any element, `try_map` short-circuits
+    /// and returns that error. Otherwise, it returns an array of the
+    /// successful values.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = ["1", "2", "3"]
+    /// let b = a.try_map(do(s) s.parse_i32().ok_or("parse failed"))
+    /// assert_eq(b, Ok([1, 2, 3]))
+    ///
+    /// let a = ["1", "abc", "3"]
+    /// let b = a.try_map(do(s) s.parse_i32().ok_or("parse failed"))
+    /// assert(b.is_err())
+    /// ```
+    pub func try_map[U, E](this, f: func(T) -> Outcome[U, E]) -> Outcome[Array[U, N], E] {
+        let result: Array[U, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let elem: T = lowlevel { array_get(this.data, i) }
+            when f(elem) {
+                Ok(mapped) => {
+                    lowlevel { array_set(result.data, i, mapped) }
+                },
+                Err(e) => return Err(e)
+            }
+            i = i + 1
+        }
+        return Ok(result)
+    }
+
+    /// Returns a slice containing the entire array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let arr = [1, 2, 3]
+    /// let slice = arr.as_slice()
+    /// assert_eq(slice.len(), 3)
+    /// ```
+    pub func as_slice(this) -> Slice[T] {
+        return Slice {
+            data: lowlevel { array_as_ptr(this.data) },
+            len: N
+        }
+    }
+
+    /// Returns a mutable slice containing the entire array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut arr = [1, 2, 3]
+    /// let slice = arr.as_mut_slice()
+    /// slice.reverse()
+    /// assert_eq(arr, [3, 2, 1])
+    /// ```
+    pub func as_mut_slice(mut this) -> MutSlice[T] {
+        return MutSlice {
+            data: lowlevel { array_as_mut_ptr(this.data) },
+            len: N
+        }
+    }
+
+    /// Returns an array of references to the elements of the original array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let floats = [3.1, 2.7, -1.0]
+    /// let float_refs: Array[ref F64, 3] = floats.each_ref()
+    /// assert_eq(*float_refs[0], 3.1)
+    /// ```
+    pub func each_ref(this) -> Array[ref T, N] {
+        let result: Array[ref T, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let r: ref T = lowlevel { array_get_ref(this.data, i) }
+            lowlevel { array_set(result.data, i, r) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns an array of mutable references to the elements of the
+    /// original array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut floats = [3.1, 2.7, -1.0]
+    /// let float_refs: Array[mut ref F64, 3] = floats.each_mut()
+    /// *float_refs[0] = 0.0
+    /// assert_eq(floats[0], 0.0)
+    /// ```
+    pub func each_mut(mut this) -> Array[mut ref T, N] {
+        let result: Array[mut ref T, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let r: mut ref T = lowlevel { array_get_mut(this.data, i) }
+            lowlevel { array_set(result.data, i, r) }
+            i = i + 1
+        }
+        return result
+    }
+}
+
+// ============================================================================
+// Splitting Operations
+// ============================================================================
+
+impl[T, const N: I64] Array[T, N] {
+    /// Divides one array reference into two at an index.
+    ///
+    /// The first will contain all indices from `[0, M)` and the second
+    /// will contain all indices from `[M, N)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3, 4, 5, 6]
+    /// let (left, right) = v.split_array_ref::<3>()
+    ///
+    /// assert_eq(left, ref [1, 2, 3])
+    /// assert_eq(right, ref [4, 5, 6])
+    /// ```
+    pub func split_array_ref[const M: I64](this) -> (ref Array[T, M], ref Array[T, N - M]) {
+        if M > N {
+            panic("array::split_array_ref: M > N")
+        }
+        let left: ref Array[T, M] = lowlevel { array_split_left(this.data, M) }
+        let right: ref Array[T, N - M] = lowlevel { array_split_right(this.data, M) }
+        return (left, right)
+    }
+
+    /// Divides one mutable array reference into two at an index.
+    ///
+    /// The first will contain all indices from `[0, M)` and the second
+    /// will contain all indices from `[M, N)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut v = [1, 2, 3, 4, 5, 6]
+    /// let (left, right) = v.split_array_mut::<3>()
+    ///
+    /// left[0] = 100
+    /// right[0] = 200
+    ///
+    /// assert_eq(v, [100, 2, 3, 200, 5, 6])
+    /// ```
+    pub func split_array_mut[const M: I64](mut this) -> (mut ref Array[T, M], mut ref Array[T, N - M]) {
+        if M > N {
+            panic("array::split_array_mut: M > N")
+        }
+        let left: mut ref Array[T, M] = lowlevel { array_split_left_mut(this.data, M) }
+        let right: mut ref Array[T, N - M] = lowlevel { array_split_right_mut(this.data, M) }
+        return (left, right)
+    }
+
+    /// Divides one array reference into two at an index from the end.
+    ///
+    /// The first will contain all indices from `[0, N - M)` and the second
+    /// will contain all indices from `[N - M, N)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let v = [1, 2, 3, 4, 5, 6]
+    /// let (left, right) = v.rsplit_array_ref::<2>()
+    ///
+    /// assert_eq(left, ref [1, 2, 3, 4])
+    /// assert_eq(right, ref [5, 6])
+    /// ```
+    pub func rsplit_array_ref[const M: I64](this) -> (ref Array[T, N - M], ref Array[T, M]) {
+        if M > N {
+            panic("array::rsplit_array_ref: M > N")
+        }
+        return this.split_array_ref::<N - M>()
+    }
+
+    /// Divides one mutable array reference into two at an index from the end.
+    ///
+    /// The first will contain all indices from `[0, N - M)` and the second
+    /// will contain all indices from `[N - M, N)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `M > N`.
+    pub func rsplit_array_mut[const M: I64](mut this) -> (mut ref Array[T, N - M], mut ref Array[T, M]) {
+        if M > N {
+            panic("array::rsplit_array_mut: M > N")
+        }
+        return this.split_array_mut::<N - M>()
+    }
+}
+
+// ============================================================================
+// Zip Operation
+// ============================================================================
+
+impl[T, const N: I64] Array[T, N] {
+    /// 'Zips up' two arrays into a single array of pairs.
+    ///
+    /// `zip()` returns a new array where every element is a tuple where
+    /// the first element comes from the first array, and the second
+    /// element comes from the second array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = [1, 2, 3]
+    /// let y = [4, 5, 6]
+    /// let z = x.zip(y)
+    /// assert_eq(z, [(1, 4), (2, 5), (3, 6)])
+    /// ```
+    pub func zip[U](this, other: Array[U, N]) -> Array[(T, U), N] {
+        let result: Array[(T, U), N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: T = lowlevel { array_get(this.data, i) }
+            let b: U = lowlevel { array_get(other.data, i) }
+            lowlevel { array_set(result.data, i, (a, b)) }
+            i = i + 1
+        }
+        return result
+    }
+}
+
+// ============================================================================
+// Array Creation Functions
+// ============================================================================
+
+/// Creates an array of type `[T; N]` by calling a closure for each index.
+///
+/// The closure receives the index `i` (starting from 0) and returns the
+/// element at that position.
+///
+/// # Examples
+///
+/// ```tml
+/// // Create [0, 1, 2, 3, 4]
+/// let arr: Array[I32, 5] = from_fn(do(i) i as I32)
+///
+/// // Create squares: [0, 1, 4, 9, 16]
+/// let squares: Array[I32, 5] = from_fn(do(i) {
+///     let n = i as I32
+///     n * n
+/// })
+/// ```
+pub func from_fn[T, const N: I64](f: func(I64) -> T) -> Array[T, N] {
+    let result: Array[T, N] = lowlevel { array_uninit() }
+    let mut i: I64 = 0
+    loop {
+        if i >= N {
+            break
+        }
+        let elem: T = f(i)
+        lowlevel { array_set(result.data, i, elem) }
+        i = i + 1
+    }
+    return result
+}
+
+/// Creates an array of type `[T; N]` by calling a fallible closure for
+/// each index.
+///
+/// If the closure returns `Err(e)` for any index, `try_from_fn` short-circuits
+/// and returns that error.
+///
+/// # Examples
+///
+/// ```tml
+/// let strings = ["1", "2", "3"]
+/// let result: Outcome[Array[I32, 3], Str] = try_from_fn(do(i) {
+///     strings[i].parse_i32().ok_or("parse error")
+/// })
+/// assert_eq(result, Ok([1, 2, 3]))
+/// ```
+pub func try_from_fn[T, E, const N: I64](f: func(I64) -> Outcome[T, E]) -> Outcome[Array[T, N], E] {
+    let result: Array[T, N] = lowlevel { array_uninit() }
+    let mut i: I64 = 0
+    loop {
+        if i >= N {
+            break
+        }
+        when f(i) {
+            Ok(elem) => lowlevel { array_set(result.data, i, elem) },
+            Err(e) => return Err(e)
+        }
+        i = i + 1
+    }
+    return Ok(result)
+}
+
+/// Creates an array where every element is initialized by cloning a value.
+///
+/// # Examples
+///
+/// ```tml
+/// let arr: Array[I32, 5] = repeat(42)
+/// assert_eq(arr, [42, 42, 42, 42, 42])
+/// ```
+pub func repeat[T: Duplicate, const N: I64](value: T) -> Array[T, N] {
+    let result: Array[T, N] = lowlevel { array_uninit() }
+    let mut i: I64 = 0
+    loop {
+        if i >= N {
+            break
+        }
+        lowlevel { array_set(result.data, i, value.duplicate()) }
+        i = i + 1
+    }
+    return result
+}
+
+/// Converts a reference to `T` into a reference to an array of length 1
+/// (without copying).
+///
+/// # Examples
+///
+/// ```tml
+/// let x = 42
+/// let arr: ref Array[I32, 1] = from_ref(ref x)
+/// assert_eq((*arr)[0], 42)
+/// ```
+pub func from_ref[T](s: ref T) -> ref Array[T, 1] {
+    return lowlevel { ptr_cast(s) }
+}
+
+/// Converts a mutable reference to `T` into a mutable reference to an
+/// array of length 1 (without copying).
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x = 42
+/// let arr: mut ref Array[I32, 1] = from_mut(mut ref x)
+/// (*arr)[0] = 100
+/// assert_eq(x, 100)
+/// ```
+pub func from_mut[T](s: mut ref T) -> mut ref Array[T, 1] {
+    return lowlevel { ptr_cast(s) }
+}
+
+// ============================================================================
+// TryFromSliceError
+// ============================================================================
+
+/// The error type returned when converting a slice to an array fails.
+///
+/// This error occurs when the slice length doesn't match the array length.
+///
+/// # Examples
+///
+/// ```tml
+/// let slice = [1, 2, 3].as_slice()
+/// let result: Outcome[Array[I32, 5], TryFromSliceError] = Array::try_from(slice)
+/// assert(result.is_err())
+/// ```
+pub type TryFromSliceError {
+    expected_len: I64,
+    actual_len: I64
+}
+
+impl Display for TryFromSliceError {
+    pub func to_string(this) -> Str {
+        return "could not convert slice of length " + this.actual_len.to_string() +
+               " to array of length " + this.expected_len.to_string()
+    }
+}
+
+impl Debug for TryFromSliceError {
+    pub func debug_string(this) -> Str {
+        return "TryFromSliceError { expected: " + this.expected_len.to_string() +
+               ", actual: " + this.actual_len.to_string() + " }"
+    }
+}
+
+// ============================================================================
+// Behavior Implementations
+// ============================================================================
+
+// --- PartialEq / Eq ---
+
+impl[T: PartialEq, const N: I64] PartialEq for Array[T, N] {
+    pub func eq(this, other: ref Array[T, N]) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: ref T = lowlevel { array_get_ref(this.data, i) }
+            let b: ref T = lowlevel { array_get_ref(other.data, i) }
+            if a.ne(b) {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+impl[T: Eq, const N: I64] Eq for Array[T, N] {}
+
+// --- PartialOrd / Ord ---
+
+impl[T: PartialOrd, const N: I64] PartialOrd for Array[T, N] {
+    pub func partial_cmp(this, other: ref Array[T, N]) -> Maybe[Ordering] {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: ref T = lowlevel { array_get_ref(this.data, i) }
+            let b: ref T = lowlevel { array_get_ref(other.data, i) }
+            when a.partial_cmp(b) {
+                Just(Less) => return Just(Less),
+                Just(Greater) => return Just(Greater),
+                Just(Equal) => {},
+                Nothing => return Nothing
+            }
+            i = i + 1
+        }
+        return Just(Equal)
+    }
+}
+
+impl[T: Ord, const N: I64] Ord for Array[T, N] {
+    pub func cmp(this, other: ref Array[T, N]) -> Ordering {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: ref T = lowlevel { array_get_ref(this.data, i) }
+            let b: ref T = lowlevel { array_get_ref(other.data, i) }
+            when a.cmp(b) {
+                Less => return Less,
+                Greater => return Greater,
+                Equal => {}
+            }
+            i = i + 1
+        }
+        return Equal
+    }
+}
+
+// --- Duplicate / Copy ---
+
+impl[T: Duplicate, const N: I64] Duplicate for Array[T, N] {
+    pub func duplicate(this) -> Array[T, N] {
+        let result: Array[T, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let elem: T = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, elem.duplicate()) }
+            i = i + 1
+        }
+        return result
+    }
+}
+
+impl[T: Copy, const N: I64] Copy for Array[T, N] {}
+
+// --- Hash ---
+
+impl[T: Hash, const N: I64] Hash for Array[T, N] {
+    pub func hash(this) -> I64 {
+        let mut h: I64 = 0
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let elem: ref T = lowlevel { array_get_ref(this.data, i) }
+            h = combine_hashes(h, elem.hash())
+            i = i + 1
+        }
+        return h
+    }
+}
+
+// --- Default ---
+
+impl[T: Default, const N: I64] Default for Array[T, N] {
+    pub func default() -> Array[T, N] {
+        return from_fn(do(_: I64) T::default())
+    }
+}
+
+// --- Display / Debug ---
+
+impl[T: Display, const N: I64] Display for Array[T, N] {
+    pub func to_string(this) -> Str {
+        let mut result: Str = "["
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            if i > 0 {
+                result = result + ", "
+            }
+            let elem: ref T = lowlevel { array_get_ref(this.data, i) }
+            result = result + elem.to_string()
+            i = i + 1
+        }
+        return result + "]"
+    }
+}
+
+impl[T: Debug, const N: I64] Debug for Array[T, N] {
+    pub func debug_string(this) -> Str {
+        let mut result: Str = "["
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            if i > 0 {
+                result = result + ", "
+            }
+            let elem: ref T = lowlevel { array_get_ref(this.data, i) }
+            result = result + elem.debug_string()
+            i = i + 1
+        }
+        return result + "]"
+    }
+}
+
+// --- AsRef / AsMut ---
+
+impl[T, const N: I64] AsRef[Slice[T]] for Array[T, N] {
+    pub func as_ref(this) -> ref Slice[T] {
+        return ref this.as_slice()
+    }
+}
+
+impl[T, const N: I64] AsMut[MutSlice[T]] for Array[T, N] {
+    pub func as_mut(mut this) -> mut ref MutSlice[T] {
+        return mut ref this.as_mut_slice()
+    }
+}
+
+// --- TryFrom[Slice[T]] ---
+
+impl[T: Copy, const N: I64] TryFrom[Slice[T]] for Array[T, N] {
+    type Error = TryFromSliceError
+
+    pub func try_from(slice: Slice[T]) -> Outcome[Array[T, N], TryFromSliceError] {
+        if slice.len() != N {
+            return Err(TryFromSliceError {
+                expected_len: N,
+                actual_len: slice.len()
+            })
+        }
+        let result: Array[T, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let elem: T = *slice.get(i).unwrap()
+            lowlevel { array_set(result.data, i, elem) }
+            i = i + 1
+        }
+        return Ok(result)
+    }
+}
+
+// --- Index / IndexMut ---
+
+impl[T, const N: I64] Index[I64] for Array[T, N] {
+    type Output = T
+
+    pub func index(this, idx: I64) -> T {
+        if idx < 0 or idx >= N {
+            panic("array index out of bounds")
+        }
+        return lowlevel { array_get(this.data, idx) }
+    }
+}
+
+impl[T, const N: I64] IndexMut[I64] for Array[T, N] {
+    pub func index_mut(mut this, idx: I64) -> mut ref T {
+        if idx < 0 or idx >= N {
+            panic("array index out of bounds")
+        }
+        return lowlevel { array_get_mut(this.data, idx) }
+    }
+}

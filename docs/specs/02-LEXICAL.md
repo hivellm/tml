@@ -38,6 +38,7 @@ async     await     quote
 ```
 
 > **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.
+> **Note:** `null` is lexed as `NullLiteral` and represents the null pointer value.
 
 ### Why Words Over Symbols
 
@@ -234,6 +235,46 @@ Char = "'" (EscapeSeq | [^'\\\n]) "'"
 '\n'
 '\u{1F600}'
 ```
+
+### 4.7 Null Literal
+
+The `null` literal represents a null pointer value. It has the type `Ptr[Unit]` and is compatible with any pointer type.
+
+```ebnf
+NullLit = 'null'
+```
+
+**Type:** `Ptr[Unit]` (compatible with any `Ptr[T]`)
+
+**Examples:**
+```tml
+// Assign null to a pointer
+let ptr: Ptr[I32] = null
+
+// Compare with null
+if ptr == null {
+    println("Pointer is null")
+}
+
+// Use in conditionals
+let value: Ptr[String] = get_optional_value()
+if value != null {
+    println(value)
+}
+
+// Return null from functions
+func find_item(id: I32) -> Ptr[Item] {
+    if not found {
+        return null
+    }
+    return item_ptr
+}
+```
+
+**Notes:**
+- `null` is compatible with any `Ptr[T]` type
+- Comparing `null` with non-pointer types is a type error
+- Dereferencing `null` causes undefined behavior (use `lowlevel` blocks)
 
 ## 5. Operators
 

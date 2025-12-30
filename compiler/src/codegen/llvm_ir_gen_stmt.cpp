@@ -422,13 +422,104 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             std::string conv = fresh_reg();
             emit_line("  " + conv + " = trunc i32 " + init_val + " to i8");
             emit_line("  store i8 " + conv + ", ptr " + alloca_reg);
+        } else if (var_type.starts_with("[") && last_expr_type_.starts_with("[") &&
+                   var_type != last_expr_type_) {
+            // Array type coercion: [N x i32] -> [N x i64] etc.
+            // Need to extract elements and convert each one
+            size_t x_pos_expected = var_type.find(" x ");
+            size_t x_pos_actual = last_expr_type_.find(" x ");
+            if (x_pos_expected != std::string::npos && x_pos_actual != std::string::npos) {
+                // Extract array size
+                size_t arr_size = std::stoul(var_type.substr(1, x_pos_expected - 1));
+                // Extract element types
+                size_t end_bracket_expected = var_type.rfind("]");
+                size_t end_bracket_actual = last_expr_type_.rfind("]");
+                std::string elem_type_expected = var_type.substr(
+                    x_pos_expected + 3, end_bracket_expected - (x_pos_expected + 3));
+                std::string elem_type_actual = last_expr_type_.substr(
+                    x_pos_actual + 3, end_bracket_actual - (x_pos_actual + 3));
+
+                // Store source array to get element pointers
+                std::string src_ptr = fresh_reg();
+                emit_line("  " + src_ptr + " = alloca " + last_expr_type_);
+                emit_line("  store " + last_expr_type_ + " " + init_val + ", ptr " + src_ptr);
+
+                // Convert each element and store to destination
+                for (size_t i = 0; i < arr_size; ++i) {
+                    // Load from source
+                    std::string src_elem_ptr = fresh_reg();
+                    emit_line("  " + src_elem_ptr + " = getelementptr " + last_expr_type_ +
+                              ", ptr " + src_ptr + ", i32 0, i32 " + std::to_string(i));
+                    std::string src_elem = fresh_reg();
+                    emit_line("  " + src_elem + " = load " + elem_type_actual + ", ptr " +
+                              src_elem_ptr);
+
+                    // Convert element type
+                    std::string conv_elem = src_elem;
+                    if (elem_type_expected != elem_type_actual) {
+                        conv_elem = fresh_reg();
+                        // Determine conversion type - handle all integer size combinations
+                        // Sign extend: smaller -> larger
+                        if (elem_type_expected == "i64" && elem_type_actual == "i32") {
+                            emit_line("  " + conv_elem + " = sext i32 " + src_elem + " to i64");
+                        } else if (elem_type_expected == "i64" && elem_type_actual == "i16") {
+                            emit_line("  " + conv_elem + " = sext i16 " + src_elem + " to i64");
+                        } else if (elem_type_expected == "i64" && elem_type_actual == "i8") {
+                            emit_line("  " + conv_elem + " = sext i8 " + src_elem + " to i64");
+                        } else if (elem_type_expected == "i32" && elem_type_actual == "i16") {
+                            emit_line("  " + conv_elem + " = sext i16 " + src_elem + " to i32");
+                        } else if (elem_type_expected == "i32" && elem_type_actual == "i8") {
+                            emit_line("  " + conv_elem + " = sext i8 " + src_elem + " to i32");
+                        } else if (elem_type_expected == "i16" && elem_type_actual == "i8") {
+                            emit_line("  " + conv_elem + " = sext i8 " + src_elem + " to i16");
+                            // Truncate: larger -> smaller
+                        } else if (elem_type_expected == "i32" && elem_type_actual == "i64") {
+                            emit_line("  " + conv_elem + " = trunc i64 " + src_elem + " to i32");
+                        } else if (elem_type_expected == "i16" && elem_type_actual == "i64") {
+                            emit_line("  " + conv_elem + " = trunc i64 " + src_elem + " to i16");
+                        } else if (elem_type_expected == "i8" && elem_type_actual == "i64") {
+                            emit_line("  " + conv_elem + " = trunc i64 " + src_elem + " to i8");
+                        } else if (elem_type_expected == "i16" && elem_type_actual == "i32") {
+                            emit_line("  " + conv_elem + " = trunc i32 " + src_elem + " to i16");
+                        } else if (elem_type_expected == "i8" && elem_type_actual == "i32") {
+                            emit_line("  " + conv_elem + " = trunc i32 " + src_elem + " to i8");
+                        } else if (elem_type_expected == "i8" && elem_type_actual == "i16") {
+                            emit_line("  " + conv_elem + " = trunc i16 " + src_elem + " to i8");
+                            // Float conversions
+                        } else if (elem_type_expected == "double" && elem_type_actual == "float") {
+                            emit_line("  " + conv_elem + " = fpext float " + src_elem +
+                                      " to double");
+                        } else if (elem_type_expected == "float" && elem_type_actual == "double") {
+                            emit_line("  " + conv_elem + " = fptrunc double " + src_elem +
+                                      " to float");
+                        } else {
+                            // Same type or unknown - just use source
+                            conv_elem = src_elem;
+                        }
+                    }
+
+                    // Store to destination
+                    std::string dst_elem_ptr = fresh_reg();
+                    emit_line("  " + dst_elem_ptr + " = getelementptr " + var_type + ", ptr " +
+                              alloca_reg + ", i32 0, i32 " + std::to_string(i));
+                    emit_line("  store " + elem_type_expected + " " + conv_elem + ", ptr " +
+                              dst_elem_ptr);
+                }
+            } else {
+                emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
+            }
         } else {
             emit_line("  store " + var_type + " " + init_val + ", ptr " + alloca_reg);
         }
     }
 
     // Map variable name to alloca with type info
-    locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
+    // Also store semantic type if we have a type annotation (needed for ArrayType inference)
+    types::TypePtr semantic_type = nullptr;
+    if (let.type_annotation) {
+        semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+    }
+    locals_[var_name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
 }
 
 void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {

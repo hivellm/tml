@@ -19,8 +19,13 @@
 //! - `layout` - Layout and LayoutError types
 //! - `global` - GlobalAlloc behavior and utilities
 
-// Note: Submodules (layout.tml, global.tml) are automatically loaded
-// when this mod.tml file exists in the directory.
+// Submodule declarations
+pub mod layout
+pub mod global
+
+// Re-export all from submodules
+pub use layout::*
+pub use global::*
 
 // ============================================================================
 // AllocError
@@ -166,4 +171,62 @@ pub behavior Allocator {
     /// Returns `Err` if the new layout does not meet the allocator's size
     /// and alignment constraints, or if shrinking otherwise fails.
     func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError]
+}
+
+// ============================================================================
+// AllocatorRef - Wrapper for borrowing allocators
+// ============================================================================
+
+/// A wrapper type that allows using a reference to an allocator.
+///
+/// This is returned by `Allocator::by_ref()` and allows passing an allocator
+/// by reference while still satisfying the `Allocator` bound.
+///
+/// # Example
+///
+/// ```tml
+/// func use_allocator[A: Allocator](alloc: A) { ... }
+///
+/// let my_alloc: MyAllocator = MyAllocator::new()
+/// // Instead of moving my_alloc, we can borrow it:
+/// use_allocator(my_alloc.by_ref())
+/// // my_alloc is still usable here
+/// ```
+pub type AllocatorRef[A] {
+    /// Reference to the underlying allocator
+    alloc: ref A
+}
+
+impl[A: Allocator] Allocator for AllocatorRef[A] {
+    func allocate(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.alloc.allocate(layout)
+    }
+
+    func deallocate(mut this, ptr: Ptr[U8], layout: Layout) {
+        this.alloc.deallocate(ptr, layout)
+    }
+
+    func allocate_zeroed(mut this, layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.alloc.allocate_zeroed(layout)
+    }
+
+    func grow(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.alloc.grow(ptr, old_layout, new_layout)
+    }
+
+    func grow_zeroed(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.alloc.grow_zeroed(ptr, old_layout, new_layout)
+    }
+
+    func shrink(mut this, ptr: Ptr[U8], old_layout: Layout, new_layout: Layout) -> Outcome[Ptr[U8], AllocError] {
+        return this.alloc.shrink(ptr, old_layout, new_layout)
+    }
+}
+
+/// Creates an `AllocatorRef` that borrows from the given allocator.
+///
+/// This function allows using an allocator by reference in contexts
+/// that require ownership.
+pub func by_ref[A: Allocator](alloc: ref A) -> AllocatorRef[A] {
+    return AllocatorRef { alloc: alloc }
 }

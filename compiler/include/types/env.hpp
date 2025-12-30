@@ -83,10 +83,19 @@ struct EnumDef {
     SourceSpan span;
 };
 
+// Associated type in a behavior declaration
+struct AssociatedTypeDef {
+    std::string name;
+    std::vector<std::string> bounds;     // Behavior bounds (e.g., Iterator where Item: Clone)
+    std::optional<TypePtr> default_type; // Optional default type
+};
+
 // Behavior (trait) definition
 struct BehaviorDef {
     std::string name;
     std::vector<std::string> type_params;
+    std::vector<AssociatedTypeDef>
+        associated_types; // Associated type declarations (e.g., type Item)
     std::vector<FuncSig> methods;
     std::vector<std::string> super_behaviors;
     std::set<std::string> methods_with_defaults; // Method names that have default implementations

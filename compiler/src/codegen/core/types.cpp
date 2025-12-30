@@ -42,6 +42,10 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "Unit")
         return "void";
 
+    // Ptr[T] syntax in TML uses NamedType "Ptr" - it should be a pointer type
+    if (name == "Ptr")
+        return "ptr";
+
     // Collection types - wrapper structs containing handles to runtime data
     // These are struct { ptr } where the ptr is the runtime handle
     if (name == "List" || name == "Vec" || name == "Array")
@@ -66,6 +70,17 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
         const auto& named = type.as<parser::NamedType>();
         if (!named.path.segments.empty()) {
             std::string base_name = named.path.segments.back();
+            // Handle associated types like This::Item or Self::Item
+            if (named.path.segments.size() == 2) {
+                const std::string& first = named.path.segments[0];
+                const std::string& second = named.path.segments[1];
+                if (first == "This" || first == "Self") {
+                    auto assoc_it = current_associated_types_.find(second);
+                    if (assoc_it != current_associated_types_.end()) {
+                        return llvm_type_from_semantic(assoc_it->second);
+                    }
+                }
+            }
 
             // Check if this is a generic type with type arguments
             if (named.generics.has_value() && !named.generics->args.empty()) {
@@ -102,7 +117,21 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
     } else if (type.is<parser::PtrType>()) {
         return "ptr";
     } else if (type.is<parser::ArrayType>()) {
-        return "ptr";
+        // Fixed-size array: [T; N] -> [N x llvm_type(T)]
+        const auto& arr = type.as<parser::ArrayType>();
+        std::string elem_type = llvm_type_ptr(arr.element);
+
+        // Get the size from the expression
+        size_t arr_size = 0;
+        if (arr.size && arr.size->is<parser::LiteralExpr>()) {
+            const auto& lit = arr.size->as<parser::LiteralExpr>();
+            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                const auto& val = lit.token.int_value();
+                arr_size = static_cast<size_t>(val.value);
+            }
+        }
+
+        return "[" + std::to_string(arr_size) + " x " + elem_type + "]";
     } else if (type.is<parser::FuncType>()) {
         // Function types are pointers in LLVM
         return "ptr";
@@ -185,6 +214,12 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
 
+        // Ptr[T] in TML syntax is represented as NamedType with name "Ptr"
+        // It should be lowered to "ptr" in LLVM IR
+        if (named.name == "Ptr") {
+            return "ptr";
+        }
+
         // If it has type arguments, need to use mangled name and ensure instantiation
         if (!named.type_args.empty()) {
             // Check if it's a generic enum (like Maybe, Outcome)
@@ -227,6 +262,14 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // We use a struct type: %dyn.BehaviorName
         const auto& dyn = type->as<types::DynBehaviorType>();
         return "%dyn." + dyn.behavior_name;
+    } else if (type->is<types::ArrayType>()) {
+        // Fixed-size arrays: [T; N] -> [N x llvm_type(T)]
+        const auto& arr = type->as<types::ArrayType>();
+        std::string elem_type = llvm_type_from_semantic(arr.element, true);
+        return "[" + std::to_string(arr.size) + " x " + elem_type + "]";
+    } else if (type->is<types::SliceType>()) {
+        // Slices are fat pointers: { ptr, i64 } but represented as ptr for simplicity
+        return "ptr";
     }
 
     return "i32"; // Default
@@ -326,6 +369,29 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
             using T = std::decay_t<decltype(t)>;
 
             if constexpr (std::is_same_v<T, parser::NamedType>) {
+                // Handle associated types like This::Item or Self::Item
+                // Path will have segments ["This", "Item"] or ["Self", "Item"]
+                if (t.path.segments.size() == 2) {
+                    const std::string& first = t.path.segments[0];
+                    const std::string& second = t.path.segments[1];
+                    if (first == "This" || first == "Self") {
+                        // Look up in current associated types
+                        auto assoc_it = current_associated_types_.find(second);
+                        if (assoc_it != current_associated_types_.end()) {
+                            return assoc_it->second;
+                        }
+                    }
+                    // Also check if it's T::AssociatedType where T is a generic param
+                    auto param_it = subs.find(first);
+                    if (param_it != subs.end()) {
+                        // For now, look up the associated type directly
+                        auto assoc_it = current_associated_types_.find(second);
+                        if (assoc_it != current_associated_types_.end()) {
+                            return assoc_it->second;
+                        }
+                    }
+                }
+
                 // Get the type name
                 std::string name;
                 if (!t.path.segments.empty()) {

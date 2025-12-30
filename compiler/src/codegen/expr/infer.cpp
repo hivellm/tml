@@ -4,6 +4,8 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/module.hpp"
 
+#include <iostream>
+
 namespace tml::codegen {
 
 // Helper: infer semantic type from expression for generics instantiation
@@ -21,6 +23,8 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return types::make_str();
         case lexer::TokenKind::CharLiteral:
             return types::make_primitive(types::PrimitiveKind::Char);
+        case lexer::TokenKind::NullLiteral:
+            return types::make_ptr(types::make_unit());
         default:
             return types::make_i32();
         }
@@ -455,6 +459,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     }
                 }
             }
+
+            // Check if it's a regular function call - look up recorded return type
+            auto ret_it = func_return_types_.find(callee_ident.name);
+            if (ret_it != func_return_types_.end()) {
+                return ret_it->second;
+            }
         }
     }
     // Handle method call expressions (need to know return type of methods)
@@ -664,6 +674,56 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             element_types.push_back(infer_expr_type(*elem));
         }
         return types::make_tuple(std::move(element_types));
+    }
+    // Handle array expressions [elem1, elem2, ...] or [expr; count]
+    if (expr.is<parser::ArrayExpr>()) {
+        const auto& arr = expr.as<parser::ArrayExpr>();
+
+        if (std::holds_alternative<std::vector<parser::ExprPtr>>(arr.kind)) {
+            const auto& elements = std::get<std::vector<parser::ExprPtr>>(arr.kind);
+            if (elements.empty()) {
+                // Empty array - use I32 as default element type
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::ArrayType{types::make_i32(), 0};
+                return result;
+            }
+            // Infer element type from first element
+            types::TypePtr elem_type = infer_expr_type(*elements[0]);
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::ArrayType{elem_type, elements.size()};
+            return result;
+        } else {
+            // [expr; count] form
+            const auto& pair = std::get<std::pair<parser::ExprPtr, parser::ExprPtr>>(arr.kind);
+            types::TypePtr elem_type = infer_expr_type(*pair.first);
+
+            // Get the count - must be a compile-time constant
+            size_t count = 0;
+            if (pair.second->is<parser::LiteralExpr>()) {
+                const auto& lit = pair.second->as<parser::LiteralExpr>();
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    const auto& val = lit.token.int_value();
+                    count = static_cast<size_t>(val.value);
+                }
+            }
+
+            auto result = std::make_shared<types::Type>();
+            result->kind = types::ArrayType{elem_type, count};
+            return result;
+        }
+    }
+    // Handle index expressions arr[i]
+    if (expr.is<parser::IndexExpr>()) {
+        const auto& idx = expr.as<parser::IndexExpr>();
+        types::TypePtr obj_type = infer_expr_type(*idx.object);
+
+        // If the object is an array, return element type
+        if (obj_type && obj_type->is<types::ArrayType>()) {
+            return obj_type->as<types::ArrayType>().element;
+        }
+
+        // Default: assume I32 for list element
+        return types::make_i32();
     }
     // Default: I32
     return types::make_i32();

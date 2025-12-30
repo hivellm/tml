@@ -218,3 +218,144 @@ pub func layout_bytes(size: I64) -> Outcome[Layout, LayoutError] {
 pub func layout_bytes_aligned(size: I64, align: I64) -> Outcome[Layout, LayoutError] {
     return Layout::from_size_align(size, align)
 }
+
+// ============================================================================
+// Global Allocator Access
+// ============================================================================
+
+/// Allocates memory using the global allocator.
+///
+/// This is a convenience function that allocates memory using the
+/// system's default allocator. The returned pointer must be freed
+/// with `dealloc_global`.
+///
+/// # Example
+///
+/// ```tml
+/// let ptr: Ptr[U8] = alloc_global(layout_u64())
+/// if ptr != null {
+///     // Use the memory...
+///     dealloc_global(ptr, layout_u64())
+/// }
+/// ```
+///
+/// # Safety
+///
+/// The caller must ensure:
+/// - The layout has non-zero size
+/// - The returned pointer is eventually freed with `dealloc_global`
+pub func alloc_global(layout: Layout) -> Ptr[U8] {
+    // This is a placeholder - actual implementation would call
+    // the registered global allocator or system malloc
+    return alloc(layout.size())
+}
+
+/// Allocates zeroed memory using the global allocator.
+///
+/// Like `alloc_global`, but the memory is initialized to zero.
+pub func alloc_global_zeroed(layout: Layout) -> Ptr[U8] {
+    let ptr: Ptr[U8] = alloc_global(layout)
+    if ptr != null {
+        mem_zero(ptr, layout.size())
+    }
+    return ptr
+}
+
+/// Deallocates memory previously allocated with `alloc_global`.
+///
+/// # Safety
+///
+/// - `ptr` must have been allocated by `alloc_global` or `alloc_global_zeroed`
+/// - `layout` must be the same layout used for allocation
+/// - The memory must not be accessed after this call
+pub func dealloc_global(ptr: Ptr[U8], layout: Layout) {
+    // This is a placeholder - actual implementation would call
+    // the registered global allocator or system free
+    dealloc(ptr)
+}
+
+/// Reallocates memory previously allocated with `alloc_global`.
+///
+/// The contents of the returned memory will be unchanged up to the
+/// lesser of the new and old sizes.
+///
+/// # Safety
+///
+/// - `ptr` must have been allocated by `alloc_global`
+/// - `old_layout` must match the original allocation
+/// - `new_size` must be greater than zero
+pub func realloc_global(ptr: Ptr[U8], old_layout: Layout, new_size: I64) -> Ptr[U8] {
+    // Allocate new memory
+    let new_layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(new_size, old_layout.align())
+    let new_layout: Layout = when new_layout_result {
+        Ok(l) => l,
+        Err(_) => return null
+    }
+
+    let new_ptr: Ptr[U8] = alloc_global(new_layout)
+    if new_ptr == null {
+        return null
+    }
+
+    // Copy old data
+    let copy_size: I64 = if old_layout.size() < new_size { old_layout.size() } else { new_size }
+    mem_copy(new_ptr, ptr, copy_size)
+
+    // Free old memory
+    dealloc_global(ptr, old_layout)
+
+    return new_ptr
+}
+
+// ============================================================================
+// Allocation Helpers
+// ============================================================================
+
+/// Allocates memory for a single value of the given size and alignment.
+///
+/// This is a convenience wrapper around `alloc_global` for single-value allocations.
+pub func alloc_single(size: I64, align: I64) -> Ptr[U8] {
+    let layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    when layout_result {
+        Ok(layout) => return alloc_global(layout),
+        Err(_) => return null
+    }
+}
+
+/// Allocates memory for an array of `n` elements.
+///
+/// Each element has the given size and alignment.
+pub func alloc_array(elem_size: I64, elem_align: I64, n: I64) -> Ptr[U8] {
+    let layout_result: Outcome[Layout, LayoutError] = Layout::array(elem_size, elem_align, n)
+    when layout_result {
+        Ok(layout) => return alloc_global(layout),
+        Err(_) => return null
+    }
+}
+
+/// Allocates zeroed memory for an array of `n` elements.
+pub func alloc_array_zeroed(elem_size: I64, elem_align: I64, n: I64) -> Ptr[U8] {
+    let layout_result: Outcome[Layout, LayoutError] = Layout::array(elem_size, elem_align, n)
+    when layout_result {
+        Ok(layout) => return alloc_global_zeroed(layout),
+        Err(_) => return null
+    }
+}
+
+/// Frees memory for a single value.
+pub func dealloc_single(ptr: Ptr[U8], size: I64, align: I64) {
+    let layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(size, align)
+    when layout_result {
+        Ok(layout) => dealloc_global(ptr, layout),
+        Err(_) => {}
+    }
+}
+
+/// Frees memory for an array.
+pub func dealloc_array(ptr: Ptr[U8], elem_size: I64, elem_align: I64, n: I64) {
+    let layout_result: Outcome[Layout, LayoutError] = Layout::array(elem_size, elem_align, n)
+    when layout_result {
+        Ok(layout) => dealloc_global(ptr, layout),
+        Err(_) => {}
+    }
+}

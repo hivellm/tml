@@ -294,17 +294,28 @@ auto Parser::parse_generic_args() -> Result<std::optional<GenericArgs>, ParseErr
     }
 
     // Lookahead to distinguish generic args from index expressions
-    // Generic args: List[I32], HashMap[K, V] - contain type names
+    // Generic args: List[I32], HashMap[K, V] - contain type names (PascalCase)
     // Index expressions: arr[0], arr[i] - contain values/expressions
-    // If the content after '[' is a literal (number, string, etc.),
-    // it's an index expression, not generic args
+    // Heuristics:
+    //   - Literals (number, string, etc.) -> definitely index
+    //   - Identifier starting with lowercase -> likely variable -> index
+    //   - Identifier starting with uppercase -> likely type -> generic arg
     auto saved_pos = pos_;
     advance(); // consume '[' for lookahead
 
     bool is_definitely_index =
         check(lexer::TokenKind::IntLiteral) || check(lexer::TokenKind::FloatLiteral) ||
         check(lexer::TokenKind::StringLiteral) || check(lexer::TokenKind::BoolLiteral) ||
-        check(lexer::TokenKind::CharLiteral);
+        check(lexer::TokenKind::CharLiteral) || check(lexer::TokenKind::NullLiteral);
+
+    // If it's an identifier, check if it starts with lowercase (likely a variable)
+    if (!is_definitely_index && check(lexer::TokenKind::Identifier)) {
+        auto lexeme = peek().lexeme;
+        if (!lexeme.empty() && lexeme[0] >= 'a' && lexeme[0] <= 'z') {
+            // Lowercase identifier -> likely a variable used as index
+            is_definitely_index = true;
+        }
+    }
 
     pos_ = saved_pos; // restore position
 

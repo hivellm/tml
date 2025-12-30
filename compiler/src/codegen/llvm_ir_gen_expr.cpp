@@ -112,6 +112,10 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
         last_expr_type_ = "i32";
         return std::to_string(lit.token.char_value().value);
     }
+    case lexer::TokenKind::NullLiteral:
+        // null is a pointer type with value null
+        last_expr_type_ = "ptr";
+        return "null";
     default:
         last_expr_type_ = "i32";
         return "0";
@@ -360,6 +364,32 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             }
 
             if (!struct_type.empty() && !struct_ptr.empty()) {
+                // If struct_type is ptr (e.g., for mut ref parameters), resolve the inner type
+                // and load the pointer from the alloca first
+                if (struct_type == "ptr") {
+                    types::TypePtr semantic_type = infer_expr_type(*field.object);
+                    if (semantic_type) {
+                        if (semantic_type->is<types::RefType>()) {
+                            const auto& ref = semantic_type->as<types::RefType>();
+                            struct_type = llvm_type_from_semantic(ref.inner);
+                            // struct_ptr points to an alloca containing a pointer to the struct
+                            // We need to load the pointer first
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                            struct_ptr = loaded_ptr;
+                        } else if (semantic_type->is<types::PtrType>()) {
+                            const auto& ptr = semantic_type->as<types::PtrType>();
+                            struct_type = llvm_type_from_semantic(ptr.inner);
+                            // Same - load the pointer from the alloca
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                            struct_ptr = loaded_ptr;
+                        } else {
+                            struct_type = llvm_type_from_semantic(semantic_type);
+                        }
+                    }
+                }
+
                 // Get the struct type name for field lookup
                 std::string type_name = struct_type;
                 if (type_name.starts_with("%struct.")) {
@@ -515,6 +545,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Check if either operand is i64
     bool is_i64 = (left_type == "i64" || right_type == "i64");
 
+    // Check for smaller integer types (i8, i16)
+    bool is_i8 = (left_type == "i8" || right_type == "i8") && !is_i64;
+    bool is_i16 = (left_type == "i16" || right_type == "i16") && !is_i64 && !is_i8;
+
     // Handle float literals (e.g., 3.0)
     if (!is_float && bin.right->is<parser::LiteralExpr>()) {
         const auto& lit = bin.right->as<parser::LiteralExpr>();
@@ -549,16 +583,30 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
             }
         }
     } else if (is_i64) {
-        // Promote i32 to i64 if needed
-        if (left_type == "i32") {
+        // Promote smaller ints to i64 if needed
+        if (left_type == "i32" || left_type == "i16" || left_type == "i8") {
             std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext i32 " + left + " to i64");
+            emit_line("  " + conv + " = sext " + left_type + " " + left + " to i64");
             left = conv;
         }
-        if (right_type == "i32") {
+        if (right_type == "i32" || right_type == "i16" || right_type == "i8") {
             std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext i32 " + right + " to i64");
+            emit_line("  " + conv + " = sext " + right_type + " " + right + " to i64");
             right = conv;
+        }
+    } else if (!is_i8 && !is_i16) {
+        // When using i32, promote smaller ints if needed
+        if (left_type == "i16" || left_type == "i8") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext " + left_type + " " + left + " to i32");
+            left = conv;
+            left_type = "i32";
+        }
+        if (right_type == "i16" || right_type == "i8") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = sext " + right_type + " " + right + " to i32");
+            right = conv;
+            right_type = "i32";
         }
     }
 
@@ -568,8 +616,17 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Check if BOTH operands are strings (ptr) - only then use str_eq
     bool is_string = (left_type == "ptr" && right_type == "ptr");
 
-    // Determine the integer type to use
-    std::string int_type = is_bool ? "i1" : (is_i64 ? "i64" : "i32");
+    // Determine the integer type to use (largest type wins)
+    std::string int_type = "i32";
+    if (is_bool) {
+        int_type = "i1";
+    } else if (is_i64) {
+        int_type = "i64";
+    } else if (is_i16) {
+        int_type = "i16";
+    } else if (is_i8) {
+        int_type = "i8";
+    }
 
     switch (bin.op) {
     case parser::BinaryOp::Add:

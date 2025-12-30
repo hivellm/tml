@@ -340,6 +340,9 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
 
     if (block.expr.has_value() && !block_terminated_) {
         result = gen_expr(*block.expr.value());
+    } else {
+        // Block has no trailing expression - it returns Unit (void)
+        last_expr_type_ = "void";
     }
 
     return result;

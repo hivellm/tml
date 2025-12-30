@@ -1,9 +1,11 @@
 // Type checker statement handling
 // Handles: check_stmt, check_let, check_var, bind_pattern
 
+#include "common.hpp"
 #include "types/checker.hpp"
 
 #include <algorithm>
+#include <iostream>
 
 namespace tml::types {
 
@@ -29,6 +31,7 @@ auto TypeChecker::check_stmt(const parser::Stmt& stmt) -> TypePtr {
 }
 
 auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
+    TML_DEBUG_LN("[check_let] Processing let statement");
     // TML requires explicit type annotations on all let statements
     if (!let.type_annotation.has_value()) {
         error("TML requires explicit type annotation on 'let' statements. Add ': Type' after the "
@@ -39,7 +42,11 @@ auto TypeChecker::check_let(const parser::LetStmt& let) -> TypePtr {
         return make_unit();
     }
 
+    TML_DEBUG_LN("[check_let] Has type annotation, calling resolve_type...");
+    TML_DEBUG_LN(
+        "[check_let] Type annotation variant index: " << (*let.type_annotation)->kind.index());
     TypePtr var_type = resolve_type(**let.type_annotation);
+    TML_DEBUG_LN("[check_let] resolved var_type: " << type_to_string(var_type));
 
     if (let.init) {
         TypePtr init_type = check_expr(**let.init);

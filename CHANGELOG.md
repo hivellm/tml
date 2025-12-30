@@ -8,6 +8,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Null Literal** (2025-12-30) - Support for `null` as a first-class literal type
+  - `null` has type `Ptr[Unit]` and is compatible with any pointer type `Ptr[T]`
+  - Can be assigned to any pointer variable: `let ptr: Ptr[I32] = null`
+  - Can be compared with any pointer: `if ptr == null { ... }`
+  - Lexer recognizes `null` as `NullLiteral` token
+  - Parser handles null in literal expressions
+  - Type checker types null as `Ptr[Unit]` with compatibility rules
+  - LLVM codegen emits `null` pointer constant
+  - Full test coverage in `compiler/tests/compiler/null_literal.test.tml`
+  - Files modified:
+    - `include/lexer/token.hpp` - Added `NullLiteral` to TokenKind enum
+    - `src/lexer/lexer_core.cpp` - Added `null` to keywords table
+    - `src/lexer/token.cpp` - Updated `is_literal` range check
+    - `src/parser/parser_expr.cpp` - Added NullLiteral to literal parsing
+    - `src/types/checker/expr.cpp` - Added null literal type as `Ptr[Unit]`
+    - `src/types/checker/helpers.cpp` - Added null pointer compatibility in `types_compatible()`
+    - `src/codegen/llvm_ir_gen_expr.cpp` - Added null literal codegen
+    - `src/codegen/core/types.cpp` - Added `Ptr` type handling
+
+- **Glob Imports** (2025-12-30) - Support for `pub use module::*` syntax
+  - Import all public symbols from a module with single statement
+  - Parser recognizes `::*` syntax in use declarations
+  - Type checker handles glob imports via `import_all_from()`
+  - Enables cleaner module re-exports (e.g., `pub use traits::*`)
+  - Files modified:
+    - `include/parser/ast.hpp` - Added `is_glob` field to UseDecl
+    - `src/parser/parser_decl.cpp` - Parse `::*` glob import syntax
+    - `src/types/checker/core.cpp` - Handle glob imports in `process_use_decl()`
+
+- **Module Parse Error Reporting** (2025-12-30) - Detailed errors and panic on module load failures
+  - Module parse errors now display detailed error information
+  - Compiler exits with code 1 when a module fails to load
+  - Shows file path, line/column, and error message for each parse error
+  - Helps identify syntax issues in imported modules
+  - Files modified:
+    - `src/types/env_module_support.cpp` - Added ParseResult struct and error reporting
+
+- **Core Alloc Module Completion** (2025-12-30) - Full Rust-compatible `core::alloc` implementation
+  - `Layout` additions: `array_of()`, `with_size()`, `with_align()`, `is_zero_sized()`, `dangling()`
+  - `AllocatorRef[A]` type for borrowing allocators (implements `Allocator` behavior)
+  - `by_ref()` function to create allocator references
+  - Global allocator functions: `alloc_global()`, `alloc_global_zeroed()`, `dealloc_global()`, `realloc_global()`
+  - Helper functions: `alloc_single()`, `alloc_array()`, `alloc_array_zeroed()`, `dealloc_single()`, `dealloc_array()`
+  - 100% API compatibility with Rust's `core::alloc` module
+
+- **Core Iterator Module** (2025-12-30) - Working `core::iter` implementation
+  - Concrete iterator types: `EmptyI32`, `EmptyI64`, `OnceI32`, `OnceI64`, `RepeatNI32`, `RepeatNI64`
+  - Factory functions: `empty_i32()`, `once_i32()`, `repeat_n_i32()`, etc.
+  - Iterator behavior trait with `next()` method
+  - Iterator adapters: `Take`, `Skip`, `Chain`, `Enumerate`, `Zip`, `StepBy`, `Fuse`
+  - All adapters implement the Iterator behavior with proper type associations
+  - Files:
+    - `lib/core/src/iter/traits.tml` - Iterator, IntoIterator, FromIterator behaviors
+    - `lib/core/src/iter/sources.tml` - Empty, Once, RepeatN iterator types
+    - `lib/core/src/iter/adapters.tml` - Take, Skip, Chain, etc. adapters
+    - `lib/core/src/iter/mod.tml` - Module with glob re-exports
+    - `lib/core/tests/iter.test.tml` - Comprehensive tests
+
+### Fixed
+- **Function Parameter Types in Codegen** (2025-12-30) - Fix parameter type lookup for module-internal function calls
+  - When generating code for functions within the same module, parameter types were defaulting to `i32`
+  - Added `param_types` vector to `FuncInfo` struct to store LLVM parameter types
+  - Updated all `FuncInfo` creation sites to include parameter types
+  - Codegen now checks `FuncInfo.param_types` when `TypeEnv` lookup fails
+  - Fixes `alloc_global()` and similar module functions being called with wrong types
+  - Files modified:
+    - `include/codegen/llvm_ir_gen.hpp` - Added `param_types` to `FuncInfo` struct
+    - `src/codegen/llvm_ir_gen_decl.cpp` - Populate param_types in function registration
+    - `src/codegen/core/generate.cpp` - Populate param_types for impl methods
+    - `src/codegen/llvm_ir_gen_builtins.cpp` - Check `FuncInfo.param_types` in `gen_call`
+
+- **Str.len() Method** (2025-12-30) - Fix `.len()` method on strings falling through to `list_len`
+  - `Str` type's `.len()` method was incorrectly calling `list_len` instead of `str_len`
+  - Added proper handling for `Str` type in the `.len()` method codegen
+  - Returns `I64` (sign-extended from `str_len`'s `I32` return)
+  - Files modified:
+    - `src/codegen/expr/method.cpp` - Added `Str` handling before `list_len` fallback
+
+- **alloc() Builtin Type** (2025-12-30) - Changed `alloc()` parameter from `I32` to `I64`
+  - `alloc(size)` now takes `I64` to match `Layout.size()` return type
+  - Removed unnecessary `sext` instruction in codegen
+  - Files modified:
+    - `src/types/builtins/mem.cpp` - Changed signature from `I32` to `I64`
+    - `src/codegen/builtins/mem.cpp` - Removed size conversion
+
+- **Generic Impl Codegen** (2025-12-30) - Skip generic impl blocks during module code generation
+  - Generic impls like `impl[T] Iterator for Empty[T]` were causing "Unknown method" errors
+  - Module codegen now skips generic impls (they require concrete type instantiation)
+  - Concrete type implementations work correctly
+  - Files modified:
+    - `src/codegen/core/runtime.cpp` - Skip generic impls in `emit_module_pure_tml_functions()`
+
 - **Parallel Build System** (2025-12-29) - Multi-threaded compilation with dependency resolution
   - Full `compile_job()` implementation: lexer → parser → type checker → codegen → LLVM IR → object file
   - `DependencyGraph` class for build ordering:

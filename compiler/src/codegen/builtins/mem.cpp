@@ -15,10 +15,8 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
         if (!call.args.empty()) {
             std::string size = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            // Convert i32 size to i64 for malloc
-            std::string size64 = fresh_reg();
-            emit_line("  " + size64 + " = sext i32 " + size + " to i64");
-            emit_line("  " + result + " = call ptr @malloc(i64 " + size64 + ")");
+            // Size is already i64
+            emit_line("  " + result + " = call ptr @malloc(i64 " + size + ")");
             last_expr_type_ = "ptr";
             return result;
         }

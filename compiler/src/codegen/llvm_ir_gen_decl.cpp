@@ -384,11 +384,14 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     std::string ret_type = "void";
     if (func.return_type.has_value()) {
         ret_type = llvm_type_ptr(*func.return_type);
+        // Record semantic return type for use in infer_expr_type
+        func_return_types_[func.name] = resolve_parser_type_with_subs(**func.return_type, {});
     }
 
     // Build parameter list and type list for function signature
     std::string params;
     std::string param_types;
+    std::vector<std::string> param_types_vec;
     for (size_t i = 0; i < func.params.size(); ++i) {
         if (i > 0) {
             params += ", ";
@@ -398,6 +401,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         std::string param_name = get_param_name(func.params[i]);
         params += param_type + " %" + param_name;
         param_types += param_type;
+        param_types_vec.push_back(param_type);
     }
 
     // Handle @extern functions - emit declare instead of define
@@ -424,7 +428,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
         // Register function - map TML name to external symbol
         std::string func_type = ret_type + " (" + param_types + ")";
-        functions_[func.name] = FuncInfo{"@" + symbol_name, func_type, ret_type};
+        functions_[func.name] = FuncInfo{"@" + symbol_name, func_type, ret_type, param_types_vec};
 
         // Store link libraries for later (linker phase)
         for (const auto& lib : func.link_libs) {
@@ -449,7 +453,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[func.name] = FuncInfo{"@tml_" + full_func_name, func_type, ret_type};
+    functions_[func.name] =
+        FuncInfo{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
 
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
@@ -647,6 +652,127 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     current_impl_type_.clear();
 }
 
+// Generate a specialized version of a generic impl method
+// e.g., impl[T] Container[T] { func get() -> T } instantiated for Container[I32]
+void LLVMIRGen::gen_impl_method_instantiation(
+    const std::string& mangled_type_name, const parser::FuncDecl& method,
+    const std::unordered_map<std::string, types::TypePtr>& type_subs,
+    [[maybe_unused]] const std::vector<parser::GenericParam>& impl_generics) {
+    // Save current context
+    std::string saved_func = current_func_;
+    std::string saved_ret_type = current_ret_type_;
+    std::string saved_impl_type = current_impl_type_;
+    bool saved_terminated = block_terminated_;
+    auto saved_locals = locals_;
+
+    std::string method_name = mangled_type_name + "_" + method.name;
+    current_func_ = method_name;
+    current_impl_type_ = mangled_type_name;
+    locals_.clear();
+    block_terminated_ = false;
+
+    // Determine return type with substitution
+    std::string ret_type = "void";
+    if (method.return_type.has_value()) {
+        auto resolved_ret = resolve_parser_type_with_subs(**method.return_type, type_subs);
+        ret_type = llvm_type_from_semantic(resolved_ret);
+    }
+    current_ret_type_ = ret_type;
+
+    // Build parameter list
+    std::string params;
+    std::string param_types;
+
+    // Check if first param is 'this'
+    size_t param_start = 0;
+    bool is_instance_method = false;
+    if (!method.params.empty()) {
+        const auto& first_param = method.params[0];
+        std::string first_name = get_param_name(first_param);
+        if (first_name == "this") {
+            is_instance_method = true;
+            param_start = 1;
+        }
+    }
+
+    // Add 'this' pointer as first parameter for instance methods
+    if (is_instance_method) {
+        params = "ptr %this";
+        param_types = "ptr";
+    }
+
+    // Add remaining parameters with type substitution
+    for (size_t i = param_start; i < method.params.size(); ++i) {
+        if (!params.empty()) {
+            params += ", ";
+            param_types += ", ";
+        }
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        std::string param_type = llvm_type_from_semantic(resolved_param);
+        std::string param_name = get_param_name(method.params[i]);
+        params += param_type + " %" + param_name;
+        param_types += param_type;
+    }
+
+    // Function signature
+    std::string func_llvm_name = "tml_" + mangled_type_name + "_" + method.name;
+    emit_line("");
+    emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
+    emit_line("entry:");
+
+    // Register 'this' in locals
+    if (is_instance_method) {
+        locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
+    }
+
+    // Register other parameters in locals by creating allocas
+    for (size_t i = param_start; i < method.params.size(); ++i) {
+        std::string param_name = get_param_name(method.params[i]);
+        auto resolved_param = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        std::string param_type = llvm_type_from_semantic(resolved_param);
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + param_type);
+        emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
+        locals_[param_name] = VarInfo{alloca_reg, param_type, resolved_param, std::nullopt};
+    }
+
+    // Generate method body
+    if (method.body.has_value()) {
+        for (const auto& stmt : method.body->stmts) {
+            gen_stmt(*stmt);
+        }
+        if (method.body->expr.has_value()) {
+            std::string result = gen_expr(*method.body->expr.value());
+            if (ret_type != "void" && !block_terminated_) {
+                emit_line("  ret " + ret_type + " " + result);
+                block_terminated_ = true;
+            }
+        }
+    }
+
+    // Add implicit return if needed
+    if (!block_terminated_) {
+        if (ret_type == "void") {
+            emit_line("  ret void");
+        } else if (ret_type == "i32") {
+            emit_line("  ret i32 0");
+        } else if (ret_type == "i1") {
+            emit_line("  ret i1 false");
+        } else {
+            emit_line("  ret " + ret_type + " zeroinitializer");
+        }
+    }
+
+    emit_line("}");
+
+    // Restore context
+    current_func_ = saved_func;
+    current_ret_type_ = saved_ret_type;
+    current_impl_type_ = saved_impl_type;
+    block_terminated_ = saved_terminated;
+    locals_ = saved_locals;
+}
+
 // Generate a specialized version of a generic function
 void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
                                        const std::vector<types::TypePtr>& type_args) {
@@ -705,7 +831,11 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
 
     // 5. Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[mangled] = FuncInfo{"@tml_" + mangled, func_type, ret_type};
+    std::vector<std::string> param_types_vec;
+    for (const auto& p : param_info) {
+        param_types_vec.push_back(p.llvm_type);
+    }
+    functions_[mangled] = FuncInfo{"@tml_" + mangled, func_type, ret_type, param_types_vec};
 
     // 6. Emit function definition
     std::string attrs = " #0";

@@ -72,11 +72,80 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
     if (is_float_type(expected) && is_float_type(actual))
         return true;
 
+    // Allow null (Ptr[Unit]) to be assigned to any pointer type
+    // null literal has type Ptr[Unit], but can be assigned to/compared with any Ptr[T]
+    // Note: Ptr[T] in TML syntax is parsed as NamedType{name="Ptr", type_args=[T]}
+    //       while *T is parsed as PtrType
+
+    // Helper lambdas to check if a type is a pointer type
+    auto is_ptr_type = [](const TypePtr& t) -> bool {
+        if (t->is<PtrType>())
+            return true;
+        if (t->is<NamedType>()) {
+            const auto& named = t->as<NamedType>();
+            return named.name == "Ptr" && named.type_args.size() == 1;
+        }
+        return false;
+    };
+
+    auto get_ptr_inner = [](const TypePtr& t) -> TypePtr {
+        if (t->is<PtrType>())
+            return t->as<PtrType>().inner;
+        if (t->is<NamedType>()) {
+            const auto& named = t->as<NamedType>();
+            if (named.name == "Ptr" && !named.type_args.empty())
+                return named.type_args[0];
+        }
+        return nullptr;
+    };
+
+    auto is_ptr_to_unit = [&](const TypePtr& t) -> bool {
+        auto inner = get_ptr_inner(t);
+        if (!inner)
+            return false;
+        return inner->is<PrimitiveType>() && inner->as<PrimitiveType>().kind == PrimitiveKind::Unit;
+    };
+
+    if (is_ptr_type(expected) && is_ptr_type(actual)) {
+        // Check if actual is Ptr[Unit] (null literal type)
+        if (is_ptr_to_unit(actual)) {
+            return true; // null is compatible with any pointer type
+        }
+
+        // Also check if expected is Ptr[Unit] (for comparisons like ptr == null)
+        if (is_ptr_to_unit(expected)) {
+            return true; // any pointer type is compatible with null
+        }
+    }
+
     // Allow array [T; N] to be assigned to slice [T]
     if (expected->is<SliceType>() && actual->is<ArrayType>()) {
         const auto& slice_elem = expected->as<SliceType>().element;
         const auto& array_elem = actual->as<ArrayType>().element;
         return types_compatible(slice_elem, array_elem);
+    }
+
+    // Allow array [T1; N] to be compatible with array [T2; N] if element types are compatible
+    // This handles cases like let arr: [I32; 5] = [1, 2, 3, 4, 5] where literals are I64
+    if (expected->is<ArrayType>() && actual->is<ArrayType>()) {
+        const auto& expected_arr = expected->as<ArrayType>();
+        const auto& actual_arr = actual->as<ArrayType>();
+        // Sizes must match
+        if (expected_arr.size != actual_arr.size)
+            return false;
+        // Element types must be compatible
+        return types_compatible(expected_arr.element, actual_arr.element);
+    }
+
+    // Allow array [T; N] to be assigned to List[T]
+    // This enables: let list: List[I32] = [1, 2, 3]
+    if (expected->is<NamedType>() && actual->is<ArrayType>()) {
+        const auto& named = expected->as<NamedType>();
+        if (named.name == "List" && !named.type_args.empty()) {
+            const auto& list_elem = named.type_args[0];
+            const auto& array_elem = actual->as<ArrayType>().element;
+            return types_compatible(list_elem, array_elem);
+        }
     }
 
     // Allow closure to be assigned to function type if signatures match

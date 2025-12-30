@@ -1,0 +1,29 @@
+// Test fixed-size arrays [T; N]
+
+@test
+func test_array_literal() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    assert(arr[0] == 1, "First element should be 1")
+    assert(arr[4] == 5, "Last element should be 5")
+    return 0
+}
+
+@test
+func test_array_indexing() -> I32 {
+    let arr: [I64; 3] = [10, 20, 30]
+    let first: I64 = arr[0]
+    let second: I64 = arr[1]
+    let third: I64 = arr[2]
+    assert(first == 10, "first should be 10")
+    assert(second == 20, "second should be 20")
+    assert(third == 30, "third should be 30")
+    return 0
+}
+
+@test
+func test_array_sum() -> I32 {
+    let arr: [I32; 4] = [1, 2, 3, 4]
+    let sum: I32 = arr[0] + arr[1] + arr[2] + arr[3]
+    assert(sum == 10, "Sum should be 10")
+    return 0
+}

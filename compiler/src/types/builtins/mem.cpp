@@ -98,9 +98,9 @@ void TypeEnv::init_builtin_mem() {
 
     // ============ Simple Allocation (compatibility) ============
 
-    // alloc(size: I32) -> Ptr[Unit] - Simple allocation (maps to malloc)
+    // alloc(size: I64) -> Ptr[Unit] - Simple allocation (maps to malloc)
     functions_["alloc"].push_back(FuncSig{"alloc",
-                                          {make_primitive(PrimitiveKind::I32)},
+                                          {make_primitive(PrimitiveKind::I64)},
                                           make_ptr(make_unit()),
                                           {},
                                           false,

@@ -1,0 +1,82 @@
+// Tests for null literal support
+// Tests: null assignment, null comparison, null in conditionals
+
+use test
+
+// ============================================================================
+// SECTION 1: Null Assignment
+// ============================================================================
+
+@test
+func test_null_assignment_ptr_i32() {
+    let ptr: Ptr[I32] = null
+    assert(ptr == null, "Ptr[I32] should be assignable from null")
+}
+
+@test
+func test_null_assignment_ptr_i64() {
+    let ptr: Ptr[I64] = null
+    assert(ptr == null, "Ptr[I64] should be assignable from null")
+}
+
+@test
+func test_null_assignment_ptr_u8() {
+    let ptr: Ptr[U8] = null
+    assert(ptr == null, "Ptr[U8] should be assignable from null")
+}
+
+// ============================================================================
+// SECTION 2: Null Comparison
+// ============================================================================
+
+@test
+func test_null_equality() {
+    let ptr: Ptr[I32] = null
+    assert(ptr == null, "null pointer should equal null")
+}
+
+@test
+func test_null_inequality() {
+    let ptr: Ptr[I32] = null
+    assert(not (ptr != null), "null pointer should not be unequal to null")
+}
+
+// ============================================================================
+// SECTION 3: Null in Conditionals
+// ============================================================================
+
+@test
+func test_null_if_true_branch() {
+    let ptr: Ptr[I32] = null
+    var result: I32 = 0
+
+    if ptr == null {
+        result = 1
+    }
+
+    assert_eq(result, 1, "if branch should execute when ptr == null")
+}
+
+@test
+func test_null_if_else_branch() {
+    let ptr: Ptr[I32] = null
+    var result: I32 = 0
+
+    if ptr != null {
+        result = 1
+    } else {
+        result = 2
+    }
+
+    assert_eq(result, 2, "else branch should execute when ptr == null")
+}
+
+// ============================================================================
+// SECTION 4: Null with mutable pointers
+// ============================================================================
+
+@test
+func test_null_mutable_ptr() {
+    var ptr: Ptr[I32] = null
+    assert(ptr == null, "mutable ptr should initially be null")
+}

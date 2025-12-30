@@ -18,6 +18,7 @@
 // - result: Outcome[T, E] enhanced methods
 // - borrow: Borrow, BorrowMut, ToOwned, Cow
 // - slice: Slice operations (sort, binary_search, etc.)
+// - array: Fixed-size array utilities (map, zip, from_fn, etc.)
 // - ptr: Raw pointer operations, NonNull
 // - error: Error behavior and common error types
 // - alloc: Memory allocation (Layout, Allocator, GlobalAlloc)
@@ -39,6 +40,7 @@ pub mod option   // Maybe[T] enhanced methods
 pub mod result   // Outcome[T, E] enhanced methods
 pub mod borrow   // Borrow, BorrowMut, ToOwned, Cow
 pub mod slice    // Slice, MutSlice, sort, binary_search
+pub mod array    // Array, ArrayIter, from_fn, repeat, TryFromSliceError
 pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError

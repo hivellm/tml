@@ -138,16 +138,17 @@ func test_equivalence() -> I32 {
 
 // ============ XOR ============
 
-func xor(a: Bool, b: Bool) -> Bool {
+// Note: 'xor' is a keyword for bitwise XOR (^), so we name this bool_xor
+func bool_xor(a: Bool, b: Bool) -> Bool {
     return (a or b) and (not (a and b))
 }
 
 @test
 func test_xor() -> I32 {
-    assert_eq(xor(false, false), false, "F xor F = F")
-    assert(xor(false, true), "F xor T = T")
-    assert(xor(true, false), "T xor F = T")
-    assert_eq(xor(true, true), false, "T xor T = F")
+    assert_eq(bool_xor(false, false), false, "F xor F = F")
+    assert(bool_xor(false, true), "F xor T = T")
+    assert(bool_xor(true, false), "T xor F = T")
+    assert_eq(bool_xor(true, true), false, "T xor T = F")
 
     return 0
 }

@@ -1,6 +1,12 @@
 // Tests for core::alloc module
 use test
-use core::alloc::{Layout, LayoutError, AllocError, is_power_of_two, is_valid_align, align_up, is_aligned}
+use core::alloc::{
+    Layout, LayoutError, AllocError,
+    is_power_of_two, is_valid_align, align_up, align_down, is_aligned,
+    padding_needed, next_power_of_two,
+    layout_u8, layout_u16, layout_u32, layout_u64, layout_u128, layout_ptr,
+    default_alloc_align, min_alloc_size
+}
 
 // ============================================================================
 // Layout Basic Tests
@@ -223,4 +229,275 @@ func test_alloc_error_new() {
     let msg: Str = err.to_string()
     let expected: Str = "memory allocation failed"
     assert_eq(msg, expected, "AllocError message mismatch")
+}
+
+// ============================================================================
+// Layout New Methods Tests
+// ============================================================================
+
+@test
+func test_layout_is_zero_sized() {
+    let zero_layout: Layout = Layout::from_size_align_unchecked(0, 8)
+    assert(zero_layout.is_zero_sized(), "0-sized layout should be zero sized")
+
+    let nonzero_layout: Layout = Layout::from_size_align_unchecked(8, 8)
+    assert(not nonzero_layout.is_zero_sized(), "8-sized layout should not be zero sized")
+}
+
+@test
+func test_layout_dangling() {
+    let layout: Layout = Layout::from_size_align_unchecked(0, 16)
+    let ptr: I64 = layout.dangling()
+    let expected: I64 = 16
+    assert_eq(ptr, expected, "dangling should return alignment value")
+}
+
+@test
+func test_layout_with_size() {
+    let layout: Layout = Layout::from_size_align_unchecked(8, 4)
+    let result: Outcome[Layout, LayoutError] = layout.with_size(16)
+    assert(result.is_ok(), "with_size should succeed")
+    when result {
+        Ok(new_layout) => {
+            let expected_size: I64 = 16
+            let expected_align: I64 = 4
+            assert_eq(new_layout.size(), expected_size, "new size should be 16")
+            assert_eq(new_layout.align(), expected_align, "align should remain 4")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+@test
+func test_layout_with_align() {
+    let layout: Layout = Layout::from_size_align_unchecked(8, 4)
+    let result: Outcome[Layout, LayoutError] = layout.with_align(16)
+    assert(result.is_ok(), "with_align should succeed")
+    when result {
+        Ok(new_layout) => {
+            let expected_size: I64 = 8
+            let expected_align: I64 = 16
+            assert_eq(new_layout.size(), expected_size, "size should remain 8")
+            assert_eq(new_layout.align(), expected_align, "new align should be 16")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+@test
+func test_layout_array_of() {
+    let result: Outcome[Layout, LayoutError] = Layout::array_of(4, 4, 10)
+    assert(result.is_ok(), "array_of should succeed")
+    when result {
+        Ok(layout) => {
+            let expected_size: I64 = 40
+            assert_eq(layout.size(), expected_size, "array of 10 x 4 bytes should be 40")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+// ============================================================================
+// Layout Extend and Repeat Packed Tests
+// ============================================================================
+
+@test
+func test_layout_extend_packed() {
+    let a: Layout = Layout::from_size_align_unchecked(8, 8)
+    let b: Layout = Layout::from_size_align_unchecked(4, 4)
+    let result: Outcome[Layout, LayoutError] = a.extend_packed(b)
+    assert(result.is_ok(), "extend_packed should succeed")
+    when result {
+        Ok(packed) => {
+            let expected_size: I64 = 12
+            let expected_align: I64 = 1
+            assert_eq(packed.size(), expected_size, "packed size should be 12")
+            assert_eq(packed.align(), expected_align, "packed align should be 1")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+@test
+func test_layout_repeat_packed() {
+    let layout: Layout = Layout::from_size_align_unchecked(5, 4)
+    let result: Outcome[Layout, LayoutError] = layout.repeat_packed(3)
+    assert(result.is_ok(), "repeat_packed should succeed")
+    when result {
+        Ok(repeated) => {
+            let expected_size: I64 = 15
+            assert_eq(repeated.size(), expected_size, "3x5 packed should be 15")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+@test
+func test_layout_array() {
+    let result: Outcome[Layout, LayoutError] = Layout::array(8, 8, 5)
+    assert(result.is_ok(), "array should succeed")
+    when result {
+        Ok(layout) => {
+            let expected_size: I64 = 40
+            assert_eq(layout.size(), expected_size, "5x8 array should be 40")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+// ============================================================================
+// More Utility Functions Tests
+// ============================================================================
+
+@test
+func test_align_down() {
+    let result1: I64 = align_down(10, 8)
+    let expected1: I64 = 8
+    assert_eq(result1, expected1, "align_down(10, 8) should be 8")
+
+    let result2: I64 = align_down(16, 8)
+    let expected2: I64 = 16
+    assert_eq(result2, expected2, "align_down(16, 8) should be 16")
+
+    let result3: I64 = align_down(7, 8)
+    let expected3: I64 = 0
+    assert_eq(result3, expected3, "align_down(7, 8) should be 0")
+}
+
+@test
+func test_padding_needed() {
+    let result1: I64 = padding_needed(10, 8)
+    let expected1: I64 = 6
+    assert_eq(result1, expected1, "padding_needed(10, 8) should be 6")
+
+    let result2: I64 = padding_needed(16, 8)
+    let expected2: I64 = 0
+    assert_eq(result2, expected2, "padding_needed(16, 8) should be 0")
+}
+
+@test
+func test_next_power_of_two() {
+    let result1: I64 = next_power_of_two(1)
+    let expected1: I64 = 1
+    assert_eq(result1, expected1, "next_power_of_two(1) should be 1")
+
+    let result2: I64 = next_power_of_two(3)
+    let expected2: I64 = 4
+    assert_eq(result2, expected2, "next_power_of_two(3) should be 4")
+
+    let result3: I64 = next_power_of_two(5)
+    let expected3: I64 = 8
+    assert_eq(result3, expected3, "next_power_of_two(5) should be 8")
+
+    let result4: I64 = next_power_of_two(8)
+    let expected4: I64 = 8
+    assert_eq(result4, expected4, "next_power_of_two(8) should be 8")
+}
+
+// ============================================================================
+// Layout Presets Tests
+// ============================================================================
+
+@test
+func test_layout_presets() {
+    let u8_layout: Layout = layout_u8()
+    assert_eq(u8_layout.size(), 1 as I64, "U8 size should be 1")
+    assert_eq(u8_layout.align(), 1 as I64, "U8 align should be 1")
+
+    let u16_layout: Layout = layout_u16()
+    assert_eq(u16_layout.size(), 2 as I64, "U16 size should be 2")
+    assert_eq(u16_layout.align(), 2 as I64, "U16 align should be 2")
+
+    let u32_layout: Layout = layout_u32()
+    assert_eq(u32_layout.size(), 4 as I64, "U32 size should be 4")
+    assert_eq(u32_layout.align(), 4 as I64, "U32 align should be 4")
+
+    let u64_layout: Layout = layout_u64()
+    assert_eq(u64_layout.size(), 8 as I64, "U64 size should be 8")
+    assert_eq(u64_layout.align(), 8 as I64, "U64 align should be 8")
+
+    let u128_layout: Layout = layout_u128()
+    assert_eq(u128_layout.size(), 16 as I64, "U128 size should be 16")
+    assert_eq(u128_layout.align(), 16 as I64, "U128 align should be 16")
+
+    let ptr_layout: Layout = layout_ptr()
+    assert_eq(ptr_layout.size(), 8 as I64, "Ptr size should be 8 (64-bit)")
+    assert_eq(ptr_layout.align(), 8 as I64, "Ptr align should be 8")
+}
+
+@test
+func test_default_alloc_constants() {
+    let default_align: I64 = default_alloc_align()
+    assert_eq(default_align, 16 as I64, "default align should be 16")
+
+    let min_size: I64 = min_alloc_size()
+    assert_eq(min_size, 16 as I64, "min alloc size should be 16")
+}
+
+// ============================================================================
+// Layout Equality Tests
+// ============================================================================
+
+@test
+func test_layout_equals() {
+    let a: Layout = Layout::from_size_align_unchecked(64, 8)
+    let b: Layout = Layout::from_size_align_unchecked(64, 8)
+    let c: Layout = Layout::from_size_align_unchecked(32, 8)
+    let d: Layout = Layout::from_size_align_unchecked(64, 16)
+
+    assert(a.equals(b), "same size and align should be equal")
+    assert(not a.equals(c), "different size should not be equal")
+    assert(not a.equals(d), "different align should not be equal")
+}
+
+// ============================================================================
+// Layout Debug String Tests
+// ============================================================================
+
+@test
+func test_layout_to_string() {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let str: Str = layout.to_string()
+    // Just check that it produces a string without crashing
+    assert(str.len() > 0, "to_string should produce non-empty string")
+}
+
+@test
+func test_layout_debug_string() {
+    let layout: Layout = Layout::from_size_align_unchecked(64, 8)
+    let str: Str = layout.debug_string()
+    assert(str.len() > 0, "debug_string should produce non-empty string")
+}
+
+// ============================================================================
+// Layout align_to Tests
+// ============================================================================
+
+@test
+func test_layout_align_to() {
+    let layout: Layout = Layout::from_size_align_unchecked(10, 4)
+    let result: Outcome[Layout, LayoutError] = layout.align_to(16)
+    assert(result.is_ok(), "align_to should succeed")
+    when result {
+        Ok(aligned) => {
+            let expected_align: I64 = 16
+            assert_eq(aligned.align(), expected_align, "align should be 16")
+            assert_eq(aligned.size(), layout.size(), "size should remain unchanged")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
+}
+
+@test
+func test_layout_align_to_keeps_larger() {
+    let layout: Layout = Layout::from_size_align_unchecked(10, 32)
+    let result: Outcome[Layout, LayoutError] = layout.align_to(8)
+    assert(result.is_ok(), "align_to should succeed")
+    when result {
+        Ok(aligned) => {
+            let expected_align: I64 = 32
+            assert_eq(aligned.align(), expected_align, "align should stay at 32 (larger)")
+        },
+        Err(_) => assert(false, "should not reach here"),
+    }
 }

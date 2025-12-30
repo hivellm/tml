@@ -1,10 +1,12 @@
 // Type checker expression checking
 // Handles: check_expr, check_literal, check_ident, check_binary, check_unary, etc.
 
+#include "common.hpp"
 #include "lexer/token.hpp"
 #include "types/checker.hpp"
 
 #include <algorithm>
+#include <iostream>
 
 namespace tml::types {
 
@@ -132,6 +134,8 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
         return make_primitive(PrimitiveKind::Char);
     case lexer::TokenKind::BoolLiteral:
         return make_bool();
+    case lexer::TokenKind::NullLiteral:
+        return make_ptr(make_unit()); // null has type Ptr[Unit]
     default:
         return make_unit();
     }
@@ -646,6 +650,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 
         auto func = env_.lookup_func(qualified);
         if (func) {
+            // For generic impl methods (impl[T] Container[T]), substitute type parameters
+            // using the receiver's type arguments if no explicit type args are provided
+            if (call.type_args.empty() && !func->type_params.empty() && !named.type_args.empty()) {
+                std::unordered_map<std::string, TypePtr> subs;
+                for (size_t i = 0; i < func->type_params.size() && i < named.type_args.size();
+                     ++i) {
+                    subs[func->type_params[i]] = named.type_args[i];
+                }
+                return substitute_type(func->return_type, subs);
+            }
             return apply_type_args(*func);
         }
 
@@ -1039,29 +1053,36 @@ auto TypeChecker::check_index(const parser::IndexExpr& idx) -> TypePtr {
     auto obj_type = check_expr(*idx.object);
     check_expr(*idx.index);
 
-    if (obj_type->is<ArrayType>()) {
-        return obj_type->as<ArrayType>().element;
+    // Resolve the type in case it's a type alias
+    auto resolved = env_.resolve(obj_type);
+
+    if (resolved->is<ArrayType>()) {
+        return resolved->as<ArrayType>().element;
     }
-    if (obj_type->is<SliceType>()) {
-        return obj_type->as<SliceType>().element;
+    if (resolved->is<SliceType>()) {
+        return resolved->as<SliceType>().element;
     }
 
     return make_unit();
 }
 
 auto TypeChecker::check_block(const parser::BlockExpr& block) -> TypePtr {
+    TML_DEBUG_LN("[check_block] Entering block with " << block.stmts.size() << " statements");
     env_.push_scope();
     TypePtr result = make_unit();
 
     for (const auto& stmt : block.stmts) {
+        TML_DEBUG_LN("[check_block] Checking statement at index " << stmt->kind.index());
         result = check_stmt(*stmt);
     }
 
     if (block.expr) {
+        TML_DEBUG_LN("[check_block] Checking trailing expression");
         result = check_expr(**block.expr);
     }
 
     env_.pop_scope();
+    TML_DEBUG_LN("[check_block] Exiting block");
     return result;
 }
 

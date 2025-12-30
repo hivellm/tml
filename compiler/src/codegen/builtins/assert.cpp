@@ -40,7 +40,25 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
                 emit_line("  unreachable");
 
                 emit_line(ok_label + ":");
-                return "";
+                last_expr_type_ = "void";
+                return "0";
+            }
+
+            // Handle type mismatches (e.g., i32 vs i64)
+            if (left_type != right_type) {
+                // If types differ, convert to match
+                if (left_type == "i32" && right_type == "i64") {
+                    // Truncate i64 right value to i32
+                    std::string trunc_reg = fresh_reg();
+                    emit_line("  " + trunc_reg + " = trunc i64 " + right + " to i32");
+                    right = trunc_reg;
+                } else if (left_type == "i64" && right_type == "i32") {
+                    // Sign-extend i32 left value to i64
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    left = ext_reg;
+                    cmp_type = "i64";
+                }
             }
 
             // For numeric/bool types, use icmp
@@ -57,9 +75,11 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");
-            return "";
+            last_expr_type_ = "void";
+            return "0";
         }
-        return "";
+        last_expr_type_ = "void";
+        return "0";
     }
 
     // assert_ne(left, right) - Assert two values are not equal
@@ -68,10 +88,25 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             std::string left = gen_expr(*call.args[0]);
             std::string left_type = last_expr_type_;
             std::string right = gen_expr(*call.args[1]);
+            std::string right_type = last_expr_type_;
 
             std::string cmp_type = left_type;
             if (cmp_type.empty())
                 cmp_type = "i32";
+
+            // Handle type mismatches (e.g., i32 vs i64)
+            if (left_type != right_type) {
+                if (left_type == "i32" && right_type == "i64") {
+                    std::string trunc_reg = fresh_reg();
+                    emit_line("  " + trunc_reg + " = trunc i64 " + right + " to i32");
+                    right = trunc_reg;
+                } else if (left_type == "i64" && right_type == "i32") {
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = sext i32 " + left + " to i64");
+                    left = ext_reg;
+                    cmp_type = "i64";
+                }
+            }
 
             std::string cmp_result = fresh_reg();
             emit_line("  " + cmp_result + " = icmp ne " + cmp_type + " " + left + ", " + right);
@@ -86,9 +121,11 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");
-            return "";
+            last_expr_type_ = "void";
+            return "0";
         }
-        return "";
+        last_expr_type_ = "void";
+        return "0";
     }
 
     // assert(condition) - Assert condition is true
@@ -106,9 +143,11 @@ auto LLVMIRGen::try_gen_builtin_assert(const std::string& fn_name, const parser:
             emit_line("  unreachable");
 
             emit_line(ok_label + ":");
-            return "";
+            last_expr_type_ = "void";
+            return "0";
         }
-        return "";
+        last_expr_type_ = "void";
+        return "0";
     }
 
     return std::nullopt;

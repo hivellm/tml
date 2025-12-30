@@ -63,8 +63,13 @@ private:
     // Current impl self type (for resolving 'this' in impl methods)
     std::string current_impl_type_; // e.g., "Counter" when in impl Describable for Counter
 
+    // Current associated type bindings (for resolving This::Item in impl blocks)
+    // Maps associated type names to their concrete types (e.g., "Item" -> I32)
+    std::unordered_map<std::string, types::TypePtr> current_associated_types_;
+
     // Current module prefix (for generating imported module functions)
-    std::string current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml
+    std::string
+        current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml
 
     // Current loop context for break/continue
     std::string current_loop_start_;
@@ -112,9 +117,10 @@ private:
 
     // Function registry for first-class functions (name -> LLVM function info)
     struct FuncInfo {
-        std::string llvm_name;      // e.g., "@tml_double"
-        std::string llvm_func_type; // e.g., "i32 (i32)"
-        std::string ret_type;       // e.g., "i32"
+        std::string llvm_name;                // e.g., "@tml_double"
+        std::string llvm_func_type;           // e.g., "i32 (i32)"
+        std::string ret_type;                 // e.g., "i32"
+        std::vector<std::string> param_types; // e.g., {"i32", "%struct.Layout"}
     };
     std::unordered_map<std::string, FuncInfo> functions_;
 
@@ -182,6 +188,28 @@ private:
     std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
     std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+
+    // Pending generic impl blocks (type_name -> impl block pointer)
+    // These are registered and methods are instantiated when called on concrete types
+    std::unordered_map<std::string, const parser::ImplDecl*> pending_generic_impls_;
+
+    // Generated impl method instantiations (mangled_name -> true)
+    // Tracks which specialized methods have already been generated
+    std::unordered_set<std::string> generated_impl_methods_;
+
+    // Pending impl method instantiation requests
+    // Each entry: (mangled_type_name, method_name, type_subs, base_type_name)
+    struct PendingImplMethod {
+        std::string mangled_type_name;
+        std::string method_name;
+        std::unordered_map<std::string, types::TypePtr> type_subs;
+        std::string base_type_name; // Used to find the impl block
+    };
+    std::vector<PendingImplMethod> pending_impl_method_instantiations_;
+
+    // Function return types (func_name -> semantic return type)
+    // Used by infer_expr_type to determine return types of function calls
+    std::unordered_map<std::string, types::TypePtr> func_return_types_;
 
     // Storage for imported module ASTs (keeps AST alive so pointers in pending_generic_* remain
     // valid)
@@ -253,6 +281,11 @@ private:
     void gen_decl(const parser::Decl& decl);
     void gen_func_decl(const parser::FuncDecl& func);
     void gen_impl_method(const std::string& type_name, const parser::FuncDecl& method);
+    void
+    gen_impl_method_instantiation(const std::string& mangled_type_name,
+                                  const parser::FuncDecl& method,
+                                  const std::unordered_map<std::string, types::TypePtr>& type_subs,
+                                  const std::vector<parser::GenericParam>& impl_generics);
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
 

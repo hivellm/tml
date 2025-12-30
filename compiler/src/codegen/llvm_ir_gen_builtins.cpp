@@ -591,9 +591,13 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         std::string actual_type = last_expr_type_; // Type of the generated value
         std::string expected_type = "i32";         // Default
 
-        // If we have function signature, use parameter type
+        // If we have function signature from TypeEnv, use parameter type
         if (func_sig.has_value() && i < func_sig->params.size()) {
             expected_type = llvm_type_from_semantic(func_sig->params[i]);
+        }
+        // Otherwise, try to get parameter type from registered functions (codegen's FuncInfo)
+        else if (func_it != functions_.end() && i < func_it->second.param_types.size()) {
+            expected_type = func_it->second.param_types[i];
         } else {
             // Fallback to inference
             // Check if it's a string constant

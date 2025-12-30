@@ -13,6 +13,11 @@ auto Parser::parse_stmt() -> Result<StmtPtr, ParseError> {
         return parse_let_stmt();
     }
 
+    // var is an alias for let mut (mutable variable)
+    if (check(lexer::TokenKind::KwVar)) {
+        return parse_var_stmt();
+    }
+
     // Check if it's a declaration
     if (check(lexer::TokenKind::KwPub) || check(lexer::TokenKind::KwFunc) ||
         check(lexer::TokenKind::KwType) || check(lexer::TokenKind::KwBehavior) ||
@@ -70,11 +75,52 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
 }
 
 auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
-    // TML doesn't have 'var' keyword - use 'let mut' for mutable bindings
-    return ParseError{.message =
-                          "TML doesn't have 'var' keyword - use 'let mut' for mutable bindings",
-                      .span = peek().span,
-                      .notes = {}};
+    // 'var x: T = expr' is equivalent to 'let mut x: T = expr'
+    auto start_span = peek().span;
+
+    auto var_tok = expect(lexer::TokenKind::KwVar, "Expected 'var'");
+    if (is_err(var_tok))
+        return unwrap_err(var_tok);
+
+    // Parse variable name (identifier pattern)
+    auto name_tok = expect(lexer::TokenKind::Identifier, "Expected variable name after 'var'");
+    if (is_err(name_tok))
+        return unwrap_err(name_tok);
+
+    std::string_view name = unwrap(name_tok).lexeme;
+
+    // Type annotation is REQUIRED in TML
+    auto colon = expect(
+        lexer::TokenKind::Colon,
+        "Expected ':' and type annotation after variable name (TML requires explicit types)");
+    if (is_err(colon))
+        return unwrap_err(colon);
+
+    auto type = parse_type();
+    if (is_err(type))
+        return unwrap_err(type);
+    std::optional<TypePtr> type_annotation = std::move(unwrap(type));
+
+    std::optional<ExprPtr> init;
+    if (match(lexer::TokenKind::Assign)) {
+        auto expr = parse_expr();
+        if (is_err(expr))
+            return unwrap_err(expr);
+        init = std::move(unwrap(expr));
+    }
+
+    auto end_span = previous().span;
+
+    // Create a mutable identifier pattern (equivalent to 'let mut name')
+    auto pattern = make_ident_pattern(std::string(name), true, start_span);
+
+    auto let_stmt = LetStmt{.pattern = std::move(pattern),
+                            .type_annotation = std::move(type_annotation),
+                            .init = std::move(init),
+                            .span = SourceSpan::merge(start_span, end_span)};
+
+    return make_box<Stmt>(
+        Stmt{.kind = std::move(let_stmt), .span = SourceSpan::merge(start_span, end_span)});
 }
 
 auto Parser::parse_expr_stmt() -> Result<StmtPtr, ParseError> {
