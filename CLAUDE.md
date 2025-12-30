@@ -165,6 +165,15 @@ tml build file.tml --emit-header  # Generate C header for FFI
 tml build file.tml --time         # Show compiler phase timings
 ```
 
+## Important Development Rules
+
+**NEVER simplify or comment out tests!** When a test fails, the correct approach is to:
+1. Fix the compiler or library implementation to make the test pass
+2. Investigate why the feature isn't working
+3. Implement missing functionality
+
+Tests represent the specification of what the code should do. Simplifying tests to make them pass defeats the purpose of testing.
+
 ## Key CLI Files
 
 When working on the build system, these are the relevant files:

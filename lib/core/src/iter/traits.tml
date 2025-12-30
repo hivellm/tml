@@ -97,3 +97,30 @@ pub behavior ExactSizeIterator: Iterator {
 /// iterator returns `Nothing`, it will continue to return `Nothing` forever.
 pub behavior FusedIterator: Iterator {
 }
+
+// ============================================================================
+// TrustedLen Behavior (marker)
+// ============================================================================
+
+/// An iterator that reports an accurate length using `size_hint`.
+///
+/// This is a marker behavior that indicates the iterator's reported length
+/// (via `ExactSizeIterator::len` or the upper bound of `size_hint`) is
+/// guaranteed to be accurate. This allows certain optimizations like
+/// pre-allocating exact capacity.
+///
+/// # Safety (lowlevel)
+///
+/// Implementing this incorrectly can lead to memory unsafety if consumers
+/// rely on the reported length for allocation.
+///
+/// # Examples
+///
+/// ```tml
+/// // ArrayIter implements TrustedLen because the array size is known
+/// // at compile time and cannot change.
+/// let arr = [1, 2, 3]
+/// let iter = arr.into_iter()  // TrustedLen iterator
+/// ```
+pub behavior TrustedLen: Iterator {
+}

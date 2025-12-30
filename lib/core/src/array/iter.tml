@@ -16,7 +16,7 @@
 //! The main type in this module is [`ArrayIter`], which is the iterator
 //! returned by the array's `into_iter()` method.
 
-use core::iter::{Iterator, IntoIterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator}
+use core::iter::{Iterator, IntoIterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator, TrustedLen}
 use core::clone::Duplicate
 use core::default::Default
 use core::fmt::Debug
@@ -59,6 +59,26 @@ impl[T, const N: I64] ArrayIter[T, N] {
             data: data,
             start: 0,
             end: N
+        }
+    }
+
+    /// Creates an empty array iterator.
+    ///
+    /// This is useful when you need an iterator with a specific type signature
+    /// but no actual elements to yield.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let iter: ArrayIter[I32, 0] = ArrayIter::empty()
+    /// assert_eq(iter.next(), Nothing)
+    /// assert_eq(iter.len(), 0)
+    /// ```
+    pub func empty() -> ArrayIter[T, 0] {
+        return ArrayIter {
+            data: [],
+            start: 0,
+            end: 0
         }
     }
 
@@ -189,6 +209,14 @@ impl[T, const N: I64] ExactSizeIterator for ArrayIter[T, N] {
 // ============================================================================
 
 impl[T, const N: I64] FusedIterator for ArrayIter[T, N] {}
+
+// ============================================================================
+// TrustedLen Implementation
+// ============================================================================
+
+/// ArrayIter implements TrustedLen because the array size is a compile-time
+/// constant, guaranteeing that the reported length is always accurate.
+impl[T, const N: I64] TrustedLen for ArrayIter[T, N] {}
 
 // ============================================================================
 // Other Trait Implementations

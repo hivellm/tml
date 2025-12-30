@@ -64,6 +64,12 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
     if (types_equal(expected, actual))
         return true;
 
+    // Type variables are compatible with any type (they represent unknown types)
+    // This handles cases like `let empty: [I32; 0] = []` where the empty array
+    // has element type TypeVar that should unify with I32
+    if (expected->is<TypeVar>() || actual->is<TypeVar>())
+        return true;
+
     // Allow integer literal (I64) to be assigned to any integer type
     if (is_integer_type(expected) && is_integer_type(actual))
         return true;

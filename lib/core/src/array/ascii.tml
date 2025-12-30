@@ -1,0 +1,334 @@
+//! ASCII utilities for byte arrays.
+//!
+//! This module provides methods for working with ASCII data in fixed-size
+//! byte arrays. It enables safe conversion between byte arrays and ASCII
+//! character arrays.
+//!
+//! # Examples
+//!
+//! ```tml
+//! let bytes: Array[U8, 5] = [72, 101, 108, 108, 111]  // "Hello"
+//! when bytes.as_ascii() {
+//!     Just(ascii) => println("Valid ASCII!"),
+//!     Nothing => println("Contains non-ASCII bytes")
+//! }
+//! ```
+
+use core::option::Maybe
+use core::array::Array
+use core::ascii::Char
+
+// ============================================================================
+// Array ASCII Methods for U8 arrays
+// ============================================================================
+
+impl[const N: I64] Array[U8, N] {
+    /// Converts a byte array to an ASCII character array.
+    ///
+    /// Returns `Nothing` if any byte in the array is not a valid ASCII
+    /// value (i.e., greater than 127).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello: Array[U8, 5] = [72, 101, 108, 108, 111]  // "Hello"
+    /// let ascii = hello.as_ascii()
+    /// assert(ascii.is_just())
+    ///
+    /// let invalid: Array[U8, 3] = [200, 201, 202]  // Non-ASCII
+    /// assert(invalid.as_ascii().is_nothing())
+    /// ```
+    pub func as_ascii(this) -> Maybe[Array[Char, N]] {
+        // First check if all bytes are valid ASCII
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            if byte > 127 {
+                return Nothing
+            }
+            i = i + 1
+        }
+
+        // All bytes are valid, perform the conversion
+        let result: Array[Char, N] = lowlevel { array_uninit() }
+        i = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, Char::from_u8_unchecked(byte)) }
+            i = i + 1
+        }
+        return Just(result)
+    }
+
+    /// Converts a byte array to an ASCII character array without validation.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// The caller must ensure all bytes in the array are valid ASCII values
+    /// (0-127). Calling this with invalid data leads to undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello: Array[U8, 5] = [72, 101, 108, 108, 111]  // "Hello"
+    /// // Only use when you're certain the data is ASCII
+    /// let ascii = lowlevel { hello.as_ascii_unchecked() }
+    /// ```
+    pub func as_ascii_unchecked(this) -> Array[Char, N] {
+        let result: Array[Char, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, Char::from_u8_unchecked(byte)) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Returns `true` if all bytes in the array are valid ASCII (0-127).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello: Array[U8, 5] = [72, 101, 108, 108, 111]
+    /// assert(hello.is_ascii())
+    ///
+    /// let invalid: Array[U8, 1] = [200]
+    /// assert(invalid.is_ascii() == false)
+    /// ```
+    pub func is_ascii(this) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            if byte > 127 {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+
+    /// Converts all ASCII uppercase letters in the array to lowercase.
+    ///
+    /// Non-ASCII bytes are left unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut hello: Array[U8, 5] = [72, 69, 76, 76, 79]  // "HELLO"
+    /// hello.make_ascii_lowercase()
+    /// assert_eq(hello, [104, 101, 108, 108, 111])  // "hello"
+    /// ```
+    pub func make_ascii_lowercase(mut this) {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            // A-Z (65-90) -> a-z (97-122)
+            if byte >= 65 and byte <= 90 {
+                lowlevel { array_set(this.data, i, byte + 32) }
+            }
+            i = i + 1
+        }
+    }
+
+    /// Converts all ASCII lowercase letters in the array to uppercase.
+    ///
+    /// Non-ASCII bytes are left unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut hello: Array[U8, 5] = [104, 101, 108, 108, 111]  // "hello"
+    /// hello.make_ascii_uppercase()
+    /// assert_eq(hello, [72, 69, 76, 76, 79])  // "HELLO"
+    /// ```
+    pub func make_ascii_uppercase(mut this) {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let byte: U8 = lowlevel { array_get(this.data, i) }
+            // a-z (97-122) -> A-Z (65-90)
+            if byte >= 97 and byte <= 122 {
+                lowlevel { array_set(this.data, i, byte - 32) }
+            }
+            i = i + 1
+        }
+    }
+
+    /// Compares two byte arrays for equality, ignoring ASCII case.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello: Array[U8, 5] = [72, 101, 108, 108, 111]  // "Hello"
+    /// let HELLO: Array[U8, 5] = [72, 69, 76, 76, 79]      // "HELLO"
+    /// assert(hello.eq_ignore_ascii_case(ref HELLO))
+    /// ```
+    pub func eq_ignore_ascii_case(this, other: ref Array[U8, N]) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let mut a: U8 = lowlevel { array_get(this.data, i) }
+            let mut b: U8 = lowlevel { array_get(other.data, i) }
+
+            // Convert both to lowercase for comparison
+            if a >= 65 and a <= 90 {
+                a = a + 32
+            }
+            if b >= 65 and b <= 90 {
+                b = b + 32
+            }
+
+            if a != b {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+// ============================================================================
+// Array ASCII Methods for AsciiChar arrays
+// ============================================================================
+
+impl[const N: I64] Array[Char, N] {
+    /// Converts an ASCII character array back to a byte array.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ascii = [72, 101, 108, 108, 111].as_ascii().unwrap()
+    /// let bytes = ascii.as_bytes()
+    /// assert_eq(bytes, [72, 101, 108, 108, 111])
+    /// ```
+    pub func as_bytes(this) -> Array[U8, N] {
+        let result: Array[U8, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let ch: Char = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, ch.to_u8()) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Converts all ASCII letters in the array to lowercase.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello = [72, 69, 76, 76, 79].as_ascii().unwrap()  // "HELLO"
+    /// let lower = hello.to_ascii_lowercase()
+    /// assert_eq(lower.as_bytes(), [104, 101, 108, 108, 111])  // "hello"
+    /// ```
+    pub func to_ascii_lowercase(this) -> Array[Char, N] {
+        let result: Array[Char, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let ch: Char = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, ch.to_lowercase()) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Converts all ASCII letters in the array to uppercase.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello = [104, 101, 108, 108, 111].as_ascii().unwrap()  // "hello"
+    /// let upper = hello.to_ascii_uppercase()
+    /// assert_eq(upper.as_bytes(), [72, 69, 76, 76, 79])  // "HELLO"
+    /// ```
+    pub func to_ascii_uppercase(this) -> Array[Char, N] {
+        let result: Array[Char, N] = lowlevel { array_uninit() }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let ch: Char = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(result.data, i, ch.to_uppercase()) }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Converts all ASCII letters in the array to lowercase in place.
+    pub func make_ascii_lowercase(mut this) {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let ch: Char = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(this.data, i, ch.to_lowercase()) }
+            i = i + 1
+        }
+    }
+
+    /// Converts all ASCII letters in the array to uppercase in place.
+    pub func make_ascii_uppercase(mut this) {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let ch: Char = lowlevel { array_get(this.data, i) }
+            lowlevel { array_set(this.data, i, ch.to_uppercase()) }
+            i = i + 1
+        }
+    }
+
+    /// Compares two ASCII arrays ignoring case.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let hello = [72, 101, 108, 108, 111].as_ascii().unwrap()  // "Hello"
+    /// let HELLO = [72, 69, 76, 76, 79].as_ascii().unwrap()      // "HELLO"
+    /// assert(hello.eq_ignore_ascii_case(ref HELLO))
+    /// ```
+    pub func eq_ignore_ascii_case(this, other: ref Array[Char, N]) -> Bool {
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: Char = lowlevel { array_get(this.data, i) }
+            let b: Char = lowlevel { array_get(other.data, i) }
+            if a.to_lowercase().to_u8() != b.to_lowercase().to_u8() {
+                return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}

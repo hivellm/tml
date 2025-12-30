@@ -1001,6 +1001,86 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
     }
 
+    // Handle ArrayType methods (e.g., [I32; 3].len(), [I32; 3].get(0), etc.)
+    if (receiver_type->is<ArrayType>()) {
+        auto& arr = receiver_type->as<ArrayType>();
+        TypePtr elem_type = arr.element;
+        (void)arr.size; // Size used for array methods like map that preserve size
+
+        // len() returns I64
+        if (call.method == "len") {
+            return make_primitive(PrimitiveKind::I64);
+        }
+
+        // is_empty() returns Bool
+        if (call.method == "is_empty") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+
+        // get(index) returns Maybe[ref T]
+        if (call.method == "get") {
+            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            std::vector<TypePtr> type_args = {ref_type};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // first(), last() return Maybe[ref T]
+        if (call.method == "first" || call.method == "last") {
+            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            std::vector<TypePtr> type_args = {ref_type};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // map(f) returns [U; N] where U is inferred from the closure
+        if (call.method == "map") {
+            // For now, return the same array type (simplified)
+            // The actual mapped type would require closure inference
+            return receiver_type;
+        }
+
+        // eq(other) and ne(other) return Bool
+        if (call.method == "eq" || call.method == "ne") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+
+        // cmp(other) returns Ordering
+        if (call.method == "cmp") {
+            return std::make_shared<Type>(NamedType{"Ordering", "", {}});
+        }
+
+        // as_slice() returns Slice[T]
+        if (call.method == "as_slice") {
+            return std::make_shared<Type>(SliceType{elem_type});
+        }
+
+        // as_mut_slice() returns MutSlice[T]
+        if (call.method == "as_mut_slice") {
+            std::vector<TypePtr> type_args = {elem_type};
+            return std::make_shared<Type>(NamedType{"MutSlice", "", type_args});
+        }
+
+        // iter() returns ArrayIter[T, N]
+        if (call.method == "iter" || call.method == "into_iter") {
+            std::vector<TypePtr> type_args = {elem_type};
+            return std::make_shared<Type>(NamedType{"ArrayIter", "", type_args});
+        }
+
+        // duplicate() returns [T; N] (same type)
+        if (call.method == "duplicate") {
+            return receiver_type;
+        }
+
+        // hash() returns I64
+        if (call.method == "hash") {
+            return make_primitive(PrimitiveKind::I64);
+        }
+
+        // to_string() returns Str
+        if (call.method == "to_string" || call.method == "debug_string") {
+            return make_primitive(PrimitiveKind::Str);
+        }
+    }
+
     return make_unit();
 }
 

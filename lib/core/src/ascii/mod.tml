@@ -1,0 +1,174 @@
+//! Operations on ASCII strings and characters.
+//!
+//! This module provides types and utilities for working with ASCII data.
+//! ASCII (American Standard Code for Information Interchange) is a character
+//! encoding standard that uses 7 bits to represent 128 characters.
+//!
+//! # Main Types
+//!
+//! - [`Char`]: An ASCII character (byte value 0-127)
+//! - [`EscapeDefault`]: Iterator for escaped byte representation
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ascii::{Char, escape_default}
+//!
+//! when Char::from_u8(65) {
+//!     Just(ch) => {
+//!         assert(ch.is_alphabetic())
+//!         assert_eq(ch.to_lowercase().to_u8(), 97)
+//!     },
+//!     Nothing => panic("65 is valid ASCII")
+//! }
+//!
+//! // Escape non-printable characters
+//! let escaped = escape_default(9)  // tab
+//! assert_eq(escaped.to_string(), "\\t")
+//! ```
+
+pub mod char  // Char type
+
+// Re-export main types
+pub use char::Char
+
+use core::iter::{Iterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator}
+use core::fmt::{Display, Debug}
+use core::option::Maybe
+
+// ============================================================================
+// EscapeDefault Iterator
+// ============================================================================
+
+/// An iterator that produces the escaped representation of a byte.
+///
+/// This struct is created by the [`escape_default`] function. See its
+/// documentation for more.
+///
+/// # Examples
+///
+/// ```tml
+/// let escaped = escape_default(9)  // tab
+/// let s = escaped.to_string()
+/// assert_eq(s, "\\t")
+/// ```
+pub type EscapeDefault {
+    /// The escaped representation as a string
+    data: Str,
+    /// Current front position
+    front: I64,
+    /// Current back position (exclusive)
+    back: I64
+}
+
+impl Iterator for EscapeDefault {
+    type Item = U8
+
+    pub func next(mut this) -> Maybe[U8] {
+        if this.front >= this.back {
+            return Nothing
+        }
+        let byte = this.data.byte_at(this.front)
+        this.front = this.front + 1
+        return Just(byte)
+    }
+}
+
+impl DoubleEndedIterator for EscapeDefault {
+    pub func next_back(mut this) -> Maybe[U8] {
+        if this.front >= this.back {
+            return Nothing
+        }
+        this.back = this.back - 1
+        let byte = this.data.byte_at(this.back)
+        return Just(byte)
+    }
+}
+
+impl ExactSizeIterator for EscapeDefault {
+    pub func len(this) -> I64 {
+        return this.back - this.front
+    }
+}
+
+impl FusedIterator for EscapeDefault {}
+
+impl Display for EscapeDefault {
+    pub func to_string(this) -> Str {
+        return this.data
+    }
+}
+
+impl Debug for EscapeDefault {
+    pub func debug_string(this) -> Str {
+        return "EscapeDefault(\"" + this.data + "\")"
+    }
+}
+
+/// Returns an iterator that produces an escaped version of a byte.
+///
+/// The default escaping follows the style used by most C-family languages:
+///
+/// - Tab (0x09): `\t`
+/// - Carriage return (0x0D): `\r`
+/// - Line feed (0x0A): `\n`
+/// - Single quote (0x27): `\'`
+/// - Double quote (0x22): `\"`
+/// - Backslash (0x5C): `\\`
+/// - Printable ASCII (0x20 to 0x7e): unchanged
+/// - Other bytes: `\xNN` hex escape
+///
+/// # Examples
+///
+/// ```tml
+/// // Escape a tab character
+/// let iter = escape_default(9)
+/// assert_eq(iter.to_string(), "\\t")
+///
+/// // Printable characters are unchanged
+/// let iter = escape_default(65)  // 'A'
+/// assert_eq(iter.to_string(), "A")
+///
+/// // Non-printable uses hex escape
+/// let iter = escape_default(1)
+/// assert_eq(iter.to_string(), "\\x01")
+/// ```
+pub func escape_default(c: U8) -> EscapeDefault {
+    let escaped: Str = when c {
+        9 => "\\t",
+        10 => "\\n",
+        13 => "\\r",
+        34 => "\\\"",
+        39 => "\\'",
+        92 => "\\\\",
+        _ => {
+            if c >= 32 and c <= 126 {
+                // Printable ASCII - return as-is
+                lowlevel { char_to_string(c) }
+            } else {
+                // Hex escape for non-printable
+                "\\x" + hex_byte(c)
+            }
+        }
+    }
+    return EscapeDefault {
+        data: escaped,
+        front: 0,
+        back: escaped.len()
+    }
+}
+
+// Helper for hex formatting
+func hex_byte(b: U8) -> Str {
+    let high: U8 = b / 16
+    let low: U8 = b % 16
+    return hex_nibble(high) + hex_nibble(low)
+}
+
+func hex_nibble(n: U8) -> Str {
+    if n < 10 {
+        return lowlevel { char_to_string(n + 48) }  // '0' + n
+    } else {
+        return lowlevel { char_to_string(n + 87) }  // 'a' + (n - 10)
+    }
+}

@@ -35,6 +35,7 @@ pub mod marker   // Send, Sync, Sized, Unpin
 pub mod mem      // size_of, swap, replace, forget, ManuallyDrop
 pub mod cell     // Cell, RefCell
 pub mod str      // String utilities
+pub mod ascii    // Char, escape_default
 pub mod iter     // Iterator, IntoIterator, FromIterator, adapters
 pub mod option   // Maybe[T] enhanced methods
 pub mod result   // Outcome[T, E] enhanced methods

@@ -565,17 +565,25 @@ auto LLVMIRGen::generate(const parser::Module& module)
         emit_line("}");
     } else if (!test_functions.empty()) {
         // Generate test runner main
-        // @test functions return Unit (void) - assertions call exit(1) on failure
-        // If a test function returns, it passed
+        // @test functions can return I32 (0 for success) or Unit
+        // Assertions inside will call panic() on failure which doesn't return
         emit_line("; Auto-generated test runner");
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");
 
+        int test_idx = 0;
         for (const auto& test_name : test_functions) {
             std::string test_fn = "@tml_" + test_name;
-            // Call test function (void return) - if it returns, test passed
-            // Assertions inside will call exit(1) on failure
-            emit_line("  call void " + test_fn + "()");
+            // Look up the function's return type from functions_ map
+            auto it = functions_.find(test_name);
+            if (it != functions_.end() && it->second.ret_type != "void") {
+                // Function returns a value - call and discard result
+                std::string tmp = "%test_result_" + std::to_string(test_idx++);
+                emit_line("  " + tmp + " = call " + it->second.ret_type + " " + test_fn + "()");
+            } else {
+                // Function returns void
+                emit_line("  call void " + test_fn + "()");
+            }
         }
 
         // Print coverage report if enabled

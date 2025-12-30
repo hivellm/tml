@@ -115,12 +115,25 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
         std::string array_llvm_type =
             "[" + std::to_string(arr_type.size) + " x " + elem_llvm_type + "]";
 
-        // Generate the array - need to get a pointer to it
-        // First allocate storage for the array value
-        std::string arr_val = gen_expr(*idx.object);
-        std::string arr_ptr = fresh_reg();
-        emit_line("  " + arr_ptr + " = alloca " + array_llvm_type);
-        emit_line("  store " + array_llvm_type + " " + arr_val + ", ptr " + arr_ptr);
+        // Try to get a direct pointer to the array if it's a local variable
+        // This is critical for array modification to work correctly
+        std::string arr_ptr;
+        if (idx.object->is<parser::IdentExpr>()) {
+            const auto& ident = idx.object->as<parser::IdentExpr>();
+            auto it = locals_.find(ident.name);
+            if (it != locals_.end()) {
+                // Use the local's register directly (it's already a pointer)
+                arr_ptr = it->second.reg;
+            }
+        }
+
+        if (arr_ptr.empty()) {
+            // Fallback: Generate the array value and store it to a temp
+            std::string arr_val = gen_expr(*idx.object);
+            arr_ptr = fresh_reg();
+            emit_line("  " + arr_ptr + " = alloca " + array_llvm_type);
+            emit_line("  store " + array_llvm_type + " " + arr_val + ", ptr " + arr_ptr);
+        }
 
         // Generate the index
         std::string index_val = gen_expr(*idx.index);

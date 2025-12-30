@@ -622,6 +622,67 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             }
         }
 
+        // Check for array methods
+        if (receiver_type && receiver_type->is<types::ArrayType>()) {
+            const auto& arr_type = receiver_type->as<types::ArrayType>();
+            types::TypePtr elem_type = arr_type.element;
+
+            // len returns I64
+            if (call.method == "len") {
+                return types::make_i64();
+            }
+
+            // is_empty returns Bool
+            if (call.method == "is_empty") {
+                return types::make_bool();
+            }
+
+            // get, first, last return Maybe[ref T]
+            if (call.method == "get" || call.method == "first" || call.method == "last") {
+                auto ref_type = std::make_shared<types::Type>();
+                ref_type->kind = types::RefType{false, elem_type};
+                std::vector<types::TypePtr> type_args = {ref_type};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"Maybe", "", std::move(type_args)};
+                return result;
+            }
+
+            // map returns the same array type (simplified)
+            if (call.method == "map") {
+                return receiver_type;
+            }
+
+            // eq, ne return Bool
+            if (call.method == "eq" || call.method == "ne") {
+                return types::make_bool();
+            }
+
+            // cmp returns Ordering
+            if (call.method == "cmp") {
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"Ordering", "", {}};
+                return result;
+            }
+
+            // iter returns ArrayIter
+            if (call.method == "iter" || call.method == "into_iter") {
+                std::vector<types::TypePtr> type_args = {elem_type};
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::NamedType{"ArrayIter", "", std::move(type_args)};
+                return result;
+            }
+
+            // duplicate returns same type
+            if (call.method == "duplicate") {
+                return receiver_type;
+            }
+
+            // to_string returns Str
+            if (call.method == "to_string" || call.method == "debug_string") {
+                return types::make_str();
+            }
+        }
+
         // Check for user-defined struct methods by looking up function signature
         if (receiver_type && receiver_type->is<types::NamedType>()) {
             const auto& named = receiver_type->as<types::NamedType>();

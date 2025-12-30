@@ -406,6 +406,50 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 // Store value to field
                 emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
             }
+        } else if (bin.left->is<parser::IndexExpr>()) {
+            // Array index assignment: arr[i] = value
+            const auto& idx_expr = bin.left->as<parser::IndexExpr>();
+
+            // Get the array pointer
+            std::string arr_ptr;
+            std::string arr_type;
+            if (idx_expr.object->is<parser::IdentExpr>()) {
+                const auto& ident = idx_expr.object->as<parser::IdentExpr>();
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    arr_ptr = it->second.reg;
+                    arr_type = it->second.type;
+                }
+            }
+
+            if (!arr_ptr.empty()) {
+                // Generate index
+                std::string idx = gen_expr(*idx_expr.index);
+                std::string idx_i64 = fresh_reg();
+                if (last_expr_type_ == "i64") {
+                    idx_i64 = idx;
+                } else {
+                    emit_line("  " + idx_i64 + " = sext " + last_expr_type_ + " " + idx +
+                              " to i64");
+                }
+
+                // Get element type from array type
+                // Array type is like "[5 x i32]", we need "i32"
+                std::string elem_type = "i32"; // default
+                types::TypePtr semantic_type = infer_expr_type(*idx_expr.object);
+                if (semantic_type && semantic_type->is<types::ArrayType>()) {
+                    const auto& arr = semantic_type->as<types::ArrayType>();
+                    elem_type = llvm_type_from_semantic(arr.element);
+                }
+
+                // Get element pointer
+                std::string elem_ptr = fresh_reg();
+                emit_line("  " + elem_ptr + " = getelementptr " + arr_type + ", ptr " + arr_ptr +
+                          ", i64 0, i64 " + idx_i64);
+
+                // Store value to element
+                emit_line("  store " + elem_type + " " + right + ", ptr " + elem_ptr);
+            }
         }
         return right;
     }
@@ -782,10 +826,12 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
             auto it = locals_.find(ident.name);
             if (it != locals_.end()) {
                 // Return the alloca pointer directly (don't load)
+                last_expr_type_ = "ptr";
                 return it->second.reg;
             }
         }
         report_error("Can only take reference of variables", unary.span);
+        last_expr_type_ = "ptr";
         return "null";
     }
 

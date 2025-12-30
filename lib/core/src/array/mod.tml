@@ -49,7 +49,8 @@
 //! }
 //! ```
 
-pub mod iter  // ArrayIter, IntoIter
+pub mod iter   // ArrayIter, IntoIter
+pub mod ascii  // ASCII array methods (uses core::ascii::Char)
 
 // Re-export iterator types
 pub use iter::{ArrayIter}
@@ -61,6 +62,7 @@ use core::default::Default
 use core::fmt::{Display, Debug}
 use core::iter::{Iterator, IntoIterator, FromIterator}
 use core::convert::{TryFrom, AsRef, AsMut}
+use core::borrow::{Borrow, BorrowMut}
 use core::slice::{Slice, MutSlice}
 
 // ============================================================================
@@ -890,5 +892,99 @@ impl[T, const N: I64] IndexMut[I64] for Array[T, N] {
             panic("array index out of bounds")
         }
         return lowlevel { array_get_mut(this.data, idx) }
+    }
+}
+
+// --- Borrow / BorrowMut ---
+
+/// Allows borrowing an array as a slice.
+///
+/// This enables functions that accept `Borrow[Slice[T]]` to work with arrays.
+///
+/// # Examples
+///
+/// ```tml
+/// func print_slice[T: Display, B: Borrow[Slice[T]]](data: ref B) {
+///     let slice = data.borrow()
+///     for elem in slice.iter() {
+///         println(elem.to_string())
+///     }
+/// }
+///
+/// let arr = [1, 2, 3]
+/// print_slice(ref arr)  // Works because Array implements Borrow[Slice[T]]
+/// ```
+impl[T, const N: I64] Borrow[Slice[T]] for Array[T, N] {
+    pub func borrow(this) -> ref Slice[T] {
+        return ref this.as_slice()
+    }
+}
+
+/// Allows mutably borrowing an array as a mutable slice.
+impl[T, const N: I64] BorrowMut[MutSlice[T]] for Array[T, N] {
+    pub func borrow_mut(mut this) -> mut ref MutSlice[T] {
+        return mut ref this.as_mut_slice()
+    }
+}
+
+// --- PartialEq between Array and Slice ---
+
+/// Compares an array with a slice for equality.
+///
+/// Two sequences are equal if they have the same length and all corresponding
+/// elements are equal.
+///
+/// # Examples
+///
+/// ```tml
+/// let arr = [1, 2, 3]
+/// let slice = [1, 2, 3].as_slice()
+/// assert(arr.eq_slice(ref slice))
+/// ```
+impl[T: PartialEq, const N: I64] Array[T, N] {
+    /// Compares this array with a slice for equality.
+    pub func eq_slice(this, other: ref Slice[T]) -> Bool {
+        if other.len() != N {
+            return false
+        }
+        let mut i: I64 = 0
+        loop {
+            if i >= N {
+                break
+            }
+            let a: ref T = lowlevel { array_get_ref(this.data, i) }
+            when other.get(i) {
+                Just(b) => {
+                    if a.ne(b) {
+                        return false
+                    }
+                },
+                Nothing => return false
+            }
+            i = i + 1
+        }
+        return true
+    }
+}
+
+/// PartialEq implementation for comparing Array with Slice.
+///
+/// # Examples
+///
+/// ```tml
+/// let arr = [1, 2, 3]
+/// let vec = Vec::from([1, 2, 3])
+/// assert(arr == vec.as_slice())  // Assuming == operator support
+/// ```
+impl[T: PartialEq, const N: I64] PartialEq[Slice[T]] for Array[T, N] {
+    pub func eq(this, other: ref Slice[T]) -> Bool {
+        return this.eq_slice(other)
+    }
+}
+
+/// PartialEq implementation for comparing Slice with Array.
+impl[T: PartialEq, const N: I64] PartialEq[Array[T, N]] for Slice[T] {
+    pub func eq(this, other: ref Array[T, N]) -> Bool {
+        return other.eq_slice(ref this)
     }
 }

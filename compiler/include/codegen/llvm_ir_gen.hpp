@@ -325,6 +325,8 @@ private:
     auto gen_outcome_method(const parser::MethodCallExpr& call, const std::string& receiver,
                             const std::string& enum_type_name, const std::string& tag_val,
                             const types::NamedType& named) -> std::optional<std::string>;
+    auto gen_array_method(const parser::MethodCallExpr& call, const std::string& method)
+        -> std::optional<std::string>;
 
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;

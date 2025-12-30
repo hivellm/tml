@@ -437,6 +437,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
     }
 
+    // Check for array methods first (high priority - before generating receiver)
+    // This handles [T; N].len(), .get(), .eq(), etc.
+    auto array_result = gen_array_method(call, method);
+    if (array_result.has_value()) {
+        return *array_result;
+    }
+
     // Generate receiver (the object the method is called on)
     std::string receiver = gen_expr(*call.receiver);
 
@@ -1023,6 +1030,14 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // Type-aware len method - calls different runtime functions based on type
     // Returns i64 to match the TML std library definition (len() -> I64)
     if (method == "len" || method == "length") {
+        // Check for array type first - return compile-time constant
+        types::TypePtr recv_semantic_type = infer_expr_type(*call.receiver);
+        if (recv_semantic_type && recv_semantic_type->is<types::ArrayType>()) {
+            const auto& arr_type = recv_semantic_type->as<types::ArrayType>();
+            last_expr_type_ = "i64";
+            return std::to_string(arr_type.size);
+        }
+
         // For List/HashMap/Buffer, receiver is a struct with handle field - extract the handle
         std::string handle = receiver;
         if (receiver_type_name == "List" || receiver_type_name == "HashMap" ||
@@ -1292,6 +1307,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         return "void";
     }
     if (method == "is_empty" || method == "isEmpty") {
+        // Check for array type first - return compile-time constant
+        types::TypePtr recv_semantic_type = infer_expr_type(*call.receiver);
+        if (recv_semantic_type && recv_semantic_type->is<types::ArrayType>()) {
+            const auto& arr_type = recv_semantic_type->as<types::ArrayType>();
+            last_expr_type_ = "i1";
+            return arr_type.size == 0 ? "true" : "false";
+        }
         std::string result = fresh_reg();
         emit_line("  " + result + " = call i1 @list_is_empty(ptr " + collection_handle + ")");
         return result;
@@ -1642,6 +1664,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             return "void";
         }
     }
+
+    // Array methods are now handled by gen_array_method() called earlier
 
     report_error("Unknown method: " + method, call.span);
     return "0";

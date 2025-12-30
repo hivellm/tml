@@ -705,6 +705,36 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                 // Unknown variant, skip to next
                 emit_line("  br label %" + next_label);
             }
+        } else if (arm.pattern->is<parser::IdentPattern>()) {
+            // Check if this is an enum unit variant (like Nothing)
+            const auto& ident_pat = arm.pattern->as<parser::IdentPattern>();
+            int variant_tag = -1;
+
+            // Try to look up as enum variant
+            std::string scrutinee_enum_name;
+            if (scrutinee_type.starts_with("%struct.")) {
+                scrutinee_enum_name = scrutinee_type.substr(8);
+            }
+
+            if (!scrutinee_enum_name.empty()) {
+                std::string key = scrutinee_enum_name + "::" + ident_pat.name;
+                auto it = enum_variants_.find(key);
+                if (it != enum_variants_.end()) {
+                    variant_tag = it->second;
+                }
+            }
+
+            if (variant_tag >= 0) {
+                // It's an enum unit variant - check tag
+                std::string cmp = fresh_reg();
+                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
+                          std::to_string(variant_tag));
+                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" +
+                          next_label);
+            } else {
+                // Not an enum variant - treat as wildcard/binding
+                emit_line("  br label %" + arm_labels[arm_idx]);
+            }
         } else {
             // Wildcard or other pattern - always matches
             emit_line("  br label %" + arm_labels[arm_idx]);
