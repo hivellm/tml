@@ -25,14 +25,14 @@ set "HAS_ERRORS=0"
 
 if defined CHECK_MODE (
     echo Checking format...
-    for /r "packages\compiler\src" %%f in (*.cpp *.c *.h *.hpp) do (
+    for /r "compiler\src" %%f in (*.cpp *.c *.h *.hpp) do (
         clang-format --dry-run --Werror "%%f" >nul 2>&1
         if errorlevel 1 (
             echo   Needs formatting: %%f
             set "HAS_ERRORS=1"
         )
     )
-    for /r "packages\compiler\runtime" %%f in (*.cpp *.c *.h *.hpp) do (
+    for /r "compiler\runtime" %%f in (*.cpp *.c *.h *.hpp) do (
         clang-format --dry-run --Werror "%%f" >nul 2>&1
         if errorlevel 1 (
             echo   Needs formatting: %%f
@@ -46,11 +46,11 @@ if defined CHECK_MODE (
     echo All files are properly formatted
 ) else (
     echo Formatting files...
-    for /r "packages\compiler\src" %%f in (*.cpp *.c *.h *.hpp) do (
+    for /r "compiler\src" %%f in (*.cpp *.c *.h *.hpp) do (
         echo   Formatting: %%f
         clang-format -i "%%f"
     )
-    for /r "packages\compiler\runtime" %%f in (*.cpp *.c *.h *.hpp) do (
+    for /r "compiler\runtime" %%f in (*.cpp *.c *.h *.hpp) do (
         echo   Formatting: %%f
         clang-format -i "%%f"
     )

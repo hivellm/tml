@@ -25,7 +25,7 @@ if exist "build\debug\tml.exe" set "TML_EXE=build\debug\tml.exe"
 if exist "build\release\tml.exe" if not defined TML_EXE set "TML_EXE=build\release\tml.exe"
 
 if defined TML_EXE (
-    "%TML_EXE%" lint %FIX_MODE% packages examples
+    "%TML_EXE%" lint %FIX_MODE% lib examples
     if errorlevel 1 exit /b 1
 ) else (
     echo   TML compiler not found. Build first: scripts\build.bat
@@ -45,9 +45,9 @@ if errorlevel 1 (
 set "CLANG_ARGS="
 if defined FIX_MODE set "CLANG_ARGS=--fix"
 
-if exist "packages\compiler\src\main.cpp" (
-    echo   Checking: packages\compiler\src\main.cpp
-    clang-tidy %CLANG_ARGS% packages\compiler\src\main.cpp -- -std=c++17 2>nul
+if exist "compiler\src\main.cpp" (
+    echo   Checking: compiler\src\main.cpp
+    clang-tidy %CLANG_ARGS% compiler\src\main.cpp -- -std=c++17 2>nul
 )
 
 :done

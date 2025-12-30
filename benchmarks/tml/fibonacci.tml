@@ -1,0 +1,52 @@
+// Fibonacci Benchmark - TML
+//
+// Compares recursive vs iterative implementations
+
+// Recursive Fibonacci (naive, exponential time)
+pub func fib_recursive(n: I32) -> I32 {
+    if n <= 1 {
+        return n
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2)
+}
+
+// Iterative Fibonacci (linear time)
+pub func fib_iterative(n: I32) -> I32 {
+    if n <= 1 {
+        return n
+    }
+
+    let mut a: I32 = 0
+    let mut b: I32 = 1
+    let mut i: I32 = 2
+
+    loop {
+        if i > n {
+            break
+        }
+        let temp: I32 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+
+    return b
+}
+
+// Benchmark runner
+pub func run_benchmark(iterations: I32) -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+
+    loop {
+        if i >= iterations {
+            break
+        }
+        sum = sum + fib_iterative(20)
+        i = i + 1
+    }
+
+    return sum
+}
+
+// Main removed - this module is meant to be imported

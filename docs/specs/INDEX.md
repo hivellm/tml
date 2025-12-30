@@ -58,7 +58,8 @@
 | [05-SEMANTICS.md](./05-SEMANTICS.md) | Caps, effects, contracts |
 | [06-MEMORY.md](./06-MEMORY.md) | Ownership and borrowing |
 | [07-MODULES.md](./07-MODULES.md) | Module system |
-| [08-IR.md](./08-IR.md) | Intermediate representation |
+| [08-IR.md](./08-IR.md) | High-level IR for semantic analysis |
+| [30-MIR.md](./30-MIR.md) | Mid-level IR for optimization (SSA form) |
 
 ### Toolchain
 
@@ -374,6 +375,7 @@ tml fmt                # format code
 | Type Checker | ✅ Complete (modular) |
 | Pattern Matching | ✅ Complete |
 | Module System | ✅ Complete |
+| Local Module Imports | ✅ Complete (`use module_name`) |
 | Trait Objects | ✅ Complete |
 | Generics | ✅ Complete (monomorphization) |
 | Where Clauses | ✅ Complete |
@@ -383,6 +385,7 @@ tml fmt                # format code
 | FFI Support | ✅ Complete (@extern, @link) |
 | Borrow Checker | ✅ Complete (reborrows, two-phase) |
 | Build Cache | ✅ Complete (content-based) |
+| Mid-level IR (MIR) | ✅ Complete (SSA, 6 optimization passes) |
 
 ## License
 

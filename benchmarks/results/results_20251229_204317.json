@@ -1,0 +1,78 @@
+{
+  "timestamp": "2025-12-29T20:43:10.583354",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.13.9"
+  },
+  "results": [
+    {
+      "name": "algorithms",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 849.8618000303395,
+      "run_time_ms": 32.23539999453351,
+      "binary_size_bytes": 156160,
+      "output": "=== TML Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "data_structures",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 855.3195999702439,
+      "run_time_ms": 32.65450004255399,
+      "binary_size_bytes": 155648,
+      "output": "=== TML Data Structure Benchmarks ===\n\nStack push/pop (1000): 667\nBinary search steps (find 500 in 0..1000): 1\nBubble sort comparisons (100 elements): 4950\nMatrix multiply ops (10x10): 2000\nSimple hash (seed=42, n=1000): 182789914\nList traverse (1000): 1000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "fibonacci",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 852.4781000451185,
+      "run_time_ms": 33.805000013671815,
+      "binary_size_bytes": 155136,
+      "output": "Fibonacci(10) recursive: 55\nFibonacci(10) iterative: 55\nBenchmark result: 6765000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "math",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 861.556300020311,
+      "run_time_ms": 34.21610000077635,
+      "binary_size_bytes": 156160,
+      "output": "=== TML Math Benchmarks ===\n\nisqrt(144): 12\nisqrt(1000000): 1000\nmod_pow(2, 10, 1000): 24\nackermann(3, 3): 61\ncatalan(10): 16796\npascal_row_sum(10): 1024\nbinomial(10, 5): 252\nsum_divisors(100): 217\neuler_phi(100): 40\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "C++",
+      "category": "algorithms",
+      "build_time_ms": 530.1536999759264,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "clang++: error: no such file or directory: '/O2'\nclang++: error: no such file or directory: '/EHsc'\nclang++: error: no such file or directory: '/Fe:F:\\Node\\hivellm\\tml\\benchmarks\\results\\bin\\algorithms_cpp.exe'\n"
+    },
+    {
+      "name": "algorithms",
+      "language": "Go",
+      "category": "algorithms",
+      "build_time_ms": 0,
+      "run_time_ms": 2732.2852999786846,
+      "binary_size_bytes": 0,
+      "output": "=== Go Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n--- Benchmarks ---\ngoos: windows\ngoarch: amd64\npkg: tml-benchmarks\ncpu: AMD Ryzen 9 7950X3D 16-Core Processor          \nBenchmarkFactorialRecursive10-32    \t23253560\t         5.150 ns/op\nBenchmarkFactorialIterative10-32    \t57795115\t         2.101 ns/op\nBenchmarkFibonacciRecursive20-32    \t    5722\t     21331 ns/op\nBenchmarkFibonacciIterative20-32    \t28315910\t         4.558 ns/op\nBenchmarkGCDRecursive-32            \t52991829\t         2.316 ns/op\nBenchmarkGCDIterative-32            \t35254714\t         3.497 ns/op\nBenchmarkPowerNaive2_10-32          \t51741979\t         2.311 ns/op\nBenchmarkPowerFast2_10-32           \t30284674\t         3.953 ns/op\nBenchmarkCountPrimes100-32          \t 1220514\t        98.34 ns/op\nBenchmarkCountPrimes1000-32         \t   71414\t      1686 ns/op\nBenchmarkCollatz27-32               \t 2211230\t        53.53 ns/op\nBenchmarkSumRange1_100-32           \t 5047869\t        23.79 ns/op\nBenchmarkSumRange1_10000-32         \t   61804\t      1987 ns/op\nPASS\nok  \ttml-benchmarks\t2.063s\n",
+      "success": true,
+      "error": ""
+    }
+  ]
+}

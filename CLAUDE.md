@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **TML (To Machine Language)** is a programming language designed specifically for LLM code generation and analysis. This repository contains:
 - Complete language specification documentation in `/docs/`
-- Full compiler implementation in `/packages/compiler/`
+- Full compiler implementation in `/compiler/`
+- Standard library modules in `/lib/` (core, std, test)
 
 **Status**: Compiler implementation with LLVM IR backend
 
@@ -70,6 +71,26 @@ TML has its own identity, optimized for LLM comprehension with self-documenting 
 | `unsafe` | `lowlevel` | Less scary, accurate |
 | Lifetimes `'a` | Always inferred | No syntax noise |
 
+## Project Structure
+
+```
+tml/
+├── compiler/           # C++ compiler implementation
+│   ├── src/           # Source files
+│   ├── include/       # Header files
+│   ├── runtime/       # Essential runtime (essential.c)
+│   └── tests/         # Compiler unit tests (C++)
+├── lib/               # TML standard libraries
+│   ├── core/          # Core library (alloc, iter, slice, etc.)
+│   ├── std/           # Standard library (collections, file, etc.)
+│   └── test/          # Test framework (assert_eq, etc.)
+├── docs/              # Language specification
+├── scripts/           # Build scripts
+└── build/             # Build output
+    ├── debug/         # Debug binaries
+    └── release/       # Release binaries
+```
+
 ## Documentation Structure
 
 ```
@@ -111,4 +132,46 @@ This project uses @hivellm/rulebook for task management. Key rules:
 
 ## File Extension
 
-TML source files use `.tml` extension (not implemented yet, specification only).
+TML source files use `.tml` extension.
+
+## Compiler CLI Options
+
+The TML compiler (`tml`) supports these build flags:
+
+```bash
+# Basic build
+tml build file.tml                # Build executable
+tml build file.tml --verbose      # Show detailed output
+
+# Output types
+tml build file.tml --crate-type=bin      # Executable (default)
+tml build file.tml --crate-type=lib      # Static library
+tml build file.tml --crate-type=dylib    # Dynamic library
+tml build file.tml --crate-type=rlib     # TML library format
+
+# Optimization
+tml build file.tml --release      # Build with -O3 optimization
+tml build file.tml -O0/-O1/-O2/-O3  # Set optimization level
+tml build file.tml --lto          # Enable Link-Time Optimization
+tml build file.tml --debug/-g     # Include debug info
+
+# Caching
+tml build file.tml --no-cache     # Force full recompilation
+
+# Diagnostics
+tml build file.tml --emit-ir      # Emit LLVM IR (.ll files)
+tml build file.tml --emit-mir     # Emit MIR for debugging
+tml build file.tml --emit-header  # Generate C header for FFI
+tml build file.tml --time         # Show compiler phase timings
+```
+
+## Key CLI Files
+
+When working on the build system, these are the relevant files:
+
+- `compiler/src/cli/dispatcher.cpp` - CLI argument parsing
+- `compiler/src/cli/cmd_build.cpp` - Main build command implementation
+- `compiler/src/cli/cmd_build.hpp` - BuildOptions struct
+- `compiler/src/cli/parallel_build.cpp` - Multi-threaded compilation
+- `compiler/src/cli/object_compiler.cpp` - LLVM IR to object file compilation
+- `compiler/src/cli/build_cache.cpp` - MIR cache for incremental compilation

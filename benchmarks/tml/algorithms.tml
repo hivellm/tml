@@ -1,0 +1,328 @@
+// Algorithm Benchmarks - TML
+//
+// Various algorithm implementations for benchmarking
+
+// ============================================================================
+// Factorial
+// ============================================================================
+
+pub func factorial_recursive(n: I32) -> I32 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial_recursive(n - 1)
+}
+
+pub func factorial_iterative(n: I32) -> I32 {
+    let mut result: I32 = 1
+    let mut i: I32 = 2
+
+    loop {
+        if i > n {
+            break
+        }
+        result = result * i
+        i = i + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// GCD (Greatest Common Divisor) - Euclidean Algorithm
+// ============================================================================
+
+pub func gcd_recursive(a: I32, b: I32) -> I32 {
+    if b == 0 {
+        return a
+    }
+    return gcd_recursive(b, a % b)
+}
+
+pub func gcd_iterative(a: I32, b: I32) -> I32 {
+    let mut x: I32 = a
+    let mut y: I32 = b
+
+    loop {
+        if y == 0 {
+            break
+        }
+        let temp: I32 = y
+        y = x % y
+        x = temp
+    }
+
+    return x
+}
+
+// ============================================================================
+// Power (Fast Exponentiation)
+// ============================================================================
+
+pub func power_naive(base: I32, exp: I32) -> I32 {
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+
+    loop {
+        if i >= exp {
+            break
+        }
+        result = result * base
+        i = i + 1
+    }
+
+    return result
+}
+
+pub func power_fast(base: I32, exp: I32) -> I32 {
+    if exp == 0 {
+        return 1
+    }
+    if exp == 1 {
+        return base
+    }
+
+    let half: I32 = power_fast(base, exp / 2)
+
+    if exp % 2 == 0 {
+        return half * half
+    }
+    return base * half * half
+}
+
+// ============================================================================
+// Prime Check
+// ============================================================================
+
+pub func is_prime(n: I32) -> Bool {
+    if n <= 1 {
+        return false
+    }
+    if n <= 3 {
+        return true
+    }
+    if n % 2 == 0 or n % 3 == 0 {
+        return false
+    }
+
+    let mut i: I32 = 5
+    loop {
+        if i * i > n {
+            break
+        }
+        if n % i == 0 or n % (i + 2) == 0 {
+            return false
+        }
+        i = i + 6
+    }
+
+    return true
+}
+
+pub func count_primes(limit: I32) -> I32 {
+    let mut count: I32 = 0
+    let mut n: I32 = 2
+
+    loop {
+        if n > limit {
+            break
+        }
+        if is_prime(n) {
+            count = count + 1
+        }
+        n = n + 1
+    }
+
+    return count
+}
+
+// ============================================================================
+// Sum of Array Elements (simulated with loop)
+// ============================================================================
+
+pub func sum_range(start: I32, end: I32) -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = start
+
+    loop {
+        if i > end {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+
+    return sum
+}
+
+// ============================================================================
+// Collatz Conjecture (steps to reach 1)
+// ============================================================================
+
+pub func collatz_steps(n: I32) -> I32 {
+    let mut current: I32 = n
+    let mut steps: I32 = 0
+
+    loop {
+        if current == 1 {
+            break
+        }
+        if current % 2 == 0 {
+            current = current / 2
+        } else {
+            current = 3 * current + 1
+        }
+        steps = steps + 1
+    }
+
+    return steps
+}
+
+// ============================================================================
+// Benchmark Helper Functions
+// ============================================================================
+
+func benchmark_factorial_recursive(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = factorial_recursive(10)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_factorial_iterative(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = factorial_iterative(10)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_gcd_recursive(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = gcd_recursive(48, 18)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_gcd_iterative(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = gcd_iterative(48, 18)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_power_naive(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = power_naive(2, 10)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_power_fast(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = power_fast(2, 10)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_count_primes_100(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = count_primes(100)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_count_primes_1000(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = count_primes(1000)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_collatz(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = collatz_steps(27)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_sum_range_100(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = sum_range(1, 100)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+func benchmark_sum_range_10000(iterations: I32) -> I64 {
+    let start: I64 = time_ns()
+    let mut i: I32 = 0
+    loop {
+        if i >= iterations {
+            break
+        }
+        let _: I32 = sum_range(1, 10000)
+        i = i + 1
+    }
+    return time_ns() - start
+}
+
+// Main removed - this module is meant to be imported

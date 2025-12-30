@@ -1,0 +1,28 @@
+// TML Benchmark Suite - Main Module
+//
+// This file imports and runs all benchmark modules
+
+use algorithms
+use fibonacci
+
+func main() -> I32 {
+    println("=== TML Algorithm Benchmarks ===\n")
+
+    // Correctness tests
+    print("Factorial(10): ")
+    println(algorithms::factorial_iterative(10))
+    print("Fibonacci(20): ")
+    println(fibonacci::fib_iterative(20))
+    print("GCD(48, 18): ")
+    println(algorithms::gcd_iterative(48, 18))
+    print("Power(2, 10): ")
+    println(algorithms::power_fast(2, 10))
+    print("Primes up to 100: ")
+    println(algorithms::count_primes(100))
+    print("Sum(1..100): ")
+    println(algorithms::sum_range(1, 100))
+    print("Collatz steps(27): ")
+    println(algorithms::collatz_steps(27))
+
+    return 0
+}

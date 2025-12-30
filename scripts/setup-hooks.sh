@@ -143,7 +143,7 @@ fi
 # Run TML lint on all files
 if [ -n "$TML_EXE" ]; then
     echo -e "${YELLOW}Running TML lint...${NC}"
-    "$TML_EXE" lint packages examples || {
+    "$TML_EXE" lint lib examples || {
         echo -e "${RED}TML lint failed!${NC}"
         echo -e "Run: ${YELLOW}$TML_EXE lint --fix${NC} to auto-fix"
         exit 1

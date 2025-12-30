@@ -38,14 +38,14 @@ elif [ -f "./build/release/tml" ]; then
 fi
 
 if [ -n "$TML_EXE" ]; then
-    "$TML_EXE" lint $FIX_MODE packages examples
+    "$TML_EXE" lint $FIX_MODE lib examples
 else
     echo -e "  ${YELLOW}TML compiler not found. Build first: ./scripts/build.sh${NC}"
     echo -e "  ${YELLOW}Falling back to basic checks...${NC}"
 
     # Basic fallback check
     ERRORS=0
-    for file in $(find packages examples -name "*.tml" 2>/dev/null); do
+    for file in $(find lib examples -name "*.tml" 2>/dev/null); do
         if [ -f "$file" ]; then
             if grep -q $'\t' "$file" 2>/dev/null; then
                 echo -e "  ${RED}[TAB]${NC} $file"
@@ -86,7 +86,7 @@ if command -v clang-tidy &> /dev/null; then
     fi
 
     # Run on key C++ files
-    for file in packages/compiler/src/main.cpp; do
+    for file in compiler/src/main.cpp; do
         if [ -f "$file" ]; then
             echo -e "  Checking: $file"
             clang-tidy $CLANG_ARGS "$file" -- -std=c++17 2>/dev/null || true

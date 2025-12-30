@@ -1,0 +1,159 @@
+// Data Structure Benchmarks - TML
+//
+// Various data structure operations for benchmarking
+
+// ============================================================================
+// Stack Operations (simulated with counter)
+// ============================================================================
+
+pub func stack_push_pop_cycle(n: I32) -> I32 {
+    let mut depth: I32 = 0
+    let mut max_depth: I32 = 0
+    let mut i: I32 = 0
+
+    loop {
+        if i >= n {
+            break
+        }
+        // Push operation
+        depth = depth + 1
+        if depth > max_depth {
+            max_depth = depth
+        }
+        // Pop every 3rd item
+        if i % 3 == 2 and depth > 0 {
+            depth = depth - 1
+        }
+        i = i + 1
+    }
+
+    return max_depth
+}
+
+// ============================================================================
+// Binary Search (simulated with range)
+// ============================================================================
+
+pub func binary_search_steps(target: I32, low: I32, high: I32) -> I32 {
+    let mut lo: I32 = low
+    let mut hi: I32 = high
+    let mut steps: I32 = 0
+
+    loop {
+        if lo > hi {
+            break
+        }
+        let mid: I32 = lo + (hi - lo) / 2
+        steps = steps + 1
+
+        if mid == target {
+            break
+        } else if mid < target {
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+
+    return steps
+}
+
+// ============================================================================
+// Bubble Sort Iterations (counting comparisons)
+// ============================================================================
+
+pub func bubble_sort_comparisons(n: I32) -> I32 {
+    let mut comparisons: I32 = 0
+    let mut i: I32 = 0
+
+    loop {
+        if i >= n - 1 {
+            break
+        }
+        let mut j: I32 = 0
+        loop {
+            if j >= n - i - 1 {
+                break
+            }
+            comparisons = comparisons + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    return comparisons
+}
+
+// ============================================================================
+// Matrix Operations (simulated)
+// ============================================================================
+
+pub func matrix_multiply_ops(n: I32) -> I32 {
+    // Count operations for n x n matrix multiply
+    let mut ops: I32 = 0
+    let mut i: I32 = 0
+
+    loop {
+        if i >= n {
+            break
+        }
+        let mut j: I32 = 0
+        loop {
+            if j >= n {
+                break
+            }
+            let mut k: I32 = 0
+            loop {
+                if k >= n {
+                    break
+                }
+                ops = ops + 2  // multiply + add
+                k = k + 1
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    return ops
+}
+
+// ============================================================================
+// Hash Function (simple)
+// ============================================================================
+
+pub func simple_hash(seed: I32, n: I32) -> I32 {
+    let mut hash: I32 = seed
+    let mut i: I32 = 0
+
+    loop {
+        if i >= n {
+            break
+        }
+        hash = ((hash * 31) + i) % 1000000007
+        i = i + 1
+    }
+
+    return hash
+}
+
+// ============================================================================
+// Linked List Traversal (simulated with count)
+// ============================================================================
+
+pub func list_traverse(length: I32) -> I32 {
+    let mut visited: I32 = 0
+    let mut current: I32 = 0
+
+    loop {
+        if current >= length {
+            break
+        }
+        visited = visited + 1
+        current = current + 1
+    }
+
+    return visited
+}
+
+// Main removed - this module is meant to be imported

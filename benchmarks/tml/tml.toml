@@ -1,0 +1,40 @@
+[package]
+name = "tml-benchmarks"
+version = "0.1.0"
+authors = ["TML Team"]
+edition = "2024"
+description = "Benchmark suite for TML language comparison"
+license = "MIT"
+
+[lib]
+path = "lib.tml"
+
+[[bin]]
+name = "fibonacci"
+path = "fibonacci.tml"
+
+[[bin]]
+name = "algorithms"
+path = "algorithms.tml"
+
+[[bin]]
+name = "data_structures"
+path = "data_structures.tml"
+
+[[bin]]
+name = "math"
+path = "math.tml"
+
+[dependencies]
+# core = { path = "../../packages/core" }
+
+[build]
+optimization_level = 3
+emit_ir = false
+verbose = false
+
+[profile.debug]
+optimization_level = 0
+
+[profile.release]
+optimization_level = 3

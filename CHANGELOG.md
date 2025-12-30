@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Parallel Build System** (2025-12-29) - Multi-threaded compilation with dependency resolution
+  - Full `compile_job()` implementation: lexer → parser → type checker → codegen → LLVM IR → object file
+  - `DependencyGraph` class for build ordering:
+    - Cycle detection via DFS
+    - Topological sort for optimal build order
+    - Automatic import parsing from TML source files
+  - `ParallelBuilder` class with thread pool:
+    - Default 8 threads for optimal performance
+    - Configurable thread count (`-jN` flag)
+    - Thread-safe job queue with condition variables
+    - Progress reporting and build statistics
+  - `tml build-all` command for parallel multi-file builds
+  - Thread-safe .ll file generation with unique thread ID suffixes
+  - Cache-aware compilation with timestamp checking
+  - **~11x speedup** vs sequential build (benchmarked: 23 files in 1.9s vs 20.7s)
+  - Files added/modified:
+    - `src/cli/parallel_build.hpp` - Enhanced with DependencyGraph, ParallelBuildOptions
+    - `src/cli/parallel_build.cpp` - Full implementation of parallel compilation pipeline
+    - `src/cli/dispatcher.cpp` - Added `build-all` command
+
+- **Build Cache & Incremental Compilation** (2025-12-29) - MIR-level caching for fast rebuilds
+  - `--no-cache` flag to force full recompilation (bypass all caches)
+  - Object file caching with timestamp validation
+  - `MirCache` class for incremental compilation:
+    - Binary MIR serialization/deserialization
+    - Cache invalidation based on: source hash, optimization level, debug settings
+    - Index file for fast cache lookups
+    - Methods: `has_valid_cache()`, `load_mir()`, `save_mir()`, `get_cached_object()`
+  - Files added:
+    - `src/cli/build_cache.hpp` - PhaseTimer, MirCache, cache utilities
+    - `src/cli/build_cache.cpp` - Full cache implementation
+
+- **Compiler Phase Timing** (2025-12-29) - Detailed performance profiling
+  - `--time` flag to show per-phase timing breakdown
+  - `PhaseTimer` class for measuring phase durations (microsecond precision)
+  - `ScopedPhaseTimer` RAII helper for automatic timing
+  - Reports include: phase name, duration (ms), percentage of total time
+  - `TML_PHASE_TIME()` macro for easy integration
+
+- **Link-Time Optimization (LTO)** (2025-12-29) - Whole-program optimization support
+  - `--lto` flag to enable LTO during build
+  - Full LTO (`-flto`) and ThinLTO (`-flto=thin`) support
+  - Parallel LTO with configurable job count (`-flto-jobs=N`)
+  - Uses LLD linker for faster LTO linking
+  - Works with executables and dynamic libraries
+  - Files modified:
+    - `src/cli/object_compiler.hpp` - Added `lto`, `thin_lto`, `lto_jobs` options
+    - `src/cli/object_compiler.cpp` - LTO flags for compilation and linking
+    - `src/cli/dispatcher.cpp` - CLI parsing for `--lto` and `--time` flags
+
+- **Extended Build Options** (2025-12-29) - New `BuildOptions` struct and `run_build_ex()`
+  - Unified options: verbose, emit_ir, emit_mir, no_cache, emit_header, show_timings, lto
+  - CLI help updated with new flags
+  - Files modified:
+    - `src/cli/cmd_build.hpp` - Added BuildOptions struct
+    - `src/cli/cmd_build.cpp` - Added run_build_ex(), cache checking in run_build()
+
+- **Mid-level IR (MIR)** (2025-12-29) - SSA-form intermediate representation for optimization
+  - Complete MIR infrastructure between type-checked AST and LLVM IR generation
+  - SSA form with explicit control flow via basic blocks
+  - Type-annotated values for easy optimization and lowering
+  - MIR types: primitives, pointers, arrays, slices, tuples, structs, enums, functions
+  - Instructions: arithmetic, comparisons, memory ops, control flow, calls, phi nodes
+  - Terminators: return, branch, conditional branch, switch, unreachable
+  - New source files:
+    - `include/mir/mir.hpp` - Core MIR data structures (types, values, instructions, blocks)
+    - `include/mir/mir_builder.hpp` - Builder API for constructing MIR
+    - `include/mir/mir_pass.hpp` - Optimization pass infrastructure
+    - `include/mir/mir_serialize.hpp` - MIR serialization/deserialization
+    - `src/mir/mir_type.cpp` - MIR type utilities and conversions
+    - `src/mir/mir_function.cpp` - Function and block management
+    - `src/mir/mir_printer.cpp` - Human-readable MIR output
+    - `src/mir/mir_builder.cpp` - MIR construction from AST
+    - `src/mir/mir_serialize.cpp` - Binary/text serialization
+    - `src/mir/mir_pass.cpp` - Pass manager and utilities
+  - Optimization passes in `src/mir/passes/`:
+    - `constant_folding.cpp` - Evaluate constant expressions at compile time
+    - `constant_propagation.cpp` - Replace uses of constants with their values
+    - `copy_propagation.cpp` - Replace copies with original values
+    - `dead_code_elimination.cpp` - Remove unused instructions
+    - `common_subexpression_elimination.cpp` - Reuse computed values
+    - `unreachable_code_elimination.cpp` - Remove unreachable blocks
+  - Pass manager with optimization levels (O0, O1, O2, O3)
+  - Analysis utilities: value usage, side effects, constant detection
+
+- **Local Module Imports** (2025-12-29) - Rust-style `use` imports for local `.tml` files
+  - Support for `use module_name` to import sibling `.tml` files in the same directory
+  - Functions accessed via `module::function()` syntax (e.g., `algorithms::factorial_iterative(10)`)
+  - Public functions marked with `pub` are exported from modules
+  - Compiler generates proper LLVM IR with module-prefixed function names
+  - Example: `use algorithms` imports `algorithms.tml`, functions become `@tml_algorithms_*`
+  - Files modified:
+    - `include/codegen/llvm_ir_gen.hpp` - Added `current_module_prefix_` member variable
+    - `src/codegen/llvm_ir_gen_decl.cpp` - Modified `gen_func_decl` to use module prefix
+    - `src/codegen/core/runtime.cpp` - Set module prefix in `emit_module_pure_tml_functions`
+    - `src/types/env_module_support.cpp` - Local module file resolution (existing)
+  - Enables multi-file TML projects with proper module organization
+
 ### Changed
 - **Type Checker Refactoring** (2025-12-27) - Split monolithic checker.cpp (2151 lines) into modular components
   - New directory: `src/types/checker/`

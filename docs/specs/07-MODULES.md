@@ -50,7 +50,53 @@ io::print("hello")
 let list: List[T] = List::new()
 ```
 
-### 2.2 Import with Alias
+### 2.2 Local Module Import
+
+Import sibling `.tml` files from the same directory:
+
+```tml
+// main.tml
+use algorithms      // imports algorithms.tml
+use fibonacci       // imports fibonacci.tml
+
+func main() -> I32 {
+    let fact: I32 = algorithms::factorial(10)
+    let fib: I32 = fibonacci::fib_iterative(20)
+    return 0
+}
+```
+
+Local module resolution:
+1. Check for `<module_name>.tml` in the source file's directory
+2. Check for `<module_name>/mod.tml` subdirectory
+
+```
+project/
+├── main.tml          # use algorithms, use utils
+├── algorithms.tml    # pub func factorial(n: I32) -> I32
+├── fibonacci.tml     # pub func fib_iterative(n: I32) -> I32
+└── utils/
+    └── mod.tml       # pub func helper() -> I32
+```
+
+Functions must be marked `pub` to be accessible from other modules:
+
+```tml
+// algorithms.tml
+pub func factorial(n: I32) -> I32 {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+// Private helper - not accessible from other modules
+func internal_helper() -> I32 {
+    return 42
+}
+```
+
+### 2.3 Import with Alias
 
 ```tml
 use std::collections::HashMap as Map
@@ -59,14 +105,14 @@ use very::long::module::name as short
 let m: Map[String, I32] = Map::new()
 ```
 
-### 2.3 Multiple Import
+### 2.4 Multiple Import
 
 ```tml
 use std::collections::{List, Map, Set}
 use std::io::{read, write, File}
 ```
 
-### 2.4 Glob Import
+### 2.5 Glob Import
 
 ```tml
 use std::prelude::*
@@ -75,7 +121,7 @@ use std::prelude::*
 // Use sparingly
 ```
 
-### 2.5 Re-export
+### 2.6 Re-export
 
 ```tml
 // lib.tml

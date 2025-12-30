@@ -134,7 +134,7 @@ if [ "$BUILD_TYPE" = "release" ]; then
     CMAKE_BUILD_TYPE="Release"
 fi
 
-cmake "$ROOT_DIR/packages/compiler" \
+cmake "$ROOT_DIR/compiler" \
     -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
     -DTML_BUILD_TESTS="$BUILD_TESTS" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \

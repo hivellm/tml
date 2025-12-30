@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TML Benchmark Runner
-Compares TML, C++, and Rust performance
+Compares TML, C++, Go, and Rust performance
 """
 
 import subprocess
@@ -22,8 +22,16 @@ BENCH_DIR = SCRIPT_DIR.parent
 RESULTS_DIR = BENCH_DIR / "results"
 CPP_DIR = BENCH_DIR / "cpp"
 RUST_DIR = BENCH_DIR / "rust"
+GO_DIR = BENCH_DIR / "go"
 TML_DIR = BENCH_DIR / "tml"
-TML_COMPILER = BENCH_DIR.parent / "packages" / "compiler" / "build" / "Debug" / "tml.exe"
+PROJECT_ROOT = BENCH_DIR.parent
+
+# TML compiler paths (try multiple locations)
+TML_COMPILER_PATHS = [
+    PROJECT_ROOT / "build" / "debug" / "tml.exe",
+    PROJECT_ROOT / "build" / "release" / "tml.exe",
+    PROJECT_ROOT / "packages" / "compiler" / "build" / "Debug" / "tml.exe",
+]
 
 @dataclass
 class BenchmarkResult:
@@ -56,6 +64,13 @@ def get_system_info() -> dict:
         "python_version": platform.python_version(),
     }
 
+def find_tml_compiler() -> Optional[str]:
+    """Find TML compiler"""
+    for path in TML_COMPILER_PATHS:
+        if path.exists():
+            return str(path)
+    return None
+
 def find_compiler(lang: str) -> Optional[str]:
     """Find compiler for a language"""
     if lang == "cpp":
@@ -81,9 +96,14 @@ def find_compiler(lang: str) -> Optional[str]:
             return "rustc"
         except:
             pass
+    elif lang == "go":
+        try:
+            subprocess.run(["go", "version"], capture_output=True, check=True)
+            return "go"
+        except:
+            pass
     elif lang == "tml":
-        if TML_COMPILER.exists():
-            return str(TML_COMPILER)
+        return find_tml_compiler()
     return None
 
 def compile_cpp(source: Path, output: Path) -> tuple[float, bool, str]:
@@ -94,12 +114,26 @@ def compile_cpp(source: Path, output: Path) -> tuple[float, bool, str]:
 
     start = time.perf_counter()
     try:
-        result = subprocess.run(
-            [cc, "-O2", "-std=c++20", str(source), "-o", str(output)],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        # Determine if MSVC (cl.exe) or Clang/GCC
+        cc_lower = cc.lower()
+        is_msvc = cc_lower.endswith("cl.exe") or cc_lower == "cl"
+
+        if is_msvc:
+            # MSVC
+            result = subprocess.run(
+                [cc, "/O2", "/EHsc", "/Fe:" + str(output), str(source)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+        else:
+            # Clang/GCC
+            result = subprocess.run(
+                [cc, "-O2", "-std=c++20", str(source), "-o", str(output)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
         elapsed = (time.perf_counter() - start) * 1000
         if result.returncode != 0:
             return elapsed, False, result.stderr
@@ -124,36 +158,52 @@ def compile_rust(source: Path, output: Path) -> tuple[float, bool, str]:
     except Exception as e:
         return 0, False, str(e)
 
-def compile_tml(source: Path, output: Path) -> tuple[float, bool, str]:
-    """Compile TML source, return (build_time_ms, success, error)
-
-    Note: TML compiler outputs to source directory, so we build there
-    and then move the exe to the desired output path.
-    """
-    if not TML_COMPILER.exists():
-        return 0, False, f"TML compiler not found at {TML_COMPILER}"
-
+def compile_go(source: Path, output: Path) -> tuple[float, bool, str]:
+    """Compile Go source, return (build_time_ms, success, error)"""
     start = time.perf_counter()
     try:
         result = subprocess.run(
-            [str(TML_COMPILER), "build", str(source)],
+            ["go", "build", "-o", str(output), str(source)],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=60
         )
         elapsed = (time.perf_counter() - start) * 1000
         if result.returncode != 0:
             return elapsed, False, result.stderr
+        return elapsed, True, ""
+    except Exception as e:
+        return 0, False, str(e)
 
-        # TML outputs the exe next to the source file
-        source_exe = source.parent / (source.stem + ".exe")
-        if source_exe.exists():
-            # Move to desired output location
+def compile_tml(source: Path, output: Path) -> tuple[float, bool, str]:
+    """Compile TML source, return (build_time_ms, success, error)"""
+    tml_cc = find_tml_compiler()
+    if not tml_cc:
+        return 0, False, f"TML compiler not found"
+
+    start = time.perf_counter()
+    try:
+        result = subprocess.run(
+            [tml_cc, "build", str(source)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=PROJECT_ROOT
+        )
+        elapsed = (time.perf_counter() - start) * 1000
+        if result.returncode != 0:
+            return elapsed, False, result.stderr + result.stdout
+
+        # TML outputs to build/debug/<name>.exe
+        expected_exe = PROJECT_ROOT / "build" / "debug" / (source.stem + ".exe")
+        if expected_exe.exists():
             import shutil
             output.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(source_exe), str(output))
+            shutil.copy(str(expected_exe), str(output))
+            return elapsed, True, ""
+        else:
+            return elapsed, False, f"Output not found at {expected_exe}"
 
-        return elapsed, True, ""
     except Exception as e:
         return 0, False, str(e)
 
@@ -174,30 +224,100 @@ def run_executable(exe: Path, timeout: int = 60) -> tuple[float, str, bool, str]
     except Exception as e:
         return 0, "", False, str(e)
 
+def run_go_benchmark() -> tuple[float, str, bool, str]:
+    """Run Go benchmarks using go test"""
+    start = time.perf_counter()
+    try:
+        # First run main.go for correctness
+        result = subprocess.run(
+            ["go", "run", "."],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=GO_DIR
+        )
+        output = result.stdout
+
+        # Then run benchmarks
+        bench_result = subprocess.run(
+            ["go", "test", "-bench=.*", "-benchtime=100ms"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=GO_DIR
+        )
+        output += "\n--- Benchmarks ---\n" + bench_result.stdout
+
+        elapsed = (time.perf_counter() - start) * 1000
+        return elapsed, output, result.returncode == 0, result.stderr
+    except Exception as e:
+        return 0, "", False, str(e)
+
 def get_binary_size(path: Path) -> int:
     """Get binary size in bytes"""
     if path.exists():
         return path.stat().st_size
     return 0
 
-def run_benchmark(name: str, category: str) -> list[BenchmarkResult]:
-    """Run a benchmark for all languages"""
-    results = []
+def run_all_benchmarks() -> BenchmarkSuite:
+    """Run all benchmarks for all languages"""
+    suite = BenchmarkSuite(
+        timestamp=datetime.now().isoformat(),
+        system_info=get_system_info()
+    )
 
-    # Prepare output directory
     out_dir = RESULTS_DIR / "bin"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # C++
-    cpp_source = CPP_DIR / f"bench_{name}.cpp"
-    if cpp_source.exists():
-        cpp_out = out_dir / f"bench_{name}_cpp.exe"
-        build_time, success, error = compile_cpp(cpp_source, cpp_out)
+    # TML benchmarks
+    print("\n[TML] Running TML benchmarks...")
+    print("-" * 50)
+    for tml_file in sorted(TML_DIR.glob("*.tml")):
+        if tml_file.stem == "tml":  # Skip tml.toml
+            continue
+
+        name = tml_file.stem
+        print(f"  {name}...", end=" ", flush=True)
+
+        tml_out = out_dir / f"{name}_tml.exe"
+        build_time, success, error = compile_tml(tml_file, tml_out)
 
         result = BenchmarkResult(
             name=name,
+            language="TML",
+            category="algorithms",
+            build_time_ms=build_time,
+            success=success,
+            error=error
+        )
+
+        if success:
+            run_time, output, run_success, run_error = run_executable(tml_out)
+            result.run_time_ms = run_time
+            result.output = output
+            result.binary_size_bytes = get_binary_size(tml_out)
+            if not run_success:
+                result.success = False
+                result.error = run_error
+            print(f"OK ({build_time:.0f}ms build, {run_time:.0f}ms run)")
+        else:
+            print(f"FAIL: {error[:50]}")
+
+        suite.results.append(result)
+
+    # C++ benchmark
+    print("\n[C++] Running C++ benchmarks...")
+    print("-" * 50)
+    cpp_source = CPP_DIR / "algorithms.cpp"
+    if cpp_source.exists():
+        cpp_out = out_dir / "algorithms_cpp.exe"
+        print(f"  algorithms...", end=" ", flush=True)
+        build_time, success, error = compile_cpp(cpp_source, cpp_out)
+
+        result = BenchmarkResult(
+            name="algorithms",
             language="C++",
-            category=category,
+            category="algorithms",
             build_time_ms=build_time,
             success=success,
             error=error
@@ -211,83 +331,77 @@ def run_benchmark(name: str, category: str) -> list[BenchmarkResult]:
             if not run_success:
                 result.success = False
                 result.error = run_error
+            print(f"OK ({build_time:.0f}ms build, {run_time:.0f}ms run)")
+        else:
+            print(f"FAIL: {error[:50]}")
 
-        results.append(result)
+        suite.results.append(result)
+    else:
+        print("  [SKIP] algorithms.cpp not found")
 
-    # Rust
-    rust_source = RUST_DIR / f"bench_{name}.rs"
-    if rust_source.exists():
-        rust_out = out_dir / f"bench_{name}_rust.exe"
+    # Go benchmarks
+    print("\n[Go] Running Go benchmarks...")
+    print("-" * 50)
+    if find_compiler("go"):
+        print(f"  algorithms...", end=" ", flush=True)
+        run_time, output, success, error = run_go_benchmark()
+
+        result = BenchmarkResult(
+            name="algorithms",
+            language="Go",
+            category="algorithms",
+            build_time_ms=0,  # Go compiles on the fly
+            run_time_ms=run_time,
+            output=output,
+            success=success,
+            error=error
+        )
+        if success:
+            print(f"OK ({run_time:.0f}ms)")
+        else:
+            print(f"FAIL: {error[:50]}")
+
+        suite.results.append(result)
+    else:
+        print("  [SKIP] Go not found")
+
+    # Rust benchmarks
+    print("\n[Rust] Running Rust benchmarks...")
+    print("-" * 50)
+    rust_source = RUST_DIR / "algorithms.rs"
+    if rust_source.exists() and find_compiler("rust"):
+        rust_out = out_dir / "algorithms_rust.exe"
+        print(f"  algorithms...", end=" ", flush=True)
         build_time, success, error = compile_rust(rust_source, rust_out)
 
         result = BenchmarkResult(
-            name=name,
+            name="algorithms",
             language="Rust",
-            category=category,
+            category="algorithms",
             build_time_ms=build_time,
             success=success,
             error=error
         )
 
         if success:
-            run_time, output, run_success, run_error = run_executable(rust_out)
+            run_time, output, run_success, run_error = run_executable(rust_out, timeout=120)
             result.run_time_ms = run_time
             result.output = output
             result.binary_size_bytes = get_binary_size(rust_out)
             if not run_success:
                 result.success = False
                 result.error = run_error
+            print(f"OK ({build_time:.0f}ms build, {run_time:.0f}ms run)")
+        else:
+            print(f"FAIL: {error[:50]}")
 
-        results.append(result)
+        suite.results.append(result)
+    elif not find_compiler("rust"):
+        print("  [SKIP] Rust not found")
+    else:
+        print("  [SKIP] algorithms.rs not found")
 
-    # TML
-    tml_source = TML_DIR / f"bench_{name}.tml"
-    if tml_source.exists():
-        tml_out = out_dir / f"bench_{name}_tml.exe"
-        build_time, success, error = compile_tml(tml_source, tml_out)
-
-        result = BenchmarkResult(
-            name=name,
-            language="TML",
-            category=category,
-            build_time_ms=build_time,
-            success=success,
-            error=error
-        )
-
-        if success:
-            run_time, output, run_success, run_error = run_executable(tml_out, timeout=120)
-            result.run_time_ms = run_time
-            result.output = output
-            result.binary_size_bytes = get_binary_size(tml_out)
-            if not run_success:
-                result.success = False
-                result.error = run_error
-
-        results.append(result)
-
-    return results
-
-def discover_benchmarks() -> dict[str, list[str]]:
-    """Discover available benchmarks by category"""
-    benchmarks = {}
-
-    # Scan TML directory for bench_*.tml files
-    for f in TML_DIR.glob("bench_*.tml"):
-        name = f.stem.replace("bench_", "")
-        # Read category from file
-        content = f.read_text()
-        category = "other"
-        for line in content.split("\n"):
-            if "Category:" in line:
-                category = line.split("Category:")[1].strip()
-                break
-
-        if category not in benchmarks:
-            benchmarks[category] = []
-        benchmarks[category].append(name)
-
-    return benchmarks
+    return suite
 
 def generate_report(suite: BenchmarkSuite, output_path: Path):
     """Generate markdown report"""
@@ -305,32 +419,49 @@ def generate_report(suite: BenchmarkSuite, output_path: Path):
     for k, v in suite.system_info.items():
         lines.append(f"| {k} | {v} |")
 
+    lines.extend(["", "## Compiler Status", ""])
+    lines.append("| Language | Compiler |")
+    lines.append("|----------|----------|")
+    lines.append(f"| TML | {find_compiler('tml') or 'NOT FOUND'} |")
+    lines.append(f"| C++ | {find_compiler('cpp') or 'NOT FOUND'} |")
+    lines.append(f"| Go | {find_compiler('go') or 'NOT FOUND'} |")
+    lines.append(f"| Rust | {find_compiler('rust') or 'NOT FOUND'} |")
+
     lines.extend(["", "## Results Summary", ""])
 
-    # Group by category
-    by_category = {}
+    # Group by language
+    by_language = {}
     for r in suite.results:
-        if r.category not in by_category:
-            by_category[r.category] = []
-        by_category[r.category].append(r)
+        if r.language not in by_language:
+            by_language[r.language] = []
+        by_language[r.language].append(r)
 
-    for category, results in by_category.items():
-        lines.extend([f"### {category.title()}", ""])
-        lines.append("| Benchmark | Language | Build (ms) | Run (ms) | Binary (KB) | Status |")
-        lines.append("|-----------|----------|------------|----------|-------------|--------|")
+    lines.append("| Language | Benchmark | Build (ms) | Run (ms) | Binary (KB) | Status |")
+    lines.append("|----------|-----------|------------|----------|-------------|--------|")
 
-        for r in results:
-            status = "OK" if r.success else f"FAIL: {r.error[:30]}"
-            binary_kb = r.binary_size_bytes / 1024 if r.binary_size_bytes else 0
-            lines.append(
-                f"| {r.name} | {r.language} | {r.build_time_ms:.1f} | {r.run_time_ms:.1f} | {binary_kb:.1f} | {status} |"
-            )
-        lines.append("")
+    for lang in ["TML", "C++", "Go", "Rust"]:
+        if lang in by_language:
+            for r in by_language[lang]:
+                status = "✅" if r.success else f"❌ {r.error[:30]}"
+                binary_kb = r.binary_size_bytes / 1024 if r.binary_size_bytes else 0
+                lines.append(
+                    f"| {r.language} | {r.name} | {r.build_time_ms:.1f} | {r.run_time_ms:.1f} | {binary_kb:.1f} | {status} |"
+                )
 
-    # Comparison charts (text-based)
-    lines.extend(["## Performance Comparison", ""])
+    lines.extend(["", "## Output Comparison", ""])
 
-    # Group by benchmark name
+    for r in suite.results:
+        if r.success and r.output.strip():
+            lines.append(f"### {r.language} - {r.name}")
+            lines.append("```")
+            lines.append(r.output.strip()[:1000])  # Limit output
+            lines.append("```")
+            lines.append("")
+
+    # Performance comparison
+    lines.extend(["", "## Performance Comparison", ""])
+
+    # Find common benchmarks
     by_name = {}
     for r in suite.results:
         if r.name not in by_name:
@@ -338,107 +469,72 @@ def generate_report(suite: BenchmarkSuite, output_path: Path):
         by_name[r.name][r.language] = r
 
     for name, langs in by_name.items():
+        if len(langs) < 2:
+            continue
+
         lines.append(f"### {name}")
         lines.append("")
 
         # Build time comparison
-        lines.append("**Build Time:**")
-        max_build = max(r.build_time_ms for r in langs.values() if r.success) or 1
-        for lang, r in sorted(langs.items()):
-            if r.success:
-                bar_len = int(40 * r.build_time_ms / max_build)
-                bar = "#" * bar_len
+        successful = [(lang, r) for lang, r in langs.items() if r.success]
+        if successful:
+            lines.append("**Build Time:**")
+            max_build = max(r.build_time_ms for _, r in successful) or 1
+            for lang, r in sorted(successful):
+                bar_len = int(30 * r.build_time_ms / max_build) if max_build > 0 else 0
+                bar = "█" * bar_len
                 lines.append(f"  {lang:6} {bar} {r.build_time_ms:.1f}ms")
-        lines.append("")
+            lines.append("")
 
-        # Run time comparison
-        lines.append("**Run Time:**")
-        max_run = max(r.run_time_ms for r in langs.values() if r.success) or 1
-        for lang, r in sorted(langs.items()):
-            if r.success:
-                bar_len = int(40 * r.run_time_ms / max_run)
-                bar = "#" * bar_len
+            lines.append("**Run Time:**")
+            max_run = max(r.run_time_ms for _, r in successful) or 1
+            for lang, r in sorted(successful):
+                bar_len = int(30 * r.run_time_ms / max_run) if max_run > 0 else 0
+                bar = "█" * bar_len
                 lines.append(f"  {lang:6} {bar} {r.run_time_ms:.1f}ms")
-        lines.append("")
+            lines.append("")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Report saved to: {output_path}")
+    print(f"\nReport saved to: {output_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="TML Benchmark Runner")
-    parser.add_argument("--category", help="Run specific category only")
-    parser.add_argument("--benchmark", help="Run specific benchmark only")
     parser.add_argument("--list", action="store_true", help="List available benchmarks")
     args = parser.parse_args()
-
-    # Ensure results directory exists
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Discover benchmarks
-    benchmarks = discover_benchmarks()
-
-    if args.list:
-        print("Available benchmarks:")
-        for category, names in benchmarks.items():
-            print(f"\n  {category}:")
-            for name in names:
-                print(f"    - {name}")
-        return
 
     print("=" * 60)
     print("TML Benchmark Suite")
     print("=" * 60)
-    print()
+
+    # Ensure results directory exists
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if args.list:
+        print("\nAvailable benchmarks:")
+        print("\nTML:")
+        for f in sorted(TML_DIR.glob("*.tml")):
+            if f.stem != "tml":
+                print(f"  - {f.stem}")
+        print("\nC++:")
+        for f in sorted(CPP_DIR.glob("*.cpp")):
+            print(f"  - {f.stem}")
+        print("\nGo:")
+        for f in sorted(GO_DIR.glob("*.go")):
+            if not f.name.endswith("_test.go"):
+                print(f"  - {f.stem}")
+        return
 
     # Check compilers
-    print("Checking compilers...")
-    cpp_cc = find_compiler("cpp")
-    rust_cc = find_compiler("rust")
-    tml_cc = find_compiler("tml")
-
-    print(f"  C++:  {cpp_cc or 'NOT FOUND'}")
-    print(f"  Rust: {rust_cc or 'NOT FOUND'}")
-    print(f"  TML:  {tml_cc or 'NOT FOUND'}")
-    print()
-
-    # Build compiler if needed
-    if not tml_cc:
-        print("Building TML compiler...")
-        build_dir = BENCH_DIR.parent / "packages" / "compiler" / "build"
-        result = subprocess.run(
-            ["cmake", "--build", ".", "--config", "Debug"],
-            cwd=build_dir,
-            capture_output=True
-        )
-        if result.returncode == 0:
-            tml_cc = find_compiler("tml")
-            print(f"  TML:  {tml_cc or 'BUILD FAILED'}")
-        print()
+    print("\nChecking compilers...")
+    print(f"  TML:  {find_compiler('tml') or 'NOT FOUND'}")
+    print(f"  C++:  {find_compiler('cpp') or 'NOT FOUND'}")
+    print(f"  Go:   {find_compiler('go') or 'NOT FOUND'}")
+    print(f"  Rust: {find_compiler('rust') or 'NOT FOUND'}")
 
     # Run benchmarks
-    suite = BenchmarkSuite(
-        timestamp=datetime.now().isoformat(),
-        system_info=get_system_info()
-    )
+    suite = run_all_benchmarks()
 
-    for category, names in benchmarks.items():
-        if args.category and category != args.category:
-            continue
-
-        print(f"Running {category} benchmarks...")
-        for name in names:
-            if args.benchmark and name != args.benchmark:
-                continue
-
-            print(f"  {name}...", end=" ", flush=True)
-            results = run_benchmark(name, category)
-            suite.results.extend(results)
-
-            # Quick summary
-            statuses = [f"{r.language}:{'OK' if r.success else 'FAIL'}" for r in results]
-            print(", ".join(statuses))
-
-    print()
+    print("\n" + "=" * 60)
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -454,11 +550,10 @@ def main():
     generate_report(suite, md_path)
 
     # Also save as latest
-    (RESULTS_DIR / "latest.json").write_text(json_path.read_text())
-    (RESULTS_DIR / "REPORT.md").write_text(md_path.read_text())
+    (RESULTS_DIR / "latest.json").write_text(json_path.read_text(encoding="utf-8"), encoding="utf-8")
+    (RESULTS_DIR / "REPORT.md").write_text(md_path.read_text(encoding="utf-8"), encoding="utf-8")
 
-    print()
-    print("Done!")
+    print("\nDone!")
 
 if __name__ == "__main__":
     main()

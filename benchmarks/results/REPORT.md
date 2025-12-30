@@ -1,6 +1,6 @@
 # TML Benchmark Report
 
-**Generated:** 2025-12-22T16:40:13.483449
+**Generated:** 2025-12-29T21:05:58.033988
 
 ## System Information
 
@@ -12,26 +12,176 @@
 | processor | AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD |
 | python_version | 3.13.9 |
 
+## Compiler Status
+
+| Language | Compiler |
+|----------|----------|
+| TML | F:\Node\hivellm\tml\build\debug\tml.exe |
+| C++ | F:/LLVM/bin/clang++.exe |
+| Go | go |
+| Rust | rustc |
+
 ## Results Summary
 
-### Arithmetic
+| Language | Benchmark | Build (ms) | Run (ms) | Binary (KB) | Status |
+|----------|-----------|------------|----------|-------------|--------|
+| TML | algorithms | 870.5 | 32.7 | 153.5 | ✅ |
+| TML | data_structures | 861.9 | 30.9 | 152.0 | ✅ |
+| TML | fibonacci | 866.0 | 32.8 | 151.5 | ✅ |
+| TML | math | 934.6 | 32.4 | 152.5 | ✅ |
+| C++ | algorithms | 1339.7 | 154.6 | 273.0 | ✅ |
+| Go | algorithms | 0.0 | 2605.2 | 0.0 | ✅ |
+| Rust | algorithms | 287.7 | 147.0 | 165.0 | ✅ |
 
-| Benchmark | Language | Build (ms) | Run (ms) | Binary (KB) | Status |
-|-----------|----------|------------|----------|-------------|--------|
-| arithmetic | C++ | 1007.4 | 41.2 | 142.5 | OK |
-| arithmetic | Rust | 207.3 | 37.2 | 163.0 | OK |
-| arithmetic | TML | 330.0 | 38.7 | 161.5 | OK |
+## Output Comparison
+
+### TML - algorithms
+```
+=== TML Algorithm Benchmarks ===
+
+Factorial(10): 3628800
+GCD(48, 18): 6
+Power(2, 10): 1024
+Primes up to 100: 25
+Sum(1..100): 5050
+Collatz steps(27): 111
+```
+
+### TML - data_structures
+```
+=== TML Data Structure Benchmarks ===
+
+Stack push/pop (1000): 667
+Binary search steps (find 500 in 0..1000): 1
+Bubble sort comparisons (100 elements): 4950
+Matrix multiply ops (10x10): 2000
+Simple hash (seed=42, n=1000): 182789914
+List traverse (1000): 1000
+```
+
+### TML - fibonacci
+```
+Fibonacci(10) recursive: 55
+Fibonacci(10) iterative: 55
+Benchmark result: 6765000
+```
+
+### TML - math
+```
+=== TML Math Benchmarks ===
+
+isqrt(144): 12
+isqrt(1000000): 1000
+mod_pow(2, 10, 1000): 24
+ackermann(3, 3): 61
+catalan(10): 16796
+pascal_row_sum(10): 1024
+binomial(10, 5): 252
+sum_divisors(100): 217
+euler_phi(100): 40
+```
+
+### C++ - algorithms
+```
+=== C++ Algorithm Benchmarks ===
+
+Factorial(10): 3628800
+Fibonacci(20): 6765
+GCD(48, 18): 6
+Power(2, 10): 1024
+Primes up to 100: 25
+Sum(1..100): 5050
+Collatz steps(27): 111
+
+=== Timing (ns per call) ===
+
+factorial_recursive(10): 0.1989 ns
+factorial_iterative(10): 0.1908 ns
+fibonacci_recursive(20): 1.41 ns
+fibonacci_iterative(20): 0.1916 ns
+gcd_recursive(48, 18): 3.4443 ns
+gcd_iterative(48, 18): 3.4398 ns
+power_naive(2, 10): 0.1909 ns
+power_fast(2, 10): 0.1909 ns
+count_primes(100): 56.183 ns
+count_primes(1000): 1644.84 ns
+collatz_steps(27): 77.8245 ns
+sum_range(1, 100): 0.1877 ns
+sum_range(1, 10000): 0.187 ns
+```
+
+### Go - algorithms
+```
+=== Go Algorithm Benchmarks ===
+
+Factorial(10): 3628800
+Fibonacci(20): 6765
+GCD(48, 18): 6
+Power(2, 10): 1024
+Primes up to 100: 25
+Sum(1..100): 5050
+Collatz steps(27): 111
+
+--- Benchmarks ---
+goos: windows
+goarch: amd64
+pkg: tml-benchmarks
+cpu: AMD Ryzen 9 7950X3D 16-Core Processor          
+BenchmarkFactorialRecursive10-32    	23103135	         5.178 ns/op
+BenchmarkFactorialIterative10-32    	56641177	         2.096 ns/op
+BenchmarkFibonacciRecursive20-32    	    5582	     21656 ns/op
+BenchmarkFibonacciIterative20-32    	27138883	         4.335 ns/op
+BenchmarkGCDRecursive-32            	53071513	         2.320 ns/op
+BenchmarkGCDIterative-32            	34868516	         3.429 ns/op
+BenchmarkPowerNaive2_10-32          	50184007	         2.321 ns/op
+BenchmarkPowerFast2_10-32           	31005348	         3.984 ns/op
+BenchmarkCountPrimes100-32          	 1204086	        96.82 ns/op
+BenchmarkCountPrimes1000-32         	   72555	      1709 ns/op
+BenchmarkCollatz27-32               	 2208520	
+```
+
+### Rust - algorithms
+```
+=== Rust Algorithm Benchmarks ===
+
+Factorial(10): 3628800
+Fibonacci(20): 6765
+GCD(48, 18): 6
+Power(2, 10): 1024
+Primes up to 100: 25
+Sum(1..100): 5050
+Collatz steps(27): 111
+
+=== Timing (ns per call) ===
+
+factorial_recursive(10): 0.1970 ns/op
+factorial_iterative(10): 0.1944 ns/op
+fibonacci_recursive(20): 0.2000 ns/op
+fibonacci_iterative(20): 7.4325 ns/op
+gcd_recursive(48, 18): 2.2826 ns/op
+gcd_iterative(48, 18): 3.4274 ns/op
+power_naive(2, 10): 0.1892 ns/op
+power_fast(2, 10): 0.1882 ns/op
+count_primes(100): 58.0550 ns/op
+count_primes(1000): 1623.0300 ns/op
+collatz_steps(27): 77.4592 ns/op
+sum_range(1, 100): 0.1938 ns/op
+sum_range(1, 10000): 0.1950 ns/op
+```
+
 
 ## Performance Comparison
 
-### arithmetic
+### algorithms
 
 **Build Time:**
-  C++    ######################################## 1007.4ms
-  Rust   ######## 207.3ms
-  TML    ############# 330.0ms
+  C++    ██████████████████████████████ 1339.7ms
+  Go      0.0ms
+  Rust   ██████ 287.7ms
+  TML    ███████████████████ 870.5ms
 
 **Run Time:**
-  C++    ######################################## 41.2ms
-  Rust   #################################### 37.2ms
-  TML    ##################################### 38.7ms
+  C++    █ 154.6ms
+  Go     ██████████████████████████████ 2605.2ms
+  Rust   █ 147.0ms
+  TML     32.7ms

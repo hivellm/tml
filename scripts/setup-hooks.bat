@@ -92,7 +92,7 @@ echo.
 echo # Run TML lint
 echo if [ -n "$TML_EXE" ]; then
 echo     echo "Running TML lint..."
-echo     "$TML_EXE" lint packages examples
+echo     "$TML_EXE" lint lib examples
 echo fi
 echo.
 echo echo "Pre-push checks passed!"

@@ -1,0 +1,89 @@
+{
+  "timestamp": "2025-12-29T20:50:00.632991",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.13.9"
+  },
+  "results": [
+    {
+      "name": "algorithms",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 445.79289999092,
+      "run_time_ms": 0.0,
+      "binary_size_bytes": 0,
+      "output": "",
+      "success": false,
+      "error": "F:/Node/hivellm/tml/build/debug/algorithms.ll:1019:58: error: '%t348' defined with type 'i64' but expected 'i32'\n 1019 |   %t350 = call i32 (ptr, ...) @printf(ptr @.fmt.int, i32 %t348)\n      |                                                          ^\n1 error generated.\nerror: Clang compilation failed with exit code 1\n"
+    },
+    {
+      "name": "data_structures",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 863.7494000140578,
+      "run_time_ms": 34.274600038770586,
+      "binary_size_bytes": 155648,
+      "output": "=== TML Data Structure Benchmarks ===\n\nStack push/pop (1000): 667\nBinary search steps (find 500 in 0..1000): 1\nBubble sort comparisons (100 elements): 4950\nMatrix multiply ops (10x10): 2000\nSimple hash (seed=42, n=1000): 182789914\nList traverse (1000): 1000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "fibonacci",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 840.7242000102997,
+      "run_time_ms": 33.73740002280101,
+      "binary_size_bytes": 155136,
+      "output": "Fibonacci(10) recursive: 55\nFibonacci(10) iterative: 55\nBenchmark result: 6765000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "math",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 870.1258999644779,
+      "run_time_ms": 35.830199951305985,
+      "binary_size_bytes": 156160,
+      "output": "=== TML Math Benchmarks ===\n\nisqrt(144): 12\nisqrt(1000000): 1000\nmod_pow(2, 10, 1000): 24\nackermann(3, 3): 61\ncatalan(10): 16796\npascal_row_sum(10): 1024\nbinomial(10, 5): 252\nsum_divisors(100): 217\neuler_phi(100): 40\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "C++",
+      "category": "algorithms",
+      "build_time_ms": 1359.3516999972053,
+      "run_time_ms": 149.92830000119284,
+      "binary_size_bytes": 279552,
+      "output": "=== C++ Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n=== Timing (ns per call) ===\n\nfactorial_recursive(10): 0.1909 ns\nfactorial_iterative(10): 0.1908 ns\nfibonacci_recursive(20): 1.41 ns\nfibonacci_iterative(20): 0.1946 ns\ngcd_recursive(48, 18): 3.4509 ns\ngcd_iterative(48, 18): 3.4442 ns\npower_naive(2, 10): 0.1936 ns\npower_fast(2, 10): 0.1908 ns\ncount_primes(100): 56.265 ns\ncount_primes(1000): 1633.67 ns\ncollatz_steps(27): 77.1461 ns\nsum_range(1, 100): 0.1847 ns\nsum_range(1, 10000): 0.185 ns\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "Go",
+      "category": "algorithms",
+      "build_time_ms": 0,
+      "run_time_ms": 2612.639400002081,
+      "binary_size_bytes": 0,
+      "output": "=== Go Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n--- Benchmarks ---\ngoos: windows\ngoarch: amd64\npkg: tml-benchmarks\ncpu: AMD Ryzen 9 7950X3D 16-Core Processor          \nBenchmarkFactorialRecursive10-32    \t21895812\t         5.356 ns/op\nBenchmarkFactorialIterative10-32    \t57747834\t         2.101 ns/op\nBenchmarkFibonacciRecursive20-32    \t    5588\t     21377 ns/op\nBenchmarkFibonacciIterative20-32    \t28697149\t         4.195 ns/op\nBenchmarkGCDRecursive-32            \t53838216\t         2.272 ns/op\nBenchmarkGCDIterative-32            \t35415990\t         3.467 ns/op\nBenchmarkPowerNaive2_10-32          \t52008841\t         2.307 ns/op\nBenchmarkPowerFast2_10-32           \t30487804\t         3.967 ns/op\nBenchmarkCountPrimes100-32          \t 1251174\t        96.13 ns/op\nBenchmarkCountPrimes1000-32         \t   70672\t      1682 ns/op\nBenchmarkCollatz27-32               \t 2241753\t        53.41 ns/op\nBenchmarkSumRange1_100-32           \t 4979128\t        24.00 ns/op\nBenchmarkSumRange1_10000-32         \t   61147\t      1939 ns/op\nPASS\nok  \ttml-benchmarks\t2.056s\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "Rust",
+      "category": "algorithms",
+      "build_time_ms": 293.21480001090094,
+      "run_time_ms": 148.80039996933192,
+      "binary_size_bytes": 168960,
+      "output": "=== Rust Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n=== Timing (ns per call) ===\n\nfactorial_recursive(10): 0.1921 ns/op\nfactorial_iterative(10): 0.1894 ns/op\nfibonacci_recursive(20): 0.1900 ns/op\nfibonacci_iterative(20): 7.4000 ns/op\ngcd_recursive(48, 18): 2.2794 ns/op\ngcd_iterative(48, 18): 3.4162 ns/op\npower_naive(2, 10): 0.1882 ns/op\npower_fast(2, 10): 0.1882 ns/op\ncount_primes(100): 58.0880 ns/op\ncount_primes(1000): 1633.2800 ns/op\ncollatz_steps(27): 77.3230 ns/op\nsum_range(1, 100): 0.1954 ns/op\nsum_range(1, 10000): 0.1900 ns/op\n",
+      "success": true,
+      "error": ""
+    }
+  ]
+}

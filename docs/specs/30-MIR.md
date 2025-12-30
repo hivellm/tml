@@ -1,0 +1,392 @@
+# TML v1.0 — Mid-level Intermediate Representation (MIR)
+
+## 1. Overview
+
+The Mid-level IR (MIR) is an SSA-form intermediate representation that sits between the type-checked AST and LLVM IR generation. It provides a clean, optimizable representation for TML programs.
+
+### 1.1 Design Goals
+
+1. **SSA Form** - Each variable defined exactly once
+2. **Explicit Control Flow** - Basic blocks with explicit terminators
+3. **Type-Annotated** - All values carry type information
+4. **Optimizable** - Clean structure for optimization passes
+5. **Easy Lowering** - Close enough to LLVM IR for straightforward translation
+
+### 1.2 Pipeline Position
+
+```
+TML Source → Lexer → Parser → AST → Type Checker → MIR → Optimizer → LLVM IR → Machine Code
+                                         ↑                    ↑
+                                    This document        Optimization passes
+```
+
+## 2. MIR Types
+
+MIR has its own type system that maps directly to low-level representations.
+
+### 2.1 Primitive Types
+
+```cpp
+enum class PrimitiveType {
+    Unit,   // Zero-sized type
+    Bool,   // Boolean (i1 in LLVM)
+    I8, I16, I32, I64, I128,   // Signed integers
+    U8, U16, U32, U64, U128,   // Unsigned integers
+    F32, F64,                   // Floating point
+    Ptr,    // Raw pointer (void*)
+    Str,    // String pointer
+};
+```
+
+### 2.2 Composite Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `MirPointerType` | Pointer to another type | `*mut I32` |
+| `MirArrayType` | Fixed-size array | `[I32; 10]` |
+| `MirSliceType` | Slice reference | `[]I32` |
+| `MirTupleType` | Tuple of types | `(I32, Bool)` |
+| `MirStructType` | Named struct | `Point { x: F64, y: F64 }` |
+| `MirEnumType` | Tagged union | `Maybe[T]` |
+| `MirFunctionType` | Function signature | `func(I32, I32) -> I32` |
+
+## 3. Values and Instructions
+
+### 3.1 Value Identifiers
+
+Every computed value in MIR has a unique identifier (ValueId):
+
+```
+%0 = const.i32 42
+%1 = add %0, %0
+%2 = call @double(%1)
+```
+
+### 3.2 Instruction Categories
+
+#### Constants
+```
+const.unit                    ; Unit value
+const.bool true               ; Boolean constant
+const.i32 42                  ; Integer constant
+const.f64 3.14159             ; Float constant
+const.str "hello"             ; String constant
+```
+
+#### Arithmetic Operations
+```
+add %a, %b       ; Addition
+sub %a, %b       ; Subtraction
+mul %a, %b       ; Multiplication
+div %a, %b       ; Division
+rem %a, %b       ; Remainder/modulo
+neg %a           ; Negation
+```
+
+#### Comparison Operations
+```
+eq %a, %b        ; Equal
+ne %a, %b        ; Not equal
+lt %a, %b        ; Less than
+le %a, %b        ; Less or equal
+gt %a, %b        ; Greater than
+ge %a, %b        ; Greater or equal
+```
+
+#### Logical Operations
+```
+and %a, %b       ; Logical AND
+or %a, %b        ; Logical OR
+not %a           ; Logical NOT
+```
+
+#### Bitwise Operations
+```
+bit_and %a, %b   ; Bitwise AND
+bit_or %a, %b    ; Bitwise OR
+bit_xor %a, %b   ; Bitwise XOR
+bit_not %a       ; Bitwise NOT
+shl %a, %b       ; Shift left
+shr %a, %b       ; Shift right (arithmetic)
+```
+
+#### Memory Operations
+```
+alloca T                      ; Stack allocation
+load %ptr                     ; Load from pointer
+store %val, %ptr              ; Store to pointer
+gep %ptr, %idx                ; Get element pointer
+field_ptr %struct_ptr, field  ; Get field pointer
+```
+
+#### Control Flow
+```
+phi [%a, bb1], [%b, bb2]      ; SSA phi node
+call @func(%arg1, %arg2)      ; Function call
+```
+
+#### Type Conversions
+```
+cast %val to T                ; Type cast
+trunc %val to T               ; Truncate integer
+ext %val to T                 ; Extend integer (sign/zero)
+```
+
+### 3.3 Terminators
+
+Each basic block ends with exactly one terminator:
+
+```
+ret %value              ; Return with value
+ret void                ; Return void
+br bb_target            ; Unconditional branch
+br_cond %cond, bb_true, bb_false  ; Conditional branch
+switch %val, [case1: bb1, case2: bb2, ...], bb_default
+unreachable             ; Unreachable code marker
+```
+
+## 4. Basic Blocks and Functions
+
+### 4.1 Basic Block Structure
+
+```
+bb0:                          ; Block label
+    %0 = const.i32 1          ; Instructions
+    %1 = const.i32 2
+    %2 = add %0, %1
+    br bb1                    ; Terminator
+
+bb1:                          ; Successor block
+    %3 = phi [%2, bb0]        ; Phi node for SSA
+    ret %3
+```
+
+### 4.2 Function Structure
+
+```mir
+func @factorial(n: I32) -> I32 {
+bb_entry:
+    %cond = le %n, const.i32 1
+    br_cond %cond, bb_base, bb_recurse
+
+bb_base:
+    ret const.i32 1
+
+bb_recurse:
+    %n_minus_1 = sub %n, const.i32 1
+    %rec_result = call @factorial(%n_minus_1)
+    %result = mul %n, %rec_result
+    ret %result
+}
+```
+
+## 5. Optimization Passes
+
+### 5.1 Pass Infrastructure
+
+```cpp
+// Base class for all passes
+class MirPass {
+    virtual std::string name() const = 0;
+    virtual bool run(Module& module) = 0;
+};
+
+// Function-level pass
+class FunctionPass : public MirPass {
+    virtual bool run_on_function(Function& func) = 0;
+};
+
+// Block-level pass
+class BlockPass : public MirPass {
+    virtual bool run_on_block(BasicBlock& block, Function& func) = 0;
+};
+```
+
+### 5.2 Available Passes
+
+| Pass | Level | Description |
+|------|-------|-------------|
+| `ConstantFolding` | Block | Evaluate constant expressions at compile time |
+| `ConstantPropagation` | Function | Replace uses of constants with their values |
+| `CopyPropagation` | Function | Replace copies with original values |
+| `DeadCodeElimination` | Function | Remove unused instructions |
+| `CommonSubexpressionElimination` | Function | Reuse computed values |
+| `UnreachableCodeElimination` | Function | Remove unreachable blocks |
+
+### 5.3 Optimization Levels
+
+```cpp
+enum class OptLevel {
+    O0,  // No optimization - just type checking
+    O1,  // Basic optimizations (constant folding, DCE)
+    O2,  // Standard optimizations (all above + CSE, copy prop)
+    O3,  // Aggressive optimizations (all above + inlining)
+};
+```
+
+### 5.4 Pass Manager
+
+```cpp
+PassManager pm(OptLevel::O2);
+pm.configure_standard_pipeline();  // Add standard passes for level
+pm.run(mir_module);                // Run all passes
+```
+
+## 6. Example Transformations
+
+### 6.1 Constant Folding
+
+Before:
+```mir
+%0 = const.i32 2
+%1 = const.i32 3
+%2 = add %0, %1       ; Can be folded
+%3 = mul %2, %2       ; Can be folded after
+ret %3
+```
+
+After:
+```mir
+%0 = const.i32 25     ; 2+3=5, 5*5=25
+ret %0
+```
+
+### 6.2 Dead Code Elimination
+
+Before:
+```mir
+%0 = const.i32 42
+%1 = const.i32 10     ; Unused
+%2 = add %0, %0       ; Unused
+ret %0
+```
+
+After:
+```mir
+%0 = const.i32 42
+ret %0
+```
+
+### 6.3 Common Subexpression Elimination
+
+Before:
+```mir
+%0 = load %ptr
+%1 = add %0, const.i32 1
+%2 = load %ptr        ; Same as %0
+%3 = add %2, const.i32 1  ; Same as %1
+%4 = add %1, %3
+ret %4
+```
+
+After:
+```mir
+%0 = load %ptr
+%1 = add %0, const.i32 1
+%4 = add %1, %1       ; Reuse %1
+ret %4
+```
+
+## 7. Serialization
+
+MIR supports both text and binary serialization for debugging and caching.
+
+### 7.1 Text Format
+
+Human-readable format for debugging:
+
+```mir
+; Module: example
+; Generated: 2025-12-29
+
+func @add(a: I32, b: I32) -> I32 {
+bb_entry:
+    %result = add %a, %b
+    ret %result
+}
+```
+
+### 7.2 Binary Format
+
+Compact binary format for build caching:
+- Header: magic number, version, checksum
+- Type table: all types used in module
+- Function table: function signatures
+- Instruction stream: encoded instructions
+
+## 8. Analysis Utilities
+
+### 8.1 Value Usage Analysis
+
+```cpp
+// Check if a value is used anywhere in the function
+bool is_value_used(const Function& func, ValueId value);
+```
+
+### 8.2 Side Effect Analysis
+
+```cpp
+// Check if an instruction has observable side effects
+bool has_side_effects(const Instruction& inst);
+
+// Side effect categories:
+// - Memory writes (store)
+// - Function calls (may have side effects)
+// - I/O operations
+```
+
+### 8.3 Constant Analysis
+
+```cpp
+// Check if instruction produces a compile-time constant
+bool is_constant(const Instruction& inst);
+
+// Extract constant value if available
+std::optional<int64_t> get_constant_int(const Instruction& inst);
+std::optional<bool> get_constant_bool(const Instruction& inst);
+```
+
+## 9. Integration with Compiler
+
+### 9.1 Building MIR from AST
+
+```cpp
+MirBuilder builder;
+auto mir_module = builder.build(typed_ast);
+```
+
+### 9.2 Running Optimization Pipeline
+
+```cpp
+PassManager pm(opt_level);
+pm.configure_standard_pipeline();
+int changes = pm.run(mir_module);
+```
+
+### 9.3 Lowering to LLVM IR
+
+```cpp
+LLVMIRGen llvm_gen(type_env, options);
+auto llvm_ir = llvm_gen.generate_from_mir(mir_module);
+```
+
+## 10. Source Files
+
+| File | Description |
+|------|-------------|
+| `include/mir/mir.hpp` | Core data structures |
+| `include/mir/mir_builder.hpp` | MIR construction API |
+| `include/mir/mir_pass.hpp` | Optimization pass infrastructure |
+| `include/mir/mir_serialize.hpp` | Serialization interface |
+| `src/mir/mir_type.cpp` | Type utilities |
+| `src/mir/mir_function.cpp` | Function/block management |
+| `src/mir/mir_printer.cpp` | Human-readable output |
+| `src/mir/mir_builder.cpp` | AST to MIR conversion |
+| `src/mir/mir_serialize.cpp` | Serialization implementation |
+| `src/mir/mir_pass.cpp` | Pass manager |
+| `src/mir/passes/*.cpp` | Individual optimization passes |
+
+---
+
+*Previous: [29-PACKAGES.md](./29-PACKAGES.md)*
+*Next: [INDEX.md](./INDEX.md)*

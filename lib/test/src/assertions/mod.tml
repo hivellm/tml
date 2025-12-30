@@ -1,0 +1,82 @@
+// Test Framework Assertions
+// All assertions are polymorphic - work with any comparable type
+//
+// NOTE: assert_eq, assert_ne, and assert are compiler builtins.
+// This module provides additional test assertions.
+
+// ============ Comparison Assertions ============
+
+/// Assert left > right
+pub func assert_gt[T](left: T, right: T, message: Str) {
+    if left <= right {
+        panic(message)
+    }
+}
+
+/// Assert left >= right
+pub func assert_gte[T](left: T, right: T, message: Str) {
+    if left < right {
+        panic(message)
+    }
+}
+
+/// Assert left < right
+pub func assert_lt[T](left: T, right: T, message: Str) {
+    if left >= right {
+        panic(message)
+    }
+}
+
+/// Assert left <= right
+pub func assert_lte[T](left: T, right: T, message: Str) {
+    if left > right {
+        panic(message)
+    }
+}
+
+/// Assert value is in range [min, max]
+pub func assert_in_range[T](value: T, min: T, max: T, message: Str) {
+    if value < min or value > max {
+        panic(message)
+    }
+}
+
+// ============ Boolean Assertions ============
+
+/// Assert condition is false
+pub func assert_false(condition: Bool, message: Str) {
+    if condition {
+        panic(message)
+    }
+}
+
+/// Assert value is true
+pub func assert_true(value: Bool, message: Str) {
+    if not value {
+        panic(message)
+    }
+}
+
+// ============ String Assertions ============
+
+/// Assert string length equals expected
+pub func assert_str_len(s: Str, expected_len: I32, message: Str) {
+    let actual: I32 = str_len(s)
+    if actual != expected_len {
+        panic(message)
+    }
+}
+
+/// Assert string is empty
+pub func assert_str_empty(s: Str, message: Str) {
+    if str_len(s) != 0 {
+        panic(message)
+    }
+}
+
+/// Assert string is not empty
+pub func assert_str_not_empty(s: Str, message: Str) {
+    if str_len(s) == 0 {
+        panic(message)
+    }
+}

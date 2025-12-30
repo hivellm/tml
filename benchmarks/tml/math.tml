@@ -1,0 +1,194 @@
+// Math Benchmarks - TML
+//
+// Mathematical computations for benchmarking
+
+// ============================================================================
+// Integer Square Root (Newton's Method)
+// ============================================================================
+
+pub func isqrt(n: I32) -> I32 {
+    if n <= 1 {
+        return n
+    }
+
+    let mut x: I32 = n
+    let mut y: I32 = (x + 1) / 2
+
+    loop {
+        if y >= x {
+            break
+        }
+        x = y
+        y = (x + n / x) / 2
+    }
+
+    return x
+}
+
+// ============================================================================
+// Modular Exponentiation
+// ============================================================================
+
+pub func mod_pow(base: I32, exp: I32, modulus: I32) -> I32 {
+    if modulus == 1 {
+        return 0
+    }
+
+    let mut result: I32 = 1
+    let mut b: I32 = base % modulus
+    let mut e: I32 = exp
+
+    loop {
+        if e <= 0 {
+            break
+        }
+        if e % 2 == 1 {
+            result = (result * b) % modulus
+        }
+        e = e / 2
+        b = (b * b) % modulus
+    }
+
+    return result
+}
+
+// ============================================================================
+// Extended GCD
+// ============================================================================
+
+pub func extended_gcd_r(a: I32, b: I32) -> I32 {
+    // Returns GCD using extended algorithm structure
+    if b == 0 {
+        return a
+    }
+    return extended_gcd_r(b, a % b)
+}
+
+// ============================================================================
+// Ackermann Function (limited)
+// ============================================================================
+
+pub func ackermann(m: I32, n: I32) -> I32 {
+    if m == 0 {
+        return n + 1
+    }
+    if m > 0 and n == 0 {
+        return ackermann(m - 1, 1)
+    }
+    return ackermann(m - 1, ackermann(m, n - 1))
+}
+
+// ============================================================================
+// Catalan Number
+// ============================================================================
+
+pub func catalan(n: I32) -> I32 {
+    if n <= 1 {
+        return 1
+    }
+
+    let mut result: I32 = 0
+    let mut i: I32 = 0
+
+    loop {
+        if i >= n {
+            break
+        }
+        result = result + catalan(i) * catalan(n - 1 - i)
+        i = i + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// Pascal Triangle Row Sum
+// ============================================================================
+
+pub func pascal_row_sum(row: I32) -> I32 {
+    // Sum of row n is 2^n
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+
+    loop {
+        if i >= row {
+            break
+        }
+        result = result * 2
+        i = i + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// Binomial Coefficient (n choose k)
+// ============================================================================
+
+pub func binomial(n: I32, k: I32) -> I32 {
+    if k > n {
+        return 0
+    }
+    if k == 0 or k == n {
+        return 1
+    }
+
+    let mut numerator: I32 = 1
+    let mut denominator: I32 = 1
+    let mut i: I32 = 0
+
+    loop {
+        if i >= k {
+            break
+        }
+        numerator = numerator * (n - i)
+        denominator = denominator * (i + 1)
+        i = i + 1
+    }
+
+    return numerator / denominator
+}
+
+// ============================================================================
+// Sum of Divisors
+// ============================================================================
+
+pub func sum_divisors(n: I32) -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 1
+
+    loop {
+        if i > n {
+            break
+        }
+        if n % i == 0 {
+            sum = sum + i
+        }
+        i = i + 1
+    }
+
+    return sum
+}
+
+// ============================================================================
+// Euler's Totient Function
+// ============================================================================
+
+pub func euler_phi(n: I32) -> I32 {
+    let mut result: I32 = 0
+    let mut i: I32 = 1
+
+    loop {
+        if i > n {
+            break
+        }
+        if extended_gcd_r(i, n) == 1 {
+            result = result + 1
+        }
+        i = i + 1
+    }
+
+    return result
+}
+
+// Main removed - this module is meant to be imported

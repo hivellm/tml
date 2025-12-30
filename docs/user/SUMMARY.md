@@ -49,6 +49,10 @@
 
 - [Building Libraries and C Interoperability](ch12-00-libraries-and-ffi.md)
 
+## Project Organization
+
+- [Modules and Code Organization](ch13-00-modules.md)
+
 ## Appendix
 
 - [Appendix](appendix-00.md)

@@ -1,0 +1,78 @@
+{
+  "timestamp": "2025-12-29T20:44:02.204091",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "python_version": "3.13.9"
+  },
+  "results": [
+    {
+      "name": "algorithms",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 832.0562000153586,
+      "run_time_ms": 31.018000037875026,
+      "binary_size_bytes": 156160,
+      "output": "=== TML Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "data_structures",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 870.8626000443473,
+      "run_time_ms": 34.817200037650764,
+      "binary_size_bytes": 155648,
+      "output": "=== TML Data Structure Benchmarks ===\n\nStack push/pop (1000): 667\nBinary search steps (find 500 in 0..1000): 1\nBubble sort comparisons (100 elements): 4950\nMatrix multiply ops (10x10): 2000\nSimple hash (seed=42, n=1000): 182789914\nList traverse (1000): 1000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "fibonacci",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 884.6356000285596,
+      "run_time_ms": 32.48760005226359,
+      "binary_size_bytes": 155136,
+      "output": "Fibonacci(10) recursive: 55\nFibonacci(10) iterative: 55\nBenchmark result: 6765000\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "math",
+      "language": "TML",
+      "category": "algorithms",
+      "build_time_ms": 847.9688999941573,
+      "run_time_ms": 31.92119998857379,
+      "binary_size_bytes": 156160,
+      "output": "=== TML Math Benchmarks ===\n\nisqrt(144): 12\nisqrt(1000000): 1000\nmod_pow(2, 10, 1000): 24\nackermann(3, 3): 61\ncatalan(10): 16796\npascal_row_sum(10): 1024\nbinomial(10, 5): 252\nsum_divisors(100): 217\neuler_phi(100): 40\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "C++",
+      "category": "algorithms",
+      "build_time_ms": 3475.266100023873,
+      "run_time_ms": 154.21489998698235,
+      "binary_size_bytes": 279552,
+      "output": "=== C++ Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n=== Timing (ns per call) ===\n\nfactorial_recursive(10): 0.1897 ns\nfactorial_iterative(10): 0.1892 ns\nfibonacci_recursive(20): 1.4 ns\nfibonacci_iterative(20): 0.1938 ns\ngcd_recursive(48, 18): 3.4303 ns\ngcd_iterative(48, 18): 3.4088 ns\npower_naive(2, 10): 0.1904 ns\npower_fast(2, 10): 0.1891 ns\ncount_primes(100): 55.599 ns\ncount_primes(1000): 1632.84 ns\ncollatz_steps(27): 78.3177 ns\nsum_range(1, 100): 0.1881 ns\nsum_range(1, 10000): 0.188 ns\n",
+      "success": true,
+      "error": ""
+    },
+    {
+      "name": "algorithms",
+      "language": "Go",
+      "category": "algorithms",
+      "build_time_ms": 0,
+      "run_time_ms": 2465.3579000150785,
+      "binary_size_bytes": 0,
+      "output": "=== Go Algorithm Benchmarks ===\n\nFactorial(10): 3628800\nFibonacci(20): 6765\nGCD(48, 18): 6\nPower(2, 10): 1024\nPrimes up to 100: 25\nSum(1..100): 5050\nCollatz steps(27): 111\n\n--- Benchmarks ---\ngoos: windows\ngoarch: amd64\npkg: tml-benchmarks\ncpu: AMD Ryzen 9 7950X3D 16-Core Processor          \nBenchmarkFactorialRecursive10-32    \t22395162\t         5.434 ns/op\nBenchmarkFactorialIterative10-32    \t57012542\t         2.120 ns/op\nBenchmarkFibonacciRecursive20-32    \t    5673\t     21174 ns/op\nBenchmarkFibonacciIterative20-32    \t26058066\t         4.268 ns/op\nBenchmarkGCDRecursive-32            \t46754460\t         2.325 ns/op\nBenchmarkGCDIterative-32            \t34641031\t         3.465 ns/op\nBenchmarkPowerNaive2_10-32          \t51896379\t         2.313 ns/op\nBenchmarkPowerFast2_10-32           \t30713316\t         3.968 ns/op\nBenchmarkCountPrimes100-32          \t 1000000\t       100.2 ns/op\nBenchmarkCountPrimes1000-32         \t   71352\t      1687 ns/op\nBenchmarkCollatz27-32               \t 2202218\t        56.86 ns/op\nBenchmarkSumRange1_100-32           \t 4953805\t        24.14 ns/op\nBenchmarkSumRange1_10000-32         \t   61576\t      1989 ns/op\nPASS\nok  \ttml-benchmarks\t1.926s\n",
+      "success": true,
+      "error": ""
+    }
+  ]
+}

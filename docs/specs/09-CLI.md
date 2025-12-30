@@ -78,9 +78,12 @@ tml build --emit-header          # Generate .h file from public functions
 
 # Other options
 tml build --emit-ir              # Emit LLVM IR (.ll files)
-tml build --no-cache             # Disable build cache
+tml build --emit-mir             # Emit MIR (Mid-level IR) for debugging
+tml build --no-cache             # Disable build cache (force full recompilation)
 tml build --out-dir=path         # Specify output directory
 tml build --verbose              # Show detailed build output
+tml build --time                 # Show detailed compiler phase timings
+tml build --lto                  # Enable Link-Time Optimization
 
 # Custom output directory
 tml build --out-dir=path/to/dir  # Save build artifacts to custom directory
@@ -678,8 +681,119 @@ TML types are automatically mapped to C types:
 **Cache benefits:**
 - ✅ Reuse compiled modules
 - ✅ Skip unchanged dependencies
-- ✅ Parallel compilation (future)
+- ✅ Parallel compilation (implemented)
 - ✅ Faster CI/CD pipelines
+
+### 8.6 Parallel Compilation
+
+TML supports multi-threaded compilation for faster builds:
+
+```bash
+# Auto-detect CPU cores (default)
+tml build
+
+# Specify number of threads
+tml build -j4             # Use 4 threads
+tml build -j8             # Use 8 threads
+
+# Single-threaded build
+tml build -j1
+```
+
+**How parallel build works:**
+1. Parse imports from all source files
+2. Build dependency graph
+3. Detect circular dependencies (falls back to sequential if found)
+4. Compile files with no dependencies first
+5. As files complete, unlock dependent files
+6. Worker threads process ready queue concurrently
+
+**Build statistics:**
+```
+Compiling 25 files with 8 threads...
+[1/25] Compiling utils.tml
+[2/25] Compiling math.tml
+...
+Build summary:
+  Total: 25 files
+  Compiled: 20 files
+  Cached: 5 files
+  Failed: 0 files
+  Time: 2.34s
+```
+
+### 8.7 Link-Time Optimization (LTO)
+
+LTO enables whole-program optimization for maximum performance:
+
+```bash
+# Enable LTO (full)
+tml build --lto
+
+# Combine with release mode
+tml build --release --lto
+
+# LTO for libraries
+tml build --crate-type=dylib --lto
+```
+
+**Benefits:**
+- Cross-module inlining
+- Dead code elimination
+- Interprocedural constant propagation
+- Better register allocation
+
+**Trade-offs:**
+- Longer compile times (especially for large projects)
+- Higher memory usage during linking
+- Best for release builds
+
+### 8.8 Compiler Phase Timing
+
+Profile compiler performance with detailed phase timing:
+
+```bash
+tml build --time
+```
+
+**Sample output:**
+```
+=== Compiler Phase Timings ===
+Lexing              :    12.34 ms ( 5.2%)
+Parsing             :    23.45 ms (10.1%)
+Type Checking       :    45.67 ms (19.6%)
+MIR Generation      :    34.56 ms (14.8%)
+MIR Optimization    :    28.90 ms (12.4%)
+LLVM Codegen        :    56.78 ms (24.4%)
+Object Compilation  :    31.23 ms (13.4%)
+----------------------------------------
+Total               :   232.93 ms
+```
+
+### 8.9 MIR Cache for Incremental Compilation
+
+TML caches MIR (Mid-level IR) for faster incremental builds:
+
+```bash
+# Normal build (uses cache)
+tml build
+
+# Force full recompilation (skip cache)
+tml build --no-cache
+
+# Inspect cached MIR
+tml build --emit-mir
+```
+
+**Cache invalidation triggers:**
+- Source file content changed (hash mismatch)
+- Optimization level changed
+- Debug info setting changed
+- Compiler version changed
+
+**Cache location:**
+- `build/debug/.cache/` - MIR and object file cache
+- Index file tracks: source hash, optimization level, debug info
 
 ---
 
