@@ -125,6 +125,10 @@
           "match": "\\b(and|or|not)\\b"
         },
         {
+          "name": "keyword.operator.bitwise.word.tml",
+          "match": "\\b(shl|shr|xor)\\b"
+        },
+        {
           "name": "keyword.other.tml",
           "match": "\\b(this|This|ref|mut|dyn|lowlevel|async|await|with|quote|as)\\b"
         },
@@ -138,11 +142,11 @@
       "patterns": [
         {
           "name": "storage.type.primitive.tml",
-          "match": "\\b(Bool|I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|String|Str|Char|Unit|Never)\\b"
+          "match": "\\b(Bool|I8|I16|I32|I64|I128|U8|U16|U32|U64|U128|F32|F64|String|Str|Char|Unit|Never|Ptr)\\b"
         },
         {
           "name": "storage.type.builtin.tml",
-          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration)\\b"
+          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration|Layout|Allocator|Iterator|IntoIterator|FromIterator)\\b"
         },
         {
           "name": "constant.language.enum-variant.tml",
@@ -168,6 +172,10 @@
         {
           "name": "constant.language.boolean.tml",
           "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.tml",
+          "match": "\\b(null)\\b"
         },
         {
           "name": "constant.numeric.integer.hexadecimal.tml",
@@ -301,7 +309,7 @@
         },
         {
           "name": "support.function.builtin.memory.tml",
-          "match": "\\b(alloc|dealloc|mem_alloc|mem_alloc_zeroed|mem_realloc|mem_free|mem_copy|mem_move|mem_set|mem_zero|mem_compare|mem_eq)\\b"
+          "match": "\\b(alloc|dealloc|mem_alloc|mem_alloc_zeroed|mem_realloc|mem_free|mem_copy|mem_move|mem_set|mem_zero|mem_compare|mem_eq|alloc_global|alloc_global_zeroed|dealloc_global|realloc_global|alloc_single|alloc_array|alloc_array_zeroed|dealloc_single|dealloc_array|ptr_offset|read_i32|read_i64|write_i32|write_i64)\\b"
         },
         {
           "name": "support.function.builtin.io.tml",
