@@ -102,6 +102,14 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
     case TokenKind::OrOr:
         return "||";
 
+    // Keywords - bitwise operators
+    case TokenKind::KwXor:
+        return "xor";
+    case TokenKind::KwShl:
+        return "shl";
+    case TokenKind::KwShr:
+        return "shr";
+
     // Keywords - types
     case TokenKind::KwThis:
         return "this";

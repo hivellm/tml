@@ -200,10 +200,11 @@ TEST_F(MirOptimizationBench, ConstantFoldingChained) {
 }
 
 TEST_F(MirOptimizationBench, ConstantFoldingBitwise) {
+    // Note: 'and'/'or' are logical operators (bool), use '&'/'|' for bitwise
     auto mir = build_mir(R"(
         func bitwise_fold() -> I32 {
-            let a: I32 = 0xFF and 0x0F
-            let b: I32 = 0xF0 or 0x0F
+            let a: I32 = 0xFF & 0x0F
+            let b: I32 = 0xF0 | 0x0F
             let c: I32 = 0xFF xor 0xAA
             let d: I32 = 1 shl 4
             let e: I32 = 256 shr 4
@@ -519,8 +520,9 @@ func loopInvariant(n int32) int32 {
 }
 
 TEST_F(MirOptimizationBench, LangCompare_StructFieldAccess) {
+    // TML uses 'type' keyword for structs (not 'struct')
     const std::string tml_code = R"(
-struct Point { x: I32, y: I32 }
+type Point { x: I32, y: I32 }
 
 func distance_squared(p: Point) -> I32 {
     return p.x * p.x + p.y * p.y
@@ -548,7 +550,10 @@ func distanceSquared(p Point) int32 {
 })";
 
     auto mir = build_mir(R"(
-        struct Point { x: I32, y: I32 }
+        type Point {
+            x: I32,
+            y: I32,
+        }
 
         func distance_squared(p: Point) -> I32 {
             return p.x * p.x + p.y * p.y

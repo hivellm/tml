@@ -177,6 +177,7 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         return precedence::BITOR;
 
     case lexer::TokenKind::BitXor:
+    case lexer::TokenKind::KwXor:
         return precedence::BITXOR;
 
     case lexer::TokenKind::BitAnd:
@@ -184,6 +185,8 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
 
     case lexer::TokenKind::Shl:
     case lexer::TokenKind::Shr:
+    case lexer::TokenKind::KwShl:
+    case lexer::TokenKind::KwShr:
         return precedence::SHIFT;
 
     case lexer::TokenKind::Plus:
@@ -275,10 +278,13 @@ auto Parser::token_to_binary_op(lexer::TokenKind kind) -> std::optional<BinaryOp
     case lexer::TokenKind::BitOr:
         return BinaryOp::BitOr;
     case lexer::TokenKind::BitXor:
+    case lexer::TokenKind::KwXor:
         return BinaryOp::BitXor;
     case lexer::TokenKind::Shl:
+    case lexer::TokenKind::KwShl:
         return BinaryOp::Shl;
     case lexer::TokenKind::Shr:
+    case lexer::TokenKind::KwShr:
         return BinaryOp::Shr;
 
     case lexer::TokenKind::Assign:

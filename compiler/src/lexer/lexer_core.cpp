@@ -45,6 +45,11 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"or", TokenKind::KwOr},
     {"not", TokenKind::KwNot},
 
+    // Bitwise operators (TML word aliases)
+    {"xor", TokenKind::KwXor},
+    {"shl", TokenKind::KwShl},
+    {"shr", TokenKind::KwShr},
+
     // Types
     {"this", TokenKind::KwThis},
     {"This", TokenKind::KwThisType},
