@@ -48,6 +48,7 @@ async     await     quote
 ```
 
 > **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.
+> **Note:** `null` is lexed as `NullLiteral` and represents the null pointer value.
 
 ### 1.2 Reserved (future use)
 
@@ -111,6 +112,9 @@ string
 // Boolean
 true
 false
+
+// Null pointer
+null            // Ptr[Unit], compatible with any Ptr[T]
 ```
 
 ---
@@ -173,7 +177,7 @@ Power       <- Unary ('**' Power)?
 Unary       <- UnaryOp* Postfix
 Postfix     <- Primary PostfixOp*
 
-Primary     <- Literal / Ident / 'this' / ParenExpr / BlockExpr
+Primary     <- Literal / Ident / 'this' / 'null' / ParenExpr / BlockExpr
              / IfExpr / WhenExpr / LoopExpr / WhileExpr / ForExpr
              / ReturnExpr / BreakExpr / Closure / StructInit / ArrayInit
 

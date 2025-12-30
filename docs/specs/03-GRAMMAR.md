@@ -351,8 +351,9 @@ GroupExpr = '(' Expr ')'
 BlockExpr = Block
 Block     = '{' Statement* Expr? '}'
 
-Literal = IntLit | FloatLit | StringLit | InterpolatedString | BoolLit | CharLit
+Literal = IntLit | FloatLit | StringLit | InterpolatedString | BoolLit | CharLit | NullLit
 BoolLit = 'true' | 'false'
+NullLit = 'null'
 
 // Interpolated strings: "Hello {name}!" where {expr} are embedded expressions
 InterpolatedString = InterpStart (Expr InterpMiddle)* Expr? InterpEnd

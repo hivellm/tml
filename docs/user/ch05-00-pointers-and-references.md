@@ -102,11 +102,44 @@ Use pointers when you need to:
 3. **Build data structures** like linked lists
 4. **Interface with C code** or system APIs
 
+## Null Pointers
+
+TML has a `null` literal that represents a null pointer. It has type `Ptr[Unit]`
+and is compatible with any pointer type `Ptr[T]`:
+
+```tml
+func main() {
+    // Assign null to a pointer
+    let ptr: Ptr[I32] = null
+
+    // Compare with null
+    if ptr == null {
+        println("Pointer is null")
+    }
+
+    // Return null from functions
+    let result: Ptr[String] = find_item(42)
+    if result != null {
+        println(*result)
+    }
+}
+
+func find_item(id: I32) -> Ptr[Item] {
+    if not found {
+        return null
+    }
+    return item_ptr
+}
+```
+
+**Important:** Dereferencing `null` causes undefined behavior. Always check
+for null before dereferencing, or use `Maybe[ref T]` for safer optional references.
+
 ## Safety Considerations
 
-Unlike C, TML prevents common pointer errors:
+Unlike C, TML helps prevent common pointer errors:
 
-- No null pointer dereferences (use `Maybe[ref T]` for optional refs)
+- Use `null` checks or `Maybe[ref T]` for optional refs
 - No use-after-free (ownership system tracks lifetimes)
 - No double-free (single ownership)
 
