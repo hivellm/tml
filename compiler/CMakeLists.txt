@@ -163,6 +163,8 @@ add_library(tml_mir STATIC
     src/mir/passes/unreachable_code_elimination.cpp
     src/mir/passes/common_subexpression_elimination.cpp
     src/mir/passes/copy_propagation.cpp
+    src/mir/passes/escape_analysis.cpp
+    src/mir/passes/inlining.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_ir)
 target_include_directories(tml_mir PUBLIC include src)
@@ -279,6 +281,7 @@ if(TML_BUILD_TESTS)
         tests/codegen_test.cpp
         tests/codegen_builtins_test.cpp
         tests/cli/object_compiler_test.cpp
+        tests/cli/parallel_build_test.cpp
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
     )

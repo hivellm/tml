@@ -65,6 +65,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `src/cli/cmd_build.hpp` - Added BuildOptions struct
     - `src/cli/cmd_build.cpp` - Added run_build_ex(), cache checking in run_build()
 
+- **Escape Analysis & Function Inlining** (2025-12-29) - Advanced optimization passes
+  - **Escape Analysis** (`EscapeAnalysisPass`):
+    - Tracks escape state: NoEscape, ArgEscape, ReturnEscape, GlobalEscape, Unknown
+    - Analyzes heap allocations, function calls, stores, and returns
+    - Fixed-point iteration for escape information propagation
+    - Identifies stack-promotable allocations via `EscapeInfo.is_stack_promotable`
+  - **Stack Promotion** (`StackPromotionPass`):
+    - Converts non-escaping heap allocations to stack allocations
+    - Reports `allocations_promoted` and `bytes_saved` statistics
+    - Works with `tml_alloc`, `heap_alloc`, `Heap::new` allocations
+  - **Function Inlining** (`InliningPass`):
+    - Cost-based inlining with configurable thresholds
+    - `InlineCost` struct: instruction_cost, call_overhead_saved, threshold
+    - `InliningOptions`: base_threshold (250), recursive_limit (3), max_callee_size (500)
+    - Optimization level-aware thresholds (O1: 1x, O2: 2x, O3: 4x)
+    - Small function bonuses (+100 for <10 instructions, +50 for <50)
+    - `InliningStats` reporting: calls_analyzed, calls_inlined, always_inline, etc.
+  - **@inline/@noinline Attributes**:
+    - Functions marked `@inline` or `@always_inline` are always inlined
+    - Functions marked `@noinline` or `@never_inline` are never inlined
+    - Decorators propagated from AST to MIR `Function.attributes`
+    - Recursive inlining limit still applies to @inline functions
+  - New files:
+    - `include/mir/passes/escape_analysis.hpp` - Escape analysis pass header
+    - `src/mir/passes/escape_analysis.cpp` - Escape analysis implementation
+    - `include/mir/passes/inlining.hpp` - Inlining pass header
+    - `src/mir/passes/inlining.cpp` - Inlining implementation
+  - Modified: `mir.hpp` (added `Function.attributes`), `mir_builder.cpp` (decorator propagation)
+
 - **Mid-level IR (MIR)** (2025-12-29) - SSA-form intermediate representation for optimization
   - Complete MIR infrastructure between type-checked AST and LLVM IR generation
   - SSA form with explicit control flow via basic blocks
@@ -90,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `dead_code_elimination.cpp` - Remove unused instructions
     - `common_subexpression_elimination.cpp` - Reuse computed values
     - `unreachable_code_elimination.cpp` - Remove unreachable blocks
+    - `escape_analysis.cpp` - Escape analysis and stack promotion
+    - `inlining.cpp` - Function inlining with cost analysis
   - Pass manager with optimization levels (O0, O1, O2, O3)
   - Analysis utilities: value usage, side effects, constant detection
 

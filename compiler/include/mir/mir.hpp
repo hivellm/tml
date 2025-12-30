@@ -452,6 +452,7 @@ struct Function {
     MirTypePtr return_type;
     std::vector<BasicBlock> blocks;
     bool is_public = false;
+    std::vector<std::string> attributes; // @inline, @noinline, etc.
 
     // Entry block is always blocks[0]
     [[nodiscard]] auto entry_block() -> BasicBlock& {

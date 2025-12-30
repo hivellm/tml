@@ -223,6 +223,11 @@ void MirBuilder::build_func_decl(const parser::FuncDecl& func) {
     mir_func.name = func.name;
     mir_func.is_public = (func.vis == parser::Visibility::Public);
 
+    // Extract decorator attributes (@inline, @noinline, etc.)
+    for (const auto& decorator : func.decorators) {
+        mir_func.attributes.push_back(decorator.name);
+    }
+
     // Convert return type
     mir_func.return_type = func.return_type ? convert_type(**func.return_type) : make_unit_type();
 
