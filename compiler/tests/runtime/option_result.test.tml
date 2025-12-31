@@ -1,55 +1,74 @@
 // Test Maybe[T] and Outcome[T,E] types
+// Note: core::option has a bug with 'xor' keyword, so we use helper functions
 use test
 
-// ============ Maybe Type ============
-
-type Maybe[T] {
-    Just(T),
-    Nothing,
-}
+// ============ Maybe Helper Functions ============
 
 func is_just[T](opt: Maybe[T]) -> Bool {
-    return when opt {
-        Just(_) => true,
-        Nothing => false
+    when opt {
+        Just(_) => return true,
+        Nothing => return false
     }
 }
 
 func is_nothing[T](opt: Maybe[T]) -> Bool {
-    return when opt {
-        Just(_) => false,
-        Nothing => true
+    when opt {
+        Just(_) => return false,
+        Nothing => return true
     }
 }
 
-func unwrap_or[T](opt: Maybe[T], default: T) -> T {
-    return when opt {
-        Just(v) => v,
-        Nothing => default
+func maybe_unwrap_or[T](opt: Maybe[T], default_val: T) -> T {
+    when opt {
+        Just(v) => return v,
+        Nothing => return default_val
     }
 }
+
+// ============ Outcome Helper Functions ============
+
+func is_ok[T, E](res: Outcome[T, E]) -> Bool {
+    when res {
+        Ok(_) => return true,
+        Err(_) => return false
+    }
+}
+
+func is_err[T, E](res: Outcome[T, E]) -> Bool {
+    when res {
+        Ok(_) => return false,
+        Err(_) => return true
+    }
+}
+
+func outcome_unwrap_or[T, E](res: Outcome[T, E], default_val: T) -> T {
+    when res {
+        Ok(v) => return v,
+        Err(_) => return default_val
+    }
+}
+
+// ============ Maybe Tests ============
 
 @test
-func test_maybe_creation() -> I32 {
+func test_maybe_is_just() {
     let some: Maybe[I32] = Just(42)
     let none: Maybe[I32] = Nothing
 
     assert(is_just(some), "Just should be just")
     assert(is_nothing(none), "Nothing should be nothing")
-    return 0
 }
 
 @test
-func test_maybe_unwrap() -> I32 {
+func test_maybe_unwrap_or() {
     let some: Maybe[I32] = Just(100)
     let none: Maybe[I32] = Nothing
 
-    // Use manual comparison since generic assert_eq may not work with I32
-    let val1: I32 = unwrap_or(some, 0)
-    assert(val1 == 100, "unwrap Just returns value")
-    let val2: I32 = unwrap_or(none, -1)
-    assert(val2 == -1, "unwrap Nothing returns default")
-    return 0
+    let val1: I32 = maybe_unwrap_or(some, 0)
+    assert_eq(val1, 100, "unwrap_or Just returns value")
+
+    let val2: I32 = maybe_unwrap_or(none, -1)
+    assert_eq(val2, -1, "unwrap_or Nothing returns default")
 }
 
 func safe_divide(a: I32, b: I32) -> Maybe[I32] {
@@ -60,64 +79,36 @@ func safe_divide(a: I32, b: I32) -> Maybe[I32] {
 }
 
 @test
-func test_maybe_safe_divide() -> I32 {
+func test_maybe_safe_divide() {
     let good: Maybe[I32] = safe_divide(10, 2)
     let bad: Maybe[I32] = safe_divide(10, 0)
 
-    let val: I32 = unwrap_or(good, 0)
-    assert(val == 5, "10/2 = 5")
+    let val: I32 = maybe_unwrap_or(good, 0)
+    assert_eq(val, 5, "10/2 = 5")
     assert(is_nothing(bad), "division by zero returns Nothing")
-    return 0
 }
 
-// ============ Outcome Type ============
-
-type Outcome[T, E] {
-    Ok(T),
-    Err(E),
-}
-
-func is_ok[T, E](res: Outcome[T, E]) -> Bool {
-    return when res {
-        Ok(_) => true,
-        Err(_) => false
-    }
-}
-
-func is_err[T, E](res: Outcome[T, E]) -> Bool {
-    return when res {
-        Ok(_) => false,
-        Err(_) => true
-    }
-}
-
-func unwrap_outcome[T, E](res: Outcome[T, E], default: T) -> T {
-    return when res {
-        Ok(v) => v,
-        Err(_) => default
-    }
-}
+// ============ Outcome Tests ============
 
 @test
-func test_outcome_creation() -> I32 {
+func test_outcome_is_ok() {
     let ok: Outcome[I32, Str] = Ok(42)
     let err: Outcome[I32, Str] = Err("error message")
 
     assert(is_ok(ok), "Ok should be ok")
     assert(is_err(err), "Err should be err")
-    return 0
 }
 
 @test
-func test_outcome_unwrap() -> I32 {
+func test_outcome_unwrap_or() {
     let ok: Outcome[I32, Str] = Ok(100)
     let err: Outcome[I32, Str] = Err("failed")
 
-    let val1: I32 = unwrap_outcome(ok, 0)
-    assert(val1 == 100, "unwrap Ok returns value")
-    let val2: I32 = unwrap_outcome(err, -1)
-    assert(val2 == -1, "unwrap Err returns default")
-    return 0
+    let val1: I32 = outcome_unwrap_or(ok, 0)
+    assert_eq(val1, 100, "unwrap_or Ok returns value")
+
+    let val2: I32 = outcome_unwrap_or(err, -1)
+    assert_eq(val2, -1, "unwrap_or Err returns default")
 }
 
 func parse_positive(s: Str) -> Outcome[I32, Str] {
@@ -131,13 +122,13 @@ func parse_positive(s: Str) -> Outcome[I32, Str] {
 }
 
 @test
-func test_outcome_parsing() -> I32 {
+func test_outcome_parsing() {
     let good: Outcome[I32, Str] = parse_positive("42")
     let bad: Outcome[I32, Str] = parse_positive("xyz")
 
     assert(is_ok(good), "42 should parse")
     assert(is_err(bad), "xyz should fail")
-    let val: I32 = unwrap_outcome(good, 0)
-    assert(val == 42, "parsed value should be 42")
-    return 0
+
+    let val: I32 = outcome_unwrap_or(good, 0)
+    assert_eq(val, 42, "parsed value should be 42")
 }

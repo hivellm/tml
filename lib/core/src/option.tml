@@ -400,18 +400,20 @@ impl[T] Maybe[T] {
     /// Returns [`Just`] if exactly one of `self` or `other` is [`Just`],
     /// otherwise returns [`Nothing`].
     ///
+    /// Named `one_of` instead of `xor` because `xor` is a reserved keyword.
+    ///
     /// # Examples
     ///
     /// ```tml
     /// let x: Maybe[I64] = Just(2)
     /// let y: Maybe[I64] = Nothing
-    /// assert(x.xor(y) == Just(2))
+    /// assert(x.one_of(y) == Just(2))
     ///
     /// let x: Maybe[I64] = Just(2)
     /// let y: Maybe[I64] = Just(3)
-    /// assert(x.xor(y) == Nothing)
+    /// assert(x.one_of(y) == Nothing)
     /// ```
-    pub func xor(this, other: Maybe[T]) -> Maybe[T] {
+    pub func one_of(this, other: Maybe[T]) -> Maybe[T] {
         when this {
             Just(val) => {
                 when other {

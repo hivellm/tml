@@ -1,6 +1,8 @@
 // Test default implementations in behaviors
 // Tests that impl blocks can inherit default methods from behaviors
 
+use test
+
 // Test behavior with default implementation
 behavior Describable {
     func describe(this) -> I32
@@ -63,48 +65,44 @@ impl Stringifiable for SpecialAmount {
     // triple_it uses default
 }
 
-func main() -> I32 {
-    // Test 1: Basic default implementation
+@test
+func test_describe_plus_one() {
     let c: Counter = Counter { value: 10 }
     let result: I32 = c.describe_plus_one()
-    if result != 11 {
-        print("FAIL: describe_plus_one should return 11")
-        return 1
-    }
+    assert_eq(result, 11, "describe_plus_one should return 11")
+}
 
-    // Test 2: Verify describe works
+@test
+func test_describe() {
+    let c: Counter = Counter { value: 10 }
     let val: I32 = c.describe()
-    if val != 10 {
-        print("FAIL: describe should return 10")
-        return 2
-    }
+    assert_eq(val, 10, "describe should return 10")
+}
 
-    // Test 3: Multiple default implementations
+@test
+func test_double_it_default() {
     let a: Amount = Amount { num: 5 }
     let doubled: I32 = a.double_it()
-    let tripled: I32 = a.triple_it()
-    if doubled != 10 {
-        print("FAIL: double_it should return 10")
-        return 3
-    }
-    if tripled != 15 {
-        print("FAIL: triple_it should return 15")
-        return 4
-    }
+    assert_eq(doubled, 10, "double_it should return 10")
+}
 
-    // Test 4: Override default implementation
+@test
+func test_triple_it_default() {
+    let a: Amount = Amount { num: 5 }
+    let tripled: I32 = a.triple_it()
+    assert_eq(tripled, 15, "triple_it should return 15")
+}
+
+@test
+func test_override_double_it() {
     let s: SpecialAmount = SpecialAmount { num: 10 }
     let s_doubled: I32 = s.double_it()
-    let s_tripled: I32 = s.triple_it()
-    if s_doubled != 40 {
-        print("FAIL: overridden double_it should return 40")
-        return 5
-    }
-    if s_tripled != 30 {
-        print("FAIL: default triple_it should return 30")
-        return 6
-    }
+    assert_eq(s_doubled, 40, "overridden double_it should return 40")
+}
 
-    print("PASS: All default implementation tests passed!")
-    return 0
+@test
+func test_default_triple_it_on_special() {
+    let s: SpecialAmount = SpecialAmount { num: 10 }
+    let s_tripled: I32 = s.triple_it()
+    assert_eq(s_tripled, 30, "default triple_it should return 30")
 }
