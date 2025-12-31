@@ -3,6 +3,8 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 
+#include <sstream>
+
 namespace tml::codegen {
 
 void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
@@ -520,6 +522,28 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
     }
     locals_[var_name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
+
+    // Emit debug info for the variable (if enabled and debug level >= 2)
+    // Level 1 only emits function scopes, level 2+ includes local variables
+    if (options_.emit_debug_info && options_.debug_level >= 2 && current_scope_id_ != 0) {
+        uint32_t line = let.span.start.line;
+        uint32_t column = let.span.start.column;
+
+        // Create debug info for the variable
+        int var_debug_id = create_local_variable_debug_info(var_name, var_type, line);
+
+        // Create debug location
+        int loc_id = fresh_debug_id();
+        std::ostringstream meta;
+        meta << "!" << loc_id << " = !DILocation("
+             << "line: " << line << ", "
+             << "column: " << column << ", "
+             << "scope: !" << current_scope_id_ << ")\n";
+        debug_metadata_.push_back(meta.str());
+
+        // Emit llvm.dbg.declare intrinsic
+        emit_debug_declare(alloca_reg, var_debug_id, loc_id);
+    }
 }
 
 void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {

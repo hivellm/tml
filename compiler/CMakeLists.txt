@@ -185,6 +185,8 @@ add_library(tml_codegen STATIC
     src/codegen/core/runtime.cpp
     src/codegen/core/dyn.cpp
     src/codegen/core/generate.cpp
+    src/codegen/core/debug_info.cpp
+    src/codegen/core/target.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/infer.cpp
     src/codegen/expr/struct.cpp
@@ -237,9 +239,12 @@ add_library(tml_cli STATIC
     src/cli/rlib.cpp
     src/cli/build_config.cpp
     src/cli/build_cache.cpp
+    src/cli/diagnostic.cpp
     src/cli/dispatcher.cpp
     src/cli/object_compiler.cpp
     src/cli/parallel_build.cpp
+    src/cli/dependency_resolver.cpp
+    src/cli/cmd_pkg.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)

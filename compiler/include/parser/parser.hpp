@@ -30,11 +30,19 @@ constexpr int CALL = 14;      // (), [], .
 constexpr int RANGE = 15;     // .., ..=
 } // namespace precedence
 
+// Fix-it hint for automatic code correction
+struct FixItHint {
+    SourceSpan span;         // Where to apply the fix
+    std::string replacement; // Text to insert/replace
+    std::string description; // Human-readable description of the fix
+};
+
 // Parser error
 struct ParseError {
     std::string message;
     SourceSpan span;
     std::vector<std::string> notes;
+    std::vector<FixItHint> fixes; // Suggested fixes
 };
 
 // Parser for TML source code
@@ -88,7 +96,25 @@ private:
     // Error handling
     void report_error(const std::string& message);
     void report_error(const std::string& message, SourceSpan span);
+    void report_error_with_fix(const std::string& message, SourceSpan span,
+                               const std::vector<FixItHint>& fixes);
     void synchronize();
+
+    // Enhanced error recovery
+    void synchronize_to_stmt();             // Recover to next statement
+    void synchronize_to_decl();             // Recover to next declaration
+    void synchronize_to_brace();            // Recover to closing brace
+    bool try_recover_missing_semi();        // Try to recover from missing semicolon
+    bool skip_until(lexer::TokenKind kind); // Skip tokens until finding kind
+    bool skip_until_any(std::initializer_list<lexer::TokenKind> kinds);
+
+    // Fix-it hint helpers
+    [[nodiscard]] auto make_insertion_fix(const SourceSpan& at, const std::string& text,
+                                          const std::string& desc) -> FixItHint;
+    [[nodiscard]] auto make_replacement_fix(const SourceSpan& span, const std::string& text,
+                                            const std::string& desc) -> FixItHint;
+    [[nodiscard]] auto make_deletion_fix(const SourceSpan& span, const std::string& desc)
+        -> FixItHint;
 
     // Declaration parsing
     auto parse_visibility() -> Visibility;

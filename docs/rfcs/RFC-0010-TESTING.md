@@ -91,12 +91,26 @@ func slow_test() {
 #### 2.6 Benchmark
 
 ```tml
+// Simple benchmark with default 1000 iterations
 @bench
-func bench_sort() {
-    let arr: [I32] = [10, 5, 8, 2, 7]
-    arr.sort()
+func bench_addition() {
+    let _x: I32 = 1 + 2 + 3 + 4 + 5
+}
+
+// Custom iteration count
+@bench(10000)
+func bench_loop() {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 100 { break }
+        sum = sum + i
+        i = i + 1
+    }
 }
 ```
+
+Benchmark files use `.bench.tml` extension and are discovered separately from tests.
 
 ### 3. Assertions
 
@@ -162,8 +176,10 @@ tml test --test-threads=4    # Parallel threads
 #### 4.4 Benchmarking
 
 ```bash
-tml test --bench             # Run all benchmarks
-tml test --bench pattern     # Run specific benchmarks
+tml test --bench                        # Run all benchmarks (*.bench.tml)
+tml test --bench pattern                # Run specific benchmarks
+tml test --bench --save-baseline=b.json # Save results for comparison
+tml test --bench --compare=b.json       # Compare against baseline
 ```
 
 ### 5. Test Discovery
@@ -390,9 +406,11 @@ func bench_many_additions() {
 | **Test Discovery** | ✅ Implemented | File scanning and pattern matching |
 | **Assertions** | ✅ Implemented | 12+ assertion functions |
 | **Runner** | ✅ Implemented | Test execution engine |
-| **Benchmarking** | ✅ Implemented | Performance measurement |
+| **Benchmarking** | ✅ Implemented | `@bench`, `@bench(N)`, `*.bench.tml` files |
+| **Benchmark Comparison** | ✅ Implemented | `--save-baseline`, `--compare` |
 | **Reporting** | ✅ Implemented | Multiple output formats |
-| **Parallel Execution** | ⚠️ Partial | Sequential for now |
+| **Parallel Execution** | ✅ Implemented | Multi-threaded test runner |
+| **Coverage** | ✅ Implemented | `--coverage`, `--coverage-output` |
 | **Panic Catching** | ❌ TODO | Requires exception handling |
 
 ## Compatibility
@@ -453,9 +471,10 @@ tml test
 
 ## Future Enhancements
 
-- Test coverage analysis
+- ~~Test coverage analysis~~ ✅ Implemented (`--coverage`)
 - Snapshot testing
-- Property-based testing
+- Property-based testing (`@fuzz`)
 - Test fixtures and setup/teardown
-- Parallel test execution
+- ~~Parallel test execution~~ ✅ Implemented (`--test-threads`)
 - Test result caching
+- HTML coverage reports

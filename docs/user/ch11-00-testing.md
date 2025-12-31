@@ -186,37 +186,60 @@ func test_database_query() {
 Use `@bench` decorator for performance tests:
 
 ```tml
-use test::bench::*
-
+// Simple benchmark with default 1000 iterations
 @bench
-func bench_addition(b: Bencher) {
-    b.iter(|| {
-        let mut sum = 0
-        for i in 0 to 1000 {
-            sum += i
-        }
-        sum
-    })
+func bench_addition() {
+    let _x: I32 = 1 + 2 + 3 + 4 + 5
 }
+
+// Custom iteration count
+@bench(10000)
+func bench_loop() {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 100 { break }
+        sum = sum + i
+        i = i + 1
+    }
+}
+
+@bench(5000)
+func bench_multiplication() {
+    let _x: I64 = 123456 * 789012
+}
+```
+
+### Benchmark Files
+
+Benchmark files use the `.bench.tml` extension:
+
+```
+project/
+├── src/
+│   └── lib.tml
+├── tests/
+│   ├── unit.test.tml        # Unit tests
+│   └── benchmarks/
+│       ├── sorting.bench.tml
+│       └── parsing.bench.tml
+└── tml.toml
 ```
 
 ### Benchmark Configuration
 
-```tml
-@bench(iterations = 10000)
-func bench_fast_operation(b: Bencher) {
-    b.iter(|| {
-        quick_computation()
-    })
-}
+The `@bench` decorator accepts an optional iteration count:
 
-@bench(warmup = 100)
-func bench_with_warmup(b: Bencher) {
-    b.iter(|| {
-        expensive_operation()
-    })
-}
+```tml
+@bench           // Default: 1000 iterations
+@bench(100)      // Run 100 iterations
+@bench(10000)    // Run 10,000 iterations
 ```
+
+Each benchmark automatically includes:
+- 10 warmup iterations (not measured)
+- Nanosecond-precision timing
+- Per-iteration timing calculation
 
 ### Manual Benchmarking
 
@@ -532,18 +555,65 @@ func bench_realistic_workload(b: Bencher) {
 ## Running Benchmarks
 
 ```bash
-tml bench                      # Run all benchmarks
-tml bench --filter sorting     # Run specific benchmarks
-tml bench --save results.json  # Save results
-tml bench --compare baseline.json  # Compare to baseline
+# Run all benchmarks (discovers *.bench.tml files)
+tml test --bench
+
+# Filter by pattern
+tml test --bench sorting
+
+# Save results as baseline for comparison
+tml test --bench --save-baseline=baseline.json
+
+# Compare against previous baseline
+tml test --bench --compare=baseline.json
+```
+
+### Benchmark Output
+
+```
+ TML Benchmarks v0.1.0
+
+ Running 1 benchmark file...
+
+ + simple
+  + bench bench_addition       ... 2 ns/iter (1000 iterations)
+  + bench bench_loop           ... 156 ns/iter (10000 iterations)
+  + bench bench_multiplication ... 1 ns/iter (5000 iterations)
+
+ Bench Files 1 passed (1)
+ Duration    1.23s
+```
+
+### Baseline Comparison
+
+When comparing against a baseline:
+- Improvements (faster) show in green with negative percentage
+- Regressions (slower) show in red with positive percentage
+- Changes within ±5% show in gray
+
+```
+  + bench bench_addition ... 2 ns/iter (-15.2%)   # improved
+  + bench bench_loop     ... 180 ns/iter (+10.5%) # regressed
+  + bench bench_sort     ... 45 ns/iter (~0.3%)   # unchanged
 ```
 
 ## Test Coverage
 
 ```bash
-tml test --coverage            # Generate coverage report
-tml test --coverage --html     # HTML coverage report
+# Enable coverage tracking
+tml test --coverage
+
+# Specify output file
+tml test --coverage --coverage-output=coverage.html
+
+# Coverage with specific tests
+tml test math --coverage
 ```
+
+The coverage report shows:
+- Function coverage: which functions were executed
+- Line coverage: which lines were hit
+- Branch coverage: which branches were taken
 
 ## See Also
 

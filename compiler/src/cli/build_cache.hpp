@@ -91,7 +91,7 @@ private:
 // ============================================================================
 
 /**
- * Cache entry metadata
+ * Cache entry metadata (module-level)
  */
 struct CacheEntry {
     std::string source_hash; // Hash of source file content
@@ -100,6 +100,18 @@ struct CacheEntry {
     int64_t source_mtime;    // Source file modification time
     int optimization_level;  // Optimization level used
     bool debug_info;         // Debug info enabled
+};
+
+/**
+ * Per-function cache entry metadata
+ */
+struct FunctionCacheEntry {
+    std::string function_name;  // Fully qualified function name
+    std::string signature_hash; // Hash of function signature (params + return type)
+    std::string body_hash;      // Hash of function body (instructions)
+    std::string deps_hash;      // Hash of dependencies (structs, enums, constants used)
+    std::string mir_file;       // Path to cached function MIR binary
+    int optimization_level;     // Optimization level used
 };
 
 /**
@@ -148,20 +160,68 @@ public:
         size_t total_entries;
         size_t valid_entries;
         size_t total_size_bytes;
+        size_t function_entries;    // Per-function cache entries
+        size_t function_cache_hits; // Functions loaded from cache
     };
     CacheStats get_stats() const;
+
+    // ========================================================================
+    // Per-Function Caching
+    // ========================================================================
+
+    // Check if a function has valid cached MIR
+    bool has_valid_function_cache(const std::string& source_path, const std::string& function_name,
+                                  const std::string& signature_hash, const std::string& body_hash,
+                                  const std::string& deps_hash, int opt_level) const;
+
+    // Load a single cached function
+    std::optional<mir::Function> load_function(const std::string& source_path,
+                                               const std::string& function_name) const;
+
+    // Save a single function to cache
+    bool save_function(const std::string& source_path, const std::string& function_name,
+                       const std::string& signature_hash, const std::string& body_hash,
+                       const std::string& deps_hash, const mir::Function& func, int opt_level);
+
+    // Compute hash for function signature
+    static std::string hash_function_signature(const mir::Function& func);
+
+    // Compute hash for function body
+    static std::string hash_function_body(const mir::Function& func);
+
+    // Compute hash for function dependencies (used types)
+    static std::string hash_function_deps(const mir::Function& func, const mir::Module& module);
+
+    // Get function cache statistics
+    struct FunctionCacheStats {
+        size_t total_functions;
+        size_t cached_functions;
+        size_t cache_hits;
+        size_t cache_misses;
+    };
+    FunctionCacheStats get_function_stats() const;
 
 private:
     fs::path cache_dir_;
     fs::path index_file_;
+    fs::path func_index_file_; // Separate index for per-function cache
     mutable std::unordered_map<std::string, CacheEntry> entries_;
+    mutable std::unordered_map<std::string, FunctionCacheEntry>
+        func_entries_; // key: source_path::func_name
     mutable bool loaded_ = false;
+    mutable bool func_loaded_ = false;
+    mutable FunctionCacheStats func_stats_ = {0, 0, 0, 0};
 
     void load_index() const;
     void save_index() const;
+    void load_func_index() const;
+    void save_func_index() const;
     std::string compute_cache_key(const std::string& source_path) const;
+    std::string compute_func_cache_key(const std::string& source_path,
+                                       const std::string& function_name) const;
     fs::path get_mir_path(const std::string& cache_key) const;
     fs::path get_obj_path(const std::string& cache_key) const;
+    fs::path get_func_mir_path(const std::string& cache_key) const;
 };
 
 // ============================================================================

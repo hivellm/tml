@@ -1,7 +1,0 @@
-use core::cmp::Ordering
-
-pub behavior Iterator {
-    type Item
-    func next(mut this) -> Maybe[This::Item]
-}
-

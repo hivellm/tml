@@ -65,6 +65,14 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @get_coverage_percent()");
     emit_line("");
 
+    // Debug intrinsics (for DWARF debug info)
+    if (options_.emit_debug_info) {
+        emit_line("; Debug intrinsics");
+        emit_line("declare void @llvm.dbg.declare(metadata, metadata, metadata) nounwind readnone");
+        emit_line("declare void @llvm.dbg.value(metadata, metadata, metadata) nounwind readnone");
+        emit_line("");
+    }
+
     // Threading runtime declarations
     emit_line("; Threading runtime (tml_runtime.c)");
     emit_line("declare ptr @thread_spawn(ptr, ptr)");

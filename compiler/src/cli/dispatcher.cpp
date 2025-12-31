@@ -5,6 +5,7 @@
 #include "cmd_format.hpp"
 #include "cmd_init.hpp"
 #include "cmd_lint.hpp"
+#include "cmd_pkg.hpp"
 #include "cmd_rlib.hpp"
 #include "cmd_test.hpp"
 #include "common.hpp"
@@ -80,13 +81,23 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --verbose, -v       Show detailed output\n";
             std::cerr << "  --no-cache          Disable build cache\n";
             std::cerr << "  --release           Build with optimizations (-O3)\n";
-            std::cerr << "  --debug, -g         Include debug info (DWARF)\n";
+            std::cerr << "  --debug, -g         Include debug info (DWARF, equivalent to -g2)\n";
+            std::cerr << "  -g0, -g1, -g2, -g3  Set debug info level (0=none, 1=minimal, "
+                         "2=standard, 3=full)\n";
             std::cerr << "  --time              Show detailed compiler phase timings\n";
             std::cerr << "  --lto               Enable Link-Time Optimization\n";
             std::cerr << "  -O0...-O3           Set optimization level\n";
             std::cerr << "  -Os, -Oz            Optimize for size\n";
             std::cerr << "  --crate-type=<type> Output type: bin, lib, dylib, rlib\n";
+            std::cerr << "  --target=<triple>   Target triple (e.g., x86_64-unknown-linux-gnu)\n";
+            std::cerr << "  --sysroot=<path>    Sysroot path for cross-compilation\n";
             std::cerr << "  --out-dir=<dir>     Output directory\n";
+            std::cerr << "  -Wnone              Disable all warnings\n";
+            std::cerr << "  -Wextra             Enable extra warnings\n";
+            std::cerr << "  -Wall               Enable all warnings\n";
+            std::cerr << "  -Wpedantic          Enable pedantic warnings\n";
+            std::cerr << "  -Werror             Treat warnings as errors\n";
+            std::cerr << "  --error-format=json Output diagnostics as JSON\n";
             return 1;
         }
 
@@ -99,9 +110,12 @@ int tml_main(int argc, char* argv[]) {
         bool emit_header = manifest_opt ? manifest_opt->build.emit_header : false;
         bool no_cache = manifest_opt ? !manifest_opt->build.cache : false;
         bool debug_info = false;
+        int debug_level = 0;
         int opt_level = manifest_opt ? manifest_opt->build.optimization_level : 0;
         BuildOutputType output_type = BuildOutputType::Executable;
-        std::string output_dir = ""; // Empty means use default (build/debug)
+        std::string output_dir = "";    // Empty means use default (build/debug)
+        std::string target_triple = ""; // Empty means use host target
+        std::string sysroot = "";       // Empty means use system default
 
         // Determine output type from manifest if available
         if (manifest_opt && manifest_opt->lib) {
@@ -137,6 +151,19 @@ int tml_main(int argc, char* argv[]) {
                 opt_level = 3;
             } else if (arg == "--debug" || arg == "-g") {
                 debug_info = true;
+                debug_level = 2; // -g is equivalent to -g2
+            } else if (arg == "-g0") {
+                debug_info = false;
+                debug_level = 0;
+            } else if (arg == "-g1") {
+                debug_info = true;
+                debug_level = 1; // Minimal: function names and line numbers only
+            } else if (arg == "-g2") {
+                debug_info = true;
+                debug_level = 2; // Standard: includes local variables
+            } else if (arg == "-g3") {
+                debug_info = true;
+                debug_level = 3; // Full: includes all debug info
             } else if (arg == "--time") {
                 show_timings = true;
             } else if (arg == "--lto") {
@@ -170,12 +197,31 @@ int tml_main(int argc, char* argv[]) {
                 }
             } else if (arg.starts_with("--out-dir=")) {
                 output_dir = arg.substr(10);
+            } else if (arg.starts_with("--target=")) {
+                target_triple = arg.substr(9);
+            } else if (arg.starts_with("--sysroot=")) {
+                sysroot = arg.substr(10);
+            } else if (arg == "-Wnone") {
+                tml::CompilerOptions::warning_level = tml::WarningLevel::None;
+            } else if (arg == "-Wextra") {
+                tml::CompilerOptions::warning_level = tml::WarningLevel::Extra;
+            } else if (arg == "-Wall") {
+                tml::CompilerOptions::warning_level = tml::WarningLevel::All;
+            } else if (arg == "-Wpedantic") {
+                tml::CompilerOptions::warning_level = tml::WarningLevel::Pedantic;
+            } else if (arg == "-Werror") {
+                tml::CompilerOptions::warnings_as_errors = true;
+            } else if (arg == "--error-format=json") {
+                tml::CompilerOptions::diagnostic_format = tml::DiagnosticFormat::JSON;
             }
         }
 
         // Store optimization settings in global options for use by build
         tml::CompilerOptions::optimization_level = opt_level;
         tml::CompilerOptions::debug_info = debug_info;
+        tml::CompilerOptions::debug_level = debug_level;
+        tml::CompilerOptions::target_triple = target_triple;
+        tml::CompilerOptions::sysroot = sysroot;
 
         // Use extended build if new features are requested
         if (show_timings || lto) {
@@ -257,6 +303,26 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "lint") {
         return run_lint(argc, argv);
+    }
+
+    if (command == "add") {
+        return run_add(argc, argv);
+    }
+
+    if (command == "update") {
+        return run_update(argc, argv);
+    }
+
+    if (command == "remove" || command == "rm") {
+        return run_remove(argc, argv);
+    }
+
+    if (command == "deps") {
+        return run_deps(argc, argv);
+    }
+
+    if (command == "publish") {
+        return run_publish(argc, argv);
     }
 
     std::cerr << "Error: Unknown command '" << command << "'\n";

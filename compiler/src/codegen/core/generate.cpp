@@ -82,6 +82,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     emit_header();
+    emit_debug_info_header(); // Initialize debug info metadata
     emit_runtime_decls();
     emit_module_lowlevel_decls();
 
@@ -483,7 +484,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
 
     // Collect test and benchmark functions (decorated with @test and @bench)
     std::vector<std::string> test_functions;
-    std::vector<std::string> bench_functions;
+    struct BenchInfo {
+        std::string name;
+        int64_t iterations = 1000; // Default iterations
+    };
+    std::vector<BenchInfo> bench_functions;
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
@@ -492,7 +497,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     test_functions.push_back(func.name);
                     break;
                 } else if (decorator.name == "bench") {
-                    bench_functions.push_back(func.name);
+                    BenchInfo info;
+                    info.name = func.name;
+                    // Check for iterations argument: @bench(1000) or @bench(iterations=1000)
+                    if (!decorator.args.empty()) {
+                        const auto& arg = *decorator.args[0];
+                        if (arg.is<parser::LiteralExpr>()) {
+                            const auto& lit = arg.as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                info.iterations = static_cast<int64_t>(lit.token.int_value().value);
+                            }
+                        }
+                    }
+                    bench_functions.push_back(info);
                     break;
                 }
             }
@@ -509,58 +526,118 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     if (!bench_functions.empty()) {
-        // Generate benchmark runner main
+        // Generate benchmark runner main with proper output
         // Note: time functions are always declared in preamble
         emit_line("; Auto-generated benchmark runner");
+        emit_line("");
+
+        // Add format strings for benchmark output
+        // String lengths: \0A = 1 byte, \00 = 1 byte (null terminator)
+        emit_line(
+            "@.bench.header = private constant [23 x i8] c\"\\0A  Running benchmarks\\0A\\00\"");
+        emit_line("@.bench.name = private constant [16 x i8] c\"  + bench %-20s\\00\"");
+        emit_line("@.bench.time = private constant [19 x i8] c\" ... %lld ns/iter\\0A\\00\"");
+        emit_line("@.bench.summary = private constant [30 x i8] c\"\\0A  %d benchmark(s) "
+                  "completed\\0A\\00\"");
+
+        // Add string constants for benchmark names
+        int idx = 0;
+        for (const auto& bench_info : bench_functions) {
+            std::string name_const = "@.bench.fn." + std::to_string(idx);
+            size_t name_len = bench_info.name.size() + 1;
+            emit_line(name_const + " = private constant [" + std::to_string(name_len) +
+                      " x i8] c\"" + bench_info.name + "\\00\"");
+            idx++;
+        }
+        emit_line("");
+
         emit_line("define i32 @main(i32 %argc, ptr %argv) {");
         emit_line("entry:");
 
+        // Print benchmark header
+        emit_line("  call i32 (ptr, ...) @printf(ptr @.bench.header)");
+        emit_line("");
+
         int bench_num = 0;
         std::string prev_block = "entry";
-        for (const auto& bench_name : bench_functions) {
-            std::string bench_fn = "@tml_" + bench_name;
+        for (const auto& bench_info : bench_functions) {
+            std::string bench_fn = "@tml_" + bench_info.name;
+            std::string n = std::to_string(bench_num);
+            std::string name_const = "@.bench.fn." + n;
+            std::string iterations_str = std::to_string(bench_info.iterations);
 
-            // Get start time
-            std::string start_time = "%bench_start_" + std::to_string(bench_num);
-            emit_line("  " + start_time + " = call i64 @time_us()");
+            // Print benchmark name
+            emit_line("  call i32 (ptr, ...) @printf(ptr @.bench.name, ptr " + name_const + ")");
 
-            // Run benchmark 1000 iterations
-            std::string iter_var = "%bench_iter_" + std::to_string(bench_num);
-            std::string loop_header = "bench_loop_header_" + std::to_string(bench_num);
-            std::string loop_body = "bench_loop_body_" + std::to_string(bench_num);
-            std::string loop_end = "bench_loop_end_" + std::to_string(bench_num);
+            // Warmup: Run 10 iterations to warm up caches
+            std::string warmup_var = "%warmup_" + n;
+            std::string warmup_header = "warmup_header_" + n;
+            std::string warmup_body = "warmup_body_" + n;
+            std::string warmup_end = "warmup_end_" + n;
+
+            emit_line("  br label %" + warmup_header);
+            emit_line("");
+            emit_line(warmup_header + ":");
+            emit_line("  " + warmup_var + " = phi i64 [ 0, %" + prev_block + " ], [ " + warmup_var +
+                      "_next, %" + warmup_body + " ]");
+            emit_line("  %warmup_cmp_" + n + " = icmp slt i64 " + warmup_var + ", 10");
+            emit_line("  br i1 %warmup_cmp_" + n + ", label %" + warmup_body + ", label %" +
+                      warmup_end);
+            emit_line("");
+            emit_line(warmup_body + ":");
+            emit_line("  call void " + bench_fn + "()");
+            emit_line("  " + warmup_var + "_next = add i64 " + warmup_var + ", 1");
+            emit_line("  br label %" + warmup_header);
+            emit_line("");
+            emit_line(warmup_end + ":");
+
+            // Get start time (nanoseconds for precision)
+            std::string start_time = "%bench_start_" + n;
+            emit_line("  " + start_time + " = call i64 @time_ns()");
+
+            // Run benchmark with configured iterations (default 1000)
+            std::string iter_var = "%bench_iter_" + n;
+            std::string loop_header = "bench_loop_header_" + n;
+            std::string loop_body = "bench_loop_body_" + n;
+            std::string loop_end = "bench_loop_end_" + n;
 
             emit_line("  br label %" + loop_header);
             emit_line("");
             emit_line(loop_header + ":");
-            emit_line("  " + iter_var + " = phi i32 [ 0, %" + prev_block + " ], [ " + iter_var +
+            emit_line("  " + iter_var + " = phi i64 [ 0, %" + warmup_end + " ], [ " + iter_var +
                       "_next, %" + loop_body + " ]");
-            std::string cmp_var = "%bench_cmp_" + std::to_string(bench_num);
-            emit_line("  " + cmp_var + " = icmp slt i32 " + iter_var + ", 1000");
+            std::string cmp_var = "%bench_cmp_" + n;
+            emit_line("  " + cmp_var + " = icmp slt i64 " + iter_var + ", " + iterations_str);
             emit_line("  br i1 " + cmp_var + ", label %" + loop_body + ", label %" + loop_end);
             emit_line("");
             emit_line(loop_body + ":");
             emit_line("  call void " + bench_fn + "()");
-            emit_line("  " + iter_var + "_next = add i32 " + iter_var + ", 1");
+            emit_line("  " + iter_var + "_next = add i64 " + iter_var + ", 1");
             emit_line("  br label %" + loop_header);
             emit_line("");
             emit_line(loop_end + ":");
 
             // Get end time and calculate duration
-            std::string end_time = "%bench_end_" + std::to_string(bench_num);
-            std::string duration = "%bench_duration_" + std::to_string(bench_num);
-            emit_line("  " + end_time + " = call i64 @time_us()");
+            std::string end_time = "%bench_end_" + n;
+            std::string duration = "%bench_duration_" + n;
+            emit_line("  " + end_time + " = call i64 @time_ns()");
             emit_line("  " + duration + " = sub i64 " + end_time + ", " + start_time);
 
-            // Calculate average (duration / 1000)
-            std::string avg_time = "%bench_avg_" + std::to_string(bench_num);
-            emit_line("  " + avg_time + " = sdiv i64 " + duration + ", 1000");
+            // Calculate average (duration / iterations)
+            std::string avg_time = "%bench_avg_" + n;
+            emit_line("  " + avg_time + " = sdiv i64 " + duration + ", " + iterations_str);
+
+            // Print benchmark time
+            emit_line("  call i32 (ptr, ...) @printf(ptr @.bench.time, i64 " + avg_time + ")");
             emit_line("");
 
             prev_block = loop_end;
             bench_num++;
         }
 
+        // Print summary
+        emit_line("  call i32 (ptr, ...) @printf(ptr @.bench.summary, i32 " +
+                  std::to_string(bench_num) + ")");
         emit_line("  ret i32 0");
         emit_line("}");
     } else if (!test_functions.empty()) {
@@ -608,6 +685,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
     emit_line("");
     emit_line("; Function attributes for optimization");
     emit_line("attributes #0 = { nounwind mustprogress willreturn }");
+
+    // Emit debug info metadata at the end
+    emit_debug_info_footer();
 
     if (!errors_.empty()) {
         return errors_;

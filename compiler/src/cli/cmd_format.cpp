@@ -1,6 +1,7 @@
 #include "cmd_format.hpp"
 
 #include "common.hpp"
+#include "diagnostic.hpp"
 #include "format/formatter.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
@@ -16,7 +17,42 @@ using namespace tml;
 
 namespace tml::cli {
 
+// Emit all lexer errors using the diagnostic emitter
+static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
+    for (const auto& error : lex.errors()) {
+        emitter.error("L001", error.message, error.span);
+    }
+}
+
+// Emit a parser error using the diagnostic emitter (with fix-it hints)
+static void emit_parser_error(DiagnosticEmitter& emitter, const parser::ParseError& error) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = "P001";
+    diag.message = error.message;
+    diag.primary_span = error.span;
+    diag.notes = error.notes;
+
+    // Convert parser FixItHints to DiagnosticFixIts
+    for (const auto& fix : error.fixes) {
+        diag.fixes.push_back(DiagnosticFixIt{
+            .span = fix.span, .replacement = fix.replacement, .description = fix.description});
+    }
+
+    emitter.emit(diag);
+}
+
+// Emit all parser errors using the diagnostic emitter
+static void emit_all_parser_errors(DiagnosticEmitter& emitter,
+                                   const std::vector<parser::ParseError>& errors) {
+    for (const auto& error : errors) {
+        emit_parser_error(emitter, error);
+    }
+}
+
 int run_fmt(const std::string& path, bool check_only, bool verbose) {
+    auto& diag = get_diagnostic_emitter();
+
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -25,15 +61,14 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
         return 1;
     }
 
+    diag.set_source_content(path, source_code);
+
     auto source = lexer::Source::from_string(source_code, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-        }
+        emit_all_lexer_errors(diag, lex);
         return 1;
     }
 
@@ -43,13 +78,7 @@ int run_fmt(const std::string& path, bool check_only, bool verbose) {
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-            for (const auto& note : error.notes) {
-                std::cerr << "  note: " << note << "\n";
-            }
-        }
+        emit_all_parser_errors(diag, errors);
         return 1;
     }
 

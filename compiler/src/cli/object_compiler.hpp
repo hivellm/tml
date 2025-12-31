@@ -38,6 +38,8 @@ struct ObjectCompileOptions {
     bool verbose = false;              // Print commands
     bool lto = false;                  // Enable Link-Time Optimization
     bool thin_lto = false;             // Use ThinLTO (faster, less memory)
+    std::string target_triple;         // Target triple for cross-compilation (empty = host)
+    std::string sysroot;               // Sysroot path for cross-compilation
 };
 
 /**
@@ -57,6 +59,8 @@ struct LinkOptions {
     int lto_jobs = 0;                         // Parallel LTO jobs (0 = auto)
     std::vector<fs::path> additional_objects; // Runtime libs, etc.
     std::vector<std::string> link_flags;
+    std::string target_triple; // Target triple for cross-compilation (empty = host)
+    std::string sysroot;       // Sysroot path for cross-compilation
 };
 
 /**

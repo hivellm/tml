@@ -26,8 +26,10 @@ struct LLVMGenOptions {
     bool emit_comments = true;
     bool coverage_enabled = false; // Inject coverage instrumentation
     bool dll_export = false;       // Add dllexport for public functions (Windows DLL)
+    bool emit_debug_info = false;  // Generate DWARF debug information
+    int debug_level = 2;           // Debug level: 1=minimal, 2=standard, 3=full
     std::string target_triple = "x86_64-pc-windows-msvc";
-    std::string source_file; // Source file path for coverage tracking
+    std::string source_file; // Source file path for coverage/debug tracking
 };
 
 // LLVM IR text generator
@@ -217,6 +219,34 @@ private:
 
     // Storage for builtin generic enum declarations (keeps AST alive)
     std::vector<std::unique_ptr<parser::EnumDecl>> builtin_enum_decls_;
+
+    // ============ Debug Info Support ============
+    // LLVM debug metadata for DWARF generation
+    int debug_metadata_counter_ = 0;          // Counter for unique metadata IDs
+    int current_scope_id_ = 0;                // Current debug scope (function)
+    int current_debug_loc_id_ = 0;            // Current debug location ID for instructions
+    int file_id_ = 0;                         // File metadata ID
+    int compile_unit_id_ = 0;                 // Compile unit metadata ID
+    std::vector<std::string> debug_metadata_; // Pending debug metadata to emit at end
+    std::unordered_map<std::string, int> func_debug_scope_; // function name -> scope ID
+    std::unordered_map<std::string, int> var_debug_info_;   // var name -> debug info ID
+    std::unordered_map<std::string, int> type_debug_info_;  // type name -> debug info ID
+
+    // Debug info generation helpers
+    int fresh_debug_id();
+    void emit_debug_info_header();
+    void emit_debug_info_footer();
+    int create_function_debug_scope(const std::string& func_name, uint32_t line, uint32_t column);
+    std::string get_debug_location(uint32_t line, uint32_t column);
+    std::string get_debug_loc_suffix(); // Returns ", !dbg !N" if in debug scope, else ""
+    int create_debug_location(uint32_t line,
+                              uint32_t column); // Create and register a debug location
+
+    // Variable debug info
+    int create_local_variable_debug_info(const std::string& var_name, const std::string& llvm_type,
+                                         uint32_t line, uint32_t arg_no = 0);
+    void emit_debug_declare(const std::string& alloca_reg, int var_debug_id, int loc_id);
+    int get_or_create_type_debug_info(const std::string& type_name, const std::string& llvm_type);
 
     // Helper methods
     auto fresh_reg() -> std::string;

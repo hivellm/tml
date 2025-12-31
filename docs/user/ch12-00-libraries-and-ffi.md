@@ -311,3 +311,159 @@ In this chapter, you learned:
 - Best practices for creating C-compatible libraries
 
 This opens up many possibilities: you can write performance-critical code in TML and use it from existing C/C++ projects, or create new libraries that work across language boundaries. The `--out-dir` option makes it easy to organize your examples and keep libraries alongside their source code.
+
+## Cross-Compilation
+
+TML supports cross-compilation, allowing you to build executables and libraries for a different platform than your host machine. This is useful when you need to:
+
+- Build Linux binaries from Windows or macOS
+- Create ARM binaries on an x86 machine
+- Target WebAssembly for web deployment
+- Build for embedded systems
+
+### The --target Flag
+
+Use the `--target` flag to specify the target platform. The format is a **target triple**: `<arch>-<vendor>-<os>[-<env>]`
+
+Common examples:
+
+| Target Triple | Description |
+|--------------|-------------|
+| `x86_64-unknown-linux-gnu` | 64-bit Linux with GNU libc |
+| `x86_64-unknown-linux-musl` | 64-bit Linux with musl libc (static) |
+| `aarch64-unknown-linux-gnu` | 64-bit ARM Linux (Raspberry Pi 4, etc.) |
+| `x86_64-pc-windows-msvc` | 64-bit Windows (MSVC ABI) |
+| `x86_64-pc-windows-gnu` | 64-bit Windows (MinGW ABI) |
+| `x86_64-apple-macos` | 64-bit macOS |
+| `aarch64-apple-macos` | Apple Silicon macOS |
+| `wasm32-unknown-unknown` | WebAssembly |
+
+### Basic Cross-Compilation
+
+To cross-compile, just add `--target`:
+
+```bash
+# On Windows, build for Linux
+tml build myapp.tml --target=x86_64-unknown-linux-gnu
+
+# On Windows, build for ARM Linux
+tml build myapp.tml --target=aarch64-unknown-linux-gnu
+
+# Build for WebAssembly
+tml build myapp.tml --target=wasm32-unknown-unknown
+```
+
+### Using a Sysroot
+
+For cross-compilation to work properly, you often need a **sysroot** - a directory containing the headers and libraries for your target platform. Use `--sysroot` to specify it:
+
+```bash
+# Cross-compile for Linux using a sysroot
+tml build myapp.tml \
+    --target=x86_64-unknown-linux-gnu \
+    --sysroot=/path/to/linux-sysroot
+```
+
+A sysroot typically contains:
+- `/usr/include` - Header files for the target
+- `/lib` or `/usr/lib` - Libraries for the target
+
+### Setting Up Cross-Compilation
+
+The exact setup depends on your host and target platforms.
+
+#### Windows Host → Linux Target
+
+1. **Install LLVM/Clang** with cross-compilation support
+
+2. **Get a Linux sysroot** - Options:
+   - Extract from a Linux Docker image
+   - Use a pre-built toolchain (e.g., from musl.cc)
+   - Copy from a Linux machine
+
+3. **Build**:
+```bash
+tml build myapp.tml \
+    --target=x86_64-unknown-linux-musl \
+    --sysroot=C:/cross/x86_64-linux-musl
+```
+
+#### Linux/macOS Host → Windows Target
+
+1. **Install MinGW-w64** for Windows cross-compilation
+
+2. **Build**:
+```bash
+tml build myapp.tml --target=x86_64-pc-windows-gnu
+```
+
+#### Any Host → WebAssembly
+
+WebAssembly targets don't require a sysroot for freestanding code:
+
+```bash
+tml build myapp.tml --target=wasm32-unknown-unknown
+```
+
+Note: Full WebAssembly support with WASI may require additional setup.
+
+### Cross-Compiling Libraries
+
+You can also cross-compile libraries:
+
+```bash
+# Build a static library for Linux ARM
+tml build mylib.tml \
+    --crate-type=lib \
+    --target=aarch64-unknown-linux-gnu \
+    --sysroot=/path/to/arm-sysroot \
+    --emit-header
+```
+
+This creates:
+- `build/debug/libmylib.a` - ARM static library
+- `build/debug/mylib.h` - C header (platform-agnostic)
+
+### Verifying the Target
+
+To verify your binary was built for the correct target:
+
+```bash
+# Linux: use file command
+file build/debug/myapp
+# Output: myapp: ELF 64-bit LSB executable, ARM aarch64...
+
+# Use llvm-objdump
+llvm-objdump -f build/debug/myapp
+```
+
+### Common Issues
+
+**Missing sysroot**:
+```
+error: unable to find header file <stdio.h>
+```
+Solution: Provide a sysroot with the target's headers using `--sysroot`.
+
+**Wrong linker**:
+```
+error: linker 'ld' not found
+```
+Solution: Ensure you have a linker for the target (e.g., `lld` for cross-platform linking).
+
+**ABI mismatch**:
+```
+error: undefined symbol: __stack_chk_fail
+```
+Solution: Use the correct target triple that matches your sysroot's ABI (gnu vs musl).
+
+### Summary
+
+Cross-compilation in TML uses these flags:
+
+| Flag | Description |
+|------|-------------|
+| `--target=<triple>` | Specify the target platform |
+| `--sysroot=<path>` | Path to target system headers and libraries |
+
+Combined with the other build options, you can create optimized, debug-enabled binaries for any supported platform from your development machine.

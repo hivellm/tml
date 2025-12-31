@@ -44,6 +44,15 @@ struct TestGroup {
     int64_t total_duration_ms = 0;
 };
 
+// Benchmark result for a single benchmark
+struct BenchmarkResult {
+    std::string file_path;
+    std::string bench_name;
+    int64_t ns_per_iter = 0; // Nanoseconds per iteration
+    int64_t iterations = 0;  // Number of iterations
+    bool passed = true;
+};
+
 // Test command options
 struct TestOptions {
     std::vector<std::string> patterns; // Test name patterns to filter
@@ -58,6 +67,10 @@ struct TestOptions {
     int timeout_seconds = 20;          // Test timeout in seconds (default: 20s)
     bool no_color = false;             // Disable colored output
     bool no_cache = false;             // Disable build cache
+    std::string save_baseline;         // Save benchmark results to file (for --bench)
+    std::string compare_baseline;      // Compare against baseline file (for --bench)
+    bool coverage = false;             // Enable code coverage tracking
+    std::string coverage_output;       // Coverage output file (default: coverage.html)
 };
 
 // Parse test command arguments

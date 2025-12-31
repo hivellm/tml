@@ -44,11 +44,15 @@ auto Parser::parse_let_stmt() -> Result<StmtPtr, ParseError> {
         return unwrap_err(pattern);
 
     // Type annotation is REQUIRED in TML (explicit typing for LLM clarity)
-    auto colon = expect(
-        lexer::TokenKind::Colon,
-        "Expected ':' and type annotation after variable name (TML requires explicit types)");
-    if (is_err(colon))
-        return unwrap_err(colon);
+    if (!check(lexer::TokenKind::Colon)) {
+        auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
+        return ParseError{.message = "Expected ':' and type annotation after variable name (TML "
+                                     "requires explicit types)",
+                          .span = peek().span,
+                          .notes = {"TML requires explicit type annotations for all variables"},
+                          .fixes = {fix}};
+    }
+    advance(); // consume ':'
 
     auto type = parse_type();
     if (is_err(type))
@@ -90,11 +94,15 @@ auto Parser::parse_var_stmt() -> Result<StmtPtr, ParseError> {
     std::string_view name = unwrap(name_tok).lexeme;
 
     // Type annotation is REQUIRED in TML
-    auto colon = expect(
-        lexer::TokenKind::Colon,
-        "Expected ':' and type annotation after variable name (TML requires explicit types)");
-    if (is_err(colon))
-        return unwrap_err(colon);
+    if (!check(lexer::TokenKind::Colon)) {
+        auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
+        return ParseError{.message = "Expected ':' and type annotation after variable name (TML "
+                                     "requires explicit types)",
+                          .span = peek().span,
+                          .notes = {"TML requires explicit type annotations for all variables"},
+                          .fixes = {fix}};
+    }
+    advance(); // consume ':'
 
     auto type = parse_type();
     if (is_err(type))

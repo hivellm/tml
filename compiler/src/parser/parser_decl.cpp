@@ -200,18 +200,29 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
     }
 
     // Parameters
-    auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after function name");
-    if (is_err(lparen))
-        return unwrap_err(lparen);
+    if (!check(lexer::TokenKind::LParen)) {
+        auto fix = make_insertion_fix(previous().span, "()", "add parameter list");
+        return ParseError{
+            .message = "Expected '(' after function name",
+            .span = peek().span,
+            .notes = {"Every function needs a parameter list, even if empty: func name()"},
+            .fixes = {fix}};
+    }
+    advance(); // consume '('
 
     auto params_result = parse_func_params();
     if (is_err(params_result))
         return unwrap_err(params_result);
     auto params = std::move(unwrap(params_result));
 
-    auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after parameters");
-    if (is_err(rparen))
-        return unwrap_err(rparen);
+    if (!check(lexer::TokenKind::RParen)) {
+        auto fix = make_insertion_fix(previous().span, ")", "add closing parenthesis");
+        return ParseError{.message = "Expected ')' after parameters",
+                          .span = peek().span,
+                          .notes = {},
+                          .fixes = {fix}};
+    }
+    advance(); // consume ')'
 
     // Return type
     std::optional<TypePtr> return_type;
@@ -344,9 +355,14 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
             return unwrap_err(field_name_result);
         auto field_name = std::string(unwrap(field_name_result).lexeme);
 
-        auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after field name");
-        if (is_err(colon))
-            return unwrap_err(colon);
+        if (!check(lexer::TokenKind::Colon)) {
+            auto fix = make_insertion_fix(previous().span, ": Type", "add type annotation");
+            return ParseError{.message = "Expected ':' after field name",
+                              .span = peek().span,
+                              .notes = {"Struct fields require type annotations: field_name: Type"},
+                              .fixes = {fix}};
+        }
+        advance(); // consume ':'
 
         auto field_type_result = parse_type();
         if (is_err(field_type_result))

@@ -87,3 +87,7 @@ warnings-as-errors = false
 verbose = false
 # Max errors before stopping
 max-errors = 50
+
+# [dependencies]
+# Path dependencies example:
+# mylib = { path = "../mylib" }

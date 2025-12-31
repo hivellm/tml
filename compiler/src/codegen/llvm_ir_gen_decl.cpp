@@ -5,6 +5,7 @@
 #include "types/type.hpp"
 
 #include <functional>
+#include <sstream>
 
 namespace tml::codegen {
 
@@ -473,8 +474,24 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // - willreturn: function will return (helps with dead code elimination)
     std::string attrs = " #0";
     emit_line("");
+
+    // Create debug scope for function (if debug info enabled)
+    int func_scope_id = 0;
+    if (options_.emit_debug_info) {
+        func_scope_id = create_function_debug_scope(func_llvm_name, func.span.start.line,
+                                                    func.span.start.column);
+        // Create a default debug location for instructions in this function
+        create_debug_location(func.span.start.line, func.span.start.column);
+    }
+
+    // Add debug info as function attribute if we have a scope
+    std::string dbg_attr = "";
+    if (func_scope_id != 0) {
+        dbg_attr = " !dbg !" + std::to_string(func_scope_id);
+    }
+
     emit_line("define " + dll_linkage + linkage + ret_type + " @" + func_llvm_name + "(" + params +
-              ")" + attrs + " {");
+              ")" + attrs + dbg_attr + " {");
     emit_line("entry:");
 
     // Register function parameters in locals_ by creating allocas
@@ -487,6 +504,28 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         emit_line("  " + alloca_reg + " = alloca " + param_type);
         emit_line("  store " + param_type + " %" + param_name + ", ptr " + alloca_reg);
         locals_[param_name] = VarInfo{alloca_reg, param_type, semantic_type, std::nullopt};
+
+        // Emit debug info for parameters (if enabled and debug level >= 2)
+        if (options_.emit_debug_info && options_.debug_level >= 2 && current_scope_id_ != 0) {
+            uint32_t line = func.params[i].span.start.line;
+            uint32_t column = func.params[i].span.start.column;
+
+            // Create debug info for parameter (arg_no is 1-based)
+            int param_debug_id = create_local_variable_debug_info(param_name, param_type, line,
+                                                                  static_cast<uint32_t>(i + 1));
+
+            // Create debug location
+            int loc_id = fresh_debug_id();
+            std::ostringstream meta;
+            meta << "!" << loc_id << " = !DILocation("
+                 << "line: " << line << ", "
+                 << "column: " << column << ", "
+                 << "scope: !" << current_scope_id_ << ")\n";
+            debug_metadata_.push_back(meta.str());
+
+            // Emit llvm.dbg.declare intrinsic
+            emit_debug_declare(alloca_reg, param_debug_id, loc_id);
+        }
     }
 
     // Coverage instrumentation - inject call at function entry
@@ -530,6 +569,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     emit_line("}");
     current_func_.clear();
     current_ret_type_.clear();
+    current_scope_id_ = 0;
+    current_debug_loc_id_ = 0;
 }
 
 void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::FuncDecl& method) {
@@ -650,6 +691,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     current_func_.clear();
     current_ret_type_.clear();
     current_impl_type_.clear();
+    current_scope_id_ = 0;
+    current_debug_loc_id_ = 0;
 }
 
 // Generate a specialized version of a generic impl method
@@ -771,6 +814,8 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_impl_type_ = saved_impl_type;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
+    current_scope_id_ = 0;
+    current_debug_loc_id_ = 0;
 }
 
 // Generate a specialized version of a generic function
@@ -847,16 +892,55 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         dll_linkage = "dllexport ";
     }
     emit_line("");
+
+    // Create debug scope for generic function instantiation (if debug info enabled)
+    int func_scope_id = 0;
+    if (options_.emit_debug_info) {
+        func_scope_id = create_function_debug_scope("tml_" + mangled, func.span.start.line,
+                                                    func.span.start.column);
+        // Create a default debug location for instructions in this function
+        create_debug_location(func.span.start.line, func.span.start.column);
+    }
+
+    // Add debug info as function attribute if we have a scope
+    std::string dbg_attr = "";
+    if (func_scope_id != 0) {
+        dbg_attr = " !dbg !" + std::to_string(func_scope_id);
+    }
+
     emit_line("define " + dll_linkage + linkage + ret_type + " @tml_" + mangled + "(" + params +
-              ")" + attrs + " {");
+              ")" + attrs + dbg_attr + " {");
     emit_line("entry:");
 
     // 7. Register parameters in locals_
-    for (const auto& p : param_info) {
+    for (size_t i = 0; i < param_info.size(); ++i) {
+        const auto& p = param_info[i];
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca " + p.llvm_type);
         emit_line("  store " + p.llvm_type + " %" + p.name + ", ptr " + alloca_reg);
         locals_[p.name] = VarInfo{alloca_reg, p.llvm_type, p.semantic_type, std::nullopt};
+
+        // Emit debug info for parameters (if enabled and debug level >= 2)
+        if (options_.emit_debug_info && options_.debug_level >= 2 && current_scope_id_ != 0) {
+            uint32_t line = func.params[i].span.start.line;
+            uint32_t column = func.params[i].span.start.column;
+
+            // Create debug info for parameter (arg_no is 1-based)
+            int param_debug_id = create_local_variable_debug_info(p.name, p.llvm_type, line,
+                                                                  static_cast<uint32_t>(i + 1));
+
+            // Create debug location
+            int loc_id = fresh_debug_id();
+            std::ostringstream meta;
+            meta << "!" << loc_id << " = !DILocation("
+                 << "line: " << line << ", "
+                 << "column: " << column << ", "
+                 << "scope: !" << current_scope_id_ << ")\n";
+            debug_metadata_.push_back(meta.str());
+
+            // Emit llvm.dbg.declare intrinsic
+            emit_debug_declare(alloca_reg, param_debug_id, loc_id);
+        }
     }
 
     // 8. Generate function body
@@ -895,5 +979,7 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     current_ret_type_ = saved_ret_type;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
+    current_scope_id_ = 0;
+    current_debug_loc_id_ = 0;
 }
 } // namespace tml::codegen

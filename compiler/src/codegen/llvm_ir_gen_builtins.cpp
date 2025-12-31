@@ -520,6 +520,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
         // Call the instantiated function
         std::string func_name = "@tml_" + mangled_name;
+        std::string dbg_suffix = get_debug_loc_suffix();
         if (ret_type == "void") {
             emit("  call void " + func_name + "(");
             for (size_t i = 0; i < arg_vals.size(); ++i) {
@@ -527,7 +528,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     emit(", ");
                 emit(arg_vals[i].second + " " + arg_vals[i].first);
             }
-            emit_line(")");
+            emit_line(")" + dbg_suffix);
             last_expr_type_ = "void";
             return "0";
         } else {
@@ -538,7 +539,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     emit(", ");
                 emit(arg_vals[i].second + " " + arg_vals[i].first);
             }
-            emit_line(")");
+            emit_line(")" + dbg_suffix);
             last_expr_type_ = ret_type;
             return result;
         }
@@ -645,6 +646,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     }
 
     // Call - handle void vs non-void return types
+    std::string dbg_suffix = get_debug_loc_suffix();
     if (ret_type == "void") {
         emit("  call void " + mangled + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {
@@ -652,7 +654,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
-        emit_line(")");
+        emit_line(")" + dbg_suffix);
         last_expr_type_ = "void";
         return "0";
     } else {
@@ -663,7 +665,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 emit(", ");
             emit(arg_vals[i].second + " " + arg_vals[i].first);
         }
-        emit_line(")");
+        emit_line(")" + dbg_suffix);
         last_expr_type_ = ret_type;
         return result;
     }

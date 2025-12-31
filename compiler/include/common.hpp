@@ -18,11 +18,32 @@ constexpr int VERSION_MAJOR = 0;
 constexpr int VERSION_MINOR = 1;
 constexpr int VERSION_PATCH = 0;
 
+// Warning level configuration
+enum class WarningLevel {
+    None = 0, // No warnings
+    Default,  // Default warnings only
+    Extra,    // Extra warnings (-Wextra)
+    All,      // All warnings (-Wall)
+    Pedantic  // Pedantic warnings (-Wpedantic)
+};
+
+// Diagnostic output format
+enum class DiagnosticFormat {
+    Text, // Human-readable text (default)
+    JSON  // Machine-readable JSON
+};
+
 // Global compiler options
 struct CompilerOptions {
     static inline bool verbose = false;       // Enable verbose/debug output
     static inline int optimization_level = 0; // 0-3: O0-O3, 4: Os, 5: Oz
     static inline bool debug_info = false;    // Include DWARF debug info
+    static inline int debug_level = 0;        // 0: none, 1: minimal, 2: standard, 3: full
+    static inline std::string target_triple;  // Target triple (empty = host)
+    static inline std::string sysroot;        // Sysroot path for cross-compilation
+    static inline WarningLevel warning_level = WarningLevel::Default;
+    static inline bool warnings_as_errors = false; // -Werror: treat warnings as errors
+    static inline DiagnosticFormat diagnostic_format = DiagnosticFormat::Text;
 };
 
 // Convenience macro for debug output (only prints when verbose is enabled)

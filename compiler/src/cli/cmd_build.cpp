@@ -5,6 +5,7 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"
 #include "compiler_setup.hpp"
+#include "diagnostic.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "mir/mir.hpp"
@@ -47,6 +48,78 @@ static std::string generate_cache_key(const std::string& path) {
     oss << std::hex << std::setw(8) << std::setfill('0') << (combined & 0xFFFFFFFF);
     return oss.str();
 }
+
+// ============================================================================
+// Diagnostic Helpers
+// ============================================================================
+
+// Emit a lexer error using the diagnostic emitter
+static void emit_lexer_error(DiagnosticEmitter& emitter, const lexer::LexerError& error) {
+    emitter.error("L001", error.message, error.span);
+}
+
+// Emit a parser error using the diagnostic emitter
+static void emit_parser_error(DiagnosticEmitter& emitter, const parser::ParseError& error) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = "P001";
+    diag.message = error.message;
+    diag.primary_span = error.span;
+    diag.notes = error.notes;
+
+    // Convert parser FixItHints to DiagnosticFixIts
+    for (const auto& fix : error.fixes) {
+        diag.fixes.push_back(DiagnosticFixIt{
+            .span = fix.span, .replacement = fix.replacement, .description = fix.description});
+    }
+
+    emitter.emit(diag);
+}
+
+// Emit a type error using the diagnostic emitter
+static void emit_type_error(DiagnosticEmitter& emitter, const types::TypeError& error) {
+    emitter.error("T001", error.message, error.span, error.notes);
+}
+
+// Emit all lexer errors
+static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
+    for (const auto& error : lex.errors()) {
+        emit_lexer_error(emitter, error);
+    }
+}
+
+// Emit all parser errors
+static void emit_all_parser_errors(DiagnosticEmitter& emitter,
+                                   const std::vector<parser::ParseError>& errors) {
+    for (const auto& error : errors) {
+        emit_parser_error(emitter, error);
+    }
+}
+
+// Emit all type errors
+static void emit_all_type_errors(DiagnosticEmitter& emitter,
+                                 const std::vector<types::TypeError>& errors) {
+    for (const auto& error : errors) {
+        emit_type_error(emitter, error);
+    }
+}
+
+// Emit a codegen error using the diagnostic emitter
+static void emit_codegen_error(DiagnosticEmitter& emitter, const codegen::LLVMGenError& error) {
+    emitter.error("C001", error.message, error.span, error.notes);
+}
+
+// Emit all codegen errors
+static void emit_all_codegen_errors(DiagnosticEmitter& emitter,
+                                    const std::vector<codegen::LLVMGenError>& errors) {
+    for (const auto& error : errors) {
+        emit_codegen_error(emitter, error);
+    }
+}
+
+// ============================================================================
+// Hashing Utilities
+// ============================================================================
 
 // Generate a content hash for caching compiled object files
 static std::string generate_content_hash(const std::string& content) {
@@ -328,6 +401,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         std::cerr << "Warning: Invalid build settings in tml.toml, using defaults\n";
     }
 
+    // Initialize diagnostic emitter for Rust-style error output
+    auto& diag = get_diagnostic_emitter();
+
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -336,15 +412,15 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         return 1;
     }
 
+    // Register source content with diagnostic emitter for source snippets
+    diag.set_source_content(path, source_code);
+
     auto source = lexer::Source::from_string(source_code, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-        }
+        emit_all_lexer_errors(diag, lex);
         return 1;
     }
 
@@ -354,13 +430,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-            for (const auto& note : error.notes) {
-                std::cerr << "  note: " << note << "\n";
-            }
-        }
+        emit_all_parser_errors(diag, errors);
         return 1;
     }
 
@@ -381,13 +451,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-            for (const auto& note : error.notes) {
-                std::cerr << "  note: " << note << "\n";
-            }
-        }
+        emit_all_type_errors(diag, errors);
         return 1;
     }
 
@@ -437,6 +501,12 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
     codegen::LLVMGenOptions options;
     options.emit_comments = verbose;
+    options.emit_debug_info = CompilerOptions::debug_info;
+    options.debug_level = CompilerOptions::debug_level;
+    options.source_file = path;
+    if (!CompilerOptions::target_triple.empty()) {
+        options.target_triple = CompilerOptions::target_triple;
+    }
 #ifdef _WIN32
     // Enable DLL export for dynamic libraries on Windows
     options.dll_export = (output_type == BuildOutputType::DynamicLib);
@@ -446,10 +516,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
     auto gen_result = llvm_gen.generate(module);
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": codegen error: " << error.message << "\n";
-        }
+        emit_all_codegen_errors(diag, errors);
         return 1;
     }
 
@@ -500,6 +567,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
     obj_options.optimization_level = tml::CompilerOptions::optimization_level;
     obj_options.debug_info = tml::CompilerOptions::debug_info;
     obj_options.verbose = verbose;
+    obj_options.target_triple = tml::CompilerOptions::target_triple;
+    obj_options.sysroot = tml::CompilerOptions::sysroot;
 
     fs::path obj_output = cache_dir / (module_name + get_object_extension());
 
@@ -629,6 +698,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         LinkOptions link_options;
         link_options.output_type = link_output_type;
         link_options.verbose = verbose;
+        link_options.target_triple = tml::CompilerOptions::target_triple;
+        link_options.sysroot = tml::CompilerOptions::sysroot;
 
         // Add @link libraries from FFI decorators
         for (const auto& lib : llvm_gen.get_link_libs()) {
@@ -684,6 +755,9 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage, bool no_cache) {
+    // Initialize diagnostic emitter for Rust-style error output
+    auto& diag = get_diagnostic_emitter();
+
     std::string source_code;
     try {
         source_code = read_file(path);
@@ -692,15 +766,15 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         return 1;
     }
 
+    // Register source content with diagnostic emitter for source snippets
+    diag.set_source_content(path, source_code);
+
     auto source = lexer::Source::from_string(source_code, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        for (const auto& error : lex.errors()) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-        }
+        emit_all_lexer_errors(diag, lex);
         return 1;
     }
 
@@ -710,13 +784,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-            for (const auto& note : error.notes) {
-                std::cerr << "  note: " << note << "\n";
-            }
-        }
+        emit_all_parser_errors(diag, errors);
         return 1;
     }
 
@@ -738,13 +806,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": error: " << error.message << "\n";
-            for (const auto& note : error.notes) {
-                std::cerr << "  note: " << note << "\n";
-            }
-        }
+        emit_all_type_errors(diag, errors);
         return 1;
     }
 
@@ -753,16 +815,15 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
     options.coverage_enabled = coverage;
+    options.emit_debug_info = CompilerOptions::debug_info;
+    options.debug_level = CompilerOptions::debug_level;
     options.source_file = path;
     codegen::LLVMIRGen llvm_gen(env, options);
 
     auto gen_result = llvm_gen.generate(module);
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-        for (const auto& error : errors) {
-            std::cerr << path << ":" << error.span.start.line << ":" << error.span.start.column
-                      << ": codegen error: " << error.message << "\n";
-        }
+        emit_all_codegen_errors(diag, errors);
         return 1;
     }
 
@@ -817,6 +878,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
         obj_options.verbose = verbose;
+        obj_options.target_triple = tml::CompilerOptions::target_triple;
+        obj_options.sysroot = tml::CompilerOptions::sysroot;
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
@@ -857,6 +920,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         LinkOptions link_options;
         link_options.output_type = LinkOptions::OutputType::Executable;
         link_options.verbose = verbose;
+        link_options.target_triple = tml::CompilerOptions::target_triple;
+        link_options.sysroot = tml::CompilerOptions::sysroot;
 
         // Add @link libraries from FFI decorators
         for (const auto& lib : llvm_gen.get_link_libs()) {
@@ -1007,6 +1072,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
     options.coverage_enabled = coverage;
+    options.emit_debug_info = CompilerOptions::debug_info;
+    options.debug_level = CompilerOptions::debug_level;
     options.source_file = path;
     codegen::LLVMIRGen llvm_gen(env, options);
 
@@ -1074,6 +1141,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         obj_options.optimization_level = tml::CompilerOptions::optimization_level;
         obj_options.debug_info = tml::CompilerOptions::debug_info;
         obj_options.verbose = false; // Always quiet for tests
+        obj_options.target_triple = tml::CompilerOptions::target_triple;
+        obj_options.sysroot = tml::CompilerOptions::sysroot;
 
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
@@ -1107,6 +1176,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         LinkOptions link_options;
         link_options.output_type = LinkOptions::OutputType::Executable;
         link_options.verbose = false; // Always quiet for tests
+        link_options.target_triple = tml::CompilerOptions::target_triple;
+        link_options.sysroot = tml::CompilerOptions::sysroot;
 
         // Add @link libraries from FFI decorators
         for (const auto& lib : llvm_gen.get_link_libs()) {

@@ -40,6 +40,8 @@ void print_usage() {
     std::cout << "  cache     Manage build cache\n";
     std::cout << "  rlib      Inspect RLIB libraries\n";
     std::cout << "  init      Initialize a new project\n";
+    std::cout << "  deps      List project dependencies\n";
+    std::cout << "  remove    Remove a dependency from tml.toml\n";
     std::cout << "  lex       Tokenize a file (debug)\n";
     std::cout << "  parse     Parse a file (debug)\n";
     std::cout << "\nOptions:\n";

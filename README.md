@@ -4,179 +4,234 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![CMake](https://img.shields.io/badge/CMake-3.20+-green.svg)](https://cmake.org/)
 
-**TML is a programming language designed specifically for Large Language Models (LLMs).** It eliminates parsing ambiguities, provides stable IDs for refactoring, and uses formal contracts to make code generation and analysis deterministic.
+**TML is a programming language designed specifically for Large Language Models (LLMs).** It eliminates parsing ambiguities, provides stable IDs for refactoring, and uses self-documenting syntax to make code generation and analysis deterministic.
 
-## 🎯 Problem Statement
+## Quick Example
 
-All existing programming languages were designed for **humans**:
-- Syntax optimized for manual reading/writing
-- Ambiguities resolved by human context
-- Syntactic sugar for typing convenience
-- Error messages for human developers
+```tml
+func main() -> I32 {
+    let numbers: [I32; 5] = [1, 2, 3, 4, 5]
+    let doubled = numbers.map(do(x) x * 2)
 
-**LLMs are not humans.** They need:
+    when doubled.get(0) {
+        Just(v) => println("First: " + (*v).to_string()),
+        Nothing => println("Empty array")
+    }
+
+    return 0
+}
+```
+
+## Why TML?
+
+All existing programming languages were designed for **humans**. LLMs need:
+
 - **Deterministic parsing** — no ambiguities
 - **Unique tokens** — each symbol with one meaning
+- **Self-documenting syntax** — keywords that explain themselves
 - **Explicit structure** — no contextual inferences
-- **Stable IDs** — references that survive refactoring
 
-## ✨ Solution: TML
+## Key Design Decisions
 
-**TML (To Machine Language)** is a language where:
+TML uses Rust-inspired semantics with self-documenting syntax:
 
-| Principle | Implementation |
-|-----------|----------------|
-| One token = one meaning | `<` is always comparison, `[` is always generic/array |
-| LL(1) parsing | Lookahead of 1 token determines the production |
-| Explicit > implicit | `return` mandatory, `then` mandatory |
-| Stable IDs | Functions and types have immutable `@id` |
-| No macros | Code is code, no meta-programming |
+| Rust | TML | Why |
+|------|-----|-----|
+| `<T>` | `[T]` | `<` conflicts with comparison |
+| `\|x\| expr` | `do(x) expr` | `\|` conflicts with OR |
+| `&&` `\|\|` `!` | `and` `or` `not` | Keywords are clearer |
+| `fn` | `func` | More explicit |
+| `match` | `when` | More intuitive |
+| `for`/`while`/`loop` | `loop` unified | Single construct |
+| `&T` / `&mut T` | `ref T` / `mut ref T` | Words over symbols |
+| `trait` | `behavior` | Self-documenting |
+| `Option[T]` | `Maybe[T]` | Intent is clear |
+| `Some(x)` / `None` | `Just(x)` / `Nothing` | Self-documenting |
+| `Result[T,E]` | `Outcome[T,E]` | Describes what it is |
+| `unsafe` | `lowlevel` | Less scary, accurate |
+| `.clone()` | `.duplicate()` | No confusion with Git |
 
-## 🚀 Key Features
+## Language Features
 
-### 🔍 Deterministic Parsing
-- **LL(1) grammar** — single token lookahead determines production
-- **No ambiguities** — each token has exactly one meaning
-- **No macros** — code is code, no meta-programming
+### Types
 
-### 🏷️ Stable IDs
-Each definition has a unique ID that survives renames:
 ```tml
-@id("a1b2c3d4")
-func calculate(x: I32) -> I32 {
-    return x * 2
-}
-```
-LLMs can reference `@id("a1b2c3d4")` without depending on the name.
+// Primitives: I8-I128, U8-U128, F32, F64, Bool, Char, Str
+let x: I32 = 42
+let pi: F64 = 3.14159
+let flag: Bool = true
+let name: Str = "TML"
 
-### 🎭 Effects & Capabilities
-Explicit declaration of what code can and does:
-```tml
-module database
-caps: [io.network, io.file]
-
-func query(sql: String) -> Outcome[Rows, Error]
-effects: [db.read]
-{
-    // ...
-}
+// Mutable variables use 'mut'
+let mut counter: I32 = 0
+counter = counter + 1
 ```
 
-### 📋 Formal Contracts
-Pre and post-conditions:
+### Fixed-Size Arrays
+
 ```tml
-func sqrt(x: F64) -> F64
-    requires x >= 0.0
-    ensures result >= 0.0 and result * result == x
-{
-    // ...
-}
+// Array literal with explicit type
+let arr: [I32; 3] = [1, 2, 3]
+
+// Access elements
+let first = arr[0]          // Direct index (panics if out of bounds)
+let safe = arr.get(0)       // Returns Maybe[ref I32]
+
+// Array methods
+arr.len()                   // 3
+arr.is_empty()              // false
+arr.first()                 // Maybe[ref I32]
+arr.last()                  // Maybe[ref I32]
+arr.map(do(x) x * 2)        // [2, 4, 6]
+
+// Modify mutable arrays
+let mut nums: [I32; 3] = [1, 2, 3]
+nums[0] = 10                // Direct modification
 ```
 
-### 🔤 String Interpolation
-Embed expressions directly in strings:
-```tml
-let name = "World"
-let count = 42
-println("Hello, {name}! Count is {count}.")
-// Output: Hello, World! Count is 42.
-```
-
-### 🏗️ Rust-Inspired, LLM-Optimized
-Learns from Rust but changes syntax for determinism:
+### Maybe and Outcome Types
 
 ```tml
-// TML (explicit, deterministic)
-func first[T](items: ref List[T]) -> Maybe[T]
-where T: Duplicate
-{
-    return items.first().duplicate()
+// Maybe[T] - optional values (like Rust's Option)
+let maybe_val: Maybe[I32] = Just(42)
+let nothing: Maybe[I32] = Nothing
+
+when maybe_val {
+    Just(v) => println("Got: " + v.to_string()),
+    Nothing => println("Nothing here")
 }
 
-// Rust (ambiguous parsing)
-fn first<T: Clone>(items: &[T]) -> Option<T> {
-    items.first().cloned()
-}
-```
-
-## 📖 Language Examples
-
-### Hello World
-```tml
-module hello
-
-public func main() {
-    println("Hello, TML!")
-}
-```
-
-### Variables & Types
-```tml
-module variables
-
-public func main() {
-    let x = 42              // Immutable with inference
-    let count: I32 = 100    // Explicit type
-    var counter = 0         // Mutable
-    const MAX_SIZE = 1024   // Compile-time constant
-
-    // String interpolation
-    println("counter = {counter}")
-}
-```
-
-### Functions & Generics
-```tml
-module collections
-
-func first[T](items: ref List[T]) -> Maybe[T]
-where T: Duplicate
-{
-    return items.first().duplicate()
-}
-
-func map[T, U](items: List[T], f: do(T) -> U) -> List[U] {
-    var result = List.of[U]()
-    loop item in items {
-        result.append(f(item))
+// Outcome[T, E] - error handling (like Rust's Result)
+func divide(a: I32, b: I32) -> Outcome[I32, Str] {
+    if b == 0 {
+        return Err("division by zero")
     }
-    return result
+    return Ok(a / b)
 }
 
-// Closures
-func apply_twice[T](value: T, f: do(T) -> T) -> T {
-    return f(f(value))
-}
-
-let result = apply_twice(5, do(x) { x * 2 })  // 20
+// Combinators
+let result = divide(10, 2)
+    .map(do(n) n * 2)
+    .unwrap_or(0)
 ```
 
 ### Pattern Matching
+
 ```tml
-func process(value: Outcome[I32, String]) -> String {
+// 'when' expression for pattern matching
+func describe(value: Maybe[I32]) -> Str {
     when value {
-        Ok(num) -> "Number: " + num.to_string(),
-        Err(msg) -> "Error: " + msg,
+        Just(n) => {
+            if n > 0 { return "positive" }
+            if n < 0 { return "negative" }
+            return "zero"
+        },
+        Nothing => return "nothing"
+    }
+}
+
+// Works with Outcome too
+when read_file("data.txt") {
+    Ok(content) => process(content),
+    Err(e) => println("Error: " + e)
+}
+```
+
+### Functions and Closures
+
+```tml
+// Regular function
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// Closures use 'do' keyword
+let double = do(x: I32) x * 2
+let sum = do(a: I32, b: I32) { return a + b }
+
+// Higher-order functions
+func apply_twice[T](value: T, f: func(T) -> T) -> T {
+    return f(f(value))
+}
+
+let result = apply_twice(5, do(x) x * 2)  // 20
+```
+
+### Generics
+
+```tml
+// Generic function
+func first[T](items: ref [T; 3]) -> Maybe[ref T] {
+    return items.get(0)
+}
+
+// Generic struct
+type Pair[T, U] {
+    first: T,
+    second: U
+}
+
+// With constraints
+func print_all[T: Display](items: ref [T; 3]) {
+    loop i in 0 through 2 {
+        println(items[i].to_string())
     }
 }
 ```
 
-### Error Handling
+### Behaviors (Traits)
+
 ```tml
-func read_file(path: String) -> Outcome[String, Error] {
-    let file = File.open(path)!      // ! propagates errors
-    let content = file.read_string()!
-    return Ok(content)
+// Define a behavior
+pub behavior Display {
+    pub func to_string(this) -> Str
+}
+
+pub behavior Iterator {
+    type Item
+    pub func next(mut this) -> Maybe[This::Item]
+}
+
+// Implement for a type
+impl Display for Point {
+    pub func to_string(this) -> Str {
+        return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+    }
+}
+```
+
+### Enums
+
+```tml
+// Simple enum
+type Color {
+    Red,
+    Green,
+    Blue
+}
+
+// Enum with data
+type Message {
+    Text(Str),
+    Number(I32),
+    Quit
+}
+
+when msg {
+    Text(s) => println(s),
+    Number(n) => println(n.to_string()),
+    Quit => return
 }
 ```
 
 ### FFI (Foreign Function Interface)
+
 ```tml
-// Call C functions with @extern
+// Call C functions
 @extern("c")
 func puts(s: Str) -> I32
 
-// Link external libraries with @link
+// Link external libraries (Windows)
 @link("user32")
 @extern("stdcall")
 func MessageBoxA(hwnd: I32, text: Str, caption: Str, utype: I32) -> I32
@@ -188,246 +243,119 @@ func main() -> I32 {
 }
 ```
 
-## 🏛️ Architecture
-
-### Two-Phase Bootstrap
-
-**Phase 1: Bootstrap Compiler (C++)**
-- Cross-platform native executables via LLVM
-- Implements full language specification
-- Frozen after Phase 2 completion
-
-**Phase 2: Native Compiler (TML)**
-- Self-hosted in TML
-- Compiled by bootstrap compiler
-- Ongoing development and maintenance
-
-### Compiler Pipeline
-
-```
-Source (.tml)
-    │
-    ▼
-┌─────────────┐
-│   Lexer     │  → Token stream
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│   Parser    │  → AST (LL(1))
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│  Resolver   │  → AST (names resolved)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│ Type Check  │  → TAST (typed AST)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│Borrow Check │  → TAST (ownership verified)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│Effect Check │  → TAST (effects verified)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│  Lowering   │  → TML-IR (canonical)
-└─────────────┘
-    │
-    ▼
-┌─────────────┐
-│   Codegen   │  → Native executable
-└─────────────┘
-```
-
-## 🛠️ Current Status
-
-**Bootstrap Compiler** - Production Ready for Core Features
-
-| Component | Status | Progress |
-|-----------|--------|----------|
-| Lexer | ✅ Complete | 100% |
-| Parser | ✅ Complete | 100% (LL(1) compliant) |
-| Type Checker | ✅ Complete | 100% (generics, closures, where clauses) |
-| Borrow Checker | ✅ Complete | 100% (NLL, field-level borrowing, lifetimes) |
-| LLVM Backend | ✅ Complete | 100% (via text IR) |
-| Test Framework | ✅ Complete | 100% (@test, @bench) |
-| Module System | ✅ Complete | 100% (imports, method lookup) |
-| FFI System | ✅ Complete | 100% (@extern, @link, namespaces) |
-| Standard Library | 🟡 In Progress | ~66% (core modules working) |
-
-### Test Results
-- **23+ tests passing** (90%+ pass rate)
-- Compiler tests: ✅ All passing
-- Runtime tests: ✅ Most passing
-
-### Recent Features (Dec 2024)
-- ✅ **Full Borrow Checker** (Dec 27) - NLL, field-level borrowing, dangling ref detection
-- ✅ **String Interpolation** (Dec 27) - `"Hello {name}!"` syntax
-- ✅ **Where Clauses** (Dec 27) - `func foo[T]() where T: Add` constraint syntax
-- ✅ **Closures** (Dec 27) - `do(x) { x * 2 }` with environment capture
-- ✅ **FFI Namespaces** (Dec 27) - Unified `ffi::c`, `ffi::win32` namespace system
-- ✅ **Iterator Combinators** (Dec 26) - `sum()`, `count()`, `take()`, `skip()` working
-- ✅ **Module Method Lookup** (Dec 26) - Imported type methods now resolve correctly
-- ✅ **Trait Objects** (Dec 24) - `dyn Behavior` with vtable dispatch
-- ✅ **Module System** (Dec 23) - `use` imports working
-- ✅ **Pattern Matching** - Full `when` expression support
-- ✅ **Generics** - Structs and enums with monomorphization
-- ✅ **Test Framework** - @test decorator, parallel execution
-- ✅ **Benchmarking** - @bench decorator with timing
-- ✅ **Cross-platform** - Windows (MSVC) and Linux (GCC)
-
-## 📋 Prerequisites
-
-- **C++20 compiler** (GCC 11+, Clang 15+, MSVC 19.30+)
-- **CMake 3.20+**
-- **LLVM 15+** (for code generation)
-- **Git**
-
-### Supported Platforms
-- Linux (x86_64, aarch64)
-- macOS (x86_64, aarch64)
-- Windows (x86_64)
-
-## 🚀 Quick Start
-
-### Build Bootstrap Compiler
-
-```bash
-# Clone repository
-git clone https://github.com/your-org/tml.git
-cd tml
-
-# Build using scripts (recommended)
-./scripts/build.sh debug    # Linux/Mac
-scripts\build.bat debug     # Windows
-
-# Or manually with CMake
-cmake -B build/debug -S packages/compiler -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug --config Debug
-
-# Run tests
-./build/debug/tml test      # Linux/Mac
-build\debug\Debug\tml.exe test  # Windows
-```
-
-### Hello World Example
+### Testing
 
 ```tml
-// Save as hello.tml
-func main() -> I32 {
-    println("Hello, TML!")
+@test
+func test_array_access() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30]
+    assert(arr[0] == 10, "first element should be 10")
+    assert(arr.len() == 3, "length should be 3")
+    return 0
+}
+
+@test
+func test_maybe_unwrap() -> I32 {
+    let x: Maybe[I32] = Just(42)
+    assert(x.unwrap() == 42, "should unwrap to 42")
     return 0
 }
 ```
+
+## Build and Run
+
+### Prerequisites
+
+- **C++20 compiler** (GCC 11+, Clang 15+, MSVC 19.30+)
+- **CMake 3.20+**
+- **LLVM 15+**
+
+### Build
+
+```bash
+# Windows
+scripts\build.bat              # Debug build
+scripts\build.bat release      # Release build
+scripts\build.bat --clean      # Clean build
+
+# Linux/Mac
+./scripts/build.sh debug
+./scripts/build.sh release
+```
+
+### Run
 
 ```bash
 # Run directly
 ./build/debug/tml run hello.tml
 
-# Or compile and execute
+# Compile to executable
 ./build/debug/tml build hello.tml -o hello
 ./hello
-# Output: Hello, TML!
+
+# Run tests
+./build/debug/tml test mymodule.tml
+
+# Emit LLVM IR for debugging
+./build/debug/tml build hello.tml --emit-ir
 ```
 
-## 📚 Documentation
+## Project Structure
 
-### Language Specification
-- **[01-OVERVIEW.md](docs/specs/01-OVERVIEW.md)** - Language overview and philosophy
-- **[02-LEXICAL.md](docs/specs/02-LEXICAL.md)** - Lexical specification
-- **[03-GRAMMAR.md](docs/specs/03-GRAMMAR.md)** - Grammar and syntax
-- **[04-TYPES.md](docs/specs/04-TYPES.md)** - Type system
-- **[16-COMPILER-ARCHITECTURE.md](docs/specs/16-COMPILER-ARCHITECTURE.md)** - Compiler design
-
-### Examples
-Complete examples in **[docs/examples/](docs/examples/)**:
-- Hello World and basic syntax
-- Variables, functions, and types
-- Control flow and pattern matching
-- Error handling and collections
-- Memory management and concurrency
-
-### Package Documentation
-Standard library packages in **[docs/packages/](docs/packages/)**:
-- **FS** - File system operations
-- **NET** - Networking and HTTP
-- **COLLECTIONS** - Data structures
-- **CRYPTO** - Cryptographic operations
-
-## 🤝 Contributing
-
-### Development Workflow
-
-1. **Check existing tasks**: `rulebook task list`
-2. **Create new task**: `rulebook task create <task-id>`
-3. **Write proposal**: Edit `rulebook/tasks/<task-id>/proposal.md`
-4. **Plan implementation**: Edit `rulebook/tasks/<task-id>/tasks.md`
-5. **Validate**: `rulebook task validate <task-id>`
-6. **Implement** following task checklist
-7. **Test** and verify coverage ≥95%
-8. **Archive**: `rulebook task archive <task-id>`
-
-### Code Quality Requirements
-
-- **C++20** with modern idioms (RAII, smart pointers, ranges)
-- **95%+ test coverage** required
-- **No warnings** allowed (`-Werror`)
-- **Address/UB sanitizers** in CI/CD
-- **clang-format** for consistent style
-
-### Testing
-
-```bash
-# Build and test
-cmake -B build -S packages/compiler
-cmake --build build
-ctest --test-dir build --output-on-failure
-
-# Coverage (when available)
-cmake -B build-cov -S packages/compiler -DCMAKE_BUILD_TYPE=Coverage
-cmake --build build-cov
-ctest --test-dir build-cov
+```
+tml/
+├── compiler/           # C++ compiler implementation
+│   ├── src/           # Source files
+│   │   ├── codegen/   # LLVM IR generation
+│   │   ├── parser/    # LL(1) parser
+│   │   ├── types/     # Type checker
+│   │   └── cli/       # Command-line interface
+│   └── include/       # Headers
+├── lib/               # TML standard libraries
+│   ├── core/          # Core types (Maybe, Outcome, Iterator, Array)
+│   └── std/           # Standard library (File, collections)
+├── docs/              # Language specification
+└── scripts/           # Build scripts
 ```
 
-## 🎯 Use Cases
+## Current Status
 
-### 🤖 LLM Code Generation
-- Deterministic parsing allows immediate validation
-- Stable IDs allow surgical patches
-- No ambiguity reduces generation errors
+**Bootstrap Compiler** - Core features working
 
-### 🔍 LLM Code Analysis
-- Explicit caps/effects allow reasoning about behavior
-- Formalizable contracts for verification
-- Canonical IR allows semantic diff
+| Component | Status |
+|-----------|--------|
+| Lexer | Complete |
+| Parser (LL(1)) | Complete |
+| Type Checker | Complete (generics, closures, where clauses) |
+| LLVM Backend | Complete (via text IR) |
+| Arrays | Complete (fixed-size with full method suite) |
+| Maybe/Outcome | Complete |
+| Pattern Matching | Complete |
+| Closures | Complete |
+| FFI | Complete (@extern, @link) |
+| Test Framework | Complete (@test) |
 
-### 🔄 Automatic Refactoring
-- IDs survive renames without breaking references
-- Transformations preserve semantics via IR
-- Patches applicable without context
+### Recent Features (Dec 2024)
 
-## 📄 License
+- Fixed-size arrays with methods: `len`, `is_empty`, `get`, `first`, `last`, `map`, `eq`, `cmp`
+- Array element modification via index assignment
+- Maybe type with pattern matching for `Just(v)` and `Nothing`
+- Null literal support
+- Bitwise operators: `shl`, `shr`, `xor`
+- ASCII character utilities
 
-**Apache License 2.0** - see [LICENSE](LICENSE) file for details.
+## Documentation
 
-## 🙏 Acknowledgments
+- [docs/INDEX.md](docs/INDEX.md) - Documentation overview
+- [docs/01-OVERVIEW.md](docs/01-OVERVIEW.md) - Language philosophy
+- [docs/03-GRAMMAR.md](docs/03-GRAMMAR.md) - LL(1) grammar specification
+- [docs/04-TYPES.md](docs/04-TYPES.md) - Type system
 
-- **Rust** - Inspiration for ownership, borrowing, and effects
-- **Swift** - Pattern matching and error handling patterns
-- **Haskell** - Type system foundations
+## License
+
+**Apache License 2.0** - see [LICENSE](LICENSE) file.
+
+## Acknowledgments
+
+- **Rust** - Ownership, borrowing, and pattern matching inspiration
 - **LLVM** - Code generation backend
-
----
-
-**TML is designed to be the language LLMs write best.** By removing ambiguities and adding explicit structure, we create a language where AI can generate, analyze, and refactor code with confidence.
-
-Ready to build the future of AI-assisted programming? 🚀

@@ -88,14 +88,23 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
     // Optimization level
     cmd << " " << get_optimization_flag(options.optimization_level);
 
-    // Platform-specific flags
+    // Target triple (use provided or default to host)
+    if (!options.target_triple.empty()) {
+        cmd << " -target " << options.target_triple;
+    } else {
 #ifdef _WIN32
-    // Windows: use native object format
-    cmd << " -target x86_64-pc-windows-msvc";
+        // Windows: use native object format
+        cmd << " -target x86_64-pc-windows-msvc";
 #else
-    // Unix: use ELF object format
-    cmd << " -target x86_64-unknown-linux-gnu";
+        // Unix: use ELF object format
+        cmd << " -target x86_64-unknown-linux-gnu";
 #endif
+    }
+
+    // Sysroot for cross-compilation
+    if (!options.sysroot.empty()) {
+        cmd << " --sysroot=\"" << to_forward_slashes(fs::path(options.sysroot)) << "\"";
+    }
 
     // Position-independent code for shared libraries
     if (options.position_independent) {
@@ -181,6 +190,16 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
         // Link executable using clang
         cmd << quote_command(clang_path); // Quote path only if it has spaces
 
+        // Target triple for cross-compilation
+        if (!options.target_triple.empty()) {
+            cmd << " -target " << options.target_triple;
+        }
+
+        // Sysroot for cross-compilation
+        if (!options.sysroot.empty()) {
+            cmd << " --sysroot=\"" << to_forward_slashes(fs::path(options.sysroot)) << "\"";
+        }
+
         // Link-Time Optimization
         if (options.lto) {
             if (options.thin_lto) {
@@ -255,6 +274,16 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
         // Shared library using clang
         cmd << quote_command(clang_path); // Quote path only if it has spaces
         cmd << " -shared";
+
+        // Target triple for cross-compilation
+        if (!options.target_triple.empty()) {
+            cmd << " -target " << options.target_triple;
+        }
+
+        // Sysroot for cross-compilation
+        if (!options.sysroot.empty()) {
+            cmd << " --sysroot=\"" << to_forward_slashes(fs::path(options.sysroot)) << "\"";
+        }
 
         // Link-Time Optimization for shared libraries
         if (options.lto) {

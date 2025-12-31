@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Benchmark Framework** (2025-12-31) - Full benchmark support with `@bench` decorator
+  - `@bench` decorator marks functions as benchmarks (default 1000 iterations)
+  - `@bench(N)` allows custom iteration count (e.g., `@bench(10000)`)
+  - Automatic warmup phase (10 iterations before measurement)
+  - Nanosecond precision timing using `@time_ns()` builtin
+  - Benchmark output format: `bench_name: X ns/iter (Y iterations)`
+  - `tml test --bench` discovers and runs `*.bench.tml` files
+  - `--save-baseline=file.json` saves benchmark results for comparison
+  - `--compare=file.json` compares against baseline (shows % change)
+  - Green output for improvements, red for regressions
+  - Files modified:
+    - `src/codegen/core/generate.cpp` - Benchmark runner codegen with warmup, timing, output
+    - `src/cli/cmd_test.cpp` - Benchmark discovery, comparison, JSON save/load
+    - `src/cli/cmd_test.hpp` - BenchmarkResult struct, TestOptions extensions
+
+- **Test Coverage Flag** (2025-12-31) - Coverage tracking support
+  - `tml test --coverage` enables code coverage tracking
+  - `--coverage-output=file.html` specifies output file (default: coverage.html)
+  - Coverage runtime in `lib/test/runtime/coverage.c`
+  - Files modified:
+    - `src/cli/cmd_test.hpp` - Added coverage, coverage_output to TestOptions
+    - `src/cli/cmd_test.cpp` - Parse coverage flags, pass to run_run
+
 - **Null Literal** (2025-12-30) - Support for `null` as a first-class literal type
   - `null` has type `Ptr[Unit]` and is compatible with any pointer type `Ptr[T]`
   - Can be assigned to any pointer variable: `let ptr: Ptr[I32] = null`

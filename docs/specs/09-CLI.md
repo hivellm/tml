@@ -149,30 +149,85 @@ tml test --filter "test_*"
 tml test --module math
 
 # Parallel
-tml test --jobs 4
+tml test --test-threads=4
 
 # Coverage
 tml test --coverage
-tml test --coverage --format html
+tml test --coverage --coverage-output=coverage.html
 
 # Verbose
 tml test --verbose
+
+# Timeout (seconds)
+tml test --timeout=30
+
+# No color output
+tml test --no-color
+
+# Skip build cache
+tml test --no-cache
 ```
 
 Output:
 ```
-   Running tests for myproject v1.0.0
+ TML Tests v0.1.0
 
-running 12 tests
-test math::test_add ... ok (0.1ms)
-test math::test_subtract ... ok (0.1ms)
-test math::test_multiply ... ok (0.2ms)
+ Running 65 test files...
 
-test result: ok. 12 passed; 0 failed
-   finished in 0.32s
+ + compiler (42 tests)
+   ✓ arithmetic.test.tml (12ms)
+   ✓ control_flow.test.tml (8ms)
+   ✓ functions.test.tml (15ms)
+   ...
+
+ Tests 65 passed (65)
+ Duration 3.45s
+
+ All tests passed!
 ```
 
-### 2.5 tml check — Quick Verification
+### 2.5 tml test --bench — Benchmarks
+
+```bash
+# Run all benchmarks (discovers *.bench.tml files)
+tml test --bench
+
+# Filter by pattern
+tml test --bench sorting
+
+# Save baseline for comparison
+tml test --bench --save-baseline=baseline.json
+
+# Compare against baseline
+tml test --bench --compare=baseline.json
+
+# Release mode benchmarks (more accurate)
+tml test --bench --release
+```
+
+Benchmark output:
+```
+ TML Benchmarks v0.1.0
+
+ Running 1 benchmark file...
+
+ + simple
+  + bench bench_addition       ... 2 ns/iter (1000 iterations)
+  + bench bench_loop           ... 156 ns/iter (10000 iterations)
+  + bench bench_multiplication ... 1 ns/iter (5000 iterations)
+
+ Bench Files 1 passed (1)
+ Duration    1.23s
+```
+
+When comparing against a baseline:
+```
+  + bench bench_addition ... 2 ns/iter (-15.2%)   # improved (green)
+  + bench bench_loop     ... 180 ns/iter (+10.5%) # regressed (red)
+  + bench bench_sort     ... 45 ns/iter (~0.3%)   # unchanged (gray)
+```
+
+### 2.6 tml check — Quick Verification
 
 ```bash
 # Check without generating code
@@ -184,7 +239,7 @@ tml check --tests
 
 Faster than build, ideal for feedback during development.
 
-### 2.6 tml fmt — Formatting
+### 2.7 tml fmt — Formatting
 
 ```bash
 # Format all
@@ -197,7 +252,7 @@ tml fmt --check
 tml fmt src/main.tml
 ```
 
-### 2.7 tml lint — Linter
+### 2.8 tml lint — Linter
 
 ```bash
 # All checks
@@ -218,7 +273,7 @@ Categories:
 - `unused` — dead code
 - `security` — vulnerabilities
 
-### 2.8 tml doc — Documentation
+### 2.9 tml doc — Documentation
 
 ```bash
 # Generate docs
@@ -231,7 +286,7 @@ tml doc --open
 tml doc --format json
 ```
 
-### 2.9 tml repl — REPL
+### 2.10 tml repl — REPL
 
 ```bash
 tml repl
@@ -257,7 +312,7 @@ tml repl
 #   :quit    Exit
 ```
 
-### 2.10 tml ir — Generate IR
+### 2.11 tml ir — Generate IR
 
 ```bash
 # S-expression
@@ -270,7 +325,7 @@ tml ir src/lib.tml --format json
 tml ir src/lib.tml --output lib.tml.ir
 ```
 
-### 2.11 tml cache — Build Cache Management
+### 2.12 tml cache — Build Cache Management
 
 ```bash
 # Show cache information
@@ -300,7 +355,7 @@ tml cache clean --days 14
 # - 91% speedup for unchanged code
 ```
 
-### 2.12 tml rlib — RLIB Library Inspection
+### 2.13 tml rlib — RLIB Library Inspection
 
 ```bash
 # Show library information
@@ -333,7 +388,7 @@ tml rlib validate mylib.rlib
 # - JSON metadata format
 ```
 
-### 2.13 tml clean — Cleanup
+### 2.14 tml clean — Cleanup
 
 ```bash
 tml clean           # remove build/ (FUTURE)

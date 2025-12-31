@@ -74,7 +74,12 @@ void Parser::report_error(const std::string& message) {
 }
 
 void Parser::report_error(const std::string& message, SourceSpan span) {
-    errors_.push_back(ParseError{.message = message, .span = span, .notes = {}});
+    errors_.push_back(ParseError{.message = message, .span = span, .notes = {}, .fixes = {}});
+}
+
+void Parser::report_error_with_fix(const std::string& message, SourceSpan span,
+                                   const std::vector<FixItHint>& fixes) {
+    errors_.push_back(ParseError{.message = message, .span = span, .notes = {}, .fixes = fixes});
 }
 
 void Parser::synchronize() {
@@ -103,6 +108,139 @@ void Parser::synchronize() {
             advance();
         }
     }
+}
+
+void Parser::synchronize_to_stmt() {
+    while (!is_at_end()) {
+        // Stop at statement terminators
+        if (check(lexer::TokenKind::Semi) || check(lexer::TokenKind::Newline)) {
+            advance();
+            skip_newlines();
+            return;
+        }
+
+        // Stop at statement-starting keywords
+        switch (peek().kind) {
+        case lexer::TokenKind::KwLet:
+        case lexer::TokenKind::KwVar:
+        case lexer::TokenKind::KwIf:
+        case lexer::TokenKind::KwLoop:
+        case lexer::TokenKind::KwWhile:
+        case lexer::TokenKind::KwFor:
+        case lexer::TokenKind::KwReturn:
+        case lexer::TokenKind::KwBreak:
+        case lexer::TokenKind::KwContinue:
+        case lexer::TokenKind::KwWhen:
+            return;
+        case lexer::TokenKind::RBrace:
+            return; // End of block
+        default:
+            advance();
+        }
+    }
+}
+
+void Parser::synchronize_to_decl() {
+    while (!is_at_end()) {
+        // Stop at declaration keywords
+        switch (peek().kind) {
+        case lexer::TokenKind::KwFunc:
+        case lexer::TokenKind::KwType:
+        case lexer::TokenKind::KwBehavior:
+        case lexer::TokenKind::KwImpl:
+        case lexer::TokenKind::KwConst:
+        case lexer::TokenKind::KwMod:
+        case lexer::TokenKind::KwUse:
+        case lexer::TokenKind::KwPub:
+        case lexer::TokenKind::At: // Decorator
+            return;
+        default:
+            advance();
+        }
+    }
+}
+
+void Parser::synchronize_to_brace() {
+    int brace_depth = 1;
+    while (!is_at_end() && brace_depth > 0) {
+        if (check(lexer::TokenKind::LBrace)) {
+            brace_depth++;
+        } else if (check(lexer::TokenKind::RBrace)) {
+            brace_depth--;
+            if (brace_depth == 0) {
+                return; // Don't consume the closing brace
+            }
+        }
+        advance();
+    }
+}
+
+bool Parser::try_recover_missing_semi() {
+    // If we're at a newline or statement-starting keyword, we might have a missing semicolon
+    if (check(lexer::TokenKind::Newline)) {
+        skip_newlines();
+        return true;
+    }
+
+    // Check if next token looks like the start of a new statement
+    switch (peek().kind) {
+    case lexer::TokenKind::KwLet:
+    case lexer::TokenKind::KwVar:
+    case lexer::TokenKind::KwIf:
+    case lexer::TokenKind::KwLoop:
+    case lexer::TokenKind::KwWhile:
+    case lexer::TokenKind::KwFor:
+    case lexer::TokenKind::KwReturn:
+    case lexer::TokenKind::KwBreak:
+    case lexer::TokenKind::KwContinue:
+    case lexer::TokenKind::RBrace:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool Parser::skip_until(lexer::TokenKind kind) {
+    while (!is_at_end()) {
+        if (check(kind)) {
+            return true;
+        }
+        advance();
+    }
+    return false;
+}
+
+bool Parser::skip_until_any(std::initializer_list<lexer::TokenKind> kinds) {
+    while (!is_at_end()) {
+        for (auto kind : kinds) {
+            if (check(kind)) {
+                return true;
+            }
+        }
+        advance();
+    }
+    return false;
+}
+
+// ============================================================================
+// Fix-it Hint Helpers
+// ============================================================================
+
+auto Parser::make_insertion_fix(const SourceSpan& at, const std::string& text,
+                                const std::string& desc) -> FixItHint {
+    // For insertion, span start and end are the same (insert point)
+    return FixItHint{.span = SourceSpan{.start = at.end, .end = at.end},
+                     .replacement = text,
+                     .description = desc};
+}
+
+auto Parser::make_replacement_fix(const SourceSpan& span, const std::string& text,
+                                  const std::string& desc) -> FixItHint {
+    return FixItHint{.span = span, .replacement = text, .description = desc};
+}
+
+auto Parser::make_deletion_fix(const SourceSpan& span, const std::string& desc) -> FixItHint {
+    return FixItHint{.span = span, .replacement = "", .description = desc};
 }
 
 // ============================================================================

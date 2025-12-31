@@ -228,33 +228,87 @@ func test_call_count() {
 ### 6.1 @bench Directive
 
 ```tml
+// Simple benchmark with default 1000 iterations
 @bench
-func bench_sort(b: Bencher) {
-    let data: List[I32] = random_list(1000)
+func bench_addition() {
+    let _x: I32 = 1 + 2 + 3 + 4 + 5
+}
 
-    b.iter(do() {
-        data.duplicate().sort()
-    })
+// Custom iteration count
+@bench(10000)
+func bench_loop() {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 100 { break }
+        sum = sum + i
+        i = i + 1
+    }
 }
 ```
 
-### 6.2 Configuration
+### 6.2 Benchmark Files
 
-```tml
-@bench(samples = 100, warmup = 10)
-func bench_with_config(b: Bencher) {
-    b.iter(do() {
-        expensive_operation()
-    })
-}
+Benchmark files use the `.bench.tml` extension and are discovered separately from tests:
+
+```
+tests/
+  math.test.tml          # Unit tests
+  benchmarks/
+    sorting.bench.tml    # Sorting benchmarks
+    parsing.bench.tml    # Parsing benchmarks
 ```
 
 ### 6.3 Run Benchmarks
 
 ```bash
-tml bench
-tml bench --filter sort
-tml bench --baseline main
+# Run all benchmarks (*.bench.tml files)
+tml test --bench
+
+# Filter by pattern
+tml test --bench sorting
+
+# Save results as baseline
+tml test --bench --save-baseline=baseline.json
+
+# Compare against baseline
+tml test --bench --compare=baseline.json
+```
+
+### 6.4 Benchmark Output
+
+```
+ TML Benchmarks v0.1.0
+
+ Running 1 benchmark file...
+
+ + simple
+  + bench bench_addition       ... 2 ns/iter (1000 iterations)
+  + bench bench_loop           ... 156 ns/iter (10000 iterations)
+  + bench bench_multiplication ... 1 ns/iter (5000 iterations)
+
+ Bench Files 1 passed (1)
+ Duration    1.23s
+```
+
+### 6.5 Baseline Comparison
+
+When comparing against a baseline, improvements show in green and regressions in red:
+
+```
+  + bench bench_addition ... 2 ns/iter (-15.2%)   # improved (green)
+  + bench bench_loop     ... 180 ns/iter (+10.5%) # regressed (red)
+  + bench bench_sort     ... 45 ns/iter (~0.3%)   # unchanged (gray)
+```
+
+The baseline file is stored in JSON format:
+```json
+{
+  "benchmarks": [
+    { "file": "simple.bench.tml", "name": "bench_addition", "ns_per_iter": 2 },
+    { "file": "simple.bench.tml", "name": "bench_loop", "ns_per_iter": 156 }
+  ]
+}
 ```
 
 ## 7. Coverage
@@ -262,12 +316,47 @@ tml bench --baseline main
 ### 7.1 Generate Report
 
 ```bash
+# Enable coverage tracking
 tml test --coverage
-tml test --coverage --format html --output coverage/
-tml test --coverage --format json
+
+# Specify output file
+tml test --coverage --coverage-output=coverage.html
+
+# Coverage with specific tests
+tml test math --coverage
 ```
 
-### 7.2 Thresholds
+### 7.2 Coverage Runtime
+
+The coverage runtime tracks:
+- **Function coverage**: Which functions were executed
+- **Line coverage**: Which lines were executed
+- **Branch coverage**: Which branches were taken
+
+```
+================================================================================
+                           CODE COVERAGE REPORT
+================================================================================
+
+FUNCTION COVERAGE: 8/10 (80.0%)
+--------------------------------------------------------------------------------
+  [+] main (hits: 1)
+  [+] add (hits: 5)
+  [-] unused_func (hits: 0)
+
+LINE COVERAGE: 45/50 (90.0%)
+--------------------------------------------------------------------------------
+
+================================================================================
+                              SUMMARY
+================================================================================
+  Functions: 8 covered / 10 total
+  Lines:     45 covered / 50 total
+  Branches:  12 covered / 15 total
+================================================================================
+```
+
+### 7.3 Thresholds
 
 ```toml
 # tml.toml
