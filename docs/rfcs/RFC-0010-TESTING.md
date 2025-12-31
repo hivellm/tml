@@ -411,7 +411,7 @@ func bench_many_additions() {
 | **Reporting** | ✅ Implemented | Multiple output formats |
 | **Parallel Execution** | ✅ Implemented | Multi-threaded test runner |
 | **Coverage** | ✅ Implemented | `--coverage`, `--coverage-output` |
-| **Panic Catching** | ❌ TODO | Requires exception handling |
+| **Panic Catching** | ✅ Implemented | Uses setjmp/longjmp via callback |
 
 ## Compatibility
 

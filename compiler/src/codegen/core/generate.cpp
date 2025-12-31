@@ -510,17 +510,15 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Emit vtables for trait objects (dyn dispatch)
     emit_vtables();
 
-    // Pre-register coverage output file string if needed (before emitting string constants)
-    std::string coverage_output_str;
-    if (options_.coverage_enabled && !options_.coverage_output_file.empty()) {
-        coverage_output_str = add_string_literal(options_.coverage_output_file);
-    }
-
-    // Emit string constants at the end (they were collected during codegen)
-    emit_string_constants();
-
-    // Collect test, benchmark, and fuzz functions (decorated with @test, @bench, @fuzz)
-    std::vector<std::string> test_functions;
+    // Collect test, benchmark, and fuzz functions BEFORE emitting string constants
+    // so we can pre-register expected panic message strings
+    struct TestInfo {
+        std::string name;
+        bool should_panic = false;
+        std::string expected_panic_message;     // Empty means any panic is fine
+        std::string expected_panic_message_str; // LLVM string constant reference
+    };
+    std::vector<TestInfo> test_functions;
     std::vector<std::string> fuzz_functions;
     struct BenchInfo {
         std::string name;
@@ -530,10 +528,38 @@ auto LLVMIRGen::generate(const parser::Module& module)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
             const auto& func = decl->as<parser::FuncDecl>();
+            bool is_test = false;
+            bool should_panic = false;
+            std::string expected_panic_message;
+
             for (const auto& decorator : func.decorators) {
                 if (decorator.name == "test") {
-                    test_functions.push_back(func.name);
-                    break;
+                    is_test = true;
+                } else if (decorator.name == "should_panic") {
+                    should_panic = true;
+                    // Check for expected message: @should_panic(expected = "message")
+                    for (const auto& arg : decorator.args) {
+                        if (arg->is<parser::BinaryExpr>()) {
+                            // Handle named argument: expected = "message"
+                            const auto& bin = arg->as<parser::BinaryExpr>();
+                            if (bin.op == parser::BinaryOp::Assign &&
+                                bin.left->is<parser::IdentExpr>() &&
+                                bin.right->is<parser::LiteralExpr>()) {
+                                const auto& ident = bin.left->as<parser::IdentExpr>();
+                                const auto& lit = bin.right->as<parser::LiteralExpr>();
+                                if (ident.name == "expected" &&
+                                    lit.token.kind == lexer::TokenKind::StringLiteral) {
+                                    expected_panic_message = lit.token.string_value().value;
+                                }
+                            }
+                        } else if (arg->is<parser::LiteralExpr>()) {
+                            // Also support @should_panic("message") without named argument
+                            const auto& lit = arg->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::StringLiteral) {
+                                expected_panic_message = lit.token.string_value().value;
+                            }
+                        }
+                    }
                 } else if (decorator.name == "bench") {
                     BenchInfo info;
                     info.name = func.name;
@@ -548,14 +574,33 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         }
                     }
                     bench_functions.push_back(info);
-                    break;
                 } else if (decorator.name == "fuzz") {
                     fuzz_functions.push_back(func.name);
-                    break;
                 }
+            }
+
+            if (is_test) {
+                TestInfo info;
+                info.name = func.name;
+                info.should_panic = should_panic;
+                info.expected_panic_message = expected_panic_message;
+                // Pre-register the expected message string BEFORE emit_string_constants
+                if (!expected_panic_message.empty()) {
+                    info.expected_panic_message_str = add_string_literal(expected_panic_message);
+                }
+                test_functions.push_back(info);
             }
         }
     }
+
+    // Pre-register coverage output file string if needed (before emitting string constants)
+    std::string coverage_output_str;
+    if (options_.coverage_enabled && !options_.coverage_output_file.empty()) {
+        coverage_output_str = add_string_literal(options_.coverage_output_file);
+    }
+
+    // Emit string constants at the end (they were collected during codegen)
+    emit_string_constants();
 
     // Generate main entry point
     bool has_user_main = false;
@@ -723,6 +768,28 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Assertions inside will call panic() on failure which doesn't return
         emit_line("; Auto-generated test runner");
 
+        // Check if any tests need @should_panic support
+        bool has_should_panic = false;
+        for (const auto& test_info : test_functions) {
+            if (test_info.should_panic) {
+                has_should_panic = true;
+                break;
+            }
+        }
+
+        // Add error message strings for should_panic tests
+        if (has_should_panic) {
+            emit_line("");
+            emit_line("; Error messages for @should_panic tests");
+            // "test did not panic as expected\n\0" = 30 + 1 + 1 = 32 bytes
+            emit_line("@.should_panic_no_panic = private constant [32 x i8] c\"test did not "
+                      "panic as expected\\0A\\00\"");
+            // "panic message did not contain expected string\n\0" = 45 + 1 + 1 = 47 bytes
+            emit_line("@.should_panic_wrong_msg = private constant [47 x i8] c\"panic message "
+                      "did not contain expected string\\0A\\00\"");
+            emit_line("");
+        }
+
         // For DLL entry, generate exported tml_test_entry function instead of main
         if (options_.generate_dll_entry) {
             // Export tml_test_entry for DLL loading
@@ -737,18 +804,86 @@ auto LLVMIRGen::generate(const parser::Module& module)
         emit_line("entry:");
 
         int test_idx = 0;
-        for (const auto& test_name : test_functions) {
-            std::string test_fn = "@tml_" + test_name;
-            // Look up the function's return type from functions_ map
-            auto it = functions_.find(test_name);
-            if (it != functions_.end() && it->second.ret_type != "void") {
-                // Function returns a value - call and discard result
-                std::string tmp = "%test_result_" + std::to_string(test_idx++);
-                emit_line("  " + tmp + " = call " + it->second.ret_type + " " + test_fn + "()");
+        std::string prev_block = "entry";
+        for (const auto& test_info : test_functions) {
+            std::string test_fn = "@tml_" + test_info.name;
+            std::string idx_str = std::to_string(test_idx);
+
+            if (test_info.should_panic) {
+                // Generate panic-catching call for @should_panic tests
+                // Uses callback approach: pass function pointer to tml_run_should_panic()
+                // which keeps setjmp on the stack while the test runs
+
+                // Call tml_run_should_panic with function pointer
+                // Returns: 1 if panicked (success), 0 if didn't panic (failure)
+                std::string result = "%panic_result_" + idx_str;
+                emit_line("  " + result + " = call i32 @tml_run_should_panic(ptr " + test_fn + ")");
+
+                // Check if test panicked
+                std::string cmp = "%panic_cmp_" + idx_str;
+                emit_line("  " + cmp + " = icmp eq i32 " + result + ", 0");
+
+                std::string no_panic_label = "no_panic_" + idx_str;
+                std::string panic_ok_label = "panic_ok_" + idx_str;
+                std::string test_done_label = "test_done_" + idx_str;
+
+                emit_line("  br i1 " + cmp + ", label %" + no_panic_label + ", label %" +
+                          panic_ok_label);
+                emit_line("");
+
+                // Test didn't panic - that's an error for @should_panic
+                emit_line(no_panic_label + ":");
+                emit_line("  call i32 (ptr, ...) @printf(ptr @.should_panic_no_panic)");
+                emit_line("  call void @exit(i32 1)");
+                emit_line("  unreachable");
+                emit_line("");
+
+                // Test panicked - check message if expected
+                emit_line(panic_ok_label + ":");
+                if (!test_info.expected_panic_message_str.empty()) {
+                    // Check if panic message contains expected string
+                    std::string msg_check = "%msg_check_" + idx_str;
+                    emit_line("  " + msg_check + " = call i32 @tml_panic_message_contains(ptr " +
+                              test_info.expected_panic_message_str + ")");
+
+                    std::string msg_ok_label = "msg_ok_" + idx_str;
+                    std::string msg_fail_label = "msg_fail_" + idx_str;
+                    std::string msg_cmp = "%msg_cmp_" + idx_str;
+                    emit_line("  " + msg_cmp + " = icmp ne i32 " + msg_check + ", 0");
+                    emit_line("  br i1 " + msg_cmp + ", label %" + msg_ok_label + ", label %" +
+                              msg_fail_label);
+                    emit_line("");
+
+                    // Message didn't match - fail
+                    emit_line(msg_fail_label + ":");
+                    emit_line("  call i32 (ptr, ...) @printf(ptr @.should_panic_wrong_msg)");
+                    emit_line("  call void @exit(i32 1)");
+                    emit_line("  unreachable");
+                    emit_line("");
+
+                    // Message matched - continue
+                    emit_line(msg_ok_label + ":");
+                    emit_line("  br label %" + test_done_label);
+                } else {
+                    // No expected message - any panic is fine
+                    emit_line("  br label %" + test_done_label);
+                }
+                emit_line("");
+
+                emit_line(test_done_label + ":");
+                prev_block = test_done_label;
             } else {
-                // Function returns void
-                emit_line("  call void " + test_fn + "()");
+                // Regular test - just call it
+                auto it = functions_.find(test_info.name);
+                if (it != functions_.end() && it->second.ret_type != "void") {
+                    std::string tmp = "%test_result_" + idx_str;
+                    emit_line("  " + tmp + " = call " + it->second.ret_type + " " + test_fn + "()");
+                } else {
+                    emit_line("  call void " + test_fn + "()");
+                }
             }
+
+            test_idx++;
         }
 
         // Print coverage report if enabled

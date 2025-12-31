@@ -30,6 +30,7 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "Char",
     "Str",
     "Unit",
+    "Never",
     // Core enums
     "Maybe",
     "Outcome",
@@ -46,6 +47,62 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     // Other core types
     "Range",
     "RangeInclusive",
+    // Pointer types
+    "Ptr",
+    "Ref",
+    // I/O types
+    "File",
+    "Path",
+    // Concurrency types
+    "Thread",
+    "Channel",
+    "Mutex",
+    "WaitGroup",
+    "AtomicCounter",
+    // String builder
+    "StringBuilder",
+};
+
+// Reserved behavior (trait) names - builtin behaviors that cannot be redefined
+static const std::set<std::string> RESERVED_BEHAVIOR_NAMES = {
+    // Comparison behaviors
+    "Eq",
+    "Ord",
+    "PartialEq",
+    "PartialOrd",
+    // Hashing
+    "Hash",
+    // Display/Debug
+    "Display",
+    "Debug",
+    // Numeric
+    "Numeric",
+    // Default value
+    "Default",
+    // Cloning
+    "Duplicate",
+    // Iteration
+    "Iterator",
+    "IntoIterator",
+    "FromIterator",
+    // Conversion
+    "Into",
+    "From",
+    "TryInto",
+    "TryFrom",
+    // Indexing
+    "Index",
+    "IndexMut",
+    // Functions
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    // Drop
+    "Drop",
+    // Sized
+    "Sized",
+    // Send/Sync (concurrency)
+    "Send",
 };
 
 // Forward declarations from helpers.cpp
@@ -179,6 +236,14 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
 }
 
 void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
+    // Check if the behavior name is reserved (builtin behavior)
+    if (RESERVED_BEHAVIOR_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin behavior '" + decl.name +
+                  "'. Use the builtin behavior instead of defining your own.",
+              decl.span);
+        return;
+    }
+
     std::vector<FuncSig> methods;
     std::set<std::string> methods_with_defaults;
 
@@ -256,6 +321,14 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 }
 
 void TypeChecker::register_type_alias(const parser::TypeAliasDecl& decl) {
+    // Check if the type alias name is reserved (builtin type)
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name +
+                  "'. Use the builtin type instead of defining your own.",
+              decl.span);
+        return;
+    }
+
     env_.define_type_alias(decl.name, resolve_type(*decl.type));
 }
 

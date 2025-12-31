@@ -47,6 +47,14 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @panic(ptr) noreturn");
     emit_line("");
 
+    // Panic catching for @should_panic tests
+    // Uses a callback approach: pass function pointer to tml_run_should_panic()
+    emit_line("; Panic catching (for @should_panic tests)");
+    emit_line("declare i32 @tml_run_should_panic(ptr)");
+    emit_line("declare ptr @tml_get_panic_message()");
+    emit_line("declare i32 @tml_panic_message_contains(ptr)");
+    emit_line("");
+
     // Note: TML test assertions are now provided by the test module's TML code
     // They call panic() internally and don't need external declarations
     emit_line("");

@@ -62,6 +62,25 @@ int64_t elapsed_ns(int64_t start);
 // ============================================================================
 
 void* mem_alloc(int64_t size);
+
+// ============================================================================
+// Panic Catching (for @should_panic tests)
+// Uses a callback approach: LLVM IR passes a function pointer to tml_run_should_panic()
+// ============================================================================
+
+// Callback type for test functions (void -> void)
+typedef void (*tml_test_fn)(void);
+
+// Run a test function that should panic
+// Returns: 1 if the test panicked (success), 0 if it didn't panic (failure)
+int32_t tml_run_should_panic(tml_test_fn test_fn);
+
+// Get the last panic message (valid after tml_run_should_panic returned 1)
+const char* tml_get_panic_message(void);
+
+// Check if the panic message contains expected substring
+int32_t tml_panic_message_contains(const char* expected);
+
 void* mem_alloc_zeroed(int64_t size);
 void* mem_realloc(void* ptr, int64_t new_size);
 void mem_free(void* ptr);
