@@ -1,139 +1,139 @@
-# TML Core Library - Análise Comparativa com Rust Core
+# TML Core Library - Comparative Analysis with Rust Core
 
-## Análise da Estrutura Atual do TML vs Rust Core
+## Current TML vs Rust Core Structure Analysis
 
-### 📊 Status Geral
+### Overall Status
 
-**TML Atual:** 9 módulos implementados
-**Rust Core:** 33+ módulos
-**Cobertura:** ~27%
+**Current TML:** 9 modules implemented
+**Rust Core:** 33+ modules
+**Coverage:** ~27%
 
 ---
 
-## ✅ MÓDULOS JÁ IMPLEMENTADOS NO TML
+## MODULES ALREADY IMPLEMENTED IN TML
 
-### 1. **core::mem** ✅
-**Status:** Implementado básico
-**Arquivo:** `packages/compiler/src/core/mem.tml`
+### 1. **core::mem**
+**Status:** Basic implementation
+**File:** `packages/compiler/src/core/mem.tml`
 
-**Funcionalidades:**
-- ✅ `alloc()` - Alocação de memória
-- ✅ `dealloc()` - Liberação de memória
-- ✅ `read_i32()`, `write_i32()` - Leitura/escrita
-- ✅ `ptr_offset()` - Aritmética de ponteiros
+**Features:**
+- `alloc()` - Memory allocation
+- `dealloc()` - Memory deallocation
+- `read_i32()`, `write_i32()` - Read/write
+- `ptr_offset()` - Pointer arithmetic
 
 **vs Rust core::mem:**
-- ❌ Falta: `size_of()`, `align_of()`, `swap()`, `replace()`, `drop()`
-- ❌ Falta: `forget()`, `discriminant()`, `transmute()`
-- ❌ Falta: `MaybeUninit[T]` type
+- Missing: `size_of()`, `align_of()`, `swap()`, `replace()`, `drop()`
+- Missing: `forget()`, `discriminant()`, `transmute()`
+- Missing: `MaybeUninit[T]` type
 
 ---
 
-### 2. **core::time** ✅
-**Status:** Implementado básico
-**Arquivo:** `packages/compiler/src/core/time.tml`
+### 2. **core::time**
+**Status:** Basic implementation
+**File:** `packages/compiler/src/core/time.tml`
 
 **vs Rust core::time:**
-- ✅ Provavelmente tem funções de timing
-- ⚠️ Precisa verificar se tem `Duration`, `Instant`
+- Probably has timing functions
+- Need to verify if it has `Duration`, `Instant`
 
 ---
 
-### 3. **core::thread** ✅
-**Status:** Implementado básico
-**Arquivo:** `packages/compiler/src/core/thread.tml`
+### 3. **core::thread**
+**Status:** Basic implementation
+**File:** `packages/compiler/src/core/thread.tml`
 
 **vs Rust core (std::thread):**
-- ⚠️ Rust core não tem threads (isso é std)
-- ✅ TML tem implementação de threading
+- Rust core doesn't have threads (that's std)
+- TML has threading implementation
 
 ---
 
-### 4. **core::sync** ✅
-**Status:** Implementado básico
-**Arquivo:** `packages/compiler/src/core/sync.tml`
+### 4. **core::sync**
+**Status:** Basic implementation
+**File:** `packages/compiler/src/core/sync.tml`
 
 **vs Rust core::sync:**
-- ✅ Provavelmente tem primitivas de sincronização
-- ⚠️ Precisa verificar: `Arc`, `Mutex`, `RwLock`, `Barrier`
+- Probably has synchronization primitives
+- Need to verify: `Arc`, `Mutex`, `RwLock`, `Barrier`
 
 ---
 
-### 5. **std::types** ✅
-**Status:** Implementado
-**Arquivo:** `packages/std/src/types/mod.tml`
+### 5. **std::types**
+**Status:** Implemented
+**File:** `packages/std/src/types/mod.tml`
 
-**Funcionalidades:**
-- ✅ `Maybe[T]` (equivalente a `Option[T]`)
-- ✅ `Outcome[T, E]` (equivalente a `Result[T, E]`)
-- ✅ Helper functions: `is_just()`, `is_nothing()`, `unwrap_or()`
-- ✅ Helper functions: `is_ok()`, `is_err()`, `unwrap_or_ok()`
+**Features:**
+- `Maybe[T]` (equivalent to `Option[T]`)
+- `Outcome[T, E]` (equivalent to `Result[T, E]`)
+- Helper functions: `is_just()`, `is_nothing()`, `unwrap_or()`
+- Helper functions: `is_ok()`, `is_err()`, `unwrap_or_ok()`
 
 **vs Rust core::option + core::result:**
-- ✅ Tipos base implementados
-- ❌ Falta: `map()`, `and_then()`, `or_else()`, `filter()`
-- ❌ Falta: `unwrap()`, `expect()`, `unwrap_or_else()`
+- Base types implemented
+- Missing: `map()`, `and_then()`, `or_else()`, `filter()`
+- Missing: `unwrap()`, `expect()`, `unwrap_or_else()`
 
 ---
 
-### 6. **std::iter** ✅
-**Status:** Implementado avançado
-**Arquivo:** `packages/std/src/iter/mod.tml`
+### 6. **std::iter**
+**Status:** Advanced implementation
+**File:** `packages/std/src/iter/mod.tml`
 
-**Funcionalidades:**
-- ✅ `Iterator` behavior (trait)
-- ✅ `IntoIterator` behavior
-- ✅ `Range` type com iteração
-- ✅ Métodos: `next()`, `take()`, `skip()`, `sum()`, `count()`
-- ✅ Métodos: `fold()`, `any()`, `all()`
+**Features:**
+- `Iterator` behavior (trait)
+- `IntoIterator` behavior
+- `Range` type with iteration
+- Methods: `next()`, `take()`, `skip()`, `sum()`, `count()`
+- Methods: `fold()`, `any()`, `all()`
 
 **vs Rust core::iter:**
-- ✅ Estrutura base muito boa
-- ❌ Falta: `map()`, `filter()`, `collect()`
-- ❌ Falta: `zip()`, `enumerate()`, `chain()`, `rev()`
-- ❌ Falta: `find()`, `position()`, `max()`, `min()`
+- Very good base structure
+- Missing: `map()`, `filter()`, `collect()`
+- Missing: `zip()`, `enumerate()`, `chain()`, `rev()`
+- Missing: `find()`, `position()`, `max()`, `min()`
 
 ---
 
-### 7. **std::collections** ✅
-**Status:** Implementado avançado
-**Arquivo:** `packages/std/src/collections/mod.tml`
+### 7. **std::collections**
+**Status:** Advanced implementation
+**File:** `packages/std/src/collections/mod.tml`
 
-**Funcionalidades:**
-- ✅ `List[T]` - Dynamic array (Vec equivalente)
-- ✅ `HashMap[K, V]` - Hash table
-- ✅ `Buffer` - Byte buffer
+**Features:**
+- `List[T]` - Dynamic array (Vec equivalent)
+- `HashMap[K, V]` - Hash table
+- `Buffer` - Byte buffer
 
-**vs Rust std::collections (core não tem):**
-- ✅ Lista dinâmica implementada
-- ✅ HashMap implementado
-- ❌ Falta: `BTreeMap`, `BinaryHeap`, `VecDeque`
-- ❌ Falta: `HashSet`, `BTreeSet`
-
----
-
-### 8. **std::file** ✅
-**Status:** Implementado
-**Arquivo:** `packages/std/src/file/mod.tml`
-
-**vs Rust std::fs (core não tem I/O):**
-- ✅ File I/O implementado
-- ⚠️ Rust core não tem I/O (apenas std)
+**vs Rust std::collections (core doesn't have this):**
+- Dynamic list implemented
+- HashMap implemented
+- Missing: `BTreeMap`, `BinaryHeap`, `VecDeque`
+- Missing: `HashSet`, `BTreeSet`
 
 ---
 
-## ❌ MÓDULOS CRÍTICOS FALTANDO
+### 8. **std::file**
+**Status:** Implemented
+**File:** `packages/std/src/file/mod.tml`
 
-### PRIORIDADE ALTA 🔴
+**vs Rust std::fs (core doesn't have I/O):**
+- File I/O implemented
+- Rust core doesn't have I/O (only std)
 
-#### 1. **core::clone** - CRÍTICO
-**Rust:** `Clone` trait para duplicação explícita
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Duplicar valores que não são `Copy`
-- Implementar `clone()` em tipos complexos
+---
 
-**Implementação sugerida:**
+## CRITICAL MISSING MODULES
+
+### HIGH PRIORITY
+
+#### 1. **core::clone** - CRITICAL
+**Rust:** `Clone` trait for explicit duplication
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Duplicating values that are not `Copy`
+- Implementing `clone()` on complex types
+
+**Suggested implementation:**
 ```tml
 // packages/core/src/clone.tml
 pub behavior Clone {
@@ -147,14 +147,14 @@ pub behavior Copy extends Clone {
 
 ---
 
-#### 2. **core::cmp** - CRÍTICO
+#### 2. **core::cmp** - CRITICAL
 **Rust:** `PartialEq`, `Eq`, `PartialOrd`, `Ord`
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Comparações personalizadas
-- Ordenação de coleções
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Custom comparisons
+- Collection sorting
 
-**Implementação sugerida:**
+**Suggested implementation:**
 ```tml
 // packages/core/src/cmp.tml
 pub behavior PartialEq {
@@ -181,14 +181,14 @@ pub type Ordering {
 
 ---
 
-#### 3. **core::ops** - CRÍTICO
+#### 3. **core::ops** - CRITICAL
 **Rust:** Operator overloading (`Add`, `Sub`, `Mul`, `Div`, `Index`)
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Sobrecarga de operadores (+, -, *, /, [])
-- Syntax sugar para tipos customizados
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Operator overloading (+, -, *, /, [])
+- Syntax sugar for custom types
 
-**Implementação sugerida:**
+**Suggested implementation:**
 ```tml
 // packages/core/src/ops.tml
 pub behavior Add {
@@ -214,14 +214,14 @@ pub behavior Index {
 
 ---
 
-#### 4. **core::default** - ALTA PRIORIDADE
-**Rust:** `Default` trait para valores padrão
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Criar instâncias padrão de tipos
-- Inicialização genérica
+#### 4. **core::default** - HIGH PRIORITY
+**Rust:** `Default` trait for default values
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Creating default instances of types
+- Generic initialization
 
-**Implementação sugerida:**
+**Suggested implementation:**
 ```tml
 // packages/core/src/default.tml
 pub behavior Default {
@@ -231,15 +231,15 @@ pub behavior Default {
 
 ---
 
-#### 5. **core::fmt** - ALTA PRIORIDADE
-**Rust:** Formatação (`Display`, `Debug`)
-**TML:** ❌ NÃO IMPLEMENTADO (usa builtins)
-**Necessário para:**
-- Print customizado
+#### 5. **core::fmt** - HIGH PRIORITY
+**Rust:** Formatting (`Display`, `Debug`)
+**TML:** NOT IMPLEMENTED (uses builtins)
+**Required for:**
+- Custom print
 - String representation
 - Debug output
 
-**Implementação sugerida:**
+**Suggested implementation:**
 ```tml
 // packages/core/src/fmt.tml
 pub behavior Display {
@@ -253,98 +253,98 @@ pub behavior Debug {
 
 ---
 
-### PRIORIDADE MÉDIA 🟡
+### MEDIUM PRIORITY
 
-#### 6. **core::convert** - MÉDIA
+#### 6. **core::convert** - MEDIUM
 **Rust:** `From`, `Into`, `TryFrom`, `TryInto`, `AsRef`, `AsMut`
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Conversões entre tipos
-- Trait bounds genéricos
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Type conversions
+- Generic trait bounds
 
 ---
 
-#### 7. **core::borrow** - MÉDIA
+#### 7. **core::borrow** - MEDIUM
 **Rust:** `Borrow`, `BorrowMut`, `ToOwned`, `Cow`
-**TML:** ⚠️ Sistema de ownership existe, mas não tem traits
-**Necessário para:**
-- Abstração sobre owned/borrowed
+**TML:** Ownership system exists but no traits
+**Required for:**
+- Abstraction over owned/borrowed
 - Generic borrowing
 
 ---
 
-#### 8. **core::hash** - MÉDIA
+#### 8. **core::hash** - MEDIUM
 **Rust:** `Hash` trait, `Hasher`
-**TML:** ⚠️ HashMap existe mas hash trait não é público
-**Necessário para:**
-- Hash customizado
-- HashMap com tipos customizados
+**TML:** HashMap exists but hash trait is not public
+**Required for:**
+- Custom hashing
+- HashMap with custom types
 
 ---
 
-#### 9. **core::cell** - MÉDIA
+#### 9. **core::cell** - MEDIUM
 **Rust:** `Cell[T]`, `RefCell[T]` - interior mutability
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Mutabilidade interior
-- Shared mutability segura
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Interior mutability
+- Safe shared mutability
 
 ---
 
-#### 10. **core::marker** - MÉDIA
+#### 10. **core::marker** - MEDIUM
 **Rust:** `Copy`, `Send`, `Sync`, `Sized`, `Unpin`
-**TML:** ❌ NÃO IMPLEMENTADO
-**Necessário para:**
-- Traits marcadores
-- Garantias de tipo
+**TML:** NOT IMPLEMENTED
+**Required for:**
+- Marker traits
+- Type guarantees
 
 ---
 
-### PRIORIDADE BAIXA 🟢
+### LOW PRIORITY
 
-#### 11. **core::any** - BAIXA
+#### 11. **core::any** - LOW
 **Rust:** Type reflection (`Any`, `TypeId`)
-**TML:** ❌ NÃO IMPLEMENTADO
+**TML:** NOT IMPLEMENTED
 
-#### 12. **core::str** - BAIXA
+#### 12. **core::str** - LOW
 **Rust:** String slice manipulation
-**TML:** ⚠️ Tem `Str` builtin mas sem módulo
+**TML:** Has `Str` builtin but no module
 
-#### 13. **core::slice** - BAIXA
+#### 13. **core::slice** - LOW
 **Rust:** Slice utilities
-**TML:** ⚠️ Tem arrays mas sem slice abstraction
+**TML:** Has arrays but no slice abstraction
 
-#### 14. **core::array** - BAIXA
-**Rust:** Array utilities e traits
-**TML:** ⚠️ Arrays existem mas sem utilities
+#### 14. **core::array** - LOW
+**Rust:** Array utilities and traits
+**TML:** Arrays exist but no utilities
 
-#### 15. **core::ptr** - BAIXA
+#### 15. **core::ptr** - LOW
 **Rust:** Raw pointer utilities
-**TML:** ⚠️ Tem `Ptr[T]` mas sem utilities
+**TML:** Has `Ptr[T]` but no utilities
 
-#### 16. **core::panic** - BAIXA
+#### 16. **core::panic** - LOW
 **Rust:** Panic infrastructure
-**TML:** ❌ NÃO IMPLEMENTADO (tem assert builtins)
+**TML:** NOT IMPLEMENTED (has assert builtins)
 
-#### 17. **core::pin** - BAIXA
+#### 17. **core::pin** - LOW
 **Rust:** Pinning pointers
-**TML:** ❌ NÃO IMPLEMENTADO
+**TML:** NOT IMPLEMENTED
 
-#### 18. **core::future** / **core::task** - BAIXA
+#### 18. **core::future** / **core::task** - LOW
 **Rust:** Async foundations
-**TML:** ❌ NÃO IMPLEMENTADO
+**TML:** NOT IMPLEMENTED
 
-#### 19. **core::error** - BAIXA
+#### 19. **core::error** - LOW
 **Rust:** Error trait
-**TML:** ⚠️ Tem `Outcome[T,E]` mas sem Error trait
+**TML:** Has `Outcome[T,E]` but no Error trait
 
 ---
 
-## 📋 PLANO DE IMPLEMENTAÇÃO SUGERIDO
+## SUGGESTED IMPLEMENTATION PLAN
 
-### FASE 1 - Fundamentos (CRÍTICOS) 🔴
+### PHASE 1 - Foundations (CRITICAL)
 
-**Objetivo:** Implementar behaviors essenciais para APIs genéricas
+**Objective:** Implement essential behaviors for generic APIs
 
 1. **core::clone** - `Clone` behavior
 2. **core::cmp** - `PartialEq`, `Ord`, `Ordering`
@@ -352,25 +352,23 @@ pub behavior Debug {
 4. **core::ops** - `Add`, `Sub`, `Mul`, `Div`, `Index`
 5. **core::fmt** - `Display`, `Debug`
 
-**Estimativa:** 2-3 semanas para LLMs
-**Impacto:** Habilita 80% dos padrões comuns
+**Impact:** Enables 80% of common patterns
 
 ---
 
-### FASE 2 - Conversões e Utilidades (MÉDIA) 🟡
+### PHASE 2 - Conversions and Utilities (MEDIUM)
 
 6. **core::convert** - `From`, `Into`, `TryFrom`, `TryInto`
-7. **core::hash** - `Hash` trait público
+7. **core::hash** - Public `Hash` trait
 8. **core::borrow** - `Borrow`, `BorrowMut`
 9. **core::marker** - `Copy`, `Send`, `Sync`
-10. **Expandir core::mem** - `size_of`, `swap`, `replace`
+10. **Expand core::mem** - `size_of`, `swap`, `replace`
 
-**Estimativa:** 2-3 semanas
-**Impacto:** APIs mais expressivas e type-safe
+**Impact:** More expressive and type-safe APIs
 
 ---
 
-### FASE 3 - Avançado (BAIXA) 🟢
+### PHASE 3 - Advanced (LOW)
 
 11. **core::cell** - `Cell[T]`, `RefCell[T]`
 12. **core::str** - String utilities
@@ -378,109 +376,107 @@ pub behavior Debug {
 14. **core::ptr** - Pointer utilities
 15. **core::error** - Error trait
 
-**Estimativa:** 3-4 semanas
-**Impacto:** Features avançadas
+**Impact:** Advanced features
 
 ---
 
-### FASE 4 - Async e Especializados (OPCIONAL) ⚪
+### PHASE 4 - Async and Specialized (OPTIONAL)
 
 16. **core::future** - Future trait
 17. **core::task** - Task types
 18. **core::pin** - Pin types
 19. **core::any** - Type reflection
 
-**Estimativa:** 4-6 semanas
-**Impacto:** Async/await support
+**Impact:** Async/await support
 
 ---
 
-## 🎯 RECOMENDAÇÕES IMEDIATAS
+## IMMEDIATE RECOMMENDATIONS
 
-### Para LLMs Gerarem Código Eficiente:
+### For LLMs to Generate Efficient Code:
 
-**TOP 3 PRIORIDADES:**
+**TOP 3 PRIORITIES:**
 
-1. **Implementar core::clone**
-   - 90% do código Rust usa Clone
-   - Crítico para trabalhar com coleções
+1. **Implement core::clone**
+   - 90% of Rust code uses Clone
+   - Critical for working with collections
 
-2. **Implementar core::cmp**
-   - Necessário para sorting e ordenação
-   - Habilita `sort()` em List[T]
+2. **Implement core::cmp**
+   - Required for sorting and ordering
+   - Enables `sort()` on List[T]
 
-3. **Implementar core::ops**
-   - Syntax sugar massivo
-   - `vec[i]` ao invés de `vec.get(i)`
-   - `a + b` ao invés de `a.add(b)`
+3. **Implement core::ops**
+   - Massive syntax sugar
+   - `vec[i]` instead of `vec.get(i)`
+   - `a + b` instead of `a.add(b)`
 
-### Arquivos a Criar:
+### Files to Create:
 
 ```
 packages/core/src/
-  ├── mod.tml           # Re-export all core modules
-  ├── clone.tml         # Clone, Copy behaviors
-  ├── cmp.tml           # PartialEq, Ord, Ordering
-  ├── default.tml       # Default behavior
-  ├── ops.tml           # Add, Sub, Mul, Div, Index
-  ├── fmt.tml           # Display, Debug
-  ├── convert.tml       # From, Into conversions
-  ├── hash.tml          # Hash behavior
-  ├── borrow.tml        # Borrow, BorrowMut
-  └── marker.tml        # Copy, Send, Sync markers
+  mod.tml           # Re-export all core modules
+  clone.tml         # Clone, Copy behaviors
+  cmp.tml           # PartialEq, Ord, Ordering
+  default.tml       # Default behavior
+  ops.tml           # Add, Sub, Mul, Div, Index
+  fmt.tml           # Display, Debug
+  convert.tml       # From, Into conversions
+  hash.tml          # Hash behavior
+  borrow.tml        # Borrow, BorrowMut
+  marker.tml        # Copy, Send, Sync markers
 ```
 
 ---
 
-## 📊 MATRIZ DE PRIORIDADES
+## PRIORITY MATRIX
 
-| Módulo | Prioridade | Complexidade | Impacto | Esforço | ROI |
-|--------|-----------|--------------|---------|---------|-----|
-| core::clone | 🔴 CRÍTICO | Baixa | Alto | 1 dia | ⭐⭐⭐⭐⭐ |
-| core::cmp | 🔴 CRÍTICO | Média | Alto | 2 dias | ⭐⭐⭐⭐⭐ |
-| core::ops | 🔴 CRÍTICO | Média | Muito Alto | 3 dias | ⭐⭐⭐⭐⭐ |
-| core::default | 🔴 ALTA | Baixa | Médio | 1 dia | ⭐⭐⭐⭐ |
-| core::fmt | 🔴 ALTA | Média | Alto | 2 dias | ⭐⭐⭐⭐ |
-| core::convert | 🟡 MÉDIA | Média | Médio | 2 dias | ⭐⭐⭐ |
-| core::hash | 🟡 MÉDIA | Baixa | Baixo | 1 dia | ⭐⭐⭐ |
-| core::borrow | 🟡 MÉDIA | Alta | Médio | 3 dias | ⭐⭐⭐ |
-| core::cell | 🟢 BAIXA | Alta | Baixo | 4 dias | ⭐⭐ |
-| core::future | ⚪ OPCIONAL | Muito Alta | Baixo | 10+ dias | ⭐ |
-
----
-
-## ✅ RESUMO EXECUTIVO
-
-**O que TML já tem (MUITO BOM):**
-- ✅ Maybe[T] e Outcome[T,E] - foundation sólida
-- ✅ Iterator system - bem implementado
-- ✅ Collections básicas - List, HashMap, Buffer
-- ✅ Memória baixo nível - core::mem funcional
-
-**O que TML precisa URGENTE:**
-- ❌ Behaviors essenciais: Clone, PartialEq, Ord
-- ❌ Operator overloading: Add, Sub, Index, etc.
-- ❌ Default trait
-- ❌ Display/Debug para formatação
-
-**Impacto:**
-Com **core::clone, core::cmp, core::ops** implementados (1 semana de trabalho), TML teria **90%** da ergonomia do Rust para LLMs gerarem código idiomático.
+| Module | Priority | Complexity | Impact | Effort | ROI |
+|--------|----------|------------|--------|--------|-----|
+| core::clone | CRITICAL | Low | High | 1 day | ***** |
+| core::cmp | CRITICAL | Medium | High | 2 days | ***** |
+| core::ops | CRITICAL | Medium | Very High | 3 days | ***** |
+| core::default | HIGH | Low | Medium | 1 day | **** |
+| core::fmt | HIGH | Medium | High | 2 days | **** |
+| core::convert | MEDIUM | Medium | Medium | 2 days | *** |
+| core::hash | MEDIUM | Low | Low | 1 day | *** |
+| core::borrow | MEDIUM | High | Medium | 3 days | *** |
+| core::cell | LOW | High | Low | 4 days | ** |
+| core::future | OPTIONAL | Very High | Low | 10+ days | * |
 
 ---
 
-## 🚀 PRÓXIMOS PASSOS
+## EXECUTIVE SUMMARY
 
-1. **Criar `packages/core/src/mod.tml`**
-2. **Implementar `core::clone.tml`** - Behavior Clone
-3. **Implementar `core::cmp.tml`** - PartialEq, Ord
-4. **Implementar `core::ops.tml`** - Add, Sub, Mul, etc.
-5. **Implementar `core::default.tml`** - Default
-6. **Implementar `core::fmt.tml`** - Display, Debug
-7. **Atualizar std::iter** - Adicionar map(), filter(), collect()
-8. **Atualizar std::types** - Adicionar map(), and_then(), etc.
+**What TML already has (VERY GOOD):**
+- Maybe[T] and Outcome[T,E] - solid foundation
+- Iterator system - well implemented
+- Basic collections - List, HashMap, Buffer
+- Low-level memory - core::mem functional
+
+**What TML needs URGENTLY:**
+- Essential behaviors: Clone, PartialEq, Ord
+- Operator overloading: Add, Sub, Index, etc.
+- Default trait
+- Display/Debug for formatting
+
+**Impact:**
+With **core::clone, core::cmp, core::ops** implemented, TML would have **90%** of Rust's ergonomics for LLMs to generate idiomatic code.
 
 ---
 
-**Documentado em:** 2025-12-26
-**Versão TML:** 0.1.0
+## NEXT STEPS
+
+1. **Create `packages/core/src/mod.tml`**
+2. **Implement `core::clone.tml`** - Clone behavior
+3. **Implement `core::cmp.tml`** - PartialEq, Ord
+4. **Implement `core::ops.tml`** - Add, Sub, Mul, etc.
+5. **Implement `core::default.tml`** - Default
+6. **Implement `core::fmt.tml`** - Display, Debug
+7. **Update std::iter** - Add map(), filter(), collect()
+8. **Update std::types** - Add map(), and_then(), etc.
+
+---
+
+**Documented on:** 2025-12-26
+**TML Version:** 0.1.0
 **Baseline:** Rust core 1.83.0

@@ -8,6 +8,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MIR Text Parser** (2025-12-31) - Full text format parser for MIR modules
+  - Parses module structure, functions, blocks, instructions, and terminators
+  - Supports all primitive types, pointers, arrays, and struct types
+  - Parses binary/unary operations, load/store, alloca, call instructions
+  - Handles return, branch, conditional branch, and unreachable terminators
+  - Enables round-trip serialization for MIR debugging and testing
+  - Files modified:
+    - `include/mir/mir_serialize.hpp` - Added read_type, read_value_ref, read_instruction, read_terminator, read_block, read_function declarations
+    - `src/mir/mir_serialize.cpp` - Full implementation of MIR text parsing (~400 lines)
+
+- **Git Dependency Resolution** (2025-12-31) - Clone and build dependencies from git repositories
+  - `git = "url"` dependency specification in tml.toml
+  - Supports `branch`, `tag`, and `rev` options for checkout
+  - Shallow clone (--depth 1) for faster downloads
+  - Automatic caching in `~/.tml/cache/git/`
+  - Builds dependency and caches resulting rlib
+  - Files modified:
+    - `src/cli/build_config.hpp` - Added `branch` and `rev` fields to Dependency struct
+    - `src/cli/dependency_resolver.cpp` - Full git resolution implementation (~140 lines)
+
+- **Registry Lookup for Dependencies** (2025-12-31) - Check package registry for version dependencies
+  - Looks up packages in local registry index cache
+  - Parses registry JSON for download URLs
+  - Groundwork for future remote registry support
+  - Files modified:
+    - `src/cli/dependency_resolver.cpp` - Registry lookup in resolve_version_dependency (~35 lines)
+
+- **DCE Purity Analysis** (2025-12-31) - Dead code elimination for pure function calls
+  - 60+ known pure functions (math, string, collection accessors)
+  - Removes unused calls to pure functions like `abs()`, `len()`, `sqrt()`
+  - Handles method calls (`String::len`) and generic instantiations (`abs[I32]`)
+  - Files modified:
+    - `src/mir/passes/dead_code_elimination.cpp` - Added `pure_functions` set and `is_pure_function()` helper (~100 lines)
+
+- **Range Expression Tests** (2025-12-31) - Parser tests for range syntax
+  - Tests for `to` keyword (exclusive range): `1 to 10`
+  - Tests for `through` keyword (inclusive range): `1 through 10`
+  - Tests for `..` operator: `1..10`
+  - Files modified:
+    - `compiler/tests/parser_test.cpp` - Added RangeExpressionWithTo, RangeExpressionWithThrough, RangeExpressionWithDotDot tests
+
+- **Never Type for panic!** (2025-12-31) - Correct return type for panic builtin
+  - `panic()` now returns `Never` type instead of `Unit`
+  - Proper diverging function semantics
+  - Files modified:
+    - `src/types/builtins/io.cpp` - Changed panic return type to `make_never()`
+
+### Changed
+- **MIR Builder Split** (2025-12-31) - Refactored mir_builder.cpp into modular components
+  - Split 1716-line file into 6 focused modules in `src/mir/builder/`:
+    - `types.cpp` (~175 lines) - Type conversion functions (convert_type, convert_semantic_type)
+    - `expr.cpp` (~490 lines) - Expression building (literals, binary, unary, calls, closures)
+    - `stmt.cpp` (~140 lines) - Statement and declaration building
+    - `pattern.cpp` (~105 lines) - Pattern matching and destructuring
+    - `control.cpp` (~300 lines) - Control flow (if, loops, when/match)
+    - `helpers.cpp` (~180 lines) - Utility functions (emit, constants, operators)
+  - Main mir_builder.cpp reduced to ~30 lines (constructor + build entry point)
+  - Files added:
+    - `src/mir/builder/builder_internal.hpp`
+    - `src/mir/builder/types.cpp`
+    - `src/mir/builder/expr.cpp`
+    - `src/mir/builder/stmt.cpp`
+    - `src/mir/builder/pattern.cpp`
+    - `src/mir/builder/control.cpp`
+    - `src/mir/builder/helpers.cpp`
+  - CMakeLists.txt updated with new builder module files
+
+### Documentation
+- **CORE_ANALYSIS.md** (2025-12-31) - Translated from Portuguese to English
+  - Comparative analysis of TML core library vs Rust core
+  - Module coverage status and priority matrix
+  - Implementation roadmap for missing behaviors (Clone, Ord, Ops, etc.)
+
 - **Benchmark Framework** (2025-12-31) - Full benchmark support with `@bench` decorator
   - `@bench` decorator marks functions as benchmarks (default 1000 iterations)
   - `@bench(N)` allows custom iteration count (e.g., `@bench(10000)`)
