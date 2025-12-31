@@ -185,10 +185,17 @@ struct RangePattern {
     SourceSpan span;
 };
 
+// Array/Slice pattern: [a, b, c] or [head, ..rest]
+struct ArrayPattern {
+    std::vector<PatternPtr> elements;
+    std::optional<PatternPtr> rest; // For [head, ..rest] patterns
+    SourceSpan span;
+};
+
 // Pattern variant
 struct Pattern {
     std::variant<WildcardPattern, IdentPattern, LiteralPattern, TuplePattern, StructPattern,
-                 EnumPattern, OrPattern, RangePattern>
+                 EnumPattern, OrPattern, RangePattern, ArrayPattern>
         kind;
     SourceSpan span;
 
@@ -710,6 +717,9 @@ struct TraitDecl {
     SourceSpan span;
 };
 
+// Forward declaration for ConstDecl (defined below)
+struct ConstDecl;
+
 // Impl block
 struct ImplDecl {
     std::vector<GenericParam> generics;
@@ -717,6 +727,7 @@ struct ImplDecl {
                         // Borrow[T] for X)
     TypePtr self_type;
     std::vector<AssociatedTypeBinding> type_bindings; // Associated type bindings
+    std::vector<ConstDecl> constants;                 // Associated constants
     std::vector<FuncDecl> methods;
     std::optional<WhereClause> where_clause;
     SourceSpan span;

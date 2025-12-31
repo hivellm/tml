@@ -4,6 +4,12 @@
 
 namespace tml::cli {
 
+// Exit codes for test/run commands
+// These help distinguish compilation errors from runtime errors
+constexpr int EXIT_SUCCESS_CODE = 0;
+constexpr int EXIT_RUNTIME_ERROR = 1;     // Test executed but failed
+constexpr int EXIT_COMPILATION_ERROR = 2; // Code failed to compile (lex/parse/type/codegen)
+
 // Build output types
 enum class BuildOutputType {
     Executable,

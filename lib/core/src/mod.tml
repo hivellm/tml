@@ -23,6 +23,7 @@
 // - error: Error behavior and common error types
 // - alloc: Memory allocation (Layout, Allocator, GlobalAlloc)
 // - collections: Behavior implementations for List, HashMap
+// - net: Network address types (IpAddr, SocketAddr) - no I/O
 
 pub mod clone    // Duplicate, Copy
 pub mod cmp      // Ordering, PartialEq, Eq, PartialOrd, Ord
@@ -46,3 +47,4 @@ pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
 pub mod collections  // List, HashMap behavior implementations
+pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr (no I/O)

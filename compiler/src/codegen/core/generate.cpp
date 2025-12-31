@@ -136,6 +136,37 @@ auto LLVMIRGen::generate(const parser::Module& module)
         } else if (decl->is<parser::ImplDecl>()) {
             // Register impl block for vtable generation
             register_impl(&decl->as<parser::ImplDecl>());
+
+            // Collect associated constants from impl block
+            const auto& impl = decl->as<parser::ImplDecl>();
+            std::string type_name;
+            if (impl.self_type->kind.index() == 0) { // NamedType
+                const auto& named = std::get<parser::NamedType>(impl.self_type->kind);
+                if (!named.path.segments.empty()) {
+                    type_name = named.path.segments.back();
+                }
+            }
+            if (!type_name.empty()) {
+                for (const auto& const_decl : impl.constants) {
+                    std::string qualified_name = type_name + "::" + const_decl.name;
+                    // For now, only support literal constants
+                    if (const_decl.value->is<parser::LiteralExpr>()) {
+                        const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                        std::string value;
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            value = std::to_string(lit.token.int_value().value);
+                        } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                            value = (lit.token.lexeme == "true") ? "1" : "0";
+                        } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
+                            value = "null";
+                        }
+                        if (!value.empty()) {
+                            global_constants_[qualified_name] = value;
+                        }
+                    }
+                    // Struct literal constants will need special handling during codegen
+                }
+            }
         } else if (decl->is<parser::TraitDecl>()) {
             // Register trait/behavior declaration for default implementations
             const auto& trait_decl = decl->as<parser::TraitDecl>();

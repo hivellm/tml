@@ -702,6 +702,7 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
         return unwrap_err(lbrace);
 
     std::vector<AssociatedTypeBinding> type_bindings;
+    std::vector<ConstDecl> constants;
     std::vector<FuncDecl> methods;
     skip_newlines();
 
@@ -731,6 +732,14 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
             type_bindings.push_back(AssociatedTypeBinding{.name = std::move(type_name),
                                                           .type = std::move(unwrap(concrete_type)),
                                                           .span = type_span});
+        } else if (check(lexer::TokenKind::KwConst)) {
+            // Associated constant: const NAME: Type = value
+            auto const_result = parse_const_decl(method_vis);
+            if (is_err(const_result))
+                return const_result;
+
+            auto& const_decl = unwrap(const_result)->as<ConstDecl>();
+            constants.push_back(std::move(const_decl));
         } else {
             auto func_result = parse_func_decl(method_vis);
             if (is_err(func_result))
@@ -753,6 +762,7 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
                               .trait_type = std::move(trait_type),
                               .self_type = std::move(self_type),
                               .type_bindings = std::move(type_bindings),
+                              .constants = std::move(constants),
                               .methods = std::move(methods),
                               .where_clause = std::move(where_clause),
                               .span = SourceSpan::merge(start_span, end_span)};
@@ -856,12 +866,23 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     // and glob imports: std::time::*
     TypePath path;
 
-    // First segment
-    auto first = expect(lexer::TokenKind::Identifier, "Expected identifier");
-    if (is_err(first))
-        return unwrap_err(first);
-    path.segments.push_back(std::string(unwrap(first).lexeme));
-    path.span = unwrap(first).span;
+    // First segment - could be identifier, 'super', or 'self'
+    if (check(lexer::TokenKind::KwSuper)) {
+        auto super_tok = advance();
+        path.segments.push_back("super");
+        path.span = super_tok.span;
+    } else if (check(lexer::TokenKind::KwThis)) {
+        // 'self' module reference (using KwThis as 'self')
+        auto self_tok = advance();
+        path.segments.push_back("self");
+        path.span = self_tok.span;
+    } else {
+        auto first = expect(lexer::TokenKind::Identifier, "Expected identifier");
+        if (is_err(first))
+            return unwrap_err(first);
+        path.segments.push_back(std::string(unwrap(first).lexeme));
+        path.span = unwrap(first).span;
+    }
 
     // Continue parsing path segments
     std::optional<std::vector<std::string>> symbols;

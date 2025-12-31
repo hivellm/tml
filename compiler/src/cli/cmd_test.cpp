@@ -1,6 +1,6 @@
 #include "cmd_test.hpp"
 
-#include "cmd_build.hpp"
+#include "cmd_build.hpp" // For EXIT_COMPILATION_ERROR, run_run_quiet
 #include "cmd_debug.hpp"
 #include "common.hpp"
 #include "compiler_setup.hpp"
@@ -317,8 +317,15 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
 
     result.passed = (result.exit_code == 0);
 
+    // Check if this was a compilation error (special exit code)
+    result.compilation_error = (result.exit_code == EXIT_COMPILATION_ERROR);
+
     if (!result.passed) {
-        result.error_message = "Exit code: " + std::to_string(result.exit_code);
+        if (result.compilation_error) {
+            result.error_message = "COMPILATION FAILED";
+        } else {
+            result.error_message = "Exit code: " + std::to_string(result.exit_code);
+        }
         if (!captured_output.empty()) {
             result.error_message += "\n" + captured_output;
         }
@@ -349,10 +356,23 @@ int compile_and_run_test(const std::string& test_file, const TestOptions& opts) 
 struct TestResultCollector {
     std::mutex mutex;
     std::vector<TestResult> results;
+    std::atomic<bool> compilation_error_occurred{false};
+    TestResult first_compilation_error; // Store the first compilation error
 
     void add(TestResult result) {
         std::lock_guard<std::mutex> lock(mutex);
+
+        // If this is a compilation error and we haven't seen one yet, store it
+        if (result.compilation_error && !compilation_error_occurred.load()) {
+            compilation_error_occurred.store(true);
+            first_compilation_error = result;
+        }
+
         results.push_back(std::move(result));
+    }
+
+    bool has_compilation_error() const {
+        return compilation_error_occurred.load();
     }
 };
 
@@ -360,6 +380,11 @@ struct TestResultCollector {
 void test_worker_new(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
                      TestResultCollector& collector, const TestOptions& opts) {
     while (true) {
+        // Stop if a compilation error has occurred in another thread
+        if (collector.has_compilation_error()) {
+            break;
+        }
+
         size_t index = current_index.fetch_add(1);
         if (index >= test_files.size()) {
             break;
@@ -368,6 +393,11 @@ void test_worker_new(const std::vector<std::string>& test_files, std::atomic<siz
         const auto& file = test_files[index];
         TestResult result = compile_and_run_test_with_result(file, opts);
         collector.add(std::move(result));
+
+        // Stop immediately if this was a compilation error
+        if (result.compilation_error) {
+            break;
+        }
     }
 }
 
@@ -834,7 +864,13 @@ int run_test(int argc, char* argv[], bool verbose) {
     if (opts.verbose || opts.nocapture || test_files.size() == 1 || num_threads == 1) {
         for (const auto& file : test_files) {
             TestResult result = compile_and_run_test_with_result(file, opts);
+            bool is_compilation_error = result.compilation_error;
             collector.add(std::move(result));
+
+            // Stop immediately if this was a compilation error
+            if (is_compilation_error) {
+                break;
+            }
         }
     } else {
         // Parallel execution
@@ -857,6 +893,34 @@ int run_test(int argc, char* argv[], bool verbose) {
     auto end_time = std::chrono::high_resolution_clock::now();
     int64_t total_duration_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+    // Check if we stopped due to a compilation error
+    if (collector.has_compilation_error()) {
+        const auto& err = collector.first_compilation_error;
+
+        // Print a clear, visible error message
+        std::cerr << "\n";
+        std::cerr
+            << c.red() << c.bold()
+            << "==============================================================================="
+            << c.reset() << "\n";
+        std::cerr << c.red() << c.bold() << "COMPILATION ERROR - Test run aborted" << c.reset()
+                  << "\n";
+        std::cerr
+            << c.red() << c.bold()
+            << "==============================================================================="
+            << c.reset() << "\n";
+        std::cerr << "\n";
+        std::cerr << c.bold() << "File: " << c.reset() << err.file_path << "\n";
+        std::cerr << "\n";
+        std::cerr << c.red() << err.error_message << c.reset() << "\n";
+        std::cerr << "\n";
+        std::cerr << c.yellow() << "Fix the compilation error above before running tests again."
+                  << c.reset() << "\n";
+        std::cerr << "\n";
+
+        return 1; // Fail immediately
+    }
 
     // Print results
     if (!opts.quiet) {

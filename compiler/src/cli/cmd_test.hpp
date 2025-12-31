@@ -30,6 +30,7 @@ struct TestResult {
     std::string group; // Directory group (e.g., "compiler", "runtime")
     bool passed = false;
     bool timeout = false;
+    bool compilation_error = false; // True if the test failed to compile
     int exit_code = 0;
     int64_t duration_ms = 0; // Duration in milliseconds
     std::string error_message;

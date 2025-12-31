@@ -36,6 +36,77 @@ using namespace tml;
 
 namespace tml::cli {
 
+// Convert a parser::Type to a string representation
+static std::string type_to_string(const parser::Type& type) {
+    return std::visit(
+        [](const auto& t) -> std::string {
+            using T = std::decay_t<decltype(t)>;
+
+            if constexpr (std::is_same_v<T, parser::NamedType>) {
+                std::string result;
+                for (size_t i = 0; i < t.path.segments.size(); ++i) {
+                    if (i > 0)
+                        result += "::";
+                    result += t.path.segments[i];
+                }
+                if (t.generics.has_value() && !t.generics->args.empty()) {
+                    result += "[";
+                    for (size_t i = 0; i < t.generics->args.size(); ++i) {
+                        if (i > 0)
+                            result += ", ";
+                        result += type_to_string(*t.generics->args[i]);
+                    }
+                    result += "]";
+                }
+                return result;
+            } else if constexpr (std::is_same_v<T, parser::RefType>) {
+                return (t.is_mut ? "mut ref " : "ref ") + type_to_string(*t.inner);
+            } else if constexpr (std::is_same_v<T, parser::PtrType>) {
+                return (t.is_mut ? "*mut " : "*const ") + type_to_string(*t.inner);
+            } else if constexpr (std::is_same_v<T, parser::ArrayType>) {
+                return "[" + type_to_string(*t.element) + "; _]";
+            } else if constexpr (std::is_same_v<T, parser::SliceType>) {
+                return "[" + type_to_string(*t.element) + "]";
+            } else if constexpr (std::is_same_v<T, parser::TupleType>) {
+                std::string result = "(";
+                for (size_t i = 0; i < t.elements.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += type_to_string(*t.elements[i]);
+                }
+                result += ")";
+                return result;
+            } else if constexpr (std::is_same_v<T, parser::FuncType>) {
+                std::string result = "func(";
+                for (size_t i = 0; i < t.params.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += type_to_string(*t.params[i]);
+                }
+                result += ")";
+                if (t.return_type) {
+                    result += " -> " + type_to_string(*t.return_type);
+                }
+                return result;
+            } else if constexpr (std::is_same_v<T, parser::InferType>) {
+                return "_";
+            } else if constexpr (std::is_same_v<T, parser::DynType>) {
+                std::string result = "dyn ";
+                if (t.is_mut)
+                    result += "mut ";
+                for (size_t i = 0; i < t.behavior.segments.size(); ++i) {
+                    if (i > 0)
+                        result += "::";
+                    result += t.behavior.segments[i];
+                }
+                return result;
+            } else {
+                return "unknown";
+            }
+        },
+        type.kind);
+}
+
 // Generate a unique cache key for a file path (to avoid collisions in parallel tests)
 static std::string generate_cache_key(const std::string& path) {
     // Use hash of full path + thread ID to ensure uniqueness
@@ -656,7 +727,19 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         RlibMetadata metadata;
         metadata.format_version = "1.0";
         metadata.library.name = module_name;
-        metadata.library.version = "0.1.0"; // TODO: Read from manifest
+
+        // Try to read version from manifest (tml.toml)
+        std::string version = "0.1.0";
+        fs::path manifest_path = fs::path(path).parent_path() / "tml.toml";
+        if (fs::exists(manifest_path)) {
+            if (auto manifest = Manifest::load(manifest_path)) {
+                version = manifest->package.version;
+                if (!manifest->package.name.empty()) {
+                    metadata.library.name = manifest->package.name;
+                }
+            }
+        }
+        metadata.library.version = version;
         metadata.library.tml_version = "0.1.0";
 
         // Add module information
@@ -665,9 +748,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         rlib_module.file = object_files[0].filename().string();
         rlib_module.hash = calculate_file_hash(fs::path(path));
 
-        // Extract exports from the module
-        // For now, we'll export all public functions
-        // TODO: Parse module to get actual exports with type information
+        // Extract exports from the module with full type information
         for (const auto& decl : module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func_decl = decl->as<parser::FuncDecl>();
@@ -675,7 +756,44 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
                     RlibExport exp;
                     exp.name = func_decl.name;
                     exp.symbol = "tml_" + func_decl.name; // Simple mangling
-                    exp.type = "func";                    // TODO: Add full type signature
+
+                    // Build type signature: func(T1, T2, ...) -> RetType
+                    std::string type_sig = "func(";
+                    for (size_t i = 0; i < func_decl.params.size(); ++i) {
+                        if (i > 0)
+                            type_sig += ", ";
+                        // Extract type name from parameter
+                        if (func_decl.params[i].type) {
+                            type_sig += type_to_string(*func_decl.params[i].type);
+                        } else {
+                            type_sig += "_";
+                        }
+                    }
+                    type_sig += ")";
+                    if (func_decl.return_type.has_value()) {
+                        type_sig += " -> " + type_to_string(**func_decl.return_type);
+                    }
+                    exp.type = type_sig;
+                    exp.is_public = true;
+                    rlib_module.exports.push_back(exp);
+                }
+            } else if (decl->is<parser::StructDecl>()) {
+                const auto& struct_decl = decl->as<parser::StructDecl>();
+                if (struct_decl.vis == parser::Visibility::Public) {
+                    RlibExport exp;
+                    exp.name = struct_decl.name;
+                    exp.symbol = struct_decl.name;
+                    exp.type = "struct";
+                    exp.is_public = true;
+                    rlib_module.exports.push_back(exp);
+                }
+            } else if (decl->is<parser::EnumDecl>()) {
+                const auto& enum_decl = decl->as<parser::EnumDecl>();
+                if (enum_decl.vis == parser::Visibility::Public) {
+                    RlibExport exp;
+                    exp.name = enum_decl.name;
+                    exp.symbol = enum_decl.name;
+                    exp.type = "enum";
                     exp.is_public = true;
                     rlib_module.exports.push_back(exp);
                 }
@@ -1010,8 +1128,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         source_code = read_file(path);
     } catch (const std::exception& e) {
         if (output)
-            *output = std::string("error: ") + e.what();
-        return 1;
+            *output = std::string("compilation error: ") + e.what();
+        return EXIT_COMPILATION_ERROR;
     }
 
     auto source = lexer::Source::from_string(source_code, path);
@@ -1019,7 +1137,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     auto tokens = lex.tokenize();
 
     if (lex.has_errors()) {
-        std::string err_output;
+        std::string err_output = "compilation error:\n";
         for (const auto& error : lex.errors()) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
                           std::to_string(error.span.start.column) + ": error: " + error.message +
@@ -1027,7 +1145,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
         if (output)
             *output = err_output;
-        return 1;
+        return EXIT_COMPILATION_ERROR;
     }
 
     parser::Parser parser(std::move(tokens));
@@ -1035,7 +1153,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     auto parse_result = parser.parse_module(module_name);
 
     if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-        std::string err_output;
+        std::string err_output = "compilation error:\n";
         const auto& errors = std::get<std::vector<parser::ParseError>>(parse_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
@@ -1044,7 +1162,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
         if (output)
             *output = err_output;
-        return 1;
+        return EXIT_COMPILATION_ERROR;
     }
 
     const auto& module = std::get<parser::Module>(parse_result);
@@ -1055,7 +1173,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     auto check_result = checker.check_module(module);
 
     if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
-        std::string err_output;
+        std::string err_output = "compilation error:\n";
         const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
@@ -1064,7 +1182,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
         if (output)
             *output = err_output;
-        return 1;
+        return EXIT_COMPILATION_ERROR;
     }
 
     const auto& env = std::get<types::TypeEnv>(check_result);
@@ -1079,7 +1197,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
 
     auto gen_result = llvm_gen.generate(module);
     if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-        std::string err_output;
+        std::string err_output = "compilation error:\n";
         const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
         for (const auto& error : errors) {
             err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
@@ -1088,7 +1206,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         }
         if (output)
             *output = err_output;
-        return 1;
+        return EXIT_COMPILATION_ERROR;
     }
 
     const auto& llvm_ir = std::get<std::string>(gen_result);
@@ -1115,8 +1233,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     std::string clang = find_clang();
     if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
         if (output)
-            *output = "error: clang not found";
-        return 1;
+            *output = "compilation error: clang not found";
+        return EXIT_COMPILATION_ERROR;
     }
 
     // Use global deps cache for precompiled runtimes
@@ -1130,8 +1248,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         std::ofstream ll_file(ll_output);
         if (!ll_file) {
             if (output)
-                *output = "error: Cannot write to " + ll_output.string();
-            return 1;
+                *output = "compilation error: Cannot write to " + ll_output.string();
+            return EXIT_COMPILATION_ERROR;
         }
         ll_file << llvm_ir;
         ll_file.close();
@@ -1147,9 +1265,9 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
         if (!obj_result.success) {
             if (output)
-                *output = "error: " + obj_result.error_message;
+                *output = "compilation error: " + obj_result.error_message;
             fs::remove(ll_output);
-            return 1;
+            return EXIT_COMPILATION_ERROR;
         }
 
         // Clean up .ll file (keep .obj for caching)
@@ -1195,8 +1313,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         auto link_result = link_objects(object_files, temp_exe, clang, link_options);
         if (!link_result.success) {
             if (output)
-                *output = "error: " + link_result.error_message;
-            return 1;
+                *output = "compilation error: " + link_result.error_message;
+            return EXIT_COMPILATION_ERROR;
         }
 
         // Try to move to cached location (may fail if another thread already did it)

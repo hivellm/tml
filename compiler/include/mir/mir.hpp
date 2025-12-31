@@ -126,6 +126,8 @@ struct MirType {
 // Type constructors
 auto make_unit_type() -> MirTypePtr;
 auto make_bool_type() -> MirTypePtr;
+auto make_i8_type() -> MirTypePtr;
+auto make_i16_type() -> MirTypePtr;
 auto make_i32_type() -> MirTypePtr;
 auto make_i64_type() -> MirTypePtr;
 auto make_f32_type() -> MirTypePtr;

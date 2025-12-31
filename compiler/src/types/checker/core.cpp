@@ -446,6 +446,14 @@ void TypeChecker::check_impl_decl(const parser::ImplDecl& impl) {
         current_associated_types_[binding.name] = resolve_type(*binding.type);
     }
 
+    // Register all constants in the impl block
+    for (const auto& const_decl : impl.constants) {
+        std::string qualified_name = type_name + "::" + const_decl.name;
+        TypePtr const_type = resolve_type(*const_decl.type);
+        // Register as a constant (immutable variable with qualified name)
+        env_.current_scope()->define(qualified_name, const_type, false, const_decl.span);
+    }
+
     // Register all methods in the impl block
     for (const auto& method : impl.methods) {
         std::string qualified_name = type_name + "::" + method.name;
@@ -540,6 +548,18 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
         auto type_var = std::make_shared<Type>();
         type_var->kind = NamedType{param.name, "", {}};
         current_type_params_[param.name] = type_var;
+    }
+
+    // Check constant initializers
+    for (const auto& const_decl : impl.constants) {
+        TypePtr declared_type = resolve_type(*const_decl.type);
+        TypePtr init_type = check_expr(*const_decl.value);
+
+        if (!types_equal(init_type, declared_type)) {
+            error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
+                      ", found " + type_to_string(init_type),
+                  const_decl.value->span);
+        }
     }
 
     for (const auto& method : impl.methods) {

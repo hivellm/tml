@@ -150,9 +150,72 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                                              .span = span});
         }
 
-        // Check for struct pattern: Point { x, y }
-        if (check(lexer::TokenKind::LBrace)) {
-            // TODO: implement struct patterns
+        // Check for struct pattern: Point { x, y } or Point { x: px, y: py, .. }
+        if (match(lexer::TokenKind::LBrace)) {
+            std::vector<std::pair<std::string, PatternPtr>> fields;
+            bool has_rest = false;
+            skip_newlines();
+
+            while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+                skip_newlines();
+
+                // Check for rest pattern: ..
+                if (check(lexer::TokenKind::DotDot)) {
+                    advance();
+                    has_rest = true;
+                    skip_newlines();
+                    break; // .. must be last
+                }
+
+                // Parse field name
+                auto field_name_result =
+                    expect(lexer::TokenKind::Identifier, "Expected field name in struct pattern");
+                if (is_err(field_name_result))
+                    return unwrap_err(field_name_result);
+                std::string field_name = std::string(unwrap(field_name_result).lexeme);
+
+                PatternPtr field_pattern;
+                skip_newlines();
+
+                // Check for explicit binding: field: pattern
+                if (match(lexer::TokenKind::Colon)) {
+                    skip_newlines();
+                    auto pat = parse_pattern();
+                    if (is_err(pat))
+                        return pat;
+                    field_pattern = std::move(unwrap(pat));
+                } else {
+                    // Shorthand: field means field: field
+                    field_pattern =
+                        make_ident_pattern(field_name, false, unwrap(field_name_result).span);
+                }
+
+                fields.emplace_back(field_name, std::move(field_pattern));
+
+                skip_newlines();
+                if (!check(lexer::TokenKind::RBrace)) {
+                    if (!match(lexer::TokenKind::Comma)) {
+                        // Allow trailing comma to be optional
+                        if (!check(lexer::TokenKind::RBrace)) {
+                            return ParseError{.message = "Expected ',' or '}' in struct pattern",
+                                              .span = peek().span,
+                                              .notes = {}};
+                        }
+                    }
+                    skip_newlines();
+                }
+            }
+
+            auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}'");
+            if (is_err(rbrace))
+                return unwrap_err(rbrace);
+
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_box<Pattern>(Pattern{.kind = StructPattern{.path = std::move(unwrap(path)),
+                                                                   .fields = std::move(fields),
+                                                                   .has_rest = has_rest,
+                                                                   .span = span},
+                                             .span = span});
         }
 
         // Simple identifier pattern

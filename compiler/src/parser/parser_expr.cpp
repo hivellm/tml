@@ -16,15 +16,49 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         return left;
 
     while (true) {
+        // Skip newlines and check if next token is an infix operator
+        // This allows multi-line expressions like:
+        //   a
+        //       or b
+        size_t saved_pos = pos_;
+        skip_newlines();
+
         auto prec = get_precedence(peek().kind);
-        if (prec <= min_precedence) {
+        auto next_kind = peek().kind;
+
+        // Check if this is a valid infix operator (not a postfix or special case)
+        bool is_infix =
+            token_to_binary_op(next_kind).has_value() || next_kind == lexer::TokenKind::KwAs ||
+            next_kind == lexer::TokenKind::Question || next_kind == lexer::TokenKind::KwTo ||
+            next_kind == lexer::TokenKind::KwThrough || next_kind == lexer::TokenKind::DotDot;
+
+        // Postfix operators (function calls, indexing, field access) should not
+        // continue across newlines to avoid ambiguity
+        bool is_postfix =
+            next_kind == lexer::TokenKind::LParen || next_kind == lexer::TokenKind::LBracket ||
+            next_kind == lexer::TokenKind::Dot || next_kind == lexer::TokenKind::Bang ||
+            next_kind == lexer::TokenKind::PlusPlus || next_kind == lexer::TokenKind::MinusMinus;
+
+        // If we skipped newlines and hit a postfix operator, don't continue
+        if (saved_pos != pos_ && is_postfix) {
+            pos_ = saved_pos;
             break;
         }
 
-        // Handle postfix operators first
-        if (check(lexer::TokenKind::LParen) || check(lexer::TokenKind::LBracket) ||
-            check(lexer::TokenKind::Dot) || check(lexer::TokenKind::Bang) ||
-            check(lexer::TokenKind::PlusPlus) || check(lexer::TokenKind::MinusMinus)) {
+        // If we skipped newlines and it's not an infix operator, don't continue
+        if (saved_pos != pos_ && !is_infix) {
+            pos_ = saved_pos;
+            break;
+        }
+
+        if (prec <= min_precedence) {
+            // Not a continuation - restore position and break
+            pos_ = saved_pos;
+            break;
+        }
+
+        // Handle postfix operators first (only if we didn't skip newlines)
+        if (is_postfix) {
             left = parse_postfix_expr(std::move(unwrap(left)));
             if (is_err(left))
                 return left;
@@ -214,23 +248,64 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
             return unwrap_err(name_result);
         auto name = std::string(unwrap(name_result).lexeme);
 
-        // Check for generic type arguments: .method[T, U]
+        // Check if it's a method call first (could have type args)
+        // Generic type arguments: .method[T, U]() - note: must be followed by ()
+        // Index expressions: .field[0] - this is NOT generic types
         std::vector<TypePtr> type_args;
+
+        // Only parse [T, U] as type args if followed by '(' for method call
+        // Otherwise, [0] is an index expression to be handled by next postfix iteration
         if (check(lexer::TokenKind::LBracket)) {
+            // Look ahead to see if this is a method call with type args
+            // We need to tentatively parse and check if it's followed by '('
+            size_t saved_pos = pos_;
             advance(); // consume '['
-            if (!check(lexer::TokenKind::RBracket)) {
-                do {
-                    skip_newlines();
-                    auto type_result = parse_type();
-                    if (is_err(type_result))
-                        return unwrap_err(type_result);
-                    type_args.push_back(std::move(unwrap(type_result)));
-                    skip_newlines();
-                } while (match(lexer::TokenKind::Comma));
+
+            // Try to parse as type arguments
+            bool looks_like_type_args = true;
+            int bracket_depth = 1;
+
+            // Scan forward to find matching ']' and check what follows
+            while (bracket_depth > 0 && !is_at_end()) {
+                if (check(lexer::TokenKind::LBracket)) {
+                    bracket_depth++;
+                } else if (check(lexer::TokenKind::RBracket)) {
+                    bracket_depth--;
+                }
+                if (bracket_depth > 0) {
+                    advance();
+                }
             }
-            auto rbracket = expect(lexer::TokenKind::RBracket, "Expected ']' after type arguments");
-            if (is_err(rbracket))
-                return unwrap_err(rbracket);
+
+            if (bracket_depth == 0) {
+                advance(); // consume final ']'
+                // Check if followed by '('
+                looks_like_type_args = check(lexer::TokenKind::LParen);
+            } else {
+                looks_like_type_args = false;
+            }
+
+            // Restore position and actually parse if it's type args
+            pos_ = saved_pos;
+
+            if (looks_like_type_args) {
+                advance(); // consume '['
+                if (!check(lexer::TokenKind::RBracket)) {
+                    do {
+                        skip_newlines();
+                        auto type_result = parse_type();
+                        if (is_err(type_result))
+                            return unwrap_err(type_result);
+                        type_args.push_back(std::move(unwrap(type_result)));
+                        skip_newlines();
+                    } while (match(lexer::TokenKind::Comma));
+                }
+                auto rbracket =
+                    expect(lexer::TokenKind::RBracket, "Expected ']' after type arguments");
+                if (is_err(rbracket))
+                    return unwrap_err(rbracket);
+            }
+            // If not type args, leave '[' unconsumed for index parsing on next iteration
         }
 
         // Check if it's a method call (with or without type args)

@@ -1,0 +1,21 @@
+// TML Core Network Types
+// Platform-independent network primitives (no I/O, no-std compatible)
+//
+// This module provides data types for network addresses without any
+// system calls or I/O operations. All types work in no-std environments.
+//
+// Types:
+// - Ipv4Addr: IPv4 address (4 bytes)
+// - Ipv6Addr: IPv6 address (16 bytes)
+// - IpAddr: Either IPv4 or IPv6
+// - SocketAddrV4: IPv4 address + port
+// - SocketAddrV6: IPv6 address + port + flow info + scope id
+// - SocketAddr: Either SocketAddrV4 or SocketAddrV6
+
+pub mod ip
+pub mod socket
+pub mod parser
+
+// Re-export main types
+pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
+pub use socket::{SocketAddr, SocketAddrV4, SocketAddrV6}

@@ -184,33 +184,449 @@ auto ModuleMetadata::serialize(const Module& module) -> std::string {
     }
 
     json << "\n  ],\n";
-    json << "  \"structs\": [],\n"; // TODO: implement struct serialization
-    json << "  \"enums\": [],\n";   // TODO: implement enum serialization
+
+    // Serialize structs
+    json << "  \"structs\": [\n";
+    bool first_struct = true;
+    for (const auto& [name, struct_def] : module.structs) {
+        if (!first_struct)
+            json << ",\n";
+        first_struct = false;
+
+        json << "    {\n";
+        json << "      \"name\": \"" << json_escape(name) << "\",\n";
+        json << "      \"type_params\": [";
+        for (size_t i = 0; i < struct_def.type_params.size(); ++i) {
+            if (i > 0)
+                json << ", ";
+            json << "\"" << json_escape(struct_def.type_params[i]) << "\"";
+        }
+        json << "],\n";
+        json << "      \"fields\": [\n";
+        for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+            if (i > 0)
+                json << ",\n";
+            json << "        {\"name\": \"" << json_escape(struct_def.fields[i].first)
+                 << "\", \"type\": " << serialize_type(struct_def.fields[i].second) << "}";
+        }
+        json << "\n      ]\n";
+        json << "    }";
+    }
+    json << "\n  ],\n";
+
+    // Serialize enums
+    json << "  \"enums\": [\n";
+    bool first_enum = true;
+    for (const auto& [name, enum_def] : module.enums) {
+        if (!first_enum)
+            json << ",\n";
+        first_enum = false;
+
+        json << "    {\n";
+        json << "      \"name\": \"" << json_escape(name) << "\",\n";
+        json << "      \"type_params\": [";
+        for (size_t i = 0; i < enum_def.type_params.size(); ++i) {
+            if (i > 0)
+                json << ", ";
+            json << "\"" << json_escape(enum_def.type_params[i]) << "\"";
+        }
+        json << "],\n";
+        json << "      \"variants\": [\n";
+        for (size_t i = 0; i < enum_def.variants.size(); ++i) {
+            if (i > 0)
+                json << ",\n";
+            const auto& [variant_name, payload_types] = enum_def.variants[i];
+            json << "        {\"name\": \"" << json_escape(variant_name) << "\", \"payload\": [";
+            for (size_t j = 0; j < payload_types.size(); ++j) {
+                if (j > 0)
+                    json << ", ";
+                json << serialize_type(payload_types[j]);
+            }
+            json << "]}";
+        }
+        json << "\n      ]\n";
+        json << "    }";
+    }
+    json << "\n  ],\n";
+
     json << "  \"type_aliases\": []\n";
     json << "}\n";
 
     return json.str();
 }
 
-auto ModuleMetadata::deserialize(const std::string& json_content) -> std::optional<Module> {
-    // Simple JSON parsing - in production, use a proper JSON library
-    // For now, this is a placeholder that returns empty module
-    // TODO: Implement proper JSON parsing
+// Simple JSON parser helper
+namespace {
 
-    Module module;
+class JsonParser {
+public:
+    explicit JsonParser(const std::string& content) : content_(content), pos_(0) {}
 
-    // Very basic parsing to extract module name
-    size_t name_pos = json_content.find("\"name\":");
-    if (name_pos != std::string::npos) {
-        size_t quote1 = json_content.find("\"", name_pos + 7);
-        size_t quote2 = json_content.find("\"", quote1 + 1);
-        if (quote1 != std::string::npos && quote2 != std::string::npos) {
-            module.name = json_content.substr(quote1 + 1, quote2 - quote1 - 1);
+    void skip_ws() {
+        while (pos_ < content_.size() && std::isspace(content_[pos_]))
+            pos_++;
+    }
+
+    bool match(char c) {
+        skip_ws();
+        if (pos_ < content_.size() && content_[pos_] == c) {
+            pos_++;
+            return true;
+        }
+        return false;
+    }
+
+    bool expect(char c) {
+        skip_ws();
+        if (pos_ < content_.size() && content_[pos_] == c) {
+            pos_++;
+            return true;
+        }
+        return false;
+    }
+
+    std::string parse_string() {
+        skip_ws();
+        if (!expect('"'))
+            return "";
+        std::string result;
+        while (pos_ < content_.size() && content_[pos_] != '"') {
+            if (content_[pos_] == '\\' && pos_ + 1 < content_.size()) {
+                pos_++;
+                switch (content_[pos_]) {
+                case 'n':
+                    result += '\n';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                case '"':
+                    result += '"';
+                    break;
+                case '\\':
+                    result += '\\';
+                    break;
+                default:
+                    result += content_[pos_];
+                    break;
+                }
+            } else {
+                result += content_[pos_];
+            }
+            pos_++;
+        }
+        expect('"');
+        return result;
+    }
+
+    bool parse_bool() {
+        skip_ws();
+        if (content_.substr(pos_, 4) == "true") {
+            pos_ += 4;
+            return true;
+        } else if (content_.substr(pos_, 5) == "false") {
+            pos_ += 5;
+            return false;
+        }
+        return false;
+    }
+
+    std::vector<std::string> parse_string_array() {
+        std::vector<std::string> result;
+        skip_ws();
+        if (!expect('['))
+            return result;
+        skip_ws();
+        if (match(']'))
+            return result;
+        do {
+            result.push_back(parse_string());
+            skip_ws();
+        } while (match(','));
+        expect(']');
+        return result;
+    }
+
+    // Skip a JSON value (for fields we don't care about)
+    void skip_value() {
+        skip_ws();
+        if (pos_ >= content_.size())
+            return;
+        char c = content_[pos_];
+        if (c == '"') {
+            parse_string();
+        } else if (c == '[') {
+            pos_++;
+            int depth = 1;
+            while (pos_ < content_.size() && depth > 0) {
+                if (content_[pos_] == '[')
+                    depth++;
+                else if (content_[pos_] == ']')
+                    depth--;
+                else if (content_[pos_] == '"') {
+                    pos_++;
+                    while (pos_ < content_.size() && content_[pos_] != '"') {
+                        if (content_[pos_] == '\\')
+                            pos_++;
+                        pos_++;
+                    }
+                }
+                pos_++;
+            }
+        } else if (c == '{') {
+            pos_++;
+            int depth = 1;
+            while (pos_ < content_.size() && depth > 0) {
+                if (content_[pos_] == '{')
+                    depth++;
+                else if (content_[pos_] == '}')
+                    depth--;
+                else if (content_[pos_] == '"') {
+                    pos_++;
+                    while (pos_ < content_.size() && content_[pos_] != '"') {
+                        if (content_[pos_] == '\\')
+                            pos_++;
+                        pos_++;
+                    }
+                }
+                pos_++;
+            }
+        } else {
+            // Number or boolean
+            while (pos_ < content_.size() && !std::isspace(content_[pos_]) &&
+                   content_[pos_] != ',' && content_[pos_] != '}' && content_[pos_] != ']') {
+                pos_++;
+            }
         }
     }
 
-    // For now, return empty module - proper JSON parsing needed
-    std::cerr << "[METADATA] Warning: JSON deserialization not fully implemented yet\n";
+    size_t pos() const {
+        return pos_;
+    }
+    const std::string& content() const {
+        return content_;
+    }
+
+private:
+    const std::string& content_;
+    size_t pos_;
+};
+
+} // anonymous namespace
+
+auto ModuleMetadata::deserialize(const std::string& json_content) -> std::optional<Module> {
+    Module module;
+    JsonParser parser(json_content);
+
+    if (!parser.expect('{'))
+        return std::nullopt;
+
+    while (true) {
+        parser.skip_ws();
+        if (parser.match('}'))
+            break;
+
+        std::string key = parser.parse_string();
+        if (!parser.expect(':')) {
+            parser.skip_value();
+            parser.match(',');
+            continue;
+        }
+
+        if (key == "name") {
+            module.name = parser.parse_string();
+        } else if (key == "file_path") {
+            module.file_path = parser.parse_string();
+        } else if (key == "functions") {
+            // Parse functions array
+            if (!parser.expect('[')) {
+                parser.skip_value();
+                parser.match(',');
+                continue;
+            }
+
+            while (!parser.match(']')) {
+                if (!parser.expect('{')) {
+                    parser.skip_value();
+                    parser.match(',');
+                    continue;
+                }
+
+                FuncSig sig;
+                while (!parser.match('}')) {
+                    std::string func_key = parser.parse_string();
+                    parser.expect(':');
+
+                    if (func_key == "name") {
+                        sig.name = parser.parse_string();
+                    } else if (func_key == "params") {
+                        auto param_strs = parser.parse_string_array();
+                        for (const auto& ps : param_strs) {
+                            sig.params.push_back(deserialize_type(ps));
+                        }
+                    } else if (func_key == "return_type") {
+                        std::string type_str = parser.parse_string();
+                        sig.return_type = deserialize_type(type_str);
+                    } else if (func_key == "is_async") {
+                        sig.is_async = parser.parse_bool();
+                    } else if (func_key == "is_lowlevel") {
+                        sig.is_lowlevel = parser.parse_bool();
+                    } else if (func_key == "stability") {
+                        std::string stab = parser.parse_string();
+                        if (stab == "Stable")
+                            sig.stability = StabilityLevel::Stable;
+                        else if (stab == "Deprecated")
+                            sig.stability = StabilityLevel::Deprecated;
+                        else
+                            sig.stability = StabilityLevel::Unstable;
+                    } else if (func_key == "extern_abi") {
+                        sig.extern_abi = parser.parse_string();
+                    } else if (func_key == "extern_name") {
+                        sig.extern_name = parser.parse_string();
+                    } else if (func_key == "link_libs") {
+                        sig.link_libs = parser.parse_string_array();
+                    } else {
+                        parser.skip_value();
+                    }
+                    parser.match(',');
+                }
+
+                if (!sig.name.empty()) {
+                    module.functions[sig.name] = sig;
+                }
+                parser.match(',');
+            }
+        } else if (key == "structs") {
+            // Parse structs array
+            if (!parser.expect('[')) {
+                parser.skip_value();
+                parser.match(',');
+                continue;
+            }
+
+            while (!parser.match(']')) {
+                if (!parser.expect('{')) {
+                    parser.skip_value();
+                    parser.match(',');
+                    continue;
+                }
+
+                StructDef def;
+                while (!parser.match('}')) {
+                    std::string struct_key = parser.parse_string();
+                    parser.expect(':');
+
+                    if (struct_key == "name") {
+                        def.name = parser.parse_string();
+                    } else if (struct_key == "type_params") {
+                        def.type_params = parser.parse_string_array();
+                    } else if (struct_key == "fields") {
+                        // Parse fields array
+                        if (parser.expect('[')) {
+                            while (!parser.match(']')) {
+                                if (parser.expect('{')) {
+                                    std::string field_name;
+                                    TypePtr field_type;
+                                    while (!parser.match('}')) {
+                                        std::string field_key = parser.parse_string();
+                                        parser.expect(':');
+                                        if (field_key == "name") {
+                                            field_name = parser.parse_string();
+                                        } else if (field_key == "type") {
+                                            std::string type_str = parser.parse_string();
+                                            field_type = deserialize_type(type_str);
+                                        } else {
+                                            parser.skip_value();
+                                        }
+                                        parser.match(',');
+                                    }
+                                    if (!field_name.empty()) {
+                                        def.fields.emplace_back(field_name, field_type);
+                                    }
+                                }
+                                parser.match(',');
+                            }
+                        }
+                    } else {
+                        parser.skip_value();
+                    }
+                    parser.match(',');
+                }
+
+                if (!def.name.empty()) {
+                    module.structs[def.name] = def;
+                }
+                parser.match(',');
+            }
+        } else if (key == "enums") {
+            // Parse enums array
+            if (!parser.expect('[')) {
+                parser.skip_value();
+                parser.match(',');
+                continue;
+            }
+
+            while (!parser.match(']')) {
+                if (!parser.expect('{')) {
+                    parser.skip_value();
+                    parser.match(',');
+                    continue;
+                }
+
+                EnumDef def;
+                while (!parser.match('}')) {
+                    std::string enum_key = parser.parse_string();
+                    parser.expect(':');
+
+                    if (enum_key == "name") {
+                        def.name = parser.parse_string();
+                    } else if (enum_key == "type_params") {
+                        def.type_params = parser.parse_string_array();
+                    } else if (enum_key == "variants") {
+                        // Parse variants array
+                        if (parser.expect('[')) {
+                            while (!parser.match(']')) {
+                                if (parser.expect('{')) {
+                                    std::string variant_name;
+                                    std::vector<TypePtr> payload_types;
+                                    while (!parser.match('}')) {
+                                        std::string var_key = parser.parse_string();
+                                        parser.expect(':');
+                                        if (var_key == "name") {
+                                            variant_name = parser.parse_string();
+                                        } else if (var_key == "payload") {
+                                            auto type_strs = parser.parse_string_array();
+                                            for (const auto& ts : type_strs) {
+                                                payload_types.push_back(deserialize_type(ts));
+                                            }
+                                        } else {
+                                            parser.skip_value();
+                                        }
+                                        parser.match(',');
+                                    }
+                                    if (!variant_name.empty()) {
+                                        def.variants.emplace_back(variant_name, payload_types);
+                                    }
+                                }
+                                parser.match(',');
+                            }
+                        }
+                    } else {
+                        parser.skip_value();
+                    }
+                    parser.match(',');
+                }
+
+                if (!def.name.empty()) {
+                    module.enums[def.name] = def;
+                }
+                parser.match(',');
+            }
+        } else {
+            parser.skip_value();
+        }
+        parser.match(',');
+    }
 
     return module;
 }

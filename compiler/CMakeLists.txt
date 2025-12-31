@@ -156,6 +156,13 @@ add_library(tml_mir STATIC
     src/mir/mir_builder.cpp
     src/mir/mir_serialize.cpp
     src/mir/mir_pass.cpp
+    # Builder modules (split from mir_builder.cpp for maintainability)
+    src/mir/builder/types.cpp
+    src/mir/builder/expr.cpp
+    src/mir/builder/stmt.cpp
+    src/mir/builder/pattern.cpp
+    src/mir/builder/control.cpp
+    src/mir/builder/helpers.cpp
     # Optimization passes
     src/mir/passes/constant_folding.cpp
     src/mir/passes/constant_propagation.cpp

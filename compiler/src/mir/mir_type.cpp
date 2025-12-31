@@ -98,6 +98,18 @@ auto make_bool_type() -> MirTypePtr {
     return type;
 }
 
+auto make_i8_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::I8};
+    return type;
+}
+
+auto make_i16_type() -> MirTypePtr {
+    auto type = std::make_shared<MirType>();
+    type->kind = MirPrimitiveType{PrimitiveType::I16};
+    return type;
+}
+
 auto make_i32_type() -> MirTypePtr {
     auto type = std::make_shared<MirType>();
     type->kind = MirPrimitiveType{PrimitiveType::I32};
