@@ -10,6 +10,44 @@
 
 namespace tml::types {
 
+// Reserved type names - builtin types that cannot be redefined by user code
+// This prevents accidental shadowing of core types like Maybe, Outcome, List, etc.
+static const std::set<std::string> RESERVED_TYPE_NAMES = {
+    // Primitive types
+    "I8",
+    "I16",
+    "I32",
+    "I64",
+    "I128",
+    "U8",
+    "U16",
+    "U32",
+    "U64",
+    "U128",
+    "F32",
+    "F64",
+    "Bool",
+    "Char",
+    "Str",
+    "Unit",
+    // Core enums
+    "Maybe",
+    "Outcome",
+    "Ordering",
+    // Core collections (from std)
+    "List",
+    "HashMap",
+    "HashSet",
+    "Buffer",
+    // Smart pointers
+    "Heap",
+    "Shared",
+    "Sync",
+    // Other core types
+    "Range",
+    "RangeInclusive",
+};
+
 // Forward declarations from helpers.cpp
 bool is_integer_type(const TypePtr& type);
 bool is_float_type(const TypePtr& type);
@@ -73,6 +111,14 @@ auto TypeChecker::check_module(const parser::Module& module)
 }
 
 void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
+    // Check if the type name is reserved (builtin type)
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name +
+                  "'. Use the builtin type instead of defining your own.",
+              decl.span);
+        return;
+    }
+
     std::vector<std::pair<std::string, TypePtr>> fields;
     for (const auto& field : decl.fields) {
         fields.emplace_back(field.name, resolve_type(*field.type));
@@ -90,6 +136,14 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
 }
 
 void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
+    // Check if the type name is reserved (builtin type)
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name +
+                  "'. Use the builtin type instead of defining your own.",
+              decl.span);
+        return;
+    }
+
     std::vector<std::pair<std::string, std::vector<TypePtr>>> variants;
     for (const auto& variant : decl.variants) {
         std::vector<TypePtr> types;

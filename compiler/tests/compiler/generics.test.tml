@@ -24,12 +24,7 @@ func test_generic_struct_multiple() {
     assert_eq(p2.first, 100, "p2.first should be 100")
 }
 
-// ============ Generic Enum ============
-
-type Maybe[T] {
-    Just(T),
-    Nothing,
-}
+// ============ Generic Enum (using builtin Maybe) ============
 
 @test
 func test_generic_enum_just() {

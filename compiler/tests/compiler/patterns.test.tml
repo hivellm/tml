@@ -1,14 +1,6 @@
 use test
 
-type Maybe[T] {
-    Just(T),
-    Nothing,
-}
-
-type Outcome[T, E] {
-    Ok(T),
-    Err(E),
-}
+// Maybe[T] and Outcome[T, E] are builtin types
 
 @test
 func pattern_binding_let() -> I32 {

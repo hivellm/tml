@@ -1,8 +1,4 @@
-// Debug generic enum
-type Maybe[T] {
-    Just(T),
-    Nothing,
-}
+// Debug generic enum (using builtin Maybe)
 
 func main() -> I32 {
     print("Creating Just(42)")

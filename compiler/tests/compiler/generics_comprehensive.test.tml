@@ -81,17 +81,7 @@ func test_generic_struct_multiple_instances() -> I32 {
 // SECTION 2: Generic Enums
 // ============================================================================
 
-// Classic Maybe/Option type
-type Maybe[T] {
-    Just(T),
-    Nothing,
-}
-
-// Classic Result/Outcome type
-type Outcome[T, E] {
-    Ok(T),
-    Err(E),
-}
+// Maybe[T] and Outcome[T, E] are builtin types, no need to redefine them
 
 @test
 func test_generic_enum_just() -> I32 {
