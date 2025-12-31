@@ -1,8 +1,14 @@
 #pragma once
+#include <map>
 #include <string>
 #include <vector>
 
 namespace tml::cli {
+
+// Phase timing result for profiling
+struct PhaseTimings {
+    std::map<std::string, int64_t> timings_us; // Phase name -> microseconds
+};
 
 // Exit codes for test/run commands
 // These help distinguish compilation errors from runtime errors
@@ -46,5 +52,10 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 // Returns exit code, stores stdout/stderr in output if provided
 int run_run_quiet(const std::string& path, const std::vector<std::string>& args, bool verbose,
                   std::string* output = nullptr, bool coverage = false, bool no_cache = false);
+
+// Run with profiling (returns phase timings)
+int run_run_profiled(const std::string& path, const std::vector<std::string>& args, bool verbose,
+                     std::string* output, PhaseTimings* timings, bool coverage = false,
+                     bool no_cache = false);
 
 } // namespace tml::cli

@@ -157,6 +157,9 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg.starts_with("--coverage-output=")) {
             opts.coverage_output = arg.substr(18);
             opts.coverage = true; // Implicitly enable coverage
+        } else if (arg == "--profile") {
+            opts.profile = true;
+            opts.test_threads = 1; // Force single-threaded for accurate profiling
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--timeout=")) {
@@ -358,6 +361,7 @@ struct TestResultCollector {
     std::vector<TestResult> results;
     std::atomic<bool> compilation_error_occurred{false};
     TestResult first_compilation_error; // Store the first compilation error
+    ProfileStats profile_stats;         // Aggregated profiling stats
 
     void add(TestResult result) {
         std::lock_guard<std::mutex> lock(mutex);
@@ -371,10 +375,59 @@ struct TestResultCollector {
         results.push_back(std::move(result));
     }
 
+    void add_timings(const PhaseTimings& timings) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (const auto& [phase, us] : timings.timings_us) {
+            profile_stats.add(phase, us);
+        }
+        profile_stats.total_tests++;
+    }
+
     bool has_compilation_error() const {
         return compilation_error_occurred.load();
     }
 };
+
+// Run test with profiling (collects phase timings)
+TestResult compile_and_run_test_profiled(const std::string& test_file, const TestOptions& opts,
+                                         PhaseTimings* timings) {
+    TestResult result;
+    result.file_path = test_file;
+    result.test_name = fs::path(test_file).stem().string();
+    result.group = extract_group_name(test_file);
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    std::vector<std::string> empty_args;
+    std::string captured_output;
+
+    result.exit_code = run_run_profiled(test_file, empty_args, opts.release, &captured_output,
+                                        timings, opts.coverage, opts.no_cache);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    result.duration_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+    if (result.duration_ms > opts.timeout_seconds * 1000) {
+        result.timeout = true;
+    }
+
+    result.passed = (result.exit_code == 0);
+    result.compilation_error = (result.exit_code == EXIT_COMPILATION_ERROR);
+
+    if (!result.passed) {
+        if (result.compilation_error) {
+            result.error_message = "COMPILATION FAILED";
+        } else {
+            result.error_message = "Exit code: " + std::to_string(result.exit_code);
+        }
+        if (!captured_output.empty()) {
+            result.error_message += "\n" + captured_output;
+        }
+    }
+
+    return result;
+}
 
 // Thread worker for parallel test execution
 void test_worker_new(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
@@ -500,6 +553,103 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
         std::cout << " " << c.red() << c.bold() << "Some tests failed." << c.reset() << "\n";
     }
     std::cout << "\n";
+}
+
+// Print profile statistics
+void print_profile_stats(const ProfileStats& stats, const TestOptions& opts) {
+    ColorOutput c(!opts.no_color);
+
+    std::cout << "\n";
+    std::cout << " " << c.cyan() << c.bold() << "Phase Profiling" << c.reset() << " " << c.dim()
+              << "(" << stats.total_tests << " tests)" << c.reset() << "\n";
+    std::cout << " " << c.dim() << std::string(60, '-') << c.reset() << "\n";
+
+    // Calculate total time
+    int64_t total_us = 0;
+    for (const auto& [_, us] : stats.total_us) {
+        total_us += us;
+    }
+
+    // Order phases by total time (descending)
+    std::vector<std::pair<std::string, int64_t>> phases(stats.total_us.begin(),
+                                                        stats.total_us.end());
+    std::sort(phases.begin(), phases.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    // Print each phase
+    for (const auto& [phase, us] : phases) {
+        double pct = total_us > 0 ? (100.0 * us / total_us) : 0.0;
+        int64_t avg_us = stats.count.at(phase) > 0 ? us / stats.count.at(phase) : 0;
+        int64_t max_us = stats.max_us.at(phase);
+
+        // Color code by percentage
+        const char* pct_color = c.gray();
+        if (pct > 30.0)
+            pct_color = c.red();
+        else if (pct > 15.0)
+            pct_color = c.yellow();
+        else if (pct > 5.0)
+            pct_color = c.green();
+
+        // Format phase name (pad to 15 chars)
+        std::string phase_name = phase;
+        if (phase_name.size() < 15)
+            phase_name += std::string(15 - phase_name.size(), ' ');
+
+        // Format times
+        auto format_us = [](int64_t us) -> std::string {
+            if (us < 1000)
+                return std::to_string(us) + " us";
+            else if (us < 1000000)
+                return std::to_string(us / 1000) + " ms";
+            else
+                return std::to_string(us / 1000000) + "." + std::to_string((us / 100000) % 10) +
+                       " s";
+        };
+
+        std::cout << " " << c.bold() << phase_name << c.reset() << "  " << pct_color << std::fixed
+                  << std::setprecision(1) << std::setw(5) << pct << "%" << c.reset() << "  "
+                  << c.dim() << "total: " << c.reset() << std::setw(8) << format_us(us) << "  "
+                  << c.dim() << "avg: " << c.reset() << std::setw(8) << format_us(avg_us) << "  "
+                  << c.dim() << "max: " << c.reset() << std::setw(8) << format_us(max_us) << "\n";
+    }
+
+    std::cout << " " << c.dim() << std::string(60, '-') << c.reset() << "\n";
+    std::cout << " " << c.bold() << "Total          " << c.reset() << "         "
+              << (total_us < 1000000 ? std::to_string(total_us / 1000) + " ms"
+                                     : std::to_string(total_us / 1000000) + "." +
+                                           std::to_string((total_us / 100000) % 10) + " s")
+              << "\n";
+    std::cout << "\n";
+
+    // Recommendations
+    if (!phases.empty()) {
+        const auto& [slowest, slowest_us] = phases[0];
+        double slowest_pct = total_us > 0 ? (100.0 * slowest_us / total_us) : 0.0;
+
+        if (slowest_pct > 30.0) {
+            std::cout << " " << c.yellow() << "Bottleneck: " << c.reset() << c.bold() << slowest
+                      << c.reset() << " is using " << std::fixed << std::setprecision(1)
+                      << slowest_pct << "% of total time\n";
+
+            // Give specific recommendations based on phase
+            if (slowest == "clang_compile") {
+                std::cout << " " << c.dim()
+                          << "  -> Consider: Enable build cache, use -O0 for tests" << c.reset()
+                          << "\n";
+            } else if (slowest == "link") {
+                std::cout << " " << c.dim() << "  -> Consider: Enable LTO cache, fewer deps"
+                          << c.reset() << "\n";
+            } else if (slowest == "type_check") {
+                std::cout << " " << c.dim() << "  -> Consider: Smaller test files, less imports"
+                          << c.reset() << "\n";
+            } else if (slowest == "codegen") {
+                std::cout << " " << c.dim() << "  -> Consider: Simpler code, fewer generics"
+                          << c.reset() << "\n";
+            }
+            std::cout << "\n";
+        }
+    }
 }
 
 // Parse benchmark output to extract timing results
@@ -860,10 +1010,18 @@ int run_test(int argc, char* argv[], bool verbose) {
             num_threads = 4; // Fallback
     }
 
-    // Single-threaded mode for verbose/nocapture or if only 1 test
-    if (opts.verbose || opts.nocapture || test_files.size() == 1 || num_threads == 1) {
+    // Single-threaded mode for verbose/nocapture/profile or if only 1 test
+    if (opts.verbose || opts.nocapture || opts.profile || test_files.size() == 1 ||
+        num_threads == 1) {
         for (const auto& file : test_files) {
-            TestResult result = compile_and_run_test_with_result(file, opts);
+            TestResult result;
+            if (opts.profile) {
+                PhaseTimings timings;
+                result = compile_and_run_test_profiled(file, opts, &timings);
+                collector.add_timings(timings);
+            } else {
+                result = compile_and_run_test_with_result(file, opts);
+            }
             bool is_compilation_error = result.compilation_error;
             collector.add(std::move(result));
 
@@ -925,6 +1083,11 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Print results
     if (!opts.quiet) {
         print_results_vitest_style(collector.results, opts, total_duration_ms);
+
+        // Print profiling stats if enabled
+        if (opts.profile && collector.profile_stats.total_tests > 0) {
+            print_profile_stats(collector.profile_stats, opts);
+        }
     }
 
     // Count failures

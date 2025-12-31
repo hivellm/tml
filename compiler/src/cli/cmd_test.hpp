@@ -54,6 +54,27 @@ struct BenchmarkResult {
     bool passed = true;
 };
 
+// Phase timing for profiling
+struct PhaseTiming {
+    std::string name;
+    int64_t duration_us = 0; // Microseconds for precision
+};
+
+// Aggregated phase timings across all tests
+struct ProfileStats {
+    std::map<std::string, int64_t> total_us; // Total time per phase
+    std::map<std::string, int64_t> max_us;   // Max time per phase
+    std::map<std::string, int64_t> count;    // Number of measurements
+    int64_t total_tests = 0;
+
+    void add(const std::string& phase, int64_t us) {
+        total_us[phase] += us;
+        if (us > max_us[phase])
+            max_us[phase] = us;
+        count[phase]++;
+    }
+};
+
 // Test command options
 struct TestOptions {
     std::vector<std::string> patterns; // Test name patterns to filter
@@ -72,6 +93,7 @@ struct TestOptions {
     std::string compare_baseline;      // Compare against baseline file (for --bench)
     bool coverage = false;             // Enable code coverage tracking
     std::string coverage_output;       // Coverage output file (default: coverage.html)
+    bool profile = false;              // Show detailed phase timings
 };
 
 // Parse test command arguments
