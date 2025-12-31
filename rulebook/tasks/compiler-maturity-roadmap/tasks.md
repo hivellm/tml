@@ -166,6 +166,18 @@ See separate task: `rulebook/tasks/package-manager/tasks.md`
 Partial implementation exists (tml.toml, dependency resolution, lockfile, tml deps, tml remove).
 Full implementation requires a TML package registry service.
 
+## Phase 16: Promises and Reactive Streams - FUTURE
+See separate task: `rulebook/tasks/promises-reactivity/tasks.md`
+
+Implement JavaScript-like Promise system and RxJS-like reactive streams:
+- Promise[T] with resolve/reject, then/catch/finally, Promise.all/race/any
+- Observable[T] with transformation, filtering, combination operators
+- Integration with existing async/await
+- Pipe operator (`|>`) support for fluent chaining
+- Event loop and scheduler for async execution
+
+Dependencies: Phase 14 (Async Runtime), Closures, Generics
+
 ## Validation
 - [ ] All phases pass existing test suite
 - [ ] Performance benchmarks show improvement
