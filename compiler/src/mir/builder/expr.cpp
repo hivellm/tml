@@ -59,6 +59,8 @@ auto MirBuilder::build_expr(const parser::Expr& expr) -> Value {
                 return build_cast(e);
             } else if constexpr (std::is_same_v<T, parser::ClosureExpr>) {
                 return build_closure(e);
+            } else if constexpr (std::is_same_v<T, parser::AwaitExpr>) {
+                return build_await(e);
             } else {
                 // Other expressions - return unit for now
                 return const_unit();
@@ -633,6 +635,31 @@ auto MirBuilder::build_closure(const parser::ClosureExpr& closure) -> Value {
     // Return a pointer to the closure function
     // In a full implementation, this would also include captured variables
     return const_unit(); // For now, return unit; full impl would return function pointer
+}
+
+auto MirBuilder::build_await(const parser::AwaitExpr& await_expr) -> Value {
+    // Build the expression being awaited (should return Poll[T])
+    Value poll_value = build_expr(*await_expr.expr);
+
+    // Determine the inner type (T from Poll[T])
+    MirTypePtr inner_type = make_i64_type(); // Default
+
+    if (auto* enum_type = std::get_if<MirEnumType>(&poll_value.type->kind)) {
+        if (enum_type->name == "Poll" && !enum_type->type_args.empty()) {
+            inner_type = enum_type->type_args[0];
+        }
+    }
+
+    // Create the await instruction with a unique suspension ID
+    AwaitInst inst;
+    inst.poll_value = poll_value;
+    inst.poll_type = poll_value.type;
+    inst.result_type = inner_type;
+    inst.suspension_id = ctx_.next_suspension_id++;
+
+    // The await instruction marks a potential suspension point
+    // The async lowering pass will later transform this into proper state machine code
+    return emit(std::move(inst), inner_type);
 }
 
 } // namespace tml::mir

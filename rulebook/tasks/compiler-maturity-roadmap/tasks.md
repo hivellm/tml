@@ -151,7 +151,11 @@
 - [x] 14.4 Implement async function codegen (returns Poll[T] with Ready wrapper)
 - [x] 14.5 Implement await codegen (extracts value from Poll.Ready)
 - [x] 14.5.1 Implement block_on builtin (synchronous execution of async functions)
-- [ ] 14.6 Implement state machine generation (for true async with suspend points)
+- [x] 14.6 Implement state machine generation (MIR infrastructure for async with suspend points)
+  - Added AsyncStateMachine, SuspensionPoint, SavedLocal structs to MIR
+  - Added AwaitInst to MIR instruction set
+  - Implemented AsyncAnalysis for suspension point and saved local detection
+  - Implemented AsyncLoweringPass for state machine metadata population
 - [ ] 14.7 Implement async executor
 - [ ] 14.8 Implement async I/O primitives
 - [ ] 14.9 Add spawn, join_all, select primitives

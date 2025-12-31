@@ -180,6 +180,7 @@ add_library(tml_mir STATIC
     src/mir/passes/copy_propagation.cpp
     src/mir/passes/escape_analysis.cpp
     src/mir/passes/inlining.cpp
+    src/mir/passes/async_lowering.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_ir)
 target_include_directories(tml_mir PUBLIC include src)

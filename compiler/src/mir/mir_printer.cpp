@@ -260,6 +260,9 @@ auto MirPrinter::print_instruction(const InstructionData& inst) -> std::string {
                     out << print_value(i.elements[j]);
                 }
                 out << "]";
+            } else if constexpr (std::is_same_v<T, AwaitInst>) {
+                out << "await " << print_value(i.poll_value);
+                out << " (suspension " << i.suspension_id << ")";
             }
         },
         inst.inst);

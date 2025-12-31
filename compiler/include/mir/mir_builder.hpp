@@ -37,6 +37,10 @@ struct BuildContext {
         std::optional<Value> break_value; // Value to use for break (if loop returns value)
     };
     std::stack<LoopContext> loop_stack;
+
+    // Async context
+    bool in_async_func = false;      // Whether we're building an async function
+    uint32_t next_suspension_id = 0; // Counter for suspension points
 };
 
 class MirBuilder {
@@ -95,6 +99,7 @@ private:
     auto build_path(const parser::PathExpr& path) -> Value;
     auto build_cast(const parser::CastExpr& cast) -> Value;
     auto build_closure(const parser::ClosureExpr& closure) -> Value;
+    auto build_await(const parser::AwaitExpr& await_expr) -> Value;
 
     // ============ Pattern Building ============
     // Build pattern matching, returns the value bound (for simple patterns)

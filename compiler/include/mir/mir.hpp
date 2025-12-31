@@ -375,11 +375,22 @@ struct ArrayInitInst {
     MirTypePtr result_type; // Full array type
 };
 
+// Await instruction: result = await poll_value (suspension point)
+// This instruction marks a potential suspension point in async functions.
+// The poll_value is a Poll[T] and result is T (extracted from Ready).
+struct AwaitInst {
+    Value poll_value;       // The Poll[T] value being awaited
+    MirTypePtr poll_type;   // Poll[T] type
+    MirTypePtr result_type; // T type (inner type)
+    uint32_t suspension_id; // ID of this suspension point (for state machine)
+};
+
 // All instruction types
-using Instruction = std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst,
-                                 GetElementPtrInst, ExtractValueInst, InsertValueInst, CallInst,
-                                 MethodCallInst, CastInst, PhiInst, ConstantInst, SelectInst,
-                                 StructInitInst, EnumInitInst, TupleInitInst, ArrayInitInst>;
+using Instruction =
+    std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst, GetElementPtrInst,
+                 ExtractValueInst, InsertValueInst, CallInst, MethodCallInst, CastInst, PhiInst,
+                 ConstantInst, SelectInst, StructInitInst, EnumInitInst, TupleInitInst,
+                 ArrayInitInst, AwaitInst>;
 
 // Instruction with result
 struct InstructionData {
@@ -448,13 +459,57 @@ struct FunctionParam {
     ValueId value_id; // SSA value for this parameter
 };
 
+// ============================================================================
+// Async State Machine
+// ============================================================================
+
+// Represents a suspension point (await expression) in an async function
+struct SuspensionPoint {
+    uint32_t id;            // Unique ID for this suspension point
+    uint32_t block_before;  // Block containing the await
+    uint32_t block_after;   // Block to resume after await completes
+    ValueId awaited_value;  // The Poll value being awaited
+    ValueId result_value;   // Where to store the extracted result
+    MirTypePtr result_type; // Type of the awaited value (inner T of Poll[T])
+    SourceSpan span;        // Source location of await
+};
+
+// Saved local variable that lives across suspension points
+struct SavedLocal {
+    std::string name;              // Original variable name
+    ValueId value_id;              // SSA value ID
+    MirTypePtr type;               // Type of the variable
+    std::vector<uint32_t> live_at; // Suspension points where this is live
+};
+
+// State machine representation for an async function
+struct AsyncStateMachine {
+    std::string state_struct_name;            // Name of generated state struct
+    std::vector<SuspensionPoint> suspensions; // All suspension points
+    std::vector<SavedLocal> saved_locals;     // Locals that span suspensions
+    MirTypePtr poll_return_type;              // Poll[T] return type
+    MirTypePtr inner_return_type;             // T (unwrapped return type)
+
+    // Check if function needs state machine transformation
+    [[nodiscard]] auto needs_transformation() const -> bool {
+        return !suspensions.empty();
+    }
+
+    // Get number of states (entry + one per suspension + done)
+    [[nodiscard]] auto state_count() const -> size_t {
+        return suspensions.size() + 2; // 0=entry, 1..N=after await, N+1=done
+    }
+};
+
 struct Function {
     std::string name;
     std::vector<FunctionParam> params;
     MirTypePtr return_type;
     std::vector<BasicBlock> blocks;
     bool is_public = false;
-    std::vector<std::string> attributes; // @inline, @noinline, etc.
+    bool is_async = false;                          // Whether this is an async function
+    std::optional<AsyncStateMachine> state_machine; // State machine for async functions
+    std::vector<std::string> attributes;            // @inline, @noinline, etc.
 
     // Entry block is always blocks[0]
     [[nodiscard]] auto entry_block() -> BasicBlock& {

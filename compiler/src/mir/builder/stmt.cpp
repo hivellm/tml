@@ -39,6 +39,7 @@ void MirBuilder::build_func_decl(const parser::FuncDecl& func) {
     Function mir_func;
     mir_func.name = func.name;
     mir_func.is_public = (func.vis == parser::Visibility::Public);
+    mir_func.is_async = func.is_async;
 
     // Extract decorator attributes (@inline, @noinline, etc.)
     for (const auto& decorator : func.decorators) {
@@ -51,6 +52,8 @@ void MirBuilder::build_func_decl(const parser::FuncDecl& func) {
     // Set up context
     ctx_.current_func = &mir_func;
     ctx_.variables.clear();
+    ctx_.in_async_func = func.is_async;
+    ctx_.next_suspension_id = 0;
 
     // Create entry block
     auto entry = mir_func.create_block("entry");
