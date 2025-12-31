@@ -20,7 +20,11 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                     // Resolve each generic argument
                     std::vector<TypePtr> type_args;
                     for (const auto& arg : t.generics->args) {
-                        type_args.push_back(resolve_type(*arg));
+                        // Only handle type arguments for now (not const generics)
+                        if (arg.is_type()) {
+                            type_args.push_back(resolve_type(*arg.as_type()));
+                        }
+                        // TODO: Handle const generic arguments when fully implemented
                     }
                     // Create new type with type_args
                     if (base_type->template is<types::NamedType>()) {
@@ -73,13 +77,41 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 std::vector<TypePtr> type_args;
                 if (t.generics) {
                     for (const auto& arg : t.generics->args) {
-                        type_args.push_back(resolve_type(*arg));
+                        // Only handle type arguments for now (not const generics)
+                        if (arg.is_type()) {
+                            type_args.push_back(resolve_type(*arg.as_type()));
+                        }
                     }
                 }
 
                 auto result = std::make_shared<Type>();
                 result->kind = DynBehaviorType{behavior_name, std::move(type_args), t.is_mut};
                 return result;
+            } else if constexpr (std::is_same_v<T, parser::ImplBehaviorType>) {
+                // Convert parser ImplBehaviorType to semantic ImplBehaviorType
+                std::string behavior_name;
+                if (!t.behavior.segments.empty()) {
+                    behavior_name = t.behavior.segments.back();
+                }
+
+                // Verify the behavior exists
+                auto behavior_def = env_.lookup_behavior(behavior_name);
+                if (!behavior_def) {
+                    error("Unknown behavior '" + behavior_name + "' in impl type", t.span);
+                    return make_unit();
+                }
+
+                // Resolve generic arguments
+                std::vector<TypePtr> type_args;
+                if (t.generics) {
+                    for (const auto& arg : t.generics->args) {
+                        if (arg.is_type()) {
+                            type_args.push_back(resolve_type(*arg.as_type()));
+                        }
+                    }
+                }
+
+                return make_impl_behavior(behavior_name, std::move(type_args));
             } else if constexpr (std::is_same_v<T, parser::FuncType>) {
                 // Convert parser FuncType to semantic FuncType
                 std::vector<TypePtr> param_types;

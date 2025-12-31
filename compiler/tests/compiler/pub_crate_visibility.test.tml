@@ -1,0 +1,35 @@
+// Test pub(crate) visibility modifier
+// Tests parsing of the crate-level visibility modifier
+
+// A struct with pub(crate) visibility - visible within crate but not outside
+pub(crate) type InternalHelper {
+    value: I32
+}
+
+// A function with pub(crate) visibility
+pub(crate) func internal_helper_func() -> I32 {
+    return 42
+}
+
+// A struct with a pub(crate) field
+type Container {
+    pub value: I32           // Fully public
+    pub(crate) internal: I32 // Only visible within crate
+    secret: I32              // Private (not visible outside module)
+}
+
+@test
+func test_pub_crate_visibility() {
+    // Test that pub(crate) items can be used within the same crate
+    let helper: InternalHelper = InternalHelper { value: 10 }
+    assert_eq(helper.value, 10)
+
+    let result: I32 = internal_helper_func()
+    assert_eq(result, 42)
+
+    let container: Container = Container { value: 1, internal: 2, secret: 3 }
+    assert_eq(container.value, 1)
+    assert_eq(container.internal, 2)
+
+    println("pub(crate) visibility test passed!")
+}

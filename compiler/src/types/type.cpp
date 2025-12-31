@@ -210,6 +210,39 @@ auto type_to_string(const TypePtr& type) -> std::string {
                 return "?" + std::to_string(t.id);
             } else if constexpr (std::is_same_v<T, GenericType>) {
                 return t.name;
+            } else if constexpr (std::is_same_v<T, ConstGenericType>) {
+                return "const " + t.name + ": " + type_to_string(t.value_type);
+            } else if constexpr (std::is_same_v<T, DynBehaviorType>) {
+                std::ostringstream ss;
+                if (t.is_mut)
+                    ss << "dyn mut ";
+                else
+                    ss << "dyn ";
+                ss << t.behavior_name;
+                if (!t.type_args.empty()) {
+                    ss << "[";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            ss << ", ";
+                        ss << type_to_string(t.type_args[i]);
+                    }
+                    ss << "]";
+                }
+                return ss.str();
+            } else if constexpr (std::is_same_v<T, ImplBehaviorType>) {
+                std::ostringstream ss;
+                ss << "impl ";
+                ss << t.behavior_name;
+                if (!t.type_args.empty()) {
+                    ss << "[";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            ss << ", ";
+                        ss << type_to_string(t.type_args[i]);
+                    }
+                    ss << "]";
+                }
+                return ss.str();
             } else {
                 return "<unknown>";
             }
@@ -297,6 +330,30 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
                 return ta.id == tb.id;
             } else if constexpr (std::is_same_v<T, GenericType>) {
                 return ta.name == tb.name;
+            } else if constexpr (std::is_same_v<T, ConstGenericType>) {
+                return ta.name == tb.name && types_equal(ta.value_type, tb.value_type);
+            } else if constexpr (std::is_same_v<T, DynBehaviorType>) {
+                if (ta.behavior_name != tb.behavior_name)
+                    return false;
+                if (ta.is_mut != tb.is_mut)
+                    return false;
+                if (ta.type_args.size() != tb.type_args.size())
+                    return false;
+                for (size_t i = 0; i < ta.type_args.size(); ++i) {
+                    if (!types_equal(ta.type_args[i], tb.type_args[i]))
+                        return false;
+                }
+                return true;
+            } else if constexpr (std::is_same_v<T, ImplBehaviorType>) {
+                if (ta.behavior_name != tb.behavior_name)
+                    return false;
+                if (ta.type_args.size() != tb.type_args.size())
+                    return false;
+                for (size_t i = 0; i < ta.type_args.size(); ++i) {
+                    if (!types_equal(ta.type_args[i], tb.type_args[i]))
+                        return false;
+                }
+                return true;
             } else {
                 return false;
             }
@@ -413,6 +470,230 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                 result->kind =
                     ClosureType{std::move(new_params), substitute_type(t.return_type, subs),
                                 std::move(new_captures)};
+                return result;
+            }
+            // ConstGenericType: no substitution here (use substitute_type_with_consts)
+            else if constexpr (std::is_same_v<T, ConstGenericType>) {
+                auto result = std::make_shared<Type>();
+                result->kind = t;
+                return result;
+            }
+            // DynBehaviorType: substitute type args
+            else if constexpr (std::is_same_v<T, DynBehaviorType>) {
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type(arg, subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = DynBehaviorType{t.behavior_name, std::move(new_args), t.is_mut};
+                return result;
+            }
+            // PrimitiveType, TypeVar: no substitution needed
+            else {
+                auto result = std::make_shared<Type>();
+                result->kind = t;
+                return result;
+            }
+        },
+        type->kind);
+}
+
+// Create const generic type
+auto make_const_generic(std::string name, TypePtr value_type) -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = ConstGenericType{std::move(name), std::move(value_type)};
+    type->id = next_type_id++;
+    return type;
+}
+
+auto make_impl_behavior(std::string behavior_name, std::vector<TypePtr> type_args) -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = ImplBehaviorType{std::move(behavior_name), std::move(type_args)};
+    type->id = next_type_id++;
+    return type;
+}
+
+// Compare const values for equality
+auto const_values_equal(const ConstValue& a, const ConstValue& b) -> bool {
+    // First check if the types are equal
+    if (!types_equal(a.type, b.type))
+        return false;
+
+    // Then compare the values
+    return std::visit(
+        [&b](const auto& va) -> bool {
+            using T = std::decay_t<decltype(va)>;
+            if (!std::holds_alternative<T>(b.value))
+                return false;
+            return va == std::get<T>(b.value);
+        },
+        a.value);
+}
+
+// Convert const value to string representation
+auto const_value_to_string(const ConstValue& value) -> std::string {
+    return std::visit(
+        [](const auto& v) -> std::string {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, int64_t>) {
+                return std::to_string(v);
+            } else if constexpr (std::is_same_v<T, uint64_t>) {
+                return std::to_string(v);
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return v ? "true" : "false";
+            } else if constexpr (std::is_same_v<T, char>) {
+                return std::string("'") + v + "'";
+            } else {
+                return "<unknown>";
+            }
+        },
+        value.value);
+}
+
+// Generic type substitution with const generics support
+auto substitute_type_with_consts(const TypePtr& type,
+                                 const std::unordered_map<std::string, TypePtr>& type_subs,
+                                 const std::unordered_map<std::string, ConstValue>& const_subs)
+    -> TypePtr {
+    if (!type)
+        return type;
+    if (type_subs.empty() && const_subs.empty())
+        return type;
+
+    return std::visit(
+        [&type_subs, &const_subs](const auto& t) -> TypePtr {
+            using T = std::decay_t<decltype(t)>;
+
+            // GenericType: look up in type substitution map
+            if constexpr (std::is_same_v<T, GenericType>) {
+                auto it = type_subs.find(t.name);
+                if (it != type_subs.end()) {
+                    return it->second;
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = t;
+                return result;
+            }
+            // ConstGenericType: look up in const substitution map
+            // When found, we need to use the concrete value in the type
+            // For now, we'll just return the type as-is since arrays already use size_t
+            else if constexpr (std::is_same_v<T, ConstGenericType>) {
+                auto it = const_subs.find(t.name);
+                if (it != const_subs.end()) {
+                    // Return the value type with the const value embedded
+                    // This is used during monomorphization
+                    auto result = std::make_shared<Type>();
+                    result->kind = t; // Keep track for now
+                    return result;
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = t;
+                return result;
+            }
+            // NamedType: substitute name if it's a type param, and recurse on type_args
+            else if constexpr (std::is_same_v<T, NamedType>) {
+                auto it = type_subs.find(t.name);
+                if (it != type_subs.end() && t.type_args.empty()) {
+                    return it->second;
+                }
+                if (t.type_args.empty()) {
+                    auto result = std::make_shared<Type>();
+                    result->kind = t;
+                    return result;
+                }
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type_with_consts(arg, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = NamedType{t.name, t.module_path, std::move(new_args)};
+                return result;
+            }
+            // ArrayType: substitute element type and check for const generic size
+            else if constexpr (std::is_same_v<T, ArrayType>) {
+                auto new_element = substitute_type_with_consts(t.element, type_subs, const_subs);
+                auto result = std::make_shared<Type>();
+                result->kind = ArrayType{std::move(new_element), t.size};
+                return result;
+            }
+            // RefType: substitute inner type
+            else if constexpr (std::is_same_v<T, RefType>) {
+                auto result = std::make_shared<Type>();
+                result->kind =
+                    RefType{t.is_mut, substitute_type_with_consts(t.inner, type_subs, const_subs)};
+                return result;
+            }
+            // PtrType: substitute inner type
+            else if constexpr (std::is_same_v<T, PtrType>) {
+                auto result = std::make_shared<Type>();
+                result->kind =
+                    PtrType{t.is_mut, substitute_type_with_consts(t.inner, type_subs, const_subs)};
+                return result;
+            }
+            // SliceType: substitute element type
+            else if constexpr (std::is_same_v<T, SliceType>) {
+                auto result = std::make_shared<Type>();
+                result->kind =
+                    SliceType{substitute_type_with_consts(t.element, type_subs, const_subs)};
+                return result;
+            }
+            // TupleType: substitute all element types
+            else if constexpr (std::is_same_v<T, TupleType>) {
+                std::vector<TypePtr> new_elements;
+                new_elements.reserve(t.elements.size());
+                for (const auto& elem : t.elements) {
+                    new_elements.push_back(
+                        substitute_type_with_consts(elem, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = TupleType{std::move(new_elements)};
+                return result;
+            }
+            // FuncType: substitute params and return type
+            else if constexpr (std::is_same_v<T, FuncType>) {
+                std::vector<TypePtr> new_params;
+                new_params.reserve(t.params.size());
+                for (const auto& param : t.params) {
+                    new_params.push_back(substitute_type_with_consts(param, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = FuncType{
+                    std::move(new_params),
+                    substitute_type_with_consts(t.return_type, type_subs, const_subs), t.is_async};
+                return result;
+            }
+            // ClosureType: substitute params, return type, and captures
+            else if constexpr (std::is_same_v<T, ClosureType>) {
+                std::vector<TypePtr> new_params;
+                new_params.reserve(t.params.size());
+                for (const auto& param : t.params) {
+                    new_params.push_back(substitute_type_with_consts(param, type_subs, const_subs));
+                }
+                std::vector<CapturedVar> new_captures;
+                new_captures.reserve(t.captures.size());
+                for (const auto& cap : t.captures) {
+                    new_captures.push_back(CapturedVar{
+                        cap.name, substitute_type_with_consts(cap.type, type_subs, const_subs),
+                        cap.is_mut});
+                }
+                auto result = std::make_shared<Type>();
+                result->kind =
+                    ClosureType{std::move(new_params),
+                                substitute_type_with_consts(t.return_type, type_subs, const_subs),
+                                std::move(new_captures)};
+                return result;
+            }
+            // DynBehaviorType: substitute type args
+            else if constexpr (std::is_same_v<T, DynBehaviorType>) {
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type_with_consts(arg, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = DynBehaviorType{t.behavior_name, std::move(new_args), t.is_mut};
                 return result;
             }
             // PrimitiveType, TypeVar: no substitution needed

@@ -535,8 +535,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                                         // Convert parser type args to semantic types
                                         std::vector<types::TypePtr> type_args;
                                         for (const auto& arg : named.generics->args) {
-                                            type_args.push_back(
-                                                resolve_parser_type_with_subs(*arg, {}));
+                                            if (arg.is_type()) {
+                                                type_args.push_back(resolve_parser_type_with_subs(
+                                                    *arg.as_type(), {}));
+                                            }
                                         }
                                         // Check if already instantiated
                                         std::string mangled =

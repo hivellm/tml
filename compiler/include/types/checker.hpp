@@ -48,6 +48,10 @@ private:
         current_associated_types_; // For resolving 'This::Owned', etc.
     std::unordered_map<std::string, TypePtr>
         current_type_params_; // Maps generic type param names to their types
+    std::unordered_map<std::string, ConstGenericParam>
+        current_const_params_; // Maps const generic param names to their definitions
+    std::unordered_map<std::string, ConstValue>
+        const_values_; // Maps const variable names to their evaluated values
     int loop_depth_ = 0;
     bool in_lowlevel_ = false; // When true, & returns pointer instead of reference
 
@@ -106,6 +110,14 @@ private:
     // Type resolution
     auto resolve_type(const parser::Type& type) -> TypePtr;
     auto resolve_type_path(const parser::TypePath& path) -> TypePtr;
+
+    // Const generic evaluation
+    // Evaluates a const expression at compile time and returns the value
+    auto evaluate_const_expr(const parser::Expr& expr, TypePtr expected_type)
+        -> std::optional<ConstValue>;
+    // Extracts const generic parameters from parser GenericParam list
+    auto extract_const_params(const std::vector<parser::GenericParam>& params)
+        -> std::vector<ConstGenericParam>;
 
     // Closure capture analysis
     void collect_captures_from_expr(const parser::Expr& expr, std::shared_ptr<Scope> closure_scope,

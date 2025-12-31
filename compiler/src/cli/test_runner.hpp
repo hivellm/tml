@@ -41,6 +41,10 @@ struct InProcessTestResult {
 // Returns 0 on success, non-zero on failure
 using TestMainFunc = int (*)();
 
+// Fuzz target function signature: int tml_fuzz_target(const uint8_t* data, size_t len)
+// Returns 0 on success, non-zero on crash/failure
+using FuzzTargetFunc = int (*)(const uint8_t*, size_t);
+
 // DLL/SO/dylib handle wrapper with RAII
 // Works on Windows (.dll), Linux (.so), and macOS (.dylib)
 class DynamicLibrary {
@@ -105,6 +109,11 @@ InProcessTestResult run_test_in_process(const std::string& lib_path);
 // Combined: compile and run test in-process
 // Falls back to process execution if library loading fails
 InProcessTestResult compile_and_run_test_in_process(const std::string& test_file,
+                                                    bool verbose = false, bool no_cache = false);
+
+// Compile a fuzz target file to a shared library
+// Similar to test compilation, but generates tml_fuzz_target entry point
+CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file,
                                                     bool verbose = false, bool no_cache = false);
 
 } // namespace tml::cli

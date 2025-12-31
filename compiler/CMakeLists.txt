@@ -100,6 +100,7 @@ add_library(tml_types STATIC
     # Checker modules (split from checker.cpp)
     src/types/checker/helpers.cpp
     src/types/checker/core.cpp
+    src/types/checker/const_eval.cpp
     src/types/checker/expr.cpp
     src/types/checker/stmt.cpp
     src/types/checker/control.cpp

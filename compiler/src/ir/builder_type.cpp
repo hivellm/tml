@@ -18,9 +18,12 @@ auto IRBuilder::build_type_expr(const parser::Type& type) -> IRTypeExpr {
                 }
                 if (t.generics) {
                     for (const auto& arg : t.generics->args) {
-                        auto inner = build_type_expr(*arg);
-                        ref.type_args.push_back(
-                            make_box<IRTypeRef>(std::move(std::get<IRTypeRef>(inner.kind))));
+                        // Only handle type arguments for now (not const generics)
+                        if (arg.is_type()) {
+                            auto inner_type = build_type_expr(*arg.as_type());
+                            ref.type_args.push_back(make_box<IRTypeRef>(
+                                std::move(std::get<IRTypeRef>(inner_type.kind))));
+                        }
                     }
                 }
                 return IRTypeExpr{std::move(ref)};

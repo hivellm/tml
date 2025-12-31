@@ -1,0 +1,33 @@
+// Test Generic Associated Types (GATs)
+// Tests parsing and type checking of associated types with generic parameters
+
+// Behavior with a GAT (Generic Associated Type)
+behavior Container {
+    // GAT: Item is parameterized by the element type
+    type Item[E]
+
+    func get(this: ref This, index: I32) -> I32
+}
+
+// Struct that will implement the GAT behavior
+type VecWrapper {
+    data: I32
+}
+
+// Impl with GAT type binding
+impl Container for VecWrapper {
+    // Bind the GAT - type Item[E] = E (identity mapping)
+    type Item[E] = E
+
+    func get(this: ref This, index: I32) -> I32 {
+        return this.data
+    }
+}
+
+@test
+func test_gat_parsing() {
+    let wrapper: VecWrapper = VecWrapper { data: 42 }
+    let value: I32 = wrapper.get(0)
+    assert_eq(value, 42)
+    println("GAT parsing test passed!")
+}

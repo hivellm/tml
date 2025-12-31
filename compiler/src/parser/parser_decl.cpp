@@ -8,6 +8,27 @@ namespace tml::parser {
 
 auto Parser::parse_visibility() -> Visibility {
     if (match(lexer::TokenKind::KwPub)) {
+        // Check for pub(crate)
+        if (check(lexer::TokenKind::LParen)) {
+            advance(); // consume '('
+            if (check(lexer::TokenKind::Identifier) && peek().lexeme == "crate") {
+                advance(); // consume 'crate'
+                if (match(lexer::TokenKind::RParen)) {
+                    return Visibility::PubCrate;
+                }
+                // Error: expected ')' after 'crate'
+                // Fall through to return Public for error recovery
+            }
+            // Other visibility modifiers like pub(super) could be added here
+            // For now, just return Public for unknown modifiers
+            // Skip to closing paren if present
+            while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+                advance();
+            }
+            if (check(lexer::TokenKind::RParen)) {
+                advance();
+            }
+        }
         return Visibility::Public;
     }
     return Visibility::Private;
@@ -599,6 +620,15 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
                 return unwrap_err(type_name_result);
             auto type_name = std::string(unwrap(type_name_result).lexeme);
 
+            // Optional GAT generic parameters: type Item[T]
+            std::vector<GenericParam> gat_generics;
+            if (check(lexer::TokenKind::LBracket)) {
+                auto generics_result = parse_generic_params();
+                if (is_err(generics_result))
+                    return unwrap_err(generics_result);
+                gat_generics = std::move(unwrap(generics_result));
+            }
+
             // Optional bounds: type Item: Display + Debug
             std::vector<TypePath> bounds;
             if (match(lexer::TokenKind::Colon)) {
@@ -612,8 +642,21 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
                 } while (match(lexer::TokenKind::Plus));
             }
 
-            associated_types.push_back(AssociatedType{
-                .name = std::move(type_name), .bounds = std::move(bounds), .span = type_span});
+            // Optional default type: type Item = I32
+            std::optional<TypePtr> default_type = std::nullopt;
+            if (match(lexer::TokenKind::Assign)) {
+                skip_newlines();
+                auto type_result = parse_type();
+                if (is_err(type_result))
+                    return unwrap_err(type_result);
+                default_type = std::move(unwrap(type_result));
+            }
+
+            associated_types.push_back(AssociatedType{.name = std::move(type_name),
+                                                      .generics = std::move(gat_generics),
+                                                      .bounds = std::move(bounds),
+                                                      .default_type = std::move(default_type),
+                                                      .span = type_span});
         } else {
             auto func_result = parse_func_decl(method_vis);
             if (is_err(func_result))
@@ -709,7 +752,8 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
         auto method_vis = parse_visibility();
 
-        // Check for associated type binding: type Name = ConcreteType
+        // Check for associated type binding: type Name = ConcreteType or type Name[T] =
+        // ConcreteType[T]
         if (check(lexer::TokenKind::KwType)) {
             auto type_span = peek().span;
             advance(); // consume 'type'
@@ -719,6 +763,15 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
             if (is_err(type_name_result))
                 return unwrap_err(type_name_result);
             auto type_name = std::string(unwrap(type_name_result).lexeme);
+
+            // Optional GAT generic parameters: type Item[T] = Vec[T]
+            std::vector<GenericParam> gat_generics;
+            if (check(lexer::TokenKind::LBracket)) {
+                auto generics_result = parse_generic_params();
+                if (is_err(generics_result))
+                    return unwrap_err(generics_result);
+                gat_generics = std::move(unwrap(generics_result));
+            }
 
             auto eq_result =
                 expect(lexer::TokenKind::Assign, "Expected '=' after associated type name");
@@ -730,6 +783,7 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
                 return unwrap_err(concrete_type);
 
             type_bindings.push_back(AssociatedTypeBinding{.name = std::move(type_name),
+                                                          .generics = std::move(gat_generics),
                                                           .type = std::move(unwrap(concrete_type)),
                                                           .span = type_span});
         } else if (check(lexer::TokenKind::KwConst)) {
@@ -993,25 +1047,44 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
     std::vector<GenericParam> params;
 
     while (!check(lexer::TokenKind::RBracket) && !is_at_end()) {
+        auto param_span = peek().span;
+        bool is_const = false;
+        std::optional<TypePtr> const_type = std::nullopt;
+
+        // Check for const generic: const N: U64
+        if (match(lexer::TokenKind::KwConst)) {
+            is_const = true;
+        }
+
         auto name_result = expect(lexer::TokenKind::Identifier, "Expected type parameter name");
         if (is_err(name_result))
             return unwrap_err(name_result);
         auto name = std::string(unwrap(name_result).lexeme);
-        auto param_span = unwrap(name_result).span;
 
         std::vector<TypePath> bounds;
         if (match(lexer::TokenKind::Colon)) {
-            // Parse bounds: T: Trait + OtherTrait
-            do {
-                auto bound = parse_type_path();
-                if (is_err(bound))
-                    return unwrap_err(bound);
-                bounds.push_back(std::move(unwrap(bound)));
-            } while (match(lexer::TokenKind::Plus));
+            if (is_const) {
+                // For const generics, parse the type: const N: U64
+                auto type_result = parse_type();
+                if (is_err(type_result))
+                    return unwrap_err(type_result);
+                const_type = std::move(unwrap(type_result));
+            } else {
+                // Parse bounds: T: Trait + OtherTrait
+                do {
+                    auto bound = parse_type_path();
+                    if (is_err(bound))
+                        return unwrap_err(bound);
+                    bounds.push_back(std::move(unwrap(bound)));
+                } while (match(lexer::TokenKind::Plus));
+            }
         }
 
-        params.push_back(
-            GenericParam{.name = std::move(name), .bounds = std::move(bounds), .span = param_span});
+        params.push_back(GenericParam{.name = std::move(name),
+                                      .bounds = std::move(bounds),
+                                      .is_const = is_const,
+                                      .const_type = std::move(const_type),
+                                      .span = param_span});
 
         if (!check(lexer::TokenKind::RBracket)) {
             auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between type parameters");

@@ -2,187 +2,116 @@ use test
 
 // Tests for Core Traits
 // Tests behavior definitions and implementations
-// NOTE: Simple enums (unit variants) have a known bug with pattern matching.
-//       These tests focus on patterns that work correctly.
+// Uses builtin Maybe and Outcome types
 
 // ============================================================================
 // Maybe[T] Type Tests (for Eq, Ord patterns)
 // ============================================================================
 
-type Maybe[T] {
-    Just(T),
-    Nothing
-}
-
-// Helper: check if Maybe is Just
-func is_just[T](m: Maybe[T]) -> Bool {
-    when m {
-        Just(_) => return true,
-        Nothing => return false
-    }
-    return false
-}
-
-// Helper: check if Maybe is Nothing
-func is_nothing[T](m: Maybe[T]) -> Bool {
-    when m {
-        Just(_) => return false,
-        Nothing => return true
-    }
-    return true
-}
-
-// Helper: unwrap Maybe with default
-func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
-    when m {
-        Just(val) => return val,
-        Nothing => return default_val
-    }
-    return default_val
-}
-
 @test
-func test_maybe_is_just() -> I32 {
+func test_maybe_is_just() {
     let m: Maybe[I32] = Just(42)
-    assert(is_just(m), "Just(42) should be Just")
-    return 0
+    assert(m.is_just(), "Just(42) should be Just")
+    println("Maybe is_just test passed!")
 }
 
 @test
-func test_maybe_is_nothing() -> I32 {
+func test_maybe_is_nothing() {
     let m: Maybe[I32] = Nothing
-    assert(is_nothing(m), "Nothing should be Nothing")
-    return 0
+    assert(m.is_nothing(), "Nothing should be Nothing")
+    println("Maybe is_nothing test passed!")
 }
 
 @test
-func test_maybe_unwrap_or_just() -> I32 {
+func test_maybe_unwrap_or_just() {
     let m: Maybe[I32] = Just(42)
-    let val: I32 = unwrap_or(m, 0)
-    assert(val == 42, "unwrap_or should return 42")
-    return 0
+    let val: I32 = m.unwrap_or(0)
+    assert_eq(val, 42)
+    println("Maybe unwrap_or Just test passed!")
 }
 
 @test
-func test_maybe_unwrap_or_nothing() -> I32 {
+func test_maybe_unwrap_or_nothing() {
     let m: Maybe[I32] = Nothing
-    let val: I32 = unwrap_or(m, 99)
-    assert(val == 99, "unwrap_or should return default 99")
-    return 0
+    let val: I32 = m.unwrap_or(99)
+    assert_eq(val, 99)
+    println("Maybe unwrap_or Nothing test passed!")
 }
 
 @test
-func test_maybe_extract_value() -> I32 {
+func test_maybe_extract_value() {
     let m: Maybe[I32] = Just(123)
     when m {
         Just(val) => {
-            assert(val == 123, "Extracted value should be 123")
-            return 0
+            assert_eq(val, 123)
+            println("Maybe extract value test passed!")
         },
         Nothing => {
             assert(false, "Should be Just, not Nothing")
-            return 1
         }
     }
-    return 1
 }
 
 // ============================================================================
 // Outcome[T, E] Type Tests
 // ============================================================================
 
-type Outcome[T, E] {
-    Ok(T),
-    Err(E)
-}
-
-// Helper: check if Outcome is Ok
-func is_ok[T, E](o: Outcome[T, E]) -> Bool {
-    when o {
-        Ok(_) => return true,
-        Err(_) => return false
-    }
-    return false
-}
-
-// Helper: check if Outcome is Err
-func is_err[T, E](o: Outcome[T, E]) -> Bool {
-    when o {
-        Ok(_) => return false,
-        Err(_) => return true
-    }
-    return true
-}
-
-// Helper: unwrap Outcome Ok value with default
-func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
-    when o {
-        Ok(val) => return val,
-        Err(_) => return default_val
-    }
-    return default_val
-}
-
 @test
-func test_outcome_is_ok() -> I32 {
+func test_outcome_is_ok() {
     let o: Outcome[I32, Str] = Ok(100)
-    assert(is_ok(o), "Ok(100) should be Ok")
-    return 0
+    assert(o.is_ok(), "Ok(100) should be Ok")
+    println("Outcome is_ok test passed!")
 }
 
 @test
-func test_outcome_is_err() -> I32 {
+func test_outcome_is_err() {
     let o: Outcome[I32, Str] = Err("error")
-    assert(is_err(o), "Err should be Err")
-    return 0
+    assert(o.is_err(), "Err should be Err")
+    println("Outcome is_err test passed!")
 }
 
 @test
-func test_outcome_unwrap_or_ok() -> I32 {
+func test_outcome_unwrap_or_ok() {
     let o: Outcome[I32, Str] = Ok(42)
-    let val: I32 = unwrap_or_ok(o, 0)
-    assert(val == 42, "unwrap_or_ok should return 42")
-    return 0
+    let val: I32 = o.unwrap_or(0)
+    assert_eq(val, 42)
+    println("Outcome unwrap_or Ok test passed!")
 }
 
 @test
-func test_outcome_unwrap_or_err() -> I32 {
+func test_outcome_unwrap_or_err() {
     let o: Outcome[I32, Str] = Err("error")
-    let val: I32 = unwrap_or_ok(o, 99)
-    assert(val == 99, "unwrap_or_ok should return default 99")
-    return 0
+    let val: I32 = o.unwrap_or(99)
+    assert_eq(val, 99)
+    println("Outcome unwrap_or Err test passed!")
 }
 
 @test
-func test_outcome_extract_ok_value() -> I32 {
+func test_outcome_extract_ok_value() {
     let o: Outcome[I32, Str] = Ok(456)
     when o {
         Ok(val) => {
-            assert(val == 456, "Extracted Ok value should be 456")
-            return 0
+            assert_eq(val, 456)
+            println("Outcome extract Ok value test passed!")
         },
         Err(_) => {
             assert(false, "Should be Ok, not Err")
-            return 1
         }
     }
-    return 1
 }
 
 @test
-func test_outcome_extract_err_value() -> I32 {
+func test_outcome_extract_err_value() {
     let o: Outcome[I32, I32] = Err(999)
     when o {
         Ok(_) => {
             assert(false, "Should be Err, not Ok")
-            return 1
         },
         Err(e) => {
-            assert(e == 999, "Extracted Err value should be 999")
-            return 0
+            assert_eq(e, 999)
+            println("Outcome extract Err value test passed!")
         }
     }
-    return 1
 }
 
 // ============================================================================
@@ -190,23 +119,23 @@ func test_outcome_extract_err_value() -> I32 {
 // ============================================================================
 
 @test
-func test_hash_consistency() -> I32 {
+func test_hash_consistency() {
     let s1: Str = "hello"
     let s2: Str = "hello"
     let h1: I32 = str_hash(s1)
     let h2: I32 = str_hash(s2)
     assert(h1 == h2, "Same strings should have same hash")
-    return 0
+    println("Hash consistency test passed!")
 }
 
 @test
-func test_hash_difference() -> I32 {
+func test_hash_difference() {
     let s1: Str = "hello"
     let s2: Str = "world"
     let h1: I32 = str_hash(s1)
     let h2: I32 = str_hash(s2)
-    assert(h1 != h2, "Different strings should have different hashes (usually)")
-    return 0
+    assert(h1 != h2, "Different strings should have different hashes")
+    println("Hash difference test passed!")
 }
 
 // ============================================================================
@@ -214,45 +143,45 @@ func test_hash_difference() -> I32 {
 // ============================================================================
 
 @test
-func test_default_i32() -> I32 {
+func test_default_i32() {
     let x: I32 = 0  // Default value for I32
-    assert(x == 0, "Default I32 should be 0")
-    return 0
+    assert_eq(x, 0)
+    println("Default I32 test passed!")
 }
 
 @test
-func test_default_bool() -> I32 {
+func test_default_bool() {
     let b: Bool = false  // Default value for Bool
     assert(b == false, "Default Bool should be false")
-    return 0
+    println("Default Bool test passed!")
 }
 
 // ============================================================================
-// Comparison Tests (without simple enum issues)
+// Comparison Tests
 // ============================================================================
 
 @test
-func test_compare_less() -> I32 {
+func test_compare_less() {
     let a: I32 = 5
     let b: I32 = 10
     assert(a < b, "5 should be less than 10")
-    return 0
+    println("Compare less test passed!")
 }
 
 @test
-func test_compare_equal() -> I32 {
+func test_compare_equal() {
     let a: I32 = 7
     let b: I32 = 7
     assert(a == b, "7 should equal 7")
-    return 0
+    println("Compare equal test passed!")
 }
 
 @test
-func test_compare_greater() -> I32 {
+func test_compare_greater() {
     let a: I32 = 20
     let b: I32 = 10
     assert(a > b, "20 should be greater than 10")
-    return 0
+    println("Compare greater test passed!")
 }
 
 // ============================================================================
@@ -260,20 +189,20 @@ func test_compare_greater() -> I32 {
 // ============================================================================
 
 @test
-func test_maybe_eq_both_just_same_value() -> I32 {
+func test_maybe_eq_both_just_same_value() {
     let a: Maybe[I32] = Just(42)
     let b: Maybe[I32] = Just(42)
-    let a_val: I32 = unwrap_or(a, -1)
-    let b_val: I32 = unwrap_or(b, -1)
+    let a_val: I32 = a.unwrap_or(-1)
+    let b_val: I32 = b.unwrap_or(-1)
     assert(a_val == b_val, "Both Just(42) should have same value")
-    return 0
+    println("Maybe eq both Just same value test passed!")
 }
 
 @test
-func test_maybe_eq_both_nothing() -> I32 {
+func test_maybe_eq_both_nothing() {
     let a: Maybe[I32] = Nothing
     let b: Maybe[I32] = Nothing
-    assert(is_nothing(a), "a should be Nothing")
-    assert(is_nothing(b), "b should be Nothing")
-    return 0
+    assert(a.is_nothing(), "a should be Nothing")
+    assert(b.is_nothing(), "b should be Nothing")
+    println("Maybe eq both Nothing test passed!")
 }

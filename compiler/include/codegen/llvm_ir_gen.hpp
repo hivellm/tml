@@ -24,11 +24,12 @@ struct LLVMGenError {
 // LLVM IR generator options
 struct LLVMGenOptions {
     bool emit_comments = true;
-    bool coverage_enabled = false;   // Inject coverage instrumentation
-    bool dll_export = false;         // Add dllexport for public functions (Windows DLL)
-    bool emit_debug_info = false;    // Generate DWARF debug information
-    bool generate_dll_entry = false; // Generate tml_test_entry for DLL loading (no main)
-    int debug_level = 2;             // Debug level: 1=minimal, 2=standard, 3=full
+    bool coverage_enabled = false;    // Inject coverage instrumentation
+    bool dll_export = false;          // Add dllexport for public functions (Windows DLL)
+    bool emit_debug_info = false;     // Generate DWARF debug information
+    bool generate_dll_entry = false;  // Generate tml_test_entry for DLL loading (no main)
+    bool generate_fuzz_entry = false; // Generate tml_fuzz_target for fuzz testing (no main)
+    int debug_level = 2;              // Debug level: 1=minimal, 2=standard, 3=full
     std::string target_triple = "x86_64-pc-windows-msvc";
     std::string source_file;          // Source file path for coverage/debug tracking
     std::string coverage_output_file; // Path for HTML coverage output (empty = print only)

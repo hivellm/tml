@@ -597,6 +597,131 @@ When comparing against a baseline:
   + bench bench_sort     ... 45 ns/iter (~0.3%)   # unchanged
 ```
 
+## Fuzz Testing
+
+TML includes a built-in fuzzer for finding bugs through random input generation.
+
+### Basic Fuzz Targets
+
+Use the `@fuzz` decorator to mark functions as fuzz targets:
+
+```tml
+// parser.fuzz.tml
+use test
+
+// Fuzz target with input data
+@fuzz
+func fuzz_parser(data: Ptr[U8], len: U64) {
+    // Convert input bytes to string or other format
+    if len == 0 { return }
+
+    // Use the fuzzed input to test your code
+    let result = parse_input(data, len)
+
+    // Assertions will catch bugs
+    assert(result.is_valid())
+}
+```
+
+### Fuzz File Naming
+
+Fuzz files use the `.fuzz.tml` extension:
+
+```
+project/
+├── src/
+│   └── lib.tml
+├── tests/
+│   └── fuzz/
+│       ├── parser.fuzz.tml
+│       ├── serializer.fuzz.tml
+│       └── validator.fuzz.tml
+└── tml.toml
+```
+
+### Running Fuzz Tests
+
+```bash
+# Run all fuzz targets (discovers *.fuzz.tml files)
+tml test --fuzz
+
+# Run for specific duration (default: 10 seconds per target)
+tml test --fuzz --fuzz-duration=60
+
+# Filter by pattern
+tml test --fuzz parser
+
+# Specify maximum input length
+tml test --fuzz --fuzz-max-len=1024
+```
+
+### Using a Corpus
+
+The fuzzer can use a corpus of input files to guide fuzzing:
+
+```bash
+# Directory structure
+project/
+├── fuzz_corpus/
+│   └── parser/           # Corpus for parser.fuzz.tml
+│       ├── seed1.bin
+│       ├── seed2.bin
+│       └── seed3.bin
+└── tests/
+    └── fuzz/
+        └── parser.fuzz.tml
+
+# Run with corpus
+tml test --fuzz --corpus-dir=fuzz_corpus/parser
+```
+
+### Crash Handling
+
+When a crash is found:
+1. The crashing input is saved to `fuzz_crashes/`
+2. The file is named `{target_name}_{timestamp}.crash`
+3. You can reproduce the crash by replaying the input
+
+```bash
+# View saved crashes
+ls fuzz_crashes/
+
+# Reproduce a crash
+tml run tests/fuzz/parser.fuzz.tml < fuzz_crashes/parser_1735689600.crash
+```
+
+### Fuzz Target Requirements
+
+Fuzz targets should:
+1. Be marked with `@fuzz` decorator
+2. Accept `(data: Ptr[U8], len: U64)` parameters (optional)
+3. Return `void` (Unit) or `I32` (0 for success, non-zero for failure)
+4. Avoid infinite loops
+5. Use assertions to detect bugs
+
+```tml
+@fuzz
+func fuzz_with_assertions(data: Ptr[U8], len: U64) {
+    let result = process(data, len)
+
+    // Catch invariant violations
+    assert(result.len() <= len)
+    assert(result.is_valid())
+}
+```
+
+### Mutation Strategies
+
+The fuzzer uses several mutation strategies:
+- **Bit flipping**: Flip random bits in the input
+- **Byte replacement**: Replace random bytes
+- **Insertion**: Insert random bytes
+- **Deletion**: Remove random bytes
+- **Swapping**: Swap byte positions
+- **Duplication**: Duplicate sections of input
+
+70% of iterations mutate from the corpus, 30% generate new random input.
+
 ## Test Coverage
 
 ```bash

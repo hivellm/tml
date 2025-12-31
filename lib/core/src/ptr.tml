@@ -857,10 +857,8 @@ impl[T] NonNull[T] {
 ///
 /// Returns 0 if `T` is a zero-sized type.
 pub func ptr_distance[T](start: RawPtr[T], end: RawPtr[T]) -> I64 {
-    // TODO: lowlevel blocks not yet supported
-    // let element_size: I64 = lowlevel { sizeof_type[T]() }
-    // For now, assume element size of 1
-    let element_size: I64 = 1
+    // Use size_of intrinsic to get element size
+    let element_size: I64 = size_of[T]()
     if element_size == 0 {
         return 0
     }

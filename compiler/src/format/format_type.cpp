@@ -13,7 +13,13 @@ auto Formatter::format_type(const parser::Type& type) -> std::string {
             for (size_t i = 0; i < named.generics->args.size(); ++i) {
                 if (i > 0)
                     result += ", ";
-                result += format_type_ptr(named.generics->args[i]);
+                const auto& arg = named.generics->args[i];
+                if (arg.is_type()) {
+                    result += format_type_ptr(arg.as_type());
+                } else {
+                    // Const generic argument - format as expression
+                    result += format_expr(*arg.as_expr());
+                }
             }
             result += "]";
         }

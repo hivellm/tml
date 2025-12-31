@@ -52,9 +52,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     const auto& pe = call.receiver->as<parser::PathExpr>();
                     if (pe.generics.has_value() && !pe.generics->args.empty()) {
                         for (const auto& arg : pe.generics->args) {
-                            // Extract type name from parser type
-                            if (arg->is<parser::NamedType>()) {
-                                const auto& named = arg->as<parser::NamedType>();
+                            // Extract type name from parser type (only type args, not const
+                            // generics)
+                            if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
+                                const auto& named = arg.as_type()->as<parser::NamedType>();
                                 if (!named.path.segments.empty()) {
                                     struct_name += "__" + named.path.segments.back();
                                 }
@@ -113,8 +114,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     const auto& pe = call.receiver->as<parser::PathExpr>();
                     if (pe.generics.has_value() && !pe.generics->args.empty()) {
                         for (const auto& arg : pe.generics->args) {
-                            if (arg->is<parser::NamedType>()) {
-                                const auto& named = arg->as<parser::NamedType>();
+                            if (arg.is_type() && arg.as_type()->is<parser::NamedType>()) {
+                                const auto& named = arg.as_type()->as<parser::NamedType>();
                                 if (!named.path.segments.empty()) {
                                     struct_name += "__" + named.path.segments.back();
                                 }

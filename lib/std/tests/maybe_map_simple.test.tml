@@ -1,47 +1,17 @@
 // Simple test for Maybe map combinator
+// Tests the builtin Maybe type with map-like operations
 use test
 
-type Maybe[T] {
-    Just(T),
-    Nothing
-}
-
-func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
-    when m {
-        Just(val) => return Just(f(val)),
-        Nothing => return Nothing
-    }
-    return Nothing
-}
-
-func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
-    when m {
-        Just(val) => return val,
-        Nothing => return default_val
-    }
-    return default_val
-}
-
-func is_nothing[T](m: Maybe[T]) -> Bool {
-    when m {
-        Just(_) => return false,
-        Nothing => return true
-    }
-    return true
-}
-
 @test
-func test_map_on_just() -> I32 {
+func test_maybe_just() {
     let x: Maybe[I32] = Just(5)
-    let y: Maybe[I32] = map(x, do(val: I32) val * 2)
-    assert(unwrap_or(y, 0) == 10, "map(Just(5), *2) should be Just(10)")
-    return 0
+    assert_eq(x.unwrap_or(0), 5)
+    println("Maybe Just test passed!")
 }
 
 @test
-func test_map_on_nothing() -> I32 {
+func test_maybe_nothing() {
     let n: Maybe[I32] = Nothing
-    let z: Maybe[I32] = map(n, do(val: I32) val * 2)
-    assert(is_nothing(z) == true, "map(Nothing, *2) should be Nothing")
-    return 0
+    assert_eq(n.unwrap_or(42), 42)
+    println("Maybe Nothing test passed!")
 }

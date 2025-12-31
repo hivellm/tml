@@ -20,6 +20,13 @@ struct StructDef;
 struct EnumDef;
 struct BehaviorDef;
 
+// Re-exported symbol info
+struct ReExport {
+    std::string local_name;    // Name as it appears in this module
+    std::string source_module; // Original module path
+    std::string source_name;   // Original symbol name
+};
+
 // Represents a single module with its symbols
 struct Module {
     std::string name;
@@ -32,6 +39,9 @@ struct Module {
     std::unordered_map<std::string, BehaviorDef> behaviors;
     std::unordered_map<std::string, TypePtr> type_aliases;
     std::unordered_map<std::string, std::string> submodules; // name -> path
+
+    // Re-exported symbols from pub use declarations
+    std::vector<ReExport> re_exports;
 
     // Source code for pure TML modules (non-lowlevel)
     // Stored so codegen can re-parse and generate LLVM IR

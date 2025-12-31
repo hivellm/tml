@@ -63,6 +63,28 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
                                    .span = span});
     }
 
+    // Impl behavior return type: impl Behavior[T]
+    // This is used for opaque return types that implement a behavior
+    if (match(lexer::TokenKind::KwImpl)) {
+        // Parse the behavior path
+        auto behavior_path = parse_type_path();
+        if (is_err(behavior_path))
+            return unwrap_err(behavior_path);
+
+        // Parse optional generic arguments
+        auto generics = parse_generic_args();
+        if (is_err(generics))
+            return unwrap_err(generics);
+
+        auto end_span = previous().span;
+        auto span = SourceSpan::merge(start_span, end_span);
+        return make_box<Type>(
+            Type{.kind = ImplBehaviorType{.behavior = std::move(unwrap(behavior_path)),
+                                          .generics = std::move(unwrap(generics)),
+                                          .span = span},
+                 .span = span});
+    }
+
     if (match(lexer::TokenKind::Star)) {
         bool is_mut = false;
         if (match(lexer::TokenKind::KwMut)) {
@@ -326,12 +348,25 @@ auto Parser::parse_generic_args() -> Result<std::optional<GenericArgs>, ParseErr
     auto start_span = peek().span;
     advance(); // consume '['
 
-    std::vector<TypePtr> args;
+    std::vector<GenericArg> args;
     while (!check(lexer::TokenKind::RBracket) && !is_at_end()) {
-        auto arg = parse_type();
-        if (is_err(arg))
-            return unwrap_err(arg);
-        args.push_back(std::move(unwrap(arg)));
+        auto arg_span = peek().span;
+
+        // Check if this is a const expression (integer literal or identifier that looks like const)
+        // For now, support: integer literals, simple identifiers (for const params like N)
+        if (check(lexer::TokenKind::IntLiteral)) {
+            // Parse as const expression
+            auto expr = parse_expr();
+            if (is_err(expr))
+                return unwrap_err(expr);
+            args.push_back(GenericArg::from_const(std::move(unwrap(expr)), arg_span));
+        } else {
+            // Try to parse as type first
+            auto type_result = parse_type();
+            if (is_err(type_result))
+                return unwrap_err(type_result);
+            args.push_back(GenericArg::from_type(std::move(unwrap(type_result)), arg_span));
+        }
 
         if (!check(lexer::TokenKind::RBracket)) {
             auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between type arguments");

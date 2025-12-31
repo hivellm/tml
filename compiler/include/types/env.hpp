@@ -29,6 +29,12 @@ struct WhereConstraint {
     std::vector<std::string> required_behaviors;
 };
 
+// Const generic parameter definition
+struct ConstGenericParam {
+    std::string name;   // Parameter name (e.g., "N")
+    TypePtr value_type; // Type of the const (e.g., U64, I32)
+};
+
 // Function signature with stability tracking
 struct FuncSig {
     std::string name;
@@ -48,6 +54,9 @@ struct FuncSig {
     std::optional<std::string> extern_name = std::nullopt; // External symbol name if different
     std::vector<std::string> link_libs = {};               // Libraries to link
     std::optional<std::string> ffi_module = std::nullopt;  // FFI namespace (extracted from @link)
+
+    // Const generic parameters (at end to not break existing code using positional init)
+    std::vector<ConstGenericParam> const_params = {};
 
     // Helper methods
     [[nodiscard]] bool is_extern() const {
@@ -71,6 +80,7 @@ struct FuncSig {
 struct StructDef {
     std::string name;
     std::vector<std::string> type_params;
+    std::vector<ConstGenericParam> const_params; // Const generic parameters
     std::vector<std::pair<std::string, TypePtr>> fields;
     SourceSpan span;
 };
@@ -79,21 +89,25 @@ struct StructDef {
 struct EnumDef {
     std::string name;
     std::vector<std::string> type_params;
+    std::vector<ConstGenericParam> const_params; // Const generic parameters
     std::vector<std::pair<std::string, std::vector<TypePtr>>> variants;
     SourceSpan span;
 };
 
 // Associated type in a behavior declaration
+// Can have generic parameters for GATs: type Item[T]
 struct AssociatedTypeDef {
     std::string name;
-    std::vector<std::string> bounds;     // Behavior bounds (e.g., Iterator where Item: Clone)
-    std::optional<TypePtr> default_type; // Optional default type
+    std::vector<std::string> type_params; // GAT type parameters (e.g., type Item[T])
+    std::vector<std::string> bounds;      // Behavior bounds (e.g., Iterator where Item: Clone)
+    std::optional<TypePtr> default_type;  // Optional default type
 };
 
 // Behavior (trait) definition
 struct BehaviorDef {
     std::string name;
     std::vector<std::string> type_params;
+    std::vector<ConstGenericParam> const_params; // Const generic parameters
     std::vector<AssociatedTypeDef>
         associated_types; // Associated type declarations (e.g., type Item)
     std::vector<FuncSig> methods;

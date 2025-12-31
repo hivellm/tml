@@ -167,11 +167,50 @@ pub func print_section_header(title: Str) {
     print_separator()
 }
 
-/// Print colored result (stub - colors not yet supported)
+// ANSI color codes
+const ANSI_RESET: Str = "\x1b[0m"
+const ANSI_GREEN: Str = "\x1b[32m"
+const ANSI_RED: Str = "\x1b[31m"
+const ANSI_YELLOW: Str = "\x1b[33m"
+const ANSI_BOLD: Str = "\x1b[1m"
+
+/// Print colored result using ANSI escape codes
 pub func print_colored(text: Str, passed: Bool) {
-    // TODO: Add color support when terminal colors are available
-    // For now, just print the text
+    if passed {
+        print(ANSI_GREEN)
+    } else {
+        print(ANSI_RED)
+    }
     print(text)
+    print(ANSI_RESET)
+}
+
+/// Print text in green (for success)
+pub func print_green(text: Str) {
+    print(ANSI_GREEN)
+    print(text)
+    print(ANSI_RESET)
+}
+
+/// Print text in red (for failure)
+pub func print_red(text: Str) {
+    print(ANSI_RED)
+    print(text)
+    print(ANSI_RESET)
+}
+
+/// Print text in yellow (for warning)
+pub func print_yellow(text: Str) {
+    print(ANSI_YELLOW)
+    print(text)
+    print(ANSI_RESET)
+}
+
+/// Print bold text
+pub func print_bold(text: Str) {
+    print(ANSI_BOLD)
+    print(text)
+    print(ANSI_RESET)
 }
 
 /// Print progress bar (simplified version)

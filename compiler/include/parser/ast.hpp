@@ -35,10 +35,67 @@ struct TypePath {
     SourceSpan span;
 };
 
-// Generic arguments: [T, U]
-struct GenericArgs {
-    std::vector<TypePtr> args;
+// A generic argument can be either a type or a const expression
+// Examples: [I32], [I32, 100], [T, N]
+struct GenericArg {
+    std::variant<TypePtr, ExprPtr> value; // Type or const expression
+    bool is_const = false;                // True if this is a const generic argument
     SourceSpan span;
+
+    // Helper constructors
+    static GenericArg from_type(TypePtr type, SourceSpan sp) {
+        return GenericArg{std::move(type), false, sp};
+    }
+    static GenericArg from_const(ExprPtr expr, SourceSpan sp) {
+        return GenericArg{std::move(expr), true, sp};
+    }
+
+    [[nodiscard]] bool is_type() const {
+        return std::holds_alternative<TypePtr>(value);
+    }
+    [[nodiscard]] bool is_expr() const {
+        return std::holds_alternative<ExprPtr>(value);
+    }
+    [[nodiscard]] TypePtr& as_type() {
+        return std::get<TypePtr>(value);
+    }
+    [[nodiscard]] const TypePtr& as_type() const {
+        return std::get<TypePtr>(value);
+    }
+    [[nodiscard]] ExprPtr& as_expr() {
+        return std::get<ExprPtr>(value);
+    }
+    [[nodiscard]] const ExprPtr& as_expr() const {
+        return std::get<ExprPtr>(value);
+    }
+};
+
+// Generic arguments: [T, U] or [I32, 100]
+struct GenericArgs {
+    std::vector<GenericArg> args;
+    SourceSpan span;
+
+    // Count type arguments (for validation)
+    [[nodiscard]] size_t type_arg_count() const {
+        size_t count = 0;
+        for (const auto& arg : args) {
+            if (arg.is_type()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Count const arguments (for validation)
+    [[nodiscard]] size_t const_arg_count() const {
+        size_t count = 0;
+        for (const auto& arg : args) {
+            if (arg.is_const) {
+                count++;
+            }
+        }
+        return count;
+    }
 };
 
 // Reference type: &T, &mut T
@@ -101,10 +158,19 @@ struct DynType {
     SourceSpan span;
 };
 
+// Impl Behavior return type: impl Behavior[T]
+// This is an opaque type that represents "some type that implements Behavior"
+// Used for return types to hide the concrete implementing type
+struct ImplBehaviorType {
+    TypePath behavior;                   // The behavior being implemented
+    std::optional<GenericArgs> generics; // Generic parameters: impl Iterator[I32]
+    SourceSpan span;
+};
+
 // Type variant
 struct Type {
     std::variant<NamedType, RefType, PtrType, ArrayType, SliceType, TupleType, FuncType, InferType,
-                 DynType>
+                 DynType, ImplBehaviorType>
         kind;
     SourceSpan span;
 
@@ -597,14 +663,17 @@ struct Stmt {
 
 // Visibility
 enum class Visibility {
-    Private,
-    Public,
+    Private,  // Default visibility - private to the current module
+    Public,   // pub - visible everywhere
+    PubCrate, // pub(crate) - visible within the current crate only
 };
 
-// Generic parameter: T, T: Trait, T: Trait + Other
+// Generic parameter: T, T: Trait, const N: U64
 struct GenericParam {
     std::string name;
-    std::vector<TypePath> bounds;
+    std::vector<TypePath> bounds;      // Trait bounds (only for type params)
+    bool is_const = false;             // True if this is a const generic param
+    std::optional<TypePtr> const_type; // Type of const param (e.g., U64, I32)
     SourceSpan span;
 };
 
@@ -691,15 +760,21 @@ struct EnumDecl {
 };
 
 // Associated type declaration in behavior: type Item
+// Can have an optional default: type Item = I32
+// Can have generic parameters (GATs): type Item[T]
 struct AssociatedType {
     std::string name;
-    std::vector<TypePath> bounds; // Optional trait bounds: type Item: Display
+    std::vector<GenericParam> generics;  // GAT generic parameters: type Item[T]
+    std::vector<TypePath> bounds;        // Optional trait bounds: type Item: Display
+    std::optional<TypePtr> default_type; // Optional default type: type Item = I32
     SourceSpan span;
 };
 
 // Associated type binding in impl: type Item = I32
+// Can have type arguments for GATs: type Item[T] = Vec[T]
 struct AssociatedTypeBinding {
     std::string name;
+    std::vector<GenericParam> generics; // GAT type parameters in binding
     TypePtr type;
     SourceSpan span;
 };

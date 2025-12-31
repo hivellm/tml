@@ -33,15 +33,11 @@ pub type TestContext {
     pub captured_output: Str,
 }
 
-// TODO: Implement function types in compiler
-// /// Function signature for test functions
-// pub type TestFn = func() -> ()
-
 /// Registered test entry
 pub type TestEntry {
     pub metadata: TestMetadata,
-    // TODO: Add function field when function types are supported
-    // pub function: TestFn,
+    // Function pointer stored as raw address (test runner calls by name)
+    pub function_addr: I64,
 }
 
 /// Test suite configuration

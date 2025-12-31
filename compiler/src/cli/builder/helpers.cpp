@@ -20,10 +20,16 @@ std::string type_to_string(const parser::Type& type) {
                 }
                 if (t.generics.has_value() && !t.generics->args.empty()) {
                     result += "[";
-                    for (size_t i = 0; i < t.generics->args.size(); ++i) {
-                        if (i > 0)
+                    bool first = true;
+                    for (const auto& arg : t.generics->args) {
+                        if (!first)
                             result += ", ";
-                        result += type_to_string(*t.generics->args[i]);
+                        first = false;
+                        if (arg.is_type()) {
+                            result += type_to_string(*arg.as_type());
+                        } else {
+                            result += "<const>"; // Placeholder for const generic
+                        }
                     }
                     result += "]";
                 }

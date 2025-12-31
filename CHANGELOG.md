@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Const Variable Compile-Time Lookup** (2025-12-31) - Const variables now available during compile-time evaluation
+  - Added `const_values_` map to TypeChecker for storing evaluated const values
+  - `check_const_decl` now evaluates and stores const values at compile time
+  - `evaluate_const_expr` can now lookup previously evaluated const values
+  - Enables const generics and compile-time computations to reference const declarations
+  - Files modified:
+    - `include/types/checker.hpp` - Added `const_values_` map
+    - `src/types/checker/core.cpp` - Store evaluated const values in `check_const_decl`
+    - `src/types/checker/const_eval.cpp` - Implemented const variable lookup
+
+- **Fuzz Testing Infrastructure** (2025-12-31) - Complete fuzz testing support with `@fuzz` decorator
+  - `@fuzz` decorator marks functions as fuzz targets
+  - Fuzz target function signature: `tml_fuzz_target(data: Ptr[U8], len: U64)`
+  - Fuzzer compiles target to shared library and calls fuzz target with generated input
+  - Mutation-based fuzzing with corpus support
+  - Crash input saved to `fuzz_crashes/` directory
+  - `generate_fuzz_entry` option in LLVMGenOptions for fuzz target codegen
+  - Files modified/added:
+    - `include/codegen/llvm_ir_gen.hpp` - Added `generate_fuzz_entry` option
+    - `src/codegen/core/generate.cpp` - Added `@fuzz` decorator collection and entry point generation
+    - `src/cli/test_runner.hpp` - Added `FuzzTargetFunc` type and `compile_fuzz_to_shared_lib` declaration
+    - `src/cli/test_runner.cpp` - Implemented `compile_fuzz_to_shared_lib` function
+    - `src/cli/tester/fuzzer.cpp` - Updated to use shared library loading and fuzz target invocation
+
+- **In-Process Test Output Capture** (2025-12-31) - Stdout/stderr capture for in-process test execution
+  - Added `OutputCapture` RAII class for capturing stdout/stderr to a string
+  - Cross-platform support (Windows and POSIX) using file descriptor redirection
+  - Uses `_sopen_s`/`_dup2` on Windows, `open`/`dup2` on POSIX
+  - Captured output stored in `InProcessTestResult.output`
+  - Files modified:
+    - `src/cli/test_runner.cpp` - Added `OutputCapture` class and updated `run_test_in_process`
+
 - **MIR Text Parser** (2025-12-31) - Full text format parser for MIR modules
   - Parses module structure, functions, blocks, instructions, and terminators
   - Supports all primitive types, pointers, arrays, and struct types

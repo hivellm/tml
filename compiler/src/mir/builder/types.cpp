@@ -47,7 +47,10 @@ auto MirBuilder::convert_type(const parser::Type& type) -> MirTypePtr {
                 std::vector<MirTypePtr> type_args;
                 if (t.generics.has_value()) {
                     for (const auto& arg : t.generics->args) {
-                        type_args.push_back(convert_type(*arg));
+                        // Only handle type arguments for now (not const generics)
+                        if (arg.is_type()) {
+                            type_args.push_back(convert_type(*arg.as_type()));
+                        }
                     }
                 }
 

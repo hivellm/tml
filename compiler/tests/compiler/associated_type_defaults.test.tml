@@ -1,0 +1,30 @@
+// Test associated type defaults
+// Tests parsing and type checking of associated type default values
+
+// Behavior with associated type default
+behavior Container {
+    type Item = I32  // Default to I32
+
+    func get(this: ref This) -> I32
+}
+
+// Simple struct using the default
+type IntBox {
+    value: I32
+}
+
+// Impl that uses the default
+impl Container for IntBox {
+    // The associated type has a default so we don't need to specify it
+    func get(this: ref This) -> I32 {
+        return this.value
+    }
+}
+
+@test
+func test_associated_type_defaults() {
+    let b: IntBox = IntBox { value: 42 }
+    let value: I32 = b.get()
+    assert_eq(value, 42)
+    println("Associated type defaults test passed!")
+}

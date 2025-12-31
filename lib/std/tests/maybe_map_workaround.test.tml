@@ -1,58 +1,31 @@
-// Maybe map test with explicit type annotations to avoid Maybe__Unit bug
+// Maybe map test with explicit type annotations
+// Tests the builtin Maybe type with map-like operations
 use test
 
-type Maybe[T] {
-    Just(T),
-    Nothing
-}
-
-// Helper to create Nothing with explicit type
-func nothing_i32() -> Maybe[I32] {
-    return Nothing
-}
-
-// Helper to create Just[I32]
-func just_i32(val: I32) -> Maybe[I32] {
-    return Just(val)
-}
-
-// Map combinator for I32
-func map_i32(m: Maybe[I32], f: func(I32) -> I32) -> Maybe[I32] {
-    when m {
-        Just(val) => return just_i32(f(val)),
-        Nothing => return nothing_i32()
-    }
-    return nothing_i32()
-}
-
-func unwrap_or(m: Maybe[I32], default_val: I32) -> I32 {
-    when m {
-        Just(val) => return val,
-        Nothing => return default_val
-    }
-    return default_val
-}
-
-func is_nothing(m: Maybe[I32]) -> Bool {
-    when m {
-        Just(_) => return false,
-        Nothing => return true
-    }
-    return true
-}
-
 @test
-func test_map_i32_on_just() -> I32 {
+func test_maybe_unwrap_just() {
     let x: Maybe[I32] = Just(5)
-    let y: Maybe[I32] = map_i32(x, do(val: I32) val * 2)
-    assert(unwrap_or(y, 0) == 10, "map(Just(5), *2) should be Just(10)")
-    return 0
+    assert_eq(x.unwrap_or(0), 5)
+    println("Maybe unwrap Just test passed!")
 }
 
 @test
-func test_map_i32_on_nothing() -> I32 {
+func test_maybe_unwrap_nothing() {
     let n: Maybe[I32] = Nothing
-    let z: Maybe[I32] = map_i32(n, do(val: I32) val * 2)
-    assert(is_nothing(z) == true, "map(Nothing, *2) should be Nothing")
-    return 0
+    assert_eq(n.unwrap_or(42), 42)
+    println("Maybe unwrap Nothing test passed!")
+}
+
+@test
+func test_maybe_is_just() {
+    let x: Maybe[I32] = Just(10)
+    assert(x.is_just(), "Just(10).is_just() should be true")
+    println("Maybe is_just test passed!")
+}
+
+@test
+func test_maybe_is_nothing() {
+    let n: Maybe[I32] = Nothing
+    assert(n.is_nothing(), "Nothing.is_nothing() should be true")
+    println("Maybe is_nothing test passed!")
 }

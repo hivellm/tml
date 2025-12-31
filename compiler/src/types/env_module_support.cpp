@@ -333,7 +333,10 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             std::vector<TypePtr> type_args;
             if (named.generics.has_value()) {
                 for (const auto& arg : named.generics->args) {
-                    type_args.push_back(resolve_simple_type(*arg));
+                    // Only handle type arguments for now (not const generics)
+                    if (arg.is_type()) {
+                        type_args.push_back(resolve_simple_type(*arg.as_type()));
+                    }
                 }
             }
             return std::make_shared<Type>(Type{NamedType{name, "", std::move(type_args)}});
@@ -415,19 +418,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 // Create function signature
-                FuncSig sig{
-                    func.name,
-                    param_types,
-                    return_type,
-                    std::move(type_params), // type_params
-                    false,                  // is_async
-                    builtin_span,
-                    StabilityLevel::Stable,
-                    "",            // deprecated_message
-                    "1.0",         // since_version
-                    {},            // where_constraints
-                    func.is_unsafe // is_lowlevel
-                };
+                FuncSig sig{.name = func.name,
+                            .params = param_types,
+                            .return_type = return_type,
+                            .type_params = std::move(type_params),
+                            .is_async = false,
+                            .span = builtin_span,
+                            .stability = StabilityLevel::Stable,
+                            .deprecated_message = "",
+                            .since_version = "1.0",
+                            .where_constraints = {},
+                            .is_lowlevel = func.is_unsafe};
 
                 mod.functions[func.name] = sig;
             } else if (decl->is<parser::StructDecl>()) {
@@ -453,8 +454,11 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 // Create struct definition
-                StructDef struct_def{struct_decl.name, std::move(type_params), std::move(fields),
-                                     struct_decl.span};
+                StructDef struct_def{.name = struct_decl.name,
+                                     .type_params = std::move(type_params),
+                                     .const_params = {},
+                                     .fields = std::move(fields),
+                                     .span = struct_decl.span};
 
                 mod.structs[struct_decl.name] = std::move(struct_def);
                 TML_DEBUG_LN("[MODULE] Registered struct: " << struct_decl.name << " in module "
@@ -495,8 +499,11 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                 }
 
                 // Create enum definition
-                EnumDef enum_def{enum_decl.name, std::move(type_params), std::move(variants),
-                                 enum_decl.span};
+                EnumDef enum_def{.name = enum_decl.name,
+                                 .type_params = std::move(type_params),
+                                 .const_params = {},
+                                 .variants = std::move(variants),
+                                 .span = enum_decl.span};
 
                 mod.enums[enum_decl.name] = std::move(enum_def);
                 TML_DEBUG_LN("[MODULE] Registered enum: " << enum_decl.name << " in module "
@@ -549,19 +556,17 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         method_type_params.push_back(gp.name);
                     }
 
-                    FuncSig sig{
-                        qualified_name,
-                        param_types,
-                        return_type,
-                        std::move(method_type_params), // type_params
-                        false,                         // is_async
-                        builtin_span,
-                        StabilityLevel::Stable,
-                        "",            // deprecated_message
-                        "1.0",         // since_version
-                        {},            // where_constraints
-                        func.is_unsafe // is_lowlevel
-                    };
+                    FuncSig sig{.name = qualified_name,
+                                .params = param_types,
+                                .return_type = return_type,
+                                .type_params = std::move(method_type_params),
+                                .is_async = false,
+                                .span = builtin_span,
+                                .stability = StabilityLevel::Stable,
+                                .deprecated_message = "",
+                                .since_version = "1.0",
+                                .where_constraints = {},
+                                .is_lowlevel = func.is_unsafe};
 
                     mod.functions[qualified_name] = sig;
                     TML_DEBUG_LN("[MODULE] Registered impl method: "

@@ -519,8 +519,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 
-    // Collect test and benchmark functions (decorated with @test and @bench)
+    // Collect test, benchmark, and fuzz functions (decorated with @test, @bench, @fuzz)
     std::vector<std::string> test_functions;
+    std::vector<std::string> fuzz_functions;
     struct BenchInfo {
         std::string name;
         int64_t iterations = 1000; // Default iterations
@@ -547,6 +548,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         }
                     }
                     bench_functions.push_back(info);
+                    break;
+                } else if (decorator.name == "fuzz") {
+                    fuzz_functions.push_back(func.name);
                     break;
                 }
             }
@@ -675,6 +679,42 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Print summary
         emit_line("  call i32 (ptr, ...) @printf(ptr @.bench.summary, i32 " +
                   std::to_string(bench_num) + ")");
+        emit_line("  ret i32 0");
+        emit_line("}");
+    } else if (options_.generate_fuzz_entry && !fuzz_functions.empty()) {
+        // Generate fuzz target entry point for fuzzing
+        // The fuzz target receives (ptr data, i64 len) and calls @fuzz functions
+        emit_line("; Auto-generated fuzz target entry point");
+        emit_line("");
+
+#ifdef _WIN32
+        emit_line("define dllexport i32 @tml_fuzz_target(ptr %data, i64 %len) {");
+#else
+        emit_line("define i32 @tml_fuzz_target(ptr %data, i64 %len) {");
+#endif
+        emit_line("entry:");
+
+        // Call each @fuzz function with the input data
+        // Fuzz functions should have signature: func fuzz_name(data: Ptr[U8], len: U64)
+        for (const auto& fuzz_name : fuzz_functions) {
+            std::string fuzz_fn = "@tml_" + fuzz_name;
+            // Look up the function's return type from functions_ map
+            auto it = functions_.find(fuzz_name);
+            if (it != functions_.end()) {
+                // Check if function takes (ptr, i64) parameters
+                if (it->second.param_types.size() >= 2) {
+                    emit_line("  call void " + fuzz_fn + "(ptr %data, i64 %len)");
+                } else {
+                    // Function doesn't take data parameters, just call it
+                    emit_line("  call void " + fuzz_fn + "()");
+                }
+            } else {
+                // Fallback - assume void function
+                emit_line("  call void " + fuzz_fn + "()");
+            }
+        }
+
+        // Return 0 for success (crash will never reach here)
         emit_line("  ret i32 0");
         emit_line("}");
     } else if (!test_functions.empty()) {

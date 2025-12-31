@@ -168,6 +168,27 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
         return types_equal(func.return_type, closure.return_type);
     }
 
+    // Allow any type that could implement a behavior to be assigned to impl Behavior
+    // This is a simplified check - full implementation would verify the type actually implements
+    // the behavior For now, accept any NamedType (struct/enum) as potentially implementing the
+    // behavior
+    if (expected->is<ImplBehaviorType>()) {
+        // Accept any named type (struct/enum) as a valid implementation
+        // The actual behavior implementation check happens elsewhere
+        if (actual->is<NamedType>()) {
+            return true;
+        }
+    }
+
+    // Allow impl Behavior to be assigned to a concrete type
+    // This enables: let x: ConcreteType = make_impl_behavior()
+    // The caller is essentially downcasting to the known concrete type
+    if (actual->is<ImplBehaviorType>()) {
+        if (expected->is<NamedType>()) {
+            return true;
+        }
+    }
+
     return false;
 }
 

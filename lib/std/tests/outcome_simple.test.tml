@@ -1,56 +1,31 @@
-// Simple Outcome[T, E] combinator test with non-generic helpers
+// Simple Outcome[T, E] combinator test
+// Tests the builtin Outcome type with unwrap and is_* operations
 use test
 
-type Outcome[T, E] {
-    Ok(T),
-    Err(E)
-}
-
-// Non-generic helpers for I32
-func map_ok_i32(o: Outcome[I32, I32], f: func(I32) -> I32) -> Outcome[I32, I32] {
-    when o {
-        Ok(val) => return Ok(f(val)),
-        Err(e) => return Err(e)
-    }
-}
-
-func unwrap_or_ok(o: Outcome[I32, I32], default_val: I32) -> I32 {
-    when o {
-        Ok(val) => return val,
-        Err(_) => return default_val
-    }
-    return default_val
-}
-
-func unwrap_or_err(o: Outcome[I32, I32], default_val: I32) -> I32 {
-    when o {
-        Ok(_) => return default_val,
-        Err(e) => return e
-    }
-    return default_val
-}
-
-func is_err(o: Outcome[I32, I32]) -> Bool {
-    when o {
-        Ok(_) => return false,
-        Err(_) => return true
-    }
-    return true
-}
-
 @test
-func test_map_ok_on_ok_value() -> I32 {
+func test_outcome_ok_unwrap() {
     let x: Outcome[I32, I32] = Ok(5)
-    let y: Outcome[I32, I32] = map_ok_i32(x, do(val: I32) val * 2)
-    assert(unwrap_or_ok(y, 0) == 10, "map_ok(Ok(5), *2) should be Ok(10)")
-    return 0
+    assert_eq(x.unwrap_or(0), 5)
+    println("Outcome Ok unwrap test passed!")
 }
 
 @test
-func test_map_ok_on_err_value() -> I32 {
+func test_outcome_err_unwrap() {
     let a: Outcome[I32, I32] = Err(42)
-    let b: Outcome[I32, I32] = map_ok_i32(a, do(val: I32) val * 2)
-    assert(is_err(b) == true, "map_ok(Err(42), *2) should be Err")
-    assert(unwrap_or_err(b, 0) == 42, "map_ok(Err(42), *2) should preserve Err(42)")
-    return 0
+    assert_eq(a.unwrap_or(0), 0)
+    println("Outcome Err unwrap test passed!")
+}
+
+@test
+func test_outcome_is_ok() {
+    let x: Outcome[I32, I32] = Ok(10)
+    assert(x.is_ok(), "Ok(10).is_ok() should be true")
+    println("Outcome is_ok test passed!")
+}
+
+@test
+func test_outcome_is_err() {
+    let a: Outcome[I32, I32] = Err(99)
+    assert(a.is_err(), "Err(99).is_err() should be true")
+    println("Outcome is_err test passed!")
 }

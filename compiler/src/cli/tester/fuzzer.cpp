@@ -304,23 +304,47 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
         }
         std::vector<std::vector<uint8_t>> corpus = load_corpus(corpus_dir);
 
-        // First, compile the fuzz target to check it's valid
-        std::vector<std::string> empty_args;
-        std::string captured_output;
-        int exit_code = run_run_quiet(file, empty_args, opts.release, &captured_output,
-                                      opts.verbose, opts.no_cache);
-        if (exit_code != 0) {
+        // Compile the fuzz target to a shared library
+        auto compile_result = compile_fuzz_to_shared_lib(file, opts.verbose, opts.no_cache);
+        if (!compile_result.success) {
             result.passed = false;
-            result.crash_message = "Compilation or initial run failed: " + captured_output;
+            result.crash_message = "Compilation failed: " + compile_result.error_message;
             all_results.push_back(result);
 
             if (!opts.quiet) {
                 std::cout << c.red() << "[COMPILE ERROR]" << c.reset() << "\n";
                 if (opts.verbose) {
-                    std::cout << captured_output << "\n";
+                    std::cout << compile_result.error_message << "\n";
                 }
             }
             crashes_found++;
+            continue;
+        }
+
+        // Load the shared library
+        DynamicLibrary lib;
+        if (!lib.load(compile_result.lib_path)) {
+            result.passed = false;
+            result.crash_message = "Failed to load library: " + lib.get_error();
+            all_results.push_back(result);
+
+            if (!opts.quiet) {
+                std::cout << c.red() << "[LOAD ERROR]" << c.reset() << "\n";
+            }
+            crashes_found++;
+            continue;
+        }
+
+        // Get the fuzz target function
+        auto fuzz_target = lib.get_function<FuzzTargetFunc>("tml_fuzz_target");
+        if (!fuzz_target) {
+            result.passed = false;
+            result.crash_message = "No tml_fuzz_target function found (add @fuzz decorator)";
+            all_results.push_back(result);
+
+            if (!opts.quiet) {
+                std::cout << c.yellow() << "[NO FUZZ TARGET]" << c.reset() << "\n";
+            }
             continue;
         }
 
@@ -345,13 +369,35 @@ int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c) {
 
             iterations++;
 
-            // The fuzz target should have a function that takes input bytes
-            // For now, we just run the target and check for crashes
-            // In a full implementation, we'd inject the input bytes into the target
+            // Call the fuzz target with the generated input
+            try {
+                int fuzz_result = fuzz_target(input.data(), input.size());
+                if (fuzz_result != 0) {
+                    // Non-zero return indicates a crash/failure
+                    found_crash = true;
+                    crash_input = input;
+                    break;
+                }
+            } catch (...) {
+                // Exception indicates a crash
+                found_crash = true;
+                crash_input = input;
+                break;
+            }
+        }
 
-            // TODO: Implement proper fuzz input injection
-            // This requires modifying the compiler to expose a fuzz_target function
-            // that takes a byte array as input
+        // Clean up the shared library file
+        try {
+            fs::remove(compile_result.lib_path);
+#ifdef _WIN32
+            fs::path lib_file = compile_result.lib_path;
+            lib_file.replace_extension(".lib");
+            if (fs::exists(lib_file)) {
+                fs::remove(lib_file);
+            }
+#endif
+        } catch (...) {
+            // Ignore cleanup errors
         }
 
         auto fuzz_actual_end = std::chrono::high_resolution_clock::now();

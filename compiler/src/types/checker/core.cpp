@@ -126,11 +126,17 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
 
     std::vector<std::string> type_params;
     for (const auto& param : decl.generics) {
-        type_params.push_back(param.name);
+        if (!param.is_const) {
+            type_params.push_back(param.name);
+        }
     }
+
+    // Extract const generic parameters
+    std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
 
     env_.define_struct(StructDef{.name = decl.name,
                                  .type_params = std::move(type_params),
+                                 .const_params = std::move(const_params),
                                  .fields = std::move(fields),
                                  .span = decl.span});
 }
@@ -157,11 +163,17 @@ void TypeChecker::register_enum_decl(const parser::EnumDecl& decl) {
 
     std::vector<std::string> type_params;
     for (const auto& param : decl.generics) {
-        type_params.push_back(param.name);
+        if (!param.is_const) {
+            type_params.push_back(param.name);
+        }
     }
+
+    // Extract const generic parameters
+    std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
 
     env_.define_enum(EnumDef{.name = decl.name,
                              .type_params = std::move(type_params),
+                             .const_params = std::move(const_params),
                              .variants = std::move(variants),
                              .span = decl.span});
 }
@@ -176,12 +188,17 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
             params.push_back(resolve_type(*p.type));
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
+
+        // Extract method's const generic params
+        std::vector<ConstGenericParam> method_const_params = extract_const_params(method.generics);
+
         methods.push_back(FuncSig{.name = method.name,
                                   .params = std::move(params),
                                   .return_type = std::move(ret),
                                   .type_params = {},
                                   .is_async = method.is_async,
-                                  .span = method.span});
+                                  .span = method.span,
+                                  .const_params = std::move(method_const_params)});
 
         // Track methods with default implementations
         if (method.body.has_value()) {
@@ -191,12 +208,25 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
     std::vector<std::string> type_params;
     for (const auto& param : decl.generics) {
-        type_params.push_back(param.name);
+        if (!param.is_const) {
+            type_params.push_back(param.name);
+        }
     }
 
-    // Collect associated type declarations
+    // Extract const generic parameters
+    std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
+
+    // Collect associated type declarations (including GATs with generic parameters)
     std::vector<AssociatedTypeDef> associated_types;
     for (const auto& assoc : decl.associated_types) {
+        // Extract GAT type parameters
+        std::vector<std::string> gat_type_params;
+        for (const auto& param : assoc.generics) {
+            if (!param.is_const) {
+                gat_type_params.push_back(param.name);
+            }
+        }
+
         std::vector<std::string> bounds;
         for (const auto& bound : assoc.bounds) {
             // Convert TypePath to string (just use the last segment for now)
@@ -204,12 +234,20 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
                 bounds.push_back(bound.segments.back());
             }
         }
-        associated_types.push_back(AssociatedTypeDef{
-            .name = assoc.name, .bounds = std::move(bounds), .default_type = std::nullopt});
+        // Resolve default type if present
+        std::optional<TypePtr> default_type = std::nullopt;
+        if (assoc.default_type) {
+            default_type = resolve_type(**assoc.default_type);
+        }
+        associated_types.push_back(AssociatedTypeDef{.name = assoc.name,
+                                                     .type_params = std::move(gat_type_params),
+                                                     .bounds = std::move(bounds),
+                                                     .default_type = std::move(default_type)});
     }
 
     env_.define_behavior(BehaviorDef{.name = decl.name,
                                      .type_params = std::move(type_params),
+                                     .const_params = std::move(const_params),
                                      .associated_types = std::move(associated_types),
                                      .methods = std::move(methods),
                                      .super_behaviors = {},
@@ -369,11 +407,16 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
         }
     }
 
-    // Extract type parameter names from generics
+    // Extract type parameter names from generics (excluding const params)
     std::vector<std::string> func_type_params;
     for (const auto& param : func.generics) {
-        func_type_params.push_back(param.name);
+        if (!param.is_const) {
+            func_type_params.push_back(param.name);
+        }
     }
+
+    // Extract const generic parameters
+    std::vector<ConstGenericParam> func_const_params = extract_const_params(func.generics);
 
     // Extract FFI module namespace from @link
     std::optional<std::string> ffi_module = std::nullopt;
@@ -395,7 +438,8 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
                              .extern_abi = func.extern_abi,
                              .extern_name = func.extern_name,
                              .link_libs = func.link_libs,
-                             .ffi_module = ffi_module});
+                             .ffi_module = ffi_module,
+                             .const_params = std::move(func_const_params)});
 }
 
 void TypeChecker::check_func_body(const parser::FuncDecl& func) {
@@ -462,6 +506,13 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
                   ", found " + type_to_string(init_type),
               const_decl.value->span);
         return;
+    }
+
+    // Try to evaluate the const value at compile time
+    auto const_value = evaluate_const_expr(*const_decl.value, declared_type);
+    if (const_value) {
+        // Store the evaluated const value for use in const expressions
+        const_values_[const_decl.name] = *const_value;
     }
 
     // Define the const in the global scope (as a variable that's immutable)

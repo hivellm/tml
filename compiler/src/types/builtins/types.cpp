@@ -26,6 +26,7 @@ void TypeEnv::init_builtin_types() {
     // Ordering { Less, Equal, Greater }
     define_enum(EnumDef{.name = "Ordering",
                         .type_params = {},
+                        .const_params = {},
                         .variants = {{"Less", {}}, {"Equal", {}}, {"Greater", {}}},
                         .span = {}});
 
@@ -35,6 +36,7 @@ void TypeEnv::init_builtin_types() {
         auto T = std::make_shared<Type>(GenericType{"T"});
         define_enum(EnumDef{.name = "Maybe",
                             .type_params = {"T"},
+                            .const_params = {},
                             .variants = {{"Just", {T}}, {"Nothing", {}}},
                             .span = {}});
     }
@@ -46,6 +48,7 @@ void TypeEnv::init_builtin_types() {
         auto E = std::make_shared<Type>(GenericType{"E"});
         define_enum(EnumDef{.name = "Outcome",
                             .type_params = {"T", "E"},
+                            .const_params = {},
                             .variants = {{"Ok", {T}}, {"Err", {E}}},
                             .span = {}});
     }

@@ -90,8 +90,11 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                     // Convert parser type args to semantic types
                     std::vector<types::TypePtr> type_args;
                     for (const auto& arg : named.generics->args) {
-                        types::TypePtr semantic_type = resolve_parser_type_with_subs(*arg, {});
-                        type_args.push_back(semantic_type);
+                        if (arg.is_type()) {
+                            types::TypePtr semantic_type =
+                                resolve_parser_type_with_subs(*arg.as_type(), {});
+                            type_args.push_back(semantic_type);
+                        }
                     }
                     // Get mangled name and ensure instantiation
                     std::string mangled = require_struct_instantiation(base_name, type_args);
@@ -102,8 +105,11 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
                 if (enum_it != pending_generic_enums_.end()) {
                     std::vector<types::TypePtr> type_args;
                     for (const auto& arg : named.generics->args) {
-                        types::TypePtr semantic_type = resolve_parser_type_with_subs(*arg, {});
-                        type_args.push_back(semantic_type);
+                        if (arg.is_type()) {
+                            types::TypePtr semantic_type =
+                                resolve_parser_type_with_subs(*arg.as_type(), {});
+                            type_args.push_back(semantic_type);
+                        }
                     }
                     std::string mangled = require_enum_instantiation(base_name, type_args);
                     return "%struct." + mangled;
@@ -426,7 +432,10 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                 std::vector<types::TypePtr> type_args;
                 if (t.generics.has_value()) {
                     for (const auto& arg : t.generics->args) {
-                        type_args.push_back(resolve_parser_type_with_subs(*arg, subs));
+                        if (arg.is_type()) {
+                            type_args.push_back(
+                                resolve_parser_type_with_subs(*arg.as_type(), subs));
+                        }
                     }
                 }
 
@@ -539,9 +548,15 @@ void LLVMIRGen::unify_types(const parser::Type& pattern, const types::TypePtr& c
                         const auto& pattern_args = p.generics->args;
                         const auto& concrete_args = named->type_args;
 
-                        for (size_t i = 0; i < pattern_args.size() && i < concrete_args.size();
-                             ++i) {
-                            unify_types(*pattern_args[i], concrete_args[i], generics, bindings);
+                        size_t concrete_idx = 0;
+                        for (size_t i = 0;
+                             i < pattern_args.size() && concrete_idx < concrete_args.size(); ++i) {
+                            // Only process type arguments (skip const generics for now)
+                            if (pattern_args[i].is_type()) {
+                                unify_types(*pattern_args[i].as_type(), concrete_args[concrete_idx],
+                                            generics, bindings);
+                                ++concrete_idx;
+                            }
                         }
                     }
                 }

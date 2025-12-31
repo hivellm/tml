@@ -207,7 +207,9 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             std::vector<TypePtr> type_args;
             if (path_expr.generics) {
                 for (const auto& arg : path_expr.generics->args) {
-                    type_args.push_back(resolve_type(*arg));
+                    if (arg.is_type()) {
+                        type_args.push_back(resolve_type(*arg.as_type()));
+                    }
                 }
             }
             type->kind = NamedType{segments[0], "", std::move(type_args)};
@@ -220,7 +222,9 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             std::vector<TypePtr> type_args;
             if (path_expr.generics) {
                 for (const auto& arg : path_expr.generics->args) {
-                    type_args.push_back(resolve_type(*arg));
+                    if (arg.is_type()) {
+                        type_args.push_back(resolve_type(*arg.as_type()));
+                    }
                 }
             }
             type->kind = NamedType{segments[0], "", std::move(type_args)};
@@ -245,7 +249,9 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
                     std::vector<TypePtr> type_args;
                     if (path_expr.generics) {
                         for (const auto& arg : path_expr.generics->args) {
-                            type_args.push_back(resolve_type(*arg));
+                            if (arg.is_type()) {
+                                type_args.push_back(resolve_type(*arg.as_type()));
+                            }
                         }
                     }
                     type->kind = NamedType{segments[0], module_path, std::move(type_args)};
@@ -259,7 +265,9 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
                     std::vector<TypePtr> type_args;
                     if (path_expr.generics) {
                         for (const auto& arg : path_expr.generics->args) {
-                            type_args.push_back(resolve_type(*arg));
+                            if (arg.is_type()) {
+                                type_args.push_back(resolve_type(*arg.as_type()));
+                            }
                         }
                     }
                     type->kind = NamedType{segments[0], module_path, std::move(type_args)};

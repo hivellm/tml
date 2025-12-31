@@ -70,6 +70,49 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
                     .span = start_span});
     }
 
+    // Array pattern: [a, b, c] or [head, ..rest]
+    if (match(lexer::TokenKind::LBracket)) {
+        std::vector<PatternPtr> elements;
+        std::optional<PatternPtr> rest;
+        skip_newlines();
+
+        while (!check(lexer::TokenKind::RBracket) && !is_at_end()) {
+            if (match(lexer::TokenKind::DotDot)) {
+                if (check(lexer::TokenKind::Identifier)) {
+                    auto rest_pattern = parse_pattern();
+                    if (is_err(rest_pattern))
+                        return rest_pattern;
+                    rest = std::move(unwrap(rest_pattern));
+                }
+                skip_newlines();
+                break;
+            }
+
+            auto elem = parse_pattern();
+            if (is_err(elem))
+                return elem;
+            elements.push_back(std::move(unwrap(elem)));
+
+            skip_newlines();
+            if (!check(lexer::TokenKind::RBracket)) {
+                auto comma = expect(lexer::TokenKind::Comma, "Expected ','");
+                if (is_err(comma))
+                    return unwrap_err(comma);
+                skip_newlines();
+            }
+        }
+
+        auto rbracket = expect(lexer::TokenKind::RBracket, "Expected ']'");
+        if (is_err(rbracket))
+            return unwrap_err(rbracket);
+
+        auto span = SourceSpan::merge(start_span, previous().span);
+        return make_box<Pattern>(Pattern{.kind = ArrayPattern{.elements = std::move(elements),
+                                                              .rest = std::move(rest),
+                                                              .span = span},
+                                         .span = span});
+    }
+
     // Tuple pattern: (a, b, c)
     if (match(lexer::TokenKind::LParen)) {
         std::vector<PatternPtr> elements;
