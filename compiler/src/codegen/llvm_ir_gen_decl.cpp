@@ -460,9 +460,19 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
     std::string func_llvm_name = "tml_" + full_func_name;
-    // Public functions and main get external linkage for library export
+    // Public functions, main, and @should_panic tests get external linkage
+    // @should_panic tests need external linkage because they're called via function pointer
+    bool has_should_panic = false;
+    for (const auto& decorator : func.decorators) {
+        if (decorator.name == "should_panic") {
+            has_should_panic = true;
+            break;
+        }
+    }
     std::string linkage =
-        (func.name == "main" || func.vis == parser::Visibility::Public) ? "" : "internal ";
+        (func.name == "main" || func.vis == parser::Visibility::Public || has_should_panic)
+            ? ""
+            : "internal ";
     // Windows DLL export for public functions
     std::string dll_linkage = "";
     if (options_.dll_export && func.vis == parser::Visibility::Public && func.name != "main") {

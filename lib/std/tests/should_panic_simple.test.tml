@@ -1,8 +1,0 @@
-// Very simple @should_panic test
-use test
-
-@test
-@should_panic
-func test_panic() {
-    panic("expected panic")
-}

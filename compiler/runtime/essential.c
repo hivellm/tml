@@ -36,8 +36,7 @@ void panic(const char* message) {
     // If we're in panic catching mode, save the message and longjmp back
     if (tml_catching_panic) {
         if (message) {
-            strncpy(tml_panic_msg, message, sizeof(tml_panic_msg) - 1);
-            tml_panic_msg[sizeof(tml_panic_msg) - 1] = '\0';
+            snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", message);
         } else {
             tml_panic_msg[0] = '\0';
         }
