@@ -95,7 +95,7 @@ Initial frozen release. Includes:
 
 ### IR Builder Modules
 
-Located in `packages/compiler/src/ir/`:
+Located in `compiler/src/ir/`:
 
 1. `builder_core.cpp` - Core builder infrastructure
 2. `builder_module.cpp` - Module conversion
@@ -107,7 +107,7 @@ Located in `packages/compiler/src/ir/`:
 
 ### IR Emitter Modules
 
-Located in `packages/compiler/src/ir/`:
+Located in `compiler/src/ir/`:
 
 1. `emitter_core.cpp` - Core emission infrastructure
 2. `emitter_decls.cpp` - Declaration emission

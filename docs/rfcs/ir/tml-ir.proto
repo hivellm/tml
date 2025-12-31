@@ -191,6 +191,7 @@ enum PrimitiveKind {
   BOOL = 2;
   CHAR = 3;
   NEVER = 4;
+  NULL = 5;
   I8 = 10;
   I16 = 11;
   I32 = 12;
@@ -289,6 +290,7 @@ message LiteralExpr {
     double float_value = 4;
     string string_value = 5;
     uint32 char_value = 6;
+    bool null_value = 7;  // null literal (value is always true when present)
   }
   Type type = 10;
 }

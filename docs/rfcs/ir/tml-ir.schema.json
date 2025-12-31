@@ -44,7 +44,7 @@
         "kind": { "const": "primitive" },
         "name": {
           "type": "string",
-          "enum": ["Unit", "Bool", "Char", "Never",
+          "enum": ["Unit", "Bool", "Char", "Never", "Null",
                    "I8", "I16", "I32", "I64", "I128",
                    "U8", "U16", "U32", "U64", "U128",
                    "F32", "F64", "String"]
@@ -477,7 +477,8 @@
           "type": "string",
           "enum": ["+", "-", "*", "/", "%", "**",
                    "==", "!=", "<", ">", "<=", ">=",
-                   "and", "or", "&", "|", "^", "<<", ">>"]
+                   "and", "or", "&", "|", "^", "<<", ">>",
+                   "shl", "shr", "xor"]
         },
         "left": { "$ref": "#/definitions/Expr" },
         "right": { "$ref": "#/definitions/Expr" }
