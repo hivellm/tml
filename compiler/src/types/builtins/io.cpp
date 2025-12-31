@@ -31,7 +31,7 @@ void TypeEnv::init_builtin_io() {
     // panic(message: Str) -> Never
     functions_["panic"].push_back(FuncSig{"panic",
                                           {make_primitive(PrimitiveKind::Str)},
-                                          make_unit(), // TODO: Should be Never type
+                                          make_never(),
                                           {},
                                           false,
                                           builtin_span,

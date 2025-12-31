@@ -533,8 +533,28 @@ TEST_F(ParserTest, ErrorPropagation) {
     EXPECT_TRUE(unwrap(result)->is<TryExpr>());
 }
 
-// NOTE: Range operators (to/through) not yet implemented in parser
-// TODO: Implement range expression parsing for 'to' and 'through' keywords
+// Range expression tests
+TEST_F(ParserTest, RangeExpressionWithTo) {
+    auto result = parse_expr("1 to 10");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<RangeExpr>());
+    auto& range = unwrap(result)->as<RangeExpr>();
+    EXPECT_FALSE(range.inclusive);
+}
+
+TEST_F(ParserTest, RangeExpressionWithThrough) {
+    auto result = parse_expr("1 through 10");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<RangeExpr>());
+    auto& range = unwrap(result)->as<RangeExpr>();
+    EXPECT_TRUE(range.inclusive);
+}
+
+TEST_F(ParserTest, RangeExpressionWithDotDot) {
+    auto result = parse_expr("1..10");
+    ASSERT_TRUE(is_ok(result));
+    EXPECT_TRUE(unwrap(result)->is<RangeExpr>());
+}
 
 // ============================================================================
 // Use Declaration Tests

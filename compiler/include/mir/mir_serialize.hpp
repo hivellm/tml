@@ -8,6 +8,7 @@
 #include "mir/mir.hpp"
 
 #include <istream>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -145,14 +146,12 @@ private:
     auto expect(char c) -> bool;
     auto expect(const std::string& s) -> bool;
 
-    auto parse_type() -> MirTypePtr;
-    auto parse_value() -> Value;
-    auto parse_instruction() -> InstructionData;
-    auto parse_terminator() -> Terminator;
-    auto parse_block() -> BasicBlock;
-    auto parse_function() -> Function;
-    auto parse_struct() -> StructDef;
-    auto parse_enum() -> EnumDef;
+    auto read_type() -> MirTypePtr;
+    auto read_value_ref() -> Value;
+    auto read_instruction() -> InstructionData;
+    auto read_terminator() -> std::optional<Terminator>;
+    auto read_block(Function& func) -> BasicBlock;
+    auto read_function() -> Function;
 };
 
 // ============================================================================

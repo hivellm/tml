@@ -55,8 +55,10 @@ struct Dependency {
     std::string name;
     std::string version; // Semver constraint (e.g., "^1.2.0")
     std::string path;    // For path dependencies
-    std::string git;     // For git dependencies (future)
-    std::string tag;     // Git tag (future)
+    std::string git;     // For git dependencies
+    std::string tag;     // Git tag
+    std::string branch;  // Git branch
+    std::string rev;     // Git commit hash
 
     bool is_path_dependency() const {
         return !path.empty();

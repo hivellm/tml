@@ -3,8 +3,104 @@
 #include "mir/passes/dead_code_elimination.hpp"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace tml::mir {
+
+// Set of known pure functions (no side effects)
+// These can be safely removed if their result is unused
+static const std::unordered_set<std::string> pure_functions = {
+    // Math functions
+    "abs",
+    "sqrt",
+    "cbrt",
+    "pow",
+    "exp",
+    "exp2",
+    "log",
+    "log2",
+    "log10",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "atan2",
+    "sinh",
+    "cosh",
+    "tanh",
+    "floor",
+    "ceil",
+    "round",
+    "trunc",
+    "fmod",
+    "min",
+    "max",
+    "clamp",
+    // String functions (that don't modify in-place)
+    "len",
+    "is_empty",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "to_uppercase",
+    "to_lowercase",
+    "trim",
+    "trim_start",
+    "trim_end",
+    "parse_int",
+    "parse_float",
+    // Collection accessors
+    "get",
+    "first",
+    "last",
+    "capacity",
+    "count",
+    // Type conversions
+    "to_string",
+    "to_i32",
+    "to_i64",
+    "to_f32",
+    "to_f64",
+    "to_bool",
+    // Comparison helpers
+    "cmp",
+    "eq",
+    "ne",
+    "lt",
+    "le",
+    "gt",
+    "ge",
+};
+
+// Check if a function is known to be pure (no side effects)
+static bool is_pure_function(const std::string& name) {
+    // Check direct match
+    if (pure_functions.count(name)) {
+        return true;
+    }
+
+    // Check for method calls (e.g., "String::len" -> check "len")
+    size_t colon_pos = name.rfind("::");
+    if (colon_pos != std::string::npos) {
+        std::string method_name = name.substr(colon_pos + 2);
+        if (pure_functions.count(method_name)) {
+            return true;
+        }
+    }
+
+    // Check for generic instantiations (e.g., "abs[I32]" -> check "abs")
+    size_t bracket_pos = name.find('[');
+    if (bracket_pos != std::string::npos) {
+        std::string base_name = name.substr(0, bracket_pos);
+        if (pure_functions.count(base_name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 auto DeadCodeEliminationPass::run_on_function(Function& func) -> bool {
     bool changed = false;
@@ -68,16 +164,29 @@ auto DeadCodeEliminationPass::can_remove(const Instruction& inst) -> bool {
 
             // Instructions that CANNOT be removed:
             // - Store (writes to memory)
-            // - Call (may have side effects)
-            // - MethodCall (may have side effects)
+            // - Call (may have side effects, unless pure)
+            // - MethodCall (may have side effects, unless pure)
 
             if constexpr (std::is_same_v<T, StoreInst>) {
                 return false;
             } else if constexpr (std::is_same_v<T, CallInst>) {
-                // Conservatively assume all calls have side effects
-                // TODO: Could be refined with purity analysis
+                // Check if the function is known to be pure (no side effects)
+                // Pure functions can be safely removed if their result is unused
+                if (!i.func_name.empty() && is_pure_function(i.func_name)) {
+                    return true;
+                }
+                // Conservatively assume unknown calls have side effects
                 return false;
             } else if constexpr (std::is_same_v<T, MethodCallInst>) {
+                // Check if the method is known to be pure
+                if (is_pure_function(i.method_name)) {
+                    return true;
+                }
+                // Also check fully qualified name
+                if (!i.receiver_type.empty() &&
+                    is_pure_function(i.receiver_type + "::" + i.method_name)) {
+                    return true;
+                }
                 return false;
             } else if constexpr (std::is_same_v<T, AllocaInst>) {
                 // Alloca can be removed if the allocated memory is never used
