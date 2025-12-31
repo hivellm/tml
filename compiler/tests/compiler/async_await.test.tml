@@ -64,3 +64,82 @@ func test_async_with_args() {
     let result: I64 = block_on(async_compute(5))
     assert_eq(result, 20)
 }
+
+// ============================================================================
+// State Machine / Suspension Point Tests
+// ============================================================================
+
+// Test local variables preserved across a single suspension point
+async func async_preserve_local() -> I64 {
+    let x: I64 = 10
+    let y: I64 = await async_compute(5)  // x must be preserved across this await
+    return x + y  // Should be 10 + 20 = 30
+}
+
+@test
+func test_async_preserve_local() {
+    let result: I64 = block_on(async_preserve_local())
+    assert_eq(result, 30)
+}
+
+// Test multiple locals preserved across suspension
+async func async_preserve_multiple_locals() -> I64 {
+    let a: I64 = 1
+    let b: I64 = 2
+    let c: I64 = 3
+    let sum1: I64 = await async_simple()  // a, b, c must be preserved
+    return a + b + c + sum1  // 1 + 2 + 3 + 42 = 48
+}
+
+@test
+func test_async_preserve_multiple_locals() {
+    let result: I64 = block_on(async_preserve_multiple_locals())
+    assert_eq(result, 48)
+}
+
+// Test locals preserved across multiple suspension points
+async func async_multiple_suspensions() -> I64 {
+    let x: I64 = 5
+    let a: I64 = await async_compute(x)    // First suspension, x preserved
+    let b: I64 = await async_compute(a)    // Second suspension, a preserved
+    return x + a + b  // 5 + 20 + 50 = 75
+}
+
+@test
+func test_async_multiple_suspensions() {
+    let result: I64 = block_on(async_multiple_suspensions())
+    assert_eq(result, 75)
+}
+
+// Test nested awaits with intermediate results
+async func async_intermediate_helper(x: I64) -> I64 {
+    return x * 3
+}
+
+async func async_nested_awaits() -> I64 {
+    let step1: I64 = await async_simple()              // 42
+    let step2: I64 = await async_compute(step1)        // 42 * 2 + 10 = 94
+    let step3: I64 = await async_intermediate_helper(step2)  // 94 * 3 = 282
+    return step3
+}
+
+@test
+func test_async_nested_awaits() {
+    let result: I64 = block_on(async_nested_awaits())
+    assert_eq(result, 282)
+}
+
+// Test computation between suspension points
+async func async_interleaved_compute() -> I64 {
+    let x: I64 = 10
+    let a: I64 = await async_simple()  // 42
+    let y: I64 = x * 2                 // 20 (computed between suspensions)
+    let b: I64 = await async_compute(y)  // 20 * 2 + 10 = 50
+    return a + b + y  // 42 + 50 + 20 = 112
+}
+
+@test
+func test_async_interleaved_compute() {
+    let result: I64 = block_on(async_interleaved_compute())
+    assert_eq(result, 112)
+}
