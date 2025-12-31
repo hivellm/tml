@@ -27,6 +27,17 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
             opts.ignored = true;
         } else if (arg == "--bench") {
             opts.bench = true;
+        } else if (arg == "--fuzz") {
+            opts.fuzz = true;
+        } else if (arg.starts_with("--fuzz-duration=")) {
+            opts.fuzz_duration = std::stoi(arg.substr(16));
+            opts.fuzz = true;
+        } else if (arg.starts_with("--fuzz-max-len=")) {
+            opts.fuzz_max_len = std::stoi(arg.substr(15));
+        } else if (arg.starts_with("--corpus=")) {
+            opts.corpus_dir = arg.substr(9);
+        } else if (arg.starts_with("--crashes=")) {
+            opts.crashes_dir = arg.substr(10);
         } else if (arg == "--release") {
             opts.release = true;
         } else if (arg == "--no-color") {
@@ -76,11 +87,25 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Test --verbose only controls test runner output format
     tml::CompilerOptions::verbose = false;
 
+    // Set coverage options (global flag for runtime linking + output path)
+    tml::CompilerOptions::coverage = opts.coverage;
+    if (!opts.coverage_output.empty()) {
+        tml::CompilerOptions::coverage_output = opts.coverage_output;
+    } else if (opts.coverage) {
+        // Default coverage output file if coverage is enabled but no path specified
+        tml::CompilerOptions::coverage_output = "coverage.html";
+    }
+
     ColorOutput c(!opts.no_color);
 
     // If --bench flag is set, run benchmarks instead of tests
     if (opts.bench) {
         return run_benchmarks(opts, c);
+    }
+
+    // If --fuzz flag is set, run fuzz tests instead
+    if (opts.fuzz) {
+        return run_fuzz_tests(opts, c);
     }
 
     std::string cwd = fs::current_path().string();

@@ -510,6 +510,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
     // Emit vtables for trait objects (dyn dispatch)
     emit_vtables();
 
+    // Pre-register coverage output file string if needed (before emitting string constants)
+    std::string coverage_output_str;
+    if (options_.coverage_enabled && !options_.coverage_output_file.empty()) {
+        coverage_output_str = add_string_literal(options_.coverage_output_file);
+    }
+
     // Emit string constants at the end (they were collected during codegen)
     emit_string_constants();
 
@@ -672,11 +678,22 @@ auto LLVMIRGen::generate(const parser::Module& module)
         emit_line("  ret i32 0");
         emit_line("}");
     } else if (!test_functions.empty()) {
-        // Generate test runner main
+        // Generate test runner main (or DLL entry point)
         // @test functions can return I32 (0 for success) or Unit
         // Assertions inside will call panic() on failure which doesn't return
         emit_line("; Auto-generated test runner");
-        emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+
+        // For DLL entry, generate exported tml_test_entry function instead of main
+        if (options_.generate_dll_entry) {
+            // Export tml_test_entry for DLL loading
+#ifdef _WIN32
+            emit_line("define dllexport i32 @tml_test_entry() {");
+#else
+            emit_line("define i32 @tml_test_entry() {");
+#endif
+        } else {
+            emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+        }
         emit_line("entry:");
 
         int test_idx = 0;
@@ -697,6 +714,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Print coverage report if enabled
         if (options_.coverage_enabled) {
             emit_line("  call void @print_coverage_report()");
+            // Write HTML report if output file specified
+            if (!coverage_output_str.empty()) {
+                emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
+            }
         }
 
         // All tests passed (if we got here, no assertion failed)
@@ -705,11 +726,39 @@ auto LLVMIRGen::generate(const parser::Module& module)
     } else if (has_user_main) {
         // Standard main wrapper for user-defined main
         emit_line("; Entry point");
-        emit_line("define i32 @main(i32 %argc, ptr %argv) {");
-        emit_line("entry:");
-        emit_line("  %ret = call i32 @tml_main()");
-        emit_line("  ret i32 %ret");
-        emit_line("}");
+
+        // For DLL entry, generate exported tml_test_entry function instead of main
+        if (options_.generate_dll_entry) {
+#ifdef _WIN32
+            emit_line("define dllexport i32 @tml_test_entry() {");
+#else
+            emit_line("define i32 @tml_test_entry() {");
+#endif
+            emit_line("entry:");
+            emit_line("  %ret = call i32 @tml_main()");
+            // Print coverage report if enabled
+            if (options_.coverage_enabled) {
+                emit_line("  call void @print_coverage_report()");
+                if (!coverage_output_str.empty()) {
+                    emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
+                }
+            }
+            emit_line("  ret i32 %ret");
+            emit_line("}");
+        } else {
+            emit_line("define i32 @main(i32 %argc, ptr %argv) {");
+            emit_line("entry:");
+            emit_line("  %ret = call i32 @tml_main()");
+            // Print coverage report if enabled
+            if (options_.coverage_enabled) {
+                emit_line("  call void @print_coverage_report()");
+                if (!coverage_output_str.empty()) {
+                    emit_line("  call void @write_coverage_html(ptr " + coverage_output_str + ")");
+                }
+            }
+            emit_line("  ret i32 %ret");
+            emit_line("}");
+        }
     }
 
     // Emit function attributes for optimization

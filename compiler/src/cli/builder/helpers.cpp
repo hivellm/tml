@@ -385,6 +385,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "test::coverage");
     }
 
+    // Link coverage runtime if coverage is enabled (even without test module)
+    if (CompilerOptions::coverage && !registry->has_module("test")) {
+        add_runtime(
+            {
+                "lib/test/runtime/coverage.c",
+                "../../../lib/test/runtime/coverage.c",
+                "F:/Node/hivellm/tml/lib/test/runtime/coverage.c",
+            },
+            "coverage");
+    }
+
     // Link std::collections runtime if imported
     if (registry->has_module("std::collections")) {
         add_runtime(

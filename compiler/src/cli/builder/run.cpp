@@ -67,6 +67,7 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
     options.coverage_enabled = coverage;
+    options.coverage_output_file = CompilerOptions::coverage_output;
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = path;
@@ -324,6 +325,7 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
     options.coverage_enabled = coverage;
+    options.coverage_output_file = CompilerOptions::coverage_output;
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
     options.source_file = path;

@@ -53,16 +53,10 @@ void LLVMIRGen::emit_runtime_decls() {
 
     // TML code coverage functions
     emit_line("; TML code coverage");
-    emit_line("declare void @cover_func(ptr)");
-    emit_line("declare void @cover_line(ptr, i32)");
-    emit_line("declare void @cover_branch(ptr, i32, i32)");
+    emit_line("declare void @tml_cover_func(ptr)");
     emit_line("declare void @print_coverage_report()");
-    emit_line("declare i32 @get_covered_func_count()");
-    emit_line("declare i32 @get_covered_line_count()");
-    emit_line("declare i32 @get_covered_branch_count()");
-    emit_line("declare void @reset_coverage()");
-    emit_line("declare i32 @is_func_covered(ptr)");
-    emit_line("declare i32 @get_coverage_percent()");
+    emit_line("declare void @write_coverage_json(ptr)");
+    emit_line("declare void @write_coverage_html(ptr)");
     emit_line("");
 
     // Debug intrinsics (for DWARF debug info)

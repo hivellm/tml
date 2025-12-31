@@ -213,7 +213,17 @@ int tml_main(int argc, char* argv[]) {
                 tml::CompilerOptions::warnings_as_errors = true;
             } else if (arg == "--error-format=json") {
                 tml::CompilerOptions::diagnostic_format = tml::DiagnosticFormat::JSON;
+            } else if (arg == "--coverage") {
+                tml::CompilerOptions::coverage = true;
+            } else if (arg.starts_with("--coverage-output=")) {
+                tml::CompilerOptions::coverage_output = arg.substr(18);
+                tml::CompilerOptions::coverage = true; // Implicitly enable coverage
             }
+        }
+
+        // Set default coverage output if not specified
+        if (tml::CompilerOptions::coverage && tml::CompilerOptions::coverage_output.empty()) {
+            tml::CompilerOptions::coverage_output = "coverage.html";
         }
 
         // Store optimization settings in global options for use by build
@@ -258,22 +268,36 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "run") {
         if (argc < 3) {
-            std::cerr << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache]\n";
+            std::cerr
+                << "Usage: tml run <file.tml> [args...] [--verbose] [--no-cache] [--coverage] "
+                   "[--coverage-output=<file>]\n";
             return 1;
         }
         std::vector<std::string> program_args;
         bool no_cache = false;
+        bool coverage = false;
         for (int i = 3; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--verbose" || arg == "-v") {
                 // Already handled
             } else if (arg == "--no-cache") {
                 no_cache = true;
+            } else if (arg == "--coverage") {
+                coverage = true;
+            } else if (arg.starts_with("--coverage-output=")) {
+                CompilerOptions::coverage_output = arg.substr(18);
+                coverage = true; // Implicitly enable coverage
             } else {
                 program_args.push_back(arg);
             }
         }
-        return run_run(argv[2], program_args, verbose, false, no_cache);
+        // Set default coverage output if not specified
+        if (coverage && CompilerOptions::coverage_output.empty()) {
+            CompilerOptions::coverage_output = "coverage.html";
+        }
+        // Set global coverage flag for runtime linking
+        CompilerOptions::coverage = coverage;
+        return run_run(argv[2], program_args, verbose, coverage, no_cache);
     }
 
     if (command == "test") {

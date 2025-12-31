@@ -54,6 +54,18 @@ struct BenchmarkResult {
     bool passed = true;
 };
 
+// Fuzz result for a single fuzz target
+struct FuzzResult {
+    std::string file_path;
+    std::string fuzz_name;
+    int64_t iterations = 0;    // Number of iterations run
+    int64_t duration_ms = 0;   // Total fuzzing duration
+    bool found_crash = false;  // True if a crash was found
+    std::string crash_input;   // Input that caused crash (hex encoded)
+    std::string crash_message; // Error message from crash
+    bool passed = true;        // True if no crashes found
+};
+
 // Phase timing for profiling
 struct PhaseTiming {
     std::string name;
@@ -83,6 +95,9 @@ struct TestOptions {
     bool quiet = false;                // Minimal output
     bool ignored = false;              // Run only ignored tests
     bool bench = false;                // Run benchmarks
+    bool fuzz = false;                 // Run fuzz tests
+    int fuzz_duration = 10;            // Fuzz duration in seconds (default: 10s)
+    int fuzz_max_len = 4096;           // Maximum fuzz input length
     int test_threads = 0;              // Parallel test threads (0 = auto)
     bool release = false;              // Run in release mode
     std::string test_binary;           // Path to test binary (if provided)
@@ -94,6 +109,8 @@ struct TestOptions {
     bool coverage = false;             // Enable code coverage tracking
     std::string coverage_output;       // Coverage output file (default: coverage.html)
     bool profile = false;              // Show detailed phase timings
+    std::string corpus_dir;            // Directory for fuzz corpus (inputs)
+    std::string crashes_dir;           // Directory to save crash inputs
 };
 
 // Parse test command arguments

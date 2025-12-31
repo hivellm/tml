@@ -1,0 +1,148 @@
+// LLVM IR generator - Cast expression generation
+// Handles: type casts between integers, floats, pointers, booleans
+
+#include "codegen/llvm_ir_gen.hpp"
+
+namespace tml::codegen {
+
+auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
+    // Generate the source expression
+    std::string src = gen_expr(*cast.expr);
+    std::string src_type = last_expr_type_;
+
+    // Get the target type
+    std::string target_type = llvm_type_ptr(cast.target);
+
+    // If types are the same, just return the source
+    if (src_type == target_type) {
+        return src;
+    }
+
+    std::string result = fresh_reg();
+
+    // Helper to get bit width
+    auto get_bit_width = [](const std::string& ty) -> int {
+        if (ty == "i8")
+            return 8;
+        if (ty == "i16")
+            return 16;
+        if (ty == "i32")
+            return 32;
+        if (ty == "i64")
+            return 64;
+        if (ty == "i128")
+            return 128;
+        return 0;
+    };
+
+    // Integer type check
+    auto is_int_type = [](const std::string& ty) -> bool {
+        return ty == "i8" || ty == "i16" || ty == "i32" || ty == "i64" || ty == "i128";
+    };
+
+    // Integer conversions with proper bit-width comparison
+    if (is_int_type(src_type) && is_int_type(target_type)) {
+        int src_bits = get_bit_width(src_type);
+        int target_bits = get_bit_width(target_type);
+
+        if (src_bits < target_bits) {
+            // Widening: use sext for signed extension
+            emit_line("  " + result + " = sext " + src_type + " " + src + " to " + target_type);
+            last_expr_type_ = target_type;
+            return result;
+        } else if (src_bits > target_bits) {
+            // Narrowing: use trunc
+            emit_line("  " + result + " = trunc " + src_type + " " + src + " to " + target_type);
+            last_expr_type_ = target_type;
+            return result;
+        }
+        // Same width: fall through (shouldn't happen, checked earlier)
+    }
+
+    // Float to int conversions
+    if ((src_type == "double" || src_type == "float") &&
+        (target_type == "i64" || target_type == "i32" || target_type == "i16" ||
+         target_type == "i8")) {
+        emit_line("  " + result + " = fptosi " + src_type + " " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Int to float conversions
+    if ((src_type == "i64" || src_type == "i32" || src_type == "i16" || src_type == "i8") &&
+        (target_type == "double" || target_type == "float")) {
+        emit_line("  " + result + " = sitofp " + src_type + " " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Float widening (float to double)
+    if (src_type == "float" && target_type == "double") {
+        emit_line("  " + result + " = fpext float " + src + " to double");
+        last_expr_type_ = "double";
+        return result;
+    }
+
+    // Float narrowing (double to float)
+    if (src_type == "double" && target_type == "float") {
+        emit_line("  " + result + " = fptrunc double " + src + " to float");
+        last_expr_type_ = "float";
+        return result;
+    }
+
+    // Bool to int
+    if (src_type == "i1" && (target_type == "i8" || target_type == "i16" || target_type == "i32" ||
+                             target_type == "i64")) {
+        emit_line("  " + result + " = zext i1 " + src + " to " + target_type);
+        last_expr_type_ = target_type;
+        return result;
+    }
+
+    // Int to bool (non-zero check)
+    if ((src_type == "i8" || src_type == "i16" || src_type == "i32" || src_type == "i64") &&
+        target_type == "i1") {
+        emit_line("  " + result + " = icmp ne " + src_type + " " + src + ", 0");
+        last_expr_type_ = "i1";
+        return result;
+    }
+
+    // Pointer casts (ptr to ptr)
+    if (src_type == "ptr" && target_type == "ptr") {
+        last_expr_type_ = "ptr";
+        return src; // No conversion needed in opaque pointer mode
+    }
+
+    // Int to pointer
+    if ((src_type == "i64" || src_type == "i32") && target_type == "ptr") {
+        std::string int_val = src;
+        if (src_type == "i32") {
+            std::string ext_reg = fresh_reg();
+            emit_line("  " + ext_reg + " = zext i32 " + src + " to i64");
+            int_val = ext_reg;
+        }
+        emit_line("  " + result + " = inttoptr i64 " + int_val + " to ptr");
+        last_expr_type_ = "ptr";
+        return result;
+    }
+
+    // Pointer to int
+    if (src_type == "ptr" && (target_type == "i64" || target_type == "i32")) {
+        std::string ptr_int = fresh_reg();
+        emit_line("  " + ptr_int + " = ptrtoint ptr " + src + " to i64");
+        if (target_type == "i64") {
+            last_expr_type_ = "i64";
+            return ptr_int;
+        } else {
+            emit_line("  " + result + " = trunc i64 " + ptr_int + " to i32");
+            last_expr_type_ = "i32";
+            return result;
+        }
+    }
+
+    // Fallback: bitcast for same-size types
+    emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
+    last_expr_type_ = target_type;
+    return src; // Return source unchanged
+}
+
+} // namespace tml::codegen

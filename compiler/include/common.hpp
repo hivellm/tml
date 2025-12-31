@@ -44,6 +44,8 @@ struct CompilerOptions {
     static inline WarningLevel warning_level = WarningLevel::Default;
     static inline bool warnings_as_errors = false; // -Werror: treat warnings as errors
     static inline DiagnosticFormat diagnostic_format = DiagnosticFormat::Text;
+    static inline bool coverage = false;       // Enable code coverage tracking
+    static inline std::string coverage_output; // Path for coverage HTML output
 };
 
 // Convenience macro for debug output (only prints when verbose is enabled)

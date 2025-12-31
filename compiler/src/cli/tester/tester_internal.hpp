@@ -160,4 +160,26 @@ std::map<std::string, int64_t> load_benchmark_baseline(const std::string& filena
 // Run benchmarks and display results
 int run_benchmarks(const TestOptions& opts, const ColorOutput& c);
 
+// ============================================================================
+// Fuzz Functions
+// ============================================================================
+
+// Discover fuzz files (*.fuzz.tml) in a directory
+std::vector<std::string> discover_fuzz_files(const std::string& root_dir);
+
+// Generate random bytes for fuzzing
+std::vector<uint8_t> generate_fuzz_input(size_t max_len);
+
+// Mutate existing fuzz input
+std::vector<uint8_t> mutate_fuzz_input(const std::vector<uint8_t>& input, size_t max_len);
+
+// Convert bytes to hex string for reporting
+std::string bytes_to_hex(const std::vector<uint8_t>& bytes);
+
+// Convert hex string back to bytes
+std::vector<uint8_t> hex_to_bytes(const std::string& hex);
+
+// Run fuzz tests and display results
+int run_fuzz_tests(const TestOptions& opts, const ColorOutput& c);
+
 } // namespace tml::cli::tester

@@ -124,6 +124,8 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
     options.emit_comments = verbose;
     options.emit_debug_info = CompilerOptions::debug_info;
     options.debug_level = CompilerOptions::debug_level;
+    options.coverage_enabled = CompilerOptions::coverage;
+    options.coverage_output_file = CompilerOptions::coverage_output;
     options.source_file = path;
     if (!CompilerOptions::target_triple.empty()) {
         options.target_triple = CompilerOptions::target_triple;

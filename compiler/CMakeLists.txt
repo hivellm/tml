@@ -201,6 +201,11 @@ add_library(tml_codegen STATIC
     src/codegen/core/debug_info.cpp
     src/codegen/core/target.cpp
     # Expression codegen (split for maintainability)
+    src/codegen/expr/core.cpp
+    src/codegen/expr/binary.cpp
+    src/codegen/expr/unary.cpp
+    src/codegen/expr/cast.cpp
+    src/codegen/expr/closure.cpp
     src/codegen/expr/infer.cpp
     src/codegen/expr/struct.cpp
     src/codegen/expr/tuple.cpp
@@ -258,6 +263,7 @@ add_library(tml_cli STATIC
     src/cli/tester/execution.cpp
     src/cli/tester/output.cpp
     src/cli/tester/benchmark.cpp
+    src/cli/tester/fuzzer.cpp
     src/cli/tester/run.cpp
     src/cli/cmd_rlib.cpp
     src/cli/cmd_init.cpp
