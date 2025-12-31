@@ -592,7 +592,15 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     if (ret.value.has_value()) {
         std::string val = gen_expr(*ret.value.value());
-        emit_line("  ret " + current_ret_type_ + " " + val);
+        std::string val_type = last_expr_type_;
+
+        // For async functions, wrap the return value in Poll.Ready
+        if (current_func_is_async_ && !current_poll_type_.empty()) {
+            std::string wrapped = wrap_in_poll_ready(val, val_type);
+            emit_line("  ret " + current_poll_type_ + " " + wrapped);
+        } else {
+            emit_line("  ret " + current_ret_type_ + " " + val);
+        }
     } else {
         emit_line("  ret void");
     }

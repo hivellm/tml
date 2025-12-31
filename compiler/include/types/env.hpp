@@ -245,6 +245,7 @@ private:
     void init_builtin_sync();
     void init_builtin_math();
     void init_builtin_collections();
+    void init_builtin_async();
 
     // NOTE: init_std_*_module() functions removed - modules now load from .tml files
 };

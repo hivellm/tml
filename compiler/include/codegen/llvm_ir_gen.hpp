@@ -61,7 +61,10 @@ private:
 
     // Current function context
     std::string current_func_;
-    std::string current_ret_type_; // Return type of current function
+    std::string current_ret_type_;        // Return type of current function
+    bool current_func_is_async_ = false;  // Whether current function is async
+    std::string current_poll_type_;       // Poll[T] type for async functions
+    std::string current_poll_inner_type_; // Inner T type for Poll[T] in async functions
     std::string current_block_;
     bool block_terminated_ = false;
 
@@ -368,6 +371,11 @@ private:
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
     auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
 
+    // Async/await helpers
+    auto wrap_in_poll_ready(const std::string& value, const std::string& value_type) -> std::string;
+    auto extract_poll_ready(const std::string& poll_value, const std::string& poll_type,
+                            const std::string& inner_type) -> std::string;
+
     // Format string print
     auto gen_format_print(const std::string& format, const std::vector<parser::ExprPtr>& args,
                           size_t start_idx, bool with_newline) -> std::string;
@@ -392,6 +400,8 @@ private:
     auto try_gen_builtin_string(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
     auto try_gen_builtin_assert(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
+    auto try_gen_builtin_async(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
 
     // Utility

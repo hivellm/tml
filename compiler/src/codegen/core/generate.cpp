@@ -81,6 +81,31 @@ auto LLVMIRGen::generate(const parser::Module& module)
         builtin_enum_decls_.push_back(std::move(outcome_decl));
     }
 
+    {
+        // Poll[T] { Ready(T), Pending }
+        auto poll_decl = std::make_unique<parser::EnumDecl>();
+        poll_decl->name = "Poll";
+        poll_decl->generics.push_back(parser::GenericParam{"T"});
+
+        // Ready(T) variant
+        parser::EnumVariant ready_variant;
+        ready_variant.name = "Ready";
+        auto t_type = std::make_unique<parser::Type>();
+        t_type->kind = parser::NamedType{parser::TypePath{{"T"}}};
+        std::vector<parser::TypePtr> ready_fields;
+        ready_fields.push_back(std::move(t_type));
+        ready_variant.tuple_fields = std::move(ready_fields);
+        poll_decl->variants.push_back(std::move(ready_variant));
+
+        // Pending variant
+        parser::EnumVariant pending_variant;
+        pending_variant.name = "Pending";
+        poll_decl->variants.push_back(std::move(pending_variant));
+
+        pending_generic_enums_["Poll"] = poll_decl.get();
+        builtin_enum_decls_.push_back(std::move(poll_decl));
+    }
+
     emit_header();
     emit_debug_info_header(); // Initialize debug info metadata
     emit_runtime_decls();

@@ -244,6 +244,10 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         return *result;
     }
 
+    if (auto result = try_gen_builtin_async(fn_name, call)) {
+        return *result;
+    }
+
     // ============ ENUM CONSTRUCTORS ============
 
     // Check if this is an enum constructor

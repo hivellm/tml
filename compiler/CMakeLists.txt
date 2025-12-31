@@ -117,6 +117,7 @@ add_library(tml_types STATIC
     src/types/builtins/sync.cpp
     src/types/builtins/math.cpp
     src/types/builtins/collections.cpp
+    src/types/builtins/async.cpp
 )
 target_link_libraries(tml_types PUBLIC tml_parser)
 target_include_directories(tml_types PUBLIC include src)
@@ -227,6 +228,7 @@ add_library(tml_codegen STATIC
     src/codegen/builtins/collections.cpp
     src/codegen/builtins/string.cpp
     src/codegen/builtins/assert.cpp
+    src/codegen/builtins/async.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)

@@ -144,13 +144,17 @@
 - [x] 13.5 Implement `pub(crate)` visibility
 - [x] 13.6 Implement module re-exports (infrastructure: ReExport struct, Module re-exports field)
 
-## Phase 14: Async Runtime - FUTURE
-- [ ] 14.1 Design async/await lowering
-- [ ] 14.2 Implement Future behavior
-- [ ] 14.3 Implement state machine generation
-- [ ] 14.4 Implement async executor
-- [ ] 14.5 Implement async I/O primitives
-- [ ] 14.6 Add `@async` function support
+## Phase 14: Async Runtime - IN PROGRESS
+- [x] 14.1 Design async/await lowering (prefix `await expr` and postfix `.await` syntax)
+- [x] 14.2 Implement Future behavior (Future with Poll enum, Output associated type)
+- [x] 14.3 Implement async function type checking (in_async_func_ context, check_await)
+- [x] 14.4 Implement async function codegen (returns Poll[T] with Ready wrapper)
+- [x] 14.5 Implement await codegen (extracts value from Poll.Ready)
+- [x] 14.5.1 Implement block_on builtin (synchronous execution of async functions)
+- [ ] 14.6 Implement state machine generation (for true async with suspend points)
+- [ ] 14.7 Implement async executor
+- [ ] 14.8 Implement async I/O primitives
+- [ ] 14.9 Add spawn, join_all, select primitives
 
 ## Phase 15: Package Manager - FUTURE
 See separate task: `rulebook/tasks/package-manager/tasks.md`

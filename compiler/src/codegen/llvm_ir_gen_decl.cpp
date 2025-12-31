@@ -383,10 +383,40 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Determine return type
     std::string ret_type = "void";
+    std::string inner_ret_type = "void"; // For async functions, the unwrapped return type
+    types::TypePtr semantic_ret = nullptr;
     if (func.return_type.has_value()) {
-        ret_type = llvm_type_ptr(*func.return_type);
+        inner_ret_type = llvm_type_ptr(*func.return_type);
+        semantic_ret = resolve_parser_type_with_subs(**func.return_type, {});
+    }
+
+    // Async functions return Poll[T] instead of T
+    // Poll[T] = { i32 tag, T data } where tag 0 = Ready, tag 1 = Pending
+    if (func.is_async && inner_ret_type != "void") {
+        // Use the semantic return type to create Poll[T]
+        if (!semantic_ret) {
+            semantic_ret =
+                std::make_shared<types::Type>(types::PrimitiveType{types::PrimitiveKind::Unit});
+        }
+        std::vector<types::TypePtr> poll_type_args = {semantic_ret};
+        std::string poll_mangled = require_enum_instantiation("Poll", poll_type_args);
+        ret_type = "%struct." + poll_mangled;
+        current_poll_type_ = ret_type;
+        current_poll_inner_type_ = inner_ret_type; // Store inner type for wrap_in_poll_ready
+
+        // For async functions, record Poll[T] as the return type for type inference
+        auto poll_type =
+            std::make_shared<types::Type>(types::NamedType{"Poll", "", poll_type_args});
+        func_return_types_[func.name] = poll_type;
+    } else {
+        ret_type = inner_ret_type;
+        current_poll_type_.clear();
+        current_poll_inner_type_.clear();
+
         // Record semantic return type for use in infer_expr_type
-        func_return_types_[func.name] = resolve_parser_type_with_subs(**func.return_type, {});
+        if (semantic_ret) {
+            func_return_types_[func.name] = semantic_ret;
+        }
     }
 
     // Build parameter list and type list for function signature
@@ -445,6 +475,7 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Store the return type for use in gen_return
     current_ret_type_ = ret_type;
+    current_func_is_async_ = func.is_async;
 
     // Build function name with module prefix if generating code for an imported module
     std::string full_func_name = func.name;
@@ -558,7 +589,13 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
-                emit_line("  ret " + ret_type + " " + result);
+                // For async functions, wrap result in Poll.Ready
+                if (current_func_is_async_ && !current_poll_type_.empty()) {
+                    std::string wrapped = wrap_in_poll_ready(result, last_expr_type_);
+                    emit_line("  ret " + current_poll_type_ + " " + wrapped);
+                } else {
+                    emit_line("  ret " + ret_type + " " + result);
+                }
                 block_terminated_ = true;
             }
         }
@@ -579,6 +616,9 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     emit_line("}");
     current_func_.clear();
     current_ret_type_.clear();
+    current_func_is_async_ = false;
+    current_poll_type_.clear();
+    current_poll_inner_type_.clear();
     current_scope_id_ = 0;
     current_debug_loc_id_ = 0;
 }

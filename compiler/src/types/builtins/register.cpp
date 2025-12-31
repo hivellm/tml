@@ -16,6 +16,7 @@ void TypeEnv::init_builtins() {
                            // waitgroup_*
     init_builtin_math();   // sqrt, pow, abs, floor, ceil, round, black_box
     init_builtin_collections(); // list_*, hashmap_*, buffer_*
+    init_builtin_async();       // block_on
 }
 
 } // namespace tml::types

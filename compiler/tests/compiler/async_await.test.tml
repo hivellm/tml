@@ -1,4 +1,4 @@
-// Test async/await type checking
+// Test async/await type checking and execution
 use test::*
 
 // Simple async function
@@ -25,8 +25,42 @@ async func async_multiple() -> I64 {
     return a + b
 }
 
+// Async function with computation
+async func async_compute(x: I64) -> I64 {
+    return x * 2 + 10
+}
+
 @test
-func test_async_function_defined() {
-    // Just test that async functions compile correctly
-    assert_eq(1, 1)
+func test_async_simple() {
+    // Test block_on with simple async function
+    let result: I64 = block_on(async_simple())
+    assert_eq(result, 42)
+}
+
+@test
+func test_async_chain_postfix() {
+    // Test chained async with postfix .await
+    let result: I64 = block_on(async_chain_postfix())
+    assert_eq(result, 43)
+}
+
+@test
+func test_async_chain_prefix() {
+    // Test chained async with prefix await
+    let result: I64 = block_on(async_chain_prefix())
+    assert_eq(result, 43)
+}
+
+@test
+func test_async_multiple() {
+    // Test multiple awaits
+    let result: I64 = block_on(async_multiple())
+    assert_eq(result, 84)
+}
+
+@test
+func test_async_with_args() {
+    // Test async function with arguments
+    let result: I64 = block_on(async_compute(5))
+    assert_eq(result, 20)
 }
