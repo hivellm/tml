@@ -1,0 +1,363 @@
+// Tests for core::net module
+
+use core::net::{IpAddr, Ipv4Addr, Ipv6Addr}
+use core::net::{SocketAddr, SocketAddrV4, SocketAddrV6}
+use core::net::parser::{parse_ipv4, parse_ipv6, parse_socket_addr, AddrParseError}
+use core::option::Maybe::{Just, Nothing}
+use core::result::Outcome
+
+// =============================================================================
+// Ipv4Addr Tests
+// =============================================================================
+
+@test
+func test_ipv4_new() {
+    let addr: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    assert_eq(addr.octets(), [192, 168, 1, 1])
+}
+
+@test
+func test_ipv4_localhost() {
+    let addr: Ipv4Addr = Ipv4Addr::LOCALHOST
+    assert_eq(addr.octets(), [127, 0, 0, 1])
+    assert(addr.is_loopback())
+}
+
+@test
+func test_ipv4_unspecified() {
+    let addr: Ipv4Addr = Ipv4Addr::UNSPECIFIED
+    assert_eq(addr.octets(), [0, 0, 0, 0])
+    assert(addr.is_unspecified())
+}
+
+@test
+func test_ipv4_broadcast() {
+    let addr: Ipv4Addr = Ipv4Addr::BROADCAST
+    assert_eq(addr.octets(), [255, 255, 255, 255])
+    assert(addr.is_broadcast())
+}
+
+@test
+func test_ipv4_from_bits() {
+    let addr: Ipv4Addr = Ipv4Addr::from_bits(0x7F000001)  // 127.0.0.1
+    assert_eq(addr, Ipv4Addr::LOCALHOST)
+}
+
+@test
+func test_ipv4_to_bits() {
+    let addr: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+    assert_eq(addr.to_bits(), 0x7F000001)
+}
+
+@test
+func test_ipv4_is_loopback() {
+    assert(Ipv4Addr::new(127, 0, 0, 1).is_loopback())
+    assert(Ipv4Addr::new(127, 255, 255, 255).is_loopback())
+    assert(not Ipv4Addr::new(128, 0, 0, 1).is_loopback())
+}
+
+@test
+func test_ipv4_is_private() {
+    // 10.0.0.0/8
+    assert(Ipv4Addr::new(10, 0, 0, 1).is_private())
+    assert(Ipv4Addr::new(10, 255, 255, 255).is_private())
+
+    // 172.16.0.0/12
+    assert(Ipv4Addr::new(172, 16, 0, 1).is_private())
+    assert(Ipv4Addr::new(172, 31, 255, 255).is_private())
+    assert(not Ipv4Addr::new(172, 15, 0, 1).is_private())
+    assert(not Ipv4Addr::new(172, 32, 0, 1).is_private())
+
+    // 192.168.0.0/16
+    assert(Ipv4Addr::new(192, 168, 0, 1).is_private())
+    assert(Ipv4Addr::new(192, 168, 255, 255).is_private())
+
+    // Public addresses
+    assert(not Ipv4Addr::new(8, 8, 8, 8).is_private())
+}
+
+@test
+func test_ipv4_is_link_local() {
+    assert(Ipv4Addr::new(169, 254, 0, 1).is_link_local())
+    assert(Ipv4Addr::new(169, 254, 255, 255).is_link_local())
+    assert(not Ipv4Addr::new(169, 253, 0, 1).is_link_local())
+}
+
+@test
+func test_ipv4_is_multicast() {
+    assert(Ipv4Addr::new(224, 0, 0, 1).is_multicast())
+    assert(Ipv4Addr::new(239, 255, 255, 255).is_multicast())
+    assert(not Ipv4Addr::new(223, 255, 255, 255).is_multicast())
+    assert(not Ipv4Addr::new(240, 0, 0, 0).is_multicast())
+}
+
+@test
+func test_ipv4_is_documentation() {
+    assert(Ipv4Addr::new(192, 0, 2, 1).is_documentation())
+    assert(Ipv4Addr::new(198, 51, 100, 1).is_documentation())
+    assert(Ipv4Addr::new(203, 0, 113, 1).is_documentation())
+    assert(not Ipv4Addr::new(192, 0, 3, 1).is_documentation())
+}
+
+@test
+func test_ipv4_equality() {
+    let a: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let b: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let c: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 2)
+
+    assert_eq(a, b)
+    assert_ne(a, c)
+}
+
+@test
+func test_ipv4_to_ipv6_mapped() {
+    let v4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    let v6: Ipv6Addr = v4.to_ipv6_mapped()
+
+    assert(v6.is_ipv4_mapped())
+    assert_eq(v6.to_ipv4(), Just(v4))
+}
+
+// =============================================================================
+// Ipv6Addr Tests
+// =============================================================================
+
+@test
+func test_ipv6_new() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    assert_eq(addr.segments()[0], 0x2001)
+    assert_eq(addr.segments()[1], 0x0db8)
+    assert_eq(addr.segments()[7], 1)
+}
+
+@test
+func test_ipv6_localhost() {
+    let addr: Ipv6Addr = Ipv6Addr::LOCALHOST
+    assert_eq(addr.segments(), [0, 0, 0, 0, 0, 0, 0, 1])
+    assert(addr.is_loopback())
+}
+
+@test
+func test_ipv6_unspecified() {
+    let addr: Ipv6Addr = Ipv6Addr::UNSPECIFIED
+    assert_eq(addr.segments(), [0, 0, 0, 0, 0, 0, 0, 0])
+    assert(addr.is_unspecified())
+}
+
+@test
+func test_ipv6_is_multicast() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0xFF00, 0, 0, 0, 0, 0, 0, 1)
+    assert(addr.is_multicast())
+
+    let not_multicast: Ipv6Addr = Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1)
+    assert(not not_multicast.is_multicast())
+}
+
+@test
+func test_ipv6_is_link_local() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0xFE80, 0, 0, 0, 0, 0, 0, 1)
+    assert(addr.is_unicast_link_local())
+}
+
+@test
+func test_ipv6_is_unique_local() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0xFC00, 0, 0, 0, 0, 0, 0, 1)
+    assert(addr.is_unique_local())
+
+    let addr2: Ipv6Addr = Ipv6Addr::new(0xFD00, 0, 0, 0, 0, 0, 0, 1)
+    assert(addr2.is_unique_local())
+}
+
+@test
+func test_ipv6_to_bits_from_bits() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    let bits: U128 = addr.to_bits()
+    let addr2: Ipv6Addr = Ipv6Addr::from_bits(bits)
+    assert_eq(addr, addr2)
+}
+
+@test
+func test_ipv6_octets() {
+    let addr: Ipv6Addr = Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 1)
+    let octets: [U8; 16] = addr.octets()
+    assert_eq(octets[0], 0x20)
+    assert_eq(octets[1], 0x01)
+    assert_eq(octets[2], 0x0d)
+    assert_eq(octets[3], 0xb8)
+}
+
+// =============================================================================
+// IpAddr Tests
+// =============================================================================
+
+@test
+func test_ip_addr_is_ipv4() {
+    let v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST)
+    let v6: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST)
+
+    assert(v4.is_ipv4())
+    assert(not v4.is_ipv6())
+    assert(v6.is_ipv6())
+    assert(not v6.is_ipv4())
+}
+
+@test
+func test_ip_addr_is_loopback() {
+    let v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST)
+    let v6: IpAddr = IpAddr::V6(Ipv6Addr::LOCALHOST)
+
+    assert(v4.is_loopback())
+    assert(v6.is_loopback())
+}
+
+@test
+func test_ip_addr_to_ipv6() {
+    let v4: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))
+    let v6_mapped: Ipv6Addr = v4.to_ipv6()
+    assert(v6_mapped.is_ipv4_mapped())
+}
+
+// =============================================================================
+// SocketAddr Tests
+// =============================================================================
+
+@test
+func test_socket_addr_v4() {
+    let addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8080)
+    assert_eq(addr.ip(), Ipv4Addr::LOCALHOST)
+    assert_eq(addr.port(), 8080)
+}
+
+@test
+func test_socket_addr_v4_set() {
+    let mut addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8080)
+    addr.set_port(9090)
+    assert_eq(addr.port(), 9090)
+
+    addr.set_ip(Ipv4Addr::BROADCAST)
+    assert_eq(addr.ip(), Ipv4Addr::BROADCAST)
+}
+
+@test
+func test_socket_addr_v6() {
+    let addr: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 8080, 0, 0)
+    assert_eq(addr.ip(), Ipv6Addr::LOCALHOST)
+    assert_eq(addr.port(), 8080)
+    assert_eq(addr.flowinfo(), 0)
+    assert_eq(addr.scope_id(), 0)
+}
+
+@test
+func test_socket_addr_new() {
+    let ip: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST)
+    let addr: SocketAddr = SocketAddr::new(ip, 80)
+
+    assert(addr.is_ipv4())
+    assert_eq(addr.port(), 80)
+}
+
+@test
+func test_socket_addr_port() {
+    let v4: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 80))
+    let v6: SocketAddr = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 443, 0, 0))
+
+    assert_eq(v4.port(), 80)
+    assert_eq(v6.port(), 443)
+}
+
+// =============================================================================
+// Parsing Tests
+// =============================================================================
+
+@test
+func test_parse_ipv4_valid() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("127.0.0.1")
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), Ipv4Addr::LOCALHOST)
+}
+
+@test
+func test_parse_ipv4_zeros() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("0.0.0.0")
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), Ipv4Addr::UNSPECIFIED)
+}
+
+@test
+func test_parse_ipv4_max() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("255.255.255.255")
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), Ipv4Addr::BROADCAST)
+}
+
+@test
+func test_parse_ipv4_invalid_octet() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("256.0.0.1")
+    assert(result.is_err())
+}
+
+@test
+func test_parse_ipv4_missing_octet() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("192.168.1")
+    assert(result.is_err())
+}
+
+@test
+func test_parse_ipv4_extra_octet() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("192.168.1.1.1")
+    assert(result.is_err())
+}
+
+@test
+func test_parse_ipv4_leading_zero() {
+    let result: Outcome[Ipv4Addr, AddrParseError] = parse_ipv4("192.168.01.1")
+    assert(result.is_err())
+}
+
+@test
+func test_parse_ipv6_localhost() {
+    let result: Outcome[Ipv6Addr, AddrParseError] = parse_ipv6("::1")
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), Ipv6Addr::LOCALHOST)
+}
+
+@test
+func test_parse_ipv6_unspecified() {
+    let result: Outcome[Ipv6Addr, AddrParseError] = parse_ipv6("::")
+    assert(result.is_ok())
+    assert_eq(result.unwrap(), Ipv6Addr::UNSPECIFIED)
+}
+
+@test
+func test_parse_ipv6_full() {
+    let result: Outcome[Ipv6Addr, AddrParseError] = parse_ipv6("2001:0db8:0000:0000:0000:0000:0000:0001")
+    assert(result.is_ok())
+    let addr: Ipv6Addr = result.unwrap()
+    assert_eq(addr.segments()[0], 0x2001)
+    assert_eq(addr.segments()[1], 0x0db8)
+    assert_eq(addr.segments()[7], 1)
+}
+
+@test
+func test_parse_socket_addr_v4() {
+    let result: Outcome[SocketAddr, AddrParseError] = parse_socket_addr("127.0.0.1:8080")
+    assert(result.is_ok())
+    let addr: SocketAddr = result.unwrap()
+    assert(addr.is_ipv4())
+    assert_eq(addr.port(), 8080)
+}
+
+@test
+func test_parse_socket_addr_v6() {
+    let result: Outcome[SocketAddr, AddrParseError] = parse_socket_addr("[::1]:8080")
+    assert(result.is_ok())
+    let addr: SocketAddr = result.unwrap()
+    assert(addr.is_ipv6())
+    assert_eq(addr.port(), 8080)
+}
+
+@test
+func test_parse_invalid_port() {
+    let result: Outcome[SocketAddr, AddrParseError] = parse_socket_addr("127.0.0.1:99999")
+    assert(result.is_err())
+}

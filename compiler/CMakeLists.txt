@@ -163,6 +163,12 @@ add_library(tml_mir STATIC
     src/mir/builder/pattern.cpp
     src/mir/builder/control.cpp
     src/mir/builder/helpers.cpp
+    # Serializer modules (split from mir_serialize.cpp for maintainability)
+    src/mir/serializer/binary_writer.cpp
+    src/mir/serializer/binary_reader.cpp
+    src/mir/serializer/text_writer.cpp
+    src/mir/serializer/text_reader.cpp
+    src/mir/serializer/serialize_utils.cpp
     # Optimization passes
     src/mir/passes/constant_folding.cpp
     src/mir/passes/constant_propagation.cpp
