@@ -146,6 +146,18 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
 }
 
 auto Parser::parse_prefix_expr() -> Result<ExprPtr, ParseError> {
+    // Prefix await: 'await expr'
+    if (match(lexer::TokenKind::KwAwait)) {
+        auto start_span = previous().span;
+        auto operand = parse_prefix_expr();
+        if (is_err(operand))
+            return operand;
+
+        auto span = SourceSpan::merge(start_span, unwrap(operand)->span);
+        return make_box<Expr>(Expr{
+            .kind = AwaitExpr{.expr = std::move(unwrap(operand)), .span = span}, .span = span});
+    }
+
     // TML syntax: 'mut ref x' for mutable reference
     if (check(lexer::TokenKind::KwMut) && check_next(lexer::TokenKind::KwRef)) {
         auto start_span = peek().span;

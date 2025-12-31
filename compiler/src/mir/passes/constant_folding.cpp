@@ -42,7 +42,7 @@ auto ConstantFoldingPass::run_on_block(BasicBlock& block, Function& func) -> boo
             auto cond_const = get_constant_for_value(func, sel->condition.id);
 
             if (cond_const) {
-                if (auto* bool_val = std::get_if<ConstBool>(&*cond_const)) {
+                if (std::get_if<ConstBool>(&*cond_const) != nullptr) {
                     // Replace select with the appropriate value
                     // We can't directly replace with a value reference,
                     // but we can mark this for copy propagation

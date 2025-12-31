@@ -469,8 +469,8 @@ auto MirBuilder::build_array(const parser::ArrayExpr& arr) -> Value {
 
                 // Try to evaluate count as a constant integer
                 size_t count = 1;
-                if (a.second && a.second->is<parser::LiteralExpr>()) {
-                    const auto& lit = a.second->as<parser::LiteralExpr>();
+                if (a.second && a.second->template is<parser::LiteralExpr>()) {
+                    const auto& lit = a.second->template as<parser::LiteralExpr>();
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         try {
                             count = std::stoull(std::string(lit.token.lexeme));

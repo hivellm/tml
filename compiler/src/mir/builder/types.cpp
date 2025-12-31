@@ -66,8 +66,8 @@ auto MirBuilder::convert_type(const parser::Type& type) -> MirTypePtr {
             } else if constexpr (std::is_same_v<T, parser::ArrayType>) {
                 // Try to evaluate size expression as a constant integer literal
                 size_t size = 0;
-                if (t.size && t.size->is<parser::LiteralExpr>()) {
-                    const auto& lit = t.size->as<parser::LiteralExpr>();
+                if (t.size && t.size->template is<parser::LiteralExpr>()) {
+                    const auto& lit = t.size->template as<parser::LiteralExpr>();
                     if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                         try {
                             size = std::stoull(std::string(lit.token.lexeme));

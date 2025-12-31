@@ -53,6 +53,40 @@ void TypeEnv::init_builtin_types() {
                             .span = {}});
     }
 
+    // Poll[T] enum (core::async)
+    // Poll[T] { Ready(T), Pending }
+    {
+        auto T = std::make_shared<Type>(GenericType{"T"});
+        define_enum(EnumDef{.name = "Poll",
+                            .type_params = {"T"},
+                            .const_params = {},
+                            .variants = {{"Ready", {T}}, {"Pending", {}}},
+                            .span = {}});
+    }
+
+    // Future[T] behavior (core::async)
+    // behavior Future { type Output; func poll(mut this, cx: mut ref Context) -> Poll[This.Output]
+    // }
+    {
+        auto Output = std::make_shared<Type>(GenericType{"Output"});
+        auto poll_output = std::make_shared<Type>(NamedType{"Poll", "", {Output}});
+        define_behavior(BehaviorDef{
+            .name = "Future",
+            .type_params = {},
+            .const_params = {},
+            .associated_types = {AssociatedTypeDef{
+                .name = "Output", .type_params = {}, .bounds = {}, .default_type = std::nullopt}},
+            .methods = {FuncSig{.name = "poll",
+                                .params = {}, // self is implicit
+                                .return_type = poll_output,
+                                .type_params = {},
+                                .is_async = false, // poll itself is not async
+                                .span = {}}},
+            .super_behaviors = {},
+            .methods_with_defaults = {},
+            .span = {}});
+    }
+
     // Register builtin behavior implementations for integer types
     std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128",
                                               "U8", "U16", "U32", "U64", "U128"};

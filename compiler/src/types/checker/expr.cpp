@@ -115,6 +115,10 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
                 return check_interp_string(e);
             } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
                 return check_cast(e);
+            } else if constexpr (std::is_same_v<T, parser::AwaitExpr>) {
+                return check_await(e, expr.span);
+            } else if constexpr (std::is_same_v<T, parser::LowlevelExpr>) {
+                return check_lowlevel(e);
             } else {
                 return make_unit();
             }
@@ -1187,6 +1191,88 @@ auto TypeChecker::check_cast(const parser::CastExpr& cast) -> TypePtr {
 
     // Return the target type - the actual cast is handled by codegen
     return target_type;
+}
+
+auto TypeChecker::check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr {
+    // Check that we're in an async function
+    if (!in_async_func_) {
+        error("Cannot use `.await` outside of an async function", span);
+        return make_unit();
+    }
+
+    // Type-check the awaited expression
+    auto expr_type = check_expr(*await_expr.expr);
+
+    // The awaited expression should return a Future[T] - extract the Output type
+    // For simplicity, we check if it's a named type that implements Future
+    // or if the expression is from an async function call (which implicitly returns Future[T])
+
+    // Case 1: Named type that might be a Future
+    if (expr_type->is<NamedType>()) {
+        auto& named = expr_type->as<NamedType>();
+
+        // Check if this type implements Future behavior
+        if (env_.type_implements(named.name, "Future")) {
+            // Look up the behavior impl to get the Output associated type
+            // For now, if the type has type_args, assume the first is the Output
+            if (!named.type_args.empty()) {
+                return named.type_args[0];
+            }
+        }
+
+        // Special case: Poll[T] - awaiting Poll returns T when Ready
+        if (named.name == "Poll" && !named.type_args.empty()) {
+            return named.type_args[0];
+        }
+    }
+
+    // Case 2: Function type with is_async = true
+    // Async functions return Future[ReturnType], so .await extracts ReturnType
+    if (expr_type->is<FuncType>()) {
+        auto& func = expr_type->as<FuncType>();
+        if (func.is_async) {
+            return func.return_type;
+        }
+    }
+
+    // Case 3: impl Behavior type (ImplBehaviorType)
+    if (expr_type->is<ImplBehaviorType>()) {
+        auto& impl_behavior = expr_type->as<ImplBehaviorType>();
+        if (impl_behavior.behavior_name == "Future") {
+            // Return the Output type if available
+            if (!impl_behavior.type_args.empty()) {
+                return impl_behavior.type_args[0];
+            }
+        }
+    }
+
+    // For now, return the type itself if we can't determine the Future output
+    // This allows async code to type-check even without full Future inference
+    return expr_type;
+}
+
+auto TypeChecker::check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr {
+    // Save previous lowlevel state
+    bool was_in_lowlevel = in_lowlevel_;
+    in_lowlevel_ = true;
+
+    env_.push_scope();
+    TypePtr result = make_unit();
+
+    // Check statements in lowlevel block
+    for (const auto& stmt : lowlevel.stmts) {
+        result = check_stmt(*stmt);
+    }
+
+    // Check trailing expression if present
+    if (lowlevel.expr) {
+        result = check_expr(**lowlevel.expr);
+    }
+
+    env_.pop_scope();
+    in_lowlevel_ = was_in_lowlevel;
+
+    return result;
 }
 
 } // namespace tml::types

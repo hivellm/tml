@@ -53,7 +53,8 @@ private:
     std::unordered_map<std::string, ConstValue>
         const_values_; // Maps const variable names to their evaluated values
     int loop_depth_ = 0;
-    bool in_lowlevel_ = false; // When true, & returns pointer instead of reference
+    bool in_lowlevel_ = false;   // When true, & returns pointer instead of reference
+    bool in_async_func_ = false; // When true, .await expressions are allowed
 
     // Declaration registration (first pass)
     void register_struct_decl(const parser::StructDecl& decl);
@@ -98,6 +99,7 @@ private:
     auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
     auto check_interp_string(const parser::InterpolatedStringExpr& interp) -> TypePtr;
     auto check_cast(const parser::CastExpr& cast) -> TypePtr;
+    auto check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

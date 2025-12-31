@@ -1,0 +1,32 @@
+// Test async/await type checking
+use test::*
+
+// Simple async function
+async func async_simple() -> I64 {
+    return 42
+}
+
+// Async function that calls another async function (postfix .await style)
+async func async_chain_postfix() -> I64 {
+    let result: I64 = async_simple().await
+    return result + 1
+}
+
+// Async function that calls another async function (prefix await style)
+async func async_chain_prefix() -> I64 {
+    let result: I64 = await async_simple()
+    return result + 1
+}
+
+// Async function with multiple awaits (mixed styles)
+async func async_multiple() -> I64 {
+    let a: I64 = async_simple().await
+    let b: I64 = await async_simple()
+    return a + b
+}
+
+@test
+func test_async_function_defined() {
+    // Just test that async functions compile correctly
+    assert_eq(1, 1)
+}

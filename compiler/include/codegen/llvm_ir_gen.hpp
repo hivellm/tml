@@ -366,6 +366,7 @@ private:
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
+    auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
 
     // Format string print
     auto gen_format_print(const std::string& format, const std::vector<parser::ExprPtr>& args,

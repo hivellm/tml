@@ -35,6 +35,7 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "Maybe",
     "Outcome",
     "Ordering",
+    "Poll",
     // Core collections (from std)
     "List",
     "HashMap",
@@ -61,6 +62,10 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "AtomicCounter",
     // String builder
     "StringBuilder",
+    // Async types
+    "Future",
+    "Context",
+    "Waker",
 };
 
 // Reserved behavior (trait) names - builtin behaviors that cannot be redefined
@@ -103,6 +108,8 @@ static const std::set<std::string> RESERVED_BEHAVIOR_NAMES = {
     "Sized",
     // Send/Sync (concurrency)
     "Send",
+    // Async (Future behavior)
+    "Future",
 };
 
 // Forward declarations from helpers.cpp
@@ -525,6 +532,10 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     env_.push_scope();
     current_return_type_ = func.return_type ? resolve_type(**func.return_type) : make_unit();
 
+    // Set async context flag for await expression checking
+    bool was_async = in_async_func_;
+    in_async_func_ = func.is_async;
+
     // Add parameters to scope
     for (const auto& p : func.params) {
         if (p.pattern->is<parser::IdentPattern>()) {
@@ -564,6 +575,7 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
 
     env_.pop_scope();
     current_return_type_ = nullptr;
+    in_async_func_ = was_async;
 }
 
 void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {

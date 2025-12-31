@@ -216,6 +216,7 @@ add_library(tml_codegen STATIC
     src/codegen/expr/method_maybe.cpp
     src/codegen/expr/method_outcome.cpp
     src/codegen/expr/method_array.cpp
+    src/codegen/expr/await.cpp
     # Builtin function codegen (split for maintainability)
     src/codegen/builtins/io.cpp
     src/codegen/builtins/mem.cpp
