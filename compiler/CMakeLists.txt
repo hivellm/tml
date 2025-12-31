@@ -244,9 +244,21 @@ add_library(tml_cli STATIC
     src/cli/cmd_debug.cpp
     src/cli/cmd_build.cpp
     src/cli/cmd_format.cpp
-    src/cli/cmd_lint.cpp
-    src/cli/cmd_test.cpp
     src/cli/cmd_cache.cpp
+    # Linter modules (split from cmd_lint.cpp for maintainability)
+    src/cli/linter/helpers.cpp
+    src/cli/linter/config.cpp
+    src/cli/linter/style.cpp
+    src/cli/linter/semantic.cpp
+    src/cli/linter/discovery.cpp
+    src/cli/linter/run.cpp
+    # Tester modules (split from cmd_test.cpp for maintainability)
+    src/cli/tester/helpers.cpp
+    src/cli/tester/discovery.cpp
+    src/cli/tester/execution.cpp
+    src/cli/tester/output.cpp
+    src/cli/tester/benchmark.cpp
+    src/cli/tester/run.cpp
     src/cli/cmd_rlib.cpp
     src/cli/cmd_init.cpp
     src/cli/rlib.cpp
@@ -258,6 +270,13 @@ add_library(tml_cli STATIC
     src/cli/parallel_build.cpp
     src/cli/dependency_resolver.cpp
     src/cli/cmd_pkg.cpp
+    # Builder modules (split from cmd_build.cpp for maintainability)
+    src/cli/builder/helpers.cpp
+    src/cli/builder/build.cpp
+    src/cli/builder/run.cpp
+    src/cli/builder/run_profiled.cpp
+    # Test runner for in-process test execution
+    src/cli/test_runner.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)

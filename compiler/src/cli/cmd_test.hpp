@@ -103,19 +103,4 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index);
 // Discovers and runs all tests in *.test.tml files
 int run_test(int argc, char* argv[], bool verbose);
 
-// Test discovery: Find all *.test.tml files
-std::vector<std::string> discover_test_files(const std::string& root_dir);
-
-// Compile and run a test file, returning detailed result
-TestResult compile_and_run_test_with_result(const std::string& test_file, const TestOptions& opts);
-
-// Legacy: Compile and run a test file (returns exit code)
-int compile_and_run_test(const std::string& test_file, const TestOptions& opts);
-
-// Extract group name from file path
-std::string extract_group_name(const std::string& file_path);
-
-// Format duration for display
-std::string format_duration(int64_t ms);
-
 } // namespace tml::cli
