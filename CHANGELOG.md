@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ASCII Character Module** (2026-01-01) - Complete `core::ascii::AsciiChar` type
+  - Safe ASCII character type with validation (0-127 range)
+  - Character classification: `is_alphabetic()`, `is_digit()`, `is_alphanumeric()`, `is_whitespace()`, etc.
+  - Case conversion: `to_lowercase()`, `to_uppercase()`, `to_ascii_lowercase()`, `to_ascii_uppercase()`
+  - Digit operations: `to_digit()`, `to_digit_radix()`, `from_digit()`, `from_digit_radix()`
+  - Comprehensive test suite (163 tests in lib/core)
+  - Files added/modified:
+    - `lib/core/src/ascii/char.tml` - AsciiChar implementation
+    - `lib/core/src/ascii/mod.tml` - Module exports
+    - `lib/core/tests/ascii.test.tml` - Test suite
+
+- **Slice Intrinsics Codegen** (2026-01-01) - Complete slice operations for lowlevel blocks
+  - `slice_get[T](data: ref T, index: I64) -> ref T` - Get element reference at index
+  - `slice_get_mut[T](data: mut ref T, index: I64) -> mut ref T` - Get mutable element reference
+  - `slice_set[T](data: mut ref T, index: I64, value: T)` - Set element at index
+  - `slice_offset[T](data: ref T, count: I64) -> ref T` - Compute offset pointer
+  - `slice_swap[T](data: mut ref T, a: I64, b: I64)` - Swap elements at indices
+  - All intrinsics use LLVM GEP instructions for efficient pointer arithmetic
+  - Files modified:
+    - `lib/core/src/intrinsics.tml` - Added intrinsic declarations
+    - `compiler/src/codegen/builtins/intrinsics.cpp` - Added codegen implementation
+
+### Fixed
+- **PHI Node Predecessors in Nested if-else-if** (2026-01-01) - Fixed LLVM IR verification errors
+  - Nested `else if` chains were generating invalid PHI nodes with wrong predecessor labels
+  - PHI nodes now correctly track the actual ending block for each branch
+  - When else branch contains nested if, the PHI predecessor is the inner if's end block, not the outer else label
+  - Files modified:
+    - `compiler/src/codegen/llvm_ir_gen_control.cpp` - Track `then_end_block` and `else_end_block` for PHI generation
+
+- **String Interpolation for Small Integer Types** (2026-01-01) - i8/i16 types now work in string interpolation
+  - Added support for U8/I8 and U16/I16 in `gen_interp_string()`
+  - Uses zext for unsigned types, sext for signed types before formatting
+  - Files modified:
+    - `compiler/src/codegen/expr/core.cpp` - Added i8/i16 extension to i64 for printf
+
+- **Function Return Type Registration Order** (2026-01-01) - Fixed type inference for @test functions
+  - When @test functions used helper functions defined later in the file, payload types were nullptr
+  - Added pre-pass in generate.cpp to register all function return types before codegen
+  - Files modified:
+    - `compiler/src/codegen/core/generate.cpp` - Pre-register function return types
+
+- **String Interpolation Static Buffer Bug** (2026-01-01) - Multiple values in same expression now work correctly
+  - `i64_to_str()` and `f64_to_str()` were using static buffers causing all interpolated values to show the same number
+  - Example: `"{a}, {b}, {c}"` was showing `"30, 30, 30"` instead of `"10, 20, 30"`
+  - Fix: Changed from static buffers to dynamically allocated strings
+  - Files modified:
+    - `compiler/runtime/string.c` - `i64_to_str()` and `f64_to_str()` now use malloc
+
 - **Const Variable Compile-Time Lookup** (2025-12-31) - Const variables now available during compile-time evaluation
   - Added `const_values_` map to TypeChecker for storing evaluated const values
   - `check_const_decl` now evaluates and stores const values at compile time
