@@ -56,10 +56,12 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
 
     // Then block
     emit_line(label_then + ":");
+    current_block_ = label_then;
     block_terminated_ = false;
     std::string then_val = gen_expr(*if_expr.then_branch);
     std::string then_type = last_expr_type_;
     bool then_terminated = block_terminated_;
+    std::string then_end_block = current_block_; // Track actual block that flows to end
     if (!block_terminated_) {
         emit_line("  br label %" + label_end);
     }
@@ -68,12 +70,15 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
     std::string else_val = "0";
     std::string else_type = "i32";
     bool else_terminated = false;
+    std::string else_end_block = label_else; // Track actual block that flows to end
     if (if_expr.else_branch.has_value()) {
         emit_line(label_else + ":");
+        current_block_ = label_else;
         block_terminated_ = false;
         else_val = gen_expr(*if_expr.else_branch.value());
         else_type = last_expr_type_;
         else_terminated = block_terminated_;
+        else_end_block = current_block_; // This may differ from label_else if nested if
         if (!block_terminated_) {
             emit_line("  br label %" + label_end);
         }
@@ -98,9 +103,12 @@ auto LLVMIRGen::gen_if(const parser::IfExpr& if_expr) -> std::string {
         !else_terminated) {
 
         // Ensure types match for phi node
+        // Use actual end blocks as PHI predecessors, not the original labels
+        // This is critical for nested if-else expressions where control flow
+        // may pass through multiple blocks before reaching the end
         std::string result = fresh_reg();
-        emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" + label_then +
-                  " ], [ " + else_val + ", %" + label_else + " ]");
+        emit_line("  " + result + " = phi " + then_type + " [ " + then_val + ", %" +
+                  then_end_block + " ], [ " + else_val + ", %" + else_end_block + " ]");
         last_expr_type_ = then_type;
         return result;
     }
