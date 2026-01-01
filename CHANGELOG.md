@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Method Codegen Modularization** (2026-01-01) - Split monolithic method.cpp into focused modules
+  - Refactored 1750-line `method.cpp` into 5 modular files in `src/codegen/expr/`:
+    - `method.cpp` (~590 lines) - Main dispatcher and core method handling
+    - `method_static.cpp` (~300 lines) - Static method calls (Type::method())
+    - `method_primitive.cpp` (~320 lines) - Primitive type methods (add, sub, mul, div, hash, cmp)
+    - `method_collection.cpp` (~265 lines) - List, HashMap, Buffer methods (push, pop, get, set, len)
+    - `method_slice.cpp` (~70 lines) - Slice/MutSlice inline methods (len, is_empty)
+  - New function declarations in `llvm_ir_gen.hpp`:
+    - `gen_static_method_call()` - Handles Type::new(), Type::default(), Type::from()
+    - `gen_primitive_method()` - Handles integer/float/bool methods
+    - `gen_collection_method()` - Handles collection instance methods
+    - `gen_slice_method()` - Handles slice inline codegen
+  - CMakeLists.txt updated with new source files
+  - All 728 tests passing after refactoring
+
+### Fixed
+- **Struct Literal Integer Type Casting** (2026-01-01) - Fixed i32 vs i64 mismatch in struct initialization
+  - When initializing struct fields of type i64 with i32 values, codegen now properly sign-extends
+  - Fixes Slice/MutSlice initialization where `len: I64` field received i32 values
+  - Added type checking in `gen_struct_expr()` to sext i32 to i64 when target field type differs
+  - Files modified: `compiler/src/codegen/expr/struct.cpp`
+
+- **Slice/MutSlice Inline Method Codegen** (2026-01-01) - Fixed len() and is_empty() for slices
+  - `len()` now uses inline GEP instruction to load i64 field from slice struct
+  - `is_empty()` compares len against 0 directly
+  - Eliminates need for runtime function calls
+  - Works with generic instantiations like `Slice__I32`, `MutSlice__Str`
+  - Files added: `compiler/src/codegen/expr/method_slice.cpp`
+
 ### Added
 - **ASCII Character Module** (2026-01-01) - Complete `core::ascii::AsciiChar` type
   - Safe ASCII character type with validation (0-127 range)
