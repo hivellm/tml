@@ -516,14 +516,24 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string vtable_ptr = fresh_reg();
                     emit_line("  " + vtable_ptr + " = load ptr, ptr " + vtable_field);
 
+                    // Build vtable struct type based on number of methods
+                    std::string vtable_type = "{ ";
+                    for (size_t i = 0; i < methods.size(); ++i) {
+                        if (i > 0)
+                            vtable_type += ", ";
+                        vtable_type += "ptr";
+                    }
+                    vtable_type += " }";
+
                     std::string fn_ptr_loc = fresh_reg();
-                    emit_line("  " + fn_ptr_loc + " = getelementptr { ptr }, ptr " + vtable_ptr +
-                              ", i32 0, i32 " + std::to_string(method_idx));
+                    emit_line("  " + fn_ptr_loc + " = getelementptr " + vtable_type + ", ptr " +
+                              vtable_ptr + ", i32 0, i32 " + std::to_string(method_idx));
                     std::string fn_ptr = fresh_reg();
                     emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
 
                     std::string result = fresh_reg();
                     emit_line("  " + result + " = call i32 " + fn_ptr + "(ptr " + data_ptr + ")");
+                    last_expr_type_ = "i32";
                     return result;
                 }
             }

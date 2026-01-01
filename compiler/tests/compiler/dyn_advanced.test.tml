@@ -1,0 +1,118 @@
+// Advanced dyn Behavior tests
+use test
+
+// ============ Behavior with Multiple Methods ============
+
+behavior Shape {
+    func area(this) -> I32
+    func perimeter(this) -> I32
+    func name(this) -> Str
+}
+
+type Rectangle {
+    width: I32,
+    height: I32,
+}
+
+impl Shape for Rectangle {
+    func area(this) -> I32 {
+        return this.width * this.height
+    }
+
+    func perimeter(this) -> I32 {
+        return 2 * (this.width + this.height)
+    }
+
+    func name(this) -> Str {
+        return "Rectangle"
+    }
+}
+
+type Square {
+    side: I32,
+}
+
+impl Shape for Square {
+    func area(this) -> I32 {
+        return this.side * this.side
+    }
+
+    func perimeter(this) -> I32 {
+        return 4 * this.side
+    }
+
+    func name(this) -> Str {
+        return "Square"
+    }
+}
+
+@test
+func test_dyn_multiple_methods() -> I32 {
+    let r: Rectangle = Rectangle { width: 10, height: 5 }
+    let d: dyn Shape = r
+
+    let a: I32 = d.area()
+    let p: I32 = d.perimeter()
+
+    assert_eq(a, 50, "Rectangle area should be 50")
+    assert_eq(p, 30, "Rectangle perimeter should be 30")
+    return 0
+}
+
+@test
+func test_dyn_different_impls() -> I32 {
+    let r: Rectangle = Rectangle { width: 6, height: 4 }
+    let s: Square = Square { side: 5 }
+
+    let dr: dyn Shape = r
+    let ds: dyn Shape = s
+
+    assert_eq(dr.area(), 24, "Rectangle area")
+    assert_eq(ds.area(), 25, "Square area")
+
+    assert_eq(dr.perimeter(), 20, "Rectangle perimeter")
+    assert_eq(ds.perimeter(), 20, "Square perimeter")
+
+    return 0
+}
+
+// ============ Dyn as Function Parameter ============
+
+func compute_total_area(s1: dyn Shape, s2: dyn Shape) -> I32 {
+    return s1.area() + s2.area()
+}
+
+@test
+func test_dyn_function_multiple_params() -> I32 {
+    let r: Rectangle = Rectangle { width: 3, height: 4 }
+    let s: Square = Square { side: 3 }
+
+    let dr: dyn Shape = r
+    let ds: dyn Shape = s
+
+    let total: I32 = compute_total_area(dr, ds)
+    assert_eq(total, 21, "Total area should be 12 + 9 = 21")
+    return 0
+}
+
+// ============ Dyn Return from Function ============
+
+// Note: Returning dyn from function requires boxing (Heap[dyn T])
+// For now, we test passing dyn and returning concrete values
+
+func get_shape_area(s: dyn Shape) -> I32 {
+    return s.area()
+}
+
+@test
+func test_dyn_return_value() -> I32 {
+    let sq: Square = Square { side: 7 }
+    let d: dyn Shape = sq
+    let area: I32 = get_shape_area(d)
+    assert_eq(area, 49, "Square area via dyn should be 49")
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

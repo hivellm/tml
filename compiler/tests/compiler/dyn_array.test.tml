@@ -1,0 +1,69 @@
+// Test dyn Behavior in arrays/collections
+use test
+
+behavior Printable {
+    func value(this) -> I32
+}
+
+type IntBox {
+    n: I32,
+}
+
+impl Printable for IntBox {
+    func value(this) -> I32 {
+        return this.n
+    }
+}
+
+type DoubleBox {
+    n: I32,
+}
+
+impl Printable for DoubleBox {
+    func value(this) -> I32 {
+        return this.n * 2
+    }
+}
+
+// Test passing dyn through function and returning sum
+func sum_values(a: dyn Printable, b: dyn Printable, c: dyn Printable) -> I32 {
+    return a.value() + b.value() + c.value()
+}
+
+@test
+func test_dyn_multiple_args() -> I32 {
+    let i1: IntBox = IntBox { n: 10 }
+    let i2: IntBox = IntBox { n: 20 }
+    let d1: DoubleBox = DoubleBox { n: 15 }
+
+    let di1: dyn Printable = i1
+    let di2: dyn Printable = i2
+    let dd1: dyn Printable = d1
+
+    // 10 + 20 + 30 = 60
+    let sum: I32 = sum_values(di1, di2, dd1)
+    assert_eq(sum, 60, "Sum should be 60")
+    return 0
+}
+
+// Test heterogeneous dyn dispatch
+@test
+func test_dyn_heterogeneous() -> I32 {
+    let a: IntBox = IntBox { n: 5 }
+    let b: DoubleBox = DoubleBox { n: 5 }
+
+    let da: dyn Printable = a
+    let db: dyn Printable = b
+
+    let va: I32 = da.value()  // 5
+    let vb: I32 = db.value()  // 10
+
+    assert_eq(va, 5, "IntBox value")
+    assert_eq(vb, 10, "DoubleBox value")
+    assert_eq(va + vb, 15, "Sum of values")
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}
