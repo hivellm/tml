@@ -1,16 +1,64 @@
-// TML Core Network Types
-// Platform-independent network primitives (no I/O, no-std compatible)
-//
-// This module provides data types for network addresses without any
-// system calls or I/O operations. All types work in no-std environments.
-//
-// Types:
-// - Ipv4Addr: IPv4 address (4 bytes)
-// - Ipv6Addr: IPv6 address (16 bytes)
-// - IpAddr: Either IPv4 or IPv6
-// - SocketAddrV4: IPv4 address + port
-// - SocketAddrV6: IPv6 address + port + flow info + scope id
-// - SocketAddr: Either SocketAddrV4 or SocketAddrV6
+//! Networking primitives for IP communication.
+//!
+//! This module provides platform-independent network types for working with
+//! IP addresses and socket addresses. These are pure data types with no I/O
+//! operations, making them suitable for `no_std` environments.
+//!
+//! # IP Addresses
+//!
+//! - [`Ipv4Addr`] - A 32-bit IPv4 address (e.g., `192.168.1.1`)
+//! - [`Ipv6Addr`] - A 128-bit IPv6 address (e.g., `::1`)
+//! - [`IpAddr`] - An enum that can hold either IPv4 or IPv6
+//!
+//! # Socket Addresses
+//!
+//! Socket addresses combine an IP address with a port number:
+//!
+//! - [`SocketAddrV4`] - IPv4 address + port
+//! - [`SocketAddrV6`] - IPv6 address + port + flow info + scope ID
+//! - [`SocketAddr`] - An enum that can hold either V4 or V6
+//!
+//! # Examples
+//!
+//! ## Working with IP Addresses
+//!
+//! ```tml
+//! use core::net::{Ipv4Addr, Ipv6Addr, IpAddr}
+//!
+//! // Create IPv4 addresses
+//! let localhost = Ipv4Addr::new(127, 0, 0, 1)
+//! let private = Ipv4Addr::new(192, 168, 1, 1)
+//!
+//! // Use predefined constants
+//! let loopback = Ipv4Addr::LOCALHOST
+//! let any = Ipv4Addr::UNSPECIFIED
+//!
+//! // Check address properties
+//! assert(localhost.is_loopback())
+//! assert(private.is_private())
+//! ```
+//!
+//! ## Working with Socket Addresses
+//!
+//! ```tml
+//! use core::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+//!
+//! // Create a socket address
+//! let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8080)
+//!
+//! // Access components
+//! let ip = addr.ip()
+//! let port = addr.port()
+//!
+//! // Or use the unified SocketAddr type
+//! let socket: SocketAddr = SocketAddr::V4(addr)
+//! ```
+//!
+//! # Module Structure
+//!
+//! - [`ip`] - IP address types (`Ipv4Addr`, `Ipv6Addr`, `IpAddr`)
+//! - [`socket`] - Socket address types (`SocketAddrV4`, `SocketAddrV6`, `SocketAddr`)
+//! - [`parser`] - Parsing utilities for addresses
 
 pub mod ip
 pub mod socket

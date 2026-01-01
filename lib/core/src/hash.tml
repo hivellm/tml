@@ -1,15 +1,98 @@
-// TML Core Library - Hash Module
-// Provides: Hash behavior for hashable types
+//! Hashing support for types.
+//!
+//! This module provides the [`Hash`] behavior for computing hash values,
+//! which is essential for using types as keys in hash-based collections
+//! like `HashMap` and `HashSet`.
+//!
+//! # The Hash Contract
+//!
+//! Types that implement both `Hash` and [`Eq`] must satisfy:
+//!
+//! ```text
+//! k1 == k2 implies hash(k1) == hash(k2)
+//! ```
+//!
+//! In other words, if two values are equal, they must have the same hash.
+//! The converse is not required: different values may have the same hash
+//! (this is called a "collision").
+//!
+//! # Implementing Hash
+//!
+//! For most types, you should hash all fields that participate in equality:
+//!
+//! ```tml
+//! use core::hash::{Hash, combine_hashes}
+//!
+//! pub type Point {
+//!     x: I64,
+//!     y: I64
+//! }
+//!
+//! impl Hash for Point {
+//!     pub func hash(this) -> I64 {
+//!         return combine_hashes(this.x.hash(), this.y.hash())
+//!     }
+//! }
+//! ```
+//!
+//! # Using Hash
+//!
+//! The primary use of `Hash` is with hash-based collections:
+//!
+//! ```tml
+//! use std::collections::HashMap
+//!
+//! let mut map: HashMap[Str, I64] = HashMap::new()
+//! map.insert("one", 1)
+//! map.insert("two", 2)
+//!
+//! // Str implements Hash, so it can be used as a key
+//! let value = map.get("one")  // Just(1)
+//! ```
+//!
+//! # Hash Quality
+//!
+//! A good hash function distributes values uniformly across the output space.
+//! For most uses, the provided [`combine_hashes`] function is sufficient.
 
 // ============================================================================
 // Hash Behavior
 // ============================================================================
 
-/// Behavior for types that can be hashed.
-/// Types implementing Hash can be used as keys in HashMap.
+/// A behavior for computing hash values.
+///
+/// Types implementing `Hash` can be used as keys in hash-based collections
+/// like `HashMap` and `HashSet`.
+///
+/// # Contract
+///
+/// If your type implements both `Hash` and [`Eq`], you must ensure:
+///
+/// - `k1 == k2` implies `k1.hash() == k2.hash()`
+///
+/// Violating this contract will cause hash-based collections to malfunction.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::hash::Hash
+///
+/// let x: I64 = 42
+/// let h: I64 = x.hash()
+/// ```
 pub behavior Hash {
     /// Computes a hash value for this value.
-    /// The hash should be consistent: equal values must produce equal hashes.
+    ///
+    /// The returned value should be deterministic: calling `hash()` multiple
+    /// times on the same value must return the same result.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = "hello"
+    /// let b = "hello"
+    /// assert(a.hash() == b.hash())  // Equal values, equal hashes
+    /// ```
     func hash(this) -> I64
 }
 
@@ -17,54 +100,63 @@ pub behavior Hash {
 // Hash implementations for primitives
 // ============================================================================
 
+/// `Hash` for `I8` - extends to `I64` for the hash value.
 impl Hash for I8 {
     pub func hash(this) -> I64 {
         return lowlevel { i8_to_i64(this) }
     }
 }
 
+/// `Hash` for `I16` - extends to `I64` for the hash value.
 impl Hash for I16 {
     pub func hash(this) -> I64 {
         return lowlevel { i16_to_i64(this) }
     }
 }
 
+/// `Hash` for `I32` - extends to `I64` for the hash value.
 impl Hash for I32 {
     pub func hash(this) -> I64 {
         return lowlevel { i32_to_i64(this) }
     }
 }
 
+/// `Hash` for `I64` - the value is its own hash.
 impl Hash for I64 {
     pub func hash(this) -> I64 {
         return this
     }
 }
 
+/// `Hash` for `U8` - extends to `I64` for the hash value.
 impl Hash for U8 {
     pub func hash(this) -> I64 {
         return lowlevel { u8_to_i64(this) }
     }
 }
 
+/// `Hash` for `U16` - extends to `I64` for the hash value.
 impl Hash for U16 {
     pub func hash(this) -> I64 {
         return lowlevel { u16_to_i64(this) }
     }
 }
 
+/// `Hash` for `U32` - extends to `I64` for the hash value.
 impl Hash for U32 {
     pub func hash(this) -> I64 {
         return lowlevel { u32_to_i64(this) }
     }
 }
 
+/// `Hash` for `U64` - converts to `I64` for the hash value.
 impl Hash for U64 {
     pub func hash(this) -> I64 {
         return lowlevel { u64_to_i64(this) }
     }
 }
 
+/// `Hash` for `Bool` - `true` hashes to `1`, `false` to `0`.
 impl Hash for Bool {
     pub func hash(this) -> I64 {
         if this {
@@ -74,6 +166,9 @@ impl Hash for Bool {
     }
 }
 
+/// `Hash` for `Str` - computes a hash of the string contents.
+///
+/// Equal strings always produce equal hashes.
 impl Hash for Str {
     pub func hash(this) -> I64 {
         return lowlevel { str_hash(this) }
@@ -84,6 +179,10 @@ impl Hash for Str {
 // Hash for Maybe[T]
 // ============================================================================
 
+/// `Hash` for `Maybe[T]` where `T: Hash`.
+///
+/// - `Nothing` hashes to `0`
+/// - `Just(v)` combines `v.hash()` with a discriminant to avoid collisions
 impl[T: Hash] Hash for Maybe[T] {
     pub func hash(this) -> I64 {
         when this {
@@ -104,6 +203,10 @@ impl[T: Hash] Hash for Maybe[T] {
 // Hash for Outcome[T, E]
 // ============================================================================
 
+/// `Hash` for `Outcome[T, E]` where both `T` and `E` implement `Hash`.
+///
+/// - `Ok(v)` combines `v.hash()` with discriminant 1
+/// - `Err(e)` combines `e.hash()` with discriminant 2
 impl[T: Hash, E: Hash] Hash for Outcome[T, E] {
     pub func hash(this) -> I64 {
         when this {
@@ -125,22 +228,42 @@ impl[T: Hash, E: Hash] Hash for Outcome[T, E] {
 // Hasher Interface (for advanced hashing)
 // ============================================================================
 
-/// A hasher that can be fed data incrementally.
-/// This is useful for hashing composite types.
+/// A stateful hasher that can be fed data incrementally.
+///
+/// This behavior is useful for hashing composite types or when you need
+/// more control over the hashing process. Unlike [`Hash::hash`] which
+/// returns a final hash value directly, `Hasher` allows you to feed
+/// data piece by piece.
+///
+/// # Examples
+///
+/// ```tml
+/// impl Hash for MyStruct {
+///     pub func hash(this) -> I64 {
+///         let mut hasher = DefaultHasher::new()
+///         hasher.write_i64(this.field1)
+///         hasher.write_i64(this.field2)
+///         return hasher.finish()
+///     }
+/// }
+/// ```
 pub behavior Hasher {
-    /// Writes bytes into this hasher.
+    /// Writes a slice of bytes into this hasher.
     func write(mut this, bytes: ref [U8])
 
     /// Writes a single byte into this hasher.
     func write_u8(mut this, value: U8)
 
-    /// Writes an I32 into this hasher.
+    /// Writes an `I32` into this hasher.
     func write_i32(mut this, value: I32)
 
-    /// Writes an I64 into this hasher.
+    /// Writes an `I64` into this hasher.
     func write_i64(mut this, value: I64)
 
-    /// Returns the hash value computed so far.
+    /// Returns the hash value computed from all data written so far.
+    ///
+    /// This method does not reset the hasher's state. Calling `finish`
+    /// multiple times without writing more data will return the same value.
     func finish(this) -> I64
 }
 
@@ -148,8 +271,27 @@ pub behavior Hasher {
 // Helper functions
 // ============================================================================
 
-/// Combines two hash values into one.
-/// Useful for hashing composite types.
+/// Combines two hash values into a single hash.
+///
+/// This is useful when implementing `Hash` for composite types. It ensures
+/// that the order of fields matters: `combine_hashes(a, b) != combine_hashes(b, a)`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::hash::{Hash, combine_hashes}
+///
+/// impl Hash for Point {
+///     pub func hash(this) -> I64 {
+///         return combine_hashes(this.x.hash(), this.y.hash())
+///     }
+/// }
+/// ```
+///
+/// # Algorithm
+///
+/// Uses the formula `h1 * 31 + h2`, similar to Java's hash combination
+/// and boost::hash_combine.
 pub func combine_hashes(h1: I64, h2: I64) -> I64 {
     // Use a simple combination formula similar to boost::hash_combine
     return h1 * 31 + h2

@@ -830,3 +830,93 @@ impl Not for Bool {
 //         return ref lowlevel { str_char_at(this, idx) }
 //     }
 // }
+
+// ============================================================================
+// Drop Behavior (RAII)
+// ============================================================================
+
+/// The `Drop` behavior enables automatic resource cleanup.
+///
+/// When a value goes out of scope, its `drop` method is called automatically
+/// if the type implements `Drop`. This enables RAII (Resource Acquisition Is
+/// Initialization) patterns for managing resources like file handles, network
+/// connections, memory allocations, etc.
+///
+/// # Drop Order
+///
+/// Values are dropped in **reverse declaration order** (LIFO - Last In, First Out).
+/// For structs, fields are dropped in reverse declaration order after the
+/// struct's own drop method is called.
+///
+/// # Examples
+///
+/// ## Basic Resource Cleanup
+///
+/// ```tml
+/// use core::ops::Drop
+///
+/// pub type FileHandle {
+///     fd: I32,
+///     path: Str
+/// }
+///
+/// impl Drop for FileHandle {
+///     pub func drop(mut this) {
+///         // Close the file descriptor
+///         lowlevel { close_fd(this.fd) }
+///         println("Closed file: " + this.path)
+///     }
+/// }
+///
+/// func process_file() {
+///     let file = FileHandle { fd: open("data.txt"), path: "data.txt" }
+///     // ... use file ...
+///     // file.drop() is called automatically when scope ends
+/// }
+/// ```
+///
+/// ## Nested Drops
+///
+/// ```tml
+/// pub type Connection {
+///     socket: Socket,
+///     buffer: Buffer
+/// }
+///
+/// impl Drop for Connection {
+///     pub func drop(mut this) {
+///         // Send disconnect message
+///         this.socket.send("DISCONNECT")
+///         // Socket and Buffer are dropped after this method returns
+///     }
+/// }
+/// ```
+///
+/// # Important Notes
+///
+/// - Drop methods should not panic. Panicking in a drop method may lead to
+///   undefined behavior.
+/// - Drop is not called for values that have been moved.
+/// - Partial moves prevent automatic drop - ensure all fields are moved together
+///   or implement Drop to handle partial state.
+/// - The compiler automatically calls drop; you should rarely need to call
+///   it explicitly.
+///
+/// # See Also
+///
+/// - [`Heap[T]`](core::mem::Heap): Heap-allocated values with automatic cleanup
+/// - [`Shared[T]`](core::sync::Shared): Reference-counted values with drop
+pub behavior Drop {
+    /// Called when the value goes out of scope.
+    ///
+    /// This method is called automatically by the compiler when:
+    /// - A variable goes out of scope
+    /// - A temporary value is no longer needed
+    /// - A struct/enum value is being destroyed
+    ///
+    /// # Contract
+    ///
+    /// After `drop` returns, the value is considered destroyed and must not
+    /// be used again.
+    func drop(mut this)
+}

@@ -1,16 +1,86 @@
-// TML Core Library - Marker Behaviors Module
-// Provides: Send, Sync, Sized, Unpin marker behaviors
+//! Marker behaviors for compile-time type properties.
+//!
+//! This module provides "marker" behaviors - behaviors that have no methods
+//! but convey information about type properties to the compiler. These are
+//! used to enforce safety invariants at compile time.
+//!
+//! # Available Markers
+//!
+//! | Marker | Description |
+//! |--------|-------------|
+//! | [`Send`] | Types that can be transferred across thread boundaries |
+//! | [`Sync`] | Types that can be shared between threads via references |
+//! | [`Sized`] | Types with a known size at compile time |
+//! | [`Unpin`] | Types that can be safely moved after being pinned |
+//!
+//! # Thread Safety: Send and Sync
+//!
+//! [`Send`] and [`Sync`] are the foundation of TML's thread safety guarantees:
+//!
+//! - **`Send`**: A type is `Send` if it can be safely moved to another thread.
+//!   Most types are `Send`. Notable exceptions include `Rc[T]` (use `Arc[T]`
+//!   for thread-safe reference counting).
+//!
+//! - **`Sync`**: A type is `Sync` if `ref T` is `Send` - that is, if shared
+//!   references can be safely used from multiple threads. Types with interior
+//!   mutability like `Cell[T]` and `RefCell[T]` are not `Sync` because their
+//!   mutation isn't synchronized.
+//!
+//! ```tml
+//! // Most primitives are both Send and Sync
+//! let x: I64 = 42  // Send + Sync
+//!
+//! // Cell provides interior mutability but is NOT Sync
+//! let cell = Cell::new(42)  // Send, but NOT Sync
+//! ```
+//!
+//! # Sized Types
+//!
+//! [`Sized`] marks types whose size is known at compile time. Almost all types
+//! are `Sized`. The main exceptions are:
+//!
+//! - Trait objects (`dyn Trait`)
+//! - Slices (`[T]` without a length)
+//!
+//! Most generic bounds implicitly require `Sized` unless you write `T: ?Sized`.
+//!
+//! # Unpin
+//!
+//! [`Unpin`] indicates that a type can be safely moved even after being pinned.
+//! Most types are `Unpin`. The main exception is self-referential types used
+//! in async code.
 
 // ============================================================================
 // Send Behavior (Marker)
 // ============================================================================
 
 /// Marker behavior for types that can be safely sent between threads.
-/// Types implementing Send can have their ownership transferred to another thread.
 ///
-/// Most types are Send. Types that are NOT Send include:
-/// - Types containing raw pointers that are not thread-safe
+/// Types implementing `Send` can have their ownership transferred to another
+/// thread. This is fundamental for message passing and thread spawning.
+///
+/// # Automatic Implementation
+///
+/// Most types are automatically `Send`. A type is `Send` if all of its
+/// components are `Send`.
+///
+/// # Types That Are NOT Send
+///
+/// - `Rc[T]` - Use `Arc[T]` for thread-safe reference counting
+/// - Types containing raw pointers (unless explicitly marked)
 /// - Types with thread-local state
+///
+/// # Examples
+///
+/// ```tml
+/// // Primitives are Send
+/// let x: I64 = 42
+/// spawn(do() { use_value(x) })  // OK: I64 is Send
+///
+/// // Rc is NOT Send
+/// let rc = Rc::new(42)
+/// spawn(do() { use_rc(rc) })  // ERROR: Rc is not Send
+/// ```
 pub behavior Send {
     // No methods - this is a marker behavior
 }
@@ -20,13 +90,43 @@ pub behavior Send {
 // ============================================================================
 
 /// Marker behavior for types that can be safely shared between threads.
-/// Types implementing Sync can have shared references (&T) used by multiple threads.
 ///
-/// If T: Sync, then &T: Send
+/// Types implementing `Sync` can have shared references (`ref T`) used by
+/// multiple threads concurrently. This is the foundation for safe concurrent
+/// read access.
 ///
-/// Most types are Sync. Types that are NOT Sync include:
-/// - Cell[T] and RefCell[T] (interior mutability without synchronization)
-/// - Raw pointers
+/// # Key Property
+///
+/// If `T: Sync`, then `ref T: Send` - a reference to `T` can be sent to
+/// another thread.
+///
+/// # Automatic Implementation
+///
+/// Most types are automatically `Sync`. A type is `Sync` if all of its
+/// components are `Sync`.
+///
+/// # Types That Are NOT Sync
+///
+/// - `Cell[T]` - Interior mutability without synchronization
+/// - `RefCell[T]` - Runtime borrow checking, not thread-safe
+/// - `Rc[T]` - Non-atomic reference counting
+///
+/// For thread-safe alternatives, use:
+/// - `Mutex[T]` or `RwLock[T]` for synchronized access
+/// - `Arc[T]` for thread-safe reference counting
+///
+/// # Examples
+///
+/// ```tml
+/// // Primitives are Sync - can be shared via references
+/// let x: I64 = 42
+/// let r: ref I64 = ref x
+/// // r can be used from multiple threads
+///
+/// // Cell is NOT Sync
+/// let cell = Cell::new(42)
+/// // Cannot share &cell between threads
+/// ```
 pub behavior Sync {
     // No methods - this is a marker behavior
 }
@@ -36,7 +136,33 @@ pub behavior Sync {
 // ============================================================================
 
 /// Marker behavior for types with a known size at compile time.
-/// Almost all types are Sized. Only trait objects and slices are !Sized.
+///
+/// Types implementing `Sized` have a size that can be determined at compile
+/// time. This is required for stack allocation, struct fields, and most
+/// generic type parameters.
+///
+/// # Automatic Implementation
+///
+/// Almost all types are `Sized`. The exceptions are:
+///
+/// - **Slices** (`[T]`) - Size depends on runtime length
+/// - **Trait objects** (`dyn Trait`) - Size depends on concrete type
+/// - **Str** (as a slice type) - Size depends on string length
+///
+/// # Implicit Bound
+///
+/// All generic type parameters have an implicit `Sized` bound. To accept
+/// unsized types, use `?Sized`:
+///
+/// ```tml
+/// // This function only accepts Sized types
+/// func foo[T](x: T) { ... }
+///
+/// // This function accepts both Sized and unsized types
+/// func bar[T: ?Sized](x: ref T) { ... }
+/// ```
+///
+/// Note that unsized types can only be used behind a pointer or reference.
 pub behavior Sized {
     // No methods - this is a marker behavior
 }
@@ -46,8 +172,32 @@ pub behavior Sized {
 // ============================================================================
 
 /// Marker behavior for types that can be safely moved after being pinned.
-/// Most types implement Unpin. Types that do NOT implement Unpin are
-/// types containing self-referential structures.
+///
+/// Pinning (`Pin[T]`) is a mechanism to prevent a value from being moved
+/// in memory. This is important for self-referential types where internal
+/// pointers would become invalid if the value moved.
+///
+/// # Automatic Implementation
+///
+/// Most types implement `Unpin`, meaning they can be freely moved even after
+/// being pinned. Only self-referential types need to opt out.
+///
+/// # Types That Are NOT Unpin
+///
+/// - Self-referential structs (contain pointers to themselves)
+/// - Async futures that hold references across await points
+///
+/// # Examples
+///
+/// ```tml
+/// // Most types are Unpin - can be moved freely
+/// let x: I64 = 42
+/// let pinned = Pin::new(x)
+/// let unpinned = pinned.into_inner()  // OK: I64 is Unpin
+///
+/// // Self-referential types are NOT Unpin
+/// // Moving them would invalidate internal pointers
+/// ```
 pub behavior Unpin {
     // No methods - this is a marker behavior
 }

@@ -1,6 +1,69 @@
-//! Core iterator traits.
+//! Core iterator behaviors.
 //!
-//! This module defines the fundamental `Iterator` behavior that all iterators implement.
+//! This module defines the fundamental behaviors that form the foundation of
+//! TML's iterator system:
+//!
+//! - [`Iterator`] - The core behavior all iterators implement
+//! - [`IntoIterator`] - Conversion into an iterator
+//! - [`FromIterator`] - Building collections from iterators
+//! - [`DoubleEndedIterator`] - Iterators that can iterate from both ends
+//! - [`ExactSizeIterator`] - Iterators that know their exact length
+//!
+//! # The Iterator Behavior
+//!
+//! The [`Iterator`] behavior is the heart of TML's iteration system. Any type
+//! that implements `Iterator` can be used in `for` loops and with iterator
+//! adapters.
+//!
+//! ```tml
+//! use core::iter::Iterator
+//!
+//! // Custom counter iterator
+//! pub type Counter {
+//!     current: I64,
+//!     max: I64
+//! }
+//!
+//! impl Iterator for Counter {
+//!     type Item = I64
+//!
+//!     pub func next(mut this) -> Maybe[I64] {
+//!         if this.current >= this.max {
+//!             return Nothing
+//!         }
+//!         let val = this.current
+//!         this.current = this.current + 1
+//!         return Just(val)
+//!     }
+//! }
+//!
+//! // Use in a for loop
+//! let counter = Counter { current: 0, max: 5 }
+//! for n in counter {
+//!     println(n.to_string())  // 0, 1, 2, 3, 4
+//! }
+//! ```
+//!
+//! # IntoIterator
+//!
+//! The [`IntoIterator`] behavior enables a type to be used in `for` loops.
+//! Collections like `Vec` and `Array` implement this.
+//!
+//! ```tml
+//! // Arrays implement IntoIterator
+//! for x in [1, 2, 3] {
+//!     println(x.to_string())
+//! }
+//! ```
+//!
+//! # FromIterator
+//!
+//! The [`FromIterator`] behavior enables building collections from iterators:
+//!
+//! ```tml
+//! // Collect iterator results into a Vec
+//! let doubled: Vec[I64] = (1 to 5).map(do(x) x * 2).collect()
+//! ```
 
 use core::cmp::Ordering
 
@@ -8,9 +71,56 @@ use core::cmp::Ordering
 // Core Iterator Behavior
 // ============================================================================
 
-/// The core iterator behavior.
+/// The core iterator behavior that all iterators implement.
 ///
-/// All iterators must implement this behavior, providing at minimum the `next` method.
+/// `Iterator` provides a way to iterate over a sequence of elements. The
+/// [`next`] method is the only required method - all other iterator methods
+/// have default implementations based on `next`.
+///
+/// # Implementing Iterator
+///
+/// To implement `Iterator`, you need:
+/// 1. An associated `Item` type for what the iterator yields
+/// 2. A `next` method that returns `Just(item)` or `Nothing`
+///
+/// ```tml
+/// pub type Range {
+///     start: I64,
+///     end: I64
+/// }
+///
+/// impl Iterator for Range {
+///     type Item = I64
+///
+///     pub func next(mut this) -> Maybe[I64] {
+///         if this.start >= this.end {
+///             return Nothing
+///         }
+///         let val = this.start
+///         this.start = this.start + 1
+///         return Just(val)
+///     }
+/// }
+/// ```
+///
+/// # Laziness
+///
+/// Iterators are lazy - they do nothing until consumed. Calling methods like
+/// `map` or `filter` just creates a new iterator; no work happens until you
+/// call `next`, `collect`, `for_each`, etc.
+///
+/// ```tml
+/// let iter = (1 to 1000000)
+///     .map(do(x) expensive_computation(x))
+///     .filter(do(x) x > 100)
+///     .take(5)
+///
+/// // No computation has happened yet!
+/// // Only when we consume the iterator:
+/// for x in iter {
+///     println(x.to_string())  // Now computation happens
+/// }
+/// ```
 pub behavior Iterator {
     /// The type of elements being iterated over.
     type Item

@@ -1,5 +1,74 @@
-// IP Address Parsing
-// Parse IP addresses from strings
+//! Parsing utilities for network addresses.
+//!
+//! This module provides functions for parsing IP addresses and socket addresses
+//! from strings. All parsing functions return `Outcome` to handle invalid input.
+//!
+//! # Parsing IP Addresses
+//!
+//! ## IPv4
+//!
+//! IPv4 addresses use dotted-decimal notation:
+//!
+//! ```tml
+//! use core::net::parser::parse_ipv4
+//!
+//! let addr = parse_ipv4("192.168.1.1").unwrap()
+//! let localhost = parse_ipv4("127.0.0.1").unwrap()
+//!
+//! // Invalid addresses return Err
+//! assert(parse_ipv4("256.0.0.1").is_err())  // Octet out of range
+//! assert(parse_ipv4("1.2.3").is_err())      // Too few octets
+//! ```
+//!
+//! ## IPv6
+//!
+//! IPv6 addresses use colon-separated hex notation with optional `::` compression:
+//!
+//! ```tml
+//! use core::net::parser::parse_ipv6
+//!
+//! let full = parse_ipv6("2001:0db8:85a3:0000:0000:8a2e:0370:7334").unwrap()
+//! let compressed = parse_ipv6("2001:db8::1").unwrap()
+//! let localhost = parse_ipv6("::1").unwrap()
+//! ```
+//!
+//! ## Either Format
+//!
+//! Use `parse_ip` when you accept either format:
+//!
+//! ```tml
+//! use core::net::parser::parse_ip
+//!
+//! let v4 = parse_ip("192.168.1.1").unwrap()  // IpAddr::V4
+//! let v6 = parse_ip("::1").unwrap()          // IpAddr::V6
+//! ```
+//!
+//! # Parsing Socket Addresses
+//!
+//! Socket addresses combine an IP with a port:
+//!
+//! ```tml
+//! use core::net::parser::parse_socket_addr
+//!
+//! // IPv4: ip:port
+//! let v4 = parse_socket_addr("127.0.0.1:8080").unwrap()
+//! assert(v4.port() == 8080)
+//!
+//! // IPv6: [ip]:port
+//! let v6 = parse_socket_addr("[::1]:8080").unwrap()
+//! assert(v6.port() == 8080)
+//! ```
+//!
+//! # Error Handling
+//!
+//! All parse functions return [`Outcome`] with [`AddrParseError`]:
+//!
+//! ```tml
+//! when parse_ipv4(user_input) {
+//!     Ok(addr) => use_address(addr),
+//!     Err(err) => println("Invalid address: " + err.to_string())
+//! }
+//! ```
 
 use core::result::Outcome::{Ok, Err}
 use core::option::Maybe::{Just, Nothing}

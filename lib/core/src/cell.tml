@@ -1,46 +1,186 @@
-// TML Core Library - Cell Module
-// Provides: Cell[T] and RefCell[T] for interior mutability
+//! Shareable mutable containers.
+//!
+//! This module provides types that allow mutation through shared references,
+//! enabling "interior mutability" - the ability to mutate data even when there
+//! are immutable references to it.
+//!
+//! # When to Use Interior Mutability
+//!
+//! TML's borrowing rules normally prevent mutation through shared references.
+//! Interior mutability is useful when:
+//!
+//! - You need to mutate data inside an otherwise immutable structure
+//! - You're implementing data structures with internal caching
+//! - You need reference-counted data that can be mutated
+//!
+//! # Cell vs RefCell
+//!
+//! | Type | Use Case | Thread Safe | Panics |
+//! |------|----------|-------------|--------|
+//! | [`Cell[T]`] | Copy types, simple get/set | No | Never |
+//! | [`RefCell[T]`] | Any type, borrow checking | No | On borrow violation |
+//!
+//! # Cell[T]
+//!
+//! [`Cell`] provides interior mutability for [`Copy`] types. It works by
+//! moving values in and out rather than borrowing:
+//!
+//! ```tml
+//! use core::cell::Cell
+//!
+//! let cell = Cell::new(5)
+//!
+//! // Get a copy of the value
+//! let value = cell.get()  // 5
+//!
+//! // Set a new value
+//! cell.set(10)
+//! assert(cell.get() == 10)
+//!
+//! // Replace and get old value
+//! let old = cell.replace(20)  // old = 10
+//! ```
+//!
+//! # RefCell[T]
+//!
+//! [`RefCell`] provides interior mutability for any type, with runtime borrow
+//! checking. It enforces borrowing rules at runtime instead of compile time:
+//!
+//! ```tml
+//! use core::cell::RefCell
+//!
+//! let cell = RefCell::new(vec![1, 2, 3])
+//!
+//! // Immutable borrow
+//! {
+//!     let borrowed = cell.borrow()
+//!     println(borrowed.get().len().to_string())
+//! }  // borrow ends here
+//!
+//! // Mutable borrow
+//! {
+//!     let mut borrowed = cell.borrow_mut()
+//!     borrowed.get_mut().push(4)
+//! }
+//! ```
+//!
+//! **Warning**: Violating borrow rules at runtime will panic:
+//!
+//! ```tml
+//! let cell = RefCell::new(42)
+//! let borrow1 = cell.borrow()
+//! let borrow2 = cell.borrow_mut()  // PANIC: already borrowed
+//! ```
+//!
+//! # Thread Safety
+//!
+//! Neither `Cell` nor `RefCell` is thread-safe. For thread-safe interior
+//! mutability, use atomic types or `Mutex`/`RwLock` from `std::sync`.
 
 // ============================================================================
 // Cell[T] - Simple interior mutability for Copy types
 // ============================================================================
 
-/// A mutable memory location for Copy types.
-/// Cell provides interior mutability by moving values in and out.
-/// It is not thread-safe (not Sync).
+/// A mutable memory location for [`Copy`] types.
+///
+/// `Cell` provides interior mutability by moving values in and out. Unlike
+/// [`RefCell`], it never panics because it doesn't do borrow checking - it
+/// simply copies values.
+///
+/// # Examples
+///
+/// ```tml
+/// let cell = Cell::new(42)
+///
+/// assert(cell.get() == 42)
+/// cell.set(100)
+/// assert(cell.get() == 100)
+/// ```
+///
+/// # Thread Safety
+///
+/// `Cell` is not `Sync` - it cannot be shared between threads. For thread-safe
+/// alternatives, use atomic types.
 pub type Cell[T] {
     value: T
 }
 
 impl[T: Copy] Cell[T] {
-    /// Creates a new Cell containing the given value.
+    /// Creates a new `Cell` containing the given value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(42)
+    /// ```
     pub func new(value: T) -> Cell[T] {
         return Cell[T] { value: value }
     }
 
     /// Returns a copy of the contained value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(42)
+    /// assert(cell.get() == 42)
+    /// ```
     pub func get(this) -> T {
         return this.value
     }
 
     /// Sets the contained value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(42)
+    /// cell.set(100)
+    /// assert(cell.get() == 100)
+    /// ```
     pub func set(mut this, value: T) {
         this.value = value
     }
 
     /// Replaces the contained value and returns the old value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(42)
+    /// let old = cell.replace(100)
+    /// assert(old == 42)
+    /// assert(cell.get() == 100)
+    /// ```
     pub func replace(mut this, value: T) -> T {
         let old: T = this.value
         this.value = value
         return old
     }
 
-    /// Takes the value out of the cell, replacing it with Default::default().
+    /// Takes the value out of the cell, replacing it with `Default::default()`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(42)
+    /// let value = cell.take()
+    /// assert(value == 42)
+    /// assert(cell.get() == 0)  // Default for I32
+    /// ```
     pub func take(mut this) -> T where T: Default {
         return this.replace(T::default())
     }
 
     /// Updates the contained value using a function.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = Cell::new(5)
+    /// cell.update(do(x) x * 2)
+    /// assert(cell.get() == 10)
+    /// ```
     pub func update(mut this, f: func(T) -> T) {
         this.value = f(this.value)
     }
@@ -67,19 +207,61 @@ type BorrowState {
 }
 
 /// A mutable memory location with dynamically checked borrow rules.
-/// RefCell enforces Rust's borrowing rules at runtime instead of compile time.
-/// It is not thread-safe (not Sync).
 ///
-/// Panics if borrowing rules are violated:
-/// - Cannot borrow_mut while any borrow is active
-/// - Cannot borrow while borrow_mut is active
+/// `RefCell` enforces TML's borrowing rules at runtime instead of compile time.
+/// This allows mutation through shared references, at the cost of potential
+/// runtime panics if the rules are violated.
+///
+/// # Borrow Rules
+///
+/// At any given time, you can have either:
+/// - Any number of immutable borrows (`borrow()`)
+/// - Exactly one mutable borrow (`borrow_mut()`)
+///
+/// Violating these rules causes a panic.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::cell::RefCell
+///
+/// let cell = RefCell::new(42)
+///
+/// // Multiple immutable borrows are OK
+/// let r1 = cell.borrow()
+/// let r2 = cell.borrow()
+/// assert(r1.get() == r2.get())
+/// // r1, r2 dropped here
+///
+/// // Now we can mutably borrow
+/// let mut m = cell.borrow_mut()
+/// m.get_mut() = 100
+/// ```
+///
+/// # Panics
+///
+/// - `borrow()` panics if a mutable borrow is active
+/// - `borrow_mut()` panics if any borrow is active
+///
+/// Use `try_borrow()` and `try_borrow_mut()` for non-panicking versions.
+///
+/// # Thread Safety
+///
+/// `RefCell` is not `Sync` - it cannot be shared between threads. For
+/// thread-safe alternatives, use `Mutex` or `RwLock` from `std::sync`.
 pub type RefCell[T] {
     value: T,
     borrow_state: BorrowState
 }
 
 impl[T] RefCell[T] {
-    /// Creates a new RefCell containing the given value.
+    /// Creates a new `RefCell` containing the given value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(vec![1, 2, 3])
+    /// ```
     pub func new(value: T) -> RefCell[T] {
         return RefCell[T] {
             value: value,
@@ -88,7 +270,21 @@ impl[T] RefCell[T] {
     }
 
     /// Immutably borrows the wrapped value.
+    ///
+    /// The borrow lasts until the returned [`Ref`] is dropped. Multiple
+    /// immutable borrows can be active at once.
+    ///
+    /// # Panics
+    ///
     /// Panics if the value is currently mutably borrowed.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    /// let borrowed = cell.borrow()
+    /// assert(borrowed.get() == 42)
+    /// ```
     pub func borrow(mut this) -> Ref[T] {
         when this.borrow_state {
             BorrowState::Unused => {
@@ -106,7 +302,23 @@ impl[T] RefCell[T] {
     }
 
     /// Mutably borrows the wrapped value.
-    /// Panics if the value is currently borrowed.
+    ///
+    /// The borrow lasts until the returned [`RefMut`] is dropped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is currently borrowed (mutably or immutably).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    /// {
+    ///     let mut borrowed = cell.borrow_mut()
+    ///     borrowed.get_mut() = 100
+    /// }
+    /// assert(cell.borrow().get() == 100)
+    /// ```
     pub func borrow_mut(mut this) -> RefMut[T] {
         when this.borrow_state {
             BorrowState::Unused => {
@@ -123,7 +335,20 @@ impl[T] RefCell[T] {
     }
 
     /// Tries to immutably borrow the wrapped value.
-    /// Returns Nothing if the value is currently mutably borrowed.
+    ///
+    /// Returns `Nothing` if the value is currently mutably borrowed.
+    /// This is the non-panicking version of [`borrow`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    ///
+    /// when cell.try_borrow() {
+    ///     Just(r) => println(r.get().to_string()),
+    ///     Nothing => println("Could not borrow")
+    /// }
+    /// ```
     pub func try_borrow(mut this) -> Maybe[Ref[T]] {
         when this.borrow_state {
             BorrowState::Unused => {
@@ -141,7 +366,20 @@ impl[T] RefCell[T] {
     }
 
     /// Tries to mutably borrow the wrapped value.
-    /// Returns Nothing if the value is currently borrowed.
+    ///
+    /// Returns `Nothing` if the value is currently borrowed.
+    /// This is the non-panicking version of [`borrow_mut`].
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    ///
+    /// when cell.try_borrow_mut() {
+    ///     Just(r) => r.get_mut() = 100,
+    ///     Nothing => println("Could not borrow mutably")
+    /// }
+    /// ```
     pub func try_borrow_mut(mut this) -> Maybe[RefMut[T]] {
         when this.borrow_state {
             BorrowState::Unused => {
@@ -155,15 +393,38 @@ impl[T] RefCell[T] {
     }
 
     /// Replaces the wrapped value and returns the old value.
+    ///
+    /// # Panics
+    ///
     /// Panics if the value is currently borrowed.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    /// let old = cell.replace(100)
+    /// assert(old == 42)
+    /// ```
     pub func replace(mut this, value: T) -> T {
         let mut_ref: RefMut[T] = this.borrow_mut()
         let old: T = mut_ref.replace(value)
         return old
     }
 
-    /// Takes the value out of the RefCell, leaving Default::default() in its place.
+    /// Takes the value out of the RefCell, leaving `Default::default()` in its place.
+    ///
+    /// # Panics
+    ///
     /// Panics if the value is currently borrowed.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let cell = RefCell::new(42)
+    /// let value = cell.take()
+    /// assert(value == 42)
+    /// assert(cell.borrow().get() == 0)
+    /// ```
     pub func take(mut this) -> T where T: Default {
         return this.replace(T::default())
     }
@@ -179,7 +440,19 @@ impl[T: Default] Default for RefCell[T] {
 // Ref[T] - Immutable borrow wrapper
 // ============================================================================
 
-/// A wrapper type for an immutably borrowed value from a RefCell.
+/// A wrapper type for an immutably borrowed value from a [`RefCell`].
+///
+/// This type is created by [`RefCell::borrow`] and implements [`Drop`] to
+/// automatically release the borrow when it goes out of scope.
+///
+/// # Examples
+///
+/// ```tml
+/// let cell = RefCell::new(42)
+/// let borrowed: Ref[I32] = cell.borrow()
+/// assert(borrowed.get() == 42)
+/// // borrowed is dropped here, releasing the borrow
+/// ```
 pub type Ref[T] {
     cell: ref RefCell[T]
 }
@@ -213,7 +486,22 @@ impl[T] Drop for Ref[T] {
 // RefMut[T] - Mutable borrow wrapper
 // ============================================================================
 
-/// A wrapper type for a mutably borrowed value from a RefCell.
+/// A wrapper type for a mutably borrowed value from a [`RefCell`].
+///
+/// This type is created by [`RefCell::borrow_mut`] and implements [`Drop`] to
+/// automatically release the borrow when it goes out of scope.
+///
+/// # Examples
+///
+/// ```tml
+/// let cell = RefCell::new(42)
+/// {
+///     let mut borrowed: RefMut[I32] = cell.borrow_mut()
+///     borrowed.get_mut() = 100
+/// }
+/// // borrowed is dropped here, allowing new borrows
+/// assert(cell.borrow().get() == 100)
+/// ```
 pub type RefMut[T] {
     cell: mut ref RefCell[T]
 }

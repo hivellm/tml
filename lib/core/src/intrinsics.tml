@@ -168,6 +168,35 @@ pub func saturating_sub[T](a: T, b: T) -> T
 pub func saturating_mul[T](a: T, b: T) -> T
 
 // ============================================================================
+// Slice Intrinsics (for use in lowlevel blocks)
+// ============================================================================
+
+/// Gets a reference to an element at index in a slice.
+/// **UNSAFE**: Caller must ensure index is in bounds.
+@intrinsic
+pub func slice_get[T](data: ref T, index: I64) -> ref T
+
+/// Gets a mutable reference to an element at index in a slice.
+/// **UNSAFE**: Caller must ensure index is in bounds.
+@intrinsic
+pub func slice_get_mut[T](data: mut ref T, index: I64) -> mut ref T
+
+/// Sets an element at index in a slice.
+/// **UNSAFE**: Caller must ensure index is in bounds.
+@intrinsic
+pub func slice_set[T](data: mut ref T, index: I64, value: T)
+
+/// Computes an offset pointer for slice splitting.
+/// **UNSAFE**: Result must stay within allocated object or one past end.
+@intrinsic
+pub func slice_offset[T](data: ref T, count: I64) -> ref T
+
+/// Swaps two elements in a slice.
+/// **UNSAFE**: Caller must ensure both indices are in bounds.
+@intrinsic
+pub func slice_swap[T](data: mut ref T, a: I64, b: I64)
+
+// ============================================================================
 // Memory Intrinsics
 // ============================================================================
 

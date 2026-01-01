@@ -1,16 +1,103 @@
-// TML Core Library - String Utilities Module
-// Provides: String manipulation functions
+//! String manipulation utilities.
+//!
+//! This module provides functions for working with strings. All functions
+//! operate on TML's `Str` type, which is a UTF-8 encoded string.
+//!
+//! # Categories
+//!
+//! ## Length and Emptiness
+//! - [`len`] - Get string length in bytes
+//! - [`is_empty`] - Check if string is empty
+//!
+//! ## Character Access
+//! - [`char_at`] - Get character at byte index
+//! - [`first_char`] / [`last_char`] - Get first/last character
+//!
+//! ## Substrings
+//! - [`substring`] - Extract a portion of the string
+//! - [`substring_from`] / [`substring_to`] - Partial extraction
+//!
+//! ## Trimming
+//! - [`trim`] - Remove leading and trailing whitespace
+//! - [`trim_start`] / [`trim_end`] - Trim one side
+//!
+//! ## Case Conversion
+//! - [`to_uppercase`] / [`to_lowercase`] - Convert case
+//!
+//! ## Searching
+//! - [`contains`] - Check if substring exists
+//! - [`starts_with`] / [`ends_with`] - Check prefix/suffix
+//! - [`find`] / [`rfind`] - Find substring position
+//!
+//! ## Splitting
+//! - [`split`] - Split by delimiter
+//! - [`split_whitespace`] - Split by whitespace
+//! - [`lines`] - Split into lines
+//!
+//! ## Replacement
+//! - [`replace`] - Replace all occurrences
+//! - [`replace_first`] - Replace first occurrence
+//!
+//! ## Building
+//! - [`repeat`] - Repeat string N times
+//! - [`pad_left`] / [`pad_right`] - Add padding
+//! - [`join`] - Join strings with separator
+//! - [`concat`] / [`concat_all`] - Concatenate strings
+//!
+//! ## Parsing
+//! - [`parse_i32`] / [`parse_i64`] / [`parse_f64`] - Parse numbers
+//! - [`parse_bool`] - Parse boolean
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::str::*
+//!
+//! let s = "  Hello, World!  "
+//!
+//! // Trimming
+//! assert(trim(s) == "Hello, World!")
+//!
+//! // Searching
+//! assert(contains(s, "World"))
+//! assert(find(s, "World") == Just(9))
+//!
+//! // Splitting
+//! let words = split(trim(s), ", ")
+//! assert(words.len() == 2)
+//!
+//! // Case conversion
+//! assert(to_uppercase("hello") == "HELLO")
+//! ```
 
 // ============================================================================
 // String Length and Emptiness
 // ============================================================================
 
 /// Returns the length of a string in bytes.
+///
+/// Note: This returns the byte length, not the character count. For UTF-8
+/// strings with multi-byte characters, this may differ from the visible
+/// character count.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(len("hello") == 5)
+/// assert(len("") == 0)
+/// ```
 pub func len(s: Str) -> I64 {
     return lowlevel { str_len(s) }
 }
 
-/// Returns true if the string is empty.
+/// Returns `true` if the string is empty.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_empty("") == true)
+/// assert(is_empty("hello") == false)
+/// ```
 pub func is_empty(s: Str) -> Bool {
     return len(s) == 0
 }
@@ -20,12 +107,29 @@ pub func is_empty(s: Str) -> Bool {
 // ============================================================================
 
 /// Returns the character at the given byte index.
+///
+/// # Panics
+///
 /// Panics if the index is out of bounds.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(char_at("hello", 0) == 'h')
+/// assert(char_at("hello", 4) == 'o')
+/// ```
 pub func char_at(s: Str, index: I64) -> I32 {
     return lowlevel { str_char_at(s, index) }
 }
 
-/// Returns the first character of the string, or Nothing if empty.
+/// Returns the first character of the string, or `Nothing` if empty.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(first_char("hello") == Just('h'))
+/// assert(first_char("") == Nothing)
+/// ```
 pub func first_char(s: Str) -> Maybe[I32] {
     if is_empty(s) {
         return Nothing
@@ -33,7 +137,14 @@ pub func first_char(s: Str) -> Maybe[I32] {
     return Just(char_at(s, 0))
 }
 
-/// Returns the last character of the string, or Nothing if empty.
+/// Returns the last character of the string, or `Nothing` if empty.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(last_char("hello") == Just('o'))
+/// assert(last_char("") == Nothing)
+/// ```
 pub func last_char(s: Str) -> Maybe[I32] {
     let length: I64 = len(s)
     if length == 0 {
@@ -46,17 +157,42 @@ pub func last_char(s: Str) -> Maybe[I32] {
 // Substring Operations
 // ============================================================================
 
-/// Returns a substring from start to end (exclusive).
+/// Returns a substring from `start` to `end` (exclusive).
+///
+/// # Arguments
+///
+/// * `s` - The source string
+/// * `start` - Starting byte index (inclusive)
+/// * `end` - Ending byte index (exclusive)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(substring("hello", 1, 4) == "ell")
+/// assert(substring("hello", 0, 5) == "hello")
+/// ```
 pub func substring(s: Str, start: I64, end: I64) -> Str {
     return lowlevel { str_substring(s, start, end) }
 }
 
-/// Returns a substring from start to the end of the string.
+/// Returns a substring from `start` to the end of the string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(substring_from("hello", 2) == "llo")
+/// ```
 pub func substring_from(s: Str, start: I64) -> Str {
     return substring(s, start, len(s))
 }
 
-/// Returns a substring from the beginning to end (exclusive).
+/// Returns a substring from the beginning to `end` (exclusive).
+///
+/// # Examples
+///
+/// ```tml
+/// assert(substring_to("hello", 3) == "hel")
+/// ```
 pub func substring_to(s: Str, end: I64) -> Str {
     return substring(s, 0, end)
 }
@@ -66,16 +202,35 @@ pub func substring_to(s: Str, end: I64) -> Str {
 // ============================================================================
 
 /// Removes leading and trailing whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim("  hello  ") == "hello")
+/// assert(trim("\n\thello\t\n") == "hello")
+/// ```
 pub func trim(s: Str) -> Str {
     return lowlevel { str_trim(s) }
 }
 
 /// Removes leading whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim_start("  hello  ") == "hello  ")
+/// ```
 pub func trim_start(s: Str) -> Str {
     return lowlevel { str_trim_start(s) }
 }
 
 /// Removes trailing whitespace from a string.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(trim_end("  hello  ") == "  hello")
+/// ```
 pub func trim_end(s: Str) -> Str {
     return lowlevel { str_trim_end(s) }
 }
@@ -85,11 +240,25 @@ pub func trim_end(s: Str) -> Str {
 // ============================================================================
 
 /// Converts all characters to uppercase.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(to_uppercase("hello") == "HELLO")
+/// assert(to_uppercase("Hello World") == "HELLO WORLD")
+/// ```
 pub func to_uppercase(s: Str) -> Str {
     return lowlevel { str_to_uppercase(s) }
 }
 
 /// Converts all characters to lowercase.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(to_lowercase("HELLO") == "hello")
+/// assert(to_lowercase("Hello World") == "hello world")
+/// ```
 pub func to_lowercase(s: Str) -> Str {
     return lowlevel { str_to_lowercase(s) }
 }
@@ -98,22 +267,52 @@ pub func to_lowercase(s: Str) -> Str {
 // Search Operations
 // ============================================================================
 
-/// Returns true if the string contains the given substring.
+/// Returns `true` if the string contains the given substring.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(contains("hello world", "world") == true)
+/// assert(contains("hello", "xyz") == false)
+/// ```
 pub func contains(s: Str, pattern: Str) -> Bool {
     return lowlevel { str_contains(s, pattern) }
 }
 
-/// Returns true if the string starts with the given prefix.
+/// Returns `true` if the string starts with the given prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(starts_with("hello", "hel") == true)
+/// assert(starts_with("hello", "lo") == false)
+/// ```
 pub func starts_with(s: Str, prefix: Str) -> Bool {
     return lowlevel { str_starts_with(s, prefix) }
 }
 
-/// Returns true if the string ends with the given suffix.
+/// Returns `true` if the string ends with the given suffix.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(ends_with("hello", "lo") == true)
+/// assert(ends_with("hello", "hel") == false)
+/// ```
 pub func ends_with(s: Str, suffix: Str) -> Bool {
     return lowlevel { str_ends_with(s, suffix) }
 }
 
-/// Returns the index of the first occurrence of the pattern, or Nothing if not found.
+/// Returns the byte index of the first occurrence of the pattern.
+///
+/// Returns `Nothing` if the pattern is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(find("hello", "ll") == Just(2))
+/// assert(find("hello", "xyz") == Nothing)
+/// ```
 pub func find(s: Str, pattern: Str) -> Maybe[I64] {
     let idx: I64 = lowlevel { str_find(s, pattern) }
     if idx < 0 {
@@ -122,7 +321,16 @@ pub func find(s: Str, pattern: Str) -> Maybe[I64] {
     return Just(idx)
 }
 
-/// Returns the index of the last occurrence of the pattern, or Nothing if not found.
+/// Returns the byte index of the last occurrence of the pattern.
+///
+/// Returns `Nothing` if the pattern is not found.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(rfind("hello hello", "hello") == Just(6))
+/// assert(rfind("hello", "xyz") == Nothing)
+/// ```
 pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
     let idx: I64 = lowlevel { str_rfind(s, pattern) }
     if idx < 0 {
@@ -136,17 +344,51 @@ pub func rfind(s: Str, pattern: Str) -> Maybe[I64] {
 // ============================================================================
 
 /// Splits a string by the given delimiter.
-/// Returns a list of substrings.
+///
+/// Returns a list of substrings. Empty strings are included if there are
+/// consecutive delimiters.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = split("a,b,c", ",")
+/// assert(parts.len() == 3)
+/// assert(parts[0] == "a")
+///
+/// let parts2 = split("a::b", "::")
+/// assert(parts2.len() == 2)
+/// ```
 pub func split(s: Str, delimiter: Str) -> List[Str] {
     return lowlevel { str_split(s, delimiter) }
 }
 
 /// Splits a string by whitespace.
+///
+/// Multiple consecutive whitespace characters are treated as a single
+/// delimiter. Leading and trailing whitespace is ignored.
+///
+/// # Examples
+///
+/// ```tml
+/// let words = split_whitespace("  hello   world  ")
+/// assert(words.len() == 2)
+/// assert(words[0] == "hello")
+/// assert(words[1] == "world")
+/// ```
 pub func split_whitespace(s: Str) -> List[Str] {
     return lowlevel { str_split_whitespace(s) }
 }
 
 /// Splits a string into lines.
+///
+/// Handles both `\n` and `\r\n` line endings.
+///
+/// # Examples
+///
+/// ```tml
+/// let lns = lines("line1\nline2\nline3")
+/// assert(lns.len() == 3)
+/// ```
 pub func lines(s: Str) -> List[Str] {
     return lowlevel { str_lines(s) }
 }
@@ -155,12 +397,39 @@ pub func lines(s: Str) -> List[Str] {
 // Replacement
 // ============================================================================
 
-/// Replaces all occurrences of `from` with `to`.
+/// Replaces all occurrences of a substring with another string.
+///
+/// # Arguments
+///
+/// * `s` - The source string
+/// * `from` - The pattern to search for
+/// * `to` - The replacement string
+///
+/// # Examples
+///
+/// ```tml
+/// assert(replace("hello world", "world", "TML") == "hello TML")
+/// assert(replace("aaa", "a", "b") == "bbb")
+/// assert(replace("hello", "x", "y") == "hello")  // No match
+/// ```
 pub func replace(s: Str, from: Str, to: Str) -> Str {
     return lowlevel { str_replace(s, from, to) }
 }
 
-/// Replaces the first occurrence of `from` with `to`.
+/// Replaces only the first occurrence of a substring.
+///
+/// # Arguments
+///
+/// * `s` - The source string
+/// * `from` - The pattern to search for
+/// * `to` - The replacement string
+///
+/// # Examples
+///
+/// ```tml
+/// assert(replace_first("aaa", "a", "b") == "baa")
+/// assert(replace_first("hello hello", "hello", "hi") == "hi hello")
+/// ```
 pub func replace_first(s: Str, from: Str, to: Str) -> Str {
     return lowlevel { str_replace_first(s, from, to) }
 }
@@ -169,12 +438,42 @@ pub func replace_first(s: Str, from: Str, to: Str) -> Str {
 // Repetition and Padding
 // ============================================================================
 
-/// Repeats the string n times.
+/// Repeats the string `n` times.
+///
+/// # Arguments
+///
+/// * `s` - The string to repeat
+/// * `n` - Number of times to repeat (must be non-negative)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(repeat("ab", 3) == "ababab")
+/// assert(repeat("x", 5) == "xxxxx")
+/// assert(repeat("hello", 0) == "")
+/// ```
 pub func repeat(s: Str, n: I64) -> Str {
     return lowlevel { str_repeat(s, n) }
 }
 
 /// Pads the string on the left to reach the given width.
+///
+/// If the string is already at least `width` bytes long, it is returned
+/// unchanged.
+///
+/// # Arguments
+///
+/// * `s` - The string to pad
+/// * `width` - The target width in bytes
+/// * `pad_char` - The padding string (typically a single character)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(pad_left("42", 5, "0") == "00042")
+/// assert(pad_left("hello", 10, " ") == "     hello")
+/// assert(pad_left("long", 2, "x") == "long")  // Already long enough
+/// ```
 pub func pad_left(s: Str, width: I64, pad_char: Str) -> Str {
     let current_len: I64 = len(s)
     if current_len >= width {
@@ -185,6 +484,23 @@ pub func pad_left(s: Str, width: I64, pad_char: Str) -> Str {
 }
 
 /// Pads the string on the right to reach the given width.
+///
+/// If the string is already at least `width` bytes long, it is returned
+/// unchanged.
+///
+/// # Arguments
+///
+/// * `s` - The string to pad
+/// * `width` - The target width in bytes
+/// * `pad_char` - The padding string (typically a single character)
+///
+/// # Examples
+///
+/// ```tml
+/// assert(pad_right("42", 5, "0") == "42000")
+/// assert(pad_right("hello", 10, " ") == "hello     ")
+/// assert(pad_right("long", 2, "x") == "long")  // Already long enough
+/// ```
 pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
     let current_len: I64 = len(s)
     if current_len >= width {
@@ -198,30 +514,86 @@ pub func pad_right(s: Str, width: I64, pad_char: Str) -> Str {
 // Parsing
 // ============================================================================
 
-/// Parses a string as an I32.
-/// Returns Nothing if parsing fails.
+/// Parses a string as a 32-bit signed integer.
+///
+/// Attempts to parse the entire string as an integer. Leading and trailing
+/// whitespace should be trimmed before calling.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_i32("42") == Just(42))
+/// assert(parse_i32("-17") == Just(-17))
+/// assert(parse_i32("0") == Just(0))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
 pub func parse_i32(s: Str) -> Maybe[I32] {
     let result: I32 = lowlevel { str_parse_i32(s) }
     // Check for parse error (returns 0 on error, need sentinel)
     return Just(result)
 }
 
-/// Parses a string as an I64.
-/// Returns Nothing if parsing fails.
+/// Parses a string as a 64-bit signed integer.
+///
+/// Attempts to parse the entire string as an integer. Leading and trailing
+/// whitespace should be trimmed before calling.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_i64("9223372036854775807") == Just(9223372036854775807))
+/// assert(parse_i64("-42") == Just(-42))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
 pub func parse_i64(s: Str) -> Maybe[I64] {
     let result: I64 = lowlevel { str_parse_i64(s) }
     return Just(result)
 }
 
-/// Parses a string as an F64.
-/// Returns Nothing if parsing fails.
+/// Parses a string as a 64-bit floating point number.
+///
+/// Accepts standard decimal notation and scientific notation.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_f64("3.14") == Just(3.14))
+/// assert(parse_f64("-0.5") == Just(-0.5))
+/// assert(parse_f64("1e10") == Just(1e10))
+/// ```
+///
+/// # Note
+///
+/// Currently always returns `Just(result)`. Proper error detection is
+/// pending implementation.
 pub func parse_f64(s: Str) -> Maybe[F64] {
     let result: F64 = lowlevel { str_parse_f64(s) }
     return Just(result)
 }
 
-/// Parses a string as a Bool.
-/// Accepts "true", "false", "1", "0" (case insensitive).
+/// Parses a string as a boolean value.
+///
+/// Accepts the following values (case insensitive):
+/// - `"true"` or `"1"` → `Just(true)`
+/// - `"false"` or `"0"` → `Just(false)`
+/// - Any other value → `Nothing`
+///
+/// # Examples
+///
+/// ```tml
+/// assert(parse_bool("true") == Just(true))
+/// assert(parse_bool("FALSE") == Just(false))
+/// assert(parse_bool("1") == Just(true))
+/// assert(parse_bool("yes") == Nothing)
+/// ```
 pub func parse_bool(s: Str) -> Maybe[Bool] {
     let lower: Str = to_lowercase(s)
     if lower == "true" or lower == "1" {
@@ -238,6 +610,27 @@ pub func parse_bool(s: Str) -> Maybe[Bool] {
 // ============================================================================
 
 /// Joins a list of strings with the given separator.
+///
+/// Creates a single string by concatenating all elements with the separator
+/// between each pair of adjacent elements.
+///
+/// # Arguments
+///
+/// * `parts` - The list of strings to join
+/// * `separator` - The string to insert between elements
+///
+/// # Examples
+///
+/// ```tml
+/// let words = ["hello", "world"]
+/// assert(join(words, " ") == "hello world")
+///
+/// let nums = ["1", "2", "3"]
+/// assert(join(nums, ", ") == "1, 2, 3")
+///
+/// let empty: List[Str] = []
+/// assert(join(empty, ",") == "")
+/// ```
 pub func join(parts: List[Str], separator: Str) -> Str {
     return lowlevel { str_join(parts, separator) }
 }
@@ -247,11 +640,32 @@ pub func join(parts: List[Str], separator: Str) -> Str {
 // ============================================================================
 
 /// Concatenates two strings.
+///
+/// This is equivalent to using the `+` operator on strings.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(concat("Hello, ", "World!") == "Hello, World!")
+/// assert(concat("", "x") == "x")
+/// ```
 pub func concat(a: Str, b: Str) -> Str {
     return a + b
 }
 
-/// Concatenates multiple strings.
+/// Concatenates multiple strings without a separator.
+///
+/// This is equivalent to `join(parts, "")`.
+///
+/// # Examples
+///
+/// ```tml
+/// let parts = ["a", "b", "c"]
+/// assert(concat_all(parts) == "abc")
+///
+/// let words = ["Hello", " ", "World"]
+/// assert(concat_all(words) == "Hello World")
+/// ```
 pub func concat_all(parts: List[Str]) -> Str {
     return join(parts, "")
 }

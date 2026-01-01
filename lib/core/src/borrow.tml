@@ -1,16 +1,99 @@
-// TML Core Library - Borrow Module
-// Provides: Borrow[T], BorrowMut[T], ToOwned behaviors
+//! Borrowing and ownership semantics.
+//!
+//! This module provides behaviors for borrowing data and converting between
+//! owned and borrowed representations.
+//!
+//! # Main Behaviors
+//!
+//! - [`Borrow`] - Borrow data as a reference to another type
+//! - [`BorrowMut`] - Mutably borrow data as a reference to another type
+//! - [`ToOwned`] - Create owned data from borrowed data
+//! - [`Cow`] - Clone-on-write smart pointer
+//!
+//! # The Borrow Relationship
+//!
+//! `Borrow[T]` allows a type to be borrowed as type `T`. This is particularly
+//! useful for collections like `HashMap`:
+//!
+//! ```tml
+//! use core::borrow::Borrow
+//!
+//! // HashMap[Str, I64] can use any type that borrows as Str for lookup
+//! func lookup[K: Borrow[Str]](map: ref HashMap[Str, I64], key: K) -> Maybe[I64] {
+//!     return map.get(key.borrow())
+//! }
+//!
+//! let map: HashMap[Str, I64] = ...
+//! lookup(ref map, "key")           // Works with Str
+//! lookup(ref map, my_string_type)  // Works with custom types too
+//! ```
+//!
+//! # ToOwned - The Inverse of Borrow
+//!
+//! While `Borrow` converts from owned to borrowed, `ToOwned` goes the other
+//! direction:
+//!
+//! ```tml
+//! use core::borrow::ToOwned
+//!
+//! let s: ref Str = "hello"
+//! let owned: Str = s.to_owned()  // Creates an owned copy
+//! ```
+//!
+//! # Cow - Clone on Write
+//!
+//! The [`Cow`] type allows you to delay cloning until mutation is actually
+//! needed:
+//!
+//! ```tml
+//! use core::borrow::Cow
+//!
+//! func process(data: Cow[Str]) -> Str {
+//!     // If we need to modify, Cow will clone if borrowed
+//!     if data.borrow().starts_with("/") {
+//!         return data.into_owned()  // Might clone, might not
+//!     }
+//!     return "/" + data.borrow()
+//! }
+//!
+//! // No clone - data is already owned
+//! process(Cow::Owned(my_string))
+//!
+//! // Clones only if needed
+//! process(Cow::Borrowed(ref some_str))
+//! ```
 
 // ============================================================================
 // Borrow Behavior
 // ============================================================================
 
-/// A behavior for borrowing data.
-/// Types implementing Borrow[T] can provide a reference to T.
+/// A behavior for borrowing data as a different type.
 ///
-/// This is useful for creating functions that can work with either
-/// owned or borrowed data. For example, HashMap::get can take any
-/// type that borrows as the key type.
+/// Types implementing `Borrow[T]` can provide a reference to type `T`.
+/// This is useful for creating generic code that can work with both
+/// owned and borrowed data.
+///
+/// # Use Cases
+///
+/// - Collection lookups (e.g., `HashMap::get`)
+/// - Generic functions accepting any "string-like" type
+/// - Bridging between similar types
+///
+/// # Contract
+///
+/// If your type also implements `Hash` and `Eq`, the implementations must
+/// be consistent: if `a.borrow() == b.borrow()`, then `a.hash() == b.hash()`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::borrow::Borrow
+///
+/// // Accept any type that can be borrowed as Str
+/// func print_str[T: Borrow[Str]](data: ref T) {
+///     println(data.borrow())
+/// }
+/// ```
 pub behavior Borrow[T] {
     /// Borrows data as type T.
     func borrow(this) -> ref T

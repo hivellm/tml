@@ -1,14 +1,105 @@
-// TML Core Library - Conversion Module
-// Provides: From, Into, TryFrom, TryInto, AsRef, AsMut behaviors
+//! Type conversion behaviors.
+//!
+//! This module provides behaviors for converting between types, both
+//! infallible (always succeeds) and fallible (may fail):
+//!
+//! | Behavior | Direction | Fallible? | Description |
+//! |----------|-----------|-----------|-------------|
+//! | [`From`] | `T -> Self` | No | Convert from another type |
+//! | [`Into`] | `Self -> T` | No | Convert into another type |
+//! | [`TryFrom`] | `T -> Outcome[Self, E]` | Yes | Fallible conversion from |
+//! | [`TryInto`] | `Self -> Outcome[T, E]` | Yes | Fallible conversion into |
+//! | [`AsRef`] | `&Self -> &T` | No | Cheap reference conversion |
+//! | [`AsMut`] | `&mut Self -> &mut T` | No | Cheap mutable ref conversion |
+//!
+//! # From and Into
+//!
+//! [`From`] and [`Into`] are reciprocal behaviors. You should prefer
+//! implementing `From`, as `Into` is automatically available when `From`
+//! is implemented.
+//!
+//! ```tml
+//! use core::convert::From
+//!
+//! // I64 can be created from I32
+//! let big: I64 = I64::from(42 as I32)
+//!
+//! // Or use .into() on the source
+//! let big: I64 = (42 as I32).into()
+//! ```
+//!
+//! # Fallible Conversions
+//!
+//! When a conversion might fail (e.g., converting a large `I64` to `I32`),
+//! use [`TryFrom`] and [`TryInto`]:
+//!
+//! ```tml
+//! use core::convert::TryFrom
+//!
+//! // This might overflow
+//! when I32::try_from(very_large_i64) {
+//!     Ok(n) => use_number(n),
+//!     Err(_) => println("Number too large!")
+//! }
+//! ```
+//!
+//! # Reference Conversions
+//!
+//! [`AsRef`] and [`AsMut`] provide cheap reference-to-reference conversions,
+//! useful for generic code that needs to accept various types:
+//!
+//! ```tml
+//! use core::convert::AsRef
+//!
+//! // Function that accepts anything that can be viewed as a [U8] slice
+//! func process_bytes[T: AsRef[[U8]]](data: T) {
+//!     let bytes: ref [U8] = data.as_ref()
+//!     // ... process bytes
+//! }
+//!
+//! process_bytes("hello")     // Str implements AsRef[[U8]]
+//! process_bytes([1, 2, 3])   // Arrays implement AsRef[[U8]]
+//! ```
 
 // ============================================================================
 // From Behavior
 // ============================================================================
 
-/// Behavior for constructing a value from another type.
-/// Implementing From[T] for U means you can convert T into U.
+/// Infallible conversion from another type.
+///
+/// Implementing `From[T]` for type `U` means you can create a `U` from any `T`.
+/// This is the preferred way to define type conversions.
+///
+/// # Implementing From
+///
+/// ```tml
+/// use core::convert::From
+///
+/// pub type Celsius { value: F64 }
+/// pub type Fahrenheit { value: F64 }
+///
+/// impl From[Celsius] for Fahrenheit {
+///     pub func from(c: Celsius) -> Fahrenheit {
+///         return Fahrenheit { value: c.value * 9.0 / 5.0 + 32.0 }
+///     }
+/// }
+///
+/// let c = Celsius { value: 100.0 }
+/// let f = Fahrenheit::from(c)  // 212.0
+/// ```
+///
+/// # Reflexivity
+///
+/// `From[T]` is automatically implemented for all types `T`, meaning
+/// every type can be converted from itself: `T::from(t)` returns `t`.
 pub behavior From[T] {
     /// Performs the conversion.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let n: I64 = I64::from(42 as I32)
+    /// ```
     func from(value: T) -> Self
 }
 
@@ -16,11 +107,37 @@ pub behavior From[T] {
 // Into Behavior
 // ============================================================================
 
-/// Behavior for converting a value into another type.
-/// This is the reciprocal of From.
-/// If From[T] is implemented for U, then Into[U] is automatically available for T.
+/// Conversion into another type.
+///
+/// `Into` is the reciprocal of [`From`]. You should prefer implementing
+/// `From` over `Into`, because implementing `From` automatically provides
+/// a corresponding `Into` implementation.
+///
+/// # Using Into
+///
+/// `Into` is most useful in generic contexts where you want to accept
+/// any type that can be converted:
+///
+/// ```tml
+/// use core::convert::Into
+///
+/// func takes_string[T: Into[Str]](value: T) {
+///     let s: Str = value.into()
+///     println(s)
+/// }
+///
+/// takes_string("hello")  // Str -> Str
+/// takes_string(42)       // I64 -> Str (if implemented)
+/// ```
 pub behavior Into[T] {
     /// Performs the conversion.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let n: I32 = 42
+    /// let big: I64 = n.into()
+    /// ```
     func into(this) -> T
 }
 
@@ -29,12 +146,38 @@ pub behavior Into[T] {
 // ============================================================================
 
 /// Fallible conversion from another type.
-/// Returns Outcome[Self, E] to indicate success or failure.
+///
+/// Use this when a conversion might fail, returning `Err` on failure.
+/// This is the fallible version of [`From`].
+///
+/// # Examples
+///
+/// ```tml
+/// use core::convert::TryFrom
+///
+/// let large: I64 = 999999999999
+/// when I32::try_from(large) {
+///     Ok(n) => println("Fits in I32: " + n.to_string()),
+///     Err(e) => println("Too large for I32")
+/// }
+/// ```
+///
+/// # When to Use
+///
+/// - Numeric conversions that might overflow
+/// - Parsing strings into structured types
+/// - Any conversion where not all inputs are valid
 pub behavior TryFrom[T] {
-    /// The error type for failed conversions.
+    /// The error type returned when conversion fails.
     type Error
 
-    /// Attempts to perform the conversion.
+    /// Attempts the conversion, returning `Err` on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let result = I32::try_from(very_large_number)
+    /// ```
     func try_from(value: T) -> Outcome[Self, This::Error]
 }
 
@@ -43,12 +186,23 @@ pub behavior TryFrom[T] {
 // ============================================================================
 
 /// Fallible conversion into another type.
-/// This is the reciprocal of TryFrom.
+///
+/// This is the reciprocal of [`TryFrom`]. Prefer implementing `TryFrom`,
+/// as `TryInto` should be automatically provided when `TryFrom` exists.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::convert::TryInto
+///
+/// let large: I64 = 999999999999
+/// let result: Outcome[I32, _] = large.try_into()
+/// ```
 pub behavior TryInto[T] {
-    /// The error type for failed conversions.
+    /// The error type returned when conversion fails.
     type Error
 
-    /// Attempts to perform the conversion.
+    /// Attempts the conversion, returning `Err` on failure.
     func try_into(this) -> Outcome[T, This::Error]
 }
 
@@ -57,9 +211,36 @@ pub behavior TryInto[T] {
 // ============================================================================
 
 /// Cheap reference-to-reference conversion.
-/// Used when you want to borrow as a different type.
+///
+/// Use `AsRef` when you want to accept different types that can all be
+/// "viewed as" a common reference type. This is a zero-cost abstraction
+/// for generic programming.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::convert::AsRef
+///
+/// // Accept anything that can be viewed as a string
+/// func print_len[T: AsRef[Str]](value: ref T) {
+///     let s: ref Str = value.as_ref()
+///     println("Length: " + s.len().to_string())
+/// }
+/// ```
+///
+/// # Implementing AsRef
+///
+/// ```tml
+/// impl AsRef[Str] for MyString {
+///     pub func as_ref(this) -> ref Str {
+///         return ref this.inner
+///     }
+/// }
+/// ```
 pub behavior AsRef[T] {
-    /// Borrows this value as a reference to T.
+    /// Converts this reference to a reference of type `T`.
+    ///
+    /// This should be a cheap operation (ideally O(1)).
     func as_ref(this) -> ref T
 }
 
@@ -68,9 +249,27 @@ pub behavior AsRef[T] {
 // ============================================================================
 
 /// Cheap mutable reference-to-reference conversion.
-/// Used when you want to mutably borrow as a different type.
+///
+/// This is the mutable version of [`AsRef`]. Use it when you need to
+/// accept different types that can all be "viewed as" a common mutable
+/// reference type.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::convert::AsMut
+///
+/// func clear_data[T: AsMut[[U8]]](data: mut ref T) {
+///     let bytes: mut ref [U8] = data.as_mut()
+///     loop i in 0 to bytes.len() {
+///         bytes[i] = 0
+///     }
+/// }
+/// ```
 pub behavior AsMut[T] {
-    /// Borrows this value as a mutable reference to T.
+    /// Converts this mutable reference to a mutable reference of type `T`.
+    ///
+    /// This should be a cheap operation (ideally O(1)).
     func as_mut(mut this) -> mut ref T
 }
 
@@ -78,7 +277,9 @@ pub behavior AsMut[T] {
 // Identity conversions
 // ============================================================================
 
-// Every type can be converted from itself
+/// Every type can be converted from itself (identity conversion).
+///
+/// This allows generic code to accept any type where `T::from(value)` works.
 impl[T] From[T] for T {
     pub func from(value: T) -> T {
         return value
@@ -88,79 +289,93 @@ impl[T] From[T] for T {
 // ============================================================================
 // Numeric conversions: smaller to larger (infallible)
 // ============================================================================
+// These conversions are always safe because the destination type is larger.
 
+/// `I8` -> `I16` (widening conversion, always safe)
 impl From[I8] for I16 {
     pub func from(value: I8) -> I16 {
         return lowlevel { i8_to_i16(value) }
     }
 }
 
+/// `I8` -> `I32` (widening conversion, always safe)
 impl From[I8] for I32 {
     pub func from(value: I8) -> I32 {
         return lowlevel { i8_to_i32(value) }
     }
 }
 
+/// `I8` -> `I64` (widening conversion, always safe)
 impl From[I8] for I64 {
     pub func from(value: I8) -> I64 {
         return lowlevel { i8_to_i64(value) }
     }
 }
 
+/// `I16` -> `I32` (widening conversion, always safe)
 impl From[I16] for I32 {
     pub func from(value: I16) -> I32 {
         return lowlevel { i16_to_i32(value) }
     }
 }
 
+/// `I16` -> `I64` (widening conversion, always safe)
 impl From[I16] for I64 {
     pub func from(value: I16) -> I64 {
         return lowlevel { i16_to_i64(value) }
     }
 }
 
+/// `I32` -> `I64` (widening conversion, always safe)
 impl From[I32] for I64 {
     pub func from(value: I32) -> I64 {
         return lowlevel { i32_to_i64(value) }
     }
 }
 
+/// `U8` -> `U16` (widening conversion, always safe)
 impl From[U8] for U16 {
     pub func from(value: U8) -> U16 {
         return lowlevel { u8_to_u16(value) }
     }
 }
 
+/// `U8` -> `U32` (widening conversion, always safe)
 impl From[U8] for U32 {
     pub func from(value: U8) -> U32 {
         return lowlevel { u8_to_u32(value) }
     }
 }
 
+/// `U8` -> `U64` (widening conversion, always safe)
 impl From[U8] for U64 {
     pub func from(value: U8) -> U64 {
         return lowlevel { u8_to_u64(value) }
     }
 }
 
+/// `U16` -> `U32` (widening conversion, always safe)
 impl From[U16] for U32 {
     pub func from(value: U16) -> U32 {
         return lowlevel { u16_to_u32(value) }
     }
 }
 
+/// `U16` -> `U64` (widening conversion, always safe)
 impl From[U16] for U64 {
     pub func from(value: U16) -> U64 {
         return lowlevel { u16_to_u64(value) }
     }
 }
 
+/// `U32` -> `U64` (widening conversion, always safe)
 impl From[U32] for U64 {
     pub func from(value: U32) -> U64 {
         return lowlevel { u32_to_u64(value) }
     }
 }
 
+/// `F32` -> `F64` (widening conversion, always safe)
 impl From[F32] for F64 {
     pub func from(value: F32) -> F64 {
         return lowlevel { f32_to_f64(value) }
@@ -171,6 +386,7 @@ impl From[F32] for F64 {
 // Bool conversions
 // ============================================================================
 
+/// `Bool` -> `I32`: `false` becomes `0`, `true` becomes `1`.
 impl From[Bool] for I32 {
     pub func from(value: Bool) -> I32 {
         if value {
@@ -180,6 +396,7 @@ impl From[Bool] for I32 {
     }
 }
 
+/// `Bool` -> `I64`: `false` becomes `0`, `true` becomes `1`.
 impl From[Bool] for I64 {
     pub func from(value: Bool) -> I64 {
         if value {
@@ -193,7 +410,13 @@ impl From[Bool] for I64 {
 // Maybe conversions
 // ============================================================================
 
-/// Convert a value into Just(value)
+/// Any value `T` can be converted into `Just(value)`.
+///
+/// This makes it easy to wrap values in `Maybe`:
+///
+/// ```tml
+/// let x: Maybe[I64] = Maybe::from(42)  // Just(42)
+/// ```
 impl[T] From[T] for Maybe[T] {
     pub func from(value: T) -> Maybe[T] {
         return Just(value)
@@ -204,7 +427,13 @@ impl[T] From[T] for Maybe[T] {
 // Outcome conversions
 // ============================================================================
 
-/// Convert an Ok value into Outcome
+/// Any value `T` can be converted into `Ok(value)`.
+///
+/// This makes it easy to wrap successful values:
+///
+/// ```tml
+/// let x: Outcome[I64, Str] = Outcome::from(42)  // Ok(42)
+/// ```
 impl[T, E] From[T] for Outcome[T, E] {
     pub func from(value: T) -> Outcome[T, E] {
         return Ok(value)

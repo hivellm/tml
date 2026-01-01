@@ -1,28 +1,149 @@
-// TML Core Library - Memory Module
-// Provides: size_of, align_of, swap, replace, take, forget
+//! Low-level memory manipulation utilities.
+//!
+//! This module provides primitives for working with memory at a low level,
+//! including:
+//!
+//! - [`size_of`] and [`align_of`] for type layout information
+//! - [`swap`] and [`replace`] for moving values around
+//! - [`take`] for extracting values while leaving defaults
+//! - [`forget`] for preventing destructors from running
+//! - [`ManuallyDrop`] for manual destructor control
+//! - [`MaybeUninit`] for uninitialized memory
+//!
+//! # Type Layout
+//!
+//! Every type has a size (in bytes) and an alignment requirement:
+//!
+//! ```tml
+//! use core::mem::{size_of, align_of}
+//!
+//! let size = size_of[I64]()      // 8 bytes
+//! let align = align_of[I64]()    // 8 bytes
+//! ```
+//!
+//! # Swapping and Replacing
+//!
+//! The [`swap`] and [`replace`] functions allow moving values without
+//! intermediate variables:
+//!
+//! ```tml
+//! use core::mem::{swap, replace}
+//!
+//! let mut a = 1
+//! let mut b = 2
+//! swap(mut ref a, mut ref b)
+//! // Now a == 2 and b == 1
+//!
+//! let old = replace(mut ref a, 100)
+//! // Now a == 100 and old == 2
+//! ```
+//!
+//! # Manual Drop Control
+//!
+//! Sometimes you need to control when or if destructors run:
+//!
+//! ```tml
+//! use core::mem::{forget, ManuallyDrop}
+//!
+//! // Prevent destructor from running
+//! let resource = acquire_resource()
+//! transfer_ownership(resource)
+//! forget(resource)  // Don't drop - ownership transferred
+//!
+//! // Or use ManuallyDrop for more control
+//! let wrapper = ManuallyDrop::new(data)
+//! // data's destructor won't run until explicitly dropped
+//! ```
+//!
+//! # Safety
+//!
+//! Many operations in this module are low-level and can cause undefined
+//! behavior if misused. Pay attention to safety requirements in each
+//! function's documentation.
+
+use core::default::Default
 
 // ============================================================================
 // Size and Alignment
 // ============================================================================
 
-/// Returns the size of a type in bytes.
-/// This is a compile-time constant for sized types.
+/// Returns the size of a type `T` in bytes.
+///
+/// This is a compile-time constant for sized types and can be used in
+/// const contexts.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::size_of
+///
+/// assert(size_of[I8]() == 1)
+/// assert(size_of[I32]() == 4)
+/// assert(size_of[I64]() == 8)
+/// assert(size_of[(I32, I32)]() == 8)
+/// ```
+///
+/// # Zero-Sized Types
+///
+/// Some types have a size of zero:
+///
+/// ```tml
+/// assert(size_of[Unit]() == 0)
+/// ```
 pub func size_of[T]() -> I64 {
     return lowlevel { sizeof_type[T]() }
 }
 
-/// Returns the alignment of a type in bytes.
-/// This is a compile-time constant for sized types.
+/// Returns the minimum alignment of a type `T` in bytes.
+///
+/// This is the alignment requirement that must be satisfied when allocating
+/// memory for this type.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::align_of
+///
+/// assert(align_of[I8]() == 1)
+/// assert(align_of[I32]() == 4)
+/// assert(align_of[I64]() == 8)
+/// ```
+///
+/// # Alignment Rules
+///
+/// - Alignment is always a power of 2
+/// - A type's alignment is at least as large as its largest field's alignment
+/// - Arrays have the same alignment as their element type
 pub func align_of[T]() -> I64 {
     return lowlevel { alignof_type[T]() }
 }
 
-/// Returns the size of the value's type in bytes.
+/// Returns the size of the pointed-to value in bytes.
+///
+/// This is useful when you have a reference but need the size of the type.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::size_of_val
+///
+/// let x: I64 = 42
+/// assert(size_of_val(ref x) == 8)
+/// ```
 pub func size_of_val[T](val: ref T) -> I64 {
     return size_of[T]()
 }
 
-/// Returns the alignment of the value's type in bytes.
+/// Returns the alignment of the pointed-to value in bytes.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::align_of_val
+///
+/// let x: I64 = 42
+/// assert(align_of_val(ref x) == 8)
+/// ```
 pub func align_of_val[T](val: ref T) -> I64 {
     return align_of[T]()
 }
@@ -32,24 +153,80 @@ pub func align_of_val[T](val: ref T) -> I64 {
 // ============================================================================
 
 /// Swaps the values at two mutable locations.
-/// After calling swap, the value at `a` will be the value that was at `b`,
-/// and vice versa.
+///
+/// This is a safe operation that exchanges the values at two locations
+/// without requiring a temporary variable in user code.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::swap
+///
+/// let mut a = 1
+/// let mut b = 2
+/// swap(mut ref a, mut ref b)
+///
+/// assert(a == 2)
+/// assert(b == 1)
+/// ```
+///
+/// # Performance
+///
+/// For small types, this is typically optimized to simple register moves.
+/// For larger types, a temporary copy is made.
 pub func swap[T](a: mut ref T, b: mut ref T) {
     let temp: T = *a
     *a = *b
     *b = temp
 }
 
-/// Replaces the value at a mutable location with a new value,
-/// returning the old value.
+/// Replaces the value at a mutable location with a new value, returning the old.
+///
+/// This atomically reads the old value and writes the new value, returning
+/// the old value to the caller.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::replace
+///
+/// let mut x = 5
+/// let old = replace(mut ref x, 10)
+///
+/// assert(x == 10)
+/// assert(old == 5)
+/// ```
+///
+/// # Use Cases
+///
+/// - Moving a value out while leaving something valid behind
+/// - Updating a struct field while using the old value
+/// - Implementing `take` patterns
 pub func replace[T](dest: mut ref T, src: T) -> T {
     let old: T = *dest
     *dest = src
     return old
 }
 
-/// Takes the value out of the mutable reference, leaving Default::default() in its place.
-/// Requires T: Default
+/// Takes the value from a mutable reference, leaving the default in its place.
+///
+/// This is equivalent to `replace(dest, T::default())`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::take
+///
+/// let mut name = "Alice"
+/// let taken = take(mut ref name)
+///
+/// assert(taken == "Alice")
+/// assert(name == "")  // Str::default() is ""
+/// ```
+///
+/// # Constraints
+///
+/// Requires `T: Default` to provide a value to leave behind.
 pub func take[T: Default](dest: mut ref T) -> T {
     return replace(dest, T::default())
 }
@@ -58,11 +235,38 @@ pub func take[T: Default](dest: mut ref T) -> T {
 // Forget
 // ============================================================================
 
-/// Intentionally leaks a value without running its destructor.
-/// Use this to prevent Drop from being called on a value.
+/// Takes ownership of a value without running its destructor.
 ///
-/// WARNING: This can cause memory leaks if used incorrectly.
-/// Only use when you know the value's resources will be cleaned up elsewhere.
+/// This function "forgets" about the value, preventing its [`Drop`]
+/// implementation from running. This is useful when:
+///
+/// - Transferring ownership to FFI code that will manage the memory
+/// - Implementing move-out operations in collections
+/// - Breaking circular references in unsafe code
+///
+/// # Warning
+///
+/// Using `forget` on a value that manages resources (memory, files, locks)
+/// will cause those resources to leak. Only use this when you're certain
+/// the resources will be cleaned up through other means.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::forget
+///
+/// // Transfer a file handle to C code
+/// let file = open_file("data.txt")
+/// let raw_fd = file.into_raw_fd()
+/// forget(file)  // Don't close the file - C code owns it now
+/// pass_to_c(raw_fd)
+/// ```
+///
+/// # Safety
+///
+/// This is not `lowlevel` because it's always safe to call - it just leaks
+/// resources. However, the program may run out of resources if used
+/// excessively.
 pub func forget[T](value: T) {
     lowlevel { mem_forget(value) }
 }
@@ -71,9 +275,27 @@ pub func forget[T](value: T) {
 // Drop
 // ============================================================================
 
-/// Drops a value, running its destructor if it has one.
-/// This is useful when you want to explicitly drop a value before
-/// the end of its scope.
+/// Explicitly drops a value, running its destructor immediately.
+///
+/// In most cases, you don't need to call this function - values are
+/// automatically dropped when they go out of scope. However, this is
+/// useful when you want to drop a value before the end of its natural scope.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::drop
+///
+/// let lock = mutex.lock()
+/// // Do some work with the lock...
+/// drop(lock)  // Release the lock early
+/// // Do more work without holding the lock...
+/// ```
+///
+/// # Note
+///
+/// This function takes ownership of the value, so it's moved into the
+/// function and dropped when the function returns.
 pub func drop[T](value: T) {
     // Value goes out of scope here and is dropped
 }
@@ -82,30 +304,93 @@ pub func drop[T](value: T) {
 // ManuallyDrop[T]
 // ============================================================================
 
-/// A wrapper that prevents automatic dropping of the contained value.
-/// You must manually call `into_inner()` or use unsafe code to extract the value.
+/// A wrapper type that inhibits the automatic destructor call.
+///
+/// `ManuallyDrop[T]` wraps a value of type `T` and prevents its destructor
+/// from running automatically. This gives you explicit control over when
+/// (or if) the value is dropped.
+///
+/// # When to Use
+///
+/// - Building custom smart pointers or collections
+/// - Implementing unions with non-Copy types
+/// - FFI where ownership is being transferred
+/// - Breaking out of normal drop order requirements
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::ManuallyDrop
+///
+/// let wrapper = ManuallyDrop::new(expensive_resource())
+///
+/// // Use the resource through the wrapper
+/// wrapper.get_ref().do_something()
+///
+/// // Later, extract and drop explicitly
+/// let resource = wrapper.into_inner()
+/// // resource is dropped here normally
+/// ```
+///
+/// # Memory Layout
+///
+/// `ManuallyDrop[T]` has the same size and alignment as `T`.
+/// It's a zero-cost abstraction - the wrapper adds no runtime overhead.
 pub type ManuallyDrop[T] {
     value: T
 }
 
 impl[T] ManuallyDrop[T] {
-    /// Creates a new ManuallyDrop wrapper.
+    /// Creates a new `ManuallyDrop` wrapper containing the given value.
+    ///
+    /// The value's destructor will not run until you explicitly extract it
+    /// with [`into_inner`] or drop it manually.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let wrapper = ManuallyDrop::new("hello".to_string())
+    /// ```
     pub func new(value: T) -> ManuallyDrop[T] {
         return ManuallyDrop[T] { value: value }
     }
 
-    /// Extracts the value from the ManuallyDrop wrapper.
-    /// The value will be dropped normally when it goes out of scope.
+    /// Extracts the value from the wrapper.
+    ///
+    /// This consumes the wrapper and returns the contained value. The
+    /// returned value will be dropped normally when it goes out of scope.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let wrapper = ManuallyDrop::new(vec![1, 2, 3])
+    /// let vec = wrapper.into_inner()
+    /// // vec will be dropped normally
+    /// ```
     pub func into_inner(this) -> T {
         return this.value
     }
 
-    /// Gets a reference to the contained value.
+    /// Returns a reference to the contained value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let wrapper = ManuallyDrop::new(42)
+    /// assert(wrapper.get_ref() == ref 42)
+    /// ```
     pub func get_ref(this) -> ref T {
         return ref this.value
     }
 
-    /// Gets a mutable reference to the contained value.
+    /// Returns a mutable reference to the contained value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut wrapper = ManuallyDrop::new(vec![1, 2])
+    /// wrapper.get_mut().push(3)
+    /// ```
     pub func get_mut(mut this) -> mut ref T {
         return mut ref this.value
     }
@@ -115,41 +400,139 @@ impl[T] ManuallyDrop[T] {
 // MaybeUninit[T]
 // ============================================================================
 
-/// A wrapper type that represents possibly uninitialized data.
-/// Use this for performance-critical code where you need to delay initialization.
+/// A wrapper type for representing possibly uninitialized data.
 ///
-/// WARNING: Reading from an uninitialized MaybeUninit is undefined behavior.
+/// `MaybeUninit[T]` allows you to work with memory that may not yet contain
+/// a valid value of type `T`. This is useful for:
+///
+/// - Performance-critical code that avoids redundant initialization
+/// - Implementing collections that pre-allocate uninitialized capacity
+/// - FFI where you need to pass uninitialized buffers to C code
+///
+/// # Safety
+///
+/// **Reading from uninitialized memory is undefined behavior.** You must
+/// ensure that a value has been written before calling [`assume_init`] or
+/// [`assume_init_ref`].
+///
+/// # Examples
+///
+/// ## Basic Usage
+///
+/// ```tml
+/// use core::mem::MaybeUninit
+///
+/// // Create uninitialized storage
+/// let mut uninit = MaybeUninit[I64]::uninit()
+///
+/// // Initialize it
+/// uninit.write(42)
+///
+/// // Now it's safe to read
+/// let value = uninit.assume_init()
+/// assert(value == 42)
+/// ```
+///
+/// ## Pre-allocating Arrays
+///
+/// ```tml
+/// // Create an array of uninitialized values
+/// let mut buffer: [MaybeUninit[I32]; 100] = [MaybeUninit::uninit(); 100]
+///
+/// // Initialize each element
+/// loop i in 0 to 100 {
+///     buffer[i].write(i as I32)
+/// }
+///
+/// // Now safe to use as initialized array
+/// ```
 pub type MaybeUninit[T] {
-    // Internal storage - may or may not be initialized
+    /// Internal storage - may or may not be initialized
     storage: T
 }
 
 impl[T] MaybeUninit[T] {
-    /// Creates a new MaybeUninit with uninitialized contents.
+    /// Creates a new `MaybeUninit` with uninitialized contents.
+    ///
+    /// The contents are truly uninitialized - reading them before
+    /// writing is undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let uninit = MaybeUninit[I64]::uninit()
+    /// // uninit.assume_init()  // UB - don't do this!
+    /// ```
     pub func uninit() -> MaybeUninit[T] {
         return lowlevel { maybe_uninit_create[T]() }
     }
 
-    /// Creates a new MaybeUninit initialized with the given value.
+    /// Creates a new `MaybeUninit` initialized with the given value.
+    ///
+    /// Unlike [`uninit`], this creates a fully initialized wrapper
+    /// that can immediately be read.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let init = MaybeUninit::new(42)
+    /// let value = init.assume_init()  // Safe - we initialized it
+    /// ```
     pub func new(value: T) -> MaybeUninit[T] {
         return MaybeUninit[T] { storage: value }
     }
 
-    /// Writes a value into the MaybeUninit.
+    /// Writes a value into the `MaybeUninit`.
+    ///
+    /// After calling this, the wrapper is initialized and safe to read.
+    ///
+    /// # Note
+    ///
+    /// If a value was previously written, it is overwritten without
+    /// running its destructor. This can cause resource leaks for types
+    /// with drop implementations.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut uninit = MaybeUninit[I64]::uninit()
+    /// uninit.write(100)
+    /// let value = uninit.assume_init()  // 100
+    /// ```
     pub func write(mut this, value: T) {
         this.storage = value
     }
 
-    /// Assumes the contents are initialized and extracts the value.
+    /// Extracts the value, assuming it has been initialized.
     ///
-    /// SAFETY: Calling this on uninitialized data is undefined behavior.
+    /// # Safety
+    ///
+    /// It is undefined behavior to call this on uninitialized memory.
+    /// The caller must ensure that [`write`] or [`new`] was called first.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut m = MaybeUninit::uninit()
+    /// m.write("hello")
+    /// let s = m.assume_init()  // Safe after write
+    /// ```
     pub func assume_init(this) -> T {
         return this.storage
     }
 
-    /// Gets a reference to the contained value.
+    /// Returns a reference to the contained value.
     ///
-    /// SAFETY: Calling this on uninitialized data is undefined behavior.
+    /// # Safety
+    ///
+    /// Calling this on uninitialized data is undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let m = MaybeUninit::new(vec![1, 2, 3])
+    /// let len = m.assume_init_ref().len()  // 3
+    /// ```
     pub func assume_init_ref(this) -> ref T {
         return ref this.storage
     }
@@ -159,16 +542,69 @@ impl[T] MaybeUninit[T] {
 // Utility Functions
 // ============================================================================
 
-/// Returns a zeroed value of type T.
-/// This is useful for initializing memory to a known state.
+/// Creates a zeroed value of type `T`.
+///
+/// This fills all bytes of the type with zeros, which is useful for:
+/// - Initializing memory to a known state
+/// - Creating default values for types where zero is meaningful
+/// - Clearing sensitive data
+///
+/// # Safety
+///
+/// Not all types have valid zero representations. For example:
+/// - References cannot be zero (null)
+/// - Enums may not have zero as a valid discriminant
+/// - Booleans should only be 0 or 1
+///
+/// Use this only for types where all-zeros is a valid bit pattern.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::zeroed
+///
+/// let n: I64 = zeroed()  // 0
+/// let f: F64 = zeroed()  // 0.0
+/// ```
 pub func zeroed[T]() -> T {
     return lowlevel { mem_zeroed[T]() }
 }
 
-/// Transmutes a value from one type to another.
+/// Reinterprets the bits of a value of one type as another type.
 ///
-/// SAFETY: This is extremely unsafe. The types must have the same size
-/// and the bit pattern of the source must be valid for the destination type.
+/// `transmute` converts between types by reinterpreting the raw bit pattern.
+/// No conversion or transformation is performed - the bytes are simply
+/// reinterpreted as the destination type.
+///
+/// # Safety
+///
+/// **This is one of the most dangerous operations in TML.** Misuse leads
+/// to undefined behavior. You must ensure:
+///
+/// - Both types have the same size (`size_of[Src]() == size_of[Dst]()`)
+/// - The bit pattern of `src` is valid for `Dst`
+/// - Any invariants of `Dst` are satisfied
+///
+/// # Examples
+///
+/// ```tml
+/// use core::mem::transmute
+///
+/// // Reinterpret f64 bits as u64 (for bit manipulation)
+/// let f: F64 = 1.0
+/// let bits: U64 = transmute[F64, U64](f)
+///
+/// // View an array as bytes
+/// let arr: [I32; 2] = [1, 2]
+/// let bytes: [U8; 8] = transmute[[I32; 2], [U8; 8]](arr)
+/// ```
+///
+/// # Alternatives
+///
+/// Often there are safer alternatives:
+/// - Use `as` for numeric conversions
+/// - Use `From`/`Into` for safe type conversions
+/// - Use pointer casts for reinterpreting references
 pub func transmute[Src, Dst](src: Src) -> Dst {
     return lowlevel { mem_transmute[Src, Dst](src) }
 }

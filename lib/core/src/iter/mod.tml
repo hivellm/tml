@@ -1,34 +1,119 @@
-//! Iterator types and traits.
+//! Composable external iteration.
 //!
-//! This module provides the core iterator infrastructure for TML.
+//! This module provides TML's iterator system - a powerful, lazy, composable
+//! abstraction for processing sequences of values.
 //!
-//! # Core Traits
-//!
-//! - [`Iterator`] - The core iterator trait
-//! - [`IntoIterator`] - Conversion into an iterator
-//! - [`FromIterator`] - Building collections from iterators
-//!
-//! # Examples
-//!
-//! Basic iterator usage:
+//! # Quick Start
 //!
 //! ```tml
-//! // Counter iterator
-//! type Counter { current: I32, max: I32 }
+//! use core::iter::*
 //!
-//! impl Iterator for Counter {
-//!     type Item = I32
+//! // Create a simple counter iterator
+//! let mut counter = Counter { current: 0, max: 5 }
+//! for n in counter {
+//!     println(n.to_string())  // 0, 1, 2, 3, 4
+//! }
+//! ```
 //!
-//!     pub func next(mut this) -> Maybe[I32] {
-//!         if this.current >= this.max {
+//! # Core Behaviors
+//!
+//! The iterator system is built on these core behaviors:
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Iterator`] | The core behavior for all iterators |
+//! | [`IntoIterator`] | Enables conversion into an iterator |
+//! | [`FromIterator`] | Enables building collections from iterators |
+//! | [`DoubleEndedIterator`] | Iteration from both ends |
+//! | [`ExactSizeIterator`] | Iterators with known length |
+//!
+//! # The Iterator Behavior
+//!
+//! [`Iterator`] is the heart of the iteration system. Any type implementing
+//! `Iterator` provides a `next()` method that returns `Just(item)` or `Nothing`:
+//!
+//! ```tml
+//! use core::iter::Iterator
+//!
+//! pub type Range {
+//!     current: I64,
+//!     end: I64
+//! }
+//!
+//! impl Iterator for Range {
+//!     type Item = I64
+//!
+//!     pub func next(mut this) -> Maybe[I64] {
+//!         if this.current >= this.end {
 //!             return Nothing
 //!         }
-//!         let val: I32 = this.current
+//!         let val = this.current
 //!         this.current = this.current + 1
 //!         return Just(val)
 //!     }
 //! }
 //! ```
+//!
+//! # Laziness
+//!
+//! Iterators are lazy - they do no work until consumed. This enables efficient
+//! chaining without intermediate allocations:
+//!
+//! ```tml
+//! // No work happens here - just building the pipeline
+//! let iter = take(skip(enumerate(data), 10), 5)
+//!
+//! // Work happens here, when we consume the iterator
+//! for (idx, item) in iter {
+//!     process(idx, item)
+//! }
+//! ```
+//!
+//! # Iterator Sources
+//!
+//! Sources create iterators from scratch:
+//!
+//! ```tml
+//! use core::iter::sources::*
+//!
+//! let empty = empty_i32()        // Yields nothing
+//! let single = once_i64(42)      // Yields exactly one element
+//! let repeated = repeat_n_i32(7, 3)  // Yields 7 three times
+//! ```
+//!
+//! # Iterator Adapters
+//!
+//! Adapters transform iterators into new iterators:
+//!
+//! ```tml
+//! use core::iter::adapters::*
+//!
+//! // Take first 10 elements
+//! let first_ten = take(iter, 10)
+//!
+//! // Skip first 5 elements
+//! let after_five = skip(iter, 5)
+//!
+//! // Chain two iterators
+//! let combined = chain(first, second)
+//!
+//! // Add indices
+//! let indexed = enumerate(iter)
+//!
+//! // Pair up two iterators
+//! let paired = zip(iter_a, iter_b)
+//!
+//! // Step through every Nth element
+//! let evens = step_by(iter, 2)
+//! ```
+//!
+//! # Module Organization
+//!
+//! - [`traits`] - Core iterator behaviors
+//! - [`sources`] - Iterator source types (`empty`, `once`, `repeat_n`)
+//! - [`adapters`] - Iterator adapters (`take`, `skip`, `chain`, etc.)
+//!
+//! All items are re-exported at the module root for convenience.
 
 pub mod traits
 pub mod adapters

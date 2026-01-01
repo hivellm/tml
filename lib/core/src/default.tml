@@ -1,14 +1,101 @@
-// TML Core Library - Default Module
-// Provides: Default behavior for types with meaningful default values
+//! Default values for types.
+//!
+//! This module provides the [`Default`] behavior, which allows types to
+//! specify a meaningful default value.
+//!
+//! # The Default Behavior
+//!
+//! [`Default`] can be implemented for any type that has a sensible default:
+//!
+//! ```tml
+//! use core::default::Default
+//!
+//! // Get default values
+//! let n: I64 = I64::default()     // 0
+//! let s: Str = Str::default()     // ""
+//! let b: Bool = Bool::default()   // false
+//! let m: Maybe[I64] = Maybe::default()  // Nothing
+//! ```
+//!
+//! # Implementing Default
+//!
+//! For your own types, implement `Default` when there's an obvious default:
+//!
+//! ```tml
+//! use core::default::Default
+//!
+//! pub type Config {
+//!     timeout_ms: I64,
+//!     retries: I32,
+//!     verbose: Bool
+//! }
+//!
+//! impl Default for Config {
+//!     pub func default() -> Config {
+//!         return Config {
+//!             timeout_ms: 5000,
+//!             retries: 3,
+//!             verbose: false
+//!         }
+//!     }
+//! }
+//!
+//! // Now you can use Config::default()
+//! let config = Config::default()
+//! ```
+//!
+//! # Use with Other Functions
+//!
+//! `Default` is commonly used with functions like [`mem::take`]:
+//!
+//! ```tml
+//! use core::mem::take
+//!
+//! let mut name = "Alice"
+//! let taken = take(mut ref name)
+//! // name is now "" (Str::default())
+//! ```
+//!
+//! # Derivability
+//!
+//! In the future, `Default` will be derivable for structs where all
+//! fields implement `Default`.
 
 // ============================================================================
 // Default Behavior
 // ============================================================================
 
-/// Behavior for types that have a meaningful default value.
-/// Use T::default() to create a default instance of type T.
+/// A behavior for types that have a meaningful default value.
+///
+/// Types implementing `Default` can be constructed via `T::default()`,
+/// which returns a default instance of that type.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::default::Default
+///
+/// let num: I64 = I64::default()
+/// assert(num == 0)
+///
+/// let opt: Maybe[I64] = Maybe::default()
+/// assert(opt.is_nothing())
+/// ```
+///
+/// # When to Implement
+///
+/// Implement `Default` when your type has a sensible, commonly-used
+/// default value. Don't implement it if there's no clear default or
+/// if a default would be misleading.
 pub behavior Default {
-    /// Creates a default value of this type.
+    /// Returns the default value for this type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = I64::default()  // 0
+    /// let s = Str::default()  // ""
+    /// ```
     func default() -> Self
 }
 
@@ -16,50 +103,62 @@ pub behavior Default {
 // Default implementations for primitives
 // ============================================================================
 
+/// `Default` for `I8` returns `0`.
 impl Default for I8 {
     pub func default() -> I8 { return 0 }
 }
 
+/// `Default` for `I16` returns `0`.
 impl Default for I16 {
     pub func default() -> I16 { return 0 }
 }
 
+/// `Default` for `I32` returns `0`.
 impl Default for I32 {
     pub func default() -> I32 { return 0 }
 }
 
+/// `Default` for `I64` returns `0`.
 impl Default for I64 {
     pub func default() -> I64 { return 0 }
 }
 
+/// `Default` for `U8` returns `0`.
 impl Default for U8 {
     pub func default() -> U8 { return 0 }
 }
 
+/// `Default` for `U16` returns `0`.
 impl Default for U16 {
     pub func default() -> U16 { return 0 }
 }
 
+/// `Default` for `U32` returns `0`.
 impl Default for U32 {
     pub func default() -> U32 { return 0 }
 }
 
+/// `Default` for `U64` returns `0`.
 impl Default for U64 {
     pub func default() -> U64 { return 0 }
 }
 
+/// `Default` for `F32` returns `0.0`.
 impl Default for F32 {
     pub func default() -> F32 { return 0.0 }
 }
 
+/// `Default` for `F64` returns `0.0`.
 impl Default for F64 {
     pub func default() -> F64 { return 0.0 }
 }
 
+/// `Default` for `Bool` returns `false`.
 impl Default for Bool {
     pub func default() -> Bool { return false }
 }
 
+/// `Default` for `Str` returns an empty string `""`.
 impl Default for Str {
     pub func default() -> Str { return "" }
 }
@@ -68,6 +167,10 @@ impl Default for Str {
 // Default for Maybe[T]
 // ============================================================================
 
+/// `Default` for `Maybe[T]` returns `Nothing`.
+///
+/// This allows `Maybe` to be used with functions like [`mem::take`] without
+/// requiring `T` to implement `Default`.
 impl[T] Default for Maybe[T] {
     pub func default() -> Maybe[T] { return Nothing }
 }

@@ -1,5 +1,30 @@
-// IP Address Types
-// Platform-independent IPv4 and IPv6 address representations
+//! IP address types.
+//!
+//! This module provides IPv4 and IPv6 address types that are platform-independent
+//! and work in `no_std` environments.
+//!
+//! # Types
+//!
+//! - [`Ipv4Addr`] - A 32-bit IPv4 address stored as 4 octets
+//! - [`Ipv6Addr`] - A 128-bit IPv6 address stored as 8 segments
+//! - [`IpAddr`] - An enum that holds either an IPv4 or IPv6 address
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+//!
+//! // Create addresses
+//! let v4 = Ipv4Addr::new(192, 168, 1, 1)
+//! let v6 = Ipv6Addr::LOCALHOST
+//!
+//! // Check properties
+//! assert(v4.is_private())
+//! assert(v6.is_loopback())
+//!
+//! // Convert between formats
+//! let mapped = v4.to_ipv6_mapped()
+//! ```
 
 use core::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd}
 use core::clone::{Copy, Duplicate}

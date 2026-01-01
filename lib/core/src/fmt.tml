@@ -1,12 +1,100 @@
-// TML Core Library - Formatting Module
-// Provides: Display and Debug behaviors for string formatting
+//! String formatting behaviors.
+//!
+//! This module provides the [`Display`] and [`Debug`] behaviors for converting
+//! values to strings.
+//!
+//! # Display vs Debug
+//!
+//! - [`Display`] - User-facing output, clean and readable
+//! - [`Debug`] - Developer-facing output, shows structure for debugging
+//!
+//! # Display
+//!
+//! Use `Display` for clean, user-friendly output:
+//!
+//! ```tml
+//! use core::fmt::Display
+//!
+//! let n: I64 = 42
+//! println(n.to_string())  // "42"
+//!
+//! let b: Bool = true
+//! println(b.to_string())  // "true"
+//! ```
+//!
+//! `Display` is used by:
+//! - `println()` and other output functions
+//! - String interpolation `"{value}"`
+//! - Error messages
+//!
+//! # Debug
+//!
+//! Use `Debug` for debugging output that shows structure:
+//!
+//! ```tml
+//! use core::fmt::Debug
+//!
+//! let s = "hello"
+//! println(s.debug_string())  // "\"hello\"" (with quotes)
+//!
+//! let opt = Just(42)
+//! println(opt.debug_string())  // "Just(42)"
+//! ```
+//!
+//! # Implementing Display and Debug
+//!
+//! For your own types:
+//!
+//! ```tml
+//! use core::fmt::{Display, Debug}
+//!
+//! pub type Point { x: I64, y: I64 }
+//!
+//! impl Display for Point {
+//!     pub func to_string(this) -> Str {
+//!         return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+//!     }
+//! }
+//!
+//! impl Debug for Point {
+//!     pub func debug_string(this) -> Str {
+//!         return "Point { x: " + this.x.to_string() + ", y: " + this.y.to_string() + " }"
+//!     }
+//! }
+//!
+//! let p = Point { x: 10, y: 20 }
+//! println(p.to_string())      // "(10, 20)"
+//! println(p.debug_string())   // "Point { x: 10, y: 20 }"
+//! ```
 
 // ============================================================================
 // Display Behavior
 // ============================================================================
 
-/// Behavior for user-facing string formatting.
-/// Used by println() and string interpolation.
+/// Behavior for user-facing string representation.
+///
+/// Types implementing `Display` can be converted to human-readable strings.
+/// This is used by `println()`, string interpolation, and anywhere clean
+/// output is needed.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Display
+///
+/// let n: I64 = 42
+/// let s: Str = n.to_string()  // "42"
+/// ```
+///
+/// # Implementing Display
+///
+/// ```tml
+/// impl Display for MyType {
+///     pub func to_string(this) -> Str {
+///         // Return a user-friendly representation
+///     }
+/// }
+/// ```
 pub behavior Display {
     /// Formats the value for display to end users.
     func to_string(this) -> Str
@@ -16,8 +104,39 @@ pub behavior Display {
 // Debug Behavior
 // ============================================================================
 
-/// Behavior for programmer-facing debug output.
-/// Shows more verbose/structural representation for debugging.
+/// Behavior for programmer-facing debug representation.
+///
+/// Types implementing `Debug` can produce output suitable for debugging.
+/// Unlike [`Display`], `Debug` output should show the structure of the value,
+/// making it easier to understand during development.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Debug
+///
+/// let s = "hello"
+/// println(s.debug_string())  // "\"hello\"" - includes quotes
+///
+/// let opt: Maybe[I64] = Just(42)
+/// println(opt.debug_string())  // "Just(42)"
+/// ```
+///
+/// # Conventions
+///
+/// - Strings should be quoted
+/// - Structs should show field names: `Point { x: 10, y: 20 }`
+/// - Enums should show variant names: `Just(42)`, `Nothing`
+///
+/// # Implementing Debug
+///
+/// ```tml
+/// impl Debug for MyType {
+///     pub func debug_string(this) -> Str {
+///         return "MyType { field: " + this.field.debug_string() + " }"
+///     }
+/// }
+/// ```
 pub behavior Debug {
     /// Formats the value for debugging purposes.
     func debug_string(this) -> Str
