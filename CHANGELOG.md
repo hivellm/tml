@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All 728 tests passing after refactoring
 
 ### Fixed
+- **Trait Object Vtable Type for Multiple Methods** (2026-01-01) - Fixed behaviors with multiple methods
+  - Vtable GEP instruction was using hardcoded `{ ptr }` type regardless of method count
+  - Now dynamically builds vtable type based on behavior's method count
+  - Set `last_expr_type_` to `i32` after dyn method dispatch
+  - Added comprehensive tests: dyn_advanced.test.tml, dyn_array.test.tml
+  - Files modified: `compiler/src/codegen/expr/method.cpp`
+
 - **Struct Literal Integer Type Casting** (2026-01-01) - Fixed i32 vs i64 mismatch in struct initialization
   - When initializing struct fields of type i64 with i32 values, codegen now properly sign-extends
   - Fixes Slice/MutSlice initialization where `len: I64` field received i32 values
