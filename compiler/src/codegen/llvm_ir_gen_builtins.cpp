@@ -564,6 +564,28 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         func_it = functions_.find(func_sig->name);
     }
 
+    // If still not found and this is a submodule call (e.g., "unicode_data::func"),
+    // try looking up with the current module prefix instead (e.g., "core::unicode::func")
+    // This handles intra-module calls where "pub mod submod" re-exports functions
+    if (func_it == functions_.end() && !current_module_prefix_.empty()) {
+        size_t first_sep = fn_name.find("::");
+        if (first_sep != std::string::npos) {
+            // Build qualified name: replace "submod::" with "module_prefix::"
+            // First convert current_module_prefix_ back to :: format
+            std::string module_path = current_module_prefix_;
+            size_t pos = 0;
+            while ((pos = module_path.find("_", pos)) != std::string::npos) {
+                module_path.replace(pos, 1, "::");
+                pos += 2;
+            }
+            // Get the function part after the submodule prefix
+            std::string func_part = fn_name.substr(first_sep + 2);
+            // Try looking up with full module path
+            std::string qualified_name = module_path + "::" + func_part;
+            func_it = functions_.find(qualified_name);
+        }
+    }
+
     std::string mangled;
     if (func_it != functions_.end()) {
         // Use the registered LLVM name (handles @extern functions correctly)

@@ -229,4 +229,227 @@ auto MirBuilder::get_unaryop(parser::UnaryOp op) -> UnaryOp {
     }
 }
 
+// ============================================================================
+// Drop Helpers (RAII)
+// ============================================================================
+
+auto MirBuilder::get_type_name(const MirTypePtr& type) const -> std::string {
+    if (!type) {
+        return "";
+    }
+
+    return std::visit(
+        [](const auto& t) -> std::string {
+            using T = std::decay_t<decltype(t)>;
+
+            if constexpr (std::is_same_v<T, MirStructType>) {
+                return t.name;
+            } else if constexpr (std::is_same_v<T, MirEnumType>) {
+                return t.name;
+            } else if constexpr (std::is_same_v<T, MirPrimitiveType>) {
+                switch (t.kind) {
+                case PrimitiveType::I8:
+                    return "I8";
+                case PrimitiveType::I16:
+                    return "I16";
+                case PrimitiveType::I32:
+                    return "I32";
+                case PrimitiveType::I64:
+                    return "I64";
+                case PrimitiveType::U8:
+                    return "U8";
+                case PrimitiveType::U16:
+                    return "U16";
+                case PrimitiveType::U32:
+                    return "U32";
+                case PrimitiveType::U64:
+                    return "U64";
+                case PrimitiveType::F32:
+                    return "F32";
+                case PrimitiveType::F64:
+                    return "F64";
+                case PrimitiveType::Bool:
+                    return "Bool";
+                case PrimitiveType::Str:
+                    return "Str";
+                default:
+                    return "";
+                }
+            } else {
+                return "";
+            }
+        },
+        type->kind);
+}
+
+void MirBuilder::emit_drop_calls(const std::vector<BuildContext::DropInfo>& drops) {
+    for (const auto& drop_info : drops) {
+        emit_drop_for_value(drop_info.value, drop_info.type, drop_info.type_name);
+    }
+}
+
+auto MirBuilder::get_type_name_from_semantic(const types::TypePtr& type) const -> std::string {
+    if (!type) {
+        return "";
+    }
+
+    return std::visit(
+        [](const auto& t) -> std::string {
+            using T = std::decay_t<decltype(t)>;
+
+            if constexpr (std::is_same_v<T, types::PrimitiveType>) {
+                switch (t.kind) {
+                case types::PrimitiveKind::I8:
+                    return "I8";
+                case types::PrimitiveKind::I16:
+                    return "I16";
+                case types::PrimitiveKind::I32:
+                    return "I32";
+                case types::PrimitiveKind::I64:
+                    return "I64";
+                case types::PrimitiveKind::I128:
+                    return "I128";
+                case types::PrimitiveKind::U8:
+                    return "U8";
+                case types::PrimitiveKind::U16:
+                    return "U16";
+                case types::PrimitiveKind::U32:
+                    return "U32";
+                case types::PrimitiveKind::U64:
+                    return "U64";
+                case types::PrimitiveKind::U128:
+                    return "U128";
+                case types::PrimitiveKind::F32:
+                    return "F32";
+                case types::PrimitiveKind::F64:
+                    return "F64";
+                case types::PrimitiveKind::Bool:
+                    return "Bool";
+                case types::PrimitiveKind::Char:
+                    return "Char";
+                case types::PrimitiveKind::Unit:
+                    return "Unit";
+                case types::PrimitiveKind::Never:
+                    return "Never";
+                default:
+                    return "";
+                }
+            } else if constexpr (std::is_same_v<T, types::NamedType>) {
+                return t.name;
+            } else {
+                return "";
+            }
+        },
+        type->kind);
+}
+
+void MirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
+                                     const std::string& type_name) {
+    // Get the effective type name for drop checking
+    std::string effective_type_name = type_name;
+    if (effective_type_name.empty() && type) {
+        effective_type_name = get_type_name(type);
+    }
+
+    // Skip if type doesn't need drop at all
+    if (!effective_type_name.empty() && !env_.type_needs_drop(effective_type_name)) {
+        return;
+    }
+    // If we still don't have a type name, check for array types
+    if (effective_type_name.empty() && type) {
+        // Only proceed if it's an array type with elements that need drop
+        if (!std::holds_alternative<MirArrayType>(type->kind)) {
+            return;
+        }
+    }
+
+    // Step 1: If type explicitly implements Drop, call Type::drop(value)
+    bool has_explicit_drop =
+        !effective_type_name.empty() && env_.type_implements(effective_type_name, "Drop");
+    if (has_explicit_drop) {
+        CallInst call;
+        call.func_name = effective_type_name + "::drop";
+        call.args = {value};
+        call.arg_types = {type};
+        call.return_type = make_unit_type();
+        emit_void(std::move(call));
+    }
+
+    // Step 2: Recursively drop fields for structs (in reverse declaration order)
+    if (!effective_type_name.empty()) {
+        auto struct_def = env_.lookup_struct(effective_type_name);
+        if (struct_def && !struct_def->fields.empty()) {
+            // Drop fields in reverse order (LIFO)
+            size_t total_fields = struct_def->fields.size();
+            for (size_t i = total_fields; i > 0; --i) {
+                size_t field_idx = i - 1;
+                const auto& [field_name, field_type] = struct_def->fields[field_idx];
+
+                // Check if field type needs drop
+                if (!env_.type_needs_drop(field_type)) {
+                    continue;
+                }
+
+                // Get the type name for the field
+                std::string field_type_name = get_type_name_from_semantic(field_type);
+
+                // Convert semantic TypePtr to MirTypePtr for the field
+                MirTypePtr field_mir_type;
+                if (!field_type_name.empty()) {
+                    field_mir_type = make_struct_type(field_type_name);
+                } else {
+                    // Fallback: use a generic pointer type
+                    field_mir_type = make_ptr_type();
+                }
+
+                // Extract field value using ExtractValueInst
+                ExtractValueInst extract;
+                extract.aggregate = value;
+                extract.indices = {static_cast<uint32_t>(field_idx)};
+                extract.aggregate_type = type;
+                extract.result_type = field_mir_type;
+
+                Value field_value = emit(std::move(extract), field_mir_type);
+
+                // Recursively drop the field
+                emit_drop_for_value(field_value, field_mir_type, field_type_name);
+            }
+        }
+    }
+
+    // Step 3: Handle arrays - iterate elements and drop each (in reverse order)
+    if (type && std::holds_alternative<MirArrayType>(type->kind)) {
+        const auto& arr_type = std::get<MirArrayType>(type->kind);
+        std::string elem_type_name = get_type_name(arr_type.element);
+
+        if (!elem_type_name.empty() && env_.type_needs_drop(elem_type_name)) {
+            // Drop each element in reverse order
+            for (size_t i = arr_type.size; i > 0; --i) {
+                ExtractValueInst extract;
+                extract.aggregate = value;
+                extract.indices = {static_cast<uint32_t>(i - 1)};
+                extract.aggregate_type = type;
+                extract.result_type = arr_type.element;
+
+                Value elem_value = emit(std::move(extract), arr_type.element);
+                emit_drop_for_value(elem_value, arr_type.element, elem_type_name);
+            }
+        }
+    }
+
+    // Note: For enums, the proper approach would be to generate a switch over the
+    // discriminant to drop the correct variant's payload. For now, enums that need
+    // drop should implement Drop explicitly to handle cleanup.
+}
+
+void MirBuilder::emit_scope_drops() {
+    auto drops = ctx_.get_drops_for_current_scope();
+    emit_drop_calls(drops);
+}
+
+void MirBuilder::emit_all_drops() {
+    auto drops = ctx_.get_all_drops();
+    emit_drop_calls(drops);
+}
+
 } // namespace tml::mir

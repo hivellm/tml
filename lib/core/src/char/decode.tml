@@ -1,0 +1,272 @@
+//! UTF-16 decoding utilities.
+//!
+//! This module provides the [`DecodeUtf16`] iterator for decoding
+//! UTF-16 encoded data into Unicode scalar values.
+
+use core::option::Maybe
+use core::result::Outcome
+use core::iter::Iterator
+use core::fmt::{Display, Debug, Formatter, FormatResult}
+use core::error::Error
+use core::char::Char
+use core::char::REPLACEMENT_CHARACTER
+
+// ============================================================================
+// DecodeUtf16 Iterator
+// ============================================================================
+
+/// An iterator that decodes UTF-16 encoded code units into `Char`s.
+///
+/// This struct is created by the [`decode_utf16`] function. See its
+/// documentation for more information.
+///
+/// # Error Handling
+///
+/// If the iterator encounters an unpaired surrogate, it returns
+/// `Err(DecodeUtf16Error)` containing the unpaired surrogate value.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::decode_utf16
+///
+/// // Valid UTF-16: "hello"
+/// let utf16: [U16] = [0x0068, 0x0065, 0x006C, 0x006C, 0x006F]
+/// let chars: List[Char] = decode_utf16(utf16.iter())
+///     .filter_map(do(r) r.ok())
+///     .collect()
+/// ```
+pub type DecodeUtf16[I] {
+    /// The underlying iterator of U16 values.
+    iter: I,
+    /// Buffered high surrogate waiting for its pair.
+    buf: Maybe[U16]
+}
+
+/// Creates an iterator over the UTF-16 encoded code points in `iter`,
+/// returning unpaired surrogates as errors.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::{decode_utf16, REPLACEMENT_CHARACTER}
+///
+/// // Decode UTF-16, replacing errors with replacement character
+/// let utf16: [U16] = [0xD834, 0xDD1E]  // U+1D11E MUSICAL SYMBOL G CLEF
+///
+/// for result in decode_utf16(utf16.iter()) {
+///     when result {
+///         Ok(c) => print(c),
+///         Err(e) => print(REPLACEMENT_CHARACTER)
+///     }
+/// }
+/// ```
+///
+/// ```tml
+/// // Handling unpaired surrogates
+/// let utf16: [U16] = [0xD800]  // Unpaired high surrogate
+///
+/// for result in decode_utf16(utf16.iter()) {
+///     when result {
+///         Ok(c) => {},
+///         Err(e) => {
+///             // e.unpaired_surrogate() returns 0xD800
+///             println("Unpaired surrogate: {}", e.unpaired_surrogate())
+///         }
+///     }
+/// }
+/// ```
+pub func decode_utf16[I: Iterator[Item = U16]](iter: I) -> DecodeUtf16[I] {
+    return DecodeUtf16 {
+        iter: iter,
+        buf: Nothing
+    }
+}
+
+impl[I: Iterator[Item = U16]] DecodeUtf16[I] {
+    /// Creates a new decoder from an iterator of U16 values.
+    pub func new(iter: I) -> DecodeUtf16[I] {
+        return DecodeUtf16 {
+            iter: iter,
+            buf: Nothing
+        }
+    }
+}
+
+impl[I: Iterator[Item = U16]] Iterator for DecodeUtf16[I] {
+    type Item = Outcome[Char, DecodeUtf16Error]
+
+    func next(mut this) -> Maybe[This::Item] {
+        // Get the next code unit, either from buffer or iterator
+        let u: U16 = when this.buf {
+            Just(buffered) => {
+                this.buf = Nothing
+                buffered
+            },
+            Nothing => {
+                when this.iter.next() {
+                    Just(v) => v,
+                    Nothing => return Nothing
+                }
+            }
+        }
+
+        // Check if this is a surrogate
+        if u < 0xD800 or u > 0xDFFF {
+            // Not a surrogate, return as-is
+            return Just(Ok(u as Char))
+        }
+
+        // High surrogate (leading surrogate): 0xD800-0xDBFF
+        if u <= 0xDBFF {
+            // Need to find the low surrogate
+            let low: U16 = when this.iter.next() {
+                Just(v) => v,
+                Nothing => {
+                    // End of input, unpaired high surrogate
+                    return Just(Err(DecodeUtf16Error { code: u }))
+                }
+            }
+
+            // Check if it's a valid low surrogate (0xDC00-0xDFFF)
+            if low >= 0xDC00 and low <= 0xDFFF {
+                // Valid surrogate pair, decode it
+                let high_bits: U32 = ((u as U32) - 0xD800) << 10
+                let low_bits: U32 = (low as U32) - 0xDC00
+                let code_point: Char = 0x10000 + high_bits + low_bits
+                return Just(Ok(code_point))
+            } else {
+                // Invalid pair - buffer the second unit for next iteration
+                this.buf = Just(low)
+                return Just(Err(DecodeUtf16Error { code: u }))
+            }
+        }
+
+        // Low surrogate without preceding high surrogate
+        return Just(Err(DecodeUtf16Error { code: u }))
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        let (low, high) = this.iter.size_hint()
+        // In the worst case, every code unit is an unpaired surrogate (1:1)
+        // In the best case, every two code units form a pair (n/2 chars)
+        let low_chars: I64 = low / 2
+        return (low_chars, high)
+    }
+}
+
+// ============================================================================
+// DecodeUtf16Error
+// ============================================================================
+
+/// An error that can occur when decoding UTF-16.
+///
+/// This error is returned by [`DecodeUtf16`] when it encounters an
+/// unpaired surrogate code unit.
+pub type DecodeUtf16Error {
+    /// The unpaired surrogate code unit.
+    code: U16
+}
+
+impl DecodeUtf16Error {
+    /// Returns the unpaired surrogate code unit which caused this error.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use core::char::decode_utf16
+    ///
+    /// let utf16: [U16] = [0xD800]  // Unpaired high surrogate
+    /// let result = decode_utf16(utf16.iter()).next().unwrap()
+    ///
+    /// when result {
+    ///     Err(e) => assert_eq(e.unpaired_surrogate(), 0xD800),
+    ///     Ok(_) => panic("expected error")
+    /// }
+    /// ```
+    pub func unpaired_surrogate(this) -> U16 {
+        return this.code
+    }
+}
+
+impl Display for DecodeUtf16Error {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("unpaired surrogate found: 0x")
+            .and_then(do(_) f.write_u16_hex(this.code))
+    }
+}
+
+impl Debug for DecodeUtf16Error {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("DecodeUtf16Error { code: 0x")
+            .and_then(do(_) f.write_u16_hex(this.code))
+            .and_then(do(_) f.write_str(" }"))
+    }
+}
+
+impl Error for DecodeUtf16Error {
+    func description(this) -> Str {
+        return "unpaired surrogate in UTF-16"
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Decodes a UTF-16 surrogate pair into a Unicode scalar value.
+///
+/// # Arguments
+///
+/// * `high` - The high surrogate (0xD800-0xDBFF)
+/// * `low` - The low surrogate (0xDC00-0xDFFF)
+///
+/// # Returns
+///
+/// Returns `Just(char)` if both values form a valid surrogate pair,
+/// or `Nothing` if either value is not a valid surrogate.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::decode_surrogate_pair
+///
+/// // U+1D11E (MUSICAL SYMBOL G CLEF)
+/// assert_eq(decode_surrogate_pair(0xD834, 0xDD1E), Just(0x1D11E))
+///
+/// // Invalid surrogates
+/// assert_eq(decode_surrogate_pair(0x0041, 0xDD1E), Nothing)
+/// ```
+pub func decode_surrogate_pair(high: U16, low: U16) -> Maybe[Char] {
+    // Validate high surrogate
+    if high < 0xD800 or high > 0xDBFF {
+        return Nothing
+    }
+
+    // Validate low surrogate
+    if low < 0xDC00 or low > 0xDFFF {
+        return Nothing
+    }
+
+    // Decode the pair
+    let high_bits: U32 = ((high as U32) - 0xD800) << 10
+    let low_bits: U32 = (low as U32) - 0xDC00
+    let code_point: Char = 0x10000 + high_bits + low_bits
+
+    return Just(code_point)
+}
+
+/// Checks if a code unit is a high (leading) surrogate.
+pub func is_high_surrogate(code: U16) -> Bool {
+    return code >= 0xD800 and code <= 0xDBFF
+}
+
+/// Checks if a code unit is a low (trailing) surrogate.
+pub func is_low_surrogate(code: U16) -> Bool {
+    return code >= 0xDC00 and code <= 0xDFFF
+}
+
+/// Checks if a code unit is any surrogate.
+pub func is_surrogate(code: U16) -> Bool {
+    return code >= 0xD800 and code <= 0xDFFF
+}

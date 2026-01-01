@@ -369,18 +369,24 @@ const char* strbuilder_as_str(void* ptr) {
 
 // i64_to_str(n: I64) -> Str
 // Convert integer to string for string interpolation
-static char i64_buffer[32];
+// NOTE: Returns a newly allocated string, caller must free or use before next allocation
 const char* i64_to_str(int64_t n) {
-    snprintf(i64_buffer, sizeof(i64_buffer), "%lld", (long long)n);
-    return i64_buffer;
+    char* buffer = (char*)malloc(32);
+    if (!buffer)
+        return "";
+    snprintf(buffer, 32, "%lld", (long long)n);
+    return buffer;
 }
 
 // f64_to_str(n: F64) -> Str
 // Convert float to string for string interpolation
-static char f64_buffer[64];
+// NOTE: Returns a newly allocated string, caller must free or use before next allocation
 const char* f64_to_str(double n) {
-    snprintf(f64_buffer, sizeof(f64_buffer), "%g", n);
-    return f64_buffer;
+    char* buffer = (char*)malloc(64);
+    if (!buffer)
+        return "";
+    snprintf(buffer, 64, "%g", n);
+    return buffer;
 }
 
 // ============================================================================
@@ -404,4 +410,12 @@ const char* i64_to_string(int64_t n) {
 // bool_to_string(b: Bool) -> Str
 const char* bool_to_string(int b) {
     return b ? "true" : "false";
+}
+
+// char_to_string(c: U8) -> Str
+// Converts a single ASCII character (byte) to a 1-character string
+static char char_to_string_buffer[2] = {0, 0};
+const char* char_to_string(uint8_t c) {
+    char_to_string_buffer[0] = (char)c;
+    return char_to_string_buffer;
 }

@@ -365,6 +365,19 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         return "0";
     }
 
+    // char_to_string(c) -> Str
+    // Converts a single byte (U8) to a 1-character string
+    if (fn_name == "char_to_string") {
+        if (!call.args.empty()) {
+            std::string c = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @char_to_string(i8 " + c + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
     // ========================================================================
     // StringBuilder Operations (Mutable String)
     // ========================================================================

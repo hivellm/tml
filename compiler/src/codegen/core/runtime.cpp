@@ -310,6 +310,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @char_from_digit(i32, i32)");
     emit_line("declare i32 @char_code(i32)");
     emit_line("declare i32 @char_from_code(i32)");
+    emit_line("declare ptr @char_to_string(i8)");
     emit_line("");
 
     // StringBuilder utilities (matches runtime/string.c)
@@ -463,6 +464,10 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
         }
         current_module_prefix_ = sanitized_prefix;
 
+        // Set submodule name for cross-module function lookups
+        // For files like "unicode_data.tml", this allows lookups with "unicode_data::func"
+        current_submodule_name_ = mod_name;
+
         // First pass: register struct/enum declarations (including generic ones)
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::StructDecl>()) {
@@ -475,6 +480,19 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 const auto& e = decl->as<parser::EnumDecl>();
                 if (e.vis == parser::Visibility::Public) {
                     gen_enum_decl(e); // This registers generic enums in pending_generic_enums_
+                }
+            }
+        }
+
+        // 1.5 pass: pre-register ALL function signatures before generating any code
+        // This ensures intra-module calls (like mod.tml calling unicode_data::func) resolve
+        // correctly
+        for (const auto& decl : parsed_module.decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func = decl->as<parser::FuncDecl>();
+                if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
+                    func.body.has_value()) {
+                    pre_register_func(func);
                 }
             }
         }

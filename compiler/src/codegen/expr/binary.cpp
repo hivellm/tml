@@ -284,16 +284,29 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         right_type = "i32";
     }
 
+    // Get semantic types for signedness detection
+    types::TypePtr left_semantic = infer_expr_type(*bin.left);
+    types::TypePtr right_semantic = infer_expr_type(*bin.right);
+
+    auto check_unsigned = [](const types::TypePtr& t) -> bool {
+        if (!t)
+            return false;
+        if (auto* prim = std::get_if<types::PrimitiveType>(&t->kind)) {
+            return prim->kind == types::PrimitiveKind::U8 ||
+                   prim->kind == types::PrimitiveKind::U16 ||
+                   prim->kind == types::PrimitiveKind::U32 ||
+                   prim->kind == types::PrimitiveKind::U64 ||
+                   prim->kind == types::PrimitiveKind::U128;
+        }
+        return false;
+    };
+
+    bool left_unsigned = check_unsigned(left_semantic);
+    bool right_unsigned = check_unsigned(right_semantic);
+
     // Check if either operand is a float
     bool is_float = (left_type == "double" || left_type == "float" || right_type == "double" ||
                      right_type == "float");
-
-    // Check if either operand is i64
-    bool is_i64 = (left_type == "i64" || right_type == "i64");
-
-    // Check for smaller integer types (i8, i16)
-    bool is_i8 = (left_type == "i8" || right_type == "i8") && !is_i64;
-    bool is_i16 = (left_type == "i16" || right_type == "i16") && !is_i64 && !is_i8;
 
     // Handle float literals (e.g., 3.0)
     if (!is_float && bin.right->is<parser::LiteralExpr>()) {
@@ -309,17 +322,56 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         }
     }
 
+    // Helper to get integer type size in bits
+    auto int_type_size = [](const std::string& t) -> int {
+        if (t == "i8")
+            return 8;
+        if (t == "i16")
+            return 16;
+        if (t == "i32")
+            return 32;
+        if (t == "i64")
+            return 64;
+        if (t == "i128")
+            return 128;
+        return 0;
+    };
+
+    // Helper to extend integer to target type
+    auto extend_int = [&](std::string& val, const std::string& from_type,
+                          const std::string& to_type, bool is_unsigned_val) {
+        if (from_type == to_type)
+            return;
+        std::string conv = fresh_reg();
+        if (is_unsigned_val) {
+            emit_line("  " + conv + " = zext " + from_type + " " + val + " to " + to_type);
+        } else {
+            emit_line("  " + conv + " = sext " + from_type + " " + val + " to " + to_type);
+        }
+        val = conv;
+    };
+
     if (is_float) {
         // Convert integer operands to double if needed
-        if (left_type == "i32" || left_type == "i64") {
+        if (int_type_size(left_type) > 0) {
             std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sitofp " + left_type + " " + left + " to double");
+            if (left_unsigned) {
+                emit_line("  " + conv + " = uitofp " + left_type + " " + left + " to double");
+            } else {
+                emit_line("  " + conv + " = sitofp " + left_type + " " + left + " to double");
+            }
             left = conv;
+            left_type = "double";
         }
-        if (right_type == "i32" || right_type == "i64") {
+        if (int_type_size(right_type) > 0) {
             std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sitofp " + right_type + " " + right + " to double");
+            if (right_unsigned) {
+                emit_line("  " + conv + " = uitofp " + right_type + " " + right + " to double");
+            } else {
+                emit_line("  " + conv + " = sitofp " + right_type + " " + right + " to double");
+            }
             right = conv;
+            right_type = "double";
         }
         // Also handle float literals that need double representation
         if (bin.right->is<parser::LiteralExpr>()) {
@@ -328,33 +380,28 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 right = std::to_string(lit.token.float_value().value);
             }
         }
-    } else if (is_i64) {
-        // Promote smaller ints to i64 if needed
-        if (left_type == "i32" || left_type == "i16" || left_type == "i8") {
-            std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext " + left_type + " " + left + " to i64");
-            left = conv;
-        }
-        if (right_type == "i32" || right_type == "i16" || right_type == "i8") {
-            std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext " + right_type + " " + right + " to i64");
-            right = conv;
-        }
-    } else if (!is_i8 && !is_i16) {
-        // When using i32, promote smaller ints if needed
-        if (left_type == "i16" || left_type == "i8") {
-            std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext " + left_type + " " + left + " to i32");
-            left = conv;
-            left_type = "i32";
-        }
-        if (right_type == "i16" || right_type == "i8") {
-            std::string conv = fresh_reg();
-            emit_line("  " + conv + " = sext " + right_type + " " + right + " to i32");
-            right = conv;
-            right_type = "i32";
+    } else {
+        // Integer type promotion: promote both to the larger type
+        int left_size = int_type_size(left_type);
+        int right_size = int_type_size(right_type);
+
+        if (left_size > 0 && right_size > 0 && left_size != right_size) {
+            // Promote smaller to larger
+            if (left_size > right_size) {
+                extend_int(right, right_type, left_type, right_unsigned);
+                right_type = left_type;
+            } else {
+                extend_int(left, left_type, right_type, left_unsigned);
+                left_type = right_type;
+            }
         }
     }
+
+    // Check if either operand is i64 (after promotion)
+    bool is_i64 = (left_type == "i64" || right_type == "i64");
+    // Check for smaller integer types (i8, i16)
+    bool is_i8 = (left_type == "i8" && right_type == "i8");
+    bool is_i16 = (left_type == "i16" && right_type == "i16");
 
     // Check if either operand is Bool (i1)
     bool is_bool = (left_type == "i1" || right_type == "i1");
@@ -374,6 +421,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         int_type = "i8";
     }
 
+    // Use unsigned operations if either operand is unsigned
+    bool is_unsigned = left_unsigned || right_unsigned;
+
     switch (bin.op) {
     case parser::BinaryOp::Add:
         if (is_string) {
@@ -384,6 +434,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         } else if (is_float) {
             emit_line("  " + result + " = fadd double " + left + ", " + right);
             last_expr_type_ = "double";
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = add nuw " + int_type + " " + left + ", " + right);
+            last_expr_type_ = int_type;
         } else {
             emit_line("  " + result + " = add nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -393,6 +446,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fsub double " + left + ", " + right);
             last_expr_type_ = "double";
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = sub nuw " + int_type + " " + left + ", " + right);
+            last_expr_type_ = int_type;
         } else {
             emit_line("  " + result + " = sub nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -402,6 +458,9 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fmul double " + left + ", " + right);
             last_expr_type_ = "double";
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = mul nuw " + int_type + " " + left + ", " + right);
+            last_expr_type_ = int_type;
         } else {
             emit_line("  " + result + " = mul nsw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -411,13 +470,20 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (is_float) {
             emit_line("  " + result + " = fdiv double " + left + ", " + right);
             last_expr_type_ = "double";
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = udiv " + int_type + " " + left + ", " + right);
+            last_expr_type_ = int_type;
         } else {
             emit_line("  " + result + " = sdiv " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
         }
         break;
     case parser::BinaryOp::Mod:
-        emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
+        if (is_unsigned) {
+            emit_line("  " + result + " = urem " + int_type + " " + left + ", " + right);
+        } else {
+            emit_line("  " + result + " = srem " + int_type + " " + left + ", " + right);
+        }
         last_expr_type_ = int_type;
         break;
     // Comparisons return i1 (use fcmp for floats, icmp for integers, str_eq for strings)
@@ -450,6 +516,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     case parser::BinaryOp::Lt:
         if (is_float) {
             emit_line("  " + result + " = fcmp olt double " + left + ", " + right);
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = icmp ult " + int_type + " " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp slt " + int_type + " " + left + ", " + right);
         }
@@ -458,6 +526,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     case parser::BinaryOp::Gt:
         if (is_float) {
             emit_line("  " + result + " = fcmp ogt double " + left + ", " + right);
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = icmp ugt " + int_type + " " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp sgt " + int_type + " " + left + ", " + right);
         }
@@ -466,6 +536,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     case parser::BinaryOp::Le:
         if (is_float) {
             emit_line("  " + result + " = fcmp ole double " + left + ", " + right);
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = icmp ule " + int_type + " " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp sle " + int_type + " " + left + ", " + right);
         }
@@ -474,6 +546,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     case parser::BinaryOp::Ge:
         if (is_float) {
             emit_line("  " + result + " = fcmp oge double " + left + ", " + right);
+        } else if (is_unsigned) {
+            emit_line("  " + result + " = icmp uge " + int_type + " " + left + ", " + right);
         } else {
             emit_line("  " + result + " = icmp sge " + int_type + " " + left + ", " + right);
         }
@@ -507,7 +581,13 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         last_expr_type_ = int_type;
         break;
     case parser::BinaryOp::Shr:
-        emit_line("  " + result + " = ashr " + int_type + " " + left + ", " + right);
+        if (is_unsigned) {
+            // Logical shift right for unsigned (fills with 0s)
+            emit_line("  " + result + " = lshr " + int_type + " " + left + ", " + right);
+        } else {
+            // Arithmetic shift right for signed (fills with sign bit)
+            emit_line("  " + result + " = ashr " + int_type + " " + left + ", " + right);
+        }
         last_expr_type_ = int_type;
         break;
     // Note: Assign is handled above before evaluating left/right

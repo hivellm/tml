@@ -1,0 +1,329 @@
+//! Character conversions.
+//!
+//! This module contains functions for converting between characters and
+//! other types, as well as error types for failed conversions.
+
+use core::option::Maybe
+use core::result::Outcome
+use core::fmt::{Display, Debug, Formatter, FormatResult}
+use core::error::Error
+use core::char::Char
+
+// ============================================================================
+// Conversion Functions
+// ============================================================================
+
+/// Converts a `U32` to a `Char`.
+///
+/// Returns `Nothing` if the value is not a valid Unicode scalar value.
+/// A Unicode scalar value is any code point that is not a surrogate
+/// (0xD800 to 0xDFFF) and is within the valid range (0 to 0x10FFFF).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::from_u32
+///
+/// assert_eq(from_u32(0x2764), Just('\u{2764}'))  // Heart
+/// assert_eq(from_u32(0x110000), Nothing)         // Out of range
+/// assert_eq(from_u32(0xD800), Nothing)           // Surrogate
+/// ```
+pub func from_u32(value: U32) -> Maybe[Char] {
+    if is_valid_char(value) {
+        return Just(value)
+    }
+    return Nothing
+}
+
+/// Converts a `U32` to a `Char` without checking validity.
+///
+/// # Safety (lowlevel)
+///
+/// This function is lowlevel because it does not verify that the value
+/// is a valid Unicode scalar value. The caller must ensure:
+/// - The value is not in the surrogate range (0xD800-0xDFFF)
+/// - The value is not greater than 0x10FFFF
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::from_u32_unchecked
+///
+/// // Only use when you're certain the value is valid
+/// let c = lowlevel { from_u32_unchecked(0x2764) }
+/// assert_eq(c, '\u{2764}')
+/// ```
+pub func from_u32_unchecked(value: U32) -> Char {
+    // In lowlevel context, we trust the caller
+    return value
+}
+
+/// Converts a digit in the given radix to a character.
+///
+/// A 'radix' here is sometimes also called a 'base'. A radix of two
+/// indicates a binary number, a radix of ten, decimal, and a radix of
+/// sixteen, hexadecimal.
+///
+/// The digits 0-9 map to characters '0'-'9', and 10-35 map to 'a'-'z'.
+///
+/// Returns `Nothing` if:
+/// - The radix is not in the range 2..=36
+/// - The digit is greater than or equal to the radix
+///
+/// # Panics
+///
+/// Panics if `radix` is greater than 36.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::from_digit
+///
+/// assert_eq(from_digit(4, 10), Just('4'))
+/// assert_eq(from_digit(10, 16), Just('a'))
+/// assert_eq(from_digit(17, 16), Nothing)  // 17 >= 16
+/// ```
+pub func from_digit(num: U32, radix: U32) -> Maybe[Char] {
+    if radix < 2 or radix > 36 {
+        panic("from_digit: radix must be 2..=36")
+    }
+
+    if num >= radix {
+        return Nothing
+    }
+
+    let digit: Char = if num < 10 {
+        num + 0x30  // '0' = 0x30
+    } else {
+        num - 10 + 0x61  // 'a' = 0x61
+    }
+
+    return Just(digit)
+}
+
+/// Attempts to convert a `U32` to a `Char`.
+///
+/// Returns `Ok(char)` if the value is a valid Unicode scalar value,
+/// or `Err(CharTryFromError)` otherwise.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::char::try_from_u32
+///
+/// assert(try_from_u32(0x2764).is_ok())
+/// assert(try_from_u32(0xD800).is_err())
+/// ```
+pub func try_from_u32(value: U32) -> Outcome[Char, CharTryFromError] {
+    if is_valid_char(value) {
+        return Ok(value)
+    }
+    return Err(CharTryFromError { value: value })
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Checks if a `U32` value is a valid Unicode scalar value.
+///
+/// Valid values are in the range 0..=0x10FFFF, excluding the surrogate
+/// range 0xD800..=0xDFFF.
+func is_valid_char(value: U32) -> Bool {
+    // Check if in surrogate range
+    if value >= 0xD800 and value <= 0xDFFF {
+        return false
+    }
+    // Check if in valid Unicode range
+    return value <= 0x10FFFF
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/// The error type returned when a `U32` to `Char` conversion fails.
+///
+/// This error is returned by [`try_from_u32`] when the value is not a
+/// valid Unicode scalar value.
+pub type CharTryFromError {
+    /// The invalid value that caused the error.
+    value: U32
+}
+
+impl CharTryFromError {
+    /// Returns the invalid value that caused this error.
+    pub func invalid_value(this) -> U32 {
+        return this.value
+    }
+}
+
+impl Display for CharTryFromError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        if this.value >= 0xD800 and this.value <= 0xDFFF {
+            return f.write_str("converted integer is a surrogate code point")
+        }
+        return f.write_str("converted integer out of range for char")
+    }
+}
+
+impl Debug for CharTryFromError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("CharTryFromError { value: ")
+            .and_then(do(_) f.write_u32(this.value))
+            .and_then(do(_) f.write_str(" }"))
+    }
+}
+
+impl Error for CharTryFromError {
+    func description(this) -> Str {
+        return "invalid char conversion"
+    }
+}
+
+/// An error returned when parsing a `Char` from a string fails.
+///
+/// This error is returned by [`Char::from_str`] when the string is
+/// empty or contains more than one character.
+pub type ParseCharError {
+    /// The kind of error that occurred.
+    kind: ParseCharErrorKind
+}
+
+/// The kind of error that occurred during character parsing.
+pub type ParseCharErrorKind {
+    /// The string was empty.
+    EmptyString,
+    /// The string contained more than one character.
+    TooManyChars
+}
+
+impl ParseCharError {
+    /// Returns the kind of error that occurred.
+    pub func kind(this) -> ParseCharErrorKind {
+        return this.kind
+    }
+}
+
+impl Display for ParseCharError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        when this.kind {
+            EmptyString => return f.write_str("cannot parse char from empty string"),
+            TooManyChars => return f.write_str("too many characters in string")
+        }
+    }
+}
+
+impl Debug for ParseCharError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("ParseCharError { kind: ")
+            .and_then(do(_) {
+                when this.kind {
+                    EmptyString => f.write_str("EmptyString"),
+                    TooManyChars => f.write_str("TooManyChars")
+                }
+            })
+            .and_then(do(_) f.write_str(" }"))
+    }
+}
+
+impl Error for ParseCharError {
+    func description(this) -> Str {
+        when this.kind {
+            EmptyString => return "cannot parse char from empty string",
+            TooManyChars => return "too many characters in string"
+        }
+    }
+}
+
+// ============================================================================
+// Conversion Traits
+// ============================================================================
+
+/// Error type returned when converting a `Char` to a smaller integer fails.
+///
+/// This occurs when trying to convert a character with a code point that
+/// doesn't fit in the target type.
+pub type TryFromCharError {
+    /// The character that couldn't be converted.
+    value: Char
+}
+
+impl TryFromCharError {
+    /// Returns the character that couldn't be converted.
+    pub func source_char(this) -> Char {
+        return this.value
+    }
+}
+
+impl Display for TryFromCharError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("char value too large for target type")
+    }
+}
+
+impl Debug for TryFromCharError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        return f.write_str("TryFromCharError { value: U+")
+            .and_then(do(_) f.write_u32_hex(this.value))
+            .and_then(do(_) f.write_str(" }"))
+    }
+}
+
+impl Error for TryFromCharError {
+    func description(this) -> Str {
+        return "char value too large"
+    }
+}
+
+// ============================================================================
+// Char to Integer Conversions
+// ============================================================================
+
+/// Converts a `Char` to `U32`.
+///
+/// This is always valid since Char is represented as U32.
+pub func to_u32(c: Char) -> U32 {
+    return c
+}
+
+/// Converts a `Char` to `U64`.
+pub func to_u64(c: Char) -> U64 {
+    return c as U64
+}
+
+/// Converts a `Char` to `U128`.
+pub func to_u128(c: Char) -> U128 {
+    return c as U128
+}
+
+/// Attempts to convert a `Char` to `U8`.
+///
+/// Returns `Err` if the character's code point is greater than 255.
+pub func try_to_u8(c: Char) -> Outcome[U8, TryFromCharError] {
+    if c <= 0xFF {
+        return Ok(c as U8)
+    }
+    return Err(TryFromCharError { value: c })
+}
+
+/// Attempts to convert a `Char` to `U16`.
+///
+/// Returns `Err` if the character's code point is greater than 65535.
+pub func try_to_u16(c: Char) -> Outcome[U16, TryFromCharError] {
+    if c <= 0xFFFF {
+        return Ok(c as U16)
+    }
+    return Err(TryFromCharError { value: c })
+}
+
+// ============================================================================
+// Integer to Char Conversions
+// ============================================================================
+
+/// Converts a `U8` to a `Char`.
+///
+/// This is always valid since all U8 values are valid Unicode scalar values.
+pub func from_u8(value: U8) -> Char {
+    return value as U32
+}

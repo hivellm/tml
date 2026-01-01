@@ -13,6 +13,9 @@
 // - mem: Memory utilities (size_of, swap, replace, forget)
 // - cell: Interior mutability (Cell, RefCell)
 // - str: String manipulation utilities
+// - char: Unicode scalar value (Char) type and operations
+// - ascii: ASCII character operations
+// - unicode: Unicode character classification and properties
 // - iter: Iterator, IntoIterator, FromIterator, and adapters
 // - option: Maybe[T] enhanced methods
 // - result: Outcome[T, E] enhanced methods
@@ -36,7 +39,9 @@ pub mod marker   // Send, Sync, Sized, Unpin
 pub mod mem      // size_of, swap, replace, forget, ManuallyDrop
 pub mod cell     // Cell, RefCell
 pub mod str      // String utilities
-pub mod ascii    // Char, escape_default
+pub mod char     // Char (Unicode scalar value), from_u32, DecodeUtf16
+pub mod ascii    // AsciiChar, escape_default
+pub mod unicode  // Unicode character classification and properties
 pub mod iter     // Iterator, IntoIterator, FromIterator, adapters
 pub mod option   // Maybe[T] enhanced methods
 pub mod result   // Outcome[T, E] enhanced methods

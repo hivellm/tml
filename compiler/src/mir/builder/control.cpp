@@ -50,17 +50,27 @@ auto MirBuilder::build_if(const parser::IfExpr& if_expr) -> Value {
 }
 
 auto MirBuilder::build_block(const parser::BlockExpr& block) -> Value {
+    // Push a new drop scope for this block
+    ctx_.push_drop_scope();
+
     for (const auto& stmt : block.stmts) {
         build_stmt(*stmt);
-        if (is_terminated())
+        if (is_terminated()) {
+            // Don't pop scope here - the terminator (return/break) handles drops
             return const_unit();
+        }
     }
 
+    Value result = const_unit();
     if (block.expr.has_value()) {
-        return build_expr(**block.expr);
+        result = build_expr(**block.expr);
     }
 
-    return const_unit();
+    // Emit drops for variables in this scope before exiting
+    emit_scope_drops();
+    ctx_.pop_drop_scope();
+
+    return result;
 }
 
 auto MirBuilder::build_loop(const parser::LoopExpr& loop) -> Value {
@@ -225,9 +235,18 @@ auto MirBuilder::build_for(const parser::ForExpr& for_expr) -> Value {
 }
 
 auto MirBuilder::build_return(const parser::ReturnExpr& ret) -> Value {
+    // First, evaluate return value if present
+    std::optional<Value> return_val;
     if (ret.value.has_value()) {
-        auto val = build_expr(**ret.value);
-        emit_return(val);
+        return_val = build_expr(**ret.value);
+    }
+
+    // Emit drops for all variables in all scopes (return exits all scopes)
+    emit_all_drops();
+
+    // Now emit the actual return
+    if (return_val.has_value()) {
+        emit_return(*return_val);
     } else {
         emit_return();
     }
@@ -245,6 +264,9 @@ auto MirBuilder::build_break(const parser::BreakExpr& brk) -> Value {
         loop.break_value = val;
     }
 
+    // Emit drops for current scope before breaking out of loop
+    emit_scope_drops();
+
     emit_branch(loop.exit_block);
     return const_unit();
 }
@@ -252,6 +274,9 @@ auto MirBuilder::build_break(const parser::BreakExpr& brk) -> Value {
 auto MirBuilder::build_continue(const parser::ContinueExpr& /*cont*/) -> Value {
     if (ctx_.loop_stack.empty())
         return const_unit();
+
+    // Emit drops for current scope before continuing loop
+    emit_scope_drops();
 
     auto& loop = ctx_.loop_stack.top();
     emit_branch(loop.header_block);

@@ -41,6 +41,74 @@ struct BuildContext {
     // Async context
     bool in_async_func = false;      // Whether we're building an async function
     uint32_t next_suspension_id = 0; // Counter for suspension points
+
+    // Drop scope tracking for RAII
+    // Each scope tracks variables that need drop calls when exiting
+    struct DropInfo {
+        std::string var_name;     // Variable name
+        Value value;              // SSA value to drop
+        std::string type_name;    // Type name for drop call resolution
+        MirTypePtr type;          // Full type for codegen
+        bool is_moved = false;    // True if value was moved (don't drop)
+    };
+    std::vector<std::vector<DropInfo>> drop_scopes;
+
+    // Push/pop drop scope
+    void push_drop_scope() { drop_scopes.push_back({}); }
+    void pop_drop_scope() {
+        if (!drop_scopes.empty()) {
+            drop_scopes.pop_back();
+        }
+    }
+
+    // Register a variable for drop when leaving scope
+    void register_for_drop(const std::string& var_name, Value value,
+                           const std::string& type_name, MirTypePtr type) {
+        if (!drop_scopes.empty()) {
+            drop_scopes.back().push_back({var_name, value, type_name, type, false});
+        }
+    }
+
+    // Mark a variable as moved (won't be dropped)
+    void mark_moved(const std::string& var_name) {
+        for (auto& scope : drop_scopes) {
+            for (auto& info : scope) {
+                if (info.var_name == var_name) {
+                    info.is_moved = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    // Get all variables that need drop in current scope (in reverse order - LIFO)
+    [[nodiscard]] auto get_drops_for_current_scope() const -> std::vector<DropInfo> {
+        if (drop_scopes.empty()) {
+            return {};
+        }
+        std::vector<DropInfo> drops;
+        for (auto it = drop_scopes.back().rbegin(); it != drop_scopes.back().rend(); ++it) {
+            if (!it->is_moved) {
+                drops.push_back(*it);
+            }
+        }
+        return drops;
+    }
+
+    // Get all drops for all scopes (for return - drop everything)
+    [[nodiscard]] auto get_all_drops() const -> std::vector<DropInfo> {
+        std::vector<DropInfo> drops;
+        // Iterate scopes from innermost to outermost
+        for (auto scope_it = drop_scopes.rbegin(); scope_it != drop_scopes.rend(); ++scope_it) {
+            // Within each scope, drop in reverse order
+            for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
+                if (!it->is_moved) {
+                    drops.push_back(*it);
+                }
+            }
+        }
+        return drops;
+    }
 };
 
 class MirBuilder {
@@ -144,6 +212,14 @@ private:
 
     // Unary operation helpers
     auto get_unaryop(parser::UnaryOp op) -> UnaryOp;
+
+    // Drop helpers for RAII
+    void emit_drop_calls(const std::vector<BuildContext::DropInfo>& drops);
+    void emit_drop_for_value(Value value, const MirTypePtr& type, const std::string& type_name);
+    void emit_scope_drops();    // Emit drops for current scope
+    void emit_all_drops();      // Emit drops for all scopes (for return)
+    [[nodiscard]] auto get_type_name(const MirTypePtr& type) const -> std::string;
+    [[nodiscard]] auto get_type_name_from_semantic(const types::TypePtr& type) const -> std::string;
 };
 
 } // namespace tml::mir

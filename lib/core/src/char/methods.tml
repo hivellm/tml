@@ -1,0 +1,889 @@
+//! Methods for working with `Char` (Unicode scalar values).
+//!
+//! This module provides classification, conversion, and manipulation
+//! functions for Unicode characters.
+
+use core::option::Maybe
+use core::char::Char
+use core::char::MAX
+use core::char::REPLACEMENT_CHARACTER
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+/// Returns `true` if the given value is a valid Unicode scalar value.
+///
+/// A Unicode scalar value is any Unicode code point except high-surrogate
+/// and low-surrogate code points (0xD800-0xDFFF).
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_valid(0x0041))       // 'A'
+/// assert(is_valid(0x10FFFF))     // Max valid
+/// assert(not is_valid(0xD800))   // Surrogate
+/// assert(not is_valid(0x110000)) // Out of range
+/// ```
+pub func is_valid(c: U32) -> Bool {
+    return c <= MAX and not (c >= 0xD800 and c <= 0xDFFF)
+}
+
+// ============================================================================
+// General Classification
+// ============================================================================
+
+/// Returns `true` if this character is alphabetic.
+///
+/// 'Alphabetic' is defined by the Unicode derived core property
+/// `Alphabetic`. This includes most letters from all scripts.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_alphabetic('a'))
+/// assert(is_alphabetic('京'))
+/// assert(not is_alphabetic('1'))
+/// ```
+pub func is_alphabetic(c: Char) -> Bool {
+    // ASCII fast path
+    if c < 128 {
+        return (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A)
+    }
+    return is_alphabetic_nonascii(c)
+}
+
+/// Returns `true` if this character is lowercase.
+///
+/// 'Lowercase' is defined according to the Unicode derived core
+/// property `Lowercase`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_lowercase('a'))
+/// assert(is_lowercase('δ'))
+/// assert(not is_lowercase('A'))
+/// assert(not is_lowercase('1'))
+/// ```
+pub func is_lowercase(c: Char) -> Bool {
+    if c < 128 {
+        return c >= 0x61 and c <= 0x7A
+    }
+    return is_lowercase_nonascii(c)
+}
+
+/// Returns `true` if this character is uppercase.
+///
+/// 'Uppercase' is defined according to the Unicode derived core
+/// property `Uppercase`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_uppercase('A'))
+/// assert(is_uppercase('Δ'))
+/// assert(not is_uppercase('a'))
+/// assert(not is_uppercase('1'))
+/// ```
+pub func is_uppercase(c: Char) -> Bool {
+    if c < 128 {
+        return c >= 0x41 and c <= 0x5A
+    }
+    return is_uppercase_nonascii(c)
+}
+
+/// Returns `true` if this character is whitespace.
+///
+/// 'Whitespace' is defined according to the Unicode property
+/// `White_Space`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_whitespace(' '))
+/// assert(is_whitespace('\t'))
+/// assert(is_whitespace('\n'))
+/// assert(not is_whitespace('a'))
+/// ```
+pub func is_whitespace(c: Char) -> Bool {
+    if c < 128 {
+        // ASCII whitespace: HT, LF, VT, FF, CR, SP
+        return c == 0x20 or c == 0x09 or c == 0x0A or
+               c == 0x0B or c == 0x0C or c == 0x0D
+    }
+    return is_whitespace_nonascii(c)
+}
+
+/// Returns `true` if this character is alphanumeric.
+///
+/// Alphanumeric characters are alphabetic or numeric.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_alphanumeric('a'))
+/// assert(is_alphanumeric('1'))
+/// assert(not is_alphanumeric('!'))
+/// ```
+pub func is_alphanumeric(c: Char) -> Bool {
+    return is_alphabetic(c) or is_numeric(c)
+}
+
+/// Returns `true` if this character is numeric.
+///
+/// 'Numeric' is defined by the Unicode General Category `Number`.
+/// This includes decimal digits, letter numbers, and other numbers.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_numeric('7'))
+/// assert(is_numeric('٣'))  // Arabic-Indic digit 3
+/// assert(is_numeric('Ⅶ'))  // Roman numeral 7
+/// assert(not is_numeric('a'))
+/// ```
+pub func is_numeric(c: Char) -> Bool {
+    if c < 128 {
+        return c >= 0x30 and c <= 0x39
+    }
+    return is_numeric_nonascii(c)
+}
+
+/// Returns `true` if this character is a control character.
+///
+/// Control characters are defined by Unicode General Category `Cc`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_control('\0'))
+/// assert(is_control('\n'))
+/// assert(not is_control('a'))
+/// ```
+pub func is_control(c: Char) -> Bool {
+    if c < 128 {
+        return c < 0x20 or c == 0x7F
+    }
+    // C1 control characters: 0x80-0x9F
+    return c >= 0x80 and c <= 0x9F
+}
+
+// ============================================================================
+// ASCII-Specific Classification
+// ============================================================================
+
+/// Returns `true` if the character is in the ASCII range (0x00-0x7F).
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_ascii('a'))
+/// assert(is_ascii('\n'))
+/// assert(not is_ascii('λ'))
+/// ```
+pub func is_ascii(c: Char) -> Bool {
+    return c < 0x80
+}
+
+/// Returns `true` if the character is an ASCII alphabetic character.
+///
+/// ASCII alphabetic characters are 'A'-'Z' or 'a'-'z'.
+pub func is_ascii_alphabetic(c: Char) -> Bool {
+    return (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A)
+}
+
+/// Returns `true` if the character is an ASCII uppercase letter.
+pub func is_ascii_uppercase(c: Char) -> Bool {
+    return c >= 0x41 and c <= 0x5A
+}
+
+/// Returns `true` if the character is an ASCII lowercase letter.
+pub func is_ascii_lowercase(c: Char) -> Bool {
+    return c >= 0x61 and c <= 0x7A
+}
+
+/// Returns `true` if the character is an ASCII alphanumeric character.
+pub func is_ascii_alphanumeric(c: Char) -> Bool {
+    return is_ascii_alphabetic(c) or is_ascii_digit(c)
+}
+
+/// Returns `true` if the character is an ASCII decimal digit.
+pub func is_ascii_digit(c: Char) -> Bool {
+    return c >= 0x30 and c <= 0x39
+}
+
+/// Returns `true` if the character is an ASCII hexadecimal digit.
+pub func is_ascii_hexdigit(c: Char) -> Bool {
+    return (c >= 0x30 and c <= 0x39) or
+           (c >= 0x41 and c <= 0x46) or
+           (c >= 0x61 and c <= 0x66)
+}
+
+/// Returns `true` if the character is an ASCII octal digit.
+pub func is_ascii_octdigit(c: Char) -> Bool {
+    return c >= 0x30 and c <= 0x37
+}
+
+/// Returns `true` if the character is an ASCII whitespace character.
+///
+/// ASCII whitespace: space, tab, newline, form feed, carriage return.
+pub func is_ascii_whitespace(c: Char) -> Bool {
+    return c == 0x20 or c == 0x09 or c == 0x0A or c == 0x0C or c == 0x0D
+}
+
+/// Returns `true` if the character is an ASCII control character.
+pub func is_ascii_control(c: Char) -> Bool {
+    return c < 0x20 or c == 0x7F
+}
+
+/// Returns `true` if the character is an ASCII graphic character.
+///
+/// Graphic characters are printable characters except space (0x21-0x7E).
+pub func is_ascii_graphic(c: Char) -> Bool {
+    return c >= 0x21 and c <= 0x7E
+}
+
+/// Returns `true` if the character is an ASCII punctuation character.
+pub func is_ascii_punctuation(c: Char) -> Bool {
+    return (c >= 0x21 and c <= 0x2F) or
+           (c >= 0x3A and c <= 0x40) or
+           (c >= 0x5B and c <= 0x60) or
+           (c >= 0x7B and c <= 0x7E)
+}
+
+// ============================================================================
+// Digit Conversion
+// ============================================================================
+
+/// Converts the character to a digit value in the given radix.
+///
+/// 'Digit' is defined to be only the characters '0'-'9', 'a'-'z', 'A'-'Z'.
+///
+/// # Arguments
+///
+/// * `c` - The character to convert
+/// * `radix` - The base (must be 2-36)
+///
+/// # Returns
+///
+/// Returns `Nothing` if:
+/// - The character is not a digit in the given radix
+/// - The radix is not in 2..=36
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_digit('5', 10), Just(5))
+/// assert_eq(to_digit('f', 16), Just(15))
+/// assert_eq(to_digit('F', 16), Just(15))
+/// assert_eq(to_digit('z', 36), Just(35))
+/// assert_eq(to_digit('a', 10), Nothing)
+/// ```
+pub func to_digit(c: Char, radix: U32) -> Maybe[U32] {
+    if radix < 2 or radix > 36 {
+        return Nothing
+    }
+
+    let digit: U32 = if c >= 0x30 and c <= 0x39 {
+        c - 0x30  // '0'-'9'
+    } else if c >= 0x41 and c <= 0x5A {
+        c - 0x41 + 10  // 'A'-'Z'
+    } else if c >= 0x61 and c <= 0x7A {
+        c - 0x61 + 10  // 'a'-'z'
+    } else {
+        return Nothing
+    }
+
+    if digit < radix {
+        return Just(digit)
+    }
+    return Nothing
+}
+
+/// Returns `true` if the character is a digit in the given radix.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_digit('5', 10))
+/// assert(is_digit('f', 16))
+/// assert(not is_digit('g', 16))
+/// ```
+pub func is_digit(c: Char, radix: U32) -> Bool {
+    return to_digit(c, radix).is_just()
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+/// Converts the character to its lowercase equivalent.
+///
+/// If no lowercase equivalent exists, returns the character unchanged.
+///
+/// Note: This performs simple (1:1) case mapping. Some characters
+/// have special case mappings that produce multiple characters,
+/// which this function does not handle.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_lowercase('A'), 'a')
+/// assert_eq(to_lowercase('Δ'), 'δ')
+/// assert_eq(to_lowercase('1'), '1')
+/// ```
+pub func to_lowercase(c: Char) -> Char {
+    if c < 128 {
+        if c >= 0x41 and c <= 0x5A {
+            return c + 32
+        }
+        return c
+    }
+    return to_lowercase_nonascii(c)
+}
+
+/// Converts the character to its uppercase equivalent.
+///
+/// If no uppercase equivalent exists, returns the character unchanged.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_uppercase('a'), 'A')
+/// assert_eq(to_uppercase('δ'), 'Δ')
+/// assert_eq(to_uppercase('1'), '1')
+/// ```
+pub func to_uppercase(c: Char) -> Char {
+    if c < 128 {
+        if c >= 0x61 and c <= 0x7A {
+            return c - 32
+        }
+        return c
+    }
+    return to_uppercase_nonascii(c)
+}
+
+/// Converts the character to its ASCII lowercase equivalent.
+///
+/// Only converts 'A'-'Z' to 'a'-'z'. All other characters unchanged.
+pub func to_ascii_lowercase(c: Char) -> Char {
+    if c >= 0x41 and c <= 0x5A {
+        return c + 32
+    }
+    return c
+}
+
+/// Converts the character to its ASCII uppercase equivalent.
+///
+/// Only converts 'a'-'z' to 'A'-'Z'. All other characters unchanged.
+pub func to_ascii_uppercase(c: Char) -> Char {
+    if c >= 0x61 and c <= 0x7A {
+        return c - 32
+    }
+    return c
+}
+
+/// Compares two characters case-insensitively (ASCII only).
+///
+/// # Examples
+///
+/// ```tml
+/// assert(eq_ignore_ascii_case('a', 'A'))
+/// assert(eq_ignore_ascii_case('A', 'a'))
+/// assert(not eq_ignore_ascii_case('a', 'b'))
+/// ```
+pub func eq_ignore_ascii_case(a: Char, b: Char) -> Bool {
+    return to_ascii_lowercase(a) == to_ascii_lowercase(b)
+}
+
+// ============================================================================
+// UTF Encoding
+// ============================================================================
+
+/// Returns the number of bytes needed to encode this character in UTF-8.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(len_utf8('A'), 1)
+/// assert_eq(len_utf8('é'), 2)
+/// assert_eq(len_utf8('中'), 3)
+/// assert_eq(len_utf8('🦀'), 4)
+/// ```
+pub func len_utf8(c: Char) -> I64 {
+    if c < 0x80 {
+        return 1
+    } else if c < 0x800 {
+        return 2
+    } else if c < 0x10000 {
+        return 3
+    } else {
+        return 4
+    }
+}
+
+/// Returns the number of 16-bit code units needed to encode this character in UTF-16.
+///
+/// Characters in the Basic Multilingual Plane (< 0x10000) need 1 unit.
+/// Characters outside need 2 units (a surrogate pair).
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(len_utf16('A'), 1)
+/// assert_eq(len_utf16('中'), 1)
+/// assert_eq(len_utf16('🦀'), 2)
+/// ```
+pub func len_utf16(c: Char) -> I64 {
+    if c < 0x10000 {
+        return 1
+    }
+    return 2
+}
+
+/// Encodes the character as UTF-8 bytes.
+///
+/// Returns a tuple of (bytes, length) where:
+/// - `bytes` is a 4-byte array containing the encoded bytes
+/// - `length` is the number of valid bytes (1-4)
+///
+/// # Examples
+///
+/// ```tml
+/// let (bytes, len) = encode_utf8('A')
+/// assert_eq(len, 1)
+/// assert_eq(bytes[0], 0x41)
+///
+/// let (bytes, len) = encode_utf8('中')
+/// assert_eq(len, 3)
+/// ```
+pub func encode_utf8(c: Char) -> ([U8; 4], I64) {
+    var bytes: [U8; 4] = [0, 0, 0, 0]
+
+    if c < 0x80 {
+        bytes[0] = c as U8
+        return (bytes, 1)
+    } else if c < 0x800 {
+        bytes[0] = (0xC0 | (c >> 6)) as U8
+        bytes[1] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 2)
+    } else if c < 0x10000 {
+        bytes[0] = (0xE0 | (c >> 12)) as U8
+        bytes[1] = (0x80 | ((c >> 6) & 0x3F)) as U8
+        bytes[2] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 3)
+    } else {
+        bytes[0] = (0xF0 | (c >> 18)) as U8
+        bytes[1] = (0x80 | ((c >> 12) & 0x3F)) as U8
+        bytes[2] = (0x80 | ((c >> 6) & 0x3F)) as U8
+        bytes[3] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 4)
+    }
+}
+
+/// Encodes the character as UTF-16 code units.
+///
+/// Returns a tuple of (units, length) where:
+/// - `units` is a 2-element array containing the code units
+/// - `length` is the number of valid units (1-2)
+///
+/// # Examples
+///
+/// ```tml
+/// let (units, len) = encode_utf16('A')
+/// assert_eq(len, 1)
+/// assert_eq(units[0], 0x0041)
+///
+/// let (units, len) = encode_utf16('🦀')
+/// assert_eq(len, 2)
+/// // units[0] is high surrogate, units[1] is low surrogate
+/// ```
+pub func encode_utf16(c: Char) -> ([U16; 2], I64) {
+    var units: [U16; 2] = [0, 0]
+
+    if c < 0x10000 {
+        units[0] = c as U16
+        return (units, 1)
+    } else {
+        // Encode as surrogate pair
+        let adjusted: U32 = c - 0x10000
+        units[0] = (0xD800 | (adjusted >> 10)) as U16   // High surrogate
+        units[1] = (0xDC00 | (adjusted & 0x3FF)) as U16 // Low surrogate
+        return (units, 2)
+    }
+}
+
+// ============================================================================
+// Escape Sequences
+// ============================================================================
+
+/// Returns the Unicode escape sequence for this character.
+///
+/// The format is `\u{XXXX}` where XXXX is the hexadecimal code point.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(escape_unicode('A'), "\\u{41}")
+/// assert_eq(escape_unicode('🦀'), "\\u{1F980}")
+/// ```
+pub func escape_unicode(c: Char) -> Str {
+    return "\\u{" + to_hex_string(c) + "}"
+}
+
+/// Returns a default escape sequence for this character.
+///
+/// Printable ASCII characters are returned as-is.
+/// Common control characters use short escapes (\n, \t, etc.).
+/// Other characters use Unicode escapes.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(escape_default('A'), "A")
+/// assert_eq(escape_default('\n'), "\\n")
+/// assert_eq(escape_default('λ'), "\\u{3BB}")
+/// ```
+pub func escape_default(c: Char) -> Str {
+    when c {
+        0x09 => return "\\t",
+        0x0A => return "\\n",
+        0x0D => return "\\r",
+        0x27 => return "\\'",
+        0x22 => return "\\\"",
+        0x5C => return "\\\\",
+        0x00 => return "\\0",
+        _ => {
+            if c >= 0x20 and c <= 0x7E {
+                // Printable ASCII - return as-is
+                return char_to_string(c)
+            }
+            return escape_unicode(c)
+        }
+    }
+}
+
+/// Returns a debug escape sequence for this character.
+///
+/// Similar to `escape_default` but always includes quotes.
+pub func escape_debug(c: Char) -> Str {
+    return "'" + escape_default(c) + "'"
+}
+
+// ============================================================================
+// Internal Helper Functions
+// ============================================================================
+
+/// Converts a character to a hex string (without prefix).
+func to_hex_string(c: Char) -> Str {
+    if c == 0 {
+        return "0"
+    }
+
+    var result: Str = ""
+    var value: U32 = c
+
+    loop {
+        if value == 0 {
+            break
+        }
+        let digit: U8 = (value % 16) as U8
+        let ch: Str = if digit < 10 {
+            char_to_string(digit + 0x30)  // '0'
+        } else {
+            char_to_string(digit - 10 + 0x41)  // 'A'
+        }
+        result = ch + result
+        value = value / 16
+    }
+
+    return result
+}
+
+/// Converts a single character to a string.
+func char_to_string(c: Char) -> Str {
+    // Uses the runtime's character-to-string conversion
+    return lowlevel { tml_char_to_string(c) }
+}
+
+// ============================================================================
+// Non-ASCII Classification (Unicode property tables)
+// ============================================================================
+
+/// Checks if a non-ASCII character is alphabetic.
+func is_alphabetic_nonascii(c: Char) -> Bool {
+    // Latin Extended-A and Extended-B
+    if c >= 0x0100 and c <= 0x024F {
+        return true
+    }
+
+    // IPA Extensions
+    if c >= 0x0250 and c <= 0x02AF {
+        return true
+    }
+
+    // Greek and Coptic
+    if c >= 0x0370 and c <= 0x03FF {
+        if c == 0x0374 or c == 0x0375 or c == 0x037E or c == 0x0384 or c == 0x0385 {
+            return false
+        }
+        return true
+    }
+
+    // Cyrillic
+    if c >= 0x0400 and c <= 0x04FF {
+        return true
+    }
+
+    // Armenian
+    if c >= 0x0531 and c <= 0x0556 {
+        return true
+    }
+    if c >= 0x0560 and c <= 0x0588 {
+        return true
+    }
+
+    // Hebrew letters
+    if c >= 0x05D0 and c <= 0x05EA {
+        return true
+    }
+
+    // Arabic letters
+    if c >= 0x0620 and c <= 0x064A {
+        return true
+    }
+    if c >= 0x0671 and c <= 0x06D3 {
+        return true
+    }
+
+    // CJK Unified Ideographs
+    if c >= 0x4E00 and c <= 0x9FFF {
+        return true
+    }
+
+    // Hangul Syllables
+    if c >= 0xAC00 and c <= 0xD7A3 {
+        return true
+    }
+
+    // Hiragana
+    if c >= 0x3041 and c <= 0x3096 {
+        return true
+    }
+
+    // Katakana
+    if c >= 0x30A1 and c <= 0x30FA {
+        return true
+    }
+
+    // Latin Extended Additional
+    if c >= 0x1E00 and c <= 0x1EFF {
+        return true
+    }
+
+    // Greek Extended
+    if c >= 0x1F00 and c <= 0x1FFF {
+        return true
+    }
+
+    return false
+}
+
+/// Checks if a non-ASCII character is lowercase.
+func is_lowercase_nonascii(c: Char) -> Bool {
+    // Latin Extended-A lowercase (odd code points)
+    if c >= 0x0101 and c <= 0x017F {
+        if (c % 2) == 1 {
+            return true
+        }
+    }
+
+    // Greek lowercase
+    if c >= 0x03B1 and c <= 0x03C9 {
+        return true
+    }
+
+    // Cyrillic lowercase
+    if c >= 0x0430 and c <= 0x044F {
+        return true
+    }
+
+    // Latin Extended Additional lowercase (odd positions)
+    if c >= 0x1E01 and c <= 0x1EFF {
+        if (c % 2) == 1 {
+            return true
+        }
+    }
+
+    // German sharp s
+    if c == 0x00DF {
+        return true
+    }
+
+    return false
+}
+
+/// Checks if a non-ASCII character is uppercase.
+func is_uppercase_nonascii(c: Char) -> Bool {
+    // Latin Extended-A uppercase (even code points)
+    if c >= 0x0100 and c <= 0x017E {
+        if (c % 2) == 0 {
+            return true
+        }
+    }
+
+    // Greek uppercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return true
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return true
+    }
+
+    // Cyrillic uppercase
+    if c >= 0x0410 and c <= 0x042F {
+        return true
+    }
+
+    // Latin Extended Additional uppercase (even positions)
+    if c >= 0x1E00 and c <= 0x1EFE {
+        if (c % 2) == 0 {
+            return true
+        }
+    }
+
+    // Capital sharp S
+    if c == 0x1E9E {
+        return true
+    }
+
+    return false
+}
+
+/// Checks if a non-ASCII character is numeric.
+func is_numeric_nonascii(c: Char) -> Bool {
+    // Superscript digits
+    if c == 0x00B2 or c == 0x00B3 or c == 0x00B9 {
+        return true
+    }
+
+    // Arabic-Indic digits
+    if c >= 0x0660 and c <= 0x0669 {
+        return true
+    }
+
+    // Extended Arabic-Indic digits
+    if c >= 0x06F0 and c <= 0x06F9 {
+        return true
+    }
+
+    // Fullwidth digits
+    if c >= 0xFF10 and c <= 0xFF19 {
+        return true
+    }
+
+    // Roman numerals
+    if c >= 0x2160 and c <= 0x2188 {
+        return true
+    }
+
+    // Vulgar fractions
+    if c >= 0x00BC and c <= 0x00BE {
+        return true
+    }
+
+    return false
+}
+
+/// Checks if a non-ASCII character is whitespace.
+func is_whitespace_nonascii(c: Char) -> Bool {
+    when c {
+        0x0085 => return true,  // Next Line
+        0x00A0 => return true,  // No-Break Space
+        0x1680 => return true,  // Ogham Space Mark
+        0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
+        0x2005, 0x2006, 0x2007, 0x2008, 0x2009,
+        0x200A => return true,  // Various spaces
+        0x2028 => return true,  // Line Separator
+        0x2029 => return true,  // Paragraph Separator
+        0x202F => return true,  // Narrow No-Break Space
+        0x205F => return true,  // Medium Mathematical Space
+        0x3000 => return true,  // Ideographic Space
+        _ => return false
+    }
+}
+
+/// Converts a non-ASCII character to lowercase.
+func to_lowercase_nonascii(c: Char) -> Char {
+    // Latin Extended-A: even -> odd
+    if c >= 0x0100 and c <= 0x017E {
+        if (c % 2) == 0 {
+            return c + 1
+        }
+    }
+
+    // Greek uppercase to lowercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return c + 32
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return c + 32
+    }
+
+    // Cyrillic uppercase to lowercase
+    if c >= 0x0410 and c <= 0x042F {
+        return c + 32
+    }
+
+    // Latin Extended Additional: even -> odd
+    if c >= 0x1E00 and c <= 0x1EFE {
+        if (c % 2) == 0 {
+            return c + 1
+        }
+    }
+
+    // Capital sharp S
+    if c == 0x1E9E {
+        return 0x00DF
+    }
+
+    return c
+}
+
+/// Converts a non-ASCII character to uppercase.
+func to_uppercase_nonascii(c: Char) -> Char {
+    // Latin Extended-A: odd -> even
+    if c >= 0x0101 and c <= 0x017F {
+        if (c % 2) == 1 {
+            return c - 1
+        }
+    }
+
+    // Greek lowercase to uppercase
+    if c >= 0x03B1 and c <= 0x03C1 {
+        return c - 32
+    }
+    if c >= 0x03C3 and c <= 0x03C9 {
+        return c - 32
+    }
+
+    // Cyrillic lowercase to uppercase
+    if c >= 0x0430 and c <= 0x044F {
+        return c - 32
+    }
+
+    // Latin Extended Additional: odd -> even
+    if c >= 0x1E01 and c <= 0x1EFF {
+        if (c % 2) == 1 {
+            return c - 1
+        }
+    }
+
+    // German sharp s -> capital sharp s
+    if c == 0x00DF {
+        return 0x1E9E
+    }
+
+    return c
+}

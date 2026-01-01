@@ -219,6 +219,7 @@ add_library(tml_codegen STATIC
     src/codegen/expr/method_outcome.cpp
     src/codegen/expr/method_array.cpp
     src/codegen/expr/await.cpp
+    src/codegen/expr/try.cpp
     # Builtin function codegen (split for maintainability)
     src/codegen/builtins/io.cpp
     src/codegen/builtins/mem.cpp
@@ -266,6 +267,7 @@ add_library(tml_cli STATIC
     src/cli/tester/helpers.cpp
     src/cli/tester/discovery.cpp
     src/cli/tester/execution.cpp
+    src/cli/tester/suite_execution.cpp
     src/cli/tester/output.cpp
     src/cli/tester/benchmark.cpp
     src/cli/tester/fuzzer.cpp

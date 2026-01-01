@@ -404,6 +404,161 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ============================================================================
+    // Slice Intrinsics
+    // ============================================================================
+
+    // slice_get[T](data: ref T, index: I64) -> ref T
+    // Returns a reference to element at index
+    if (fn_name == "slice_get") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_; // ptr
+
+            // Infer element type from the first argument's semantic type
+            std::string elem_type = "i8"; // Default
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+            }
+
+            std::string index = gen_expr(*call.args[1]);
+
+            // GEP to compute address: data + index * sizeof(T)
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      index);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
+    // slice_get_mut[T](data: mut ref T, index: I64) -> mut ref T
+    // Same as slice_get but for mutable references
+    if (fn_name == "slice_get_mut") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+            std::string data_type = last_expr_type_;
+
+            // Infer element type
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type->is<types::MutRefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            } else if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+            }
+
+            std::string index = gen_expr(*call.args[1]);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      index);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
+    // slice_set[T](data: mut ref T, index: I64, value: T)
+    // Sets element at index to value
+    if (fn_name == "slice_set") {
+        if (call.args.size() >= 3) {
+            std::string data = gen_expr(*call.args[0]);
+
+            // Infer element type
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type->is<types::MutRefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            } else if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+            }
+
+            std::string index = gen_expr(*call.args[1]);
+            std::string value = gen_expr(*call.args[2]);
+            std::string value_type = last_expr_type_;
+
+            // Compute address and store
+            std::string addr = fresh_reg();
+            emit_line("  " + addr + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      index);
+            emit_line("  store " + value_type + " " + value + ", ptr " + addr);
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // slice_offset[T](data: ref T, count: I64) -> ref T
+    // Returns pointer offset by count elements
+    if (fn_name == "slice_offset") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+
+            // Infer element type
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+            } else if (arg_type->is<types::MutRefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            }
+
+            std::string count = gen_expr(*call.args[1]);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      count);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
+    // slice_swap[T](data: mut ref T, a: I64, b: I64)
+    // Swaps elements at indices a and b
+    if (fn_name == "slice_swap") {
+        if (call.args.size() >= 3) {
+            std::string data = gen_expr(*call.args[0]);
+
+            // Infer element type
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type->is<types::MutRefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            } else if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+            }
+
+            std::string idx_a = gen_expr(*call.args[1]);
+            std::string idx_b = gen_expr(*call.args[2]);
+
+            // Compute addresses
+            std::string addr_a = fresh_reg();
+            std::string addr_b = fresh_reg();
+            emit_line("  " + addr_a + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      idx_a);
+            emit_line("  " + addr_b + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      idx_b);
+
+            // Load both values
+            std::string val_a = fresh_reg();
+            std::string val_b = fresh_reg();
+            emit_line("  " + val_a + " = load " + elem_type + ", ptr " + addr_a);
+            emit_line("  " + val_b + " = load " + elem_type + ", ptr " + addr_b);
+
+            // Store swapped
+            emit_line("  store " + elem_type + " " + val_b + ", ptr " + addr_a);
+            emit_line("  store " + elem_type + " " + val_a + ", ptr " + addr_b);
+
+            last_expr_type_ = "void";
+            return "0";
+        }
+        return "0";
+    }
+
+    // ============================================================================
     // Type Information Intrinsics
     // ============================================================================
 

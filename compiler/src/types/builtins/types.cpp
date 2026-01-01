@@ -87,6 +87,26 @@ void TypeEnv::init_builtin_types() {
             .span = {}});
     }
 
+    // Drop behavior (core::ops)
+    // behavior Drop { func drop(mut this) }
+    // Enables RAII - automatic cleanup when values go out of scope
+    {
+        define_behavior(
+            BehaviorDef{.name = "Drop",
+                        .type_params = {},
+                        .const_params = {},
+                        .associated_types = {},
+                        .methods = {FuncSig{.name = "drop",
+                                            .params = {}, // mut this is implicit
+                                            .return_type = make_unit(),
+                                            .type_params = {},
+                                            .is_async = false,
+                                            .span = {}}},
+                        .super_behaviors = {},
+                        .methods_with_defaults = {}, // No default - must be explicitly implemented
+                        .span = {}});
+    }
+
     // Register builtin behavior implementations for integer types
     std::vector<std::string> integer_types = {"I8", "I16", "I32", "I64", "I128",
                                               "U8", "U16", "U32", "U64", "U128"};

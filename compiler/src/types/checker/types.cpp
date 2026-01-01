@@ -108,7 +108,36 @@ auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
 }
 
 auto TypeChecker::check_try(const parser::TryExpr& try_expr) -> TypePtr {
-    return check_expr(*try_expr.expr);
+    // The try operator (!) unwraps Outcome[T, E] or Maybe[T], propagating errors.
+    // For Outcome[T, E], it returns T on Ok, or early-returns Err(E).
+    // For Maybe[T], it returns T on Just, or early-returns/panics on Nothing.
+    auto expr_type = check_expr(*try_expr.expr);
+
+    if (!expr_type) {
+        return make_unit();
+    }
+
+    // Check if it's a NamedType (Outcome or Maybe)
+    if (expr_type->is<NamedType>()) {
+        const auto& named = expr_type->as<NamedType>();
+
+        // Handle Outcome[T, E] - returns T
+        if (named.name == "Outcome" && named.type_args.size() >= 1) {
+            return named.type_args[0]; // Return the T (success) type
+        }
+
+        // Handle Maybe[T] - returns T
+        if (named.name == "Maybe" && named.type_args.size() >= 1) {
+            return named.type_args[0]; // Return the T (Just value) type
+        }
+    }
+
+    // If not Outcome or Maybe, report an error but continue with the original type
+    // This allows partial compilation while flagging the issue
+    error("try operator (!) can only be used on Outcome[T, E] or Maybe[T] types, got " +
+              type_to_string(expr_type),
+          try_expr.span);
+    return expr_type;
 }
 
 void TypeChecker::collect_captures_from_expr(const parser::Expr& expr,

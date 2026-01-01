@@ -274,8 +274,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         std::string elem_type = llvm_type_from_semantic(arr.element, true);
         return "[" + std::to_string(arr.size) + " x " + elem_type + "]";
     } else if (type->is<types::SliceType>()) {
-        // Slices are fat pointers: { ptr, i64 } but represented as ptr for simplicity
-        return "ptr";
+        // Slices are fat pointers: { ptr, i64 } - data pointer and length
+        return "{ ptr, i64 }";
     }
 
     return "i32"; // Default

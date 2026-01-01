@@ -146,6 +146,12 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
 }
 
 auto Parser::parse_prefix_expr() -> Result<ExprPtr, ParseError> {
+    // Allow expressions to continue on next line after binary operators
+    // This enables patterns like:
+    //   return a or
+    //          b
+    skip_newlines();
+
     // Prefix await: 'await expr'
     if (match(lexer::TokenKind::KwAwait)) {
         auto start_span = previous().span;
@@ -255,10 +261,23 @@ auto Parser::parse_postfix_expr(ExprPtr left) -> Result<ExprPtr, ParseError> {
                 Expr{.kind = AwaitExpr{.expr = std::move(left), .span = span}, .span = span});
         }
 
+        // Check for tuple index access: tuple.0, tuple.1, etc.
+        std::string name;
+        if (check(lexer::TokenKind::IntLiteral)) {
+            // Tuple index access
+            auto index_token = advance();
+            name = std::string(index_token.lexeme);
+            // Tuple index is just a field access with numeric name
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_box<Expr>(
+                Expr{.kind = FieldExpr{.object = std::move(left), .field = name, .span = span},
+                     .span = span});
+        }
+
         auto name_result = expect(lexer::TokenKind::Identifier, "Expected field or method name");
         if (is_err(name_result))
             return unwrap_err(name_result);
-        auto name = std::string(unwrap(name_result).lexeme);
+        name = std::string(unwrap(name_result).lexeme);
 
         // Check if it's a method call first (could have type args)
         // Generic type arguments: .method[T, U]() - note: must be followed by ()
@@ -523,9 +542,33 @@ auto Parser::parse_ident_or_path_expr() -> Result<ExprPtr, ParseError> {
         } else if (check(lexer::TokenKind::Identifier)) {
             auto saved_inner = pos_;
             advance(); // consume identifier
-            // If followed by : or , or }, it's a struct literal
-            is_struct = check(lexer::TokenKind::Colon) || check(lexer::TokenKind::Comma) ||
-                        check(lexer::TokenKind::RBrace);
+            // If followed by : or }, it's definitely a struct literal
+            // If followed by ,, we need to look further to distinguish from when patterns
+            // Struct: { a, b } or { a, b: value }
+            // When pattern: { a, b => body } (multiple patterns with comma)
+            if (check(lexer::TokenKind::Colon) || check(lexer::TokenKind::RBrace)) {
+                is_struct = true;
+            } else if (check(lexer::TokenKind::Comma)) {
+                // Look ahead past comma-separated identifiers to check for =>
+                // If we see =>, it's a when pattern, not a struct
+                is_struct = true; // assume struct by default
+                while (match(lexer::TokenKind::Comma)) {
+                    skip_newlines();
+                    if (check(lexer::TokenKind::FatArrow)) {
+                        // Found =>, this is a when pattern, not a struct
+                        is_struct = false;
+                        break;
+                    }
+                    if (!check(lexer::TokenKind::Identifier)) {
+                        break;
+                    }
+                    advance(); // consume identifier
+                }
+                // If we see => after identifiers, it's a when pattern
+                if (check(lexer::TokenKind::FatArrow)) {
+                    is_struct = false;
+                }
+            }
             pos_ = saved_inner; // restore to before identifier
         }
 
@@ -851,9 +894,39 @@ auto Parser::parse_when_expr() -> Result<ExprPtr, ParseError> {
     skip_newlines();
 
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
-        auto pattern = parse_pattern();
-        if (is_err(pattern))
-            return unwrap_err(pattern);
+        auto first_pattern = parse_pattern();
+        if (is_err(first_pattern))
+            return unwrap_err(first_pattern);
+
+        // Check for comma-separated patterns: Pattern1, Pattern2, ... => body
+        // These are combined into an OrPattern
+        PatternPtr pattern;
+        if (check(lexer::TokenKind::Comma) && peek_next().kind != lexer::TokenKind::FatArrow) {
+            // We have multiple comma-separated patterns
+            std::vector<PatternPtr> patterns;
+            patterns.push_back(std::move(unwrap(first_pattern)));
+
+            while (match(lexer::TokenKind::Comma)) {
+                skip_newlines();
+                // Stop if next token is => (end of patterns)
+                if (check(lexer::TokenKind::FatArrow))
+                    break;
+                // Also stop if we hit } (malformed but let error handling deal with it)
+                if (check(lexer::TokenKind::RBrace))
+                    break;
+
+                auto next = parse_pattern();
+                if (is_err(next))
+                    return unwrap_err(next);
+                patterns.push_back(std::move(unwrap(next)));
+            }
+
+            auto span = SourceSpan::merge(patterns.front()->span, patterns.back()->span);
+            pattern = make_box<Pattern>(Pattern{
+                .kind = OrPattern{.patterns = std::move(patterns), .span = span}, .span = span});
+        } else {
+            pattern = std::move(unwrap(first_pattern));
+        }
 
         std::optional<ExprPtr> guard;
         if (match(lexer::TokenKind::KwIf)) {
@@ -871,8 +944,8 @@ auto Parser::parse_when_expr() -> Result<ExprPtr, ParseError> {
         if (is_err(body))
             return body;
 
-        auto arm_span = SourceSpan::merge(unwrap(pattern)->span, unwrap(body)->span);
-        arms.push_back(WhenArm{.pattern = std::move(unwrap(pattern)),
+        auto arm_span = SourceSpan::merge(pattern->span, unwrap(body)->span);
+        arms.push_back(WhenArm{.pattern = std::move(pattern),
                                .guard = std::move(guard),
                                .body = std::move(unwrap(body)),
                                .span = arm_span});

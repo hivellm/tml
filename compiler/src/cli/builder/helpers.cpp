@@ -260,15 +260,73 @@ void emit_all_codegen_errors(DiagnosticEmitter& emitter,
 void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& error) {
     Diagnostic diag;
     diag.severity = DiagnosticSeverity::Error;
-    diag.code = "B001";
+
+    // Use error code from the error struct for more specific codes
+    // Map BorrowErrorCode to string code
+    switch (error.code) {
+    case borrow::BorrowErrorCode::UseAfterMove:
+        diag.code = "B001";
+        break;
+    case borrow::BorrowErrorCode::MoveWhileBorrowed:
+        diag.code = "B002";
+        break;
+    case borrow::BorrowErrorCode::AssignNotMutable:
+        diag.code = "B003";
+        break;
+    case borrow::BorrowErrorCode::AssignWhileBorrowed:
+        diag.code = "B004";
+        break;
+    case borrow::BorrowErrorCode::BorrowAfterMove:
+        diag.code = "B005";
+        break;
+    case borrow::BorrowErrorCode::MutBorrowNotMutable:
+        diag.code = "B006";
+        break;
+    case borrow::BorrowErrorCode::MutBorrowWhileImmut:
+        diag.code = "B007";
+        break;
+    case borrow::BorrowErrorCode::DoubleMutBorrow:
+        diag.code = "B008";
+        break;
+    case borrow::BorrowErrorCode::ImmutBorrowWhileMut:
+        diag.code = "B009";
+        break;
+    case borrow::BorrowErrorCode::ReturnLocalRef:
+        diag.code = "B010";
+        break;
+    case borrow::BorrowErrorCode::PartialMove:
+        diag.code = "B011";
+        break;
+    case borrow::BorrowErrorCode::OverlappingBorrow:
+        diag.code = "B012";
+        break;
+    case borrow::BorrowErrorCode::UseWhileBorrowed:
+        diag.code = "B013";
+        break;
+    default:
+        diag.code = "B099";
+        break;
+    }
+
     diag.message = error.message;
     diag.primary_span = error.span;
     diag.notes = error.notes;
 
     // Add related span as a secondary label if present
     if (error.related_span) {
+        // Use the specific related_message if provided, otherwise use a generic message
+        std::string label_message = error.related_message.value_or("related location here");
         diag.labels.push_back(DiagnosticLabel{
-            .span = *error.related_span, .message = "previous borrow here", .is_primary = false});
+            .span = *error.related_span, .message = label_message, .is_primary = false});
+    }
+
+    // Add suggestions as notes
+    for (const auto& suggestion : error.suggestions) {
+        std::string note = "help: " + suggestion.message;
+        if (suggestion.fix) {
+            note += ": `" + *suggestion.fix + "`";
+        }
+        diag.notes.push_back(note);
     }
 
     emitter.emit(diag);

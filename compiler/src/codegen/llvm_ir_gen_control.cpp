@@ -754,11 +754,12 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
 
         // Get literal value based on token type
         if (lit_pat.literal.kind == lexer::TokenKind::IntLiteral) {
-            lit_val = std::string(lit_pat.literal.lexeme);
+            // Convert to decimal for LLVM IR (handles 0x, 0b, 0o prefixes)
+            lit_val = std::to_string(lit_pat.literal.int_value().value);
         } else if (lit_pat.literal.kind == lexer::TokenKind::BoolLiteral) {
             lit_val = lit_pat.literal.bool_value() ? "1" : "0";
         } else if (lit_pat.literal.kind == lexer::TokenKind::FloatLiteral) {
-            lit_val = std::string(lit_pat.literal.lexeme);
+            lit_val = std::to_string(lit_pat.literal.float_value().value);
         } else {
             // Unsupported literal type
             return "";

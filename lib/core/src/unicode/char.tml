@@ -1,0 +1,382 @@
+//! Unicode character type extensions.
+//!
+//! This module provides additional methods for working with Unicode characters
+//! beyond what `core::char` provides. It focuses on Unicode-specific properties
+//! and General Category classification.
+//!
+//! # Relationship with `core::char`
+//!
+//! The `core::char` module provides the primary `Char` type and common
+//! character operations. This module (`core::unicode::char`) extends that
+//! with Unicode-specific functionality:
+//!
+//! - General Category classification (`is_letter`, `is_mark`, `is_symbol`, etc.)
+//! - Surrogate detection (`is_surrogate`, `is_high_surrogate`, `is_low_surrogate`)
+//! - Grapheme extend property (`is_grapheme_extend`)
+//!
+//! For basic character operations, prefer using `core::char` directly.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::char          // Primary char operations
+//! use core::unicode::char // Extended Unicode properties
+//!
+//! let c: Char = 0x03B1  // Greek alpha 'α'
+//!
+//! // Use core::char for basic operations
+//! assert(core::char::is_alphabetic(c))
+//! assert(core::char::is_lowercase(c))
+//!
+//! // Use core::unicode::char for Unicode-specific operations
+//! assert(unicode::char::is_letter(c))
+//! let cat = unicode::char::general_category(c)
+//! ```
+
+use core::option::Maybe
+use core::char::Char
+use core::unicode::unicode_data
+use core::unicode::GeneralCategory
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+// Note: Basic constants (MIN, MAX, REPLACEMENT_CHARACTER, UNICODE_VERSION)
+// are defined in core::char. These are Unicode-specific additions.
+
+/// The byte order mark (BOM): U+FEFF
+///
+/// The BOM is used at the start of a text stream to indicate:
+/// - The byte order (endianness) of the text
+/// - That the text is Unicode
+pub const BOM: Char = 0xFEFF
+
+/// Zero Width No-Break Space (ZWNBSP): U+FEFF
+///
+/// This is the same code point as BOM, but used inline as a word joiner.
+/// Note: U+2060 WORD JOINER is now preferred for this use.
+pub const ZWNBSP: Char = 0xFEFF
+
+/// Zero Width Space: U+200B
+pub const ZERO_WIDTH_SPACE: Char = 0x200B
+
+/// Zero Width Non-Joiner: U+200C
+pub const ZWNJ: Char = 0x200C
+
+/// Zero Width Joiner: U+200D
+pub const ZWJ: Char = 0x200D
+
+// ============================================================================
+// Surrogate Detection
+// ============================================================================
+
+// Note: is_valid is now in core::char::is_valid
+
+/// Returns `true` if the value is a high (leading) surrogate (0xD800-0xDBFF).
+///
+/// High surrogates are the first code unit in a UTF-16 surrogate pair.
+/// They are not valid Unicode scalar values on their own.
+pub func is_high_surrogate(c: Char) -> Bool {
+    return c >= 0xD800 and c <= 0xDBFF
+}
+
+/// Returns `true` if the value is a low (trailing) surrogate (0xDC00-0xDFFF).
+///
+/// Low surrogates are the second code unit in a UTF-16 surrogate pair.
+/// They are not valid Unicode scalar values on their own.
+pub func is_low_surrogate(c: Char) -> Bool {
+    return c >= 0xDC00 and c <= 0xDFFF
+}
+
+/// Returns `true` if the value is any surrogate (0xD800-0xDFFF).
+///
+/// Surrogates are reserved for UTF-16 encoding and are not valid
+/// Unicode scalar values.
+pub func is_surrogate(c: Char) -> Bool {
+    return c >= 0xD800 and c <= 0xDFFF
+}
+
+// ============================================================================
+// Extended Unicode Classification
+// ============================================================================
+
+// Note: Basic classification functions (is_alphabetic, is_lowercase, is_uppercase,
+// is_numeric, is_whitespace, is_control, is_ascii_*) are in core::char.
+// This module provides additional Unicode-specific classification.
+
+/// Returns `true` if the character is a grapheme extending character.
+///
+/// Grapheme extending characters are combining marks that extend the
+/// previous base character (like accents, diacritics). They don't form
+/// independent grapheme clusters.
+///
+/// # Examples
+///
+/// ```tml
+/// // Combining acute accent
+/// assert(is_grapheme_extend(0x0301))
+///
+/// // Regular letter
+/// assert(not is_grapheme_extend('a' as Char))
+/// ```
+pub func is_grapheme_extend(c: Char) -> Bool {
+    if c < 128 {
+        return false
+    }
+    return unicode_data::is_grapheme_extend_nonascii(c)
+}
+
+/// Returns `true` if the character has the Cased property.
+///
+/// A character is cased if it has different uppercase and lowercase forms,
+/// or is defined as cased by Unicode.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_cased('a' as Char))
+/// assert(is_cased('A' as Char))
+/// assert(not is_cased('1' as Char))
+/// assert(not is_cased('中' as Char))
+/// ```
+pub func is_cased(c: Char) -> Bool {
+    // ASCII fast path
+    if c < 128 {
+        return (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A)
+    }
+
+    // Non-ASCII: check if character has case mapping
+    return unicode_data::is_lowercase_nonascii(c) or
+           unicode_data::is_uppercase_nonascii(c)
+}
+
+/// Returns `true` if the character is a format control character.
+///
+/// Format characters (Unicode category Cf) are invisible characters
+/// that affect text processing, such as:
+/// - Zero-width spaces and joiners
+/// - Bidirectional formatting marks
+/// - Soft hyphens
+pub func is_format(c: Char) -> Bool {
+    // Common format characters
+    when c {
+        0x00AD => return true,  // Soft hyphen
+        0x200B, 0x200C, 0x200D, 0x200E, 0x200F => return true,  // Zero-width chars
+        0x2028, 0x2029 => return true,  // Line/paragraph separators
+        0x202A, 0x202B, 0x202C, 0x202D, 0x202E => return true,  // Bidi controls
+        0x2060, 0x2061, 0x2062, 0x2063, 0x2064 => return true,  // Invisible operators
+        0x206A, 0x206B, 0x206C, 0x206D, 0x206E, 0x206F => return true,  // Deprecated
+        0xFEFF => return true,  // BOM / ZWNBSP
+        0xFFF9, 0xFFFA, 0xFFFB => return true,  // Interlinear annotation
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is a private use character.
+///
+/// Private use characters are reserved for application-specific use
+/// and have no standard meaning in Unicode.
+pub func is_private_use(c: Char) -> Bool {
+    // BMP Private Use Area
+    if c >= 0xE000 and c <= 0xF8FF {
+        return true
+    }
+    // Supplementary Private Use Area-A
+    if c >= 0xF0000 and c <= 0xFFFFF {
+        return true
+    }
+    // Supplementary Private Use Area-B
+    if c >= 0x100000 and c <= 0x10FFFF {
+        return true
+    }
+    return false
+}
+
+/// Returns `true` if the character is unassigned in Unicode.
+///
+/// Unassigned characters are code points that have not been given
+/// a meaning in the current Unicode version.
+pub func is_unassigned(c: Char) -> Bool {
+    let cat: GeneralCategory = unicode_data::lookup_category(c)
+    when cat {
+        Unassigned => return true,
+        _ => return false
+    }
+}
+
+// ============================================================================
+// Unicode Case Conversion (Extended)
+// ============================================================================
+
+// Note: Basic case conversion (to_lowercase, to_uppercase) is in core::char.
+// This module provides titlecase, which is Unicode-specific.
+
+/// Converts the character to titlecase.
+///
+/// For most characters, titlecase is the same as uppercase.
+/// However, some characters have distinct titlecase forms:
+/// - Croatian/Serbian digraphs: ǆ → Ǆ (not ǅ), but titlecase is Ǆ → ǅ
+/// - Ligatures: ﬁ → Fi (titlecase) vs FI (uppercase)
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_titlecase('a' as Char), 'A' as Char)
+/// assert_eq(to_titlecase(0x01C6), 0x01C5)  // ǆ → ǅ
+/// ```
+pub func to_titlecase(c: Char) -> Char {
+    if c < 128 {
+        if c >= 97 and c <= 122 {
+            return c - 32
+        }
+        return c
+    }
+    return unicode_data::to_titlecase_nonascii(c)
+}
+
+/// Compares two characters case-insensitively using Unicode case folding.
+///
+/// This performs full Unicode case-insensitive comparison, unlike
+/// `core::char::eq_ignore_ascii_case` which only handles ASCII.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(eq_ignore_case('A' as Char, 'a' as Char))
+/// assert(eq_ignore_case('Σ' as Char, 'σ' as Char))  // Greek sigma
+/// assert(eq_ignore_case('ß' as Char, 'ẞ' as Char))  // German sharp s
+/// ```
+pub func eq_ignore_case(a: Char, b: Char) -> Bool {
+    // Fast path: same character
+    if a == b {
+        return true
+    }
+
+    // Compare lowercase forms
+    let a_lower: Char = if a < 128 {
+        if a >= 0x41 and a <= 0x5A { a + 32 } else { a }
+    } else {
+        unicode_data::to_lowercase_nonascii(a)
+    }
+
+    let b_lower: Char = if b < 128 {
+        if b >= 0x41 and b <= 0x5A { b + 32 } else { b }
+    } else {
+        unicode_data::to_lowercase_nonascii(b)
+    }
+
+    return a_lower == b_lower
+}
+
+// ============================================================================
+// General Category Classification
+// ============================================================================
+
+// Note: UTF encoding (len_utf8, len_utf16, encode_utf8, encode_utf16) and
+// escape functions are in core::char. This module provides General Category
+// classification which is more Unicode-specific.
+
+/// Returns the Unicode General Category for this character.
+///
+/// Every Unicode character belongs to exactly one General Category.
+/// See [`GeneralCategory`] for the full list of categories.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::unicode::GeneralCategory
+///
+/// assert_eq(general_category('A' as Char), UppercaseLetter)
+/// assert_eq(general_category('a' as Char), LowercaseLetter)
+/// assert_eq(general_category('5' as Char), DecimalNumber)
+/// ```
+pub func general_category(c: Char) -> GeneralCategory {
+    return unicode_data::lookup_category(c)
+}
+
+/// Returns `true` if the character is in the Letter category (L).
+///
+/// This includes:
+/// - Uppercase letters (Lu)
+/// - Lowercase letters (Ll)
+/// - Titlecase letters (Lt)
+/// - Modifier letters (Lm)
+/// - Other letters (Lo) - includes CJK ideographs
+pub func is_letter(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        UppercaseLetter, LowercaseLetter, TitlecaseLetter,
+        ModifierLetter, OtherLetter => return true,
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is in the Mark category (M).
+///
+/// Marks are combining characters that attach to base characters.
+/// This includes:
+/// - Nonspacing marks (Mn) - accents, diacritics
+/// - Spacing combining marks (Mc)
+/// - Enclosing marks (Me)
+pub func is_mark(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        NonspacingMark, SpacingMark, EnclosingMark => return true,
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is in the Number category (N).
+///
+/// This includes:
+/// - Decimal digits (Nd) - 0-9 and digits from other scripts
+/// - Letter numbers (Nl) - Roman numerals
+/// - Other numbers (No) - fractions, subscripts, etc.
+pub func is_number(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        DecimalNumber, LetterNumber, OtherNumber => return true,
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is in the Punctuation category (P).
+pub func is_punctuation(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        ConnectorPunctuation, DashPunctuation, OpenPunctuation,
+        ClosePunctuation, InitialPunctuation, FinalPunctuation,
+        OtherPunctuation => return true,
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is in the Symbol category (S).
+///
+/// This includes:
+/// - Math symbols (Sm) - +, -, =, etc.
+/// - Currency symbols (Sc) - $, €, ¥, etc.
+/// - Modifier symbols (Sk) - ^, `, etc.
+/// - Other symbols (So) - emoji, dingbats, etc.
+pub func is_symbol(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        MathSymbol, CurrencySymbol, ModifierSymbol, OtherSymbol => return true,
+        _ => return false
+    }
+}
+
+/// Returns `true` if the character is in the Separator category (Z).
+///
+/// This includes:
+/// - Space separators (Zs) - various space characters
+/// - Line separators (Zl) - U+2028
+/// - Paragraph separators (Zp) - U+2029
+pub func is_separator(c: Char) -> Bool {
+    let cat: GeneralCategory = general_category(c)
+    when cat {
+        SpaceSeparator, LineSeparator, ParagraphSeparator => return true,
+        _ => return false
+    }
+}

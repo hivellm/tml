@@ -2,6 +2,7 @@
 #include "types/module.hpp"
 
 #include <algorithm>
+#include <set>
 
 namespace tml::types {
 
@@ -247,6 +248,121 @@ bool TypeEnv::type_implements(const std::string& type_name,
         return false;
     const auto& behaviors = it->second;
     return std::find(behaviors.begin(), behaviors.end(), behavior_name) != behaviors.end();
+}
+
+bool TypeEnv::type_needs_drop(const std::string& type_name) const {
+    // Check if type explicitly implements Drop
+    if (type_implements(type_name, "Drop")) {
+        return true;
+    }
+
+    // Primitive types never need drop
+    static const std::set<std::string> primitives = {"I8",  "I16", "I32",  "I64",  "I128",
+                                                     "U8",  "U16", "U32",  "U64",  "U128",
+                                                     "F32", "F64", "Bool", "Char", "Unit"};
+    if (primitives.count(type_name) > 0) {
+        return false;
+    }
+
+    // Str is a special case - it may need drop depending on implementation
+    // For now, we don't drop Str since it's managed by the runtime
+    if (type_name == "Str") {
+        return false;
+    }
+
+    // Check if it's a struct with fields that need drop
+    auto struct_def = lookup_struct(type_name);
+    if (struct_def) {
+        for (const auto& [field_name, field_type] : struct_def->fields) {
+            if (type_needs_drop(field_type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Check if it's an enum with variants that need drop
+    auto enum_def = lookup_enum(type_name);
+    if (enum_def) {
+        for (const auto& [variant_name, variant_types] : enum_def->variants) {
+            for (const auto& variant_type : variant_types) {
+                if (type_needs_drop(variant_type)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Unknown types don't need drop by default
+    return false;
+}
+
+bool TypeEnv::type_needs_drop(const TypePtr& type) const {
+    if (!type) {
+        return false;
+    }
+
+    return std::visit(
+        [this](const auto& t) -> bool {
+            using T = std::decay_t<decltype(t)>;
+
+            if constexpr (std::is_same_v<T, PrimitiveType>) {
+                // Primitives never need drop (includes Unit and Never kinds)
+                return false;
+            } else if constexpr (std::is_same_v<T, NamedType>) {
+                // Check if the named type needs drop
+                return type_needs_drop(t.name);
+            } else if constexpr (std::is_same_v<T, RefType>) {
+                // References don't own the data, so no drop needed
+                return false;
+            } else if constexpr (std::is_same_v<T, PtrType>) {
+                // Raw pointers don't own the data, so no drop needed
+                return false;
+            } else if constexpr (std::is_same_v<T, TupleType>) {
+                // Tuple needs drop if any element needs drop
+                for (const auto& elem : t.elements) {
+                    if (type_needs_drop(elem)) {
+                        return true;
+                    }
+                }
+                return false;
+            } else if constexpr (std::is_same_v<T, ArrayType>) {
+                // Array needs drop if element type needs drop
+                return type_needs_drop(t.element);
+            } else if constexpr (std::is_same_v<T, SliceType>) {
+                // Slices don't own the data (they're fat pointers/views)
+                return false;
+            } else if constexpr (std::is_same_v<T, FuncType>) {
+                // Function types don't need drop
+                return false;
+            } else if constexpr (std::is_same_v<T, ClosureType>) {
+                // Closures may capture values that need drop
+                // For now, conservative: let the closure handle it
+                return false;
+            } else if constexpr (std::is_same_v<T, GenericType>) {
+                // Generic types - we don't know at compile time, assume no drop needed
+                // The monomorphized version will be checked
+                return false;
+            } else if constexpr (std::is_same_v<T, TypeVar>) {
+                // Type variables - not resolved yet
+                return false;
+            } else if constexpr (std::is_same_v<T, ConstGenericType>) {
+                // Const generics are values, not types with drop
+                return false;
+            } else if constexpr (std::is_same_v<T, DynBehaviorType>) {
+                // Trait objects may need drop - depends on the underlying type
+                // For boxed trait objects, the box handles the drop
+                return false; // Conservative: let the container handle it
+            } else if constexpr (std::is_same_v<T, ImplBehaviorType>) {
+                // Impl behavior types - check the underlying type
+                return false;
+            } else {
+                // Default: no drop needed
+                return false;
+            }
+        },
+        type->kind);
 }
 
 } // namespace tml::types

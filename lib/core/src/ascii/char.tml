@@ -1,14 +1,27 @@
-//! The `Char` type for representing ASCII characters.
+//! The `AsciiChar` type for representing ASCII characters.
 //!
 //! This module defines the core ASCII character type, equivalent to Rust's
-//! `ascii::Char` (AsciiChar).
+//! `ascii::Char`.
+//!
+//! # Relationship with `core::char`
+//!
+//! `AsciiChar` represents a subset of Unicode characters (code points 0-127).
+//! It can be converted to `core::char::Char` (a full Unicode scalar value)
+//! using the `to_char()` method.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ascii::AsciiChar
+//! use core::char::Char
+//!
+//! let ascii = AsciiChar::from_u8(65).unwrap()  // 'A'
+//! let unicode: Char = ascii.to_char()
+//! assert_eq(unicode, 65)
+//! ```
 
-use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
-use core::clone::{Duplicate, Copy}
-use core::hash::Hash
-use core::default::Default
-use core::fmt::{Display, Debug}
 use core::option::Maybe
+use core::char::Char
 
 // ============================================================================
 // ASCII Character Type
@@ -22,7 +35,7 @@ use core::option::Maybe
 ///
 /// # Representation
 ///
-/// `Char` is represented as a single `U8` byte with value in range 0-127.
+/// `AsciiChar` is represented as a single I32 internally.
 /// This is equivalent to Rust's `ascii::Char`.
 ///
 /// Unlike Rust which uses an enum with 128 named variants, TML uses a
@@ -31,10 +44,10 @@ use core::option::Maybe
 /// # Examples
 ///
 /// ```tml
-/// use core::ascii::Char
+/// use core::ascii::AsciiChar
 ///
 /// // Create from a known-valid byte
-/// let a = Char::from_u8(65).unwrap()  // 'A'
+/// let a = AsciiChar::from_u8(65).unwrap()  // 'A'
 /// assert_eq(a.to_u8(), 65)
 ///
 /// // Check character properties
@@ -45,201 +58,201 @@ use core::option::Maybe
 /// let lower = a.to_lowercase()
 /// assert_eq(lower.to_u8(), 97)  // 'a'
 /// ```
-pub type Char {
-    value: U8
+pub type AsciiChar {
+    value: I32
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     // Minimum and Maximum
     /// The smallest ASCII character: Null (0x00).
-    pub const MIN: Char = Char { value: 0 }
+    pub const MIN: AsciiChar = AsciiChar { value: 0 }
     /// The largest ASCII character: Delete (0x7F = 127).
-    pub const MAX: Char = Char { value: 127 }
+    pub const MAX: AsciiChar = AsciiChar { value: 127 }
 
     // Control Characters (0x00 - 0x1F)
     /// Null character (NUL, 0x00)
-    pub const Null: Char = Char { value: 0 }
+    pub const Null: AsciiChar = AsciiChar { value: 0 }
     /// Start of Heading (SOH, 0x01)
-    pub const StartOfHeading: Char = Char { value: 1 }
+    pub const StartOfHeading: AsciiChar = AsciiChar { value: 1 }
     /// Start of Text (STX, 0x02)
-    pub const StartOfText: Char = Char { value: 2 }
+    pub const StartOfText: AsciiChar = AsciiChar { value: 2 }
     /// End of Text (ETX, 0x03)
-    pub const EndOfText: Char = Char { value: 3 }
+    pub const EndOfText: AsciiChar = AsciiChar { value: 3 }
     /// End of Transmission (EOT, 0x04)
-    pub const EndOfTransmission: Char = Char { value: 4 }
+    pub const EndOfTransmission: AsciiChar = AsciiChar { value: 4 }
     /// Enquiry (ENQ, 0x05)
-    pub const Enquiry: Char = Char { value: 5 }
+    pub const Enquiry: AsciiChar = AsciiChar { value: 5 }
     /// Acknowledge (ACK, 0x06)
-    pub const Acknowledge: Char = Char { value: 6 }
+    pub const Acknowledge: AsciiChar = AsciiChar { value: 6 }
     /// Bell (BEL, 0x07)
-    pub const Bell: Char = Char { value: 7 }
+    pub const Bell: AsciiChar = AsciiChar { value: 7 }
     /// Backspace (BS, 0x08)
-    pub const Backspace: Char = Char { value: 8 }
+    pub const Backspace: AsciiChar = AsciiChar { value: 8 }
     /// Horizontal Tab (HT, 0x09)
-    pub const Tab: Char = Char { value: 9 }
+    pub const Tab: AsciiChar = AsciiChar { value: 9 }
     /// Line Feed (LF, 0x0A)
-    pub const LineFeed: Char = Char { value: 10 }
+    pub const LineFeed: AsciiChar = AsciiChar { value: 10 }
     /// Vertical Tab (VT, 0x0B)
-    pub const VerticalTab: Char = Char { value: 11 }
+    pub const VerticalTab: AsciiChar = AsciiChar { value: 11 }
     /// Form Feed (FF, 0x0C)
-    pub const FormFeed: Char = Char { value: 12 }
+    pub const FormFeed: AsciiChar = AsciiChar { value: 12 }
     /// Carriage Return (CR, 0x0D)
-    pub const CarriageReturn: Char = Char { value: 13 }
+    pub const CarriageReturn: AsciiChar = AsciiChar { value: 13 }
     /// Shift Out (SO, 0x0E)
-    pub const ShiftOut: Char = Char { value: 14 }
+    pub const ShiftOut: AsciiChar = AsciiChar { value: 14 }
     /// Shift In (SI, 0x0F)
-    pub const ShiftIn: Char = Char { value: 15 }
+    pub const ShiftIn: AsciiChar = AsciiChar { value: 15 }
     /// Data Link Escape (DLE, 0x10)
-    pub const DataLinkEscape: Char = Char { value: 16 }
+    pub const DataLinkEscape: AsciiChar = AsciiChar { value: 16 }
     /// Device Control 1 / XON (DC1, 0x11)
-    pub const DeviceControl1: Char = Char { value: 17 }
+    pub const DeviceControl1: AsciiChar = AsciiChar { value: 17 }
     /// Device Control 2 (DC2, 0x12)
-    pub const DeviceControl2: Char = Char { value: 18 }
+    pub const DeviceControl2: AsciiChar = AsciiChar { value: 18 }
     /// Device Control 3 / XOFF (DC3, 0x13)
-    pub const DeviceControl3: Char = Char { value: 19 }
+    pub const DeviceControl3: AsciiChar = AsciiChar { value: 19 }
     /// Device Control 4 (DC4, 0x14)
-    pub const DeviceControl4: Char = Char { value: 20 }
+    pub const DeviceControl4: AsciiChar = AsciiChar { value: 20 }
     /// Negative Acknowledge (NAK, 0x15)
-    pub const NegativeAcknowledge: Char = Char { value: 21 }
+    pub const NegativeAcknowledge: AsciiChar = AsciiChar { value: 21 }
     /// Synchronous Idle (SYN, 0x16)
-    pub const SynchronousIdle: Char = Char { value: 22 }
+    pub const SynchronousIdle: AsciiChar = AsciiChar { value: 22 }
     /// End of Transmission Block (ETB, 0x17)
-    pub const EndOfTransmissionBlock: Char = Char { value: 23 }
+    pub const EndOfTransmissionBlock: AsciiChar = AsciiChar { value: 23 }
     /// Cancel (CAN, 0x18)
-    pub const Cancel: Char = Char { value: 24 }
+    pub const Cancel: AsciiChar = AsciiChar { value: 24 }
     /// End of Medium (EM, 0x19)
-    pub const EndOfMedium: Char = Char { value: 25 }
+    pub const EndOfMedium: AsciiChar = AsciiChar { value: 25 }
     /// Substitute (SUB, 0x1A)
-    pub const Substitute: Char = Char { value: 26 }
+    pub const Substitute: AsciiChar = AsciiChar { value: 26 }
     /// Escape (ESC, 0x1B)
-    pub const Escape: Char = Char { value: 27 }
+    pub const Escape: AsciiChar = AsciiChar { value: 27 }
     /// File Separator (FS, 0x1C)
-    pub const FileSeparator: Char = Char { value: 28 }
+    pub const FileSeparator: AsciiChar = AsciiChar { value: 28 }
     /// Group Separator (GS, 0x1D)
-    pub const GroupSeparator: Char = Char { value: 29 }
+    pub const GroupSeparator: AsciiChar = AsciiChar { value: 29 }
     /// Record Separator (RS, 0x1E)
-    pub const RecordSeparator: Char = Char { value: 30 }
+    pub const RecordSeparator: AsciiChar = AsciiChar { value: 30 }
     /// Unit Separator (US, 0x1F)
-    pub const UnitSeparator: Char = Char { value: 31 }
+    pub const UnitSeparator: AsciiChar = AsciiChar { value: 31 }
 
     // Printable Characters
     /// Space (SP, 0x20)
-    pub const Space: Char = Char { value: 32 }
+    pub const Space: AsciiChar = AsciiChar { value: 32 }
     /// Delete (DEL, 0x7F)
-    pub const Delete: Char = Char { value: 127 }
+    pub const Delete: AsciiChar = AsciiChar { value: 127 }
 
     // Digit Characters (0x30 - 0x39)
-    pub const Digit0: Char = Char { value: 48 }
-    pub const Digit1: Char = Char { value: 49 }
-    pub const Digit2: Char = Char { value: 50 }
-    pub const Digit3: Char = Char { value: 51 }
-    pub const Digit4: Char = Char { value: 52 }
-    pub const Digit5: Char = Char { value: 53 }
-    pub const Digit6: Char = Char { value: 54 }
-    pub const Digit7: Char = Char { value: 55 }
-    pub const Digit8: Char = Char { value: 56 }
-    pub const Digit9: Char = Char { value: 57 }
+    pub const Digit0: AsciiChar = AsciiChar { value: 48 }
+    pub const Digit1: AsciiChar = AsciiChar { value: 49 }
+    pub const Digit2: AsciiChar = AsciiChar { value: 50 }
+    pub const Digit3: AsciiChar = AsciiChar { value: 51 }
+    pub const Digit4: AsciiChar = AsciiChar { value: 52 }
+    pub const Digit5: AsciiChar = AsciiChar { value: 53 }
+    pub const Digit6: AsciiChar = AsciiChar { value: 54 }
+    pub const Digit7: AsciiChar = AsciiChar { value: 55 }
+    pub const Digit8: AsciiChar = AsciiChar { value: 56 }
+    pub const Digit9: AsciiChar = AsciiChar { value: 57 }
 
     // Capital Letters (0x41 - 0x5A)
-    pub const CapitalA: Char = Char { value: 65 }
-    pub const CapitalB: Char = Char { value: 66 }
-    pub const CapitalC: Char = Char { value: 67 }
-    pub const CapitalD: Char = Char { value: 68 }
-    pub const CapitalE: Char = Char { value: 69 }
-    pub const CapitalF: Char = Char { value: 70 }
-    pub const CapitalG: Char = Char { value: 71 }
-    pub const CapitalH: Char = Char { value: 72 }
-    pub const CapitalI: Char = Char { value: 73 }
-    pub const CapitalJ: Char = Char { value: 74 }
-    pub const CapitalK: Char = Char { value: 75 }
-    pub const CapitalL: Char = Char { value: 76 }
-    pub const CapitalM: Char = Char { value: 77 }
-    pub const CapitalN: Char = Char { value: 78 }
-    pub const CapitalO: Char = Char { value: 79 }
-    pub const CapitalP: Char = Char { value: 80 }
-    pub const CapitalQ: Char = Char { value: 81 }
-    pub const CapitalR: Char = Char { value: 82 }
-    pub const CapitalS: Char = Char { value: 83 }
-    pub const CapitalT: Char = Char { value: 84 }
-    pub const CapitalU: Char = Char { value: 85 }
-    pub const CapitalV: Char = Char { value: 86 }
-    pub const CapitalW: Char = Char { value: 87 }
-    pub const CapitalX: Char = Char { value: 88 }
-    pub const CapitalY: Char = Char { value: 89 }
-    pub const CapitalZ: Char = Char { value: 90 }
+    pub const CapitalA: AsciiChar = AsciiChar { value: 65 }
+    pub const CapitalB: AsciiChar = AsciiChar { value: 66 }
+    pub const CapitalC: AsciiChar = AsciiChar { value: 67 }
+    pub const CapitalD: AsciiChar = AsciiChar { value: 68 }
+    pub const CapitalE: AsciiChar = AsciiChar { value: 69 }
+    pub const CapitalF: AsciiChar = AsciiChar { value: 70 }
+    pub const CapitalG: AsciiChar = AsciiChar { value: 71 }
+    pub const CapitalH: AsciiChar = AsciiChar { value: 72 }
+    pub const CapitalI: AsciiChar = AsciiChar { value: 73 }
+    pub const CapitalJ: AsciiChar = AsciiChar { value: 74 }
+    pub const CapitalK: AsciiChar = AsciiChar { value: 75 }
+    pub const CapitalL: AsciiChar = AsciiChar { value: 76 }
+    pub const CapitalM: AsciiChar = AsciiChar { value: 77 }
+    pub const CapitalN: AsciiChar = AsciiChar { value: 78 }
+    pub const CapitalO: AsciiChar = AsciiChar { value: 79 }
+    pub const CapitalP: AsciiChar = AsciiChar { value: 80 }
+    pub const CapitalQ: AsciiChar = AsciiChar { value: 81 }
+    pub const CapitalR: AsciiChar = AsciiChar { value: 82 }
+    pub const CapitalS: AsciiChar = AsciiChar { value: 83 }
+    pub const CapitalT: AsciiChar = AsciiChar { value: 84 }
+    pub const CapitalU: AsciiChar = AsciiChar { value: 85 }
+    pub const CapitalV: AsciiChar = AsciiChar { value: 86 }
+    pub const CapitalW: AsciiChar = AsciiChar { value: 87 }
+    pub const CapitalX: AsciiChar = AsciiChar { value: 88 }
+    pub const CapitalY: AsciiChar = AsciiChar { value: 89 }
+    pub const CapitalZ: AsciiChar = AsciiChar { value: 90 }
 
     // Small Letters (0x61 - 0x7A)
-    pub const SmallA: Char = Char { value: 97 }
-    pub const SmallB: Char = Char { value: 98 }
-    pub const SmallC: Char = Char { value: 99 }
-    pub const SmallD: Char = Char { value: 100 }
-    pub const SmallE: Char = Char { value: 101 }
-    pub const SmallF: Char = Char { value: 102 }
-    pub const SmallG: Char = Char { value: 103 }
-    pub const SmallH: Char = Char { value: 104 }
-    pub const SmallI: Char = Char { value: 105 }
-    pub const SmallJ: Char = Char { value: 106 }
-    pub const SmallK: Char = Char { value: 107 }
-    pub const SmallL: Char = Char { value: 108 }
-    pub const SmallM: Char = Char { value: 109 }
-    pub const SmallN: Char = Char { value: 110 }
-    pub const SmallO: Char = Char { value: 111 }
-    pub const SmallP: Char = Char { value: 112 }
-    pub const SmallQ: Char = Char { value: 113 }
-    pub const SmallR: Char = Char { value: 114 }
-    pub const SmallS: Char = Char { value: 115 }
-    pub const SmallT: Char = Char { value: 116 }
-    pub const SmallU: Char = Char { value: 117 }
-    pub const SmallV: Char = Char { value: 118 }
-    pub const SmallW: Char = Char { value: 119 }
-    pub const SmallX: Char = Char { value: 120 }
-    pub const SmallY: Char = Char { value: 121 }
-    pub const SmallZ: Char = Char { value: 122 }
+    pub const SmallA: AsciiChar = AsciiChar { value: 97 }
+    pub const SmallB: AsciiChar = AsciiChar { value: 98 }
+    pub const SmallC: AsciiChar = AsciiChar { value: 99 }
+    pub const SmallD: AsciiChar = AsciiChar { value: 100 }
+    pub const SmallE: AsciiChar = AsciiChar { value: 101 }
+    pub const SmallF: AsciiChar = AsciiChar { value: 102 }
+    pub const SmallG: AsciiChar = AsciiChar { value: 103 }
+    pub const SmallH: AsciiChar = AsciiChar { value: 104 }
+    pub const SmallI: AsciiChar = AsciiChar { value: 105 }
+    pub const SmallJ: AsciiChar = AsciiChar { value: 106 }
+    pub const SmallK: AsciiChar = AsciiChar { value: 107 }
+    pub const SmallL: AsciiChar = AsciiChar { value: 108 }
+    pub const SmallM: AsciiChar = AsciiChar { value: 109 }
+    pub const SmallN: AsciiChar = AsciiChar { value: 110 }
+    pub const SmallO: AsciiChar = AsciiChar { value: 111 }
+    pub const SmallP: AsciiChar = AsciiChar { value: 112 }
+    pub const SmallQ: AsciiChar = AsciiChar { value: 113 }
+    pub const SmallR: AsciiChar = AsciiChar { value: 114 }
+    pub const SmallS: AsciiChar = AsciiChar { value: 115 }
+    pub const SmallT: AsciiChar = AsciiChar { value: 116 }
+    pub const SmallU: AsciiChar = AsciiChar { value: 117 }
+    pub const SmallV: AsciiChar = AsciiChar { value: 118 }
+    pub const SmallW: AsciiChar = AsciiChar { value: 119 }
+    pub const SmallX: AsciiChar = AsciiChar { value: 120 }
+    pub const SmallY: AsciiChar = AsciiChar { value: 121 }
+    pub const SmallZ: AsciiChar = AsciiChar { value: 122 }
 
     // Punctuation
-    pub const ExclamationMark: Char = Char { value: 33 }
-    pub const QuotationMark: Char = Char { value: 34 }
-    pub const NumberSign: Char = Char { value: 35 }
-    pub const DollarSign: Char = Char { value: 36 }
-    pub const PercentSign: Char = Char { value: 37 }
-    pub const Ampersand: Char = Char { value: 38 }
-    pub const Apostrophe: Char = Char { value: 39 }
-    pub const LeftParenthesis: Char = Char { value: 40 }
-    pub const RightParenthesis: Char = Char { value: 41 }
-    pub const Asterisk: Char = Char { value: 42 }
-    pub const PlusSign: Char = Char { value: 43 }
-    pub const Comma: Char = Char { value: 44 }
-    pub const HyphenMinus: Char = Char { value: 45 }
-    pub const FullStop: Char = Char { value: 46 }
-    pub const Solidus: Char = Char { value: 47 }
-    pub const Colon: Char = Char { value: 58 }
-    pub const Semicolon: Char = Char { value: 59 }
-    pub const LessThanSign: Char = Char { value: 60 }
-    pub const EqualsSign: Char = Char { value: 61 }
-    pub const GreaterThanSign: Char = Char { value: 62 }
-    pub const QuestionMark: Char = Char { value: 63 }
-    pub const CommercialAt: Char = Char { value: 64 }
-    pub const LeftSquareBracket: Char = Char { value: 91 }
-    pub const ReverseSolidus: Char = Char { value: 92 }
-    pub const RightSquareBracket: Char = Char { value: 93 }
-    pub const CircumflexAccent: Char = Char { value: 94 }
-    pub const LowLine: Char = Char { value: 95 }
-    pub const GraveAccent: Char = Char { value: 96 }
-    pub const LeftCurlyBracket: Char = Char { value: 123 }
-    pub const VerticalLine: Char = Char { value: 124 }
-    pub const RightCurlyBracket: Char = Char { value: 125 }
-    pub const Tilde: Char = Char { value: 126 }
+    pub const ExclamationMark: AsciiChar = AsciiChar { value: 33 }
+    pub const QuotationMark: AsciiChar = AsciiChar { value: 34 }
+    pub const NumberSign: AsciiChar = AsciiChar { value: 35 }
+    pub const DollarSign: AsciiChar = AsciiChar { value: 36 }
+    pub const PercentSign: AsciiChar = AsciiChar { value: 37 }
+    pub const Ampersand: AsciiChar = AsciiChar { value: 38 }
+    pub const Apostrophe: AsciiChar = AsciiChar { value: 39 }
+    pub const LeftParenthesis: AsciiChar = AsciiChar { value: 40 }
+    pub const RightParenthesis: AsciiChar = AsciiChar { value: 41 }
+    pub const Asterisk: AsciiChar = AsciiChar { value: 42 }
+    pub const PlusSign: AsciiChar = AsciiChar { value: 43 }
+    pub const Comma: AsciiChar = AsciiChar { value: 44 }
+    pub const HyphenMinus: AsciiChar = AsciiChar { value: 45 }
+    pub const FullStop: AsciiChar = AsciiChar { value: 46 }
+    pub const Solidus: AsciiChar = AsciiChar { value: 47 }
+    pub const Colon: AsciiChar = AsciiChar { value: 58 }
+    pub const Semicolon: AsciiChar = AsciiChar { value: 59 }
+    pub const LessThanSign: AsciiChar = AsciiChar { value: 60 }
+    pub const EqualsSign: AsciiChar = AsciiChar { value: 61 }
+    pub const GreaterThanSign: AsciiChar = AsciiChar { value: 62 }
+    pub const QuestionMark: AsciiChar = AsciiChar { value: 63 }
+    pub const CommercialAt: AsciiChar = AsciiChar { value: 64 }
+    pub const LeftSquareBracket: AsciiChar = AsciiChar { value: 91 }
+    pub const ReverseSolidus: AsciiChar = AsciiChar { value: 92 }
+    pub const RightSquareBracket: AsciiChar = AsciiChar { value: 93 }
+    pub const CircumflexAccent: AsciiChar = AsciiChar { value: 94 }
+    pub const LowLine: AsciiChar = AsciiChar { value: 95 }
+    pub const GraveAccent: AsciiChar = AsciiChar { value: 96 }
+    pub const LeftCurlyBracket: AsciiChar = AsciiChar { value: 123 }
+    pub const VerticalLine: AsciiChar = AsciiChar { value: 124 }
+    pub const RightCurlyBracket: AsciiChar = AsciiChar { value: 125 }
+    pub const Tilde: AsciiChar = AsciiChar { value: 126 }
 }
 
 // ============================================================================
 // Construction
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     /// Creates an ASCII character from a byte.
     ///
     /// Returns `Nothing` if the byte is not a valid ASCII value (> 127).
@@ -253,11 +266,11 @@ impl Char {
     /// assert(Char::from_u8(127).is_just())  // DEL is valid
     /// assert(Char::from_u8(128).is_nothing()) // Invalid
     /// ```
-    pub func from_u8(byte: U8) -> Maybe[Char] {
+    pub func from_u8(byte: U8) -> Maybe[AsciiChar] {
         if byte > 127 {
             return Nothing
         }
-        return Just(Char { value: byte })
+        return Just(AsciiChar { value: byte as I32 })
     }
 
     /// Creates an ASCII character from a byte without checking validity.
@@ -273,8 +286,8 @@ impl Char {
     /// // Only use when you're certain the value is valid ASCII
     /// let ch = lowlevel { Char::from_u8_unchecked(65) }
     /// ```
-    pub func from_u8_unchecked(byte: U8) -> Char {
-        return Char { value: byte }
+    pub func from_u8_unchecked(byte: U8) -> AsciiChar {
+        return AsciiChar { value: byte as I32 }
     }
 
     /// Creates an ASCII digit from a decimal number 0-9.
@@ -288,11 +301,11 @@ impl Char {
     /// assert_eq(five.to_u8(), 53)  // '5'
     /// assert(Char::digit(10).is_nothing())
     /// ```
-    pub func digit(n: U8) -> Maybe[Char] {
+    pub func digit(n: U8) -> Maybe[AsciiChar] {
         if n > 9 {
             return Nothing
         }
-        return Just(Char { value: n + 48 })  // '0' = 48
+        return Just(AsciiChar { value: (n as I32) + 48 })  // '0' = 48
     }
 
     /// Creates an ASCII digit from a decimal number 0-9 without bounds checking.
@@ -300,8 +313,69 @@ impl Char {
     /// # Safety (lowlevel)
     ///
     /// The caller must ensure n is in range 0-9.
-    pub func digit_unchecked(n: U8) -> Char {
-        return Char { value: n + 48 }
+    pub func digit_unchecked(n: U8) -> AsciiChar {
+        return AsciiChar { value: (n as I32) + 48 }
+    }
+
+    /// Creates an ASCII character from a digit value in the given radix.
+    ///
+    /// Supports radix 2-36. For values 10-35, returns lowercase letters 'a'-'z'.
+    /// Returns `Nothing` if:
+    /// - The radix is not in range 2-36
+    /// - The value is greater than or equal to the radix
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert_eq(AsciiChar::from_digit(5, 10), Just(AsciiChar::Digit5))
+    /// assert_eq(AsciiChar::from_digit(10, 16).unwrap().to_u8(), 97)  // 'a'
+    /// assert_eq(AsciiChar::from_digit(15, 16).unwrap().to_u8(), 102) // 'f'
+    /// assert_eq(AsciiChar::from_digit(10, 10), Nothing)  // 10 >= 10
+    /// ```
+    pub func from_digit(num: U8, radix: U8) -> Maybe[AsciiChar] {
+        if radix < 2 or radix > 36 {
+            return Nothing
+        }
+        if num >= radix {
+            return Nothing
+        }
+
+        if num < 10 {
+            return Just(AsciiChar { value: (num as I32) + 48 })  // '0' = 48
+        } else {
+            return Just(AsciiChar { value: (num as I32) - 10 + 97 })  // 'a' = 97
+        }
+    }
+
+    /// Creates an AsciiChar from a Char if it's in the ASCII range.
+    ///
+    /// Returns `Nothing` if the character is not ASCII (> 127).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use core::char::Char
+    ///
+    /// let c: Char = 65  // 'A'
+    /// assert(AsciiChar::from_char(c).is_just())
+    ///
+    /// let greek: Char = 0x03B1  // 'α'
+    /// assert(AsciiChar::from_char(greek).is_nothing())
+    /// ```
+    pub func from_char(c: Char) -> Maybe[AsciiChar] {
+        if c > 127 {
+            return Nothing
+        }
+        return Just(AsciiChar { value: c as I32 })
+    }
+
+    /// Creates an AsciiChar from a Char without checking if it's ASCII.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// The caller must ensure the Char is in ASCII range (0-127).
+    pub func from_char_unchecked(c: Char) -> AsciiChar {
+        return AsciiChar { value: c as I32 }
     }
 }
 
@@ -309,7 +383,7 @@ impl Char {
 // Conversion Methods
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     /// Returns the byte value of this ASCII character.
     ///
     /// This is always a value in range 0-127.
@@ -321,14 +395,27 @@ impl Char {
     /// assert_eq(a.to_u8(), 65)
     /// ```
     pub func to_u8(this) -> U8 {
-        return this.value
+        return this.value as U8
     }
 
-    /// Converts this ASCII character to a Unicode scalar value.
+    /// Converts this ASCII character to a Unicode scalar value (`Char`).
     ///
     /// ASCII characters map directly to Unicode code points 0-127.
-    pub func to_char(this) -> U32 {
-        return this.value as U32
+    /// This conversion is always valid and lossless.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// use core::ascii::AsciiChar
+    /// use core::char
+    ///
+    /// let a = AsciiChar::from_u8(65).unwrap()
+    /// let c: Char = a.to_char()
+    /// assert(char::is_ascii(c))
+    /// assert(char::is_uppercase(c))
+    /// ```
+    pub func to_char(this) -> Char {
+        return this.value as Char
     }
 
     /// Returns a string containing just this ASCII character.
@@ -340,7 +427,8 @@ impl Char {
     /// assert_eq(a.as_str(), "A")
     /// ```
     pub func as_str(this) -> Str {
-        return lowlevel { char_to_string(this.value) }
+        let byte: U8 = this.value as U8
+        return lowlevel { char_to_string(byte) }
     }
 }
 
@@ -348,11 +436,11 @@ impl Char {
 // Character Classification
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     /// Returns `true` if this is an ASCII alphabetic character: A-Z or a-z.
     pub func is_alphabetic(this) -> Bool {
-        return (this.value >= 65 and this.value <= 90) or  // A-Z
-               (this.value >= 97 and this.value <= 122)     // a-z
+        return (this.value >= 65 and this.value <= 90) or   // A-Z
+               (this.value >= 97 and this.value <= 122)      // a-z
     }
 
     /// Returns `true` if this is an ASCII lowercase letter: a-z.
@@ -442,46 +530,50 @@ impl Char {
 // Case Conversion
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     /// Converts this ASCII character to lowercase.
     ///
     /// If this is an uppercase letter (A-Z), returns the lowercase equivalent (a-z).
     /// Otherwise, returns the character unchanged.
-    pub func to_lowercase(this) -> Char {
+    pub func to_lowercase(this) -> AsciiChar {
         if this.is_uppercase() {
-            return Char { value: this.value + 32 }
+            return AsciiChar { value: this.value + 32 }
         }
-        return this
+        return AsciiChar { value: this.value }
     }
 
     /// Converts this ASCII character to uppercase.
     ///
     /// If this is a lowercase letter (a-z), returns the uppercase equivalent (A-Z).
     /// Otherwise, returns the character unchanged.
-    pub func to_uppercase(this) -> Char {
+    pub func to_uppercase(this) -> AsciiChar {
         if this.is_lowercase() {
-            return Char { value: this.value - 32 }
+            return AsciiChar { value: this.value - 32 }
         }
-        return this
+        return AsciiChar { value: this.value }
     }
 
     /// Converts this ASCII character to lowercase in place.
-    pub func make_lowercase(mut this) {
-        if this.is_uppercase() {
+    pub func make_lowercase(mut this) -> Unit {
+        // Check if uppercase (A-Z: 65-90)
+        if this.value >= 65 and this.value <= 90 {
             this.value = this.value + 32
         }
     }
 
     /// Converts this ASCII character to uppercase in place.
-    pub func make_uppercase(mut this) {
-        if this.is_lowercase() {
+    pub func make_uppercase(mut this) -> Unit {
+        // Check if lowercase (a-z: 97-122)
+        if this.value >= 97 and this.value <= 122 {
             this.value = this.value - 32
         }
     }
 
     /// Compares this character with another, ignoring ASCII case.
-    pub func eq_ignore_case(this, other: Char) -> Bool {
-        return this.to_lowercase().value == other.to_lowercase().value
+    pub func eq_ignore_case(this, other: AsciiChar) -> Bool {
+        let this_lower: AsciiChar = this.to_lowercase()
+        let other_lower: AsciiChar = other.to_lowercase()
+        return this_lower.value == other_lower.value
     }
 }
 
@@ -489,13 +581,13 @@ impl Char {
 // Digit Conversion
 // ============================================================================
 
-impl Char {
+impl AsciiChar {
     /// Converts this ASCII digit to its numeric value.
     ///
     /// Returns `Nothing` if this is not a digit (0-9).
     pub func to_digit(this) -> Maybe[U8] {
         if this.is_digit() {
-            return Just(this.value - 48)
+            return Just((this.value - 48) as U8)
         }
         return Nothing
     }
@@ -505,80 +597,55 @@ impl Char {
     /// Returns `Nothing` if this is not a hex digit (0-9, A-F, a-f).
     pub func to_hexdigit(this) -> Maybe[U8] {
         if this.is_digit() {
-            return Just(this.value - 48)
+            return Just((this.value - 48) as U8)
         } else if this.value >= 65 and this.value <= 70 {
-            return Just(this.value - 55)  // A=10, B=11, ...
+            return Just((this.value - 55) as U8)  // A=10, B=11, ...
         } else if this.value >= 97 and this.value <= 102 {
-            return Just(this.value - 87)  // a=10, b=11, ...
+            return Just((this.value - 87) as U8)  // a=10, b=11, ...
         }
         return Nothing
     }
-}
 
-// ============================================================================
-// Behavior Implementations
-// ============================================================================
-
-impl PartialEq for Char {
-    pub func eq(this, other: ref Char) -> Bool {
-        return this.value == other.value
-    }
-}
-
-impl Eq for Char {}
-
-impl PartialOrd for Char {
-    pub func partial_cmp(this, other: ref Char) -> Maybe[Ordering] {
-        return Just(this.cmp(other))
-    }
-}
-
-impl Ord for Char {
-    pub func cmp(this, other: ref Char) -> Ordering {
-        if this.value < other.value {
-            return Less
-        } else if this.value > other.value {
-            return Greater
-        } else {
-            return Equal
+    /// Converts this ASCII character to a digit value in the given radix.
+    ///
+    /// Supports radix 2-36. For radix > 10, letters A-Z and a-z represent
+    /// values 10-35 (case-insensitive).
+    ///
+    /// Returns `Nothing` if:
+    /// - The radix is not in range 2-36
+    /// - The character is not a valid digit in the given radix
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let five = AsciiChar::from_u8(53).unwrap()  // '5'
+    /// assert_eq(five.to_digit_radix(10), Just(5))
+    /// assert_eq(five.to_digit_radix(8), Just(5))
+    /// assert_eq(five.to_digit_radix(4), Nothing)  // '5' not valid in base 4
+    ///
+    /// let f = AsciiChar::from_u8(102).unwrap()  // 'f'
+    /// assert_eq(f.to_digit_radix(16), Just(15))
+    /// assert_eq(f.to_digit_radix(10), Nothing)
+    /// ```
+    pub func to_digit_radix(this, radix: U8) -> Maybe[U8] {
+        if radix < 2 or radix > 36 {
+            return Nothing
         }
-    }
-}
 
-impl Duplicate for Char {
-    pub func duplicate(this) -> Char {
-        return Char { value: this.value }
-    }
-}
-
-impl Copy for Char {}
-
-impl Hash for Char {
-    pub func hash(this) -> I64 {
-        return this.value as I64
-    }
-}
-
-impl Default for Char {
-    /// Returns the NUL character (0x00).
-    pub func default() -> Char {
-        return Char::Null
-    }
-}
-
-impl Display for Char {
-    pub func to_string(this) -> Str {
-        return this.as_str()
-    }
-}
-
-impl Debug for Char {
-    pub func debug_string(this) -> Str {
-        if this.is_printable() {
-            return "'" + this.as_str() + "'"
+        let digit: I32 = if this.value >= 48 and this.value <= 57 {
+            this.value - 48  // '0'-'9'
+        } else if this.value >= 65 and this.value <= 90 {
+            this.value - 55  // 'A'-'Z' -> 10-35
+        } else if this.value >= 97 and this.value <= 122 {
+            this.value - 87  // 'a'-'z' -> 10-35
         } else {
-            return "'\\x" + hex_byte(this.value) + "'"
+            return Nothing
         }
+
+        if digit < (radix as I32) {
+            return Just(digit as U8)
+        }
+        return Nothing
     }
 }
 
@@ -586,16 +653,7 @@ impl Debug for Char {
 // Helper Functions
 // ============================================================================
 
-func hex_byte(b: U8) -> Str {
-    let high: U8 = b / 16
-    let low: U8 = b % 16
-    return hex_nibble(high) + hex_nibble(low)
-}
-
-func hex_nibble(n: U8) -> Str {
-    if n < 10 {
-        return lowlevel { char_to_string(n + 48) }  // '0' + n
-    } else {
-        return lowlevel { char_to_string(n + 87) }  // 'a' + (n - 10)
-    }
+/// Converts an AsciiChar to a string
+pub func to_string(ch: AsciiChar) -> Str {
+    return ch.as_str()
 }

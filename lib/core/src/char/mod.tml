@@ -1,0 +1,109 @@
+//! Utilities for the `Char` type (Unicode scalar values).
+//!
+//! This module provides comprehensive support for Unicode characters,
+//! represented as 32-bit unsigned integers (`U32`) containing valid
+//! Unicode scalar values.
+//!
+//! # Character Representation
+//!
+//! In TML, a `Char` is a Unicode scalar value, which is any Unicode code
+//! point except high-surrogate and low-surrogate code points. This matches
+//! Rust's `char` type.
+//!
+//! Valid ranges:
+//! - `0x0000` to `0xD7FF` (before surrogates)
+//! - `0xE000` to `0x10FFFF` (after surrogates)
+//!
+//! # Modules
+//!
+//! - [`convert`]: Conversion functions and error types
+//! - [`decode`]: UTF-16 decoding iterator
+//! - [`methods`]: Character property methods
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::char
+//!
+//! // Create a character from a code point
+//! when char::from_u32(0x1F600) {
+//!     Just(c) => println("Got emoji: {}", c),
+//!     Nothing => println("Invalid code point")
+//! }
+//!
+//! // Check character properties
+//! let c: Char = 'A'
+//! assert(char::is_alphabetic(c))
+//! assert(char::is_uppercase(c))
+//!
+//! // Case conversion
+//! assert_eq(char::to_lowercase(c), 'a')
+//! ```
+
+pub mod convert   // from_u32, from_digit, CharTryFromError, ParseCharError
+pub mod decode    // DecodeUtf16, DecodeUtf16Error, decode_utf16
+pub mod methods   // Character classification and manipulation methods
+
+// Re-export main types and functions
+pub use convert::from_u32
+pub use convert::from_u32_unchecked
+pub use convert::from_digit
+pub use convert::CharTryFromError
+pub use convert::ParseCharError
+pub use decode::decode_utf16
+pub use decode::DecodeUtf16
+pub use decode::DecodeUtf16Error
+pub use methods::*
+
+// ============================================================================
+// Type Alias
+// ============================================================================
+
+/// A Unicode scalar value.
+///
+/// A `Char` is a Unicode scalar value, which is any Unicode code point
+/// other than a surrogate code point. This has a fixed numerical definition:
+/// code points are in the range 0 to 0x10FFFF, inclusive, but the surrogate
+/// code points (0xD800 to 0xDFFF) cannot appear in Chars.
+///
+/// # Representation
+///
+/// `Char` is represented as a `U32` internally, but is guaranteed to hold
+/// only valid Unicode scalar values.
+///
+/// # Examples
+///
+/// ```tml
+/// let c: Char = 'A'
+/// let emoji: Char = '\u{1F600}'
+/// ```
+pub type Char = U32
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// The lowest valid Unicode scalar value: U+0000 (NUL).
+pub const MIN: Char = 0x0000
+
+/// The highest valid Unicode scalar value: U+10FFFF.
+///
+/// Use `char::MAX.to_u32()` to get the numeric value.
+pub const MAX: Char = 0x10FFFF
+
+/// The Unicode replacement character: U+FFFD.
+///
+/// Used to replace invalid or unrepresentable characters during
+/// encoding or decoding operations.
+pub const REPLACEMENT_CHARACTER: Char = 0xFFFD
+
+/// Maximum number of bytes a `Char` can occupy when encoded as UTF-8.
+pub const MAX_LEN_UTF8: I64 = 4
+
+/// Maximum number of 16-bit code units a `Char` can occupy when encoded as UTF-16.
+pub const MAX_LEN_UTF16: I64 = 2
+
+/// The version of Unicode that this implementation is based on.
+///
+/// Represented as (major, minor, patch).
+pub const UNICODE_VERSION: (U8, U8, U8) = (15, 1, 0)

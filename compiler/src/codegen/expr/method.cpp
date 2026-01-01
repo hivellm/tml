@@ -1157,7 +1157,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         impl_receiver_ptr = receiver;
                     }
                 } else {
-                    impl_receiver_ptr = receiver;
+                    // For non-identifier receivers (e.g., method chaining like a.foo().bar()),
+                    // the receiver is a struct value, not a pointer. We need to store it
+                    // in a temporary alloca and pass the pointer.
+                    if (last_expr_type_.starts_with("%struct.")) {
+                        std::string tmp = fresh_reg();
+                        emit_line("  " + tmp + " = alloca " + last_expr_type_);
+                        emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+                        impl_receiver_ptr = tmp;
+                    } else {
+                        impl_receiver_ptr = receiver;
+                    }
                 }
 
                 // Build argument list: self (receiver ptr) + args
@@ -1512,8 +1522,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         impl_receiver_ptr = receiver; // Fall back to generated value
                     }
                 } else {
-                    // For other expressions, receiver is already a pointer
-                    impl_receiver_ptr = receiver;
+                    // For non-identifier receivers (e.g., method chaining like a.foo().bar()),
+                    // the receiver is a struct value, not a pointer. We need to store it
+                    // in a temporary alloca and pass the pointer.
+                    if (last_expr_type_.starts_with("%struct.")) {
+                        std::string tmp = fresh_reg();
+                        emit_line("  " + tmp + " = alloca " + last_expr_type_);
+                        emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
+                        impl_receiver_ptr = tmp;
+                    } else {
+                        impl_receiver_ptr = receiver;
+                    }
                 }
 
                 // Build argument list: self (receiver ptr) + args

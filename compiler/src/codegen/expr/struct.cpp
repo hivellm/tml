@@ -3,6 +3,7 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 
+#include <cctype>
 #include <iostream>
 
 namespace tml::codegen {
@@ -318,6 +319,46 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             } else {
                 struct_type = llvm_type_from_semantic(semantic_type);
             }
+        }
+    }
+
+    // Check if this is tuple element access (field name is a number like "0", "1", "2")
+    bool is_tuple_access = !field.field.empty() && std::isdigit(field.field[0]);
+
+    if (is_tuple_access) {
+        // Tuple element access: tuple.0, tuple.1, etc.
+        types::TypePtr obj_type = infer_expr_type(*field.object);
+        if (obj_type && obj_type->is<types::TupleType>()) {
+            const auto& tuple_type = obj_type->as<types::TupleType>();
+            size_t idx = std::stoul(field.field);
+
+            if (idx >= tuple_type.elements.size()) {
+                report_error("Tuple index out of bounds: " + field.field, field.span);
+                return "0";
+            }
+
+            // Get the element type
+            types::TypePtr elem_type = tuple_type.elements[idx];
+            std::string elem_llvm_type = llvm_type_from_semantic(elem_type);
+
+            // Generate tuple type string for getelementptr
+            std::string tuple_llvm_type = "{ ";
+            for (size_t i = 0; i < tuple_type.elements.size(); ++i) {
+                if (i > 0)
+                    tuple_llvm_type += ", ";
+                tuple_llvm_type += llvm_type_from_semantic(tuple_type.elements[i]);
+            }
+            tuple_llvm_type += " }";
+
+            // Use getelementptr to access element, then load
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr " + tuple_llvm_type + ", ptr " +
+                      struct_ptr + ", i32 0, i32 " + std::to_string(idx));
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + elem_llvm_type + ", ptr " + elem_ptr);
+            last_expr_type_ = elem_llvm_type;
+            return result;
         }
     }
 

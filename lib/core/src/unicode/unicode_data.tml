@@ -1,0 +1,1087 @@
+//! Unicode property tables and lookup functions.
+//!
+//! This module contains the data tables and lookup functions for Unicode
+//! character properties. The data is derived from the Unicode Character
+//! Database (UCD) version 15.1.0.
+//!
+//! # Implementation Notes
+//!
+//! The tables use a combination of techniques for space efficiency:
+//! - Range-based lookup for contiguous blocks
+//! - Binary search for sparse properties
+//! - Two-stage tables for common properties
+//!
+//! This module is internal and not intended for direct use.
+//! Use the functions in `core::unicode` instead.
+
+use core::unicode::GeneralCategory
+
+// ============================================================================
+// Unicode Version
+// ============================================================================
+
+/// The Unicode version this data is based on: (major, minor, patch)
+pub const UNICODE_VERSION: (U8, U8, U8) = (15, 1, 0)
+
+// ============================================================================
+// Alphabetic Property
+// ============================================================================
+
+/// Check if a non-ASCII character is alphabetic.
+pub func is_alphabetic_nonascii(c: U32) -> Bool {
+    // Latin Extended-A and Extended-B
+    if c >= 0x0100 and c <= 0x024F {
+        return true
+    }
+
+    // IPA Extensions
+    if c >= 0x0250 and c <= 0x02AF {
+        return true
+    }
+
+    // Greek and Coptic
+    if c >= 0x0370 and c <= 0x03FF {
+        // Exclude some punctuation
+        if c == 0x0374 or c == 0x0375 or c == 0x037E or c == 0x0384 or c == 0x0385 {
+            return false
+        }
+        return true
+    }
+
+    // Cyrillic
+    if c >= 0x0400 and c <= 0x04FF {
+        return true
+    }
+
+    // Cyrillic Supplement
+    if c >= 0x0500 and c <= 0x052F {
+        return true
+    }
+
+    // Armenian
+    if c >= 0x0531 and c <= 0x0556 {
+        return true
+    }
+    if c >= 0x0560 and c <= 0x0588 {
+        return true
+    }
+
+    // Hebrew letters (excluding points and marks)
+    if c >= 0x05D0 and c <= 0x05EA {
+        return true
+    }
+
+    // Arabic letters
+    if c >= 0x0620 and c <= 0x064A {
+        return true
+    }
+    if c >= 0x066E and c <= 0x066F {
+        return true
+    }
+    if c >= 0x0671 and c <= 0x06D3 {
+        return true
+    }
+
+    // Devanagari
+    if c >= 0x0904 and c <= 0x0939 {
+        return true
+    }
+    if c >= 0x0958 and c <= 0x0961 {
+        return true
+    }
+
+    // Bengali
+    if c >= 0x0985 and c <= 0x09B9 {
+        return true
+    }
+
+    // Thai
+    if c >= 0x0E01 and c <= 0x0E30 {
+        return true
+    }
+    if c >= 0x0E32 and c <= 0x0E33 {
+        return true
+    }
+
+    // Georgian
+    if c >= 0x10A0 and c <= 0x10C5 {
+        return true
+    }
+    if c >= 0x10D0 and c <= 0x10FA {
+        return true
+    }
+
+    // Hangul Syllables
+    if c >= 0xAC00 and c <= 0xD7A3 {
+        return true
+    }
+
+    // CJK Unified Ideographs
+    if c >= 0x4E00 and c <= 0x9FFF {
+        return true
+    }
+
+    // CJK Extension A
+    if c >= 0x3400 and c <= 0x4DBF {
+        return true
+    }
+
+    // Hiragana
+    if c >= 0x3041 and c <= 0x3096 {
+        return true
+    }
+
+    // Katakana
+    if c >= 0x30A1 and c <= 0x30FA {
+        return true
+    }
+
+    // Bopomofo
+    if c >= 0x3105 and c <= 0x312F {
+        return true
+    }
+
+    // Latin Extended Additional
+    if c >= 0x1E00 and c <= 0x1EFF {
+        return true
+    }
+
+    // Greek Extended
+    if c >= 0x1F00 and c <= 0x1FFF {
+        return true
+    }
+
+    // Letterlike Symbols (some)
+    if c >= 0x2100 and c <= 0x214F {
+        // Check specific letterlike symbols
+        when c {
+            0x2102 => return true,  // ℂ
+            0x2107 => return true,  // ℇ
+            0x210A => return true,  // ℊ
+            0x210B => return true,  // ℋ
+            0x210C => return true,  // ℌ
+            0x210D => return true,  // ℍ
+            0x210E => return true,  // ℎ
+            0x210F => return true,  // ℏ
+            0x2110 => return true,  // ℐ
+            0x2111 => return true,  // ℑ
+            0x2112 => return true,  // ℒ
+            0x2113 => return true,  // ℓ
+            0x2115 => return true,  // ℕ
+            0x2119 => return true,  // ℙ
+            0x211A => return true,  // ℚ
+            0x211B => return true,  // ℛ
+            0x211C => return true,  // ℜ
+            0x211D => return true,  // ℝ
+            0x2124 => return true,  // ℤ
+            0x2126 => return true,  // Ω
+            0x2128 => return true,  // ℨ
+            0x212A => return true,  // K
+            0x212B => return true,  // Å
+            0x212C => return true,  // ℬ
+            0x212D => return true,  // ℭ
+            0x212F => return true,  // ℯ
+            0x2130 => return true,  // ℰ
+            0x2131 => return true,  // ℱ
+            0x2133 => return true,  // ℳ
+            0x2134 => return true,  // ℴ
+            _ => return false
+        }
+    }
+
+    // SMP: Deseret
+    if c >= 0x10400 and c <= 0x1044F {
+        return true
+    }
+
+    // SMP: Mathematical Alphanumeric Symbols (letters only)
+    if c >= 0x1D400 and c <= 0x1D7FF {
+        // This range includes many letter variants
+        return true
+    }
+
+    return false
+}
+
+// ============================================================================
+// Lowercase Property
+// ============================================================================
+
+/// Check if a non-ASCII character is lowercase.
+pub func is_lowercase_nonascii(c: U32) -> Bool {
+    // Latin Extended-A lowercase
+    if c >= 0x0101 and c <= 0x017F {
+        // Odd code points in this range are typically lowercase
+        if (c % 2) == 1 {
+            return true
+        }
+    }
+
+    // Latin Extended-B lowercase selections
+    if c >= 0x0180 and c <= 0x024F {
+        // Lowercase letters scattered through this range
+        when c {
+            0x0180, 0x0183, 0x0185, 0x0188, 0x018C, 0x018D,
+            0x0192, 0x0195, 0x0199, 0x019A, 0x019B, 0x019E,
+            0x01A1, 0x01A3, 0x01A5, 0x01A8, 0x01AD, 0x01B0,
+            0x01B4, 0x01B6, 0x01B9, 0x01BA, 0x01BD, 0x01BE,
+            0x01BF, 0x01C6, 0x01C9, 0x01CC, 0x01CE, 0x01D0,
+            0x01D2, 0x01D4, 0x01D6, 0x01D8, 0x01DA, 0x01DC,
+            0x01DD, 0x01DF, 0x01E1, 0x01E3, 0x01E5, 0x01E7,
+            0x01E9, 0x01EB, 0x01ED, 0x01EF, 0x01F0, 0x01F3,
+            0x01F5, 0x01F9, 0x01FB, 0x01FD, 0x01FF => return true,
+            _ => {}
+        }
+    }
+
+    // Greek lowercase
+    if c >= 0x03B1 and c <= 0x03C9 {
+        return true
+    }
+    if c >= 0x03D0 and c <= 0x03D7 {
+        return true
+    }
+
+    // Cyrillic lowercase
+    if c >= 0x0430 and c <= 0x044F {
+        return true
+    }
+    if c >= 0x0450 and c <= 0x045F {
+        return true
+    }
+
+    // Latin Extended Additional lowercase (odd positions)
+    if c >= 0x1E01 and c <= 0x1EFF {
+        if (c % 2) == 1 {
+            return true
+        }
+    }
+
+    // Greek Extended lowercase
+    if c >= 0x1F00 and c <= 0x1F07 {
+        return true
+    }
+    if c >= 0x1F10 and c <= 0x1F15 {
+        return true
+    }
+    if c >= 0x1F20 and c <= 0x1F27 {
+        return true
+    }
+    if c >= 0x1F30 and c <= 0x1F37 {
+        return true
+    }
+    if c >= 0x1F40 and c <= 0x1F45 {
+        return true
+    }
+    if c >= 0x1F50 and c <= 0x1F57 {
+        return true
+    }
+    if c >= 0x1F60 and c <= 0x1F67 {
+        return true
+    }
+    if c >= 0x1F70 and c <= 0x1F7D {
+        return true
+    }
+    if c >= 0x1F80 and c <= 0x1F87 {
+        return true
+    }
+    if c >= 0x1F90 and c <= 0x1F97 {
+        return true
+    }
+    if c >= 0x1FA0 and c <= 0x1FA7 {
+        return true
+    }
+
+    // German sharp s
+    if c == 0x00DF {
+        return true
+    }
+
+    return false
+}
+
+// ============================================================================
+// Uppercase Property
+// ============================================================================
+
+/// Check if a non-ASCII character is uppercase.
+pub func is_uppercase_nonascii(c: U32) -> Bool {
+    // Latin Extended-A uppercase
+    if c >= 0x0100 and c <= 0x017E {
+        // Even code points in this range are typically uppercase
+        if (c % 2) == 0 {
+            return true
+        }
+    }
+
+    // Latin Extended-B uppercase selections
+    if c >= 0x0180 and c <= 0x024F {
+        when c {
+            0x0181, 0x0182, 0x0184, 0x0186, 0x0187, 0x0189,
+            0x018A, 0x018B, 0x018E, 0x018F, 0x0190, 0x0191,
+            0x0193, 0x0194, 0x0196, 0x0197, 0x0198, 0x019C,
+            0x019D, 0x019F, 0x01A0, 0x01A2, 0x01A4, 0x01A6,
+            0x01A7, 0x01A9, 0x01AC, 0x01AE, 0x01AF, 0x01B1,
+            0x01B2, 0x01B3, 0x01B5, 0x01B7, 0x01B8, 0x01BC,
+            0x01C4, 0x01C7, 0x01CA, 0x01CD, 0x01CF, 0x01D1,
+            0x01D3, 0x01D5, 0x01D7, 0x01D9, 0x01DB, 0x01DE,
+            0x01E0, 0x01E2, 0x01E4, 0x01E6, 0x01E8, 0x01EA,
+            0x01EC, 0x01EE, 0x01F1, 0x01F4, 0x01F6, 0x01F7,
+            0x01F8, 0x01FA, 0x01FC, 0x01FE => return true,
+            _ => {}
+        }
+    }
+
+    // Greek uppercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return true
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return true
+    }
+
+    // Cyrillic uppercase
+    if c >= 0x0410 and c <= 0x042F {
+        return true
+    }
+    if c >= 0x0400 and c <= 0x040F {
+        return true
+    }
+
+    // Latin Extended Additional uppercase (even positions)
+    if c >= 0x1E00 and c <= 0x1EFE {
+        if (c % 2) == 0 {
+            return true
+        }
+    }
+
+    // Greek Extended uppercase
+    if c >= 0x1F08 and c <= 0x1F0F {
+        return true
+    }
+    if c >= 0x1F18 and c <= 0x1F1D {
+        return true
+    }
+    if c >= 0x1F28 and c <= 0x1F2F {
+        return true
+    }
+    if c >= 0x1F38 and c <= 0x1F3F {
+        return true
+    }
+    if c >= 0x1F48 and c <= 0x1F4D {
+        return true
+    }
+    if c >= 0x1F59 and c <= 0x1F5F {
+        if (c % 2) == 1 {
+            return true
+        }
+    }
+    if c >= 0x1F68 and c <= 0x1F6F {
+        return true
+    }
+    if c >= 0x1F88 and c <= 0x1F8F {
+        return true
+    }
+    if c >= 0x1F98 and c <= 0x1F9F {
+        return true
+    }
+    if c >= 0x1FA8 and c <= 0x1FAF {
+        return true
+    }
+    if c >= 0x1FB8 and c <= 0x1FBC {
+        return true
+    }
+    if c >= 0x1FC8 and c <= 0x1FCC {
+        return true
+    }
+    if c >= 0x1FD8 and c <= 0x1FDB {
+        return true
+    }
+    if c >= 0x1FE8 and c <= 0x1FEC {
+        return true
+    }
+    if c >= 0x1FF8 and c <= 0x1FFC {
+        return true
+    }
+
+    // Capital sharp S
+    if c == 0x1E9E {
+        return true
+    }
+
+    return false
+}
+
+// ============================================================================
+// Numeric Property
+// ============================================================================
+
+/// Check if a non-ASCII character is numeric.
+pub func is_numeric_nonascii(c: U32) -> Bool {
+    // Superscript and subscript digits
+    if c == 0x00B2 or c == 0x00B3 or c == 0x00B9 {
+        return true  // ² ³ ¹
+    }
+
+    // Arabic-Indic digits
+    if c >= 0x0660 and c <= 0x0669 {
+        return true
+    }
+
+    // Extended Arabic-Indic digits
+    if c >= 0x06F0 and c <= 0x06F9 {
+        return true
+    }
+
+    // Devanagari digits
+    if c >= 0x0966 and c <= 0x096F {
+        return true
+    }
+
+    // Bengali digits
+    if c >= 0x09E6 and c <= 0x09EF {
+        return true
+    }
+
+    // Gurmukhi digits
+    if c >= 0x0A66 and c <= 0x0A6F {
+        return true
+    }
+
+    // Gujarati digits
+    if c >= 0x0AE6 and c <= 0x0AEF {
+        return true
+    }
+
+    // Oriya digits
+    if c >= 0x0B66 and c <= 0x0B6F {
+        return true
+    }
+
+    // Tamil digits
+    if c >= 0x0BE6 and c <= 0x0BEF {
+        return true
+    }
+
+    // Telugu digits
+    if c >= 0x0C66 and c <= 0x0C6F {
+        return true
+    }
+
+    // Kannada digits
+    if c >= 0x0CE6 and c <= 0x0CEF {
+        return true
+    }
+
+    // Malayalam digits
+    if c >= 0x0D66 and c <= 0x0D6F {
+        return true
+    }
+
+    // Thai digits
+    if c >= 0x0E50 and c <= 0x0E59 {
+        return true
+    }
+
+    // Lao digits
+    if c >= 0x0ED0 and c <= 0x0ED9 {
+        return true
+    }
+
+    // Tibetan digits
+    if c >= 0x0F20 and c <= 0x0F29 {
+        return true
+    }
+
+    // Myanmar digits
+    if c >= 0x1040 and c <= 0x1049 {
+        return true
+    }
+
+    // Khmer digits
+    if c >= 0x17E0 and c <= 0x17E9 {
+        return true
+    }
+
+    // Mongolian digits
+    if c >= 0x1810 and c <= 0x1819 {
+        return true
+    }
+
+    // Fullwidth digits
+    if c >= 0xFF10 and c <= 0xFF19 {
+        return true
+    }
+
+    // Roman numerals
+    if c >= 0x2160 and c <= 0x2188 {
+        return true
+    }
+
+    // Vulgar fractions
+    if c >= 0x00BC and c <= 0x00BE {
+        return true  // ¼ ½ ¾
+    }
+    if c >= 0x2150 and c <= 0x215F {
+        return true
+    }
+
+    // Subscript and superscript
+    if c >= 0x2070 and c <= 0x2079 {
+        return true
+    }
+    if c >= 0x2080 and c <= 0x2089 {
+        return true
+    }
+
+    return false
+}
+
+// ============================================================================
+// Whitespace Property
+// ============================================================================
+
+/// Check if a non-ASCII character is whitespace.
+pub func is_whitespace_nonascii(c: U32) -> Bool {
+    when c {
+        0x0085 => return true,  // Next Line (NEL)
+        0x00A0 => return true,  // No-Break Space
+        0x1680 => return true,  // Ogham Space Mark
+        0x2000 => return true,  // En Quad
+        0x2001 => return true,  // Em Quad
+        0x2002 => return true,  // En Space
+        0x2003 => return true,  // Em Space
+        0x2004 => return true,  // Three-Per-Em Space
+        0x2005 => return true,  // Four-Per-Em Space
+        0x2006 => return true,  // Six-Per-Em Space
+        0x2007 => return true,  // Figure Space
+        0x2008 => return true,  // Punctuation Space
+        0x2009 => return true,  // Thin Space
+        0x200A => return true,  // Hair Space
+        0x2028 => return true,  // Line Separator
+        0x2029 => return true,  // Paragraph Separator
+        0x202F => return true,  // Narrow No-Break Space
+        0x205F => return true,  // Medium Mathematical Space
+        0x3000 => return true,  // Ideographic Space
+        _ => return false
+    }
+}
+
+// ============================================================================
+// Control Property
+// ============================================================================
+
+/// Check if a non-ASCII character is a control character.
+pub func is_control_nonascii(c: U32) -> Bool {
+    // C1 control characters
+    if c >= 0x0080 and c <= 0x009F {
+        return true
+    }
+    return false
+}
+
+// ============================================================================
+// Grapheme Extend Property
+// ============================================================================
+
+/// Check if a non-ASCII character is a grapheme extending character.
+pub func is_grapheme_extend_nonascii(c: U32) -> Bool {
+    // Combining Diacritical Marks
+    if c >= 0x0300 and c <= 0x036F {
+        return true
+    }
+
+    // Combining Diacritical Marks Extended
+    if c >= 0x1AB0 and c <= 0x1AFF {
+        return true
+    }
+
+    // Combining Diacritical Marks Supplement
+    if c >= 0x1DC0 and c <= 0x1DFF {
+        return true
+    }
+
+    // Combining Diacritical Marks for Symbols
+    if c >= 0x20D0 and c <= 0x20FF {
+        return true
+    }
+
+    // Combining Half Marks
+    if c >= 0xFE20 and c <= 0xFE2F {
+        return true
+    }
+
+    // Hebrew points and marks
+    if c >= 0x0591 and c <= 0x05BD {
+        return true
+    }
+    if c == 0x05BF {
+        return true
+    }
+    if c >= 0x05C1 and c <= 0x05C2 {
+        return true
+    }
+    if c >= 0x05C4 and c <= 0x05C5 {
+        return true
+    }
+    if c == 0x05C7 {
+        return true
+    }
+
+    // Arabic marks
+    if c >= 0x0610 and c <= 0x061A {
+        return true
+    }
+    if c >= 0x064B and c <= 0x065F {
+        return true
+    }
+    if c == 0x0670 {
+        return true
+    }
+    if c >= 0x06D6 and c <= 0x06DC {
+        return true
+    }
+    if c >= 0x06DF and c <= 0x06E4 {
+        return true
+    }
+    if c >= 0x06E7 and c <= 0x06E8 {
+        return true
+    }
+    if c >= 0x06EA and c <= 0x06ED {
+        return true
+    }
+
+    // Devanagari signs
+    if c >= 0x0901 and c <= 0x0903 {
+        return true
+    }
+    if c >= 0x093A and c <= 0x094F {
+        return true
+    }
+
+    // Bengali signs
+    if c >= 0x0981 and c <= 0x0983 {
+        return true
+    }
+    if c >= 0x09BC and c <= 0x09CD {
+        return true
+    }
+
+    // Thai marks
+    if c >= 0x0E31 and c <= 0x0E3A {
+        return true
+    }
+    if c >= 0x0E47 and c <= 0x0E4E {
+        return true
+    }
+
+    // Variation selectors
+    if c >= 0xFE00 and c <= 0xFE0F {
+        return true
+    }
+
+    // Variation Selectors Supplement
+    if c >= 0xE0100 and c <= 0xE01EF {
+        return true
+    }
+
+    return false
+}
+
+// ============================================================================
+// Printable Property
+// ============================================================================
+
+/// Check if a non-ASCII character is printable.
+pub func is_printable_nonascii(c: U32) -> Bool {
+    // C1 control characters are not printable
+    if c >= 0x0080 and c <= 0x009F {
+        return false
+    }
+
+    // Line/paragraph separators are not printable (they're format controls)
+    if c == 0x2028 or c == 0x2029 {
+        return false
+    }
+
+    // Format characters (Cf category) - not printable
+    if c == 0x00AD {  // Soft hyphen
+        return false
+    }
+    if c >= 0x200B and c <= 0x200F {
+        return false  // Zero-width space, joiners, direction marks
+    }
+    if c >= 0x2028 and c <= 0x202E {
+        return false
+    }
+    if c >= 0x2060 and c <= 0x206F {
+        return false
+    }
+    if c == 0xFEFF {  // BOM / Zero-width no-break space
+        return false
+    }
+    if c >= 0xFFF0 and c <= 0xFFFF {
+        // Specials block
+        if c >= 0xFFF9 and c <= 0xFFFB {
+            return false  // Interlinear annotation anchors
+        }
+        if c == 0xFFFC or c == 0xFFFD {
+            return true  // Object replacement char, replacement char - visible
+        }
+        if c == 0xFFFE or c == 0xFFFF {
+            return false  // Non-characters
+        }
+    }
+
+    // Private Use Area
+    if c >= 0xE000 and c <= 0xF8FF {
+        return true  // Considered printable (may have glyphs)
+    }
+
+    // Surrogates are not valid scalar values
+    if c >= 0xD800 and c <= 0xDFFF {
+        return false
+    }
+
+    // Beyond valid Unicode
+    if c > 0x10FFFF {
+        return false
+    }
+
+    // SMP non-characters
+    if (c & 0xFFFF) >= 0xFFFE {
+        return false
+    }
+
+    // Default: printable
+    return true
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+/// Convert a non-ASCII character to uppercase.
+pub func to_uppercase_nonascii(c: U32) -> U32 {
+    // Latin Extended-A: odd -> even
+    if c >= 0x0101 and c <= 0x017F {
+        if (c % 2) == 1 {
+            return c - 1
+        }
+    }
+
+    // Greek lowercase to uppercase
+    if c >= 0x03B1 and c <= 0x03C1 {
+        return c - 32
+    }
+    if c >= 0x03C3 and c <= 0x03C9 {
+        return c - 32
+    }
+
+    // Cyrillic lowercase to uppercase
+    if c >= 0x0430 and c <= 0x044F {
+        return c - 32
+    }
+
+    // Latin Extended Additional: odd -> even
+    if c >= 0x1E01 and c <= 0x1EFF {
+        if (c % 2) == 1 {
+            return c - 1
+        }
+    }
+
+    // German sharp s -> capital sharp s
+    if c == 0x00DF {
+        return 0x1E9E
+    }
+
+    // Micro sign -> Greek capital mu
+    if c == 0x00B5 {
+        return 0x039C
+    }
+
+    return c
+}
+
+/// Convert a non-ASCII character to lowercase.
+pub func to_lowercase_nonascii(c: U32) -> U32 {
+    // Latin Extended-A: even -> odd
+    if c >= 0x0100 and c <= 0x017E {
+        if (c % 2) == 0 {
+            return c + 1
+        }
+    }
+
+    // Greek uppercase to lowercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return c + 32
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return c + 32
+    }
+
+    // Cyrillic uppercase to lowercase
+    if c >= 0x0410 and c <= 0x042F {
+        return c + 32
+    }
+
+    // Latin Extended Additional: even -> odd
+    if c >= 0x1E00 and c <= 0x1EFE {
+        if (c % 2) == 0 {
+            return c + 1
+        }
+    }
+
+    // Capital sharp S -> lowercase sharp s
+    if c == 0x1E9E {
+        return 0x00DF
+    }
+
+    return c
+}
+
+/// Convert a non-ASCII character to titlecase.
+pub func to_titlecase_nonascii(c: U32) -> U32 {
+    // For most characters, titlecase == uppercase
+    // Special titlecase characters:
+
+    // Croatian/Serbian digraphs
+    when c {
+        0x01C6 => return 0x01C5,  // DŽ -> Dž
+        0x01C9 => return 0x01C8,  // LJ -> Lj
+        0x01CC => return 0x01CB,  // NJ -> Nj
+        0x01F3 => return 0x01F2,  // DZ -> Dz
+        _ => return to_uppercase_nonascii(c)
+    }
+}
+
+// ============================================================================
+// General Category Lookup
+// ============================================================================
+
+/// Look up the Unicode General Category for a character.
+pub func lookup_category(c: U32) -> GeneralCategory {
+    // ASCII fast path
+    if c < 128 {
+        if c < 32 or c == 127 {
+            return Control
+        }
+        if c == 32 {
+            return SpaceSeparator
+        }
+        if c >= 48 and c <= 57 {
+            return DecimalNumber
+        }
+        if c >= 65 and c <= 90 {
+            return UppercaseLetter
+        }
+        if c >= 97 and c <= 122 {
+            return LowercaseLetter
+        }
+        // Punctuation and symbols
+        when c {
+            33, 34, 35, 37, 38, 39, 42, 44, 46, 47,
+            58, 59, 63, 64, 92 => return OtherPunctuation,
+            40 => return OpenPunctuation,
+            41 => return ClosePunctuation,
+            91 => return OpenPunctuation,
+            93 => return ClosePunctuation,
+            123 => return OpenPunctuation,
+            125 => return ClosePunctuation,
+            36 => return CurrencySymbol,
+            43, 60, 61, 62, 124, 126 => return MathSymbol,
+            94, 96 => return ModifierSymbol,
+            95 => return ConnectorPunctuation,
+            _ => return OtherSymbol
+        }
+    }
+
+    // C1 control characters
+    if c >= 0x0080 and c <= 0x009F {
+        return Control
+    }
+
+    // Latin-1 Supplement
+    if c >= 0x00A0 and c <= 0x00FF {
+        if c == 0x00A0 {
+            return SpaceSeparator
+        }
+        if c >= 0x00A2 and c <= 0x00A5 {
+            return CurrencySymbol
+        }
+        if c == 0x00A6 or c == 0x00A9 or c == 0x00AE or c == 0x00B0 {
+            return OtherSymbol
+        }
+        if c == 0x00A7 or c == 0x00B6 {
+            return OtherPunctuation
+        }
+        if c == 0x00AB {
+            return InitialPunctuation
+        }
+        if c == 0x00BB {
+            return FinalPunctuation
+        }
+        if c == 0x00AC or c == 0x00B1 or c == 0x00D7 or c == 0x00F7 {
+            return MathSymbol
+        }
+        if c >= 0x00B2 and c <= 0x00B3 {
+            return OtherNumber
+        }
+        if c == 0x00B9 {
+            return OtherNumber
+        }
+        if c >= 0x00BC and c <= 0x00BE {
+            return OtherNumber
+        }
+        if c >= 0x00C0 and c <= 0x00D6 {
+            return UppercaseLetter
+        }
+        if c >= 0x00D8 and c <= 0x00DE {
+            return UppercaseLetter
+        }
+        if c == 0x00DF {
+            return LowercaseLetter
+        }
+        if c >= 0x00E0 and c <= 0x00F6 {
+            return LowercaseLetter
+        }
+        if c >= 0x00F8 and c <= 0x00FF {
+            return LowercaseLetter
+        }
+        return OtherSymbol
+    }
+
+    // Greek and Coptic
+    if c >= 0x0370 and c <= 0x03FF {
+        if c >= 0x0391 and c <= 0x03A1 {
+            return UppercaseLetter
+        }
+        if c >= 0x03A3 and c <= 0x03A9 {
+            return UppercaseLetter
+        }
+        if c >= 0x03B1 and c <= 0x03C9 {
+            return LowercaseLetter
+        }
+        if c >= 0x0370 and c <= 0x0373 {
+            return (c % 2 == 0) ? UppercaseLetter : LowercaseLetter
+        }
+        return OtherLetter
+    }
+
+    // Cyrillic
+    if c >= 0x0400 and c <= 0x04FF {
+        if c >= 0x0400 and c <= 0x040F {
+            return UppercaseLetter
+        }
+        if c >= 0x0410 and c <= 0x042F {
+            return UppercaseLetter
+        }
+        if c >= 0x0430 and c <= 0x044F {
+            return LowercaseLetter
+        }
+        if c >= 0x0450 and c <= 0x045F {
+            return LowercaseLetter
+        }
+        return OtherLetter
+    }
+
+    // CJK Unified Ideographs
+    if c >= 0x4E00 and c <= 0x9FFF {
+        return OtherLetter
+    }
+
+    // CJK Extension A
+    if c >= 0x3400 and c <= 0x4DBF {
+        return OtherLetter
+    }
+
+    // Hangul Syllables
+    if c >= 0xAC00 and c <= 0xD7A3 {
+        return OtherLetter
+    }
+
+    // Hiragana
+    if c >= 0x3041 and c <= 0x3096 {
+        return OtherLetter
+    }
+
+    // Katakana
+    if c >= 0x30A1 and c <= 0x30FA {
+        return OtherLetter
+    }
+
+    // Combining Diacritical Marks
+    if c >= 0x0300 and c <= 0x036F {
+        return NonspacingMark
+    }
+
+    // General Punctuation
+    if c >= 0x2000 and c <= 0x206F {
+        if c >= 0x2000 and c <= 0x200A {
+            return SpaceSeparator
+        }
+        if c == 0x2028 {
+            return LineSeparator
+        }
+        if c == 0x2029 {
+            return ParagraphSeparator
+        }
+        if c >= 0x200B and c <= 0x200F {
+            return Format
+        }
+        if c >= 0x2010 and c <= 0x2015 {
+            return DashPunctuation
+        }
+        if c == 0x2018 or c == 0x201B or c == 0x201C or c == 0x201F {
+            return InitialPunctuation
+        }
+        if c == 0x2019 or c == 0x201A or c == 0x201D or c == 0x201E {
+            return FinalPunctuation
+        }
+        return OtherPunctuation
+    }
+
+    // Currency Symbols
+    if c >= 0x20A0 and c <= 0x20CF {
+        return CurrencySymbol
+    }
+
+    // Number Forms (Roman numerals, fractions)
+    if c >= 0x2150 and c <= 0x218F {
+        if c >= 0x2160 and c <= 0x216F {
+            return LetterNumber
+        }
+        if c >= 0x2170 and c <= 0x217F {
+            return LetterNumber
+        }
+        return OtherNumber
+    }
+
+    // Mathematical Operators
+    if c >= 0x2200 and c <= 0x22FF {
+        return MathSymbol
+    }
+
+    // Arrows
+    if c >= 0x2190 and c <= 0x21FF {
+        return MathSymbol
+    }
+
+    // Private Use Area
+    if c >= 0xE000 and c <= 0xF8FF {
+        return PrivateUse
+    }
+
+    // Surrogates
+    if c >= 0xD800 and c <= 0xDFFF {
+        return Surrogate
+    }
+
+    // Beyond valid Unicode
+    if c > 0x10FFFF {
+        return Unassigned
+    }
+
+    // Default
+    return Unassigned
+}

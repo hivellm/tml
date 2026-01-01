@@ -228,6 +228,15 @@ void TypeEnv::init_builtin_string() {
                                                    false,
                                                    builtin_span});
 
+    // char_to_string(c: U8) -> Str
+    // Converts a single byte (ASCII character) to a 1-character string
+    functions_["char_to_string"].push_back(FuncSig{"char_to_string",
+                                                   {make_primitive(PrimitiveKind::U8)},
+                                                   make_primitive(PrimitiveKind::Str),
+                                                   {},
+                                                   false,
+                                                   builtin_span});
+
     // ========================================================================
     // StringBuilder Operations (Mutable String)
     // ========================================================================

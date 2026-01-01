@@ -52,12 +52,16 @@ void MirBuilder::build_func_decl(const parser::FuncDecl& func) {
     // Set up context
     ctx_.current_func = &mir_func;
     ctx_.variables.clear();
+    ctx_.drop_scopes.clear();
     ctx_.in_async_func = func.is_async;
     ctx_.next_suspension_id = 0;
 
     // Create entry block
     auto entry = mir_func.create_block("entry");
     ctx_.current_block = entry;
+
+    // Push initial drop scope for function
+    ctx_.push_drop_scope();
 
     // Add parameters
     for (const auto& param : func.params) {
@@ -87,12 +91,18 @@ void MirBuilder::build_func_decl(const parser::FuncDecl& func) {
 
     // Add implicit return if not terminated
     if (!is_terminated()) {
+        // Emit drops for function-level scope before implicit return
+        emit_all_drops();
+
         if (mir_func.return_type->is_unit()) {
             emit_return();
         } else {
             emit_return(body_value);
         }
     }
+
+    // Pop function drop scope
+    ctx_.pop_drop_scope();
 
     module_.functions.push_back(std::move(mir_func));
     ctx_.current_func = nullptr;
@@ -167,6 +177,15 @@ void MirBuilder::build_let_stmt(const parser::LetStmt& let) {
 
     auto init_value = build_expr(**let.init);
     build_pattern_binding(*let.pattern, init_value);
+
+    // Register for drop if the pattern is a simple identifier
+    if (let.pattern->is<parser::IdentPattern>()) {
+        const auto& ident = let.pattern->as<parser::IdentPattern>();
+        std::string type_name = get_type_name(init_value.type);
+        if (!type_name.empty() && env_.type_needs_drop(type_name)) {
+            ctx_.register_for_drop(ident.name, init_value, type_name, init_value.type);
+        }
+    }
 }
 
 void MirBuilder::build_var_stmt(const parser::VarStmt& var) {
@@ -181,6 +200,13 @@ void MirBuilder::build_var_stmt(const parser::VarStmt& var) {
 
     // Map variable to alloca
     ctx_.variables[var.name] = alloca_val;
+
+    // Register for drop - for mutable vars we need to load before dropping
+    // Note: we register the alloca pointer; codegen will handle loading
+    std::string type_name = get_type_name(init_value.type);
+    if (!type_name.empty() && env_.type_needs_drop(type_name)) {
+        ctx_.register_for_drop(var.name, alloca_val, type_name, init_value.type);
+    }
 }
 
 void MirBuilder::build_expr_stmt(const parser::ExprStmt& expr) {

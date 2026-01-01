@@ -110,12 +110,51 @@ enum class MoveSemantics {
     Move, // Must be moved (ownership transfer)
 };
 
-// Borrow checking error
+// Error codes for different borrow error categories
+enum class BorrowErrorCode {
+    UseAfterMove,           // B001: Use of moved value
+    MoveWhileBorrowed,      // B002: Cannot move because value is borrowed
+    AssignNotMutable,       // B003: Cannot assign to immutable variable
+    AssignWhileBorrowed,    // B004: Cannot assign because value is borrowed
+    BorrowAfterMove,        // B005: Cannot borrow moved value
+    MutBorrowNotMutable,    // B006: Cannot mutably borrow non-mutable variable
+    MutBorrowWhileImmut,    // B007: Cannot mutably borrow while immutably borrowed
+    DoubleMutBorrow,        // B008: Cannot borrow mutably more than once
+    ImmutBorrowWhileMut,    // B009: Cannot immutably borrow while mutably borrowed
+    ReturnLocalRef,         // B010: Cannot return reference to local
+    PartialMove,            // B011: Partial move detected
+    OverlappingBorrow,      // B012: Overlapping borrows
+    UseWhileBorrowed,       // B013: Cannot use while borrowed
+    Other,                  // B099: Other borrow errors
+};
+
+// Suggestion for fixing borrow errors
+struct BorrowSuggestion {
+    std::string message;            // Human-readable suggestion
+    std::optional<std::string> fix; // Optional code fix (e.g., ".duplicate()")
+};
+
+// Borrow checking error with rich diagnostics
 struct BorrowError {
+    BorrowErrorCode code = BorrowErrorCode::Other;
     std::string message;
     SourceSpan span;
     std::vector<std::string> notes;
     std::optional<SourceSpan> related_span;
+    std::optional<std::string> related_message; // Context for related span
+    std::vector<BorrowSuggestion> suggestions;  // Fix suggestions
+
+    // Helpers for common error patterns
+    static auto use_after_move(const std::string& name, SourceSpan use_span,
+                               SourceSpan move_span) -> BorrowError;
+    static auto double_mut_borrow(const std::string& name, SourceSpan second_span,
+                                  SourceSpan first_span) -> BorrowError;
+    static auto mut_borrow_while_immut(const std::string& name, SourceSpan mut_span,
+                                       SourceSpan immut_span) -> BorrowError;
+    static auto immut_borrow_while_mut(const std::string& name, SourceSpan immut_span,
+                                       SourceSpan mut_span) -> BorrowError;
+    static auto return_local_ref(const std::string& name, SourceSpan return_span,
+                                 SourceSpan def_span) -> BorrowError;
 };
 
 // Tracks the state of a single place (variable)
@@ -133,6 +172,8 @@ struct PlaceState {
     std::set<std::string> moved_fields;
     // Is this place initialized?
     bool is_initialized = true;
+    // Track where a move occurred (for use-after-move errors)
+    std::optional<Location> move_location;
 };
 
 // Move state for partial moves

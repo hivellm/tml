@@ -2,6 +2,7 @@
 #define TML_COMMON_HPP
 
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <span>

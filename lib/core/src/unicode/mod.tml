@@ -1,0 +1,354 @@
+//! Unicode character operations and classification.
+//!
+//! This module provides Unicode-aware character classification and property
+//! lookup functions, complementing the ASCII-specific functions in `core::ascii`.
+//!
+//! # Unicode Version
+//!
+//! The Unicode data in this module corresponds to Unicode version 15.1.0.
+//! New versions of Unicode are released regularly, and this module may be
+//! updated to reflect newer standards.
+//!
+//! # Main Components
+//!
+//! - [`UNICODE_VERSION`]: The Unicode standard version this implementation follows
+//! - [`Char`]: Extension methods for Unicode characters (represented as U32)
+//! - Character classification functions (alphabetic, numeric, whitespace, etc.)
+//! - Case conversion utilities
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::unicode
+//!
+//! // Check if a character is alphabetic (works with non-ASCII)
+//! assert(unicode::is_alphabetic('α' as U32))  // Greek alpha
+//! assert(unicode::is_alphabetic('中' as U32))  // Chinese character
+//!
+//! // Case conversion
+//! let upper = unicode::to_uppercase('é' as U32)
+//! assert_eq(upper, 'É' as U32)
+//! ```
+
+pub mod unicode_data  // Internal Unicode property tables
+pub mod char          // Char type extensions
+
+// Re-export main types and functions
+pub use char::*
+pub use unicode_data::UNICODE_VERSION
+
+// ============================================================================
+// Unicode Version Constant
+// ============================================================================
+
+/// The version of Unicode that this implementation is based on.
+///
+/// This constant allows code to check which Unicode standard version
+/// underlies the character classification and conversion methods.
+///
+/// The version is represented as a tuple of (major, minor, patch).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::unicode::UNICODE_VERSION
+///
+/// let (major, minor, patch) = UNICODE_VERSION
+/// println("Unicode version: {major}.{minor}.{patch}")
+/// ```
+
+// ============================================================================
+// Top-level Classification Functions
+// ============================================================================
+
+/// Returns `true` if the character is alphabetic according to Unicode.
+///
+/// This includes letters from all scripts (Latin, Greek, Cyrillic, CJK, etc.)
+/// as well as letter modifiers and marks.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_alphabetic('a' as U32))
+/// assert(is_alphabetic('Σ' as U32))   // Greek Sigma
+/// assert(is_alphabetic('日' as U32))  // Japanese
+/// assert(not is_alphabetic('5' as U32))
+/// ```
+pub func is_alphabetic(c: U32) -> Bool {
+    // ASCII fast path
+    if c < 128 {
+        return (c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+    }
+    return unicode_data::is_alphabetic_nonascii(c)
+}
+
+/// Returns `true` if the character is lowercase.
+///
+/// This is true for lowercase letters in all scripts that distinguish case.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_lowercase('a' as U32))
+/// assert(is_lowercase('ω' as U32))   // Greek omega
+/// assert(not is_lowercase('A' as U32))
+/// ```
+pub func is_lowercase(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 97 and c <= 122
+    }
+    return unicode_data::is_lowercase_nonascii(c)
+}
+
+/// Returns `true` if the character is uppercase.
+///
+/// This is true for uppercase letters in all scripts that distinguish case.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_uppercase('A' as U32))
+/// assert(is_uppercase('Ω' as U32))   // Greek Omega
+/// assert(not is_uppercase('a' as U32))
+/// ```
+pub func is_uppercase(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 65 and c <= 90
+    }
+    return unicode_data::is_uppercase_nonascii(c)
+}
+
+/// Returns `true` if the character is numeric.
+///
+/// This includes decimal digits (0-9), as well as numeric characters from
+/// other scripts and Roman numerals.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_numeric('5' as U32))
+/// assert(is_numeric('٤' as U32))   // Arabic-Indic 4
+/// assert(is_numeric('Ⅳ' as U32))  // Roman numeral 4
+/// assert(not is_numeric('a' as U32))
+/// ```
+pub func is_numeric(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 48 and c <= 57
+    }
+    return unicode_data::is_numeric_nonascii(c)
+}
+
+/// Returns `true` if the character is alphanumeric.
+///
+/// This is equivalent to `is_alphabetic(c) or is_numeric(c)`.
+pub func is_alphanumeric(c: U32) -> Bool {
+    return is_alphabetic(c) or is_numeric(c)
+}
+
+/// Returns `true` if the character is whitespace according to Unicode.
+///
+/// This includes ASCII whitespace as well as Unicode-specific whitespace
+/// characters like non-breaking space, em space, etc.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_whitespace(' ' as U32))    // Regular space
+/// assert(is_whitespace('\t' as U32))   // Tab
+/// assert(is_whitespace(0x00A0))         // Non-breaking space
+/// assert(is_whitespace(0x2003))         // Em space
+/// ```
+pub func is_whitespace(c: U32) -> Bool {
+    // ASCII whitespace fast path
+    if c < 128 {
+        return c == 32 or c == 9 or c == 10 or c == 12 or c == 13 or c == 11
+    }
+    return unicode_data::is_whitespace_nonascii(c)
+}
+
+/// Returns `true` if the character is a control character.
+///
+/// Control characters are non-printing characters that affect text processing.
+/// This includes ASCII control characters (0x00-0x1F, 0x7F) and Unicode
+/// control characters in the Cc category.
+pub func is_control(c: U32) -> Bool {
+    if c < 128 {
+        return c < 32 or c == 127
+    }
+    return unicode_data::is_control_nonascii(c)
+}
+
+/// Returns `true` if the character has grapheme extend property.
+///
+/// Grapheme extending characters are combining marks that extend the
+/// previous base character (like accents, diacritics).
+pub func is_grapheme_extend(c: U32) -> Bool {
+    if c < 128 {
+        return false
+    }
+    return unicode_data::is_grapheme_extend_nonascii(c)
+}
+
+/// Returns `true` if the character is a valid Unicode scalar value.
+///
+/// Valid scalar values are in range 0x0000-0xD7FF and 0xE000-0x10FFFF.
+/// The range 0xD800-0xDFFF is reserved for UTF-16 surrogates.
+pub func is_valid_scalar(c: U32) -> Bool {
+    return c <= 0x10FFFF and not (c >= 0xD800 and c <= 0xDFFF)
+}
+
+/// Returns `true` if the character is printable.
+///
+/// A character is printable if it has a visual representation (including space).
+/// Control characters and unassigned code points are not printable.
+pub func is_printable(c: U32) -> Bool {
+    // ASCII fast path
+    if c < 32 {
+        return false
+    }
+    if c < 127 {
+        return true
+    }
+    if c == 127 {
+        return false
+    }
+    return unicode_data::is_printable_nonascii(c)
+}
+
+// ============================================================================
+// Case Conversion
+// ============================================================================
+
+/// Converts a character to its uppercase equivalent.
+///
+/// If the character has no uppercase equivalent, returns the character unchanged.
+/// Some characters may map to multiple characters; this function returns only
+/// the simple (single character) mapping.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_uppercase('a' as U32), 'A' as U32)
+/// assert_eq(to_uppercase('ß' as U32), 'ẞ' as U32)  // German sharp S
+/// assert_eq(to_uppercase('5' as U32), '5' as U32)  // No change
+/// ```
+pub func to_uppercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 97 and c <= 122 {
+            return c - 32
+        }
+        return c
+    }
+    return unicode_data::to_uppercase_nonascii(c)
+}
+
+/// Converts a character to its lowercase equivalent.
+///
+/// If the character has no lowercase equivalent, returns the character unchanged.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(to_lowercase('A' as U32), 'a' as U32)
+/// assert_eq(to_lowercase('Σ' as U32), 'σ' as U32)  // Greek Sigma
+/// assert_eq(to_lowercase('5' as U32), '5' as U32)  // No change
+/// ```
+pub func to_lowercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 65 and c <= 90 {
+            return c + 32
+        }
+        return c
+    }
+    return unicode_data::to_lowercase_nonascii(c)
+}
+
+/// Converts a character to its titlecase equivalent.
+///
+/// For most characters, titlecase is the same as uppercase.
+/// Some characters (like 'ǆ') have distinct titlecase forms ('ǅ').
+pub func to_titlecase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 97 and c <= 122 {
+            return c - 32
+        }
+        return c
+    }
+    return unicode_data::to_titlecase_nonascii(c)
+}
+
+// ============================================================================
+// Unicode Category
+// ============================================================================
+
+/// Unicode General Category
+///
+/// Each Unicode character is assigned to exactly one General Category.
+/// Categories are grouped into major classes:
+/// - L: Letter (Lu, Ll, Lt, Lm, Lo)
+/// - M: Mark (Mn, Mc, Me)
+/// - N: Number (Nd, Nl, No)
+/// - P: Punctuation (Pc, Pd, Ps, Pe, Pi, Pf, Po)
+/// - S: Symbol (Sm, Sc, Sk, So)
+/// - Z: Separator (Zs, Zl, Zp)
+/// - C: Other (Cc, Cf, Cs, Co, Cn)
+pub type GeneralCategory {
+    // Letter
+    UppercaseLetter,    // Lu
+    LowercaseLetter,    // Ll
+    TitlecaseLetter,    // Lt
+    ModifierLetter,     // Lm
+    OtherLetter,        // Lo
+
+    // Mark
+    NonspacingMark,     // Mn
+    SpacingMark,        // Mc
+    EnclosingMark,      // Me
+
+    // Number
+    DecimalNumber,      // Nd
+    LetterNumber,       // Nl
+    OtherNumber,        // No
+
+    // Punctuation
+    ConnectorPunctuation,  // Pc
+    DashPunctuation,       // Pd
+    OpenPunctuation,       // Ps
+    ClosePunctuation,      // Pe
+    InitialPunctuation,    // Pi
+    FinalPunctuation,      // Pf
+    OtherPunctuation,      // Po
+
+    // Symbol
+    MathSymbol,         // Sm
+    CurrencySymbol,     // Sc
+    ModifierSymbol,     // Sk
+    OtherSymbol,        // So
+
+    // Separator
+    SpaceSeparator,     // Zs
+    LineSeparator,      // Zl
+    ParagraphSeparator, // Zp
+
+    // Other
+    Control,            // Cc
+    Format,             // Cf
+    Surrogate,          // Cs
+    PrivateUse,         // Co
+    Unassigned,         // Cn
+}
+
+/// Returns the Unicode General Category for a character.
+///
+/// # Examples
+///
+/// ```tml
+/// let cat = general_category('A' as U32)
+/// assert_eq(cat, UppercaseLetter)
+///
+/// let cat = general_category('5' as U32)
+/// assert_eq(cat, DecimalNumber)
+/// ```
+pub func general_category(c: U32) -> GeneralCategory {
+    return unicode_data::lookup_category(c)
+}

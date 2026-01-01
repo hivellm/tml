@@ -709,9 +709,109 @@ println("Average: {:.3} ms (10 runs)", avg_ms)
 - Compiler will emit warnings when using deprecated time functions
 - Use `--allow-unstable` flag to suppress stability warnings during migration
 
-## 8. Fundamental Behaviors
+## 8. Intrinsics (lowlevel)
 
-### 8.1 Equal
+Intrinsics are low-level operations that map directly to LLVM instructions. They are declared with `@intrinsic` in `lib/core/src/intrinsics.tml` and used inside `lowlevel { }` blocks.
+
+### 8.1 Slice Intrinsics
+
+For implementing slice operations in the core library:
+
+```tml
+// Get element reference at index (no bounds check)
+@intrinsic
+pub func slice_get[T](data: ref T, index: I64) -> ref T
+
+// Get mutable element reference at index (no bounds check)
+@intrinsic
+pub func slice_get_mut[T](data: mut ref T, index: I64) -> mut ref T
+
+// Set element at index (no bounds check)
+@intrinsic
+pub func slice_set[T](data: mut ref T, index: I64, value: T)
+
+// Compute offset pointer (for slice splitting)
+@intrinsic
+pub func slice_offset[T](data: ref T, count: I64) -> ref T
+
+// Swap two elements (no bounds check)
+@intrinsic
+pub func slice_swap[T](data: mut ref T, a: I64, b: I64)
+```
+
+**Example Usage:**
+
+```tml
+impl[T] Slice[T] {
+    pub func get(this, index: I64) -> Maybe[ref T] {
+        if index < 0 or index >= this.len {
+            return Nothing
+        }
+        lowlevel {
+            Just(slice_get(this.data, index))
+        }
+    }
+
+    pub func set(mut this, index: I64, value: T) -> Bool {
+        if index < 0 or index >= this.len {
+            return false
+        }
+        lowlevel {
+            slice_set(this.data, index, value)
+        }
+        true
+    }
+}
+```
+
+### 8.2 Memory Intrinsics
+
+```tml
+@intrinsic pub func ptr_read[T](ptr: Ptr[T]) -> T
+@intrinsic pub func ptr_write[T](ptr: Ptr[T], value: T)
+@intrinsic pub func ptr_offset[T](ptr: Ptr[T], offset: I64) -> Ptr[T]
+@intrinsic pub func ptr_to_int[T](ptr: Ptr[T]) -> I64
+@intrinsic pub func int_to_ptr[T](addr: I64) -> Ptr[T]
+```
+
+### 8.3 Arithmetic Intrinsics (with overflow)
+
+```tml
+@intrinsic pub func checked_add[T](a: T, b: T) -> (T, Bool)   // (result, overflow)
+@intrinsic pub func checked_sub[T](a: T, b: T) -> (T, Bool)
+@intrinsic pub func checked_mul[T](a: T, b: T) -> (T, Bool)
+@intrinsic pub func wrapping_add[T](a: T, b: T) -> T
+@intrinsic pub func wrapping_sub[T](a: T, b: T) -> T
+@intrinsic pub func wrapping_mul[T](a: T, b: T) -> T
+@intrinsic pub func saturating_add[T](a: T, b: T) -> T
+@intrinsic pub func saturating_sub[T](a: T, b: T) -> T
+@intrinsic pub func saturating_mul[T](a: T, b: T) -> T
+```
+
+### 8.4 Bit Manipulation Intrinsics
+
+```tml
+@intrinsic pub func rotate_left[T](val: T, amount: U32) -> T
+@intrinsic pub func rotate_right[T](val: T, amount: U32) -> T
+@intrinsic pub func ctlz[T](val: T) -> T        // Count leading zeros
+@intrinsic pub func cttz[T](val: T) -> T        // Count trailing zeros
+@intrinsic pub func ctpop[T](val: T) -> T       // Population count (count 1 bits)
+@intrinsic pub func bitreverse[T](val: T) -> T
+@intrinsic pub func bswap[T](val: T) -> T       // Byte swap
+```
+
+### 8.5 Compiler Hints
+
+```tml
+@intrinsic pub func unreachable()               // Mark unreachable code
+@intrinsic pub func assume(cond: Bool)          // Assume condition is true
+@intrinsic pub func likely(cond: Bool) -> Bool  // Branch prediction hint
+@intrinsic pub func unlikely(cond: Bool) -> Bool
+```
+
+## 9. Fundamental Behaviors
+
+### 9.1 Equal
 
 ```tml
 behavior Equal {
@@ -724,7 +824,7 @@ behavior Equal {
 // Usage: a == b, a != b
 ```
 
-### 8.2 Ordering Enum
+### 9.2 Ordering Enum
 
 ```tml
 // Builtin enum for comparison results
@@ -742,7 +842,7 @@ ord.to_string() -> Str      // "Less", "Equal", or "Greater"
 ord.debug_string() -> Str   // "Ordering::Less", etc.
 ```
 
-### 8.3 Ordered Behavior
+### 9.3 Ordered Behavior
 
 ```tml
 behavior Ordered: Equal {
@@ -766,7 +866,7 @@ when order {
 }
 ```
 
-### 8.4 Duplicate
+### 9.4 Duplicate
 
 ```tml
 behavior Duplicate {
@@ -776,7 +876,7 @@ behavior Duplicate {
 let copy: T = original.duplicate()
 ```
 
-### 8.5 Default
+### 9.5 Default
 
 ```tml
 behavior Default {
@@ -788,7 +888,7 @@ let s: String = String.default() // ""
 let l: List[I32] = List.default()   // []
 ```
 
-### 8.6 Debug
+### 9.6 Debug
 
 ```tml
 behavior Debug {
@@ -798,7 +898,7 @@ behavior Debug {
 print(value.debug())
 ```
 
-### 8.7 Hashable
+### 9.7 Hashable
 
 ```tml
 behavior Hashable {
@@ -808,7 +908,7 @@ behavior Hashable {
 // Required to use as key in Map/Set
 ```
 
-### 8.8 Addable, Subtractable, Multipliable, Divisible
+### 9.8 Addable, Subtractable, Multipliable, Divisible
 
 ```tml
 behavior Addable[Rhs = This] {
@@ -819,7 +919,7 @@ behavior Addable[Rhs = This] {
 // Similar for Subtractable, Multipliable, Divisible, Remainder
 ```
 
-### 8.9 From / Into
+### 9.9 From / Into
 
 ```tml
 behavior From[T] {

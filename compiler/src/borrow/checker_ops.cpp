@@ -2,6 +2,85 @@
 
 namespace tml::borrow {
 
+// ============================================================================
+// BorrowError Static Helpers - Create rich diagnostics for common error patterns
+// ============================================================================
+
+auto BorrowError::use_after_move(const std::string& name, SourceSpan use_span, SourceSpan move_span)
+    -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::UseAfterMove;
+    err.message = "use of moved value: `" + name + "`";
+    err.span = use_span;
+    err.related_span = move_span;
+    err.related_message = "value moved here";
+    err.notes.push_back("move occurs because `" + name +
+                        "` has type that does not implement the `Duplicate` behavior");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider cloning the value before the move",
+        .fix = ".duplicate()",
+    });
+    return err;
+}
+
+auto BorrowError::double_mut_borrow(const std::string& name, SourceSpan second_span,
+                                    SourceSpan first_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::DoubleMutBorrow;
+    err.message = "cannot borrow `" + name + "` as mutable more than once at a time";
+    err.span = second_span;
+    err.related_span = first_span;
+    err.related_message = "first mutable borrow occurs here";
+    err.notes.push_back("first borrow is still active when second borrow occurs");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider borrowing at different scopes, or using interior mutability",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
+auto BorrowError::mut_borrow_while_immut(const std::string& name, SourceSpan mut_span,
+                                         SourceSpan immut_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::MutBorrowWhileImmut;
+    err.message =
+        "cannot borrow `" + name + "` as mutable because it is also borrowed as immutable";
+    err.span = mut_span;
+    err.related_span = immut_span;
+    err.related_message = "immutable borrow occurs here";
+    err.notes.push_back("immutable borrow is still active when mutable borrow occurs");
+    return err;
+}
+
+auto BorrowError::immut_borrow_while_mut(const std::string& name, SourceSpan immut_span,
+                                         SourceSpan mut_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::ImmutBorrowWhileMut;
+    err.message =
+        "cannot borrow `" + name + "` as immutable because it is also borrowed as mutable";
+    err.span = immut_span;
+    err.related_span = mut_span;
+    err.related_message = "mutable borrow occurs here";
+    err.notes.push_back("mutable borrow is still active when immutable borrow occurs");
+    return err;
+}
+
+auto BorrowError::return_local_ref(const std::string& name, SourceSpan return_span,
+                                   SourceSpan def_span) -> BorrowError {
+    BorrowError err;
+    err.code = BorrowErrorCode::ReturnLocalRef;
+    err.message = "cannot return reference to local variable `" + name + "`";
+    err.span = return_span;
+    err.related_span = def_span;
+    err.related_message = "`" + name + "` is declared here";
+    err.notes.push_back("returns a reference to data owned by the current function");
+    err.suggestions.push_back(BorrowSuggestion{
+        .message = "consider returning an owned value instead",
+        .fix = std::nullopt,
+    });
+    return err;
+}
+
 void BorrowChecker::create_borrow(PlaceId place, BorrowKind kind, Location loc) {
     auto& state = env_.get_state_mut(place);
 
@@ -67,23 +146,48 @@ void BorrowChecker::move_value(PlaceId place, Location loc) {
     auto& state = env_.get_state_mut(place);
 
     if (state.state == OwnershipState::Moved) {
-        error("use of moved value: `" + state.name + "`", loc.span);
+        // Use rich error with move location
+        if (state.move_location) {
+            errors_.push_back(
+                BorrowError::use_after_move(state.name, loc.span, state.move_location->span));
+        } else {
+            error("use of moved value: `" + state.name + "`", loc.span);
+        }
         return;
     }
 
     if (state.state == OwnershipState::Borrowed || state.state == OwnershipState::MutBorrowed) {
+        // Find the active borrow span
+        for (const auto& borrow : state.active_borrows) {
+            if (!borrow.end) {
+                BorrowError err;
+                err.code = BorrowErrorCode::MoveWhileBorrowed;
+                err.message = "cannot move out of `" + state.name + "` because it is borrowed";
+                err.span = loc.span;
+                err.related_span = borrow.start.span;
+                err.related_message = "borrow of `" + state.name + "` occurs here";
+                errors_.push_back(err);
+                return;
+            }
+        }
         error("cannot move out of `" + state.name + "` because it is borrowed", loc.span);
         return;
     }
 
     state.state = OwnershipState::Moved;
+    state.move_location = loc; // Track where the move happened
 }
 
 void BorrowChecker::check_can_use(PlaceId place, Location loc) {
     const auto& state = env_.get_state(place);
 
     if (state.state == OwnershipState::Moved) {
-        error("use of moved value: `" + state.name + "`", loc.span);
+        if (state.move_location) {
+            errors_.push_back(
+                BorrowError::use_after_move(state.name, loc.span, state.move_location->span));
+        } else {
+            error("use of moved value: `" + state.name + "`", loc.span);
+        }
     }
 
     if (state.state == OwnershipState::Dropped) {
@@ -95,21 +199,68 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
     const auto& state = env_.get_state(place);
 
     if (!state.is_mutable) {
-        error("cannot assign to `" + state.name + "` because it is not mutable", loc.span);
+        BorrowError err;
+        err.code = BorrowErrorCode::AssignNotMutable;
+        err.message = "cannot assign to `" + state.name + "` because it is not mutable";
+        err.span = loc.span;
+        err.related_span = state.definition.span;
+        err.related_message = "`" + state.name + "` is declared here";
+        err.suggestions.push_back(BorrowSuggestion{
+            .message = "consider declaring as mutable",
+            .fix = "mut " + state.name,
+        });
+        errors_.push_back(err);
         return;
     }
 
     if (state.state == OwnershipState::Moved) {
-        error("cannot assign to moved value: `" + state.name + "`", loc.span);
+        if (state.move_location) {
+            BorrowError err;
+            err.code = BorrowErrorCode::UseAfterMove;
+            err.message = "cannot assign to moved value: `" + state.name + "`";
+            err.span = loc.span;
+            err.related_span = state.move_location->span;
+            err.related_message = "value moved here";
+            errors_.push_back(err);
+        } else {
+            error("cannot assign to moved value: `" + state.name + "`", loc.span);
+        }
         return;
     }
 
     if (state.state == OwnershipState::Borrowed) {
+        // Find the active immutable borrow
+        for (const auto& borrow : state.active_borrows) {
+            if (!borrow.end && borrow.kind == BorrowKind::Shared) {
+                BorrowError err;
+                err.code = BorrowErrorCode::AssignWhileBorrowed;
+                err.message = "cannot assign to `" + state.name + "` because it is borrowed";
+                err.span = loc.span;
+                err.related_span = borrow.start.span;
+                err.related_message = "immutable borrow occurs here";
+                errors_.push_back(err);
+                return;
+            }
+        }
         error("cannot assign to `" + state.name + "` because it is borrowed", loc.span);
         return;
     }
 
     if (state.state == OwnershipState::MutBorrowed) {
+        // Find the active mutable borrow
+        for (const auto& borrow : state.active_borrows) {
+            if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
+                BorrowError err;
+                err.code = BorrowErrorCode::AssignWhileBorrowed;
+                err.message =
+                    "cannot assign to `" + state.name + "` because it is mutably borrowed";
+                err.span = loc.span;
+                err.related_span = borrow.start.span;
+                err.related_message = "mutable borrow occurs here";
+                errors_.push_back(err);
+                return;
+            }
+        }
         error("cannot assign to `" + state.name + "` because it is mutably borrowed", loc.span);
         return;
     }
@@ -119,7 +270,15 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
     const auto& state = env_.get_state(place);
 
     if (state.state == OwnershipState::Moved) {
-        error("cannot borrow moved value: `" + state.name + "`", loc.span);
+        BorrowError err;
+        err.code = BorrowErrorCode::BorrowAfterMove;
+        err.message = "cannot borrow moved value: `" + state.name + "`";
+        err.span = loc.span;
+        if (state.move_location) {
+            err.related_span = state.move_location->span;
+            err.related_message = "value moved here";
+        }
+        errors_.push_back(err);
         return;
     }
 
@@ -129,9 +288,18 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
 
     if (kind == BorrowKind::Mutable) {
         if (!state.is_mutable && !is_reborrow) {
-            error("cannot borrow `" + state.name +
-                      "` as mutable because it is not declared as mutable",
-                  loc.span);
+            BorrowError err;
+            err.code = BorrowErrorCode::MutBorrowNotMutable;
+            err.message = "cannot borrow `" + state.name +
+                          "` as mutable because it is not declared as mutable";
+            err.span = loc.span;
+            err.related_span = state.definition.span;
+            err.related_message = "`" + state.name + "` is declared here";
+            err.suggestions.push_back(BorrowSuggestion{
+                .message = "consider declaring as mutable",
+                .fix = "mut " + state.name,
+            });
+            errors_.push_back(err);
             return;
         }
 
@@ -144,6 +312,14 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
         }
 
         if (state.state == OwnershipState::Borrowed && !is_reborrow) {
+            // Find the active immutable borrow for related span
+            for (const auto& borrow : state.active_borrows) {
+                if (!borrow.end && borrow.kind == BorrowKind::Shared) {
+                    errors_.push_back(BorrowError::mut_borrow_while_immut(state.name, loc.span,
+                                                                          borrow.start.span));
+                    return;
+                }
+            }
             error("cannot borrow `" + state.name +
                       "` as mutable because it is also borrowed as immutable",
                   loc.span);
@@ -153,6 +329,14 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
         // Allow two-phase borrows: during method calls, we can have a mutable borrow
         // that is temporarily shared while evaluating arguments
         if (state.state == OwnershipState::MutBorrowed && !is_two_phase_borrow_active_) {
+            // Find the active mutable borrow for related span
+            for (const auto& borrow : state.active_borrows) {
+                if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
+                    errors_.push_back(
+                        BorrowError::double_mut_borrow(state.name, loc.span, borrow.start.span));
+                    return;
+                }
+            }
             error("cannot borrow `" + state.name + "` as mutable more than once at a time",
                   loc.span);
             return;
@@ -162,6 +346,14 @@ void BorrowChecker::check_can_borrow(PlaceId place, BorrowKind kind, Location lo
         // Allow shared reborrow from mutable borrow (coercion &mut T -> &T)
         if (state.state == OwnershipState::MutBorrowed && !is_reborrow &&
             !is_two_phase_borrow_active_) {
+            // Find the active mutable borrow for related span
+            for (const auto& borrow : state.active_borrows) {
+                if (!borrow.end && borrow.kind == BorrowKind::Mutable) {
+                    errors_.push_back(BorrowError::immut_borrow_while_mut(state.name, loc.span,
+                                                                          borrow.start.span));
+                    return;
+                }
+            }
             error("cannot borrow `" + state.name +
                       "` as immutable because it is also borrowed as mutable",
                   loc.span);

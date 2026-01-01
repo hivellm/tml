@@ -43,6 +43,7 @@ const char* str_to_upper(const char* s);
 const char* str_to_lower(const char* s);
 const char* str_trim(const char* s);
 int32_t str_char_at(const char* s, int32_t index);
+const char* char_to_string(uint8_t c);
 
 // ============================================================================
 // Time Functions

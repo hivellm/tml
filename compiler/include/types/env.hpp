@@ -163,6 +163,10 @@ public:
     [[nodiscard]] bool type_implements(const std::string& type_name,
                                        const std::string& behavior_name) const;
 
+    // Drop behavior helpers
+    [[nodiscard]] bool type_needs_drop(const std::string& type_name) const;
+    [[nodiscard]] bool type_needs_drop(const TypePtr& type) const;
+
     // Get all definitions (for error message suggestions and enum lookup)
     [[nodiscard]] auto all_enums() const -> const std::unordered_map<std::string, EnumDef>&;
     [[nodiscard]] auto all_structs() const -> const std::unordered_map<std::string, StructDef>&;

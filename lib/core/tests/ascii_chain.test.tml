@@ -1,0 +1,71 @@
+// Test method chaining on AsciiChar
+use core::ascii::AsciiChar
+
+@test
+func test_chain_to_lowercase_to_u8() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)  // 'A'
+
+    // Method chaining: to_lowercase returns AsciiChar, then call to_u8 on it
+    let result: U8 = upper_a.to_lowercase().to_u8()
+
+    // 'A' (65) should become 'a' (97)
+    assert(result == 97, "A should lowercase to a (97)")
+
+    return 0
+}
+
+@test
+func test_from_u8_valid() -> I32 {
+    let maybe_a: Maybe[AsciiChar] = AsciiChar::from_u8(65)
+    assert(maybe_a.is_just(), "65 should be valid ASCII")
+    return 0
+}
+
+@test
+func test_from_u8_invalid() -> I32 {
+    let maybe_invalid: Maybe[AsciiChar] = AsciiChar::from_u8(128)
+    assert(maybe_invalid.is_nothing(), "128 should be invalid ASCII")
+    return 0
+}
+
+@test
+func test_is_uppercase() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    assert(upper_a.is_uppercase(), "A should be uppercase")
+    assert(not lower_a.is_uppercase(), "a should not be uppercase")
+    return 0
+}
+
+@test
+func test_is_lowercase() -> I32 {
+    let upper_a: AsciiChar = AsciiChar::from_u8_unchecked(65)
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    assert(lower_a.is_lowercase(), "a should be lowercase")
+    assert(not upper_a.is_lowercase(), "A should not be lowercase")
+    return 0
+}
+
+@test
+func test_is_digit() -> I32 {
+    let d0: AsciiChar = AsciiChar::from_u8_unchecked(48)  // '0'
+    let d9: AsciiChar = AsciiChar::from_u8_unchecked(57)  // '9'
+    let a: AsciiChar = AsciiChar::from_u8_unchecked(97)   // 'a'
+
+    assert(d0.is_digit(), "0 should be digit")
+    assert(d9.is_digit(), "9 should be digit")
+    assert(not a.is_digit(), "a should not be digit")
+    return 0
+}
+
+@test
+func test_to_uppercase() -> I32 {
+    let lower_a: AsciiChar = AsciiChar::from_u8_unchecked(97)
+
+    // Method chaining
+    let result: U8 = lower_a.to_uppercase().to_u8()
+    assert(result == 65, "a should uppercase to A (65)")
+    return 0
+}
