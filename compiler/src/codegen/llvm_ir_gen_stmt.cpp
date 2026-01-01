@@ -126,7 +126,148 @@ static bool is_ref_expr(const parser::Expr& expr) {
     return false;
 }
 
+// Helper to parse tuple type string into element types
+static std::vector<std::string> parse_tuple_types(const std::string& tuple_type) {
+    std::vector<std::string> element_types;
+    if (tuple_type.size() > 2 && tuple_type.front() == '{' && tuple_type.back() == '}') {
+        // Parse "{ i32, i64, ptr }" -> ["i32", "i64", "ptr"]
+        std::string inner = tuple_type.substr(2, tuple_type.size() - 4);
+        int brace_depth = 0;
+        int bracket_depth = 0;
+        std::string current;
+
+        for (size_t i = 0; i < inner.size(); ++i) {
+            char c = inner[i];
+            if (c == '{') {
+                brace_depth++;
+                current += c;
+            } else if (c == '}') {
+                brace_depth--;
+                current += c;
+            } else if (c == '[') {
+                bracket_depth++;
+                current += c;
+            } else if (c == ']') {
+                bracket_depth--;
+                current += c;
+            } else if (c == ',' && brace_depth == 0 && bracket_depth == 0) {
+                // Trim whitespace
+                size_t start = current.find_first_not_of(" ");
+                size_t end = current.find_last_not_of(" ");
+                if (start != std::string::npos) {
+                    element_types.push_back(current.substr(start, end - start + 1));
+                }
+                current.clear();
+            } else {
+                current += c;
+            }
+        }
+        // Don't forget the last element
+        if (!current.empty()) {
+            size_t start = current.find_first_not_of(" ");
+            size_t end = current.find_last_not_of(" ");
+            if (start != std::string::npos) {
+                element_types.push_back(current.substr(start, end - start + 1));
+            }
+        }
+    }
+    return element_types;
+}
+
 void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
+    // Handle tuple pattern destructuring: let (a, b): (T1, T2) = expr
+    if (let.pattern->is<parser::TuplePattern>()) {
+        if (!let.init.has_value()) {
+            errors_.push_back(LLVMGenError{
+                .message = "Tuple pattern requires an initializer", .span = let.span, .notes = {}});
+            return;
+        }
+
+        // Get the tuple type from annotation
+        std::string tuple_type;
+        types::TypePtr semantic_tuple_type = nullptr;
+        if (let.type_annotation) {
+            tuple_type = llvm_type_ptr(*let.type_annotation);
+            semantic_tuple_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+        }
+
+        // Generate the initializer expression
+        std::string init_val = gen_expr(*let.init.value());
+        std::string expr_type = last_expr_type_;
+        if (tuple_type.empty()) {
+            tuple_type = expr_type;
+        }
+
+        // Parse the tuple types for both expected and actual
+        std::vector<std::string> expected_elem_types = parse_tuple_types(tuple_type);
+        std::vector<std::string> actual_elem_types = parse_tuple_types(expr_type);
+
+        // Get semantic element types if we have a tuple type annotation
+        std::vector<types::TypePtr> semantic_elem_types;
+        if (semantic_tuple_type && semantic_tuple_type->is<types::TupleType>()) {
+            const auto& tup = semantic_tuple_type->as<types::TupleType>();
+            semantic_elem_types = tup.elements;
+        }
+
+        // Store tuple to temp using actual type
+        std::string src_type = expr_type;
+        std::string tuple_ptr = fresh_reg();
+        emit_line("  " + tuple_ptr + " = alloca " + src_type);
+        emit_line("  store " + src_type + " " + init_val + ", ptr " + tuple_ptr);
+
+        // Extract and bind each pattern element
+        const auto& tuple_pattern = let.pattern->as<parser::TuplePattern>();
+        for (size_t i = 0; i < tuple_pattern.elements.size(); ++i) {
+            const auto& elem_pattern = *tuple_pattern.elements[i];
+
+            std::string actual_elem = i < actual_elem_types.size() ? actual_elem_types[i] : "i32";
+            std::string expected_elem =
+                i < expected_elem_types.size() ? expected_elem_types[i] : actual_elem;
+            types::TypePtr semantic_elem =
+                i < semantic_elem_types.size() ? semantic_elem_types[i] : nullptr;
+
+            // Get pointer to element using GEP with the actual type
+            std::string elem_ptr = fresh_reg();
+            emit_line("  " + elem_ptr + " = getelementptr inbounds " + src_type + ", ptr " +
+                      tuple_ptr + ", i32 0, i32 " + std::to_string(i));
+
+            // Load the element value with the actual type
+            std::string elem_val = fresh_reg();
+            emit_line("  " + elem_val + " = load " + actual_elem + ", ptr " + elem_ptr);
+
+            // Handle coercion if types differ
+            std::string store_val = elem_val;
+            if (actual_elem != expected_elem) {
+                std::string conv = fresh_reg();
+                if (expected_elem == "i64" && actual_elem == "i32") {
+                    emit_line("  " + conv + " = sext i32 " + elem_val + " to i64");
+                    store_val = conv;
+                } else if (expected_elem == "i32" && actual_elem == "i64") {
+                    emit_line("  " + conv + " = trunc i64 " + elem_val + " to i32");
+                    store_val = conv;
+                }
+                // Add more conversions as needed
+            }
+
+            // Bind the element to its identifier or handle nested patterns
+            if (elem_pattern.is<parser::IdentPattern>()) {
+                const auto& ident = elem_pattern.as<parser::IdentPattern>();
+                std::string alloca_reg = fresh_reg();
+                emit_line("  " + alloca_reg + " = alloca " + expected_elem);
+                emit_line("  store " + expected_elem + " " + store_val + ", ptr " + alloca_reg);
+                locals_[ident.name] =
+                    VarInfo{alloca_reg, expected_elem, semantic_elem, std::nullopt};
+            } else if (elem_pattern.is<parser::WildcardPattern>()) {
+                // Ignore the value
+            } else if (elem_pattern.is<parser::TuplePattern>()) {
+                // Handle nested tuple patterns recursively
+                gen_tuple_pattern_binding(elem_pattern.as<parser::TuplePattern>(), store_val,
+                                          expected_elem, semantic_elem);
+            }
+        }
+        return;
+    }
+
     std::string var_name;
     if (let.pattern->is<parser::IdentPattern>()) {
         var_name = let.pattern->as<parser::IdentPattern>().name;
@@ -548,6 +689,58 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
 
 void LLVMIRGen::gen_expr_stmt(const parser::ExprStmt& expr) {
     gen_expr(*expr.expr);
+}
+
+void LLVMIRGen::gen_tuple_pattern_binding(const parser::TuplePattern& pattern,
+                                          const std::string& value, const std::string& tuple_type,
+                                          const types::TypePtr& semantic_type) {
+    // Parse element types from the tuple type string
+    std::vector<std::string> elem_types = parse_tuple_types(tuple_type);
+
+    // Get semantic element types if available
+    std::vector<types::TypePtr> semantic_elem_types;
+    if (semantic_type && semantic_type->is<types::TupleType>()) {
+        const auto& tup = semantic_type->as<types::TupleType>();
+        semantic_elem_types = tup.elements;
+    }
+
+    // Store the tuple value to a temporary so we can GEP into it
+    std::string tuple_ptr = fresh_reg();
+    emit_line("  " + tuple_ptr + " = alloca " + tuple_type);
+    emit_line("  store " + tuple_type + " " + value + ", ptr " + tuple_ptr);
+
+    // Extract and bind each element
+    for (size_t i = 0; i < pattern.elements.size(); ++i) {
+        const auto& elem_pattern = *pattern.elements[i];
+
+        std::string elem_type = i < elem_types.size() ? elem_types[i] : "i32";
+        types::TypePtr semantic_elem =
+            i < semantic_elem_types.size() ? semantic_elem_types[i] : nullptr;
+
+        // Get pointer to element
+        std::string elem_ptr = fresh_reg();
+        emit_line("  " + elem_ptr + " = getelementptr inbounds " + tuple_type + ", ptr " +
+                  tuple_ptr + ", i32 0, i32 " + std::to_string(i));
+
+        // Load the element
+        std::string elem_val = fresh_reg();
+        emit_line("  " + elem_val + " = load " + elem_type + ", ptr " + elem_ptr);
+
+        // Bind based on pattern type
+        if (elem_pattern.is<parser::IdentPattern>()) {
+            const auto& ident = elem_pattern.as<parser::IdentPattern>();
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + elem_type);
+            emit_line("  store " + elem_type + " " + elem_val + ", ptr " + alloca_reg);
+            locals_[ident.name] = VarInfo{alloca_reg, elem_type, semantic_elem, std::nullopt};
+        } else if (elem_pattern.is<parser::WildcardPattern>()) {
+            // Ignore the value
+        } else if (elem_pattern.is<parser::TuplePattern>()) {
+            // Recursively handle nested tuple patterns
+            gen_tuple_pattern_binding(elem_pattern.as<parser::TuplePattern>(), elem_val, elem_type,
+                                      semantic_elem);
+        }
+    }
 }
 
 } // namespace tml::codegen

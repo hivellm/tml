@@ -97,13 +97,22 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                 }
                 env_.current_scope()->define(p.name, type, p.is_mut, pattern.span);
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
-                if (type->is<TupleType>()) {
-                    auto& tuple = type->as<TupleType>();
-                    for (size_t i = 0; i < std::min(p.elements.size(), tuple.elements.size());
-                         ++i) {
-                        bind_pattern(*p.elements[i], tuple.elements[i]);
-                    }
+                if (!type->is<TupleType>()) {
+                    error("Cannot destructure non-tuple type with tuple pattern", pattern.span);
+                    return;
                 }
+                auto& tuple = type->as<TupleType>();
+                if (p.elements.size() != tuple.elements.size()) {
+                    error("Tuple pattern has " + std::to_string(p.elements.size()) +
+                              " elements, but type has " + std::to_string(tuple.elements.size()),
+                          pattern.span);
+                    return;
+                }
+                for (size_t i = 0; i < p.elements.size(); ++i) {
+                    bind_pattern(*p.elements[i], tuple.elements[i]);
+                }
+            } else if constexpr (std::is_same_v<T, parser::WildcardPattern>) {
+                // Wildcard pattern matches any type, doesn't bind anything
             } else if constexpr (std::is_same_v<T, parser::EnumPattern>) {
                 // Extract enum name from type
                 if (!type->is<NamedType>()) {

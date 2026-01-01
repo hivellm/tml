@@ -78,38 +78,38 @@ TEST_F(CodegenTest, EnumConstructorSimple) {
 
 TEST_F(CodegenTest, EnumConstructorUnitVariant) {
     std::string ir = generate(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func main() {
-            let x: Maybe[I64] = Nothing
+            let x: Option[I64] = None
         }
     )");
 
-    // Check that tag is set for Nothing (tag = 1)
+    // Check that tag is set for None (tag = 1)
     EXPECT_NE(ir.find("store i32 1"), std::string::npos)
-        << "IR should store tag value 1 for Nothing variant";
+        << "IR should store tag value 1 for None variant";
 }
 
 TEST_F(CodegenTest, EnumConstructorWithPrintln) {
     std::string ir = generate(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func main() {
-            let x: Maybe[I64] = Just(42)
+            let x: Option[I64] = Some(42)
             println("Created enum")
         }
     )");
 
     // Verify that both enum construction and println are present
-    // Generic enums use mangled names like Maybe__I64
-    EXPECT_NE(ir.find("%struct.Maybe__I64 = type"), std::string::npos)
-        << "IR should declare %struct.Maybe__I64 type for Maybe[I64]";
+    // Generic enums use mangled names like Option__I64
+    EXPECT_NE(ir.find("%struct.Option__I64 = type"), std::string::npos)
+        << "IR should declare %struct.Option__I64 type for Option[I64]";
     EXPECT_NE(ir.find("@puts"), std::string::npos);
 }
 
@@ -148,24 +148,24 @@ TEST_F(CodegenTest, EnumConstructorWithVariable) {
 
 TEST_F(CodegenTest, WhenExpressionSimple) {
     std::string ir = generate(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func main() {
-            let x: Maybe[I64] = Just(42)
+            let x: Option[I64] = Some(42)
 
             when x {
-                Just(v) => println("has value"),
-                Nothing => println("no value"),
+                Some(v) => println("has value"),
+                None => println("no value"),
             }
         }
     )");
 
     // Check for tag extraction (getelementptr to field 0)
-    // Generic enums use mangled names like Maybe__I64
-    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe__I64"), std::string::npos)
+    // Generic enums use mangled names like Option__I64
+    EXPECT_NE(ir.find("getelementptr inbounds %struct.Option__I64"), std::string::npos)
         << "IR should extract tag from enum";
 
     // Check for tag comparison
@@ -177,27 +177,27 @@ TEST_F(CodegenTest, WhenExpressionSimple) {
 
 TEST_F(CodegenTest, WhenExpressionPayloadBinding) {
     std::string ir = generate(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
-        func get_value(m: Maybe[I64]) -> I64 {
+        func get_value(m: Option[I64]) -> I64 {
             return when m {
-                Just(v) => v,
-                Nothing => 0,
+                Some(v) => v,
+                None => 0,
             }
         }
 
         func main() {
-            let x: Maybe[I64] = Just(42)
+            let x: Option[I64] = Some(42)
             let result: I64 = get_value(x)
         }
     )");
 
     // Check for payload extraction (getelementptr to field 1)
-    // Generic enums use mangled names like Maybe__I64
-    EXPECT_NE(ir.find("getelementptr inbounds %struct.Maybe__I64, ptr"), std::string::npos)
+    // Generic enums use mangled names like Option__I64
+    EXPECT_NE(ir.find("getelementptr inbounds %struct.Option__I64, ptr"), std::string::npos)
         << "IR should extract payload from enum";
 
     // Check that we return the extracted value
@@ -361,4 +361,77 @@ TEST_F(CodegenTest, FFINamespaceLibNameExtraction) {
         << "IR should contain SDL_Init declaration";
     EXPECT_NE(ir.find("call i32 @SDL_Init(i32 0)"), std::string::npos)
         << "IR should call SDL_Init via SDL2:: namespace";
+}
+
+// ============================================================================
+// Tuple Destructuring Tests
+// ============================================================================
+
+TEST_F(CodegenTest, TupleDestructuringSimple) {
+    std::string ir = generate(R"(
+        func make_pair() -> (I32, I32) {
+            let x: I32 = 10
+            let y: I32 = 20
+            return (x, y)
+        }
+
+        func main() {
+            let (a, b): (I32, I32) = make_pair()
+        }
+    )");
+
+    // Check that tuple type is used
+    EXPECT_NE(ir.find("{ i32, i32 }"), std::string::npos)
+        << "IR should contain tuple type { i32, i32 }";
+
+    // Check that getelementptr is used to extract elements
+    EXPECT_NE(ir.find("getelementptr inbounds { i32, i32 }"), std::string::npos)
+        << "IR should use GEP to extract tuple elements";
+}
+
+TEST_F(CodegenTest, TupleDestructuringNested) {
+    std::string ir = generate(R"(
+        func make_nested() -> ((I32, I32), I32) {
+            let x: I32 = 1
+            let y: I32 = 2
+            let z: I32 = 3
+            return ((x, y), z)
+        }
+
+        func main() {
+            let ((a, b), c): ((I32, I32), I32) = make_nested()
+        }
+    )");
+
+    // Check nested tuple type
+    EXPECT_NE(ir.find("{ { i32, i32 }, i32 }"), std::string::npos)
+        << "IR should contain nested tuple type";
+
+    // Should have multiple GEP extractions for nested destructuring
+    size_t gep_count = 0;
+    size_t pos = 0;
+    while ((pos = ir.find("getelementptr inbounds", pos)) != std::string::npos) {
+        gep_count++;
+        pos++;
+    }
+    EXPECT_GE(gep_count, 3) << "IR should have at least 3 GEP instructions for nested tuple";
+}
+
+TEST_F(CodegenTest, TupleDestructuringWithWildcard) {
+    std::string ir = generate(R"(
+        func get_triple() -> (I32, I32, I32) {
+            let x: I32 = 1
+            let y: I32 = 2
+            let z: I32 = 3
+            return (x, y, z)
+        }
+
+        func main() {
+            let (a, _, c): (I32, I32, I32) = get_triple()
+        }
+    )");
+
+    // Should still generate GEP for all 3 elements (wildcard is just ignored)
+    EXPECT_NE(ir.find("{ i32, i32, i32 }"), std::string::npos)
+        << "IR should contain triple tuple type";
 }

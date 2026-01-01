@@ -589,6 +589,52 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     return "0";
 }
 
+// Helper to parse tuple type string into element types
+static std::vector<std::string> parse_tuple_types_for_coercion(const std::string& tuple_type) {
+    std::vector<std::string> element_types;
+    if (tuple_type.size() > 2 && tuple_type.front() == '{' && tuple_type.back() == '}') {
+        // Parse "{ i32, i64, ptr }" -> ["i32", "i64", "ptr"]
+        std::string inner = tuple_type.substr(2, tuple_type.size() - 4);
+        int brace_depth = 0;
+        int bracket_depth = 0;
+        std::string current;
+
+        for (size_t i = 0; i < inner.size(); ++i) {
+            char c = inner[i];
+            if (c == '{') {
+                brace_depth++;
+                current += c;
+            } else if (c == '}') {
+                brace_depth--;
+                current += c;
+            } else if (c == '[') {
+                bracket_depth++;
+                current += c;
+            } else if (c == ']') {
+                bracket_depth--;
+                current += c;
+            } else if (c == ',' && brace_depth == 0 && bracket_depth == 0) {
+                size_t start = current.find_first_not_of(" ");
+                size_t end = current.find_last_not_of(" ");
+                if (start != std::string::npos) {
+                    element_types.push_back(current.substr(start, end - start + 1));
+                }
+                current.clear();
+            } else {
+                current += c;
+            }
+        }
+        if (!current.empty()) {
+            size_t start = current.find_first_not_of(" ");
+            size_t end = current.find_last_not_of(" ");
+            if (start != std::string::npos) {
+                element_types.push_back(current.substr(start, end - start + 1));
+            }
+        }
+    }
+    return element_types;
+}
+
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     if (ret.value.has_value()) {
         std::string val = gen_expr(*ret.value.value());
@@ -599,6 +645,87 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
             std::string wrapped = wrap_in_poll_ready(val, val_type);
             emit_line("  ret " + current_poll_type_ + " " + wrapped);
         } else {
+            // Check if we need tuple coercion (e.g., { i32, i32 } -> { i32, i64 })
+            if (val_type != current_ret_type_ && val_type.front() == '{' &&
+                current_ret_type_.front() == '{') {
+                // Parse element types for both
+                auto actual_elems = parse_tuple_types_for_coercion(val_type);
+                auto expected_elems = parse_tuple_types_for_coercion(current_ret_type_);
+
+                if (actual_elems.size() == expected_elems.size()) {
+                    bool needs_conversion = false;
+                    for (size_t i = 0; i < actual_elems.size(); ++i) {
+                        if (actual_elems[i] != expected_elems[i]) {
+                            needs_conversion = true;
+                            break;
+                        }
+                    }
+
+                    if (needs_conversion) {
+                        // Store original tuple to memory
+                        std::string src_ptr = fresh_reg();
+                        emit_line("  " + src_ptr + " = alloca " + val_type);
+                        emit_line("  store " + val_type + " " + val + ", ptr " + src_ptr);
+
+                        // Allocate destination tuple
+                        std::string dst_ptr = fresh_reg();
+                        emit_line("  " + dst_ptr + " = alloca " + current_ret_type_);
+
+                        // Convert each element
+                        for (size_t i = 0; i < actual_elems.size(); ++i) {
+                            std::string elem_ptr = fresh_reg();
+                            emit_line("  " + elem_ptr + " = getelementptr inbounds " + val_type +
+                                      ", ptr " + src_ptr + ", i32 0, i32 " + std::to_string(i));
+                            std::string elem_val = fresh_reg();
+                            emit_line("  " + elem_val + " = load " + actual_elems[i] + ", ptr " +
+                                      elem_ptr);
+
+                            std::string conv_val = elem_val;
+                            if (actual_elems[i] != expected_elems[i]) {
+                                conv_val = fresh_reg();
+                                // Integer extension/truncation
+                                if (expected_elems[i] == "i64" && actual_elems[i] == "i32") {
+                                    emit_line("  " + conv_val + " = sext i32 " + elem_val +
+                                              " to i64");
+                                } else if (expected_elems[i] == "i32" && actual_elems[i] == "i64") {
+                                    emit_line("  " + conv_val + " = trunc i64 " + elem_val +
+                                              " to i32");
+                                } else if (expected_elems[i] == "i64" && actual_elems[i] == "i16") {
+                                    emit_line("  " + conv_val + " = sext i16 " + elem_val +
+                                              " to i64");
+                                } else if (expected_elems[i] == "i64" && actual_elems[i] == "i8") {
+                                    emit_line("  " + conv_val + " = sext i8 " + elem_val +
+                                              " to i64");
+                                } else if (expected_elems[i] == "i32" && actual_elems[i] == "i16") {
+                                    emit_line("  " + conv_val + " = sext i16 " + elem_val +
+                                              " to i32");
+                                } else if (expected_elems[i] == "i32" && actual_elems[i] == "i8") {
+                                    emit_line("  " + conv_val + " = sext i8 " + elem_val +
+                                              " to i32");
+                                } else {
+                                    // Same type or unhandled - just use original
+                                    conv_val = elem_val;
+                                }
+                            }
+
+                            std::string dst_elem_ptr = fresh_reg();
+                            emit_line("  " + dst_elem_ptr + " = getelementptr inbounds " +
+                                      current_ret_type_ + ", ptr " + dst_ptr + ", i32 0, i32 " +
+                                      std::to_string(i));
+                            emit_line("  store " + expected_elems[i] + " " + conv_val + ", ptr " +
+                                      dst_elem_ptr);
+                        }
+
+                        // Load converted tuple
+                        std::string result = fresh_reg();
+                        emit_line("  " + result + " = load " + current_ret_type_ + ", ptr " +
+                                  dst_ptr);
+                        emit_line("  ret " + current_ret_type_ + " " + result);
+                        block_terminated_ = true;
+                        return "void";
+                    }
+                }
+            }
             emit_line("  ret " + current_ret_type_ + " " + val);
         }
     } else {
@@ -606,6 +733,113 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     }
     block_terminated_ = true;
     return "void";
+}
+
+// Helper: generate comparison for a single pattern against scrutinee
+// Returns the comparison result register, or empty string for always-match patterns
+auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::string& scrutinee,
+                                const std::string& scrutinee_type, const std::string& tag,
+                                bool is_primitive) -> std::string {
+    if (pattern.is<parser::LiteralPattern>()) {
+        const auto& lit_pat = pattern.as<parser::LiteralPattern>();
+        std::string lit_val;
+
+        // Get literal value based on token type
+        if (lit_pat.literal.kind == lexer::TokenKind::IntLiteral) {
+            lit_val = std::string(lit_pat.literal.lexeme);
+        } else if (lit_pat.literal.kind == lexer::TokenKind::BoolLiteral) {
+            lit_val = lit_pat.literal.bool_value() ? "1" : "0";
+        } else if (lit_pat.literal.kind == lexer::TokenKind::FloatLiteral) {
+            lit_val = std::string(lit_pat.literal.lexeme);
+        } else {
+            // Unsupported literal type
+            return "";
+        }
+
+        std::string cmp = fresh_reg();
+        if (scrutinee_type == "float" || scrutinee_type == "double") {
+            emit_line("  " + cmp + " = fcmp oeq " + scrutinee_type + " " + scrutinee + ", " +
+                      lit_val);
+        } else {
+            emit_line("  " + cmp + " = icmp eq " + scrutinee_type + " " + scrutinee + ", " +
+                      lit_val);
+        }
+        return cmp;
+    } else if (pattern.is<parser::EnumPattern>()) {
+        const auto& enum_pat = pattern.as<parser::EnumPattern>();
+        std::string variant_name;
+        if (enum_pat.path.segments.size() >= 1) {
+            variant_name = enum_pat.path.segments.back();
+        }
+
+        // Find variant tag
+        int variant_tag = -1;
+        std::string scrutinee_enum_name;
+        if (scrutinee_type.starts_with("%struct.")) {
+            scrutinee_enum_name = scrutinee_type.substr(8);
+        }
+
+        if (!scrutinee_enum_name.empty()) {
+            std::string key = scrutinee_enum_name + "::" + variant_name;
+            auto it = enum_variants_.find(key);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
+            }
+        }
+
+        // Fallback: Try full path
+        if (variant_tag < 0) {
+            std::string full_path;
+            for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
+                if (i > 0)
+                    full_path += "::";
+                full_path += enum_pat.path.segments[i];
+            }
+            auto it = enum_variants_.find(full_path);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
+            }
+        }
+
+        if (variant_tag >= 0) {
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            return cmp;
+        }
+        return "";
+    } else if (pattern.is<parser::IdentPattern>()) {
+        const auto& ident_pat = pattern.as<parser::IdentPattern>();
+
+        // For primitives, IdentPattern is a binding (always matches)
+        if (is_primitive) {
+            return "";
+        }
+
+        // For enums, check if it's a unit variant
+        int variant_tag = -1;
+        std::string scrutinee_enum_name;
+        if (scrutinee_type.starts_with("%struct.")) {
+            scrutinee_enum_name = scrutinee_type.substr(8);
+        }
+
+        if (!scrutinee_enum_name.empty()) {
+            std::string key = scrutinee_enum_name + "::" + ident_pat.name;
+            auto it = enum_variants_.find(key);
+            if (it != enum_variants_.end()) {
+                variant_tag = it->second;
+            }
+        }
+
+        if (variant_tag >= 0) {
+            std::string cmp = fresh_reg();
+            emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " + std::to_string(variant_tag));
+            return cmp;
+        }
+        return ""; // Binding pattern - always matches
+    } else if (pattern.is<parser::WildcardPattern>()) {
+        return ""; // Always matches
+    }
+    return ""; // Default: always matches
 }
 
 auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
@@ -629,12 +863,22 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
         emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + scrutinee_ptr);
     }
 
-    // Extract tag (assumes enum is { i32, i64 })
-    std::string tag_ptr = fresh_reg();
-    emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
-              scrutinee_ptr + ", i32 0, i32 0");
-    std::string tag = fresh_reg();
-    emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+    // Check if scrutinee is a simple primitive type (not enum/struct)
+    bool is_primitive_scrutinee =
+        (scrutinee_type == "i8" || scrutinee_type == "i16" || scrutinee_type == "i32" ||
+         scrutinee_type == "i64" || scrutinee_type == "i128" || scrutinee_type == "float" ||
+         scrutinee_type == "double" || scrutinee_type == "i1");
+
+    // For enums/structs, extract tag; for primitives, we'll compare directly
+    std::string tag;
+    if (!is_primitive_scrutinee) {
+        // Extract tag (assumes enum is { i32, i64 })
+        std::string tag_ptr = fresh_reg();
+        emit_line("  " + tag_ptr + " = getelementptr inbounds " + scrutinee_type + ", ptr " +
+                  scrutinee_ptr + ", i32 0, i32 0");
+        tag = fresh_reg();
+        emit_line("  " + tag + " = load i32, ptr " + tag_ptr);
+    }
 
     // Generate labels for each arm + end
     std::vector<std::string> arm_labels;
@@ -656,96 +900,47 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
             (arm_idx + 1 < when.arms.size()) ? fresh_label("when_next") : label_end;
 
         // Check if pattern matches
-        if (arm.pattern->is<parser::EnumPattern>()) {
-            const auto& enum_pat = arm.pattern->as<parser::EnumPattern>();
-            std::string enum_name;
-            std::string variant_name;
+        // Handle OrPattern: generate comparisons for each sub-pattern and OR them together
+        if (arm.pattern->is<parser::OrPattern>()) {
+            const auto& or_pat = arm.pattern->as<parser::OrPattern>();
+            std::vector<std::string> cmp_results;
 
-            // Extract enum name and variant name from path
-            if (enum_pat.path.segments.size() >= 2) {
-                enum_name = enum_pat.path.segments[enum_pat.path.segments.size() - 2];
-                variant_name = enum_pat.path.segments.back();
-            } else if (enum_pat.path.segments.size() == 1) {
-                variant_name = enum_pat.path.segments[0];
-            }
-
-            // Find variant index in the correct enum
-            // First, try to extract enum name from scrutinee type (e.g., %struct.Maybe__I32 ->
-            // Maybe__I32)
-            int variant_tag = -1;
-            std::string scrutinee_enum_name;
-            if (scrutinee_type.starts_with("%struct.")) {
-                scrutinee_enum_name = scrutinee_type.substr(8); // Remove "%struct."
-            }
-
-            // Try lookup with scrutinee-derived enum name (for generic enums)
-            if (!scrutinee_enum_name.empty()) {
-                std::string key = scrutinee_enum_name + "::" + variant_name;
-                auto it = enum_variants_.find(key);
-                if (it != enum_variants_.end()) {
-                    variant_tag = it->second;
+            for (const auto& sub_pattern : or_pat.patterns) {
+                std::string cmp = gen_pattern_cmp(*sub_pattern, scrutinee, scrutinee_type, tag,
+                                                  is_primitive_scrutinee);
+                if (!cmp.empty()) {
+                    cmp_results.push_back(cmp);
                 }
             }
 
-            // Fallback: Try full path from pattern segments
-            if (variant_tag < 0) {
-                std::string full_path;
-                for (size_t i = 0; i < enum_pat.path.segments.size(); ++i) {
-                    if (i > 0)
-                        full_path += "::";
-                    full_path += enum_pat.path.segments[i];
-                }
-
-                auto it = enum_variants_.find(full_path);
-                if (it != enum_variants_.end()) {
-                    variant_tag = it->second;
-                }
-            }
-
-            if (variant_tag >= 0) {
-                // Compare tag
-                std::string cmp = fresh_reg();
-                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
-                          std::to_string(variant_tag));
-                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" +
-                          next_label);
-            } else {
-                // Unknown variant, skip to next
-                emit_line("  br label %" + next_label);
-            }
-        } else if (arm.pattern->is<parser::IdentPattern>()) {
-            // Check if this is an enum unit variant (like Nothing)
-            const auto& ident_pat = arm.pattern->as<parser::IdentPattern>();
-            int variant_tag = -1;
-
-            // Try to look up as enum variant
-            std::string scrutinee_enum_name;
-            if (scrutinee_type.starts_with("%struct.")) {
-                scrutinee_enum_name = scrutinee_type.substr(8);
-            }
-
-            if (!scrutinee_enum_name.empty()) {
-                std::string key = scrutinee_enum_name + "::" + ident_pat.name;
-                auto it = enum_variants_.find(key);
-                if (it != enum_variants_.end()) {
-                    variant_tag = it->second;
-                }
-            }
-
-            if (variant_tag >= 0) {
-                // It's an enum unit variant - check tag
-                std::string cmp = fresh_reg();
-                emit_line("  " + cmp + " = icmp eq i32 " + tag + ", " +
-                          std::to_string(variant_tag));
-                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" +
-                          next_label);
-            } else {
-                // Not an enum variant - treat as wildcard/binding
+            if (cmp_results.empty()) {
+                // All patterns always match (all wildcards)
                 emit_line("  br label %" + arm_labels[arm_idx]);
+            } else if (cmp_results.size() == 1) {
+                emit_line("  br i1 " + cmp_results[0] + ", label %" + arm_labels[arm_idx] +
+                          ", label %" + next_label);
+            } else {
+                // Combine with OR
+                std::string combined = cmp_results[0];
+                for (size_t i = 1; i < cmp_results.size(); ++i) {
+                    std::string new_combined = fresh_reg();
+                    emit_line("  " + new_combined + " = or i1 " + combined + ", " + cmp_results[i]);
+                    combined = new_combined;
+                }
+                emit_line("  br i1 " + combined + ", label %" + arm_labels[arm_idx] + ", label %" +
+                          next_label);
             }
         } else {
-            // Wildcard or other pattern - always matches
-            emit_line("  br label %" + arm_labels[arm_idx]);
+            // Single pattern
+            std::string cmp = gen_pattern_cmp(*arm.pattern, scrutinee, scrutinee_type, tag,
+                                              is_primitive_scrutinee);
+            if (cmp.empty()) {
+                // Pattern always matches (wildcard, binding, etc.)
+                emit_line("  br label %" + arm_labels[arm_idx]);
+            } else {
+                emit_line("  br i1 " + cmp + ", label %" + arm_labels[arm_idx] + ", label %" +
+                          next_label);
+            }
         }
 
         // Generate arm body

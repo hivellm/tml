@@ -330,6 +330,18 @@ private:
     void gen_let_stmt(const parser::LetStmt& let);
     void gen_expr_stmt(const parser::ExprStmt& expr);
 
+    // Pattern binding for destructuring
+    // Binds pattern elements to extracted values from a tuple/struct
+    // expected_type: the type we want to bind to (from annotation)
+    // actual_type: the type of the expression value (defaults to expected_type if empty)
+    void gen_pattern_binding(const parser::Pattern& pattern, const std::string& value,
+                             const std::string& expected_type, const std::string& actual_type = "");
+
+    // Tuple pattern binding helper for nested tuple destructuring
+    void gen_tuple_pattern_binding(const parser::TuplePattern& pattern, const std::string& value,
+                                   const std::string& tuple_type,
+                                   const types::TypePtr& semantic_type);
+
     // Expression generation - returns the register holding the value
     auto gen_expr(const parser::Expr& expr) -> std::string;
     auto gen_literal(const parser::LiteralExpr& lit) -> std::string;
@@ -346,6 +358,9 @@ private:
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
     auto gen_when(const parser::WhenExpr& when) -> std::string;
+    auto gen_pattern_cmp(const parser::Pattern& pattern, const std::string& scrutinee,
+                         const std::string& scrutinee_type, const std::string& tag,
+                         bool is_primitive) -> std::string;
     auto gen_struct_expr(const parser::StructExpr& s) -> std::string;
     auto gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string;
     auto gen_field(const parser::FieldExpr& field) -> std::string;
@@ -370,6 +385,7 @@ private:
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
     auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
+    auto gen_try(const parser::TryExpr& try_expr) -> std::string;
 
     // Async/await helpers
     auto wrap_in_poll_ready(const std::string& value, const std::string& value_type) -> std::string;

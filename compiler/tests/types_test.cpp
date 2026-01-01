@@ -183,13 +183,13 @@ TEST_F(TypeCheckerTest, SimpleEnum) {
 
 TEST_F(TypeCheckerTest, EnumWithData) {
     auto env = check_ok(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
     )");
 
-    auto enum_def = env.lookup_enum("Maybe");
+    auto enum_def = env.lookup_enum("Option");
     EXPECT_TRUE(enum_def.has_value());
     EXPECT_EQ(enum_def->type_params.size(), 1);
     EXPECT_EQ(enum_def->variants.size(), 2);
@@ -419,9 +419,9 @@ TEST_F(TypeCheckerTest, CompleteModule) {
             y: I32,
         }
 
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         behavior Printable {
@@ -529,49 +529,49 @@ TEST_F(TypeCheckerTest, BreakOutsideLoop) {
 
 TEST_F(TypeCheckerTest, EnumConstructorWithPayload) {
     auto env = check_ok(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func test() {
-            let x: Maybe[I64] = Just(42)
+            let x: Option[I64] = Some(42)
         }
     )");
 
     // Verify enum is registered
-    auto enum_def = env.lookup_enum("Maybe");
+    auto enum_def = env.lookup_enum("Option");
     EXPECT_TRUE(enum_def.has_value());
     EXPECT_EQ(enum_def->variants.size(), 2);
-    EXPECT_EQ(enum_def->variants[0].first, "Just");
-    EXPECT_EQ(enum_def->variants[1].first, "Nothing");
+    EXPECT_EQ(enum_def->variants[0].first, "Some");
+    EXPECT_EQ(enum_def->variants[1].first, "None");
 }
 
 TEST_F(TypeCheckerTest, EnumConstructorWithoutPayload) {
     auto env = check_ok(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func test() {
-            let x: Maybe[I64] = Nothing
+            let x: Option[I64] = None
         }
     )");
 
-    auto enum_def = env.lookup_enum("Maybe");
+    auto enum_def = env.lookup_enum("Option");
     EXPECT_TRUE(enum_def.has_value());
 }
 
 TEST_F(TypeCheckerTest, EnumConstructorArgCountMismatch) {
     check_error(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func test() {
-            let x: Maybe[I32] = Just(42, 100)
+            let x: Option[I32] = Some(42, 100)
         }
     )");
 }
@@ -582,22 +582,22 @@ TEST_F(TypeCheckerTest, EnumConstructorArgCountMismatch) {
 
 TEST_F(TypeCheckerTest, PatternBindingInWhen) {
     auto env = check_ok(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
         func test() {
-            let x: Maybe[I64] = Just(42)
+            let x: Option[I64] = Some(42)
 
             when x {
-                Just(v) => println(v),
-                Nothing => println("nothing"),
+                Some(v) => println(v),
+                None => println("nothing"),
             }
         }
     )");
 
-    // Test should pass - v should be bound in the Just arm
+    // Test should pass - v should be bound in the Some arm
 }
 
 TEST_F(TypeCheckerTest, PatternBindingMultiplePayloads) {
@@ -623,27 +623,27 @@ TEST_F(TypeCheckerTest, PatternBindingMultiplePayloads) {
 
 TEST_F(TypeCheckerTest, PatternBindingNestedEnums) {
     auto env = check_ok(R"(
-        type Maybe[T] {
-            Just(T),
-            Nothing,
+        type Option[T] {
+            Some(T),
+            None,
         }
 
-        type Outcome[T, E] {
+        type Result[T, E] {
             Ok(T),
             Err(E),
         }
 
         func test() {
-            let x: Maybe[Outcome[I32, I64]] = Just(Ok(42))
+            let x: Option[Result[I32, I64]] = Some(Ok(42))
 
             when x {
-                Just(result) => {
+                Some(result) => {
                     when result {
                         Ok(value) => println(value),
                         Err(e) => println("error"),
                     }
                 },
-                Nothing => println("nothing"),
+                None => println("nothing"),
             }
         }
     )");
@@ -734,11 +734,11 @@ TEST_F(TypeCheckerTest, FFIQualifiedLookup) {
 
 TEST_F(TypeCheckerTest, WhereClauseParsingAndStorage) {
     auto env = check_ok(R"(
-        behavior Eq {
+        behavior MyEq {
             func eq(self: ref This, other: ref This) -> Bool
         }
 
-        func compare[T](a: T, b: T) -> Bool where T: Eq {
+        func compare[T](a: T, b: T) -> Bool where T: MyEq {
             return true
         }
     )");
@@ -748,52 +748,42 @@ TEST_F(TypeCheckerTest, WhereClauseParsingAndStorage) {
     EXPECT_EQ(func->where_constraints.size(), 1);
     EXPECT_EQ(func->where_constraints[0].type_param, "T");
     EXPECT_EQ(func->where_constraints[0].required_behaviors.size(), 1);
-    EXPECT_EQ(func->where_constraints[0].required_behaviors[0], "Eq");
+    EXPECT_EQ(func->where_constraints[0].required_behaviors[0], "MyEq");
 }
 
 TEST_F(TypeCheckerTest, WhereClauseWithPrimitiveType) {
-    // I32 implements Eq by default, so this should pass
+    // Test where clause with a type that implements the behavior
     check_ok(R"(
-        behavior Eq {
+        behavior MyEq {
             func eq(self: ref This, other: ref This) -> Bool
         }
 
-        func compare[T](a: T, b: T) -> Bool where T: Eq {
-            return true
+        type MyInt {
+            value: I32,
         }
 
-        func test() -> Bool {
-            return compare(1, 2)
-        }
-    )");
-}
-
-TEST_F(TypeCheckerTest, WhereClauseWithUserDefinedType) {
-    // User-defined type that implements Eq - use TML's `type` keyword for structs
-    check_ok(R"(
-        behavior Eq {
-            func eq(self: ref This, other: ref This) -> Bool
-        }
-
-        type Point {
-            x: I32,
-            y: I32,
-        }
-
-        impl Eq for Point {
+        impl MyEq for MyInt {
             func eq(self: ref This, other: ref This) -> Bool {
                 return true
             }
         }
 
-        func compare[T](a: T, b: T) -> Bool where T: Eq {
+        func compare[T](a: T, b: T) -> Bool where T: MyEq {
             return true
         }
-    )");
 
-    // Verify Point now implements Eq
-    auto result = check(R"(
-        behavior Eq {
+        func test() -> Bool {
+            let a: MyInt = MyInt { value: 1 }
+            let b: MyInt = MyInt { value: 2 }
+            return compare(a, b)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, WhereClauseWithUserDefinedType) {
+    // User-defined type that implements MyEq - use TML's `type` keyword for structs
+    check_ok(R"(
+        behavior MyEq {
             func eq(self: ref This, other: ref This) -> Bool
         }
 
@@ -802,7 +792,29 @@ TEST_F(TypeCheckerTest, WhereClauseWithUserDefinedType) {
             y: I32,
         }
 
-        impl Eq for Point {
+        impl MyEq for Point {
+            func eq(self: ref This, other: ref This) -> Bool {
+                return true
+            }
+        }
+
+        func compare[T](a: T, b: T) -> Bool where T: MyEq {
+            return true
+        }
+    )");
+
+    // Verify Point now implements MyEq
+    auto result = check(R"(
+        behavior MyEq {
+            func eq(self: ref This, other: ref This) -> Bool
+        }
+
+        type Point {
+            x: I32,
+            y: I32,
+        }
+
+        impl MyEq for Point {
             func eq(self: ref This, other: ref This) -> Bool {
                 return true
             }
@@ -810,14 +822,14 @@ TEST_F(TypeCheckerTest, WhereClauseWithUserDefinedType) {
     )");
     ASSERT_TRUE(is_ok(result));
     auto& env = std::get<TypeEnv>(result);
-    EXPECT_TRUE(env.type_implements("Point", "Eq"));
+    EXPECT_TRUE(env.type_implements("Point", "MyEq"));
 }
 
 TEST_F(TypeCheckerTest, WhereClauseViolation) {
     // Verify that a type not implementing a behavior cannot be used
     // where that behavior is required
     auto result = check(R"(
-        behavior Eq {
+        behavior MyEq {
             func eq(self: ref This, other: ref This) -> Bool
         }
 
@@ -828,26 +840,101 @@ TEST_F(TypeCheckerTest, WhereClauseViolation) {
     ASSERT_TRUE(is_ok(result));
     auto& env = std::get<TypeEnv>(result);
 
-    // NoEq should NOT implement Eq
-    EXPECT_FALSE(env.type_implements("NoEq", "Eq"));
+    // NoEq should NOT implement MyEq
+    EXPECT_FALSE(env.type_implements("NoEq", "MyEq"));
 }
 
 TEST_F(TypeCheckerTest, WhereClauseMultipleBehaviors) {
     check_ok(R"(
-        behavior Eq {
+        behavior MyEq {
             func eq(self: ref This, other: ref This) -> Bool
         }
 
-        behavior Hash {
+        behavior MyHash {
             func hash(self: ref This) -> I64
         }
 
-        func hash_compare[T](a: T, b: T) -> Bool where T: Eq, T: Hash {
+        type MyValue {
+            value: I32,
+        }
+
+        impl MyEq for MyValue {
+            func eq(self: ref This, other: ref This) -> Bool {
+                return true
+            }
+        }
+
+        impl MyHash for MyValue {
+            func hash(self: ref This) -> I64 {
+                return 42
+            }
+        }
+
+        func hash_compare[T](a: T, b: T) -> Bool where T: MyEq, T: MyHash {
             return true
         }
 
         func test() -> Bool {
-            return hash_compare(1, 2)
+            let a: MyValue = MyValue { value: 1 }
+            let b: MyValue = MyValue { value: 2 }
+            return hash_compare(a, b)
+        }
+    )");
+}
+
+// ============================================================================
+// Tuple Destructuring Tests
+// ============================================================================
+
+TEST_F(TypeCheckerTest, TupleDestructuringSimple) {
+    check_ok(R"(
+        func test() {
+            let x: I32 = 1
+            let y: I32 = 2
+            let (a, b): (I32, I32) = (x, y)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, TupleDestructuringNested) {
+    check_ok(R"(
+        func test() {
+            let x: I32 = 1
+            let y: I32 = 2
+            let z: I32 = 3
+            let ((a, b), c): ((I32, I32), I32) = ((x, y), z)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, TupleDestructuringWildcard) {
+    check_ok(R"(
+        func test() {
+            let x: I32 = 1
+            let y: I32 = 2
+            let z: I32 = 3
+            let (a, _, c): (I32, I32, I32) = (x, y, z)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, TupleDestructuringTooManyElements) {
+    check_error(R"(
+        func test() {
+            let x: I32 = 1
+            let y: I32 = 2
+            let (a, b, c): (I32, I32) = (x, y)
+        }
+    )");
+}
+
+TEST_F(TypeCheckerTest, TupleDestructuringTooFewElements) {
+    check_error(R"(
+        func test() {
+            let x: I32 = 1
+            let y: I32 = 2
+            let z: I32 = 3
+            let (a, b): (I32, I32, I32) = (x, y, z)
         }
     )");
 }
