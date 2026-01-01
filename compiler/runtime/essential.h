@@ -91,6 +91,22 @@ void mem_zero(void* ptr, int64_t size);
 int32_t mem_compare(const void* a, const void* b, int64_t size);
 int32_t mem_eq(const void* a, const void* b, int64_t size);
 
+// ============================================================================
+// Async Runtime (see async.h for full API)
+// ============================================================================
+
+// Forward declarations for async types
+struct TmlExecutor;
+struct TmlTask;
+struct TmlPoll;
+
+// Simple block_on helpers for synchronous async functions
+// These extract values from Poll structs assuming Poll is Ready
+int64_t tml_block_on_simple_i64(void* poll_ptr);
+int32_t tml_block_on_simple_i32(void* poll_ptr);
+double tml_block_on_simple_f64(void* poll_ptr);
+void* tml_block_on_simple_ptr(void* poll_ptr);
+
 #ifdef __cplusplus
 }
 #endif

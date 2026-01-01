@@ -338,6 +338,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::cout << "Including time runtime: " << time_obj << "\n";
             }
         }
+
+        // Include async.c for async/await executor support
+        fs::path async_c = runtime_dir / "async.c";
+        if (fs::exists(async_c)) {
+            std::string async_obj =
+                ensure_c_compiled(to_forward_slashes(async_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(async_obj));
+            if (verbose) {
+                std::cout << "Including async runtime: " << async_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported
