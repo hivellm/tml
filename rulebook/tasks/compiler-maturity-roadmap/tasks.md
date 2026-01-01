@@ -144,7 +144,7 @@
 - [x] 13.5 Implement `pub(crate)` visibility
 - [x] 13.6 Implement module re-exports (infrastructure: ReExport struct, Module re-exports field)
 
-## Phase 14: Async Runtime - IN PROGRESS
+## Phase 14: Async Runtime ✅ COMPLETED
 - [x] 14.1 Design async/await lowering (prefix `await expr` and postfix `.await` syntax)
 - [x] 14.2 Implement Future behavior (Future with Poll enum, Output associated type)
 - [x] 14.3 Implement async function type checking (in_async_func_ context, check_await)
@@ -156,9 +156,9 @@
   - Added AwaitInst to MIR instruction set
   - Implemented AsyncAnalysis for suspension point and saved local detection
   - Implemented AsyncLoweringPass for state machine metadata population
-- [ ] 14.7 Implement async executor
-- [ ] 14.8 Implement async I/O primitives
-- [ ] 14.9 Add spawn, join_all, select primitives
+- [x] 14.7 Implement async executor (TmlExecutor with ready/pending task queues)
+- [x] 14.8 Implement async I/O primitives (timers, channels, yield)
+- [x] 14.9 Add spawn, join_all, select primitives (async.c runtime library)
 
 ## Phase 15: Package Manager - FUTURE
 See separate task: `rulebook/tasks/package-manager/tasks.md`
