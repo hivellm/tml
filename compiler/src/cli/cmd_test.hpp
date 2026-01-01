@@ -23,7 +23,7 @@ inline const char* bg_red = "\033[41m";
 inline const char* bg_green = "\033[42m";
 } // namespace colors
 
-// Test result for a single test
+// Test result for a single test file
 struct TestResult {
     std::string file_path;
     std::string test_name;
@@ -34,6 +34,7 @@ struct TestResult {
     int exit_code = 0;
     int64_t duration_ms = 0; // Duration in milliseconds
     std::string error_message;
+    int test_count = 1; // Number of @test functions in this file
 };
 
 // Test group summary

@@ -13,6 +13,7 @@ TestResult compile_and_run_test_inprocess(const std::string& test_file, const Te
     result.file_path = test_file;
     result.test_name = fs::path(test_file).stem().string();
     result.group = extract_group_name(test_file);
+    result.test_count = count_tests_in_file(test_file);
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -74,6 +75,7 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
     result.file_path = test_file;
     result.test_name = fs::path(test_file).stem().string();
     result.group = extract_group_name(test_file);
+    result.test_count = count_tests_in_file(test_file);
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -127,6 +129,7 @@ TestResult compile_and_run_test_profiled(const std::string& test_file, const Tes
     result.file_path = test_file;
     result.test_name = fs::path(test_file).stem().string();
     result.group = extract_group_name(test_file);
+    result.test_count = count_tests_in_file(test_file);
 
     auto start_time = std::chrono::high_resolution_clock::now();
 

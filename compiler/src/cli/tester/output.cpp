@@ -12,8 +12,9 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
                                 int64_t total_duration_ms) {
     ColorOutput c(!opts.no_color);
 
-    // Group results by directory
+    // Group results by directory and count individual tests
     std::map<std::string, TestGroup> groups;
+    int total_test_count = 0;
 
     for (const auto& result : results) {
         auto& group = groups[result.group];
@@ -22,10 +23,11 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
         }
         group.results.push_back(result);
         group.total_duration_ms += result.duration_ms;
+        total_test_count += result.test_count;
         if (result.passed) {
-            group.passed++;
+            group.passed += result.test_count;
         } else {
-            group.failed++;
+            group.failed += result.test_count;
         }
     }
 
@@ -48,9 +50,15 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
         const char* icon = all_passed ? "+" : "x";
         const char* icon_color = all_passed ? c.green() : c.red();
 
+        // Count tests in this group
+        int group_test_count = 0;
+        for (const auto& r : group.results) {
+            group_test_count += r.test_count;
+        }
+
         std::cout << " " << icon_color << icon << c.reset() << " " << c.bold() << group.name
-                  << c.reset() << " " << c.gray() << "(" << group.results.size() << " test"
-                  << (group.results.size() != 1 ? "s" : "") << ")" << c.reset() << " " << c.dim()
+                  << c.reset() << " " << c.gray() << "(" << group_test_count << " test"
+                  << (group_test_count != 1 ? "s" : "") << ")" << c.reset() << " " << c.dim()
                   << format_duration(group.total_duration_ms) << c.reset() << "\n";
 
         // Print individual tests in group (only if verbose or there are failures)
@@ -75,32 +83,37 @@ void print_results_vitest_style(const std::vector<TestResult>& results, const Te
         }
     }
 
-    // Count totals
-    int total_passed = 0;
-    int total_failed = 0;
+    // Count totals (files and individual tests)
+    int files_passed = 0;
+    int files_failed = 0;
+    int tests_passed = 0;
+    int tests_failed = 0;
     for (const auto& result : results) {
         if (result.passed) {
-            total_passed++;
+            files_passed++;
+            tests_passed += result.test_count;
         } else {
-            total_failed++;
+            files_failed++;
+            tests_failed += result.test_count;
         }
     }
 
     // Print summary box
     std::cout << "\n";
-    std::cout << " " << c.bold() << "Test Files  " << c.reset();
-    if (total_failed > 0) {
-        std::cout << c.red() << c.bold() << total_failed << " failed" << c.reset() << " | ";
+    std::cout << " " << c.bold() << "Tests       " << c.reset();
+    if (tests_failed > 0) {
+        std::cout << c.red() << c.bold() << tests_failed << " failed" << c.reset() << " | ";
     }
-    std::cout << c.green() << c.bold() << total_passed << " passed" << c.reset() << " " << c.gray()
-              << "(" << results.size() << ")" << c.reset() << "\n";
+    std::cout << c.green() << c.bold() << tests_passed << " passed" << c.reset() << " " << c.gray()
+              << "(" << total_test_count << " tests, " << results.size() << " file"
+              << (results.size() != 1 ? "s" : "") << ")" << c.reset() << "\n";
 
     std::cout << " " << c.bold() << "Duration    " << c.reset()
               << format_duration(total_duration_ms) << "\n";
 
     // Print final status line
     std::cout << "\n";
-    if (total_failed == 0) {
+    if (tests_failed == 0) {
         std::cout << " " << c.green() << c.bold() << "All tests passed!" << c.reset() << "\n";
     } else {
         std::cout << " " << c.red() << c.bold() << "Some tests failed." << c.reset() << "\n";

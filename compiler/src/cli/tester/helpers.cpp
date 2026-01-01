@@ -40,6 +40,34 @@ std::string format_duration(int64_t ms) {
 }
 
 // ============================================================================
+// Count @test Functions in File
+// ============================================================================
+
+int count_tests_in_file(const std::string& file_path) {
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        return 1; // Default to 1 if can't read file
+    }
+
+    int count = 0;
+    std::string line;
+    while (std::getline(file, line)) {
+        // Skip leading whitespace
+        size_t pos = line.find_first_not_of(" \t");
+        if (pos == std::string::npos) {
+            continue;
+        }
+
+        // Check if line starts with @test
+        if (line.substr(pos, 5) == "@test") {
+            count++;
+        }
+    }
+
+    return count > 0 ? count : 1; // At least 1 test per file
+}
+
+// ============================================================================
 // Extract Group Name
 // ============================================================================
 

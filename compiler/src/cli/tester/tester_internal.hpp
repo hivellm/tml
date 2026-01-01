@@ -103,6 +103,9 @@ std::string format_duration(int64_t ms);
 // Extract group name from file path
 std::string extract_group_name(const std::string& file_path);
 
+// Count @test functions in a file
+int count_tests_in_file(const std::string& file_path);
+
 // ============================================================================
 // Discovery Functions
 // ============================================================================
