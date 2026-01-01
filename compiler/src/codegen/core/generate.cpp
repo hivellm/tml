@@ -219,6 +219,24 @@ auto LLVMIRGen::generate(const parser::Module& module)
     saved_output.str(output_.str()); // Save current output (headers, type defs)
     output_.str("");                 // Clear for function code
 
+    // Pre-pass: register all function return types for type inference
+    // This allows later functions to be used in earlier functions correctly
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::FuncDecl>()) {
+            const auto& func = decl->as<parser::FuncDecl>();
+            // Skip generic functions - their return types depend on instantiation
+            if (!func.generics.empty()) {
+                continue;
+            }
+            if (func.return_type.has_value()) {
+                types::TypePtr semantic_ret = resolve_parser_type_with_subs(**func.return_type, {});
+                if (semantic_ret) {
+                    func_return_types_[func.name] = semantic_ret;
+                }
+            }
+        }
+    }
+
     // Second pass: generate function declarations (into temp buffer)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {

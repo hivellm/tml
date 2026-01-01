@@ -290,13 +290,36 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
             // Otherwise, convert it to string using appropriate runtime function
             if (expr_type == "ptr") {
                 segment_strs.push_back(expr_val);
-            } else if (expr_type == "i32" || expr_type == "i64") {
+            } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
+                       expr_type == "i64") {
                 // Convert integer to string using i64_to_str
                 std::string int_val = expr_val;
-                if (expr_type == "i32") {
-                    // Sign extend i32 to i64
+                if (expr_type == "i8") {
+                    // Extend i8 to i64 - use zext for unsigned semantics
                     std::string ext_reg = fresh_reg();
-                    emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
+                    if (last_expr_is_unsigned_) {
+                        emit_line("  " + ext_reg + " = zext i8 " + expr_val + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i8 " + expr_val + " to i64");
+                    }
+                    int_val = ext_reg;
+                } else if (expr_type == "i16") {
+                    // Extend i16 to i64 - use zext for unsigned semantics
+                    std::string ext_reg = fresh_reg();
+                    if (last_expr_is_unsigned_) {
+                        emit_line("  " + ext_reg + " = zext i16 " + expr_val + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i16 " + expr_val + " to i64");
+                    }
+                    int_val = ext_reg;
+                } else if (expr_type == "i32") {
+                    // Extend i32 to i64 - use zext for unsigned semantics
+                    std::string ext_reg = fresh_reg();
+                    if (last_expr_is_unsigned_) {
+                        emit_line("  " + ext_reg + " = zext i32 " + expr_val + " to i64");
+                    } else {
+                        emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
+                    }
                     int_val = ext_reg;
                 }
                 std::string str_result = fresh_reg();
