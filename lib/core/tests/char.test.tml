@@ -1,0 +1,1256 @@
+// Tests for core::char module
+// Tests Unicode scalar value (Char) type and related functions
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+@test
+func test_char_constants() -> I32 {
+    // Test MIN and MAX
+    let min: U32 = 0x0000
+    let max: U32 = 0x10FFFF
+    let replacement: U32 = 0xFFFD
+
+    assert(min == 0, "MIN should be 0")
+    assert(max == 0x10FFFF, "MAX should be 0x10FFFF")
+    assert(replacement == 0xFFFD, "REPLACEMENT_CHARACTER should be 0xFFFD")
+
+    return 0
+}
+
+@test
+func test_max_len_constants() -> I32 {
+    // MAX_LEN_UTF8 = 4, MAX_LEN_UTF16 = 2
+    let max_utf8: I64 = 4
+    let max_utf16: I64 = 2
+
+    assert(max_utf8 == 4, "MAX_LEN_UTF8 should be 4")
+    assert(max_utf16 == 2, "MAX_LEN_UTF16 should be 2")
+
+    return 0
+}
+
+// ============================================================================
+// Validation Tests
+// ============================================================================
+
+@test
+func test_is_valid_ascii() -> I32 {
+    // ASCII characters are valid
+    assert(is_valid_char(0x0000), "NUL should be valid")
+    assert(is_valid_char(0x0041), "A should be valid")
+    assert(is_valid_char(0x007F), "DEL should be valid")
+
+    return 0
+}
+
+@test
+func test_is_valid_unicode() -> I32 {
+    // Various Unicode characters are valid
+    assert(is_valid_char(0x00E9), "e-acute should be valid")
+    assert(is_valid_char(0x4E2D), "CJK char should be valid")
+    assert(is_valid_char(0x10FFFF), "Max code point should be valid")
+
+    return 0
+}
+
+@test
+func test_is_valid_surrogates_invalid() -> I32 {
+    // Surrogate range is invalid
+    assert(not is_valid_char(0xD800), "High surrogate start should be invalid")
+    assert(not is_valid_char(0xDBFF), "High surrogate end should be invalid")
+    assert(not is_valid_char(0xDC00), "Low surrogate start should be invalid")
+    assert(not is_valid_char(0xDFFF), "Low surrogate end should be invalid")
+
+    return 0
+}
+
+@test
+func test_is_valid_out_of_range() -> I32 {
+    // Out of Unicode range is invalid
+    assert(not is_valid_char(0x110000), "Above max should be invalid")
+    assert(not is_valid_char(0xFFFFFFFF), "Max U32 should be invalid")
+
+    return 0
+}
+
+// ============================================================================
+// Conversion Tests - from_u32
+// ============================================================================
+
+@test
+func test_from_u32_valid() -> I32 {
+    when from_u32(0x0041) {
+        Just(c) => assert(c == 0x0041, "from_u32 A should be Just A"),
+        Nothing => assert(false, "from_u32 A should not be Nothing")
+    }
+
+    when from_u32(0x4E2D) {
+        Just(c) => assert(c == 0x4E2D, "from_u32 CJK should be Just"),
+        Nothing => assert(false, "from_u32 CJK should not be Nothing")
+    }
+
+    when from_u32(0x10FFFF) {
+        Just(c) => assert(c == 0x10FFFF, "from_u32 MAX should be Just MAX"),
+        Nothing => assert(false, "from_u32 MAX should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_from_u32_invalid() -> I32 {
+    when from_u32(0xD800) {
+        Just(_) => assert(false, "from_u32 surrogate should be Nothing"),
+        Nothing => {}
+    }
+
+    when from_u32(0x110000) {
+        Just(_) => assert(false, "from_u32 out of range should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Conversion Tests - from_digit
+// ============================================================================
+
+@test
+func test_from_digit_decimal() -> I32 {
+    when from_digit(0, 10) {
+        Just(c) => assert(c == 0x30, "from_digit 0,10 should be 0x30"),
+        Nothing => assert(false, "from_digit 0,10 should not be Nothing")
+    }
+
+    when from_digit(5, 10) {
+        Just(c) => assert(c == 0x35, "from_digit 5,10 should be 0x35"),
+        Nothing => assert(false, "from_digit 5,10 should not be Nothing")
+    }
+
+    when from_digit(9, 10) {
+        Just(c) => assert(c == 0x39, "from_digit 9,10 should be 0x39"),
+        Nothing => assert(false, "from_digit 9,10 should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_from_digit_hex() -> I32 {
+    when from_digit(10, 16) {
+        Just(c) => assert(c == 0x61, "from_digit 10,16 should be 0x61"),
+        Nothing => assert(false, "from_digit 10,16 should not be Nothing")
+    }
+
+    when from_digit(15, 16) {
+        Just(c) => assert(c == 0x66, "from_digit 15,16 should be 0x66"),
+        Nothing => assert(false, "from_digit 15,16 should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_from_digit_invalid() -> I32 {
+    // Digit >= radix should return Nothing
+    when from_digit(10, 10) {
+        Just(_) => assert(false, "from_digit 10,10 should be Nothing"),
+        Nothing => {}
+    }
+
+    when from_digit(16, 16) {
+        Just(_) => assert(false, "from_digit 16,16 should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Conversion Tests - try_from_u32
+// ============================================================================
+
+@test
+func test_try_from_u32_valid() -> I32 {
+    when try_from_u32(0x0041) {
+        Ok(c) => assert(c == 0x0041, "try_from_u32 A should be Ok A"),
+        Err(_) => assert(false, "try_from_u32 A should not be Err")
+    }
+
+    return 0
+}
+
+@test
+func test_try_from_u32_invalid() -> I32 {
+    when try_from_u32(0xD800) {
+        Ok(_) => assert(false, "try_from_u32 surrogate should be Err"),
+        Err(_) => {}  // Just check it returns an error
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Conversion Tests - to_u32, from_u8, etc.
+// ============================================================================
+
+@test
+func test_to_u32() -> I32 {
+    let c: U32 = 0x0041
+    let result: U32 = to_u32(c)
+    assert(result == 0x0041, "to_u32 should return the same value")
+
+    return 0
+}
+
+@test
+func test_from_u8() -> I32 {
+    let result: U32 = from_u8(65)
+    assert(result == 0x0041, "from_u8 65 should be A")
+
+    let result2: U32 = from_u8(0)
+    assert(result2 == 0x0000, "from_u8 0 should be NUL")
+
+    let result3: U32 = from_u8(255)
+    assert(result3 == 0x00FF, "from_u8 255 should be 0xFF")
+
+    return 0
+}
+
+@test
+func test_try_to_u8() -> I32 {
+    when try_to_u8(0x0041) {
+        Ok(v) => assert(v == 65, "try_to_u8 A should be Ok 65"),
+        Err(_) => assert(false, "try_to_u8 A should not be Err")
+    }
+
+    when try_to_u8(0x00FF) {
+        Ok(v) => assert(v == 255, "try_to_u8 0xFF should be Ok 255"),
+        Err(_) => assert(false, "try_to_u8 0xFF should not be Err")
+    }
+
+    when try_to_u8(0x0100) {
+        Ok(_) => assert(false, "try_to_u8 0x100 should be Err"),
+        Err(_) => {}
+    }
+
+    return 0
+}
+
+@test
+func test_try_to_u16() -> I32 {
+    when try_to_u16(0x0041) {
+        Ok(v) => assert(v == 65, "try_to_u16 A should be Ok 65"),
+        Err(_) => assert(false, "try_to_u16 A should not be Err")
+    }
+
+    when try_to_u16(0xFFFF) {
+        Ok(v) => assert(v == 65535, "try_to_u16 0xFFFF should be Ok 65535"),
+        Err(_) => assert(false, "try_to_u16 0xFFFF should not be Err")
+    }
+
+    when try_to_u16(0x10000) {
+        Ok(_) => assert(false, "try_to_u16 0x10000 should be Err"),
+        Err(_) => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Classification Tests - Basic Unicode Properties
+// ============================================================================
+
+@test
+func test_is_alphabetic_ascii() -> I32 {
+    // Lowercase letters
+    assert(is_alphabetic(0x61), "a should be alphabetic")
+    assert(is_alphabetic(0x7A), "z should be alphabetic")
+
+    // Uppercase letters
+    assert(is_alphabetic(0x41), "A should be alphabetic")
+    assert(is_alphabetic(0x5A), "Z should be alphabetic")
+
+    // Non-alphabetic
+    assert(not is_alphabetic(0x30), "0 should not be alphabetic")
+    assert(not is_alphabetic(0x20), "space should not be alphabetic")
+
+    return 0
+}
+
+@test
+func test_is_alphabetic_unicode() -> I32 {
+    // Greek letters
+    assert(is_alphabetic(0x03B1), "Greek alpha should be alphabetic")
+    assert(is_alphabetic(0x0391), "Greek capital Alpha should be alphabetic")
+
+    // Cyrillic letters
+    assert(is_alphabetic(0x0430), "Cyrillic a should be alphabetic")
+    assert(is_alphabetic(0x0410), "Cyrillic A should be alphabetic")
+
+    // CJK
+    assert(is_alphabetic(0x4E2D), "CJK char should be alphabetic")
+
+    return 0
+}
+
+@test
+func test_is_lowercase_ascii() -> I32 {
+    assert(is_lowercase(0x61), "a should be lowercase")
+    assert(is_lowercase(0x7A), "z should be lowercase")
+    assert(not is_lowercase(0x41), "A should not be lowercase")
+    assert(not is_lowercase(0x30), "0 should not be lowercase")
+
+    return 0
+}
+
+@test
+func test_is_uppercase_ascii() -> I32 {
+    assert(is_uppercase(0x41), "A should be uppercase")
+    assert(is_uppercase(0x5A), "Z should be uppercase")
+    assert(not is_uppercase(0x61), "a should not be uppercase")
+    assert(not is_uppercase(0x30), "0 should not be uppercase")
+
+    return 0
+}
+
+@test
+func test_is_whitespace() -> I32 {
+    assert(is_whitespace(0x20), "space should be whitespace")
+    assert(is_whitespace(0x09), "tab should be whitespace")
+    assert(is_whitespace(0x0A), "newline should be whitespace")
+    assert(is_whitespace(0x0D), "carriage return should be whitespace")
+    assert(not is_whitespace(0x41), "A should not be whitespace")
+
+    return 0
+}
+
+@test
+func test_is_alphanumeric() -> I32 {
+    assert(is_alphanumeric(0x61), "a should be alphanumeric")
+    assert(is_alphanumeric(0x41), "A should be alphanumeric")
+    assert(is_alphanumeric(0x30), "0 should be alphanumeric")
+    assert(not is_alphanumeric(0x20), "space should not be alphanumeric")
+    assert(not is_alphanumeric(0x21), "! should not be alphanumeric")
+
+    return 0
+}
+
+@test
+func test_is_numeric() -> I32 {
+    assert(is_numeric(0x30), "0 should be numeric")
+    assert(is_numeric(0x39), "9 should be numeric")
+    assert(not is_numeric(0x61), "a should not be numeric")
+
+    return 0
+}
+
+@test
+func test_is_control() -> I32 {
+    assert(is_control(0x00), "NUL should be control")
+    assert(is_control(0x0A), "LF should be control")
+    assert(is_control(0x1F), "Unit separator should be control")
+    assert(is_control(0x7F), "DEL should be control")
+    assert(not is_control(0x20), "space should not be control")
+    assert(not is_control(0x41), "A should not be control")
+
+    return 0
+}
+
+// ============================================================================
+// ASCII Classification Tests
+// ============================================================================
+
+@test
+func test_is_ascii() -> I32 {
+    assert(is_ascii(0x00), "NUL should be ASCII")
+    assert(is_ascii(0x41), "A should be ASCII")
+    assert(is_ascii(0x7F), "DEL should be ASCII")
+    assert(not is_ascii(0x80), "0x80 should not be ASCII")
+    assert(not is_ascii(0x4E2D), "CJK char should not be ASCII")
+
+    return 0
+}
+
+@test
+func test_is_ascii_alphabetic() -> I32 {
+    assert(is_ascii_alphabetic(0x41), "A should be ASCII alphabetic")
+    assert(is_ascii_alphabetic(0x5A), "Z should be ASCII alphabetic")
+    assert(is_ascii_alphabetic(0x61), "a should be ASCII alphabetic")
+    assert(is_ascii_alphabetic(0x7A), "z should be ASCII alphabetic")
+    assert(not is_ascii_alphabetic(0x30), "0 should not be ASCII alphabetic")
+    assert(not is_ascii_alphabetic(0x40), "@ should not be ASCII alphabetic")
+
+    return 0
+}
+
+@test
+func test_is_ascii_uppercase() -> I32 {
+    assert(is_ascii_uppercase(0x41), "A should be ASCII uppercase")
+    assert(is_ascii_uppercase(0x5A), "Z should be ASCII uppercase")
+    assert(not is_ascii_uppercase(0x61), "a should not be ASCII uppercase")
+    assert(not is_ascii_uppercase(0x40), "@ should not be ASCII uppercase")
+
+    return 0
+}
+
+@test
+func test_is_ascii_lowercase() -> I32 {
+    assert(is_ascii_lowercase(0x61), "a should be ASCII lowercase")
+    assert(is_ascii_lowercase(0x7A), "z should be ASCII lowercase")
+    assert(not is_ascii_lowercase(0x41), "A should not be ASCII lowercase")
+
+    return 0
+}
+
+@test
+func test_is_ascii_alphanumeric() -> I32 {
+    assert(is_ascii_alphanumeric(0x41), "A should be ASCII alphanumeric")
+    assert(is_ascii_alphanumeric(0x61), "a should be ASCII alphanumeric")
+    assert(is_ascii_alphanumeric(0x30), "0 should be ASCII alphanumeric")
+    assert(not is_ascii_alphanumeric(0x20), "space should not be ASCII alphanumeric")
+
+    return 0
+}
+
+@test
+func test_is_ascii_digit() -> I32 {
+    assert(is_ascii_digit(0x30), "0 should be ASCII digit")
+    assert(is_ascii_digit(0x39), "9 should be ASCII digit")
+    assert(not is_ascii_digit(0x41), "A should not be ASCII digit")
+    assert(not is_ascii_digit(0x2F), "/ should not be ASCII digit")
+
+    return 0
+}
+
+@test
+func test_is_ascii_hexdigit() -> I32 {
+    // Digits
+    assert(is_ascii_hexdigit(0x30), "0 should be ASCII hexdigit")
+    assert(is_ascii_hexdigit(0x39), "9 should be ASCII hexdigit")
+    // Uppercase hex
+    assert(is_ascii_hexdigit(0x41), "A should be ASCII hexdigit")
+    assert(is_ascii_hexdigit(0x46), "F should be ASCII hexdigit")
+    // Lowercase hex
+    assert(is_ascii_hexdigit(0x61), "a should be ASCII hexdigit")
+    assert(is_ascii_hexdigit(0x66), "f should be ASCII hexdigit")
+    // Not hex
+    assert(not is_ascii_hexdigit(0x47), "G should not be ASCII hexdigit")
+    assert(not is_ascii_hexdigit(0x67), "g should not be ASCII hexdigit")
+
+    return 0
+}
+
+@test
+func test_is_ascii_octdigit() -> I32 {
+    assert(is_ascii_octdigit(0x30), "0 should be ASCII octdigit")
+    assert(is_ascii_octdigit(0x37), "7 should be ASCII octdigit")
+    assert(not is_ascii_octdigit(0x38), "8 should not be ASCII octdigit")
+    assert(not is_ascii_octdigit(0x39), "9 should not be ASCII octdigit")
+
+    return 0
+}
+
+@test
+func test_is_ascii_whitespace() -> I32 {
+    assert(is_ascii_whitespace(0x20), "space should be ASCII whitespace")
+    assert(is_ascii_whitespace(0x09), "tab should be ASCII whitespace")
+    assert(is_ascii_whitespace(0x0A), "LF should be ASCII whitespace")
+    assert(is_ascii_whitespace(0x0C), "FF should be ASCII whitespace")
+    assert(is_ascii_whitespace(0x0D), "CR should be ASCII whitespace")
+    // VT (0x0B) is not ASCII whitespace in standard definition
+    assert(not is_ascii_whitespace(0x0B), "VT should not be ASCII whitespace")
+    assert(not is_ascii_whitespace(0x41), "A should not be ASCII whitespace")
+
+    return 0
+}
+
+@test
+func test_is_ascii_control() -> I32 {
+    assert(is_ascii_control(0x00), "NUL should be ASCII control")
+    assert(is_ascii_control(0x1F), "US should be ASCII control")
+    assert(is_ascii_control(0x7F), "DEL should be ASCII control")
+    assert(not is_ascii_control(0x20), "space should not be ASCII control")
+
+    return 0
+}
+
+@test
+func test_is_ascii_graphic() -> I32 {
+    assert(is_ascii_graphic(0x21), "! should be ASCII graphic")
+    assert(is_ascii_graphic(0x41), "A should be ASCII graphic")
+    assert(is_ascii_graphic(0x7E), "~ should be ASCII graphic")
+    assert(not is_ascii_graphic(0x20), "space should not be ASCII graphic")
+    assert(not is_ascii_graphic(0x7F), "DEL should not be ASCII graphic")
+
+    return 0
+}
+
+@test
+func test_is_ascii_punctuation() -> I32 {
+    assert(is_ascii_punctuation(0x21), "! should be ASCII punctuation")
+    assert(is_ascii_punctuation(0x2E), ". should be ASCII punctuation")
+    assert(is_ascii_punctuation(0x3A), ": should be ASCII punctuation")
+    assert(is_ascii_punctuation(0x5B), "bracket should be ASCII punctuation")
+    assert(is_ascii_punctuation(0x7B), "brace should be ASCII punctuation")
+    assert(not is_ascii_punctuation(0x41), "A should not be ASCII punctuation")
+    assert(not is_ascii_punctuation(0x30), "0 should not be ASCII punctuation")
+
+    return 0
+}
+
+// ============================================================================
+// Digit Conversion Tests
+// ============================================================================
+
+@test
+func test_to_digit_decimal() -> I32 {
+    when to_digit(0x30, 10) {
+        Just(d) => assert(d == 0, "to_digit 0x30,10 should be 0"),
+        Nothing => assert(false, "to_digit 0x30,10 should not be Nothing")
+    }
+
+    when to_digit(0x35, 10) {
+        Just(d) => assert(d == 5, "to_digit 0x35,10 should be 5"),
+        Nothing => assert(false, "to_digit 0x35,10 should not be Nothing")
+    }
+
+    when to_digit(0x39, 10) {
+        Just(d) => assert(d == 9, "to_digit 0x39,10 should be 9"),
+        Nothing => assert(false, "to_digit 0x39,10 should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_to_digit_hex() -> I32 {
+    when to_digit(0x41, 16) {
+        Just(d) => assert(d == 10, "to_digit A,16 should be 10"),
+        Nothing => assert(false, "to_digit A,16 should not be Nothing")
+    }
+
+    when to_digit(0x61, 16) {
+        Just(d) => assert(d == 10, "to_digit a,16 should be 10"),
+        Nothing => assert(false, "to_digit a,16 should not be Nothing")
+    }
+
+    when to_digit(0x46, 16) {
+        Just(d) => assert(d == 15, "to_digit F,16 should be 15"),
+        Nothing => assert(false, "to_digit F,16 should not be Nothing")
+    }
+
+    when to_digit(0x66, 16) {
+        Just(d) => assert(d == 15, "to_digit f,16 should be 15"),
+        Nothing => assert(false, "to_digit f,16 should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_to_digit_binary() -> I32 {
+    when to_digit(0x30, 2) {
+        Just(d) => assert(d == 0, "to_digit 0,2 should be 0"),
+        Nothing => assert(false, "to_digit 0,2 should not be Nothing")
+    }
+
+    when to_digit(0x31, 2) {
+        Just(d) => assert(d == 1, "to_digit 1,2 should be 1"),
+        Nothing => assert(false, "to_digit 1,2 should not be Nothing")
+    }
+
+    when to_digit(0x32, 2) {
+        Just(_) => assert(false, "to_digit 2,2 should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_to_digit_invalid_radix() -> I32 {
+    when to_digit(0x30, 0) {
+        Just(_) => assert(false, "to_digit with radix 0 should be Nothing"),
+        Nothing => {}
+    }
+
+    when to_digit(0x30, 1) {
+        Just(_) => assert(false, "to_digit with radix 1 should be Nothing"),
+        Nothing => {}
+    }
+
+    when to_digit(0x30, 37) {
+        Just(_) => assert(false, "to_digit with radix 37 should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+@test
+func test_is_digit() -> I32 {
+    assert(is_digit(0x35, 10), "5 should be a digit in base 10")
+    assert(not is_digit(0x61, 10), "a should not be a digit in base 10")
+    assert(is_digit(0x61, 16), "a should be a digit in base 16")
+    assert(not is_digit(0x67, 16), "g should not be a digit in base 16")
+
+    return 0
+}
+
+// ============================================================================
+// Case Conversion Tests
+// ============================================================================
+
+@test
+func test_to_lowercase_ascii() -> I32 {
+    assert(to_lowercase(0x41) == 0x61, "to_lowercase A should be a")
+    assert(to_lowercase(0x5A) == 0x7A, "to_lowercase Z should be z")
+    assert(to_lowercase(0x61) == 0x61, "to_lowercase a should be a")
+    assert(to_lowercase(0x30) == 0x30, "to_lowercase 0 should be 0")
+
+    return 0
+}
+
+@test
+func test_to_uppercase_ascii() -> I32 {
+    assert(to_uppercase(0x61) == 0x41, "to_uppercase a should be A")
+    assert(to_uppercase(0x7A) == 0x5A, "to_uppercase z should be Z")
+    assert(to_uppercase(0x41) == 0x41, "to_uppercase A should be A")
+    assert(to_uppercase(0x30) == 0x30, "to_uppercase 0 should be 0")
+
+    return 0
+}
+
+@test
+func test_to_ascii_lowercase() -> I32 {
+    assert(to_ascii_lowercase(0x41) == 0x61, "to_ascii_lowercase A should be a")
+    assert(to_ascii_lowercase(0x5A) == 0x7A, "to_ascii_lowercase Z should be z")
+    assert(to_ascii_lowercase(0x61) == 0x61, "to_ascii_lowercase a should be a")
+    // Unicode should be unchanged
+    assert(to_ascii_lowercase(0x0391) == 0x0391, "to_ascii_lowercase Greek Alpha should be unchanged")
+
+    return 0
+}
+
+@test
+func test_to_ascii_uppercase() -> I32 {
+    assert(to_ascii_uppercase(0x61) == 0x41, "to_ascii_uppercase a should be A")
+    assert(to_ascii_uppercase(0x7A) == 0x5A, "to_ascii_uppercase z should be Z")
+    assert(to_ascii_uppercase(0x41) == 0x41, "to_ascii_uppercase A should be A")
+    // Unicode should be unchanged
+    assert(to_ascii_uppercase(0x03B1) == 0x03B1, "to_ascii_uppercase Greek alpha should be unchanged")
+
+    return 0
+}
+
+@test
+func test_eq_ignore_ascii_case() -> I32 {
+    assert(eq_ignore_ascii_case(0x41, 0x61), "A should equal a ignoring case")
+    assert(eq_ignore_ascii_case(0x61, 0x41), "a should equal A ignoring case")
+    assert(eq_ignore_ascii_case(0x41, 0x41), "A should equal A")
+    assert(not eq_ignore_ascii_case(0x41, 0x42), "A should not equal B")
+    // Unicode comparison (both unchanged)
+    assert(not eq_ignore_ascii_case(0x0391, 0x03B1), "Greek Alpha and alpha should not match ASCII only")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-8 Encoding Tests
+// ============================================================================
+
+@test
+func test_len_utf8_1_byte() -> I32 {
+    assert(len_utf8(0x00) == 1, "NUL should be 1 byte in UTF-8")
+    assert(len_utf8(0x41) == 1, "A should be 1 byte in UTF-8")
+    assert(len_utf8(0x7F) == 1, "DEL should be 1 byte in UTF-8")
+
+    return 0
+}
+
+@test
+func test_len_utf8_2_bytes() -> I32 {
+    assert(len_utf8(0x80) == 2, "0x80 should be 2 bytes in UTF-8")
+    assert(len_utf8(0x00E9) == 2, "e-acute should be 2 bytes in UTF-8")
+    assert(len_utf8(0x07FF) == 2, "0x7FF should be 2 bytes in UTF-8")
+
+    return 0
+}
+
+@test
+func test_len_utf8_3_bytes() -> I32 {
+    assert(len_utf8(0x0800) == 3, "0x800 should be 3 bytes in UTF-8")
+    assert(len_utf8(0x4E2D) == 3, "CJK char should be 3 bytes in UTF-8")
+    assert(len_utf8(0xFFFF) == 3, "0xFFFF should be 3 bytes in UTF-8")
+
+    return 0
+}
+
+@test
+func test_len_utf8_4_bytes() -> I32 {
+    assert(len_utf8(0x10000) == 4, "0x10000 should be 4 bytes in UTF-8")
+    assert(len_utf8(0x1F980) == 4, "crab emoji should be 4 bytes in UTF-8")
+    assert(len_utf8(0x10FFFF) == 4, "max code point should be 4 bytes in UTF-8")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-16 Encoding Tests
+// ============================================================================
+
+@test
+func test_len_utf16_1_unit() -> I32 {
+    assert(len_utf16(0x00) == 1, "NUL should be 1 unit in UTF-16")
+    assert(len_utf16(0x41) == 1, "A should be 1 unit in UTF-16")
+    assert(len_utf16(0x4E2D) == 1, "CJK char should be 1 unit in UTF-16")
+    assert(len_utf16(0xFFFF) == 1, "0xFFFF should be 1 unit in UTF-16")
+
+    return 0
+}
+
+@test
+func test_len_utf16_2_units() -> I32 {
+    assert(len_utf16(0x10000) == 2, "0x10000 should be 2 units in UTF-16")
+    assert(len_utf16(0x1F980) == 2, "crab emoji should be 2 units in UTF-16")
+    assert(len_utf16(0x10FFFF) == 2, "max code point should be 2 units in UTF-16")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-8 Encode Tests
+// ============================================================================
+
+@test
+func test_encode_utf8_1_byte() -> I32 {
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x41)
+    assert(len == 1, "encode_utf8 A should have length 1")
+    assert(bytes[0] == 0x41, "encode_utf8 A first byte should be 0x41")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_2_bytes() -> I32 {
+    // e-acute = U+00E9 = 0xC3 0xA9 in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x00E9)
+    assert(len == 2, "encode_utf8 e-acute should have length 2")
+    assert(bytes[0] == 0xC3, "encode_utf8 e-acute first byte should be 0xC3")
+    assert(bytes[1] == 0xA9, "encode_utf8 e-acute second byte should be 0xA9")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_3_bytes() -> I32 {
+    // CJK char = U+4E2D = 0xE4 0xB8 0xAD in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x4E2D)
+    assert(len == 3, "encode_utf8 CJK should have length 3")
+    assert(bytes[0] == 0xE4, "encode_utf8 CJK first byte should be 0xE4")
+    assert(bytes[1] == 0xB8, "encode_utf8 CJK second byte should be 0xB8")
+    assert(bytes[2] == 0xAD, "encode_utf8 CJK third byte should be 0xAD")
+
+    return 0
+}
+
+@test
+func test_encode_utf8_4_bytes() -> I32 {
+    // U+1F980 (crab emoji) = 0xF0 0x9F 0xA6 0x80 in UTF-8
+    let (bytes, len): ([U8; 4], I64) = encode_utf8(0x1F980)
+    assert(len == 4, "encode_utf8 crab should have length 4")
+    assert(bytes[0] == 0xF0, "encode_utf8 crab first byte should be 0xF0")
+    assert(bytes[1] == 0x9F, "encode_utf8 crab second byte should be 0x9F")
+    assert(bytes[2] == 0xA6, "encode_utf8 crab third byte should be 0xA6")
+    assert(bytes[3] == 0x80, "encode_utf8 crab fourth byte should be 0x80")
+
+    return 0
+}
+
+// ============================================================================
+// UTF-16 Encode Tests
+// ============================================================================
+
+@test
+func test_encode_utf16_1_unit() -> I32 {
+    let (units, len): ([U16; 2], I64) = encode_utf16(0x41)
+    assert(len == 1, "encode_utf16 A should have length 1")
+    assert(units[0] == 0x0041, "encode_utf16 A first unit should be 0x0041")
+
+    let (units2, len2): ([U16; 2], I64) = encode_utf16(0x4E2D)
+    assert(len2 == 1, "encode_utf16 CJK should have length 1")
+    assert(units2[0] == 0x4E2D, "encode_utf16 CJK first unit should be 0x4E2D")
+
+    return 0
+}
+
+@test
+func test_encode_utf16_2_units() -> I32 {
+    // U+1F980 = surrogate pair: D83E DC80
+    let (units, len): ([U16; 2], I64) = encode_utf16(0x1F980)
+    assert(len == 2, "encode_utf16 crab should have length 2")
+    assert(units[0] == 0xD83E, "encode_utf16 crab high surrogate should be 0xD83E")
+    assert(units[1] == 0xDE80, "encode_utf16 crab low surrogate should be 0xDE80")
+
+    return 0
+}
+
+// ============================================================================
+// Unicode Case Conversion Tests
+// ============================================================================
+
+@test
+func test_to_lowercase_greek() -> I32 {
+    // Greek capital Alpha -> lowercase alpha
+    assert(to_lowercase(0x0391) == 0x03B1, "to_lowercase Greek Alpha should be alpha")
+    // Greek capital Omega -> lowercase omega
+    assert(to_lowercase(0x03A9) == 0x03C9, "to_lowercase Greek Omega should be omega")
+    // Already lowercase
+    assert(to_lowercase(0x03B1) == 0x03B1, "to_lowercase Greek alpha should stay alpha")
+
+    return 0
+}
+
+@test
+func test_to_uppercase_greek() -> I32 {
+    // Greek lowercase alpha -> capital Alpha
+    assert(to_uppercase(0x03B1) == 0x0391, "to_uppercase Greek alpha should be Alpha")
+    // Greek lowercase omega -> capital Omega
+    assert(to_uppercase(0x03C9) == 0x03A9, "to_uppercase Greek omega should be Omega")
+    // Already uppercase
+    assert(to_uppercase(0x0391) == 0x0391, "to_uppercase Greek Alpha should stay Alpha")
+
+    return 0
+}
+
+@test
+func test_to_lowercase_cyrillic() -> I32 {
+    // Cyrillic capital A -> lowercase a
+    assert(to_lowercase(0x0410) == 0x0430, "to_lowercase Cyrillic A should be a")
+    // Cyrillic capital Ya -> lowercase ya
+    assert(to_lowercase(0x042F) == 0x044F, "to_lowercase Cyrillic Ya should be ya")
+
+    return 0
+}
+
+@test
+func test_to_uppercase_cyrillic() -> I32 {
+    // Cyrillic lowercase a -> capital A
+    assert(to_uppercase(0x0430) == 0x0410, "to_uppercase Cyrillic a should be A")
+    // Cyrillic lowercase ya -> capital Ya
+    assert(to_uppercase(0x044F) == 0x042F, "to_uppercase Cyrillic ya should be Ya")
+
+    return 0
+}
+
+@test
+func test_german_sharp_s() -> I32 {
+    // German sharp s to uppercase is capital sharp S
+    assert(to_uppercase(0x00DF) == 0x1E9E, "to_uppercase sharp-s should be capital sharp-S")
+    // Capital sharp S to lowercase is sharp s
+    assert(to_lowercase(0x1E9E) == 0x00DF, "to_lowercase capital sharp-S should be sharp-s")
+
+    return 0
+}
+
+// ============================================================================
+// Helper function for validation
+// ============================================================================
+
+func is_valid_char(value: U32) -> Bool {
+    if value >= 0xD800 and value <= 0xDFFF {
+        return false
+    }
+    return value <= 0x10FFFF
+}
+
+// Helper imports for functions being tested
+// These would normally be `use core::char::*` but we define stubs
+// for the test to be self-contained. The actual test runner will
+// link against the real implementations.
+
+// Conversion functions
+func from_u32(value: U32) -> Maybe[U32] {
+    if is_valid_char(value) {
+        return Just(value)
+    }
+    return Nothing
+}
+
+func from_digit(num: U32, radix: U32) -> Maybe[U32] {
+    if radix < 2 or radix > 36 {
+        return Nothing
+    }
+    if num >= radix {
+        return Nothing
+    }
+    let digit: U32 = if num < 10 {
+        num + 0x30
+    } else {
+        num - 10 + 0x61
+    }
+    return Just(digit)
+}
+
+type CharTryFromError {
+    value: U32
+}
+
+impl CharTryFromError {
+    func invalid_value(this) -> U32 {
+        return this.value
+    }
+}
+
+func try_from_u32(value: U32) -> Outcome[U32, CharTryFromError] {
+    if is_valid_char(value) {
+        return Ok(value)
+    }
+    return Err(CharTryFromError { value: value })
+}
+
+func to_u32(c: U32) -> U32 {
+    return c
+}
+
+func from_u8(value: U8) -> U32 {
+    return value as U32
+}
+
+type TryFromCharError {
+    value: U32
+}
+
+func try_to_u8(c: U32) -> Outcome[U8, TryFromCharError] {
+    if c <= 0xFF {
+        return Ok(c as U8)
+    }
+    return Err(TryFromCharError { value: c })
+}
+
+func try_to_u16(c: U32) -> Outcome[U16, TryFromCharError] {
+    if c <= 0xFFFF {
+        return Ok(c as U16)
+    }
+    return Err(TryFromCharError { value: c })
+}
+
+// Classification functions
+func is_alphabetic(c: U32) -> Bool {
+    if c < 128 {
+        return (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A)
+    }
+    return is_alphabetic_nonascii(c)
+}
+
+func is_lowercase(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 0x61 and c <= 0x7A
+    }
+    return is_lowercase_nonascii(c)
+}
+
+func is_uppercase(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 0x41 and c <= 0x5A
+    }
+    return is_uppercase_nonascii(c)
+}
+
+func is_whitespace(c: U32) -> Bool {
+    if c < 128 {
+        return c == 0x20 or c == 0x09 or c == 0x0A or
+               c == 0x0B or c == 0x0C or c == 0x0D
+    }
+    return false
+}
+
+func is_alphanumeric(c: U32) -> Bool {
+    return is_alphabetic(c) or is_numeric(c)
+}
+
+func is_numeric(c: U32) -> Bool {
+    if c < 128 {
+        return c >= 0x30 and c <= 0x39
+    }
+    return false
+}
+
+func is_control(c: U32) -> Bool {
+    if c < 128 {
+        return c < 0x20 or c == 0x7F
+    }
+    return c >= 0x80 and c <= 0x9F
+}
+
+func is_ascii(c: U32) -> Bool {
+    return c < 0x80
+}
+
+func is_ascii_alphabetic(c: U32) -> Bool {
+    return (c >= 0x41 and c <= 0x5A) or (c >= 0x61 and c <= 0x7A)
+}
+
+func is_ascii_uppercase(c: U32) -> Bool {
+    return c >= 0x41 and c <= 0x5A
+}
+
+func is_ascii_lowercase(c: U32) -> Bool {
+    return c >= 0x61 and c <= 0x7A
+}
+
+func is_ascii_alphanumeric(c: U32) -> Bool {
+    return is_ascii_alphabetic(c) or is_ascii_digit(c)
+}
+
+func is_ascii_digit(c: U32) -> Bool {
+    return c >= 0x30 and c <= 0x39
+}
+
+func is_ascii_hexdigit(c: U32) -> Bool {
+    return (c >= 0x30 and c <= 0x39) or
+           (c >= 0x41 and c <= 0x46) or
+           (c >= 0x61 and c <= 0x66)
+}
+
+func is_ascii_octdigit(c: U32) -> Bool {
+    return c >= 0x30 and c <= 0x37
+}
+
+func is_ascii_whitespace(c: U32) -> Bool {
+    return c == 0x20 or c == 0x09 or c == 0x0A or c == 0x0C or c == 0x0D
+}
+
+func is_ascii_control(c: U32) -> Bool {
+    return c < 0x20 or c == 0x7F
+}
+
+func is_ascii_graphic(c: U32) -> Bool {
+    return c >= 0x21 and c <= 0x7E
+}
+
+func is_ascii_punctuation(c: U32) -> Bool {
+    return (c >= 0x21 and c <= 0x2F) or
+           (c >= 0x3A and c <= 0x40) or
+           (c >= 0x5B and c <= 0x60) or
+           (c >= 0x7B and c <= 0x7E)
+}
+
+func to_digit(c: U32, radix: U32) -> Maybe[U32] {
+    if radix < 2 or radix > 36 {
+        return Nothing
+    }
+    // Determine digit value based on character
+    var digit: U32 = 0
+    var valid: Bool = false
+    if c >= 0x30 and c <= 0x39 {
+        digit = c - 0x30
+        valid = true
+    }
+    if not valid and c >= 0x41 and c <= 0x5A {
+        digit = c - 0x41 + 10
+        valid = true
+    }
+    if not valid and c >= 0x61 and c <= 0x7A {
+        digit = c - 0x61 + 10
+        valid = true
+    }
+    if not valid {
+        return Nothing
+    }
+    if digit < radix {
+        return Just(digit)
+    }
+    return Nothing
+}
+
+func is_digit(c: U32, radix: U32) -> Bool {
+    when to_digit(c, radix) {
+        Just(_) => return true,
+        Nothing => return false
+    }
+}
+
+// Case conversion functions
+func to_lowercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 0x41 and c <= 0x5A {
+            return c + 32
+        }
+        return c
+    }
+    return to_lowercase_nonascii(c)
+}
+
+func to_uppercase(c: U32) -> U32 {
+    if c < 128 {
+        if c >= 0x61 and c <= 0x7A {
+            return c - 32
+        }
+        return c
+    }
+    return to_uppercase_nonascii(c)
+}
+
+func to_ascii_lowercase(c: U32) -> U32 {
+    if c >= 0x41 and c <= 0x5A {
+        return c + 32
+    }
+    return c
+}
+
+func to_ascii_uppercase(c: U32) -> U32 {
+    if c >= 0x61 and c <= 0x7A {
+        return c - 32
+    }
+    return c
+}
+
+func eq_ignore_ascii_case(a: U32, b: U32) -> Bool {
+    return to_ascii_lowercase(a) == to_ascii_lowercase(b)
+}
+
+// UTF encoding functions
+func len_utf8(c: U32) -> I64 {
+    if c < 0x80 {
+        return 1
+    }
+    if c < 0x800 {
+        return 2
+    }
+    if c < 0x10000 {
+        return 3
+    }
+    return 4
+}
+
+func len_utf16(c: U32) -> I64 {
+    if c < 0x10000 {
+        return 1
+    }
+    return 2
+}
+
+func encode_utf8(c: U32) -> ([U8; 4], I64) {
+    var bytes: [U8; 4] = [0, 0, 0, 0]
+
+    if c < 0x80 {
+        bytes[0] = c as U8
+        return (bytes, 1)
+    }
+    if c < 0x800 {
+        bytes[0] = (0xC0 | (c >> 6)) as U8
+        bytes[1] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 2)
+    }
+    if c < 0x10000 {
+        bytes[0] = (0xE0 | (c >> 12)) as U8
+        bytes[1] = (0x80 | ((c >> 6) & 0x3F)) as U8
+        bytes[2] = (0x80 | (c & 0x3F)) as U8
+        return (bytes, 3)
+    }
+    bytes[0] = (0xF0 | (c >> 18)) as U8
+    bytes[1] = (0x80 | ((c >> 12) & 0x3F)) as U8
+    bytes[2] = (0x80 | ((c >> 6) & 0x3F)) as U8
+    bytes[3] = (0x80 | (c & 0x3F)) as U8
+    return (bytes, 4)
+}
+
+func encode_utf16(c: U32) -> ([U16; 2], I64) {
+    var units: [U16; 2] = [0, 0]
+
+    if c < 0x10000 {
+        units[0] = c as U16
+        return (units, 1)
+    }
+    let adjusted: U32 = c - 0x10000
+    units[0] = (0xD800 | (adjusted >> 10)) as U16
+    units[1] = (0xDC00 | (adjusted & 0x3FF)) as U16
+    return (units, 2)
+}
+
+// Non-ASCII helper functions
+func is_alphabetic_nonascii(c: U32) -> Bool {
+    // Greek and Coptic
+    if c >= 0x0370 and c <= 0x03FF {
+        return true
+    }
+    // Cyrillic
+    if c >= 0x0400 and c <= 0x04FF {
+        return true
+    }
+    // CJK
+    if c >= 0x4E00 and c <= 0x9FFF {
+        return true
+    }
+    return false
+}
+
+func is_lowercase_nonascii(c: U32) -> Bool {
+    // Greek lowercase
+    if c >= 0x03B1 and c <= 0x03C9 {
+        return true
+    }
+    // Cyrillic lowercase
+    if c >= 0x0430 and c <= 0x044F {
+        return true
+    }
+    return false
+}
+
+func is_uppercase_nonascii(c: U32) -> Bool {
+    // Greek uppercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return true
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return true
+    }
+    // Cyrillic uppercase
+    if c >= 0x0410 and c <= 0x042F {
+        return true
+    }
+    return false
+}
+
+func to_lowercase_nonascii(c: U32) -> U32 {
+    // Greek uppercase to lowercase
+    if c >= 0x0391 and c <= 0x03A1 {
+        return c + 32
+    }
+    if c >= 0x03A3 and c <= 0x03A9 {
+        return c + 32
+    }
+    // Cyrillic uppercase to lowercase
+    if c >= 0x0410 and c <= 0x042F {
+        return c + 32
+    }
+    // Capital sharp S
+    if c == 0x1E9E {
+        return 0x00DF
+    }
+    return c
+}
+
+func to_uppercase_nonascii(c: U32) -> U32 {
+    // Greek lowercase to uppercase
+    if c >= 0x03B1 and c <= 0x03C1 {
+        return c - 32
+    }
+    if c >= 0x03C3 and c <= 0x03C9 {
+        return c - 32
+    }
+    // Cyrillic lowercase to uppercase
+    if c >= 0x0430 and c <= 0x044F {
+        return c - 32
+    }
+    // German sharp s
+    if c == 0x00DF {
+        return 0x1E9E
+    }
+    return c
+}
