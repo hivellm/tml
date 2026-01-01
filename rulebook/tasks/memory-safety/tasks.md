@@ -1,0 +1,131 @@
+# Tasks: Memory Safety & Leak Prevention
+
+**Status**: Not started
+
+**Priority**: High - Infrastructure reliability
+
+## Phase 1: Compiler Memory Audit
+
+### 1.1 AST Memory Management
+- [ ] 1.1.1 Audit AST node allocations in parser
+- [ ] 1.1.2 Verify AST destruction in ASTNode destructors
+- [ ] 1.1.3 Check for orphaned nodes in error recovery paths
+- [ ] 1.1.4 Review unique_ptr/shared_ptr usage consistency
+
+### 1.2 MIR Memory Management
+- [ ] 1.2.1 Audit MIR instruction allocations
+- [ ] 1.2.2 Verify MIR function/block cleanup
+- [ ] 1.2.3 Check MIR optimization pass memory handling
+- [ ] 1.2.4 Review MIR cache eviction and cleanup
+
+### 1.3 Type System Memory
+- [ ] 1.3.1 Audit TypeInfo allocation in TypeRegistry
+- [ ] 1.3.2 Review GenericInstance memory lifecycle
+- [ ] 1.3.3 Check BehaviorImpl memory management
+- [ ] 1.3.4 Verify constraint/bound cleanup
+
+### 1.4 Symbol Tables & Scopes
+- [ ] 1.4.1 Audit Scope allocation/deallocation
+- [ ] 1.4.2 Review SymbolTable cleanup on scope exit
+- [ ] 1.4.3 Check module symbol cleanup
+- [ ] 1.4.4 Verify import resolution cleanup
+
+### 1.5 Module System
+- [ ] 1.5.1 Audit ModuleRegistry memory
+- [ ] 1.5.2 Review cached module cleanup
+- [ ] 1.5.3 Check dependency graph cleanup
+- [ ] 1.5.4 Verify incremental compilation cache cleanup
+
+## Phase 2: Runtime Memory Audit
+
+### 2.1 Core Runtime (essential.c)
+- [ ] 2.1.1 Audit tml_string_* allocations
+- [ ] 2.1.2 Review tml_array_* allocations
+- [ ] 2.1.3 Check tml_slice_* ownership
+- [ ] 2.1.4 Verify panic/error path cleanup
+- [ ] 2.1.5 Review printf format string handling
+
+### 2.2 Async Runtime (async.c)
+- [ ] 2.2.1 Audit TmlTask allocation/deallocation
+- [ ] 2.2.2 Review TmlExecutor cleanup
+- [ ] 2.2.3 Check TmlChannel buffer management
+- [ ] 2.2.4 Verify timer/waker cleanup
+- [ ] 2.2.5 Review spawn/join memory lifecycle
+
+### 2.3 Heap Allocations
+- [ ] 2.3.1 Review Heap[T] allocation codegen
+- [ ] 2.3.2 Verify Heap[T] deallocation on drop
+- [ ] 2.3.3 Check reference counting (Shared[T], Sync[T])
+- [ ] 2.3.4 Audit cycle detection (if applicable)
+
+## Phase 3: LLVM/Codegen Memory
+
+### 3.1 LLVM IR Generation
+- [ ] 3.1.1 Audit LLVMContext lifecycle
+- [ ] 3.1.2 Review LLVMModule cleanup
+- [ ] 3.1.3 Check LLVMBuilder memory handling
+- [ ] 3.1.4 Verify DIBuilder cleanup (debug info)
+
+### 3.2 Object Compilation
+- [ ] 3.2.1 Review TargetMachine lifecycle
+- [ ] 3.2.2 Check temporary file cleanup
+- [ ] 3.2.3 Verify linker input cleanup
+
+## Phase 4: Tooling Integration
+
+### 4.1 Sanitizer Support
+- [ ] 4.1.1 Add AddressSanitizer build option (-fsanitize=address)
+- [ ] 4.1.2 Add LeakSanitizer integration
+- [ ] 4.1.3 Add MemorySanitizer option for uninitialized reads
+- [ ] 4.1.4 Create sanitizer test target in CMake
+
+### 4.2 Valgrind Support
+- [ ] 4.2.1 Create Valgrind suppression file for known false positives
+- [ ] 4.2.2 Add `tml test --valgrind` option (Linux only)
+- [ ] 4.2.3 Document Valgrind usage
+
+### 4.3 CI Integration
+- [ ] 4.3.1 Add sanitizer build to CI pipeline
+- [ ] 4.3.2 Add memory leak check gate
+- [ ] 4.3.3 Create memory benchmark tracking
+
+## Phase 5: Fixes & Improvements
+
+### 5.1 RAII Patterns
+- [ ] 5.1.1 Convert raw pointers to unique_ptr where appropriate
+- [ ] 5.1.2 Add custom deleters where needed
+- [ ] 5.1.3 Use make_unique/make_shared consistently
+- [ ] 5.1.4 Document ownership in header comments
+
+### 5.2 Error Path Cleanup
+- [ ] 5.2.1 Add cleanup in parser error recovery
+- [ ] 5.2.2 Add cleanup in type checker errors
+- [ ] 5.2.3 Add cleanup in codegen errors
+- [ ] 5.2.4 Review exception safety
+
+### 5.3 Resource Management
+- [ ] 5.3.1 Review file handle cleanup
+- [ ] 5.3.2 Review process handle cleanup (Windows)
+- [ ] 5.3.3 Review DLL/shared library unloading
+- [ ] 5.3.4 Review temporary directory cleanup
+
+## Phase 6: Testing & Verification
+
+### 6.1 Memory Tests
+- [ ] 6.1.1 Create stress test for repeated compilation
+- [ ] 6.1.2 Create test for large file compilation
+- [ ] 6.1.3 Create test for many small files
+- [ ] 6.1.4 Create test for error recovery paths
+
+### 6.2 Verification
+- [ ] 6.2.1 Run full test suite under ASan
+- [ ] 6.2.2 Run full test suite under Valgrind
+- [ ] 6.2.3 Verify zero leaks on clean exit
+- [ ] 6.2.4 Document any accepted leaks (with justification)
+
+## Validation Checklist
+- [ ] Zero memory leaks in normal compilation paths
+- [ ] Zero memory leaks in error recovery paths
+- [ ] Sanitizer builds pass all tests
+- [ ] Memory usage stays bounded during long sessions
+- [ ] All allocations have clear ownership documentation
