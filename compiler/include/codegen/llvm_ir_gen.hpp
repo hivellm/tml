@@ -85,6 +85,7 @@ private:
 
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
+    bool last_expr_is_unsigned_ = false; // Track if last expression was unsigned type
 
     // Expected type context for enum constructors (used in gen_call_expr)
     // When set, enum constructors will use this type instead of inferring

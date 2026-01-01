@@ -9,6 +9,7 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     // Generate the source expression
     std::string src = gen_expr(*cast.expr);
     std::string src_type = last_expr_type_;
+    bool src_is_unsigned = last_expr_is_unsigned_;
 
     // Get the target type
     std::string target_type = llvm_type_ptr(cast.target);
@@ -46,8 +47,12 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         int target_bits = get_bit_width(target_type);
 
         if (src_bits < target_bits) {
-            // Widening: use sext for signed extension
-            emit_line("  " + result + " = sext " + src_type + " " + src + " to " + target_type);
+            // Widening: use zext for unsigned, sext for signed
+            if (src_is_unsigned) {
+                emit_line("  " + result + " = zext " + src_type + " " + src + " to " + target_type);
+            } else {
+                emit_line("  " + result + " = sext " + src_type + " " + src + " to " + target_type);
+            }
             last_expr_type_ = target_type;
             return result;
         } else if (src_bits > target_bits) {
@@ -71,7 +76,12 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     // Int to float conversions
     if ((src_type == "i64" || src_type == "i32" || src_type == "i16" || src_type == "i8") &&
         (target_type == "double" || target_type == "float")) {
-        emit_line("  " + result + " = sitofp " + src_type + " " + src + " to " + target_type);
+        // Use uitofp for unsigned, sitofp for signed
+        if (src_is_unsigned) {
+            emit_line("  " + result + " = uitofp " + src_type + " " + src + " to " + target_type);
+        } else {
+            emit_line("  " + result + " = sitofp " + src_type + " " + src + " to " + target_type);
+        }
         last_expr_type_ = target_type;
         return result;
     }

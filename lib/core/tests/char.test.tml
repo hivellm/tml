@@ -790,11 +790,14 @@ func test_encode_utf16_1_unit() -> I32 {
 
 @test
 func test_encode_utf16_2_units() -> I32 {
-    // U+1F980 = surrogate pair: D83E DC80
+    // U+1F980 = surrogate pair: D83E DD80
+    // adjusted = 0x1F980 - 0x10000 = 0xF980
+    // high = 0xD800 | (0xF980 >> 10) = 0xD800 | 0x3E = 0xD83E
+    // low = 0xDC00 | (0xF980 & 0x3FF) = 0xDC00 | 0x180 = 0xDD80
     let (units, len): ([U16; 2], I64) = encode_utf16(0x1F980)
     assert(len == 2, "encode_utf16 crab should have length 2")
     assert(units[0] == 0xD83E, "encode_utf16 crab high surrogate should be 0xD83E")
-    assert(units[1] == 0xDE80, "encode_utf16 crab low surrogate should be 0xDE80")
+    assert(units[1] == 0xDD80, "encode_utf16 crab low surrogate should be 0xDD80")
 
     return 0
 }

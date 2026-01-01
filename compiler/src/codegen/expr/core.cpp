@@ -61,6 +61,17 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
     if (it != locals_.end()) {
         const VarInfo& var = it->second;
         last_expr_type_ = var.type;
+        // Check if semantic type is unsigned
+        last_expr_is_unsigned_ = false;
+        if (var.semantic_type) {
+            if (auto* prim = std::get_if<types::PrimitiveType>(&var.semantic_type->kind)) {
+                last_expr_is_unsigned_ = prim->kind == types::PrimitiveKind::U8 ||
+                                         prim->kind == types::PrimitiveKind::U16 ||
+                                         prim->kind == types::PrimitiveKind::U32 ||
+                                         prim->kind == types::PrimitiveKind::U64 ||
+                                         prim->kind == types::PrimitiveKind::U128;
+            }
+        }
         // Check if it's an alloca (starts with %t and has digit after) that needs loading
         // But skip %this which is a direct parameter, not an alloca
         // This includes ptr types - we load the pointer value from the alloca
