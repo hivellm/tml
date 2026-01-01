@@ -1,5 +1,6 @@
 #include "parallel_build.hpp"
 
+#include "borrow/checker.hpp"
 #include "cmd_build.hpp"
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"
@@ -525,6 +526,24 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
         }
 
         const auto& env = std::get<types::TypeEnv>(check_result);
+
+        // Borrow checking
+        borrow::BorrowChecker borrow_checker;
+        auto borrow_result = borrow_checker.check_module(module);
+
+        if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+            std::ostringstream err;
+            const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+            for (const auto& error : errors) {
+                err << job->source_file.string() << ":" << error.span.start.line << ":"
+                    << error.span.start.column << ": borrow error: " << error.message << "\n";
+            }
+            job->error_message = err.str();
+            if (verbose) {
+                std::cerr << job->error_message;
+            }
+            return false;
+        }
 
         // Code generation
         codegen::LLVMGenOptions gen_options;

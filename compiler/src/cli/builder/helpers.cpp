@@ -257,6 +257,30 @@ void emit_all_codegen_errors(DiagnosticEmitter& emitter,
     }
 }
 
+void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& error) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = "B001";
+    diag.message = error.message;
+    diag.primary_span = error.span;
+    diag.notes = error.notes;
+
+    // Add related span as a secondary label if present
+    if (error.related_span) {
+        diag.labels.push_back(DiagnosticLabel{
+            .span = *error.related_span, .message = "previous borrow here", .is_primary = false});
+    }
+
+    emitter.emit(diag);
+}
+
+void emit_all_borrow_errors(DiagnosticEmitter& emitter,
+                            const std::vector<borrow::BorrowError>& errors) {
+    for (const auto& error : errors) {
+        emit_borrow_error(emitter, error);
+    }
+}
+
 // ============================================================================
 // Module Helpers
 // ============================================================================

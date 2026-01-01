@@ -96,6 +96,25 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Phase 4.5: Borrow Checking
+    phase_start = Clock::now();
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+    record_phase("borrow_check", phase_start);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        std::string err_output = "Borrow check error:\n";
+        const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+        for (const auto& error : errors) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": error: " + error.message +
+                          "\n";
+        }
+        if (output)
+            *output = err_output;
+        return EXIT_COMPILATION_ERROR;
+    }
+
     // Phase 5: Code Generation
     phase_start = Clock::now();
     codegen::LLVMGenOptions options;

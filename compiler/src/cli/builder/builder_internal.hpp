@@ -13,6 +13,7 @@
 #include "cli/utils.hpp"
 
 // Headers from include/ (no prefix needed, include/ is in path)
+#include "borrow/checker.hpp"
 #include "codegen/c_header_gen.hpp"
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"
@@ -112,6 +113,13 @@ void emit_all_type_errors(DiagnosticEmitter& emitter, const std::vector<types::T
 // Emit all codegen errors
 void emit_all_codegen_errors(DiagnosticEmitter& emitter,
                              const std::vector<codegen::LLVMGenError>& errors);
+
+// Emit a borrow error using the diagnostic emitter
+void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& error);
+
+// Emit all borrow errors
+void emit_all_borrow_errors(DiagnosticEmitter& emitter,
+                            const std::vector<borrow::BorrowError>& errors);
 
 // ============================================================================
 // Module Helpers

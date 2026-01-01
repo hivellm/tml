@@ -78,6 +78,16 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Run borrow checker (ownership and borrowing validation)
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+        emit_all_borrow_errors(diag, errors);
+        return 1;
+    }
+
     // Emit MIR if requested (early exit before LLVM codegen)
     if (emit_mir) {
         mir::MirBuilder mir_builder(env);

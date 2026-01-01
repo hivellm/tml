@@ -64,6 +64,16 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Run borrow checker (ownership and borrowing validation)
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+        emit_all_borrow_errors(diag, errors);
+        return 1;
+    }
+
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
     options.coverage_enabled = coverage;
@@ -321,6 +331,23 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     }
 
     const auto& env = std::get<types::TypeEnv>(check_result);
+
+    // Run borrow checker (ownership and borrowing validation)
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        std::string err_output = "Borrow check error:\n";
+        const auto& errors = std::get<std::vector<borrow::BorrowError>>(borrow_result);
+        for (const auto& error : errors) {
+            err_output += path + ":" + std::to_string(error.span.start.line) + ":" +
+                          std::to_string(error.span.start.column) + ": error: " + error.message +
+                          "\n";
+        }
+        if (output)
+            *output = err_output;
+        return EXIT_COMPILATION_ERROR;
+    }
 
     codegen::LLVMGenOptions options;
     options.emit_comments = false;

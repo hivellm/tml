@@ -275,6 +275,15 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
 
     const auto& env = std::get<types::TypeEnv>(check_result);
 
+    // Borrow check
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        result.error_message = "Borrow check errors";
+        return result;
+    }
+
     // Codegen with shared library entry point
     codegen::LLVMGenOptions options;
     options.emit_comments = false;
@@ -526,6 +535,15 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     }
 
     const auto& env = std::get<types::TypeEnv>(check_result);
+
+    // Borrow check
+    borrow::BorrowChecker borrow_checker;
+    auto borrow_result = borrow_checker.check_module(module);
+
+    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+        result.error_message = "Borrow check errors";
+        return result;
+    }
 
     // Codegen with fuzz target entry point
     codegen::LLVMGenOptions options;
