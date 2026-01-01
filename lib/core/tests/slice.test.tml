@@ -1,0 +1,145 @@
+// Tests for dynamic slices
+// Tests basic slice operations using raw pointer operations
+
+use test
+
+use core::slice::{Slice, MutSlice}
+
+// ============================================================================
+// 3.5.1: Test slice creation - using Slice struct directly
+// ============================================================================
+
+@test
+func test_slice_len_basic() -> I32 {
+    // Allocate memory for 5 I32s (4 bytes each = 20 bytes)
+    let ptr: *Unit = alloc(20)
+
+    // Store values
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+    atomic_store(ptr_offset(ptr, 12), 40)
+    atomic_store(ptr_offset(ptr, 16), 50)
+
+    // Create slice from raw pointer
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    assert_eq(slice.len(), 5, "slice should have length 5")
+    assert(slice.is_empty() == false, "slice should not be empty")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_empty_slice() -> I32 {
+    // Create empty slice
+    let ptr: *Unit = alloc(4) // Need valid pointer even for empty
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 0
+    }
+
+    assert_eq(slice.len(), 0, "empty slice should have length 0")
+    assert(slice.is_empty(), "empty slice should be empty")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// 3.5.5: Test mutable slice operations
+// ============================================================================
+
+@test
+func test_mut_slice_len() -> I32 {
+    let ptr: *Unit = alloc(16)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+
+    let mut slice: MutSlice[I32] = MutSlice {
+        data: ptr,
+        len: 4
+    }
+
+    assert_eq(slice.len(), 4, "mut slice should have length 4")
+    assert(slice.is_empty() == false, "mut slice should not be empty")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// 3.5.2: Test slice indexing via raw pointer
+// ============================================================================
+
+@test
+func test_slice_indexing() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 100)
+    atomic_store(ptr_offset(ptr, 4), 200)
+    atomic_store(ptr_offset(ptr, 8), 300)
+    atomic_store(ptr_offset(ptr, 12), 400)
+    atomic_store(ptr_offset(ptr, 16), 500)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    // Access via raw pointer arithmetic (demonstrates slice data layout)
+    let first_val: I32 = atomic_load(ptr)
+    assert_eq(first_val, 100, "first element should be 100")
+
+    let third_val: I32 = atomic_load(ptr_offset(ptr, 8))
+    assert_eq(third_val, 300, "third element should be 300")
+
+    let last_val: I32 = atomic_load(ptr_offset(ptr, 16))
+    assert_eq(last_val, 500, "last element should be 500")
+
+    // Verify slice correctly tracks length
+    assert_eq(slice.len(), 5, "slice length should match")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// 3.5.5: Test mutable slice basic operations
+// ============================================================================
+
+@test
+func test_mut_slice_basic() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let mut slice: MutSlice[I32] = MutSlice {
+        data: ptr,
+        len: 3
+    }
+
+    // Verify basic properties
+    assert_eq(slice.len(), 3, "len should be 3")
+    assert(slice.is_empty() == false, "should not be empty")
+
+    // Modify via raw pointer (tests underlying data access)
+    atomic_store(ptr, 100)
+    let new_first: I32 = atomic_load(ptr)
+    assert_eq(new_first, 100, "modification via ptr should work")
+
+    dealloc(ptr)
+    return 0
+}
+
+// Note: swap, reverse, and other MutSlice methods require generic impl
+// instantiation which is pending. Tests for these will be added once
+// generic impl method generation is fixed for Slice/MutSlice types.
+

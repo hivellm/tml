@@ -7,6 +7,15 @@
 
 namespace tml::codegen {
 
+// Helper to extract type name from LLVM type for drop checking
+// e.g., "%struct.DroppableResource" -> "DroppableResource"
+static std::string extract_type_name_for_drop(const std::string& llvm_type) {
+    if (llvm_type.starts_with("%struct.")) {
+        return llvm_type.substr(8); // Skip "%struct."
+    }
+    return "";
+}
+
 void LLVMIRGen::gen_stmt(const parser::Stmt& stmt) {
     if (stmt.is<parser::LetStmt>()) {
         gen_let_stmt(stmt.as<parser::LetStmt>());
@@ -352,6 +361,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         // gen_struct_expr allocates and initializes, returns the pointer
         std::string init_ptr = gen_struct_expr_ptr(let.init.value()->as<parser::StructExpr>());
         locals_[var_name] = VarInfo{init_ptr, var_type, nullptr, std::nullopt};
+
+        // Register for drop if type implements Drop
+        std::string type_name = extract_type_name_for_drop(var_type);
+        register_for_drop(var_name, init_ptr, type_name, var_type);
         return;
     }
 
@@ -443,6 +456,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     emit_line("  store " + var_type + " " + result + ", ptr " + alloca_reg);
 
                     locals_[var_name] = VarInfo{alloca_reg, var_type, nullptr, std::nullopt};
+
+                    // Register for drop if type implements Drop
+                    std::string type_name = extract_type_name_for_drop(var_type);
+                    register_for_drop(var_name, alloca_reg, type_name, var_type);
                     return;
                 }
             }
@@ -663,6 +680,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
     }
     locals_[var_name] = VarInfo{alloca_reg, var_type, semantic_type, std::nullopt};
+
+    // Register for drop if type implements Drop
+    std::string type_name = extract_type_name_for_drop(var_type);
+    register_for_drop(var_name, alloca_reg, type_name, var_type);
 
     // Emit debug info for the variable (if enabled and debug level >= 2)
     // Level 1 only emits function scopes, level 2+ includes local variables

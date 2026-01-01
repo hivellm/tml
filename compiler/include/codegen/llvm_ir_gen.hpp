@@ -114,8 +114,29 @@ public:
             closure_captures; // Present if this is a closure with captures
     };
 
+    // Drop tracking for RAII - tracks variables that need drop() called at scope exit
+    struct DropInfo {
+        std::string var_name;  // Variable name
+        std::string var_reg;   // LLVM register for the variable value
+        std::string type_name; // Type name (e.g., "DroppableResource")
+        std::string llvm_type; // LLVM type (e.g., "%struct.DroppableResource")
+    };
+
 private:
     std::unordered_map<std::string, VarInfo> locals_;
+
+    // Drop scope tracking for RAII
+    // Each scope level contains variables that need drop() called when scope exits
+    std::vector<std::vector<DropInfo>> drop_scopes_;
+
+    // Drop scope management
+    void push_drop_scope();
+    void pop_drop_scope();
+    void register_for_drop(const std::string& var_name, const std::string& var_reg,
+                           const std::string& type_name, const std::string& llvm_type);
+    void emit_scope_drops(); // Emit drops for current scope only
+    void emit_all_drops();   // Emit drops for all scopes (for return)
+    void emit_drop_call(const DropInfo& info);
 
     // Type mapping
     std::unordered_map<std::string, std::string> struct_types_;
@@ -383,6 +404,17 @@ private:
     auto gen_method_call(const parser::MethodCallExpr& call) -> std::string;
 
     // Method call helpers - split into separate files for maintainability
+    auto gen_static_method_call(const parser::MethodCallExpr& call, const std::string& type_name)
+        -> std::optional<std::string>;
+    auto gen_primitive_method(const parser::MethodCallExpr& call, const std::string& receiver,
+                              const std::string& receiver_ptr, types::TypePtr receiver_type)
+        -> std::optional<std::string>;
+    auto gen_collection_method(const parser::MethodCallExpr& call, const std::string& receiver,
+                               const std::string& receiver_type_name, types::TypePtr receiver_type)
+        -> std::optional<std::string>;
+    auto gen_slice_method(const parser::MethodCallExpr& call, const std::string& receiver,
+                          const std::string& receiver_type_name, types::TypePtr receiver_type)
+        -> std::optional<std::string>;
     auto gen_maybe_method(const parser::MethodCallExpr& call, const std::string& receiver,
                           const std::string& enum_type_name, const std::string& tag_val,
                           const types::NamedType& named) -> std::optional<std::string>;

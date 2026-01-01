@@ -559,6 +559,92 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ============================================================================
+    // Array Intrinsics
+    // ============================================================================
+
+    // array_as_ptr[T](data: T) -> ref T
+    // Returns a pointer to the first element of an array (for creating slices)
+    if (fn_name == "array_as_ptr") {
+        if (!call.args.empty()) {
+            // The argument should be an array field (like this.data)
+            // We just need to get its address
+            std::string arr = gen_expr(*call.args[0]);
+            // For arrays in locals, gen_expr returns the alloca pointer
+            // which is already what we need
+            last_expr_type_ = "ptr";
+            return arr;
+        }
+        return "null";
+    }
+
+    // array_as_mut_ptr[T](data: T) -> mut ref T
+    // Same as array_as_ptr but for mutable references
+    if (fn_name == "array_as_mut_ptr") {
+        if (!call.args.empty()) {
+            std::string arr = gen_expr(*call.args[0]);
+            last_expr_type_ = "ptr";
+            return arr;
+        }
+        return "null";
+    }
+
+    // array_offset_ptr[T](data: ref T, count: I64) -> ref T
+    // Computes an offset pointer within an array
+    if (fn_name == "array_offset_ptr") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+
+            // Infer element type from the first argument
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type) {
+                if (arg_type->is<types::RefType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+                } else if (arg_type->is<types::MutRefType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+                }
+            }
+
+            std::string count = gen_expr(*call.args[1]);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      count);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
+    // array_offset_mut_ptr[T](data: mut ref T, count: I64) -> mut ref T
+    // Same as array_offset_ptr but for mutable references
+    if (fn_name == "array_offset_mut_ptr") {
+        if (call.args.size() >= 2) {
+            std::string data = gen_expr(*call.args[0]);
+
+            // Infer element type
+            std::string elem_type = "i8";
+            types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+            if (arg_type) {
+                if (arg_type->is<types::MutRefType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+                } else if (arg_type->is<types::RefType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+                }
+            }
+
+            std::string count = gen_expr(*call.args[1]);
+
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + data + ", i64 " +
+                      count);
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        return "null";
+    }
+
+    // ============================================================================
     // Type Information Intrinsics
     // ============================================================================
 

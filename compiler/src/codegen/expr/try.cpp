@@ -48,6 +48,9 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     // Error/Nothing block - early return
     emit_line(err_block + ":");
 
+    // Emit drops for all locals before early return (RAII)
+    emit_all_drops();
+
     if (is_outcome) {
         // For Outcome, extract the error value and wrap it in Err
         // Get pointer to the data field (union)

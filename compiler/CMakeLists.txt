@@ -203,6 +203,7 @@ add_library(tml_codegen STATIC
     src/codegen/core/generate.cpp
     src/codegen/core/debug_info.cpp
     src/codegen/core/target.cpp
+    src/codegen/core/drop.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/core.cpp
     src/codegen/expr/binary.cpp
@@ -215,6 +216,10 @@ add_library(tml_codegen STATIC
     src/codegen/expr/print.cpp
     src/codegen/expr/collections.cpp
     src/codegen/expr/method.cpp
+    src/codegen/expr/method_static.cpp
+    src/codegen/expr/method_primitive.cpp
+    src/codegen/expr/method_collection.cpp
+    src/codegen/expr/method_slice.cpp
     src/codegen/expr/method_maybe.cpp
     src/codegen/expr/method_outcome.cpp
     src/codegen/expr/method_array.cpp

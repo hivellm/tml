@@ -716,6 +716,9 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Generate function body
     if (func.body) {
+        // Push drop scope for function body - variables here need drop at return
+        push_drop_scope();
+
         for (const auto& stmt : func.body->stmts) {
             if (block_terminated_) {
                 // Block already terminated, skip remaining statements
@@ -728,6 +731,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Emit drops before returning
+                emit_all_drops();
                 // For async functions, wrap result in Poll.Ready
                 if (current_func_is_async_ && !current_poll_type_.empty()) {
                     std::string wrapped = wrap_in_poll_ready(result, last_expr_type_);
@@ -738,6 +743,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                 block_terminated_ = true;
             }
         }
+
+        pop_drop_scope();
     }
 
     // Add implicit return if needed
@@ -1138,6 +1145,9 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
 
     // 8. Generate function body
     if (func.body) {
+        // Push drop scope for function body - variables here need drop at return
+        push_drop_scope();
+
         for (const auto& stmt : func.body->stmts) {
             if (block_terminated_)
                 break;
@@ -1148,10 +1158,14 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
         if (func.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*func.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
+                // Emit drops before returning
+                emit_all_drops();
                 emit_line("  ret " + ret_type + " " + result);
                 block_terminated_ = true;
             }
         }
+
+        pop_drop_scope();
     }
 
     // 9. Add implicit return if needed

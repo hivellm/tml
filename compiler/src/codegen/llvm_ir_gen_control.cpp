@@ -338,9 +338,13 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
 auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
     std::string result = "0";
 
+    // Push a new drop scope for this block
+    push_drop_scope();
+
     for (const auto& stmt : block.stmts) {
         if (block_terminated_) {
             // Block already terminated, skip remaining statements
+            // Don't emit drops here - they were emitted by return/break/continue
             break;
         }
         gen_stmt(*stmt);
@@ -352,6 +356,13 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
         // Block has no trailing expression - it returns Unit (void)
         last_expr_type_ = "void";
     }
+
+    // Emit drops for variables in this scope before exiting
+    if (!block_terminated_) {
+        emit_scope_drops();
+    }
+
+    pop_drop_scope();
 
     return result;
 }
@@ -644,6 +655,9 @@ static std::vector<std::string> parse_tuple_types_for_coercion(const std::string
 }
 
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
+    // Emit drops for all variables in all scopes before returning
+    emit_all_drops();
+
     if (ret.value.has_value()) {
         std::string val = gen_expr(*ret.value.value());
         std::string val_type = last_expr_type_;

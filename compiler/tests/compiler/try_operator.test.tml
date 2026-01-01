@@ -1,0 +1,166 @@
+// Tests for the try operator (!) for error propagation
+// TML uses ! instead of ? for error propagation (more visible for LLMs)
+
+use test
+
+// ============================================================================
+// Test basic ! propagation with Outcome
+// ============================================================================
+
+func returns_ok() -> Outcome[I32, Str] {
+    return Ok(42)
+}
+
+func returns_err() -> Outcome[I32, Str] {
+    return Err("error")
+}
+
+func uses_try_ok() -> Outcome[I32, Str] {
+    let value: I32 = returns_ok()!
+    return Ok(value + 1)
+}
+
+func uses_try_err() -> Outcome[I32, Str] {
+    let value: I32 = returns_err()!
+    // This line should not be reached
+    return Ok(value + 1)
+}
+
+@test
+func test_try_ok_propagation() -> I32 {
+    when uses_try_ok() {
+        Ok(v) => {
+            assert_eq(v, 43, "should unwrap and add 1")
+        },
+        Err(_) => {
+            assert(false, "should not be Err")
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_err_propagation() -> I32 {
+    when uses_try_err() {
+        Ok(_) => {
+            assert(false, "should not be Ok")
+        },
+        Err(e) => {
+            assert_eq(e, "error", "should propagate the error")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// Test chained ! operators
+// ============================================================================
+
+func step1() -> Outcome[I32, Str] {
+    return Ok(10)
+}
+
+func step2(x: I32) -> Outcome[I32, Str] {
+    return Ok(x * 2)
+}
+
+func step3(x: I32) -> Outcome[I32, Str] {
+    return Ok(x + 5)
+}
+
+func chained_operations() -> Outcome[I32, Str] {
+    let a: I32 = step1()!
+    let b: I32 = step2(a)!
+    let c: I32 = step3(b)!
+    return Ok(c)
+}
+
+@test
+func test_chained_try() -> I32 {
+    when chained_operations() {
+        Ok(v) => {
+            // step1: 10, step2: 10*2=20, step3: 20+5=25
+            assert_eq(v, 25, "chained operations should work")
+        },
+        Err(_) => {
+            assert(false, "should not be Err")
+        }
+    }
+    return 0
+}
+
+func step_that_fails(x: I32) -> Outcome[I32, Str] {
+    if x > 15 then {
+        return Err("too big")
+    }
+    return Ok(x)
+}
+
+func chained_with_failure() -> Outcome[I32, Str] {
+    let a: I32 = step1()!          // Ok(10)
+    let b: I32 = step2(a)!         // Ok(20)
+    let c: I32 = step_that_fails(b)!  // Should fail, b=20 > 15
+    return Ok(c)
+}
+
+@test
+func test_chained_try_with_failure() -> I32 {
+    when chained_with_failure() {
+        Ok(_) => {
+            assert(false, "should propagate error from middle")
+        },
+        Err(e) => {
+            assert_eq(e, "too big", "should propagate the error message")
+        }
+    }
+    return 0
+}
+
+// ============================================================================
+// Test ! with Maybe type
+// ============================================================================
+
+func returns_just() -> Maybe[I32] {
+    return Just(99)
+}
+
+func returns_nothing() -> Maybe[I32] {
+    return Nothing
+}
+
+func uses_maybe_just() -> Maybe[I32] {
+    let value: I32 = returns_just()!
+    return Just(value + 1)
+}
+
+func uses_maybe_nothing() -> Maybe[I32] {
+    let value: I32 = returns_nothing()!
+    // This line should not be reached
+    return Just(value + 1)
+}
+
+@test
+func test_try_maybe_just() -> I32 {
+    when uses_maybe_just() {
+        Just(v) => {
+            assert_eq(v, 100, "should unwrap Just and add 1")
+        },
+        Nothing => {
+            assert(false, "should not be Nothing")
+        }
+    }
+    return 0
+}
+
+@test
+func test_try_maybe_nothing() -> I32 {
+    when uses_maybe_nothing() {
+        Just(_) => {
+            assert(false, "should not be Just")
+        },
+        Nothing => {
+            // Expected - Nothing was propagated
+        }
+    }
+    return 0
+}

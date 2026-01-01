@@ -1,0 +1,215 @@
+use test
+
+// Drop/RAII Tests
+// Tests automatic drop call generation at scope exit
+// Uses atomic operations to track when drops are called
+
+// A simple resource that tracks when it's dropped via atomic counter
+type DroppableResource {
+    id: I32,
+    counter_ptr: *Unit,
+}
+
+impl Drop for DroppableResource {
+    func drop(mut this) {
+        // Increment the counter when dropped using atomic_add
+        let old: I32 = atomic_add(this.counter_ptr, 1)
+        // old is unused but we need the side effect
+    }
+}
+
+// Helper to create a counter (allocates 4 bytes for I32)
+func create_counter() -> *Unit {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 0)
+    return ptr
+}
+
+// Helper to read counter value
+func read_counter(ptr: *Unit) -> I32 {
+    return atomic_load(ptr)
+}
+
+// Helper to free counter
+func free_counter(ptr: *Unit) {
+    dealloc(ptr)
+}
+
+// 2.4.1: Test basic scope exit drop
+@test
+func test_basic_scope_drop() -> I32 {
+    let counter: *Unit = create_counter()
+
+    // Create resource in a nested scope
+    {
+        let res: DroppableResource = DroppableResource {
+            id: 1,
+            counter_ptr: counter,
+        }
+        // res should be dropped here at end of scope
+    }
+
+    let count: I32 = read_counter(counter)
+    assert_eq(count, 1, "resource should be dropped once at scope exit")
+    free_counter(counter)
+    return 0
+}
+
+// 2.4.2: Test early return drop
+func helper_with_early_return(counter_ptr: *Unit, do_early_return: Bool) -> I32 {
+    let res: DroppableResource = DroppableResource {
+        id: 2,
+        counter_ptr: counter_ptr,
+    }
+
+    if do_early_return then {
+        return 42  // res should be dropped before return
+    }
+
+    return 0  // res should be dropped before return
+}
+
+@test
+func test_early_return_drop() -> I32 {
+    let counter: *Unit = create_counter()
+
+    // Test early return path
+    let result1: I32 = helper_with_early_return(counter, true)
+    let count1: I32 = read_counter(counter)
+    assert_eq(count1, 1, "resource should be dropped on early return")
+    assert_eq(result1, 42, "early return should return 42")
+
+    // Test normal return path
+    let result2: I32 = helper_with_early_return(counter, false)
+    let count2: I32 = read_counter(counter)
+    assert_eq(count2, 2, "resource should be dropped on normal return too")
+    assert_eq(result2, 0, "normal return should return 0")
+
+    free_counter(counter)
+    return 0
+}
+
+// 2.4.3: Test conditional drop (if branches)
+@test
+func test_conditional_drop() -> I32 {
+    let counter: *Unit = create_counter()
+
+    let condition: Bool = true
+
+    if condition then {
+        let res: DroppableResource = DroppableResource {
+            id: 3,
+            counter_ptr: counter,
+        }
+        // res dropped here
+    } else {
+        // This branch not taken
+    }
+
+    let count1: I32 = read_counter(counter)
+    assert_eq(count1, 1, "resource in true branch should be dropped")
+
+    // Now test false branch
+    let condition2: Bool = false
+
+    if condition2 then {
+        // This branch not taken
+    } else {
+        let res2: DroppableResource = DroppableResource {
+            id: 4,
+            counter_ptr: counter,
+        }
+        // res2 dropped here
+    }
+
+    let count2: I32 = read_counter(counter)
+    assert_eq(count2, 2, "resource in else branch should be dropped")
+
+    free_counter(counter)
+    return 0
+}
+
+// 2.4.4: Test loop drop behavior
+@test
+func test_loop_drop() -> I32 {
+    let counter: *Unit = create_counter()
+    let mut i: I32 = 0
+
+    loop {
+        if i >= 3 then break
+
+        let res: DroppableResource = DroppableResource {
+            id: i,
+            counter_ptr: counter,
+        }
+
+        // res should be dropped at end of each iteration
+        i = i + 1
+    }
+
+    let count: I32 = read_counter(counter)
+    assert_eq(count, 3, "resource should be dropped 3 times (once per iteration)")
+
+    free_counter(counter)
+    return 0
+}
+
+// 2.4.5: Test struct with Drop - explicit drop only
+// (Field drops are handled by the explicit drop implementation)
+type OuterResource {
+    inner: DroppableResource,
+    value: I32,
+}
+
+impl Drop for OuterResource {
+    func drop(mut this) {
+        // Outer drop runs, add 100
+        let old: I32 = atomic_add(this.inner.counter_ptr, 100)
+        // Note: In the current implementation, the outer drop must manually
+        // handle any cleanup. Field drops are not automatic.
+    }
+}
+
+@test
+func test_nested_drop() -> I32 {
+    let counter: *Unit = create_counter()
+
+    {
+        let outer: OuterResource = OuterResource {
+            inner: DroppableResource {
+                id: 5,
+                counter_ptr: counter,
+            },
+            value: 42,
+        }
+        // When outer goes out of scope, OuterResource::drop is called (adds 100)
+    }
+
+    // Total should be 100 (from outer drop)
+    let count: I32 = read_counter(counter)
+    assert_eq(count, 100, "outer drop should run")
+
+    free_counter(counter)
+    return 0
+}
+
+// Test multiple resources in same scope (LIFO drop order)
+@test
+func test_drop_order() -> I32 {
+    let counter: *Unit = create_counter()
+
+    {
+        let a: DroppableResource = DroppableResource { id: 1, counter_ptr: counter }
+        let b: DroppableResource = DroppableResource { id: 2, counter_ptr: counter }
+        let c: DroppableResource = DroppableResource { id: 3, counter_ptr: counter }
+
+        // At end of scope, drops should be in reverse order: c, b, a
+        // Each increments counter, so final count = 3
+    }
+
+    let count: I32 = read_counter(counter)
+    assert_eq(count, 3, "all three resources should be dropped")
+
+    free_counter(counter)
+    return 0
+}

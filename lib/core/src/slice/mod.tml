@@ -96,6 +96,29 @@ pub type Slice[T] {
 }
 
 impl[T] Slice[T] {
+    /// Creates a slice from a raw pointer and a length.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `data` is valid for reads for `len * size_of::<T>()` bytes
+    /// - `data` is properly aligned for type `T`
+    /// - The memory referenced by the returned slice must not be mutated
+    ///   for the duration of lifetime of the slice
+    /// - `len` is the exact number of elements the pointer points to
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let arr = [1, 2, 3, 4, 5]
+    /// let ptr: ref I32 = lowlevel { array_as_ptr(arr) }
+    /// let slice: Slice[I32] = Slice::from_raw(ptr, 5)
+    /// assert_eq(slice.len(), 5)
+    /// ```
+    pub func from_raw(data: ref T, len: I64) -> Slice[T] {
+        return Slice { data: data, len: len }
+    }
+
     /// Returns the number of elements in the slice.
     ///
     /// # Examples
@@ -411,6 +434,29 @@ pub type MutSlice[T] {
 }
 
 impl[T] MutSlice[T] {
+    /// Creates a mutable slice from a raw pointer and a length.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `data` is valid for reads and writes for `len * size_of::<T>()` bytes
+    /// - `data` is properly aligned for type `T`
+    /// - The memory referenced by the returned slice must not be accessed
+    ///   through any other pointer for the duration of lifetime of the slice
+    /// - `len` is the exact number of elements the pointer points to
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut arr = [1, 2, 3, 4, 5]
+    /// let ptr: mut ref I32 = lowlevel { array_as_mut_ptr(arr) }
+    /// let slice: MutSlice[I32] = MutSlice::from_raw(ptr, 5)
+    /// slice.reverse()
+    /// ```
+    pub func from_raw(data: mut ref T, len: I64) -> MutSlice[T] {
+        return MutSlice { data: data, len: len }
+    }
+
     /// Returns the number of elements in the slice.
     ///
     /// # Examples

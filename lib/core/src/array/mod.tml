@@ -673,8 +673,9 @@ impl Display for TryFromSliceError {
 
 impl Debug for TryFromSliceError {
     pub func debug_string(this) -> Str {
-        return "TryFromSliceError { expected: " + this.expected_len.to_string() +
-               ", actual: " + this.actual_len.to_string() + " }"
+        let e: Str = this.expected_len.to_string()
+        let a: Str = this.actual_len.to_string()
+        return "TryFromSliceError { expected: " + e + ", actual: " + a + " }"
     }
 }
 

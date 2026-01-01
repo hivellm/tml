@@ -197,6 +197,33 @@ pub func slice_offset[T](data: ref T, count: I64) -> ref T
 pub func slice_swap[T](data: mut ref T, a: I64, b: I64)
 
 // ============================================================================
+// Array Intrinsics (for use in lowlevel blocks)
+// ============================================================================
+
+/// Gets a pointer to the first element of an array.
+/// Used by Array::as_slice() to create a slice view.
+/// **UNSAFE**: Caller must ensure the array is valid.
+@intrinsic
+pub func array_as_ptr[T](data: T) -> ref T
+
+/// Gets a mutable pointer to the first element of an array.
+/// Used by Array::as_mut_slice() to create a mutable slice view.
+/// **UNSAFE**: Caller must ensure the array is valid.
+@intrinsic
+pub func array_as_mut_ptr[T](data: T) -> mut ref T
+
+/// Computes an offset pointer within an array.
+/// Used for slice iteration and range operations.
+/// **UNSAFE**: Result must stay within allocated object or one past end.
+@intrinsic
+pub func array_offset_ptr[T](data: ref T, count: I64) -> ref T
+
+/// Computes a mutable offset pointer within an array.
+/// **UNSAFE**: Result must stay within allocated object or one past end.
+@intrinsic
+pub func array_offset_mut_ptr[T](data: mut ref T, count: I64) -> mut ref T
+
+// ============================================================================
 // Memory Intrinsics
 // ============================================================================
 

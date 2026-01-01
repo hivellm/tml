@@ -123,9 +123,33 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             field_val = nested_val;
         } else {
             field_val = gen_expr(*s.fields[i].second);
-            // Infer field type for proper store
+            // Get the actual field type from the struct definition
+            std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
+            // Infer expression type for proper casting
             types::TypePtr expr_type = infer_expr_type(*s.fields[i].second);
-            field_type = llvm_type_from_semantic(expr_type);
+            std::string expr_llvm_type = llvm_type_from_semantic(expr_type);
+
+            // If target field type is different from expression type, cast as needed
+            if (target_field_type != expr_llvm_type && target_field_type != "i32") {
+                // Cast integer literals to the correct field type
+                if ((expr_llvm_type == "i32" || expr_llvm_type == "i64") &&
+                    (target_field_type == "i64" || target_field_type == "i32")) {
+                    if (expr_llvm_type == "i32" && target_field_type == "i64") {
+                        // Sign extend i32 to i64
+                        std::string casted = fresh_reg();
+                        emit_line("  " + casted + " = sext i32 " + field_val + " to i64");
+                        field_val = casted;
+                    } else if (expr_llvm_type == "i64" && target_field_type == "i32") {
+                        // Truncate i64 to i32
+                        std::string casted = fresh_reg();
+                        emit_line("  " + casted + " = trunc i64 " + field_val + " to i32");
+                        field_val = casted;
+                    }
+                }
+                field_type = target_field_type;
+            } else {
+                field_type = expr_llvm_type;
+            }
         }
 
         std::string field_ptr = fresh_reg();
@@ -268,6 +292,12 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             if (it != locals_.end()) {
                 std::string outer_type = it->second.type;
                 std::string outer_ptr = it->second.reg;
+
+                // Special handling for 'this' in impl methods
+                if (ident.name == "this" && !current_impl_type_.empty()) {
+                    outer_type = "%struct." + current_impl_type_;
+                    // 'this' is already a direct pointer parameter
+                }
 
                 // Get outer struct type name
                 std::string outer_name = outer_type;
