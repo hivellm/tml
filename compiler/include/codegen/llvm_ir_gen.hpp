@@ -29,7 +29,10 @@ struct LLVMGenOptions {
     bool emit_debug_info = false;     // Generate DWARF debug information
     bool generate_dll_entry = false;  // Generate tml_test_entry for DLL loading (no main)
     bool generate_fuzz_entry = false; // Generate tml_fuzz_target for fuzz testing (no main)
-    int debug_level = 2;              // Debug level: 1=minimal, 2=standard, 3=full
+    bool force_internal_linkage =
+        false;                 // Force internal linkage for all non-entry functions (suite mode)
+    int debug_level = 2;       // Debug level: 1=minimal, 2=standard, 3=full
+    int suite_test_index = -1; // Suite test index: -1 = tml_test_entry, >= 0 = tml_test_N
     std::string target_triple = "x86_64-pc-windows-msvc";
     std::string source_file;          // Source file path for coverage/debug tracking
     std::string coverage_output_file; // Path for HTML coverage output (empty = print only)
@@ -78,6 +81,10 @@ private:
     // Current module prefix (for generating imported module functions)
     std::string
         current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml
+
+    // Current submodule name (file stem) for cross-module function lookups
+    // e.g., "unicode_data" when processing unicode_data.tml within core::unicode module
+    std::string current_submodule_name_;
 
     // Current loop context for break/continue
     std::string current_loop_start_;
@@ -206,6 +213,10 @@ private:
     // Tracks which specialized methods have already been generated
     std::unordered_set<std::string> generated_impl_methods_;
 
+    // Generated function names (full LLVM names) to avoid duplicates
+    // Used when processing directory modules that may have same-named functions
+    std::unordered_set<std::string> generated_functions_;
+
     // Pending impl method instantiation requests
     // Each entry: (mangled_type_name, method_name, type_subs, base_type_name)
     struct PendingImplMethod {
@@ -317,6 +328,7 @@ private:
     // Declaration generation
     void gen_decl(const parser::Decl& decl);
     void gen_func_decl(const parser::FuncDecl& func);
+    void pre_register_func(const parser::FuncDecl& func); // Pre-register without generating code
     void gen_impl_method(const std::string& type_name, const parser::FuncDecl& method);
     void
     gen_impl_method_instantiation(const std::string& mangled_type_name,

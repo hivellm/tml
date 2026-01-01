@@ -134,6 +134,10 @@ TestResult compile_and_run_test_profiled(const std::string& test_file, const Tes
 void test_worker(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
                  TestResultCollector& collector, const TestOptions& opts);
 
+// Warm-up worker for parallel DLL compilation (no execution)
+void warmup_worker(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
+                   std::atomic<bool>& has_error, const TestOptions& opts);
+
 // ============================================================================
 // Output Functions
 // ============================================================================
@@ -162,6 +166,15 @@ std::map<std::string, int64_t> load_benchmark_baseline(const std::string& filena
 
 // Run benchmarks and display results
 int run_benchmarks(const TestOptions& opts, const ColorOutput& c);
+
+// ============================================================================
+// Suite-Based Execution Functions
+// ============================================================================
+
+// Run tests using suite-based DLL compilation (fewer DLLs, faster loading)
+// Returns exit code (0 = all passed, 1 = failures)
+int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestOptions& opts,
+                         TestResultCollector& collector, const ColorOutput& c);
 
 // ============================================================================
 // Fuzz Functions

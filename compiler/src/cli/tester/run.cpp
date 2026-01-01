@@ -56,6 +56,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg == "--profile") {
             opts.profile = true;
             opts.test_threads = 1; // Force single-threaded for accurate profiling
+        } else if (arg == "--suite") {
+            opts.suite_mode = true; // Use suite-based DLL compilation (default)
+        } else if (arg == "--no-suite") {
+            opts.suite_mode = false; // Disable suite mode (one DLL per test file)
         } else if (arg.starts_with("--test-threads=")) {
             opts.test_threads = std::stoi(arg.substr(15));
         } else if (arg.starts_with("--timeout=")) {
@@ -165,9 +169,102 @@ int run_test(int argc, char* argv[], bool verbose) {
         }
     }
 
-    // Single-threaded mode for verbose/nocapture/profile or if only 1 test
-    if (opts.verbose || opts.nocapture || opts.profile || test_files.size() == 1 ||
-        num_threads == 1) {
+    // Suite mode: compile multiple test files into single DLLs per suite
+    // This is now the default behavior as internal linkage prevents duplicate symbols
+    if (opts.suite_mode) {
+        int result_code = run_tests_suite_mode(test_files, opts, collector, c);
+
+        if (result_code != 0 || collector.has_compilation_error()) {
+            const auto& err = collector.first_compilation_error;
+
+            std::cerr << "\n";
+            std::cerr
+                << c.red() << c.bold()
+                << "==============================================================================="
+                << c.reset() << "\n";
+            std::cerr << c.red() << c.bold() << "COMPILATION ERROR - Test run aborted" << c.reset()
+                      << "\n";
+            std::cerr
+                << c.red() << c.bold()
+                << "==============================================================================="
+                << c.reset() << "\n";
+            std::cerr << "\n";
+            std::cerr << c.bold() << "File: " << c.reset() << err.file_path << "\n";
+            std::cerr << "\n";
+            std::cerr << c.red() << err.error_message << c.reset() << "\n";
+            std::cerr << "\n";
+            std::cerr << c.yellow() << "Fix the compilation error above before running tests again."
+                      << c.reset() << "\n";
+            std::cerr << "\n";
+
+            return 1;
+        }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        int64_t total_duration_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+        if (!opts.quiet) {
+            print_results_vitest_style(collector.results, opts, total_duration_ms);
+
+            // Print profiling stats if enabled
+            if (opts.profile && collector.profile_stats.total_tests > 0) {
+                print_profile_stats(collector.profile_stats, opts);
+            }
+        }
+
+        int failed = 0;
+        for (const auto& result : collector.results) {
+            if (!result.passed) {
+                failed++;
+            }
+        }
+
+        return failed > 0 ? 1 : 0;
+    }
+
+    // Profile mode: parallel warm-up, then sequential profiled execution
+    if (opts.profile && test_files.size() > 1 && num_threads > 1) {
+        // Phase 1: Parallel warm-up (compile all DLLs to populate cache)
+        if (!opts.quiet) {
+            std::cout << c.dim() << " Warming up cache..." << c.reset() << std::flush;
+        }
+
+        std::atomic<size_t> warmup_index{0};
+        std::atomic<bool> warmup_error{false};
+        std::vector<std::thread> warmup_threads;
+
+        unsigned int warmup_threads_count =
+            std::min(num_threads, static_cast<unsigned int>(test_files.size()));
+        for (unsigned int i = 0; i < warmup_threads_count; ++i) {
+            warmup_threads.emplace_back(warmup_worker, std::ref(test_files), std::ref(warmup_index),
+                                        std::ref(warmup_error), std::ref(opts));
+        }
+
+        for (auto& thread : warmup_threads) {
+            thread.join();
+        }
+
+        if (!opts.quiet) {
+            std::cout << "\r" << std::string(30, ' ') << "\r" << std::flush;
+        }
+
+        // Phase 2: Sequential profiled execution (with warm cache)
+        for (const auto& file : test_files) {
+            PhaseTimings timings;
+            TestResult result = compile_and_run_test_profiled(file, opts, &timings);
+            collector.add_timings(timings);
+            bool is_compilation_error = result.compilation_error;
+            collector.add(std::move(result));
+
+            if (is_compilation_error) {
+                break;
+            }
+        }
+    }
+    // Single-threaded mode for verbose/nocapture or if only 1 test
+    else if (opts.verbose || opts.nocapture || opts.profile || test_files.size() == 1 ||
+             num_threads == 1) {
         for (const auto& file : test_files) {
             TestResult result;
             if (opts.profile) {

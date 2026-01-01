@@ -120,7 +120,7 @@ TestResult compile_and_run_test_with_result(const std::string& test_file, const 
 }
 
 // ============================================================================
-// Profiled Test Execution
+// Profiled Test Execution (In-Process with Sub-Phase Timing)
 // ============================================================================
 
 TestResult compile_and_run_test_profiled(const std::string& test_file, const TestOptions& opts,
@@ -133,11 +133,10 @@ TestResult compile_and_run_test_profiled(const std::string& test_file, const Tes
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::string> empty_args;
-    std::string captured_output;
-
-    result.exit_code = run_run_profiled(test_file, empty_args, opts.release, &captured_output,
-                                        timings, opts.coverage, opts.no_cache);
+    // Use in-process profiled execution for detailed sub-phase timing
+    // This gives us exec.load_lib, exec.get_symbol, exec.run, etc.
+    auto inproc_result =
+        compile_and_run_test_in_process_profiled(test_file, timings, opts.verbose, opts.no_cache);
 
     auto end_time = std::chrono::high_resolution_clock::now();
     result.duration_ms =
@@ -147,8 +146,20 @@ TestResult compile_and_run_test_profiled(const std::string& test_file, const Tes
         result.timeout = true;
     }
 
-    result.passed = (result.exit_code == 0);
-    result.compilation_error = (result.exit_code == EXIT_COMPILATION_ERROR);
+    result.exit_code = inproc_result.exit_code;
+    result.passed = inproc_result.success;
+
+    // Check for compilation error
+    if (!inproc_result.error.empty() &&
+        (inproc_result.error.find("Lexer") != std::string::npos ||
+         inproc_result.error.find("Parser") != std::string::npos ||
+         inproc_result.error.find("Type") != std::string::npos ||
+         inproc_result.error.find("Codegen") != std::string::npos ||
+         inproc_result.error.find("Compilation") != std::string::npos ||
+         inproc_result.error.find("Linking") != std::string::npos)) {
+        result.compilation_error = true;
+        result.exit_code = EXIT_COMPILATION_ERROR;
+    }
 
     if (!result.passed) {
         if (result.compilation_error) {
@@ -156,8 +167,11 @@ TestResult compile_and_run_test_profiled(const std::string& test_file, const Tes
         } else {
             result.error_message = "Exit code: " + std::to_string(result.exit_code);
         }
-        if (!captured_output.empty()) {
-            result.error_message += "\n" + captured_output;
+        if (!inproc_result.error.empty()) {
+            result.error_message += "\n" + inproc_result.error;
+        }
+        if (!inproc_result.output.empty()) {
+            result.error_message += "\n" + inproc_result.output;
         }
     }
 
@@ -188,6 +202,49 @@ void test_worker(const std::vector<std::string>& test_files, std::atomic<size_t>
         // Stop immediately if this was a compilation error
         if (result.compilation_error) {
             break;
+        }
+    }
+}
+
+// ============================================================================
+// Warm-up Worker (Compile DLLs in parallel, no execution)
+// ============================================================================
+
+void warmup_worker(const std::vector<std::string>& test_files, std::atomic<size_t>& current_index,
+                   std::atomic<bool>& has_error, const TestOptions& opts) {
+    while (true) {
+        // Stop if an error occurred in another thread
+        if (has_error.load()) {
+            break;
+        }
+
+        size_t index = current_index.fetch_add(1);
+        if (index >= test_files.size()) {
+            break;
+        }
+
+        const auto& file = test_files[index];
+
+        // Just compile to shared library (populates cache), don't run
+        auto result = compile_test_to_shared_lib(file, opts.verbose, opts.no_cache);
+
+        if (!result.success) {
+            has_error.store(true);
+            break;
+        }
+
+        // Clean up the output DLL (we only wanted to populate the cache)
+        try {
+            fs::remove(result.lib_path);
+#ifdef _WIN32
+            fs::path lib_file = result.lib_path;
+            lib_file.replace_extension(".lib");
+            if (fs::exists(lib_file)) {
+                fs::remove(lib_file);
+            }
+#endif
+        } catch (...) {
+            // Ignore cleanup errors
         }
     }
 }

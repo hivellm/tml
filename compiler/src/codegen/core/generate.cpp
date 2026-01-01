@@ -833,13 +833,17 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emit_line("");
         }
 
-        // For DLL entry, generate exported tml_test_entry function instead of main
+        // For DLL entry, generate exported test entry function instead of main
         if (options_.generate_dll_entry) {
-            // Export tml_test_entry for DLL loading
+            // Determine entry function name (tml_test_entry or tml_test_N for suites)
+            std::string entry_name = "tml_test_entry";
+            if (options_.suite_test_index >= 0) {
+                entry_name = "tml_test_" + std::to_string(options_.suite_test_index);
+            }
 #ifdef _WIN32
-            emit_line("define dllexport i32 @tml_test_entry() {");
+            emit_line("define dllexport i32 @" + entry_name + "() {");
 #else
-            emit_line("define i32 @tml_test_entry() {");
+            emit_line("define i32 @" + entry_name + "() {");
 #endif
         } else {
             emit_line("define i32 @main(i32 %argc, ptr %argv) {");
@@ -945,12 +949,17 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Standard main wrapper for user-defined main
         emit_line("; Entry point");
 
-        // For DLL entry, generate exported tml_test_entry function instead of main
+        // For DLL entry, generate exported test entry function instead of main
         if (options_.generate_dll_entry) {
+            // Determine entry function name (tml_test_entry or tml_test_N for suites)
+            std::string entry_name = "tml_test_entry";
+            if (options_.suite_test_index >= 0) {
+                entry_name = "tml_test_" + std::to_string(options_.suite_test_index);
+            }
 #ifdef _WIN32
-            emit_line("define dllexport i32 @tml_test_entry() {");
+            emit_line("define dllexport i32 @" + entry_name + "() {");
 #else
-            emit_line("define i32 @tml_test_entry() {");
+            emit_line("define i32 @" + entry_name + "() {");
 #endif
             emit_line("entry:");
             emit_line("  %ret = call i32 @tml_main()");

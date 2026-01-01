@@ -374,6 +374,94 @@ static std::string get_param_name(const parser::FuncParam& param) {
     return "_anon";
 }
 
+// Pre-register function signature without generating code
+// This ensures intra-module calls resolve correctly before any code is generated
+void LLVMIRGen::pre_register_func(const parser::FuncDecl& func) {
+    // Skip generic functions - they are instantiated on demand
+    if (!func.generics.empty()) {
+        return;
+    }
+
+    // Skip @extern functions - they're handled in gen_func_decl
+    if (func.extern_abi.has_value()) {
+        return;
+    }
+
+    // Build return type
+    std::string ret_type = "i32"; // Default
+    if (func.return_type.has_value()) {
+        std::string inner_ret_type = llvm_type_ptr(*func.return_type);
+        if (func.is_async && inner_ret_type != "void") {
+            // Async functions return Poll[T]
+            auto semantic_ret = resolve_parser_type_with_subs(**func.return_type, {});
+            std::vector<types::TypePtr> poll_type_args = {semantic_ret};
+            std::string poll_mangled = require_enum_instantiation("Poll", poll_type_args);
+            ret_type = "%struct." + poll_mangled;
+        } else {
+            ret_type = inner_ret_type;
+        }
+    } else if (func.is_async) {
+        // async func with no return type -> Poll[Unit]
+        std::vector<types::TypePtr> poll_type_args = {
+            std::make_shared<types::Type>(types::PrimitiveType{types::PrimitiveKind::Unit})};
+        std::string poll_mangled = require_enum_instantiation("Poll", poll_type_args);
+        ret_type = "%struct." + poll_mangled;
+    }
+
+    // Build parameter type list
+    std::string param_types;
+    std::vector<std::string> param_types_vec;
+    for (size_t i = 0; i < func.params.size(); ++i) {
+        if (i > 0) {
+            param_types += ", ";
+        }
+        std::string param_type = llvm_type_ptr(func.params[i].type);
+        param_types += param_type;
+        param_types_vec.push_back(param_type);
+    }
+
+    // Build function name with module prefix
+    std::string full_func_name = func.name;
+    if (!current_module_prefix_.empty()) {
+        full_func_name = current_module_prefix_ + "_" + func.name;
+    }
+
+    // Register function in functions_ map
+    std::string func_type = ret_type + " (" + param_types + ")";
+    FuncInfo func_info{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
+    functions_[func.name] = func_info;
+
+    // Register with module-qualified name for cross-module calls
+    if (!current_module_prefix_.empty()) {
+        // Convert prefix to :: format (core_unicode -> core::unicode)
+        std::string qualified_name = current_module_prefix_;
+        size_t pos = 0;
+        while ((pos = qualified_name.find("_", pos)) != std::string::npos) {
+            qualified_name.replace(pos, 1, "::");
+            pos += 2;
+        }
+        qualified_name += "::" + func.name;
+        functions_[qualified_name] = func_info;
+
+        // Also register with short key (e.g., "unicode::is_alphabetic")
+        size_t last_sep = qualified_name.rfind("::");
+        if (last_sep != std::string::npos) {
+            std::string without_func = qualified_name.substr(0, last_sep);
+            size_t second_last_sep = without_func.rfind("::");
+            if (second_last_sep != std::string::npos) {
+                std::string short_key = qualified_name.substr(second_last_sep + 2);
+                functions_[short_key] = func_info;
+            }
+        }
+
+        // Register with submodule name (e.g., "unicode_data::is_alphabetic_nonascii")
+        if (!current_submodule_name_.empty() && current_submodule_name_ != "mod") {
+            std::string submod_key = current_submodule_name_ + "::" + func.name;
+            functions_[submod_key] = func_info;
+        }
+    }
+}
+
 void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
     // Defer generic functions - they will be instantiated when called
     if (!func.generics.empty()) {
@@ -483,10 +571,55 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         full_func_name = current_module_prefix_ + "_" + func.name;
     }
 
+    // Skip if this function was already generated (handles duplicates in directory modules)
+    std::string llvm_name = "@tml_" + full_func_name;
+    if (generated_functions_.count(llvm_name)) {
+        return;
+    }
+    generated_functions_.insert(llvm_name);
+
     // Register function for first-class function support
     std::string func_type = ret_type + " (" + param_types + ")";
-    functions_[func.name] =
-        FuncInfo{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
+    FuncInfo func_info{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
+    functions_[func.name] = func_info;
+
+    // Also register with module-qualified name for cross-module calls
+    // When module A calls module B's function, the lookup uses "B::func" or "B_func"
+    if (!current_module_prefix_.empty()) {
+        // Register with :: separator (e.g., "core::unicode::is_grapheme_extend_nonascii")
+        std::string qualified_name = current_module_prefix_;
+        // Replace _ back to :: for the lookup key
+        size_t pos = 0;
+        while ((pos = qualified_name.find("_", pos)) != std::string::npos) {
+            qualified_name.replace(pos, 1, "::");
+            pos += 2;
+        }
+        qualified_name += "::" + func.name;
+        functions_[qualified_name] = func_info;
+
+        // Also register with just the last segment of module path
+        // This allows `use core::unicode` to enable calls like `unicode::is_alphabetic`
+        // From qualified_name like "core::unicode::is_alphabetic", extract "unicode::is_alphabetic"
+        size_t last_sep = qualified_name.rfind("::");
+        if (last_sep != std::string::npos) {
+            // Find the second-to-last :: (the one before the module name)
+            std::string without_func = qualified_name.substr(0, last_sep);
+            size_t second_last_sep = without_func.rfind("::");
+            if (second_last_sep != std::string::npos) {
+                // Extract "module::func" pattern (e.g., "unicode::is_alphabetic")
+                std::string short_key = qualified_name.substr(second_last_sep + 2);
+                functions_[short_key] = func_info;
+            }
+        }
+
+        // Also register with submodule name for `submodule::func` style calls
+        // e.g., when mod.tml calls unicode_data::is_grapheme_extend, register as
+        // "unicode_data::is_grapheme_extend"
+        if (!current_submodule_name_.empty() && current_submodule_name_ != "mod") {
+            std::string submod_key = current_submodule_name_ + "::" + func.name;
+            functions_[submod_key] = func_info;
+        }
+    }
 
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
@@ -500,13 +633,19 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
             break;
         }
     }
+    // In suite mode (force_internal_linkage), all functions including main get internal linkage
+    // to avoid duplicate symbols when linking multiple test objects into one DLL.
+    // Only @should_panic tests need external linkage (called via function pointer).
     std::string linkage =
-        (func.name == "main" || func.vis == parser::Visibility::Public || has_should_panic)
+        ((!options_.force_internal_linkage && func.name == "main") ||
+         (func.vis == parser::Visibility::Public && !options_.force_internal_linkage) ||
+         has_should_panic)
             ? ""
             : "internal ";
-    // Windows DLL export for public functions
+    // Windows DLL export for public functions (disabled in suite mode)
     std::string dll_linkage = "";
-    if (options_.dll_export && func.vis == parser::Visibility::Public && func.name != "main") {
+    if (options_.dll_export && func.vis == parser::Visibility::Public && func.name != "main" &&
+        !options_.force_internal_linkage) {
         dll_linkage = "dllexport ";
     }
     // Optimization attributes:
@@ -935,10 +1074,14 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     // 6. Emit function definition
     std::string attrs = " #0";
     // Public functions get external linkage for library export
-    std::string linkage = (func.vis == parser::Visibility::Public) ? "" : "internal ";
-    // Windows DLL export for public functions
+    // In suite mode (force_internal_linkage), all functions are internal to avoid duplicate symbols
+    std::string linkage =
+        (func.vis == parser::Visibility::Public && !options_.force_internal_linkage) ? ""
+                                                                                     : "internal ";
+    // Windows DLL export for public functions (disabled in suite mode)
     std::string dll_linkage = "";
-    if (options_.dll_export && func.vis == parser::Visibility::Public) {
+    if (options_.dll_export && func.vis == parser::Visibility::Public &&
+        !options_.force_internal_linkage) {
         dll_linkage = "dllexport ";
     }
     emit_line("");

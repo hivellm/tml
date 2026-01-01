@@ -110,6 +110,7 @@ struct TestOptions {
     bool coverage = false;             // Enable code coverage tracking
     std::string coverage_output;       // Coverage output file (default: coverage.html)
     bool profile = false;              // Show detailed phase timings
+    bool suite_mode = true;            // Use suite-based DLL compilation (fewer DLLs, faster)
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
 };
