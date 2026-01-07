@@ -1,0 +1,73 @@
+//! Numeric behaviors and types.
+//!
+//! This module provides behaviors for numeric operations that go beyond
+//! the basic arithmetic operators, as well as wrapper types for different
+//! overflow handling strategies.
+//!
+//! # Core Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Zero`] | Types with an additive identity (zero) |
+//! | [`One`] | Types with a multiplicative identity (one) |
+//! | [`Bounded`] | Types with minimum and maximum values |
+//! | [`Integer`] | Marker for integer types |
+//!
+//! # Overflow-Handling Wrappers
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Saturating`] | Arithmetic that saturates at bounds |
+//! | [`Wrapping`] | Arithmetic that wraps around on overflow |
+//! | [`NonZero`] | Wrapper guaranteeing a non-zero value |
+//!
+//! # Overflow-Handling Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`CheckedAdd`], etc. | Checked arithmetic returning Maybe |
+//! | [`SaturatingAdd`], etc. | Saturating arithmetic |
+//! | [`WrappingAdd`], etc. | Wrapping arithmetic |
+//! | [`OverflowingAdd`], etc. | Returns (result, overflowed) |
+//!
+//! # Examples
+//!
+//! ## Using Zero and One
+//!
+//! ```tml
+//! use core::num::{Zero, One}
+//!
+//! func sum_or_zero[T: Zero + Add](values: List[T]) -> T {
+//!     let mut result: T = T::zero()
+//!     for v in values {
+//!         result = result + v
+//!     }
+//!     return result
+//! }
+//! ```
+//!
+//! ## Using Saturating Arithmetic
+//!
+//! ```tml
+//! use core::num::Saturating
+//!
+//! let x: Saturating[I8] = Saturating::new(100)
+//! let y: Saturating[I8] = Saturating::new(50)
+//! let sum = x + y  // Saturates to 127 instead of overflowing
+//! ```
+
+// Re-export all public items from submodules
+pub use traits::*
+pub use saturating::*
+pub use wrapping::*
+pub use nonzero::*
+pub use overflow::*
+pub use integer::*
+
+// Submodules
+pub mod traits      // Zero, One, Bounded, Integer, SignedInteger, UnsignedInteger
+pub mod saturating  // Saturating[T] wrapper type
+pub mod wrapping    // Wrapping[T] wrapper type
+pub mod nonzero     // NonZero[T] wrapper type
+pub mod overflow    // Checked*, Saturating*, Wrapping*, Overflowing* behaviors
+pub mod integer     // abs, signum, is_positive, is_negative, pow, MIN/MAX constants

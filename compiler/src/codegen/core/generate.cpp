@@ -174,10 +174,11 @@ auto LLVMIRGen::generate(const parser::Module& module)
             if (!type_name.empty()) {
                 for (const auto& const_decl : impl.constants) {
                     std::string qualified_name = type_name + "::" + const_decl.name;
-                    // For now, only support literal constants
+                    std::string value;
+
+                    // Support: literal constants
                     if (const_decl.value->is<parser::LiteralExpr>()) {
                         const auto& lit = const_decl.value->as<parser::LiteralExpr>();
-                        std::string value;
                         if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                             value = std::to_string(lit.token.int_value().value);
                         } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
@@ -185,11 +186,54 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
                             value = "null";
                         }
-                        if (!value.empty()) {
-                            global_constants_[qualified_name] = value;
+                    }
+                    // Support: cast expressions (e.g., -2147483648 as I32)
+                    else if (const_decl.value->is<parser::CastExpr>()) {
+                        const auto& cast = const_decl.value->as<parser::CastExpr>();
+                        if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                value = std::to_string(lit.token.int_value().value);
+                            }
+                        } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
+                            const auto& unary = cast.expr->as<parser::UnaryExpr>();
+                            if (unary.op == parser::UnaryOp::Neg &&
+                                unary.operand->is<parser::LiteralExpr>()) {
+                                const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    int64_t int_val =
+                                        static_cast<int64_t>(lit.token.int_value().value);
+                                    value = std::to_string(-int_val);
+                                }
+                            }
                         }
                     }
-                    // Struct literal constants will need special handling during codegen
+                    // Support: unary expressions (e.g., -128)
+                    else if (const_decl.value->is<parser::UnaryExpr>()) {
+                        const auto& unary = const_decl.value->as<parser::UnaryExpr>();
+                        if (unary.op == parser::UnaryOp::Neg &&
+                            unary.operand->is<parser::LiteralExpr>()) {
+                            const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                                value = std::to_string(-int_val);
+                            }
+                        } else if (unary.operand->is<parser::CastExpr>()) {
+                            const auto& cast = unary.operand->as<parser::CastExpr>();
+                            if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                                const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    int64_t int_val =
+                                        static_cast<int64_t>(lit.token.int_value().value);
+                                    value = std::to_string(-int_val);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!value.empty()) {
+                        global_constants_[qualified_name] = value;
+                    }
                 }
             }
         } else if (decl->is<parser::TraitDecl>()) {
@@ -289,6 +333,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     std::string params;
                     std::string param_types;
                     std::vector<std::string> param_types_vec;
+
+                    // Determine the LLVM type for 'this' based on the impl type
+                    // For primitive types, pass by value; for structs/enums, pass by pointer
+                    std::string impl_llvm_type = llvm_type_name(type_name);
+                    bool is_primitive_impl = (impl_llvm_type[0] != '%');
+
                     for (size_t i = 0; i < method.params.size(); ++i) {
                         if (i > 0) {
                             params += ", ";
@@ -302,9 +352,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Substitute 'This' type with the actual impl type
+                        // Handle 'this' parameter: primitive types pass by value, others by pointer
                         if (param_name == "this" && param_type.find("This") != std::string::npos) {
-                            param_type = "ptr"; // 'this' is always a pointer to the struct
+                            param_type = is_primitive_impl ? impl_llvm_type : "ptr";
                         }
                         params += param_type + " %" + param_name;
                         param_types += param_type;
@@ -332,12 +382,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Substitute 'This' type with ptr for 'this' param
+                        // Handle 'this' parameter: primitive types use value type, others use ptr
                         if (param_name == "this" && param_type.find("This") != std::string::npos) {
-                            param_type = "ptr";
+                            param_type = is_primitive_impl ? impl_llvm_type : "ptr";
                         }
 
-                        // 'this' is already a pointer parameter, don't create alloca for it
+                        // 'this' is passed directly (by value for primitives, by pointer for
+                        // structs) Don't create alloca for it
                         if (param_name == "this") {
                             locals_[param_name] =
                                 VarInfo{"%" + param_name, param_type, nullptr, std::nullopt};
@@ -423,6 +474,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             std::string params;
                             std::string param_types;
                             std::vector<std::string> param_types_vec;
+
+                            // Determine the LLVM type for 'this' based on the impl type
+                            // For primitive types, pass by value; for structs/enums, pass by
+                            // pointer
+                            std::string trait_impl_llvm_type = llvm_type_name(type_name);
+                            bool trait_is_primitive_impl = (trait_impl_llvm_type[0] != '%');
+
                             for (size_t i = 0; i < trait_method.params.size(); ++i) {
                                 if (i > 0) {
                                     params += ", ";
@@ -438,10 +496,12 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 } else {
                                     param_name = "_anon";
                                 }
-                                // Substitute 'This' type with ptr for 'this' param
+                                // Handle 'this' parameter: primitive types pass by value, others by
+                                // pointer
                                 if (param_name == "this" &&
                                     param_type.find("This") != std::string::npos) {
-                                    param_type = "ptr";
+                                    param_type =
+                                        trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
                                 }
                                 params += param_type + " %" + param_name;
                                 param_types += param_type;
@@ -477,13 +537,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 types::TypePtr semantic_type = nullptr;
                                 if (param_name == "this" &&
                                     param_type.find("This") != std::string::npos) {
-                                    param_type = "ptr";
+                                    // Handle 'this': primitive types use value type, others use ptr
+                                    param_type =
+                                        trait_is_primitive_impl ? trait_impl_llvm_type : "ptr";
                                     // Create semantic type as the concrete impl type
                                     semantic_type = std::make_shared<types::Type>();
                                     semantic_type->kind = types::NamedType{type_name, "", {}};
                                 }
 
-                                // 'this' is already a pointer parameter, don't create alloca for it
+                                // 'this' is passed directly (by value for primitives, by pointer
+                                // for structs) Don't create alloca for it
                                 if (param_name == "this") {
                                     locals_[param_name] = VarInfo{"%" + param_name, param_type,
                                                                   semantic_type, std::nullopt};

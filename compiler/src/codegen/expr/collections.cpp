@@ -204,6 +204,53 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
         full_path += path.path.segments[i];
     }
 
+    // Check for global constants (like I32::MIN, I32::MAX)
+    // First check local global_constants_
+    auto const_it = global_constants_.find(full_path);
+    std::string const_value;
+    if (const_it != global_constants_.end()) {
+        const_value = const_it->second;
+    } else if (env_.module_registry()) {
+        // Search all imported modules for the constant
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto mod_const_it = mod.constants.find(full_path);
+            if (mod_const_it != mod.constants.end()) {
+                const_value = mod_const_it->second;
+                break;
+            }
+        }
+    }
+
+    if (!const_value.empty()) {
+        // Determine the type based on the prefix (I32::, U64::, etc.)
+        if (path.path.segments.size() >= 1) {
+            std::string type_name = path.path.segments[0];
+            if (type_name == "I8") {
+                last_expr_type_ = "i8";
+            } else if (type_name == "I16") {
+                last_expr_type_ = "i16";
+            } else if (type_name == "I32") {
+                last_expr_type_ = "i32";
+            } else if (type_name == "I64") {
+                last_expr_type_ = "i64";
+            } else if (type_name == "U8") {
+                last_expr_type_ = "i8";
+            } else if (type_name == "U16") {
+                last_expr_type_ = "i16";
+            } else if (type_name == "U32") {
+                last_expr_type_ = "i32";
+            } else if (type_name == "U64") {
+                last_expr_type_ = "i64";
+            } else {
+                last_expr_type_ = "i64"; // Default to i64
+            }
+        } else {
+            last_expr_type_ = "i64";
+        }
+        return const_value;
+    }
+
     // Look up in enum variants
     auto it = enum_variants_.find(full_path);
     if (it != enum_variants_.end()) {

@@ -1,0 +1,120 @@
+//! Wrapping arithmetic wrapper type.
+//!
+//! This module provides the [`Wrapping`] wrapper type which performs
+//! wrapping (modular) arithmetic operations.
+
+use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+use core::clone::{Duplicate, Copy}
+use core::default::Default
+
+// ============================================================================
+// Wrapping Wrapper Type
+// ============================================================================
+
+/// A wrapper providing wrapping (modular) arithmetic operations.
+///
+/// Wrapping arithmetic performs two's complement wrapping on overflow.
+/// For example, adding 1 to `I8::MAX` (127) yields `I8::MIN` (-128).
+///
+/// This is the default behavior for integer overflow in release mode
+/// in many languages, but `Wrapping` makes it explicit.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::Wrapping
+///
+/// let x: Wrapping[I8] = Wrapping::new(127)
+/// let y: Wrapping[I8] = Wrapping::new(1)
+///
+/// // 127 + 1 wraps to -128
+/// let sum: Wrapping[I8] = x + y
+/// assert_eq(sum.value(), -128)
+///
+/// // Works with unsigned too
+/// let a: Wrapping[U8] = Wrapping::new(255)
+/// let b: Wrapping[U8] = Wrapping::new(1)
+/// assert_eq((a + b).value(), 0)
+/// ```
+///
+/// # When to Use
+///
+/// - Hash calculations
+/// - Cryptographic operations
+/// - Modular arithmetic
+/// - Ring buffer index calculations
+/// - When you explicitly want wraparound behavior
+pub type Wrapping[T] {
+    inner: T
+}
+
+impl[T] Wrapping[T] {
+    /// Creates a new `Wrapping` wrapper around the given value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let wrap: Wrapping[I32] = Wrapping::new(42)
+    /// assert_eq(wrap.value(), 42)
+    /// ```
+    pub func new(value: T) -> Wrapping[T] {
+        return Wrapping { inner: value }
+    }
+
+    /// Returns the wrapped value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let wrap: Wrapping[I32] = Wrapping::new(42)
+    /// assert_eq(wrap.value(), 42)
+    /// ```
+    pub func value(this) -> T {
+        return this.inner
+    }
+
+    /// Consumes the wrapper and returns the inner value.
+    ///
+    /// This is equivalent to `value()` but consumes the wrapper.
+    pub func into_inner(this) -> T {
+        return this.inner
+    }
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+impl[T: Default] Default for Wrapping[T] {
+    pub func default() -> Wrapping[T] {
+        return Wrapping::new(Default::default())
+    }
+}
+
+impl[T: Duplicate] Duplicate for Wrapping[T] {
+    pub func duplicate(this) -> Wrapping[T] {
+        return Wrapping::new(this.inner.duplicate())
+    }
+}
+
+impl[T: Copy] Copy for Wrapping[T] {}
+
+impl[T: PartialEq] PartialEq for Wrapping[T] {
+    pub func eq(this, other: ref Wrapping[T]) -> Bool {
+        return this.inner.eq(ref other.inner)
+    }
+}
+
+impl[T: Eq] Eq for Wrapping[T] {}
+
+impl[T: PartialOrd] PartialOrd for Wrapping[T] {
+    pub func partial_cmp(this, other: ref Wrapping[T]) -> Maybe[Ordering] {
+        return this.inner.partial_cmp(ref other.inner)
+    }
+}
+
+impl[T: Ord] Ord for Wrapping[T] {
+    pub func cmp(this, other: ref Wrapping[T]) -> Ordering {
+        return this.inner.cmp(ref other.inner)
+    }
+}

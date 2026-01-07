@@ -1,0 +1,324 @@
+//! Integer methods and constants.
+//!
+//! This module provides additional functions for integer types beyond the
+//! basic arithmetic operators, as well as MIN/MAX constants.
+//!
+//! # Sign Functions (Signed Integers)
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | [`abs_i32`] | Absolute value for I32 |
+//! | [`abs_i64`] | Absolute value for I64 |
+//! | [`signum_i32`] | Returns -1, 0, or 1 depending on sign |
+//! | [`signum_i64`] | Returns -1, 0, or 1 depending on sign |
+//!
+//! # Power Functions
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | [`pow_i32`] | Raises I32 to a power |
+//! | [`pow_i64`] | Raises I64 to a power |
+//!
+//! # Examples
+//!
+//! ```tml
+//! let x: I32 = -42
+//! assert_eq(abs_i32(x), 42)
+//! assert_eq(signum_i32(x), -1)
+//! assert(x < 0) // negative check
+//! ```
+//!
+//! # Note
+//!
+//! Methods on primitive types (e.g., `x.abs()`) are not yet supported due to
+//! codegen constraints. Use the standalone functions instead.
+
+// ============================================================================
+// Signed Integer Functions - I32
+// ============================================================================
+
+/// Returns the absolute value of an I32 integer.
+///
+/// # Overflow
+///
+/// The absolute value of `I32::MIN` cannot be represented as an `I32`.
+/// This will cause overflow and panic in debug mode.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(abs_i32(-5), 5)
+/// assert_eq(abs_i32(5), 5)
+/// assert_eq(abs_i32(0), 0)
+/// ```
+pub func abs_i32(value: I32) -> I32 {
+    if value < 0 {
+        return 0 - value
+    }
+    return value
+}
+
+/// Returns a number representing the sign of an I32 integer.
+///
+/// - `1` if the number is positive
+/// - `0` if the number is zero
+/// - `-1` if the number is negative
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(signum_i32(10), 1)
+/// assert_eq(signum_i32(0), 0)
+/// assert_eq(signum_i32(-10), -1)
+/// ```
+pub func signum_i32(value: I32) -> I32 {
+    if value > 0 {
+        return 1
+    }
+    if value < 0 {
+        return -1
+    }
+    return 0
+}
+
+/// Raises an I32 integer to the power of `exp`.
+///
+/// # Overflow
+///
+/// This function may overflow for large exponents.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(pow_i32(2, 10), 1024)
+/// assert_eq(pow_i32(3, 3), 27)
+/// assert_eq(pow_i32(5, 0), 1)
+/// ```
+pub func pow_i32(base: I32, exp: I32) -> I32 {
+    if exp == 0 {
+        return 1
+    }
+    if exp == 1 {
+        return base
+    }
+    let mut result: I32 = 1
+    let mut b: I32 = base
+    let mut e: I32 = exp
+    loop {
+        if e <= 0 {
+            return result
+        }
+        if e % 2 == 1 {
+            result = result * b
+        }
+        b = b * b
+        e = e / 2
+    }
+    return result
+}
+
+// ============================================================================
+// Signed Integer Functions - I64
+// ============================================================================
+
+/// Returns the absolute value of an I64 integer.
+pub func abs_i64(value: I64) -> I64 {
+    let zero: I64 = 0
+    if value < zero {
+        return zero - value
+    }
+    return value
+}
+
+/// Returns a number representing the sign of an I64 integer.
+pub func signum_i64(value: I64) -> I64 {
+    let zero: I64 = 0
+    let one: I64 = 1
+    let neg_one: I64 = -1
+    if value > zero {
+        return one
+    }
+    if value < zero {
+        return neg_one
+    }
+    return zero
+}
+
+/// Raises an I64 integer to the power of `exp`.
+pub func pow_i64(base: I64, exp: I64) -> I64 {
+    let zero: I64 = 0
+    let one: I64 = 1
+    let two: I64 = 2
+    if exp == zero {
+        return one
+    }
+    if exp == one {
+        return base
+    }
+    let mut result: I64 = one
+    let mut b: I64 = base
+    let mut e: I64 = exp
+    loop {
+        if e <= zero {
+            return result
+        }
+        if e % two == one {
+            result = result * b
+        }
+        b = b * b
+        e = e / two
+    }
+    return result
+}
+
+// ============================================================================
+// Integer Methods - I32
+// ============================================================================
+
+impl I32 {
+    /// The minimum value for an `I32`.
+    pub const MIN: I32 = -2147483648 as I32
+
+    /// The maximum value for an `I32`.
+    pub const MAX: I32 = 2147483647 as I32
+
+    /// Returns the absolute value of this integer.
+    pub func abs(this) -> I32 {
+        if this < 0 {
+            return 0 - this
+        }
+        return this
+    }
+
+    /// Returns a number representing the sign of this integer.
+    /// - `1` if the number is positive
+    /// - `0` if the number is zero
+    /// - `-1` if the number is negative
+    pub func signum(this) -> I32 {
+        if this > 0 {
+            return 1
+        }
+        if this < 0 {
+            return -1
+        }
+        return 0
+    }
+
+    /// Returns `true` if this integer is positive (greater than zero).
+    pub func is_positive(this) -> Bool {
+        return this > 0
+    }
+
+    /// Returns `true` if this integer is negative (less than zero).
+    pub func is_negative(this) -> Bool {
+        return this < 0
+    }
+
+    /// Raises this integer to the power of `exp`.
+    pub func pow(this, exp: I32) -> I32 {
+        if exp == 0 {
+            return 1
+        }
+        if exp == 1 {
+            return this
+        }
+        let mut result: I32 = 1
+        let mut base: I32 = this
+        let mut e: I32 = exp
+        loop {
+            if e <= 0 {
+                return result
+            }
+            if e % 2 == 1 {
+                result = result * base
+            }
+            base = base * base
+            e = e / 2
+        }
+        return result
+    }
+}
+
+// ============================================================================
+// Integer MIN/MAX Constants - I64
+// ============================================================================
+
+impl I64 {
+    /// The minimum value for an `I64`.
+    pub const MIN: I64 = -9223372036854775808
+
+    /// The maximum value for an `I64`.
+    pub const MAX: I64 = 9223372036854775807
+}
+
+// ============================================================================
+// Integer MIN/MAX Constants - I8
+// ============================================================================
+
+impl I8 {
+    /// The minimum value for an `I8`.
+    pub const MIN: I8 = -128 as I8
+
+    /// The maximum value for an `I8`.
+    pub const MAX: I8 = 127 as I8
+}
+
+// ============================================================================
+// Integer MIN/MAX Constants - I16
+// ============================================================================
+
+impl I16 {
+    /// The minimum value for an `I16`.
+    pub const MIN: I16 = -32768 as I16
+
+    /// The maximum value for an `I16`.
+    pub const MAX: I16 = 32767 as I16
+}
+
+// ============================================================================
+// Unsigned Integer MIN/MAX Constants - U32
+// ============================================================================
+
+impl U32 {
+    /// The minimum value for a `U32`.
+    pub const MIN: U32 = 0 as U32
+
+    /// The maximum value for a `U32`.
+    pub const MAX: U32 = 4294967295 as U32
+}
+
+// ============================================================================
+// Unsigned Integer MIN/MAX Constants - U64
+// ============================================================================
+
+impl U64 {
+    /// The minimum value for a `U64`.
+    pub const MIN: U64 = 0 as U64
+
+    /// The maximum value for a `U64`.
+    pub const MAX: U64 = 18446744073709551615 as U64
+}
+
+// ============================================================================
+// Unsigned Integer MIN/MAX Constants - U8
+// ============================================================================
+
+impl U8 {
+    /// The minimum value for a `U8`.
+    pub const MIN: U8 = 0 as U8
+
+    /// The maximum value for a `U8`.
+    pub const MAX: U8 = 255 as U8
+}
+
+// ============================================================================
+// Unsigned Integer MIN/MAX Constants - U16
+// ============================================================================
+
+impl U16 {
+    /// The minimum value for a `U16`.
+    pub const MIN: U16 = 0 as U16
+
+    /// The maximum value for a `U16`.
+    pub const MAX: U16 = 65535 as U16
+}

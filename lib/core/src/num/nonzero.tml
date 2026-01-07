@@ -1,0 +1,119 @@
+//! Non-zero wrapper type.
+//!
+//! This module provides the [`NonZero`] wrapper type which guarantees
+//! that a value is never zero at the type level.
+
+use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+use core::clone::{Duplicate, Copy}
+use core::num::traits::Zero
+
+// ============================================================================
+// NonZero Wrapper Type
+// ============================================================================
+
+/// A non-zero wrapper type.
+///
+/// `NonZero[T]` guarantees at the type level that the value is never zero.
+/// This enables optimizations like niche filling in `Maybe[NonZero[T]]`,
+/// where the compiler can use zero to represent `Nothing` without any
+/// extra space overhead.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::NonZero
+///
+/// when NonZero::new(42) {
+///     Just(n) => assert_eq(n.get(), 42),
+///     Nothing => panic("was zero")
+/// }
+///
+/// // Zero returns Nothing
+/// assert(NonZero::new(0).is_nothing())
+/// ```
+///
+/// # Size Optimization
+///
+/// Because `NonZero[T]` can never be zero, `Maybe[NonZero[T]]` has the same
+/// size as `T`:
+///
+/// ```tml
+/// // Both are the same size as I32
+/// let a: Maybe[NonZero[I32]] = Just(NonZero::new(42).unwrap())
+/// let b: Maybe[NonZero[I32]] = Nothing
+/// ```
+///
+/// # When to Use
+///
+/// - When you know a value cannot be zero
+/// - For array lengths and counts (always positive)
+/// - For IDs that are never zero
+/// - To enable `Maybe` size optimization
+pub type NonZero[T] {
+    value: T
+}
+
+impl[T: Zero + PartialEq] NonZero[T] {
+    /// Creates a new `NonZero` if the value is not zero.
+    ///
+    /// Returns `Nothing` if the value is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(NonZero::new(42).is_just())
+    /// assert(NonZero::new(0).is_nothing())
+    /// ```
+    pub func new(value: T) -> Maybe[NonZero[T]] {
+        if value.is_zero() {
+            return Nothing
+        }
+        return Just(NonZero { value: value })
+    }
+
+    /// Returns the value.
+    ///
+    /// This method is safe because `NonZero` guarantees the value is never zero.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let n = NonZero::new(42).unwrap()
+    /// assert_eq(n.get(), 42)
+    /// ```
+    pub func get(this) -> T {
+        return this.value
+    }
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+impl[T: Zero + PartialEq + Duplicate] Duplicate for NonZero[T] {
+    pub func duplicate(this) -> NonZero[T] {
+        return NonZero { value: this.value.duplicate() }
+    }
+}
+
+impl[T: Copy] Copy for NonZero[T] {}
+
+impl[T: PartialEq] PartialEq for NonZero[T] {
+    pub func eq(this, other: ref NonZero[T]) -> Bool {
+        return this.value.eq(ref other.value)
+    }
+}
+
+impl[T: Eq] Eq for NonZero[T] {}
+
+impl[T: PartialOrd] PartialOrd for NonZero[T] {
+    pub func partial_cmp(this, other: ref NonZero[T]) -> Maybe[Ordering] {
+        return this.value.partial_cmp(ref other.value)
+    }
+}
+
+impl[T: Ord] Ord for NonZero[T] {
+    pub func cmp(this, other: ref NonZero[T]) -> Ordering {
+        return this.value.cmp(ref other.value)
+    }
+}

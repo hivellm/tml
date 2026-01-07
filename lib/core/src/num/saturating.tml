@@ -1,0 +1,120 @@
+//! Saturating arithmetic wrapper type.
+//!
+//! This module provides the [`Saturating`] wrapper type which performs
+//! saturating arithmetic operations.
+
+use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+use core::clone::{Duplicate, Copy}
+use core::default::Default
+
+// ============================================================================
+// Saturating Wrapper Type
+// ============================================================================
+
+/// A wrapper providing saturating arithmetic operations.
+///
+/// Saturating arithmetic clamps the result to the minimum or maximum value
+/// of the type instead of overflowing. For example, adding 1 to `I8::MAX`
+/// in saturating mode yields `I8::MAX` (127), not -128.
+///
+/// This is useful when overflow is unexpected but you want a reasonable
+/// fallback rather than wrapping or panicking.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::Saturating
+///
+/// let x: Saturating[I8] = Saturating::new(100)
+/// let y: Saturating[I8] = Saturating::new(50)
+///
+/// // 100 + 50 would overflow I8, but saturates to 127
+/// let sum: Saturating[I8] = x + y
+/// assert_eq(sum.value(), 127)
+///
+/// // Subtraction also saturates
+/// let small: Saturating[I8] = Saturating::new(-100)
+/// let diff: Saturating[I8] = small - y  // -100 - 50 saturates to -128
+/// assert_eq(diff.value(), -128)
+/// ```
+///
+/// # When to Use
+///
+/// - Audio/video processing (clipping instead of distortion)
+/// - Color calculations (clamping to 0-255)
+/// - Counter limits (staying at max value)
+/// - Any context where "as close as possible" is better than wrapping
+pub type Saturating[T] {
+    inner: T
+}
+
+impl[T] Saturating[T] {
+    /// Creates a new `Saturating` wrapper around the given value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let sat: Saturating[I32] = Saturating::new(42)
+    /// assert_eq(sat.value(), 42)
+    /// ```
+    pub func new(value: T) -> Saturating[T] {
+        return Saturating { inner: value }
+    }
+
+    /// Returns the wrapped value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let sat: Saturating[I32] = Saturating::new(42)
+    /// assert_eq(sat.value(), 42)
+    /// ```
+    pub func value(this) -> T {
+        return this.inner
+    }
+
+    /// Consumes the wrapper and returns the inner value.
+    ///
+    /// This is equivalent to `value()` but consumes the wrapper.
+    pub func into_inner(this) -> T {
+        return this.inner
+    }
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+impl[T: Default] Default for Saturating[T] {
+    pub func default() -> Saturating[T] {
+        return Saturating::new(Default::default())
+    }
+}
+
+impl[T: Duplicate] Duplicate for Saturating[T] {
+    pub func duplicate(this) -> Saturating[T] {
+        return Saturating::new(this.inner.duplicate())
+    }
+}
+
+impl[T: Copy] Copy for Saturating[T] {}
+
+impl[T: PartialEq] PartialEq for Saturating[T] {
+    pub func eq(this, other: ref Saturating[T]) -> Bool {
+        return this.inner.eq(ref other.inner)
+    }
+}
+
+impl[T: Eq] Eq for Saturating[T] {}
+
+impl[T: PartialOrd] PartialOrd for Saturating[T] {
+    pub func partial_cmp(this, other: ref Saturating[T]) -> Maybe[Ordering] {
+        return this.inner.partial_cmp(ref other.inner)
+    }
+}
+
+impl[T: Ord] Ord for Saturating[T] {
+    pub func cmp(this, other: ref Saturating[T]) -> Ordering {
+        return this.inner.cmp(ref other.inner)
+    }
+}

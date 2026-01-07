@@ -312,6 +312,105 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return result;
     }
 
+    // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
+    // Convert PrimitiveKind to type name
+    std::string type_name;
+    switch (kind) {
+    case types::PrimitiveKind::I8:
+        type_name = "I8";
+        break;
+    case types::PrimitiveKind::I16:
+        type_name = "I16";
+        break;
+    case types::PrimitiveKind::I32:
+        type_name = "I32";
+        break;
+    case types::PrimitiveKind::I64:
+        type_name = "I64";
+        break;
+    case types::PrimitiveKind::I128:
+        type_name = "I128";
+        break;
+    case types::PrimitiveKind::U8:
+        type_name = "U8";
+        break;
+    case types::PrimitiveKind::U16:
+        type_name = "U16";
+        break;
+    case types::PrimitiveKind::U32:
+        type_name = "U32";
+        break;
+    case types::PrimitiveKind::U64:
+        type_name = "U64";
+        break;
+    case types::PrimitiveKind::U128:
+        type_name = "U128";
+        break;
+    case types::PrimitiveKind::F32:
+        type_name = "F32";
+        break;
+    case types::PrimitiveKind::F64:
+        type_name = "F64";
+        break;
+    case types::PrimitiveKind::Bool:
+        type_name = "Bool";
+        break;
+    default:
+        return std::nullopt;
+    }
+
+    std::string qualified_name = type_name + "::" + method;
+    auto func_sig = env_.lookup_func(qualified_name);
+
+    // If not found in local env, search all imported modules
+    if (!func_sig && env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto func_it = mod.functions.find(qualified_name);
+            if (func_it != mod.functions.end()) {
+                func_sig = func_it->second;
+                break;
+            }
+        }
+    }
+
+    if (func_sig) {
+        std::string fn_name = "@tml_" + type_name + "_" + method;
+
+        // Build arguments - 'this' is passed by value for primitives
+        std::vector<std::pair<std::string, std::string>> typed_args;
+        typed_args.push_back({llvm_ty, receiver});
+
+        // Add remaining arguments
+        for (size_t i = 0; i < call.args.size(); ++i) {
+            std::string val = gen_expr(*call.args[i]);
+            std::string arg_type = "i32"; // default fallback
+            if (i + 1 < func_sig->params.size()) {
+                arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+            }
+            typed_args.push_back({arg_type, val});
+        }
+
+        std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+        std::string args_str;
+        for (size_t i = 0; i < typed_args.size(); ++i) {
+            if (i > 0)
+                args_str += ", ";
+            args_str += typed_args[i].first + " " + typed_args[i].second;
+        }
+
+        std::string result = fresh_reg();
+        if (ret_type == "void") {
+            emit_line("  call void " + fn_name + "(" + args_str + ")");
+            last_expr_type_ = "void";
+            return std::string("void");
+        } else {
+            emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" + args_str + ")");
+            last_expr_type_ = ret_type;
+            return result;
+        }
+    }
+
     return std::nullopt;
 }
 

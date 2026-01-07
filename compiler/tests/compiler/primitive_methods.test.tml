@@ -1,0 +1,688 @@
+// Comprehensive tests for methods on primitive types
+// Tests the codegen fix for passing 'this' by value instead of pointer
+use test
+
+// ============================================================================
+// I32 Implementation for Testing
+// ============================================================================
+
+impl I32 {
+    pub const MIN: I32 = -2147483648 as I32
+    pub const MAX: I32 = 2147483647 as I32
+    pub const ZERO: I32 = 0 as I32
+    pub const ONE: I32 = 1 as I32
+
+    /// Absolute value
+    pub func abs(this) -> I32 {
+        if this < 0 {
+            return 0 - this
+        }
+        return this
+    }
+
+    /// Sign indicator: 1, 0, or -1
+    pub func signum(this) -> I32 {
+        if this > 0 { return 1 }
+        if this < 0 { return -1 }
+        return 0
+    }
+
+    /// Check if positive
+    pub func is_positive(this) -> Bool {
+        return this > 0
+    }
+
+    /// Check if negative
+    pub func is_negative(this) -> Bool {
+        return this < 0
+    }
+
+    /// Check if zero
+    pub func is_zero(this) -> Bool {
+        return this == 0
+    }
+
+    /// Power function
+    pub func pow(this, exp: I32) -> I32 {
+        if exp == 0 { return 1 }
+        if exp == 1 { return this }
+        let mut result: I32 = 1
+        let mut base: I32 = this
+        let mut e: I32 = exp
+        loop {
+            if e <= 0 { return result }
+            if e % 2 == 1 { result = result * base }
+            base = base * base
+            e = e / 2
+        }
+        return result
+    }
+
+    /// Returns the larger of two values
+    pub func max(this, other: I32) -> I32 {
+        if this > other { return this }
+        return other
+    }
+
+    /// Returns the smaller of two values
+    pub func min(this, other: I32) -> I32 {
+        if this < other { return this }
+        return other
+    }
+
+    /// Clamp value between min and max
+    pub func clamp(this, min_val: I32, max_val: I32) -> I32 {
+        if this < min_val { return min_val }
+        if this > max_val { return max_val }
+        return this
+    }
+
+    /// Saturating addition (clamps at MAX/MIN instead of overflow)
+    pub func saturating_add(this, other: I32) -> I32 {
+        // Simple implementation for testing
+        let result: I64 = (this as I64) + (other as I64)
+        if result > 2147483647 { return 2147483647 }
+        if result < -2147483648 { return -2147483648 as I32 }
+        return result as I32
+    }
+
+    /// Saturating subtraction
+    pub func saturating_sub(this, other: I32) -> I32 {
+        let result: I64 = (this as I64) - (other as I64)
+        if result > 2147483647 { return 2147483647 }
+        if result < -2147483648 { return -2147483648 as I32 }
+        return result as I32
+    }
+
+    /// Double the value
+    pub func double(this) -> I32 {
+        return this * 2
+    }
+
+    /// Square the value
+    pub func square(this) -> I32 {
+        return this * this
+    }
+}
+
+// ============================================================================
+// I64 Implementation for Testing
+// ============================================================================
+
+impl I64 {
+    pub const MIN: I64 = -9223372036854775808
+    pub const MAX: I64 = 9223372036854775807
+    pub const ZERO: I64 = 0 as I64
+    pub const ONE: I64 = 1 as I64
+
+    pub func abs(this) -> I64 {
+        let zero: I64 = 0
+        if this < zero {
+            return zero - this
+        }
+        return this
+    }
+
+    pub func signum(this) -> I64 {
+        let zero: I64 = 0
+        let one: I64 = 1
+        let neg_one: I64 = -1
+        if this > zero { return one }
+        if this < zero { return neg_one }
+        return zero
+    }
+
+    pub func is_positive(this) -> Bool {
+        let zero: I64 = 0
+        return this > zero
+    }
+
+    pub func is_negative(this) -> Bool {
+        let zero: I64 = 0
+        return this < zero
+    }
+
+    pub func is_zero(this) -> Bool {
+        let zero: I64 = 0
+        return this == zero
+    }
+}
+
+// ============================================================================
+// Bool Implementation for Testing
+// ============================================================================
+
+impl Bool {
+    /// Logical NOT
+    pub func flip(this) -> Bool {
+        return not this
+    }
+
+    /// Convert to I32: true=1, false=0
+    pub func to_i32(this) -> I32 {
+        if this { return 1 }
+        return 0
+    }
+
+    /// Logical AND with another bool
+    pub func and_with(this, other: Bool) -> Bool {
+        return this and other
+    }
+
+    /// Logical OR with another bool
+    pub func or_with(this, other: Bool) -> Bool {
+        return this or other
+    }
+
+    /// Logical XOR with another bool
+    pub func xor_with(this, other: Bool) -> Bool {
+        if this {
+            return not other
+        }
+        return other
+    }
+}
+
+// ============================================================================
+// I32 Constant Tests
+// ============================================================================
+
+@test
+func test_i32_min_constant() -> I32 {
+    assert_eq(I32::MIN, -2147483648, "I32::MIN should be -2147483648")
+    return 0
+}
+
+@test
+func test_i32_max_constant() -> I32 {
+    assert_eq(I32::MAX, 2147483647, "I32::MAX should be 2147483647")
+    return 0
+}
+
+@test
+func test_i32_zero_constant() -> I32 {
+    assert_eq(I32::ZERO, 0, "I32::ZERO should be 0")
+    return 0
+}
+
+@test
+func test_i32_one_constant() -> I32 {
+    assert_eq(I32::ONE, 1, "I32::ONE should be 1")
+    return 0
+}
+
+@test
+func test_i32_constants_relationship() -> I32 {
+    assert(I32::MIN < I32::ZERO, "MIN < ZERO")
+    assert(I32::ZERO < I32::ONE, "ZERO < ONE")
+    assert(I32::ONE < I32::MAX, "ONE < MAX")
+    assert(I32::MIN < I32::MAX, "MIN < MAX")
+    return 0
+}
+
+// ============================================================================
+// I32::abs() Tests
+// ============================================================================
+
+@test
+func test_i32_abs_positive() -> I32 {
+    assert_eq((5).abs(), 5, "abs(5) = 5")
+    assert_eq((1).abs(), 1, "abs(1) = 1")
+    assert_eq((100).abs(), 100, "abs(100) = 100")
+    assert_eq((2147483647).abs(), 2147483647, "abs(MAX) = MAX")
+    return 0
+}
+
+@test
+func test_i32_abs_negative() -> I32 {
+    assert_eq((-5).abs(), 5, "abs(-5) = 5")
+    assert_eq((-1).abs(), 1, "abs(-1) = 1")
+    assert_eq((-100).abs(), 100, "abs(-100) = 100")
+    assert_eq((-2147483647).abs(), 2147483647, "abs(-MAX) = MAX")
+    return 0
+}
+
+@test
+func test_i32_abs_zero() -> I32 {
+    assert_eq((0).abs(), 0, "abs(0) = 0")
+    return 0
+}
+
+@test
+func test_i32_abs_with_variable() -> I32 {
+    let x: I32 = -42
+    assert_eq(x.abs(), 42, "variable.abs() works")
+    let y: I32 = 42
+    assert_eq(y.abs(), 42, "positive variable.abs() works")
+    return 0
+}
+
+// ============================================================================
+// I32::signum() Tests
+// ============================================================================
+
+@test
+func test_i32_signum_positive() -> I32 {
+    assert_eq((1).signum(), 1, "signum(1) = 1")
+    assert_eq((5).signum(), 1, "signum(5) = 1")
+    assert_eq((100).signum(), 1, "signum(100) = 1")
+    assert_eq((2147483647).signum(), 1, "signum(MAX) = 1")
+    return 0
+}
+
+@test
+func test_i32_signum_negative() -> I32 {
+    assert_eq((-1).signum(), -1, "signum(-1) = -1")
+    assert_eq((-5).signum(), -1, "signum(-5) = -1")
+    assert_eq((-100).signum(), -1, "signum(-100) = -1")
+    assert_eq((-2147483647).signum(), -1, "signum(-MAX) = -1")
+    return 0
+}
+
+@test
+func test_i32_signum_zero() -> I32 {
+    assert_eq((0).signum(), 0, "signum(0) = 0")
+    return 0
+}
+
+// ============================================================================
+// I32::is_positive/is_negative/is_zero Tests
+// ============================================================================
+
+@test
+func test_i32_is_positive() -> I32 {
+    assert((1).is_positive(), "1 is positive")
+    assert((100).is_positive(), "100 is positive")
+    assert((2147483647).is_positive(), "MAX is positive")
+    assert(not (0).is_positive(), "0 is not positive")
+    assert(not (-1).is_positive(), "-1 is not positive")
+    return 0
+}
+
+@test
+func test_i32_is_negative() -> I32 {
+    assert((-1).is_negative(), "-1 is negative")
+    assert((-100).is_negative(), "-100 is negative")
+    assert((-2147483647).is_negative(), "-MAX is negative")
+    assert(not (0).is_negative(), "0 is not negative")
+    assert(not (1).is_negative(), "1 is not negative")
+    return 0
+}
+
+@test
+func test_i32_is_zero() -> I32 {
+    assert((0).is_zero(), "0 is zero")
+    assert(not (1).is_zero(), "1 is not zero")
+    assert(not (-1).is_zero(), "-1 is not zero")
+    return 0
+}
+
+@test
+func test_i32_sign_predicates_exhaustive() -> I32 {
+    // Positive numbers: is_positive=true, is_negative=false, is_zero=false
+    let pos: I32 = 42
+    assert(pos.is_positive(), "42.is_positive()")
+    assert(not pos.is_negative(), "not 42.is_negative()")
+    assert(not pos.is_zero(), "not 42.is_zero()")
+
+    // Negative numbers: is_positive=false, is_negative=true, is_zero=false
+    let neg: I32 = -42
+    assert(not neg.is_positive(), "not -42.is_positive()")
+    assert(neg.is_negative(), "-42.is_negative()")
+    assert(not neg.is_zero(), "not -42.is_zero()")
+
+    // Zero: is_positive=false, is_negative=false, is_zero=true
+    let zero: I32 = 0
+    assert(not zero.is_positive(), "not 0.is_positive()")
+    assert(not zero.is_negative(), "not 0.is_negative()")
+    assert(zero.is_zero(), "0.is_zero()")
+
+    return 0
+}
+
+// ============================================================================
+// I32::pow() Tests
+// ============================================================================
+
+@test
+func test_i32_pow_basic() -> I32 {
+    assert_eq((2).pow(0), 1, "2^0 = 1")
+    assert_eq((2).pow(1), 2, "2^1 = 2")
+    assert_eq((2).pow(2), 4, "2^2 = 4")
+    assert_eq((2).pow(3), 8, "2^3 = 8")
+    assert_eq((2).pow(10), 1024, "2^10 = 1024")
+    return 0
+}
+
+@test
+func test_i32_pow_negative_base() -> I32 {
+    assert_eq((-2).pow(0), 1, "(-2)^0 = 1")
+    assert_eq((-2).pow(1), -2, "(-2)^1 = -2")
+    assert_eq((-2).pow(2), 4, "(-2)^2 = 4")
+    assert_eq((-2).pow(3), -8, "(-2)^3 = -8")
+    assert_eq((-2).pow(4), 16, "(-2)^4 = 16")
+    return 0
+}
+
+@test
+func test_i32_pow_various_bases() -> I32 {
+    assert_eq((3).pow(3), 27, "3^3 = 27")
+    assert_eq((5).pow(2), 25, "5^2 = 25")
+    assert_eq((7).pow(2), 49, "7^2 = 49")
+    assert_eq((10).pow(3), 1000, "10^3 = 1000")
+    return 0
+}
+
+@test
+func test_i32_pow_edge_cases() -> I32 {
+    assert_eq((0).pow(0), 1, "0^0 = 1 (by convention)")
+    assert_eq((0).pow(1), 0, "0^1 = 0")
+    assert_eq((0).pow(10), 0, "0^10 = 0")
+    assert_eq((1).pow(0), 1, "1^0 = 1")
+    assert_eq((1).pow(100), 1, "1^100 = 1")
+    assert_eq((-1).pow(0), 1, "(-1)^0 = 1")
+    assert_eq((-1).pow(1), -1, "(-1)^1 = -1")
+    assert_eq((-1).pow(2), 1, "(-1)^2 = 1")
+    return 0
+}
+
+// ============================================================================
+// I32::min/max Tests
+// ============================================================================
+
+@test
+func test_i32_min() -> I32 {
+    assert_eq((5).min(3), 3, "min(5, 3) = 3")
+    assert_eq((3).min(5), 3, "min(3, 5) = 3")
+    assert_eq((5).min(5), 5, "min(5, 5) = 5")
+    assert_eq((-5).min(3), -5, "min(-5, 3) = -5")
+    assert_eq((0).min(-1), -1, "min(0, -1) = -1")
+    return 0
+}
+
+@test
+func test_i32_max() -> I32 {
+    assert_eq((5).max(3), 5, "max(5, 3) = 5")
+    assert_eq((3).max(5), 5, "max(3, 5) = 5")
+    assert_eq((5).max(5), 5, "max(5, 5) = 5")
+    assert_eq((-5).max(3), 3, "max(-5, 3) = 3")
+    assert_eq((0).max(-1), 0, "max(0, -1) = 0")
+    return 0
+}
+
+// ============================================================================
+// I32::clamp Tests
+// ============================================================================
+
+@test
+func test_i32_clamp_in_range() -> I32 {
+    assert_eq((5).clamp(0, 10), 5, "5 in [0,10] = 5")
+    assert_eq((0).clamp(0, 10), 0, "0 in [0,10] = 0")
+    assert_eq((10).clamp(0, 10), 10, "10 in [0,10] = 10")
+    return 0
+}
+
+@test
+func test_i32_clamp_below_range() -> I32 {
+    assert_eq((-5).clamp(0, 10), 0, "-5 clamped to [0,10] = 0")
+    assert_eq((-100).clamp(0, 10), 0, "-100 clamped to [0,10] = 0")
+    return 0
+}
+
+@test
+func test_i32_clamp_above_range() -> I32 {
+    assert_eq((15).clamp(0, 10), 10, "15 clamped to [0,10] = 10")
+    assert_eq((100).clamp(0, 10), 10, "100 clamped to [0,10] = 10")
+    return 0
+}
+
+@test
+func test_i32_clamp_negative_range() -> I32 {
+    assert_eq((0).clamp(-10, -5), -5, "0 clamped to [-10,-5] = -5")
+    assert_eq((-7).clamp(-10, -5), -7, "-7 in [-10,-5] = -7")
+    assert_eq((-15).clamp(-10, -5), -10, "-15 clamped to [-10,-5] = -10")
+    return 0
+}
+
+// ============================================================================
+// I32::saturating_add/sub Tests
+// ============================================================================
+
+@test
+func test_i32_saturating_add_normal() -> I32 {
+    assert_eq((5).saturating_add(3), 8, "5 + 3 = 8")
+    assert_eq((0).saturating_add(0), 0, "0 + 0 = 0")
+    assert_eq((-5).saturating_add(3), -2, "-5 + 3 = -2")
+    return 0
+}
+
+@test
+func test_i32_saturating_add_overflow() -> I32 {
+    // Should clamp at MAX instead of overflowing
+    assert_eq((2147483647).saturating_add(1), 2147483647, "MAX + 1 saturates to MAX")
+    assert_eq((2147483647).saturating_add(100), 2147483647, "MAX + 100 saturates to MAX")
+    return 0
+}
+
+@test
+func test_i32_saturating_sub_normal() -> I32 {
+    assert_eq((5).saturating_sub(3), 2, "5 - 3 = 2")
+    assert_eq((0).saturating_sub(0), 0, "0 - 0 = 0")
+    assert_eq((-5).saturating_sub(3), -8, "-5 - 3 = -8")
+    return 0
+}
+
+@test
+func test_i32_saturating_sub_underflow() -> I32 {
+    // Should clamp at MIN instead of underflowing
+    let min_val: I32 = -2147483648 as I32
+    assert_eq(min_val.saturating_sub(1), min_val, "MIN - 1 saturates to MIN")
+    return 0
+}
+
+// ============================================================================
+// I32::double/square Tests
+// ============================================================================
+
+@test
+func test_i32_double() -> I32 {
+    assert_eq((0).double(), 0, "0.double() = 0")
+    assert_eq((1).double(), 2, "1.double() = 2")
+    assert_eq((5).double(), 10, "5.double() = 10")
+    assert_eq((-3).double(), -6, "(-3).double() = -6")
+    return 0
+}
+
+@test
+func test_i32_square() -> I32 {
+    assert_eq((0).square(), 0, "0.square() = 0")
+    assert_eq((1).square(), 1, "1.square() = 1")
+    assert_eq((5).square(), 25, "5.square() = 25")
+    assert_eq((-3).square(), 9, "(-3).square() = 9")
+    assert_eq((10).square(), 100, "10.square() = 100")
+    return 0
+}
+
+// ============================================================================
+// I64 Tests
+// ============================================================================
+
+@test
+func test_i64_constants() -> I32 {
+    let min_val: I64 = -9223372036854775808
+    let max_val: I64 = 9223372036854775807
+    assert_eq(I64::MIN, min_val, "I64::MIN")
+    assert_eq(I64::MAX, max_val, "I64::MAX")
+    let zero: I64 = 0
+    let one: I64 = 1
+    assert_eq(I64::ZERO, zero, "I64::ZERO")
+    assert_eq(I64::ONE, one, "I64::ONE")
+    return 0
+}
+
+@test
+func test_i64_abs() -> I32 {
+    let five: I64 = 5
+    let neg_five: I64 = -5
+    let zero: I64 = 0
+    assert_eq(five.abs(), five, "abs(5) = 5")
+    assert_eq(neg_five.abs(), five, "abs(-5) = 5")
+    assert_eq(zero.abs(), zero, "abs(0) = 0")
+    return 0
+}
+
+@test
+func test_i64_signum() -> I32 {
+    let pos: I64 = 42
+    let neg: I64 = -42
+    let zero: I64 = 0
+    let one: I64 = 1
+    let neg_one: I64 = -1
+    assert_eq(pos.signum(), one, "signum(42) = 1")
+    assert_eq(neg.signum(), neg_one, "signum(-42) = -1")
+    assert_eq(zero.signum(), zero, "signum(0) = 0")
+    return 0
+}
+
+@test
+func test_i64_sign_predicates() -> I32 {
+    let pos: I64 = 42
+    let neg: I64 = -42
+    let zero: I64 = 0
+
+    assert(pos.is_positive(), "42 is positive")
+    assert(not pos.is_negative(), "42 is not negative")
+    assert(not pos.is_zero(), "42 is not zero")
+
+    assert(not neg.is_positive(), "-42 is not positive")
+    assert(neg.is_negative(), "-42 is negative")
+    assert(not neg.is_zero(), "-42 is not zero")
+
+    assert(not zero.is_positive(), "0 is not positive")
+    assert(not zero.is_negative(), "0 is not negative")
+    assert(zero.is_zero(), "0 is zero")
+
+    return 0
+}
+
+// ============================================================================
+// Bool Tests
+// ============================================================================
+
+@test
+func test_bool_flip() -> I32 {
+    assert_eq(true.flip(), false, "true.flip() = false")
+    assert_eq(false.flip(), true, "false.flip() = true")
+    return 0
+}
+
+@test
+func test_bool_to_i32() -> I32 {
+    assert_eq(true.to_i32(), 1, "true.to_i32() = 1")
+    assert_eq(false.to_i32(), 0, "false.to_i32() = 0")
+    return 0
+}
+
+@test
+func test_bool_and_with() -> I32 {
+    assert_eq(true.and_with(true), true, "true AND true = true")
+    assert_eq(true.and_with(false), false, "true AND false = false")
+    assert_eq(false.and_with(true), false, "false AND true = false")
+    assert_eq(false.and_with(false), false, "false AND false = false")
+    return 0
+}
+
+@test
+func test_bool_or_with() -> I32 {
+    assert_eq(true.or_with(true), true, "true OR true = true")
+    assert_eq(true.or_with(false), true, "true OR false = true")
+    assert_eq(false.or_with(true), true, "false OR true = true")
+    assert_eq(false.or_with(false), false, "false OR false = false")
+    return 0
+}
+
+@test
+func test_bool_xor_with() -> I32 {
+    assert_eq(true.xor_with(true), false, "true XOR true = false")
+    assert_eq(true.xor_with(false), true, "true XOR false = true")
+    assert_eq(false.xor_with(true), true, "false XOR true = true")
+    assert_eq(false.xor_with(false), false, "false XOR false = false")
+    return 0
+}
+
+// ============================================================================
+// Method Chaining Tests
+// ============================================================================
+
+@test
+func test_method_chaining() -> I32 {
+    // Chain multiple method calls
+    assert_eq((-5).abs().double(), 10, "(-5).abs().double() = 10")
+    assert_eq((3).square().double(), 18, "3.square().double() = 18")
+    assert_eq((-4).abs().square(), 16, "(-4).abs().square() = 16")
+    return 0
+}
+
+@test
+func test_method_on_expression_result() -> I32 {
+    // Method on arithmetic result
+    let x: I32 = 3
+    let y: I32 = -7
+    assert_eq((x + y).abs(), 4, "(3 + -7).abs() = 4")
+    assert_eq((x * y).abs(), 21, "(3 * -7).abs() = 21")
+    return 0
+}
+
+@test
+func test_method_with_method_argument() -> I32 {
+    // Method call with result of another method as argument
+    let x: I32 = -5
+    let y: I32 = 3
+    assert_eq(x.abs().max(y), 5, "(-5).abs().max(3) = 5")
+    assert_eq(x.abs().min(y), 3, "(-5).abs().min(3) = 3")
+    return 0
+}
+
+// ============================================================================
+// Edge Cases and Boundary Tests
+// ============================================================================
+
+@test
+func test_i32_boundary_values() -> I32 {
+    // Test at boundary values
+    assert_eq((2147483647).is_positive(), true, "MAX is positive")
+    assert_eq((2147483647).is_negative(), false, "MAX is not negative")
+    assert_eq((2147483647).signum(), 1, "signum(MAX) = 1")
+
+    let min_plus_one: I32 = -2147483647
+    assert_eq(min_plus_one.is_positive(), false, "MIN+1 is not positive")
+    assert_eq(min_plus_one.is_negative(), true, "MIN+1 is negative")
+    assert_eq(min_plus_one.abs(), 2147483647, "abs(MIN+1) = MAX")
+
+    return 0
+}
+
+@test
+func test_consecutive_method_calls() -> I32 {
+    // Multiple independent method calls on same value
+    let x: I32 = -42
+    let a: I32 = x.abs()
+    let s: I32 = x.signum()
+    let p: Bool = x.is_positive()
+    let n: Bool = x.is_negative()
+
+    assert_eq(a, 42, "abs(-42) = 42")
+    assert_eq(s, -1, "signum(-42) = -1")
+    assert(not p, "-42 is not positive")
+    assert(n, "-42 is negative")
+
+    return 0
+}
+
+// ============================================================================
+// Entry Point
+// ============================================================================
+
+func main() -> I32 {
+    return 0
+}

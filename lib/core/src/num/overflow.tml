@@ -1,0 +1,220 @@
+//! Overflow-handling behaviors.
+//!
+//! This module provides behaviors for different overflow handling strategies:
+//!
+//! - **Checked**: Returns `Maybe`, `Nothing` on overflow
+//! - **Saturating**: Clamps to min/max instead of overflowing
+//! - **Wrapping**: Wraps around on overflow (two's complement)
+//! - **Overflowing**: Returns (result, did_overflow) tuple
+
+// ============================================================================
+// Checked Arithmetic Behaviors
+// ============================================================================
+
+/// Types that support checked addition.
+///
+/// Returns `Nothing` on overflow instead of wrapping or panicking.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: I8 = 100
+/// let b: I8 = 50
+///
+/// when a.checked_add(b) {
+///     Just(sum) => println("Sum: {sum}"),
+///     Nothing => println("Overflow!")
+/// }
+/// ```
+pub behavior CheckedAdd {
+    /// Checked addition. Returns `Nothing` on overflow.
+    func checked_add(this, rhs: Self) -> Maybe[Self]
+}
+
+/// Types that support checked subtraction.
+///
+/// Returns `Nothing` on underflow.
+pub behavior CheckedSub {
+    /// Checked subtraction. Returns `Nothing` on underflow.
+    func checked_sub(this, rhs: Self) -> Maybe[Self]
+}
+
+/// Types that support checked multiplication.
+///
+/// Returns `Nothing` on overflow.
+pub behavior CheckedMul {
+    /// Checked multiplication. Returns `Nothing` on overflow.
+    func checked_mul(this, rhs: Self) -> Maybe[Self]
+}
+
+/// Types that support checked division.
+///
+/// Returns `Nothing` if `rhs == 0` or on overflow (e.g., `I8::MIN / -1`).
+pub behavior CheckedDiv {
+    /// Checked division. Returns `Nothing` if `rhs == 0` or on overflow.
+    func checked_div(this, rhs: Self) -> Maybe[Self]
+}
+
+/// Types that support checked remainder.
+///
+/// Returns `Nothing` if `rhs == 0` or on overflow.
+pub behavior CheckedRem {
+    /// Checked remainder. Returns `Nothing` if `rhs == 0` or on overflow.
+    func checked_rem(this, rhs: Self) -> Maybe[Self]
+}
+
+/// Types that support checked negation.
+///
+/// Returns `Nothing` on overflow (e.g., `I8::MIN.checked_neg()` since `-(-128)`
+/// cannot be represented as an `I8`).
+pub behavior CheckedNeg {
+    /// Checked negation. Returns `Nothing` on overflow.
+    func checked_neg(this) -> Maybe[Self]
+}
+
+/// Types that support checked left shift.
+///
+/// Returns `Nothing` if shift amount is >= bit width of the type.
+pub behavior CheckedShl {
+    /// Checked left shift. Returns `Nothing` if shift amount is >= bit width.
+    func checked_shl(this, rhs: U32) -> Maybe[Self]
+}
+
+/// Types that support checked right shift.
+///
+/// Returns `Nothing` if shift amount is >= bit width of the type.
+pub behavior CheckedShr {
+    /// Checked right shift. Returns `Nothing` if shift amount is >= bit width.
+    func checked_shr(this, rhs: U32) -> Maybe[Self]
+}
+
+// ============================================================================
+// Saturating Arithmetic Behaviors
+// ============================================================================
+
+/// Types that support saturating addition.
+///
+/// Saturating addition clamps at the numeric bounds instead of overflowing.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: I8 = 100
+/// let b: I8 = 50
+/// assert_eq(a.saturating_add(b), 127)  // Clamped to I8::MAX
+/// ```
+pub behavior SaturatingAdd {
+    /// Saturating addition. Clamps at the numeric bounds instead of overflowing.
+    func saturating_add(this, rhs: Self) -> Self
+}
+
+/// Types that support saturating subtraction.
+///
+/// Saturating subtraction clamps at the numeric bounds instead of underflowing.
+pub behavior SaturatingSub {
+    /// Saturating subtraction. Clamps at the numeric bounds instead of underflowing.
+    func saturating_sub(this, rhs: Self) -> Self
+}
+
+/// Types that support saturating multiplication.
+///
+/// Saturating multiplication clamps at the numeric bounds instead of overflowing.
+pub behavior SaturatingMul {
+    /// Saturating multiplication. Clamps at the numeric bounds instead of overflowing.
+    func saturating_mul(this, rhs: Self) -> Self
+}
+
+// ============================================================================
+// Wrapping Arithmetic Behaviors
+// ============================================================================
+
+/// Types that support wrapping addition.
+///
+/// Wrapping addition performs two's complement wrapping on overflow.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: I8 = 127
+/// let b: I8 = 1
+/// assert_eq(a.wrapping_add(b), -128)  // Wraps around
+/// ```
+pub behavior WrappingAdd {
+    /// Wrapping addition. Wraps around at the type boundary.
+    func wrapping_add(this, rhs: Self) -> Self
+}
+
+/// Types that support wrapping subtraction.
+///
+/// Wrapping subtraction performs two's complement wrapping on underflow.
+pub behavior WrappingSub {
+    /// Wrapping subtraction. Wraps around at the type boundary.
+    func wrapping_sub(this, rhs: Self) -> Self
+}
+
+/// Types that support wrapping multiplication.
+///
+/// Wrapping multiplication performs two's complement wrapping on overflow.
+pub behavior WrappingMul {
+    /// Wrapping multiplication. Wraps around at the type boundary.
+    func wrapping_mul(this, rhs: Self) -> Self
+}
+
+/// Types that support wrapping negation.
+///
+/// Note that `I8::MIN.wrapping_neg() == I8::MIN` because `-(-128) = 128`
+/// which wraps back to `-128`.
+pub behavior WrappingNeg {
+    /// Wrapping negation. Wraps around on overflow.
+    func wrapping_neg(this) -> Self
+}
+
+// ============================================================================
+// Overflowing Arithmetic Behaviors
+// ============================================================================
+
+/// Types that support overflowing addition.
+///
+/// Returns a tuple of `(result, overflowed)` where `overflowed` is `true`
+/// if overflow occurred.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: I8 = 127
+/// let b: I8 = 1
+/// let (result, overflowed) = a.overflowing_add(b)
+/// assert_eq(result, -128)
+/// assert(overflowed)
+/// ```
+pub behavior OverflowingAdd {
+    /// Overflowing addition. Returns `(result, overflowed)`.
+    func overflowing_add(this, rhs: Self) -> (Self, Bool)
+}
+
+/// Types that support overflowing subtraction.
+///
+/// Returns a tuple of `(result, overflowed)` where `overflowed` is `true`
+/// if underflow occurred.
+pub behavior OverflowingSub {
+    /// Overflowing subtraction. Returns `(result, overflowed)`.
+    func overflowing_sub(this, rhs: Self) -> (Self, Bool)
+}
+
+/// Types that support overflowing multiplication.
+///
+/// Returns a tuple of `(result, overflowed)` where `overflowed` is `true`
+/// if overflow occurred.
+pub behavior OverflowingMul {
+    /// Overflowing multiplication. Returns `(result, overflowed)`.
+    func overflowing_mul(this, rhs: Self) -> (Self, Bool)
+}
+
+/// Types that support overflowing negation.
+///
+/// Returns a tuple of `(result, overflowed)` where `overflowed` is `true`
+/// if overflow occurred (only possible for `MIN` values of signed types).
+pub behavior OverflowingNeg {
+    /// Overflowing negation. Returns `(result, overflowed)`.
+    func overflowing_neg(this) -> (Self, Bool)
+}

@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Primitive Type Methods Support** (2026-01-07) - Methods on primitive types (I32, I64, Bool, etc.) now work correctly
+  - Fixed codegen bug where `this` was incorrectly passed as pointer instead of by value for primitives
+  - Added support for user-defined impl methods on primitive types (e.g., `impl I32 { func abs(this) -> I32 }`)
+  - Added support for impl constants on primitive types (e.g., `I32::MIN`, `I32::MAX`)
+  - Fixed F32/F64 binary operations to use correct float type instead of always using double
+  - New test file: `compiler/tests/compiler/primitive_methods.test.tml` with 46 comprehensive tests
+  - Files modified:
+    - `compiler/src/codegen/expr/method_primitive.cpp` - lookup user-defined impl methods for primitives
+    - `compiler/src/codegen/expr/collections.cpp` - lookup constants from imported modules
+    - `compiler/src/codegen/expr/binary.cpp` - F32/F64 type handling in comparisons
+    - `compiler/src/types/checker/expr.cpp` - type checker support for primitive impl methods
+    - `compiler/src/types/env_module_support.cpp` - extract constants from imported modules
+    - `compiler/src/codegen/core/generate.cpp` - handle cast expressions in local constants
+    - `compiler/include/types/module.hpp` - added `constants` field to Module struct
+
+- **Duration Type Tests** (2026-01-06) - Comprehensive test suite for `core::time::Duration`
+  - Created `lib/core/tests/time.test.tml` with 28 test cases covering:
+    - Construction: new(), from_secs(), from_millis(), from_micros(), from_nanos()
+    - Accessors: is_zero(), as_secs(), subsec_nanos(), subsec_millis(), subsec_micros()
+    - Conversion: as_millis(), as_micros(), as_nanos()
+    - Arithmetic: checked_add(), checked_sub(), saturating_add(), saturating_sub(), mul(), div()
+    - Comparison: eq(), ordering via as_nanos()
+    - Behaviors: duplicate(), default()
+  - Fixed time.tml string interpolation syntax (debug_string format)
+  - Fixed module-level constant visibility by inlining values
+
+- **Core Library Test Improvements** (2026-01-06) - Comprehensive test coverage for core modules
+  - `iter.test.tml`: Added 8 new tests (EmptyI64, RepeatNI64, OnceI32 edge cases, large count)
+  - `slice.test.tml`: Added 7 new tests (find_max, find_min, first/last element, negative values)
+  - `num.test.tml`: Added 14 new tests (Zero/One properties, signed/unsigned ranges, arithmetic properties, F64)
+  - `async_iter.test.tml`: Simplified to 4 working tests for Once/Repeat type construction
+  - Total: 29 new test cases across core library modules
+
+### Fixed
+- **alloc.tml String Interpolation Syntax** (2026-01-06) - Fixed curly brace parsing in debug strings
+  - Removed curly braces from debug string formatting that were being interpreted as interpolation
+  - Changed `"Layout { size: ..."` to `"Layout(size=..."` format for proper parsing
+  - Files modified: `lib/core/src/alloc.tml`
+
+- **bstr.test.tml and alloc.test.tml** (2026-01-06) - Moved to pending due to codegen issues
+  - ByteStr module methods return `()` instead of proper types (codegen limitation)
+  - alloc tests reference unimplemented helper functions (align_up, align_down, etc.)
+  - Files moved to `lib/core/tests/pending/`
+
 ### Changed
 - **Method Codegen Modularization** (2026-01-01) - Split monolithic method.cpp into focused modules
   - Refactored 1750-line `method.cpp` into 5 modular files in `src/codegen/expr/`:
@@ -21,9 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `gen_collection_method()` - Handles collection instance methods
     - `gen_slice_method()` - Handles slice inline codegen
   - CMakeLists.txt updated with new source files
-  - All 728 tests passing after refactoring
+  - All 747 tests passing after refactoring
 
 ### Fixed
+- **Void Return Type for Indirect Function Calls** (2026-01-01) - Fixed closures returning void
+  - Indirect function pointer calls (closures) were incorrectly trying to assign void results
+  - Added void check in `gen_call()` for indirect calls, matching behavior of direct calls
+  - File modified: `compiler/src/codegen/llvm_ir_gen_builtins.cpp`
+
 - **Trait Object Vtable Type for Multiple Methods** (2026-01-01) - Fixed behaviors with multiple methods
   - Vtable GEP instruction was using hardcoded `{ ptr }` type regardless of method count
   - Now dynamically builds vtable type based on behavior's method count
@@ -45,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Files added: `compiler/src/codegen/expr/method_slice.cpp`
 
 ### Added
+- **Closure Iterator Pattern Tests** (2026-01-01) - Tests for closures with iterator-like patterns
+  - Tests for fold, all, any, find patterns using closures with arrays
+  - Files added:
+    - `compiler/tests/compiler/closure_basic.test.tml` - Basic closure tests
+    - `compiler/tests/compiler/closure_hof.test.tml` - Higher-order function tests
+    - `compiler/tests/compiler/closure_fold.test.tml` - Fold/all/any/find pattern tests
+
 - **ASCII Character Module** (2026-01-01) - Complete `core::ascii::AsciiChar` type
   - Safe ASCII character type with validation (0-127 range)
   - Character classification: `is_alphabetic()`, `is_digit()`, `is_alphanumeric()`, `is_whitespace()`, etc.

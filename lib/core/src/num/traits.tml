@@ -1,0 +1,322 @@
+//! Core numeric traits.
+//!
+//! This module provides the foundational behaviors for numeric types:
+//! - [`Zero`] - Types with an additive identity
+//! - [`One`] - Types with a multiplicative identity
+//! - [`Bounded`] - Types with minimum and maximum values
+//! - [`Integer`] - Marker for integer types
+//! - [`SignedInteger`] - Marker for signed integer types
+//! - [`UnsignedInteger`] - Marker for unsigned integer types
+
+// ============================================================================
+// Zero Behavior
+// ============================================================================
+
+/// A type with an additive identity element (zero).
+///
+/// Types implementing `Zero` have a value that, when added to any other value
+/// of the same type, returns that value unchanged: `x + 0 = x`.
+///
+/// # Laws
+///
+/// For all values `x` of a type implementing `Zero`:
+/// - `x + T::zero() == x` (right identity)
+/// - `T::zero() + x == x` (left identity)
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::Zero
+///
+/// assert(I32::zero() == 0)
+/// assert(F64::zero() == 0.0)
+///
+/// let x: I64 = 42
+/// assert(x + I64::zero() == x)
+/// ```
+pub behavior Zero {
+    /// Returns the additive identity element of this type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(I32::zero() == 0)
+    /// assert(F64::zero() == 0.0)
+    /// ```
+    func zero() -> Self
+
+    /// Returns `true` if this value is equal to zero.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(0.is_zero())
+    /// assert(not 5.is_zero())
+    /// ```
+    func is_zero(this) -> Bool
+}
+
+// ============================================================================
+// One Behavior
+// ============================================================================
+
+/// A type with a multiplicative identity element (one).
+///
+/// Types implementing `One` have a value that, when multiplied with any other
+/// value of the same type, returns that value unchanged: `x * 1 = x`.
+///
+/// # Laws
+///
+/// For all values `x` of a type implementing `One`:
+/// - `x * T::one() == x` (right identity)
+/// - `T::one() * x == x` (left identity)
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::One
+///
+/// assert(I32::one() == 1)
+/// assert(F64::one() == 1.0)
+///
+/// let x: I64 = 42
+/// assert(x * I64::one() == x)
+/// ```
+pub behavior One {
+    /// Returns the multiplicative identity element of this type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(I32::one() == 1)
+    /// assert(F64::one() == 1.0)
+    /// ```
+    func one() -> Self
+
+    /// Returns `true` if this value is equal to one.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(1.is_one())
+    /// assert(not 5.is_one())
+    /// ```
+    func is_one(this) -> Bool
+}
+
+// ============================================================================
+// Bounded Behavior
+// ============================================================================
+
+/// Types with minimum and maximum values.
+///
+/// This behavior provides access to the bounds of a numeric type.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::num::Bounded
+///
+/// assert_eq(I8::min_value(), -128)
+/// assert_eq(I8::max_value(), 127)
+/// assert_eq(U8::min_value(), 0)
+/// assert_eq(U8::max_value(), 255)
+/// ```
+pub behavior Bounded {
+    /// Returns the minimum value of this type.
+    func min_value() -> Self
+
+    /// Returns the maximum value of this type.
+    func max_value() -> Self
+}
+
+// ============================================================================
+// Integer Marker Behaviors
+// ============================================================================
+
+/// Marker behavior for integer types.
+///
+/// This is implemented by all built-in integer types (I8, I16, I32, I64,
+/// U8, U16, U32, U64).
+pub behavior Integer: Zero + One + Bounded {}
+
+/// Marker behavior for signed integer types.
+pub behavior SignedInteger: Integer {}
+
+/// Marker behavior for unsigned integer types.
+pub behavior UnsignedInteger: Integer {}
+
+// ============================================================================
+// Zero Implementations
+// ============================================================================
+
+impl Zero for I8 {
+    pub func zero() -> I8 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for I16 {
+    pub func zero() -> I16 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for I32 {
+    pub func zero() -> I32 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for I64 {
+    pub func zero() -> I64 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for U8 {
+    pub func zero() -> U8 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for U16 {
+    pub func zero() -> U16 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for U32 {
+    pub func zero() -> U32 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for U64 {
+    pub func zero() -> U64 { return 0 }
+    pub func is_zero(this) -> Bool { return this == 0 }
+}
+
+impl Zero for F32 {
+    pub func zero() -> F32 { return 0.0 }
+    pub func is_zero(this) -> Bool { return this == 0.0 }
+}
+
+impl Zero for F64 {
+    pub func zero() -> F64 { return 0.0 }
+    pub func is_zero(this) -> Bool { return this == 0.0 }
+}
+
+// ============================================================================
+// One Implementations
+// ============================================================================
+
+impl One for I8 {
+    pub func one() -> I8 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for I16 {
+    pub func one() -> I16 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for I32 {
+    pub func one() -> I32 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for I64 {
+    pub func one() -> I64 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for U8 {
+    pub func one() -> U8 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for U16 {
+    pub func one() -> U16 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for U32 {
+    pub func one() -> U32 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for U64 {
+    pub func one() -> U64 { return 1 }
+    pub func is_one(this) -> Bool { return this == 1 }
+}
+
+impl One for F32 {
+    pub func one() -> F32 { return 1.0 }
+    pub func is_one(this) -> Bool { return this == 1.0 }
+}
+
+impl One for F64 {
+    pub func one() -> F64 { return 1.0 }
+    pub func is_one(this) -> Bool { return this == 1.0 }
+}
+
+// ============================================================================
+// Bounded Implementations
+// ============================================================================
+
+impl Bounded for I8 {
+    pub func min_value() -> I8 { return -128 }
+    pub func max_value() -> I8 { return 127 }
+}
+
+impl Bounded for I16 {
+    pub func min_value() -> I16 { return -32768 }
+    pub func max_value() -> I16 { return 32767 }
+}
+
+impl Bounded for I32 {
+    pub func min_value() -> I32 { return -2147483648 }
+    pub func max_value() -> I32 { return 2147483647 }
+}
+
+impl Bounded for I64 {
+    pub func min_value() -> I64 { return -9223372036854775808 }
+    pub func max_value() -> I64 { return 9223372036854775807 }
+}
+
+impl Bounded for U8 {
+    pub func min_value() -> U8 { return 0 }
+    pub func max_value() -> U8 { return 255 }
+}
+
+impl Bounded for U16 {
+    pub func min_value() -> U16 { return 0 }
+    pub func max_value() -> U16 { return 65535 }
+}
+
+impl Bounded for U32 {
+    pub func min_value() -> U32 { return 0 }
+    pub func max_value() -> U32 { return 4294967295 }
+}
+
+impl Bounded for U64 {
+    pub func min_value() -> U64 { return 0 }
+    pub func max_value() -> U64 { return 18446744073709551615 }
+}
+
+// ============================================================================
+// Integer Marker Implementations
+// ============================================================================
+
+impl Integer for I8 {}
+impl Integer for I16 {}
+impl Integer for I32 {}
+impl Integer for I64 {}
+impl Integer for U8 {}
+impl Integer for U16 {}
+impl Integer for U32 {}
+impl Integer for U64 {}
+
+impl SignedInteger for I8 {}
+impl SignedInteger for I16 {}
+impl SignedInteger for I32 {}
+impl SignedInteger for I64 {}
+
+impl UnsignedInteger for U8 {}
+impl UnsignedInteger for U16 {}
+impl UnsignedInteger for U32 {}
+impl UnsignedInteger for U64 {}

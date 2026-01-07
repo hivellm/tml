@@ -701,6 +701,19 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         if (behavior_def) {
             for (const auto& method : behavior_def->methods) {
                 if (method.name == call.method) {
+                    // Build substitution map from behavior's type params to dyn's type args
+                    // e.g., for dyn Processor[I32], map T -> I32
+                    if (!dyn.type_args.empty() && !behavior_def->type_params.empty()) {
+                        std::unordered_map<std::string, TypePtr> subs;
+                        for (size_t i = 0;
+                             i < behavior_def->type_params.size() && i < dyn.type_args.size();
+                             ++i) {
+                            subs[behavior_def->type_params[i]] = dyn.type_args[i];
+                        }
+                        // Substitute both return type and check parameter types
+                        auto return_type = substitute_type(method.return_type, subs);
+                        return return_type;
+                    }
                     return apply_type_args(method);
                 }
             }
@@ -781,6 +794,14 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         // borrow_mut() returns mut ref Self for all primitives (BorrowMut behavior)
         if (call.method == "borrow_mut") {
             return std::make_shared<Type>(RefType{true, receiver_type});
+        }
+
+        // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
+        std::string type_name = primitive_to_string(kind);
+        std::string qualified = type_name + "::" + call.method;
+        auto func = env_.lookup_func(qualified);
+        if (func) {
+            return func->return_type;
         }
     }
 

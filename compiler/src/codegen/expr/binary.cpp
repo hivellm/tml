@@ -308,6 +308,16 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     bool is_float = (left_type == "double" || left_type == "float" || right_type == "double" ||
                      right_type == "float");
 
+    // Determine if we're dealing with F32 (float) or F64 (double)
+    // F32 is only used when BOTH operands are float (not mixed with double)
+    bool is_f32 = (left_type == "float" && (right_type == "float" || right_type != "double")) ||
+                  (right_type == "float" && (left_type == "float" || left_type != "double"));
+    // Override: if either is double, use double
+    if (left_type == "double" || right_type == "double") {
+        is_f32 = false;
+    }
+    std::string float_type = is_f32 ? "float" : "double";
+
     // Handle float literals (e.g., 3.0)
     if (!is_float && bin.right->is<parser::LiteralExpr>()) {
         const auto& lit = bin.right->as<parser::LiteralExpr>();
@@ -352,28 +362,55 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     };
 
     if (is_float) {
-        // Convert integer operands to double if needed
+        // Convert integer operands to the target float type if needed
         if (int_type_size(left_type) > 0) {
             std::string conv = fresh_reg();
             if (left_unsigned) {
-                emit_line("  " + conv + " = uitofp " + left_type + " " + left + " to double");
+                emit_line("  " + conv + " = uitofp " + left_type + " " + left + " to " +
+                          float_type);
             } else {
-                emit_line("  " + conv + " = sitofp " + left_type + " " + left + " to double");
+                emit_line("  " + conv + " = sitofp " + left_type + " " + left + " to " +
+                          float_type);
             }
             left = conv;
-            left_type = "double";
+            left_type = float_type;
         }
         if (int_type_size(right_type) > 0) {
             std::string conv = fresh_reg();
             if (right_unsigned) {
-                emit_line("  " + conv + " = uitofp " + right_type + " " + right + " to double");
+                emit_line("  " + conv + " = uitofp " + right_type + " " + right + " to " +
+                          float_type);
             } else {
-                emit_line("  " + conv + " = sitofp " + right_type + " " + right + " to double");
+                emit_line("  " + conv + " = sitofp " + right_type + " " + right + " to " +
+                          float_type);
             }
             right = conv;
-            right_type = "double";
+            right_type = float_type;
         }
-        // Also handle float literals that need double representation
+        // Handle float <-> double conversions
+        if (left_type == "float" && float_type == "double") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fpext float " + left + " to double");
+            left = conv;
+            left_type = "double";
+        } else if (left_type == "double" && float_type == "float") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fptrunc double " + left + " to float");
+            left = conv;
+            left_type = "float";
+        }
+        if (right_type == "float" && float_type == "double") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fpext float " + right + " to double");
+            right = conv;
+            right_type = "double";
+        } else if (right_type == "double" && float_type == "float") {
+            std::string conv = fresh_reg();
+            emit_line("  " + conv + " = fptrunc double " + right + " to float");
+            right = conv;
+            right_type = "float";
+        }
+        // Also handle float literals
         if (bin.right->is<parser::LiteralExpr>()) {
             const auto& lit = bin.right->as<parser::LiteralExpr>();
             if (lit.token.kind == lexer::TokenKind::FloatLiteral) {
@@ -432,8 +469,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                       ")");
             last_expr_type_ = "ptr";
         } else if (is_float) {
-            emit_line("  " + result + " = fadd double " + left + ", " + right);
-            last_expr_type_ = "double";
+            emit_line("  " + result + " = fadd " + float_type + " " + left + ", " + right);
+            last_expr_type_ = float_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = add nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -444,8 +481,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Sub:
         if (is_float) {
-            emit_line("  " + result + " = fsub double " + left + ", " + right);
-            last_expr_type_ = "double";
+            emit_line("  " + result + " = fsub " + float_type + " " + left + ", " + right);
+            last_expr_type_ = float_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = sub nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -456,8 +493,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Mul:
         if (is_float) {
-            emit_line("  " + result + " = fmul double " + left + ", " + right);
-            last_expr_type_ = "double";
+            emit_line("  " + result + " = fmul " + float_type + " " + left + ", " + right);
+            last_expr_type_ = float_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = mul nuw " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -468,8 +505,8 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Div:
         if (is_float) {
-            emit_line("  " + result + " = fdiv double " + left + ", " + right);
-            last_expr_type_ = "double";
+            emit_line("  " + result + " = fdiv " + float_type + " " + left + ", " + right);
+            last_expr_type_ = float_type;
         } else if (is_unsigned) {
             emit_line("  " + result + " = udiv " + int_type + " " + left + ", " + right);
             last_expr_type_ = int_type;
@@ -489,7 +526,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
     // Comparisons return i1 (use fcmp for floats, icmp for integers, str_eq for strings)
     case parser::BinaryOp::Eq:
         if (is_float) {
-            emit_line("  " + result + " = fcmp oeq double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp oeq " + float_type + " " + left + ", " + right);
         } else if (is_string) {
             // String comparison using str_eq runtime function (returns i32, convert to i1)
             std::string eq_i32 = fresh_reg();
@@ -502,7 +539,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Ne:
         if (is_float) {
-            emit_line("  " + result + " = fcmp one double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp one " + float_type + " " + left + ", " + right);
         } else if (is_string) {
             // String comparison: NOT str_eq (str_eq returns i32, convert to i1)
             std::string eq_i32 = fresh_reg();
@@ -515,7 +552,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Lt:
         if (is_float) {
-            emit_line("  " + result + " = fcmp olt double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp olt " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
             emit_line("  " + result + " = icmp ult " + int_type + " " + left + ", " + right);
         } else {
@@ -525,7 +562,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Gt:
         if (is_float) {
-            emit_line("  " + result + " = fcmp ogt double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp ogt " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
             emit_line("  " + result + " = icmp ugt " + int_type + " " + left + ", " + right);
         } else {
@@ -535,7 +572,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Le:
         if (is_float) {
-            emit_line("  " + result + " = fcmp ole double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp ole " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
             emit_line("  " + result + " = icmp ule " + int_type + " " + left + ", " + right);
         } else {
@@ -545,7 +582,7 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         break;
     case parser::BinaryOp::Ge:
         if (is_float) {
-            emit_line("  " + result + " = fcmp oge double " + left + ", " + right);
+            emit_line("  " + result + " = fcmp oge " + float_type + " " + left + ", " + right);
         } else if (is_unsigned) {
             emit_line("  " + result + " = icmp uge " + int_type + " " + left + ", " + right);
         } else {

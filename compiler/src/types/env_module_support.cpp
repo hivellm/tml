@@ -5,6 +5,7 @@
 #include "types/module.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -571,6 +572,95 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     mod.functions[qualified_name] = sig;
                     TML_DEBUG_LN("[MODULE] Registered impl method: "
                                  << qualified_name << " in module " << module_path);
+                }
+
+                // Extract constants from impl block (e.g., const MIN: I32 = ...)
+                for (const auto& const_decl : impl_decl.constants) {
+                    // Only include public constants
+                    if (const_decl.vis != parser::Visibility::Public) {
+                        continue;
+                    }
+
+                    // Create qualified constant name: Type::CONST
+                    std::string qualified_name = type_name + "::" + const_decl.name;
+
+                    // Extract constant value - only support literals for now
+                    if (const_decl.value && const_decl.value->is<parser::LiteralExpr>()) {
+                        const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                        std::string value;
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            value = std::to_string(lit.token.int_value().value);
+                        } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                            value = (lit.token.lexeme == "true") ? "1" : "0";
+                        } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
+                            value = "null";
+                        }
+                        if (!value.empty()) {
+                            mod.constants[qualified_name] = value;
+                            TML_DEBUG_LN("[MODULE] Registered impl constant: "
+                                         << qualified_name << " = " << value << " in module "
+                                         << module_path);
+                        }
+                    } else if (const_decl.value && const_decl.value->is<parser::CastExpr>()) {
+                        // Handle cast expressions like -2147483648 as I32
+                        const auto& cast = const_decl.value->as<parser::CastExpr>();
+                        if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                std::string value = std::to_string(lit.token.int_value().value);
+                                mod.constants[qualified_name] = value;
+                                TML_DEBUG_LN("[MODULE] Registered impl constant: "
+                                             << qualified_name << " = " << value << " in module "
+                                             << module_path);
+                            }
+                        } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
+                            // Handle negation like -(2147483648 as I32)
+                            const auto& unary = cast.expr->as<parser::UnaryExpr>();
+                            if (unary.op == parser::UnaryOp::Neg &&
+                                unary.operand->is<parser::LiteralExpr>()) {
+                                const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    int64_t int_val =
+                                        static_cast<int64_t>(lit.token.int_value().value);
+                                    std::string value = std::to_string(-int_val);
+                                    mod.constants[qualified_name] = value;
+                                    TML_DEBUG_LN("[MODULE] Registered impl constant: "
+                                                 << qualified_name << " = " << value
+                                                 << " in module " << module_path);
+                                }
+                            }
+                        }
+                    } else if (const_decl.value && const_decl.value->is<parser::UnaryExpr>()) {
+                        // Handle unary expressions like -2147483648
+                        const auto& unary = const_decl.value->as<parser::UnaryExpr>();
+                        if (unary.op == parser::UnaryOp::Neg &&
+                            unary.operand->is<parser::LiteralExpr>()) {
+                            const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                                std::string value = std::to_string(-int_val);
+                                mod.constants[qualified_name] = value;
+                                TML_DEBUG_LN("[MODULE] Registered impl constant: "
+                                             << qualified_name << " = " << value << " in module "
+                                             << module_path);
+                            }
+                        } else if (unary.operand->is<parser::CastExpr>()) {
+                            // Handle -(literal as Type)
+                            const auto& cast = unary.operand->as<parser::CastExpr>();
+                            if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                                const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    int64_t int_val =
+                                        static_cast<int64_t>(lit.token.int_value().value);
+                                    std::string value = std::to_string(-int_val);
+                                    mod.constants[qualified_name] = value;
+                                    TML_DEBUG_LN("[MODULE] Registered impl constant: "
+                                                 << qualified_name << " = " << value
+                                                 << " in module " << module_path);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -39,6 +39,8 @@ struct Module {
     std::unordered_map<std::string, BehaviorDef> behaviors;
     std::unordered_map<std::string, TypePtr> type_aliases;
     std::unordered_map<std::string, std::string> submodules; // name -> path
+    std::unordered_map<std::string, std::string>
+        constants; // name -> value (e.g., "I32::MIN" -> "-2147483648")
 
     // Re-exported symbols from pub use declarations
     std::vector<ReExport> re_exports;
