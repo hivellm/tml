@@ -443,6 +443,19 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
         func_type_sig += ")";
 
+        // Handle void return type - don't assign result
+        if (ret_type == "void") {
+            emit("  call " + func_type_sig + " " + fn_ptr + "(");
+            for (size_t i = 0; i < arg_vals.size(); ++i) {
+                if (i > 0)
+                    emit(", ");
+                emit(arg_vals[i].second + " " + arg_vals[i].first);
+            }
+            emit_line(")");
+            last_expr_type_ = "void";
+            return "0";
+        }
+
         std::string result = fresh_reg();
         emit("  " + result + " = call " + func_type_sig + " " + fn_ptr + "(");
         for (size_t i = 0; i < arg_vals.size(); ++i) {

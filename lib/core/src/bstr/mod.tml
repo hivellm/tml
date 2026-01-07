@@ -1,0 +1,814 @@
+//! Byte string types.
+//!
+//! This module provides [`ByteStr`], a wrapper around `[U8]` that provides
+//! string-oriented operations on byte slices. Unlike `Str`, `ByteStr` does
+//! not require valid UTF-8 content.
+//!
+//! # Overview
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`ByteStr`] | A borrowed byte string slice (`&[U8]` wrapper) |
+//!
+//! # When to Use ByteStr
+//!
+//! Use `ByteStr` when you need to:
+//! - Work with binary data that may contain text
+//! - Handle text with unknown or mixed encodings
+//! - Process file paths on systems where paths aren't guaranteed UTF-8
+//! - Work with network protocols that use byte sequences
+//!
+//! # Comparison with Str
+//!
+//! | Aspect | `Str` | `ByteStr` |
+//! |--------|-------|-----------|
+//! | UTF-8 | Guaranteed valid | May contain invalid UTF-8 |
+//! | Display | Direct | Lossy (replaces invalid with �) |
+//! | Use case | Text processing | Binary/mixed data |
+//!
+//! # Examples
+//!
+//! ## Creating a ByteStr
+//!
+//! ```tml
+//! use core::bstr::ByteStr
+//!
+//! // From a byte slice
+//! let bs = ByteStr::new([104, 101, 108, 108, 111])  // "hello"
+//!
+//! // From a string (ASCII only for this example)
+//! let bs = ByteStr::from_str("hello")
+//! ```
+//!
+//! ## Handling Non-UTF-8 Content
+//!
+//! ```tml
+//! use core::bstr::ByteStr
+//!
+//! let data: [U8] = [0xFF, 0xFE, 104, 101, 108, 108, 111]
+//! let bs = ByteStr::new(data)
+//!
+//! // Display replaces invalid UTF-8 with replacement character
+//! println(bs.to_string())  // "��hello"
+//!
+//! // Iterate over valid UTF-8 chunks and errors
+//! for chunk in bs.utf8_chunks() {
+//!     when chunk {
+//!         Utf8Chunk::Valid(s) => println("Valid: {s}"),
+//!         Utf8Chunk::Invalid(bytes) => println("Invalid: {bytes.len()} bytes")
+//!     }
+//! }
+//! ```
+
+use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+use core::hash::Hash
+use core::fmt::{Display, Debug}
+use core::clone::{Duplicate, Copy}
+use core::convert::{AsRef, AsMut}
+
+// ============================================================================
+// ByteStr Type
+// ============================================================================
+
+/// A byte string slice.
+///
+/// `ByteStr` is a wrapper around `[U8]` that provides string-oriented
+/// operations. Unlike `Str`, it does not require valid UTF-8 content.
+///
+/// # Representation
+///
+/// `ByteStr` is a newtype around `[U8]` and has the same memory layout.
+/// It is an unsized type, so you typically work with references: `ref ByteStr`.
+///
+/// # String Operations
+///
+/// `ByteStr` provides methods commonly associated with strings:
+/// - Searching: `contains`, `find`, `starts_with`, `ends_with`
+/// - Iteration: `lines`, `words`, `utf8_chunks`
+/// - Trimming: `trim`, `trim_start`, `trim_end`
+/// - Case: `to_lowercase`, `to_uppercase` (ASCII only)
+///
+/// # Display Behavior
+///
+/// When displayed, invalid UTF-8 sequences are replaced with the Unicode
+/// replacement character (U+FFFD, '�'):
+///
+/// ```tml
+/// let bs = ByteStr::new([0xFF, 65, 66])  // Invalid UTF-8 + "AB"
+/// println(bs.to_string())  // "�AB"
+/// ```
+///
+/// # Examples
+///
+/// ```tml
+/// use core::bstr::ByteStr
+///
+/// let data: [U8] = [72, 101, 108, 108, 111]  // "Hello"
+/// let bs = ByteStr::new(ref data)
+///
+/// assert(bs.is_ascii())
+/// assert_eq(bs.len(), 5)
+/// assert(bs.starts_with([72, 101]))  // "He"
+/// ```
+pub type ByteStr {
+    bytes: [U8]
+}
+
+impl ByteStr {
+    /// Creates a new `ByteStr` from a byte slice.
+    ///
+    /// This is a zero-cost conversion.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let data: [U8] = [104, 101, 108, 108, 111]
+    /// let bs = ByteStr::new(ref data)
+    /// ```
+    pub func new(bytes: ref [U8]) -> ref ByteStr {
+        // Zero-cost conversion - ByteStr has same layout as [U8]
+        return lowlevel { transmute(bytes) }
+    }
+
+    /// Creates a mutable `ByteStr` from a mutable byte slice.
+    pub func new_mut(bytes: mut ref [U8]) -> mut ref ByteStr {
+        return lowlevel { transmute(bytes) }
+    }
+
+    /// Creates a `ByteStr` from a string slice.
+    ///
+    /// Since `Str` is guaranteed to be valid UTF-8, this is always valid.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello")
+    /// assert_eq(bs.len(), 5)
+    /// ```
+    pub func from_str(s: ref Str) -> ref ByteStr {
+        return ByteStr::new(s.as_bytes())
+    }
+
+    /// Returns the underlying byte slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("abc")
+    /// let bytes: ref [U8] = bs.as_bytes()
+    /// assert_eq(bytes[0], 97)  // 'a'
+    /// ```
+    pub func as_bytes(this) -> ref [U8] {
+        return ref this.bytes
+    }
+
+    /// Returns a mutable reference to the underlying byte slice.
+    pub func as_bytes_mut(mut this) -> mut ref [U8] {
+        return mut ref this.bytes
+    }
+
+    /// Returns the length of this byte string in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello")
+    /// assert_eq(bs.len(), 5)
+    /// ```
+    pub func len(this) -> I64 {
+        return this.bytes.len()
+    }
+
+    /// Returns `true` if this byte string is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(ByteStr::new([]).is_empty())
+    /// assert(not ByteStr::from_str("a").is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.bytes.len() == 0
+    }
+
+    /// Returns the first byte, or `Nothing` if empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("abc")
+    /// assert_eq(bs.first(), Just(97))  // 'a'
+    /// ```
+    pub func first(this) -> Maybe[U8] {
+        if this.bytes.len() == 0 {
+            return Nothing
+        }
+        return Just(this.bytes[0])
+    }
+
+    /// Returns the last byte, or `Nothing` if empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("abc")
+    /// assert_eq(bs.last(), Just(99))  // 'c'
+    /// ```
+    pub func last(this) -> Maybe[U8] {
+        let len: I64 = this.bytes.len()
+        if len == 0 {
+            return Nothing
+        }
+        return Just(this.bytes[len - 1])
+    }
+
+    /// Returns `true` if all bytes are ASCII (0-127).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(ByteStr::from_str("hello").is_ascii())
+    /// assert(not ByteStr::new([0xFF, 0x80]).is_ascii())
+    /// ```
+    pub func is_ascii(this) -> Bool {
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { return true }
+            if this.bytes[i] > 127 {
+                return false
+            }
+            i = i + 1
+        }
+    }
+
+    /// Checks if this byte string starts with the given prefix.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello world")
+    /// assert(bs.starts_with_bytes([104, 101, 108, 108, 111]))  // "hello"
+    /// ```
+    pub func starts_with_bytes(this, prefix: ref [U8]) -> Bool {
+        let prefix_len: I64 = prefix.len()
+        if prefix_len > this.bytes.len() {
+            return false
+        }
+        var i: I64 = 0
+        loop {
+            if i >= prefix_len { return true }
+            if this.bytes[i] != prefix[i] {
+                return false
+            }
+            i = i + 1
+        }
+    }
+
+    /// Checks if this byte string ends with the given suffix.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello world")
+    /// assert(bs.ends_with_bytes([119, 111, 114, 108, 100]))  // "world"
+    /// ```
+    pub func ends_with_bytes(this, suffix: ref [U8]) -> Bool {
+        let suffix_len: I64 = suffix.len()
+        let self_len: I64 = this.bytes.len()
+        if suffix_len > self_len {
+            return false
+        }
+        let start: I64 = self_len - suffix_len
+        var i: I64 = 0
+        loop {
+            if i >= suffix_len { return true }
+            if this.bytes[start + i] != suffix[i] {
+                return false
+            }
+            i = i + 1
+        }
+    }
+
+    /// Checks if this byte string contains the given needle.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello world")
+    /// assert(bs.contains_bytes([111, 32, 119]))  // "o w"
+    /// ```
+    pub func contains_bytes(this, needle: ref [U8]) -> Bool {
+        return this.find_bytes(needle).is_just()
+    }
+
+    /// Finds the first occurrence of the needle in this byte string.
+    ///
+    /// Returns the byte index of the start of the match, or `Nothing`
+    /// if not found.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello world")
+    /// assert_eq(bs.find_bytes([119, 111]), Just(6))  // "wo" at index 6
+    /// ```
+    pub func find_bytes(this, needle: ref [U8]) -> Maybe[I64] {
+        let needle_len: I64 = needle.len()
+        let self_len: I64 = this.bytes.len()
+
+        if needle_len == 0 {
+            return Just(0)
+        }
+        if needle_len > self_len {
+            return Nothing
+        }
+
+        let max_start: I64 = self_len - needle_len
+        var i: I64 = 0
+        loop {
+            if i > max_start { return Nothing }
+
+            // Check for match at position i
+            var j: I64 = 0
+            var matches: Bool = true
+            loop {
+                if j >= needle_len { break }
+                if this.bytes[i + j] != needle[j] {
+                    matches = false
+                    break
+                }
+                j = j + 1
+            }
+
+            if matches {
+                return Just(i)
+            }
+            i = i + 1
+        }
+    }
+
+    /// Finds the last occurrence of the needle in this byte string.
+    ///
+    /// Returns the byte index of the start of the match, or `Nothing`
+    /// if not found.
+    pub func rfind_bytes(this, needle: ref [U8]) -> Maybe[I64] {
+        let needle_len: I64 = needle.len()
+        let self_len: I64 = this.bytes.len()
+
+        if needle_len == 0 {
+            return Just(self_len)
+        }
+        if needle_len > self_len {
+            return Nothing
+        }
+
+        var i: I64 = self_len - needle_len
+        loop {
+            if i < 0 { return Nothing }
+
+            // Check for match at position i
+            var j: I64 = 0
+            var matches: Bool = true
+            loop {
+                if j >= needle_len { break }
+                if this.bytes[i + j] != needle[j] {
+                    matches = false
+                    break
+                }
+                j = j + 1
+            }
+
+            if matches {
+                return Just(i)
+            }
+            i = i - 1
+        }
+    }
+
+    /// Returns a subslice of this byte string.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the range is out of bounds.
+    pub func slice(this, start: I64, end: I64) -> ref ByteStr {
+        if start < 0 or end > this.bytes.len() or start > end {
+            panic("ByteStr::slice: index out of bounds")
+        }
+        return ByteStr::new(this.bytes.slice(start, end))
+    }
+
+    /// Converts this byte string to a `Str` if it's valid UTF-8.
+    ///
+    /// Returns `Nothing` if the byte string contains invalid UTF-8.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::from_str("hello")
+    /// assert_eq(bs.to_str(), Just("hello"))
+    ///
+    /// let invalid = ByteStr::new([0xFF, 0xFE])
+    /// assert(invalid.to_str().is_nothing())
+    /// ```
+    pub func to_str(this) -> Maybe[Str] {
+        return lowlevel { str_from_utf8(this.bytes) }
+    }
+
+    /// Converts this byte string to a `Str`, replacing invalid UTF-8
+    /// with the replacement character (U+FFFD).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let bs = ByteStr::new([0xFF, 104, 105])  // invalid + "hi"
+    /// assert_eq(bs.to_str_lossy(), "�hi")
+    /// ```
+    pub func to_str_lossy(this) -> Str {
+        return lowlevel { str_from_utf8_lossy(this.bytes) }
+    }
+
+    /// Returns an iterator over the bytes.
+    pub func iter(this) -> ByteStrIter {
+        return ByteStrIter { bytes: ref this.bytes, pos: 0 }
+    }
+
+    /// Returns an iterator over the lines in this byte string.
+    ///
+    /// Lines are separated by `\n` or `\r\n`. The line ending is not
+    /// included in the yielded lines.
+    pub func lines(this) -> ByteStrLines {
+        return ByteStrLines { bytes: ref this.bytes, pos: 0 }
+    }
+
+    /// Trims ASCII whitespace from the start and end.
+    ///
+    /// ASCII whitespace: space, tab, newline, carriage return, form feed.
+    pub func trim_ascii(this) -> ref ByteStr {
+        let start: I64 = this.find_non_ascii_whitespace_start()
+        let end: I64 = this.find_non_ascii_whitespace_end()
+        if start >= end {
+            return ByteStr::new([])
+        }
+        return this.slice(start, end)
+    }
+
+    /// Trims ASCII whitespace from the start.
+    pub func trim_ascii_start(this) -> ref ByteStr {
+        let start: I64 = this.find_non_ascii_whitespace_start()
+        return this.slice(start, this.bytes.len())
+    }
+
+    /// Trims ASCII whitespace from the end.
+    pub func trim_ascii_end(this) -> ref ByteStr {
+        let end: I64 = this.find_non_ascii_whitespace_end()
+        return this.slice(0, end)
+    }
+
+    // Helper: find first non-whitespace byte index
+    func find_non_ascii_whitespace_start(this) -> I64 {
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { return len }
+            let b: U8 = this.bytes[i]
+            if not is_ascii_whitespace(b) {
+                return i
+            }
+            i = i + 1
+        }
+    }
+
+    // Helper: find last non-whitespace byte index + 1
+    func find_non_ascii_whitespace_end(this) -> I64 {
+        var i: I64 = this.bytes.len()
+        loop {
+            if i <= 0 { return 0 }
+            i = i - 1
+            let b: U8 = this.bytes[i]
+            if not is_ascii_whitespace(b) {
+                return i + 1
+            }
+        }
+    }
+
+    /// Converts ASCII lowercase letters to uppercase in a new allocation.
+    ///
+    /// Non-ASCII bytes are left unchanged.
+    pub func to_ascii_uppercase(this) -> [U8] {
+        let len: I64 = this.bytes.len()
+        var result: [U8] = []
+        var i: I64 = 0
+        loop {
+            if i >= len { break }
+            let b: U8 = this.bytes[i]
+            if b >= 97 and b <= 122 {  // 'a' to 'z'
+                result.push(b - 32)
+            } else {
+                result.push(b)
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Converts ASCII uppercase letters to lowercase in a new allocation.
+    ///
+    /// Non-ASCII bytes are left unchanged.
+    pub func to_ascii_lowercase(this) -> [U8] {
+        let len: I64 = this.bytes.len()
+        var result: [U8] = []
+        var i: I64 = 0
+        loop {
+            if i >= len { break }
+            let b: U8 = this.bytes[i]
+            if b >= 65 and b <= 90 {  // 'A' to 'Z'
+                result.push(b + 32)
+            } else {
+                result.push(b)
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    /// Compares two byte strings ignoring ASCII case.
+    ///
+    /// Returns `true` if both strings are equal when ASCII letters
+    /// are compared case-insensitively.
+    pub func eq_ignore_ascii_case(this, other: ref ByteStr) -> Bool {
+        if this.bytes.len() != other.bytes.len() {
+            return false
+        }
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { return true }
+            let a: U8 = this.bytes[i]
+            let b: U8 = other.bytes[i]
+            if to_ascii_lowercase_byte(a) != to_ascii_lowercase_byte(b) {
+                return false
+            }
+            i = i + 1
+        }
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Returns `true` if the byte is ASCII whitespace.
+func is_ascii_whitespace(b: U8) -> Bool {
+    return b == 32   // space
+        or b == 9    // tab
+        or b == 10   // newline
+        or b == 13   // carriage return
+        or b == 12   // form feed
+}
+
+/// Converts an ASCII uppercase letter to lowercase.
+func to_ascii_lowercase_byte(b: U8) -> U8 {
+    if b >= 65 and b <= 90 {  // 'A' to 'Z'
+        return b + 32
+    }
+    return b
+}
+
+// ============================================================================
+// ByteStrIter - Iterator over bytes
+// ============================================================================
+
+/// An iterator over the bytes of a `ByteStr`.
+pub type ByteStrIter {
+    bytes: ref [U8],
+    pos: I64
+}
+
+impl Iterator for ByteStrIter {
+    type Item = U8
+
+    pub func next(mut this) -> Maybe[U8] {
+        if this.pos >= this.bytes.len() {
+            return Nothing
+        }
+        let b: U8 = this.bytes[this.pos]
+        this.pos = this.pos + 1
+        return Just(b)
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let remaining: I64 = this.bytes.len() - this.pos
+        return (remaining, Just(remaining))
+    }
+}
+
+// ============================================================================
+// ByteStrLines - Iterator over lines
+// ============================================================================
+
+/// An iterator over the lines of a `ByteStr`.
+///
+/// Lines are separated by `\n` or `\r\n`.
+pub type ByteStrLines {
+    bytes: ref [U8],
+    pos: I64
+}
+
+impl Iterator for ByteStrLines {
+    type Item = ref ByteStr
+
+    pub func next(mut this) -> Maybe[ref ByteStr] {
+        let len: I64 = this.bytes.len()
+        if this.pos >= len {
+            return Nothing
+        }
+
+        let start: I64 = this.pos
+        var end: I64 = start
+
+        // Find end of line
+        loop {
+            if end >= len { break }
+            let b: U8 = this.bytes[end]
+            if b == 10 {  // '\n'
+                break
+            }
+            end = end + 1
+        }
+
+        // Determine actual line end (excluding \r if present)
+        var line_end: I64 = end
+        if line_end > start and this.bytes[line_end - 1] == 13 {  // '\r'
+            line_end = line_end - 1
+        }
+
+        // Move past the newline
+        if end < len {
+            this.pos = end + 1
+        } else {
+            this.pos = len
+        }
+
+        return Just(ByteStr::new(this.bytes.slice(start, line_end)))
+    }
+}
+
+// ============================================================================
+// Utf8Chunk - UTF-8 validation chunks
+// ============================================================================
+
+/// A chunk of a byte string during UTF-8 validation.
+///
+/// When iterating with `utf8_chunks()`, each chunk is either valid
+/// UTF-8 or a sequence of invalid bytes.
+// enum Utf8Chunk { // TODO: struct variant enums not supported yet
+//     /// A valid UTF-8 string slice.
+//     Valid { s: Str },
+//     /// Invalid UTF-8 bytes.
+//     Invalid { bytes: [U8] }
+// }
+
+/// An iterator over UTF-8 chunks of a `ByteStr`.
+pub type Utf8Chunks {
+    bytes: ref [U8],
+    pos: I64
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+impl PartialEq for ByteStr {
+    pub func eq(this, other: ref ByteStr) -> Bool {
+        if this.bytes.len() != other.bytes.len() {
+            return false
+        }
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { return true }
+            if this.bytes[i] != other.bytes[i] {
+                return false
+            }
+            i = i + 1
+        }
+    }
+}
+
+impl Eq for ByteStr {}
+
+impl PartialOrd for ByteStr {
+    pub func partial_cmp(this, other: ref ByteStr) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for ByteStr {
+    pub func cmp(this, other: ref ByteStr) -> Ordering {
+        let len_a: I64 = this.bytes.len()
+        let len_b: I64 = other.bytes.len()
+        var min_len: I64 = len_a
+        if len_b < min_len {
+            min_len = len_b
+        }
+
+        var i: I64 = 0
+        loop {
+            if i >= min_len { break }
+            if this.bytes[i] < other.bytes[i] {
+                return Ordering::Less
+            }
+            if this.bytes[i] > other.bytes[i] {
+                return Ordering::Greater
+            }
+            i = i + 1
+        }
+
+        // All compared bytes are equal, compare lengths
+        if len_a < len_b {
+            return Ordering::Less
+        }
+        if len_a > len_b {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl Hash for ByteStr {
+    pub func hash(this) -> I64 {
+        // FNV-1a hash
+        var h: I64 = -3750763034362895579  // FNV offset basis
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { break }
+            h = h ^ (this.bytes[i] as I64)
+            h = h * 1099511628211  // FNV prime
+            i = i + 1
+        }
+        return h
+    }
+}
+
+impl Display for ByteStr {
+    /// Displays the byte string, replacing invalid UTF-8 with the
+    /// replacement character (U+FFFD, '�').
+    pub func to_string(this) -> Str {
+        return this.to_str_lossy()
+    }
+}
+
+impl Debug for ByteStr {
+    /// Debug representation showing bytes as a string with hex escapes
+    /// for non-printable and invalid UTF-8 bytes.
+    pub func debug_string(this) -> Str {
+        var result: Str = "\""
+        var i: I64 = 0
+        let len: I64 = this.bytes.len()
+        loop {
+            if i >= len { break }
+            let b: U8 = this.bytes[i]
+            if b >= 32 and b < 127 and b != 34 and b != 92 {
+                // Printable ASCII (except quote and backslash)
+                result = result + Str::from_byte(b)
+            } else if b == 34 {
+                result = result + "\\\""
+            } else if b == 92 {
+                result = result + "\\\\"
+            } else if b == 10 {
+                result = result + "\\n"
+            } else if b == 13 {
+                result = result + "\\r"
+            } else if b == 9 {
+                result = result + "\\t"
+            } else {
+                // Hex escape
+                result = result + "\\x" + byte_to_hex(b)
+            }
+            i = i + 1
+        }
+        result = result + "\""
+        return result
+    }
+}
+
+/// Converts a byte to a two-character hex string.
+func byte_to_hex(b: U8) -> Str {
+    let hex_chars: [U8] = [
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57,  // 0-9
+        97, 98, 99, 100, 101, 102                 // a-f
+    ]
+    let hi_idx: I64 = (b >> 4) as I64
+    let hi: U8 = hex_chars[hi_idx]
+    let lo_idx: I64 = (b & 15) as I64
+    let lo: U8 = hex_chars[lo_idx]
+    return Str::from_byte(hi) + Str::from_byte(lo)
+}
+
+// ============================================================================
+// Imports
+// ============================================================================
+
+use core::iter::Iterator

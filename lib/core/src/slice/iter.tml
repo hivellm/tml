@@ -362,3 +362,184 @@ impl[T] Slice[T] {
         }
     }
 }
+
+// ============================================================================
+// SliceIter - Immutable Element Iterator
+// ============================================================================
+
+/// An iterator over references to the elements of a slice.
+///
+/// This struct is created by the [`iter`] method on [slices][Slice].
+///
+/// # Examples
+///
+/// ```tml
+/// let arr = [1, 2, 3]
+/// let slice = arr.as_slice()
+/// let mut iter = slice.iter()
+///
+/// assert_eq(iter.next(), Just(ref 1))
+/// assert_eq(iter.next(), Just(ref 2))
+/// assert_eq(iter.next(), Just(ref 3))
+/// assert(iter.next().is_nothing())
+/// ```
+pub type SliceIter[T] {
+    slice: Slice[T],
+    index: I64
+}
+
+impl[T] Iterator for SliceIter[T] {
+    type Item = ref T
+
+    /// Returns a reference to the next element, or `Nothing` if the iterator
+    /// is exhausted.
+    pub func next(mut this) -> Maybe[ref T] {
+        if this.index >= this.slice.len {
+            return Nothing
+        }
+        let elem: ref T = this.slice.get(this.index).unwrap()
+        this.index = this.index + 1
+        return Just(elem)
+    }
+}
+
+impl[T] SliceIter[T] {
+    /// Returns the number of remaining elements.
+    pub func len(this) -> I64 {
+        return this.slice.len - this.index
+    }
+
+    /// Returns `true` if there are no remaining elements.
+    pub func is_empty(this) -> Bool {
+        return this.index >= this.slice.len
+    }
+
+    /// Returns the remaining slice.
+    pub func as_slice(this) -> Slice[T] {
+        return this.slice.skip(this.index)
+    }
+}
+
+// ============================================================================
+// Slice::iter method
+// ============================================================================
+
+impl[T] Slice[T] {
+    /// Returns an iterator over references to the slice elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let slice = [1, 2, 3].as_slice()
+    /// let mut sum = 0
+    /// for x in slice.iter() {
+    ///     sum = sum + *x
+    /// }
+    /// assert_eq(sum, 6)
+    /// ```
+    pub func iter(this) -> SliceIter[T] {
+        return SliceIter {
+            slice: this,
+            index: 0
+        }
+    }
+}
+
+// ============================================================================
+// SliceIterMut - Mutable Element Iterator
+// ============================================================================
+
+/// An iterator over mutable references to the elements of a slice.
+///
+/// This struct is created by the [`iter_mut`] method on [slices][MutSlice].
+///
+/// # Examples
+///
+/// ```tml
+/// let mut arr = [1, 2, 3]
+/// let slice = arr.as_mut_slice()
+/// for x in slice.iter_mut() {
+///     *x = *x * 2
+/// }
+/// assert_eq(arr, [2, 4, 6])
+/// ```
+pub type SliceIterMut[T] {
+    slice: MutSlice[T],
+    index: I64
+}
+
+impl[T] Iterator for SliceIterMut[T] {
+    type Item = mut ref T
+
+    /// Returns a mutable reference to the next element, or `Nothing` if the
+    /// iterator is exhausted.
+    pub func next(mut this) -> Maybe[mut ref T] {
+        if this.index >= this.slice.len {
+            return Nothing
+        }
+        let elem: mut ref T = this.slice.get_mut(this.index).unwrap()
+        this.index = this.index + 1
+        return Just(elem)
+    }
+}
+
+impl[T] SliceIterMut[T] {
+    /// Returns the number of remaining elements.
+    pub func len(this) -> I64 {
+        return this.slice.len - this.index
+    }
+
+    /// Returns `true` if there are no remaining elements.
+    pub func is_empty(this) -> Bool {
+        return this.index >= this.slice.len
+    }
+}
+
+// ============================================================================
+// MutSlice::iter and iter_mut methods
+// ============================================================================
+
+impl[T] MutSlice[T] {
+    /// Returns an iterator over immutable references to the slice elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut arr = [1, 2, 3]
+    /// let slice = arr.as_mut_slice()
+    /// let mut sum = 0
+    /// for x in slice.iter() {
+    ///     sum = sum + *x
+    /// }
+    /// assert_eq(sum, 6)
+    /// ```
+    pub func iter(this) -> SliceIter[T] {
+        // Convert MutSlice to Slice for iteration
+        let immut: Slice[T] = Slice {
+            data: this.data,
+            len: this.len
+        }
+        return SliceIter {
+            slice: immut,
+            index: 0
+        }
+    }
+
+    /// Returns an iterator over mutable references to the slice elements.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut arr = [1, 2, 3]
+    /// for x in arr.as_mut_slice().iter_mut() {
+    ///     *x = *x * 2
+    /// }
+    /// assert_eq(arr, [2, 4, 6])
+    /// ```
+    pub func iter_mut(mut this) -> SliceIterMut[T] {
+        return SliceIterMut {
+            slice: this,
+            index: 0
+        }
+    }
+}

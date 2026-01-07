@@ -73,6 +73,20 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                     return make_unit();
                 }
 
+                // Check for object safety: behaviors with generic methods cannot be used with dyn
+                // because the vtable cannot contain pointers to generic functions
+                for (const auto& method : behavior_def->methods) {
+                    if (!method.type_params.empty()) {
+                        error("Behavior '" + behavior_name +
+                                  "' is not object-safe: method '" + method.name +
+                                  "' has generic type parameters. "
+                                  "Generic methods require monomorphization which is incompatible "
+                                  "with dynamic dispatch.",
+                              t.span);
+                        return make_unit();
+                    }
+                }
+
                 // Resolve generic arguments
                 std::vector<TypePtr> type_args;
                 if (t.generics) {

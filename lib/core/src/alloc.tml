@@ -1,0 +1,496 @@
+//! Memory allocation primitives.
+//!
+//! This module provides types and behaviors for memory allocation, including
+//! the [`Layout`] type for describing memory requirements and the [`Allocator`]
+//! behavior for custom allocators.
+//!
+//! # Core Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Layout`] | Describes size and alignment requirements for memory |
+//! | [`LayoutError`] | Error when creating an invalid layout |
+//! | [`AllocError`] | Error when allocation fails |
+//!
+//! # Allocator Behavior
+//!
+//! The [`Allocator`] behavior allows implementing custom memory allocators:
+//!
+//! ```tml
+//! use core::alloc::{Allocator, Layout, AllocError}
+//!
+//! type MyAllocator { ... }
+//!
+//! impl Allocator for MyAllocator {
+//!     func allocate(mut this, layout: Layout) -> Outcome[RawPtr[U8], AllocError] {
+//!         // Custom allocation logic
+//!     }
+//!
+//!     lowlevel func deallocate(mut this, ptr: RawPtr[U8], layout: Layout) {
+//!         // Custom deallocation logic
+//!     }
+//! }
+//! ```
+//!
+//! # Layout
+//!
+//! [`Layout`] describes the memory requirements of a type or value:
+//!
+//! ```tml
+//! use core::alloc::Layout
+//!
+//! // Create a layout for 100 bytes with 8-byte alignment
+//! let layout = Layout::from_size_align(100, 8)!
+//!
+//! // Get layout for a specific type
+//! let i32_layout = Layout::new[I32]()
+//! assert_eq(i32_layout.size(), 4)
+//! assert_eq(i32_layout.align(), 4)
+//! ```
+
+use core::fmt::{Display, Debug}
+
+// ============================================================================
+// Layout Type
+// ============================================================================
+
+/// Describes the memory layout requirements for a type.
+///
+/// A `Layout` consists of:
+/// - **size**: The number of bytes to allocate
+/// - **align**: The alignment requirement (must be a power of 2)
+///
+/// # Creating Layouts
+///
+/// ```tml
+/// use core::alloc::Layout
+///
+/// // From size and alignment
+/// let layout = Layout::from_size_align(1024, 16)!
+///
+/// // For a specific type (requires compiler support)
+/// let layout = Layout::new[I64]()
+///
+/// // For an array
+/// let layout = Layout::array[I32](100)!
+/// ```
+///
+/// # Invariants
+///
+/// - `align` must be a power of two
+/// - `size` must be a multiple of `align` when rounded up
+/// - `size` must not overflow when rounded up to `align`
+pub type Layout {
+    size_: I64,
+    align_: I64
+}
+
+impl Layout {
+    /// Creates a `Layout` from the given size and alignment.
+    ///
+    /// Returns `Err(LayoutError)` if:
+    /// - `align` is not a power of two
+    /// - `size`, when rounded up to `align`, overflows
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let layout = Layout::from_size_align(100, 8)!
+    /// assert_eq(layout.size(), 100)
+    /// assert_eq(layout.align(), 8)
+    /// ```
+    pub func from_size_align(size: I64, align: I64) -> Outcome[Layout, LayoutError] {
+        // Check alignment is power of two
+        if align <= 0 or (align & (align - 1)) != 0 {
+            return Err(LayoutError::new("alignment must be a power of two"))
+        }
+
+        // Check size doesn't overflow when aligned
+        let aligned_size: I64 = (size + align - 1) & (0 - align)
+        if aligned_size < size {
+            return Err(LayoutError::new("size overflow when aligned"))
+        }
+
+        return Ok(Layout { size_: size, align_: align })
+    }
+
+    /// Creates a `Layout` without checking the invariants.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// The caller must ensure:
+    /// - `align` is a power of two
+    /// - `size` does not overflow when rounded up to `align`
+    pub func from_size_align_unchecked(size: I64, align: I64) -> Layout {
+        return Layout { size_: size, align_: align }
+    }
+
+    /// Returns the size of the layout in bytes.
+    pub func size(this) -> I64 {
+        return this.size_
+    }
+
+    /// Returns the alignment of the layout in bytes.
+    pub func align(this) -> I64 {
+        return this.align_
+    }
+
+    /// Creates a layout describing the record for a `[T; n]` array.
+    ///
+    /// Returns `Err(LayoutError)` if the total size would overflow.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let layout = Layout::array_layout(4, 4, 100)!  // 100 I32s
+    /// assert_eq(layout.size(), 400)
+    /// ```
+    pub func array_layout(elem_size: I64, elem_align: I64, n: I64) -> Outcome[Layout, LayoutError] {
+        if n < 0 {
+            return Err(LayoutError::new("negative array length"))
+        }
+
+        // Check for overflow
+        let total_size: I64 = elem_size * n
+        if n != 0 and total_size / n != elem_size {
+            return Err(LayoutError::new("array size overflow"))
+        }
+
+        return Layout::from_size_align(total_size, elem_align)
+    }
+
+    /// Returns the amount of padding needed to align `self.size()` to `align`.
+    ///
+    /// The return value is always less than `align`.
+    pub func padding_needed_for(this, align: I64) -> I64 {
+        let len: I64 = this.size_
+        let align_m1: I64 = align - 1
+        return (0 - len) & align_m1
+    }
+
+    /// Creates a layout by rounding the size up to a multiple of the alignment.
+    ///
+    /// This is useful when you need to allocate multiple items with the same
+    /// layout consecutively.
+    pub func pad_to_align(this) -> Layout {
+        let new_size: I64 = (this.size_ + this.align_ - 1) & (0 - this.align_)
+        return Layout { size_: new_size, align_: this.align_ }
+    }
+
+    /// Creates a layout for `n` copies of `self`, with padding between each.
+    ///
+    /// Returns `(layout, stride)` where `stride` is the distance between
+    /// consecutive elements.
+    ///
+    /// Returns `Err(LayoutError)` if the total size would overflow.
+    pub func repeat(this, n: I64) -> Outcome[(Layout, I64), LayoutError] {
+        if n < 0 {
+            return Err(LayoutError::new("negative repeat count"))
+        }
+
+        let padded: Layout = this.pad_to_align()
+        let stride: I64 = padded.size()
+
+        // Check for overflow
+        let total_size: I64 = stride * n
+        if n != 0 and total_size / n != stride {
+            return Err(LayoutError::new("repeat size overflow"))
+        }
+
+        let layout: Layout = Layout::from_size_align_unchecked(total_size, this.align_)
+        return Ok((layout, stride))
+    }
+
+    /// Extends this layout with another layout, returning the combined layout
+    /// and the offset where the second layout begins.
+    ///
+    /// The resulting layout has:
+    /// - Size: self.size() + padding + other.size()
+    /// - Alignment: max(self.align(), other.align())
+    pub func extend(this, other: Layout) -> Outcome[(Layout, I64), LayoutError] {
+        let new_align: I64 = this.align_
+        if other.align_ > new_align {
+            new_align = other.align_
+        }
+
+        let padding: I64 = this.padding_needed_for(other.align_)
+        let offset: I64 = this.size_ + padding
+
+        // Check for overflow
+        let new_size: I64 = offset + other.size_
+        if new_size < offset {
+            return Err(LayoutError::new("layout extend overflow"))
+        }
+
+        let layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(new_size, new_align)
+        when layout_result {
+            Ok(layout) => return Ok((layout, offset)),
+            Err(e) => return Err(e)
+        }
+    }
+
+    /// Returns a layout identical to `self` but with the given alignment.
+    ///
+    /// Returns `Err` if `align` is not a power of two or is less than
+    /// `self.align()`.
+    pub func align_to(this, align: I64) -> Outcome[Layout, LayoutError] {
+        if align < this.align_ {
+            return Err(LayoutError::new("cannot reduce alignment"))
+        }
+        return Layout::from_size_align(this.size_, align)
+    }
+}
+
+impl PartialEq for Layout {
+    pub func eq(this, other: ref Layout) -> Bool {
+        return this.size_ == other.size_ and this.align_ == other.align_
+    }
+}
+
+impl Eq for Layout {}
+
+impl Duplicate for Layout {
+    pub func duplicate(this) -> Layout {
+        return Layout { size_: this.size_, align_: this.align_ }
+    }
+}
+
+impl Copy for Layout {}
+
+impl Debug for Layout {
+    pub func debug_string(this) -> Str {
+        return "Layout(size=" + this.size_.to_string() + ", align=" + this.align_.to_string() + ")"
+    }
+}
+
+impl Display for Layout {
+    pub func to_string(this) -> Str {
+        return "Layout(size=" + this.size_.to_string() + ", align=" + this.align_.to_string() + ")"
+    }
+}
+
+// ============================================================================
+// LayoutError Type
+// ============================================================================
+
+/// Error indicating an invalid layout.
+///
+/// This error is returned when attempting to create a `Layout` with invalid
+/// parameters, such as:
+/// - Non-power-of-two alignment
+/// - Size that would overflow when aligned
+pub type LayoutError {
+    message: Str
+}
+
+impl LayoutError {
+    /// Creates a new `LayoutError` with the given message.
+    pub func new(message: Str) -> LayoutError {
+        return LayoutError { message: message }
+    }
+
+    /// Returns the error message.
+    pub func message(this) -> Str {
+        return this.message
+    }
+}
+
+impl Display for LayoutError {
+    pub func to_string(this) -> Str {
+        return "layout error: " + this.message
+    }
+}
+
+impl Debug for LayoutError {
+    pub func debug_string(this) -> Str {
+        return "LayoutError(message=" + this.message + ")"
+    }
+}
+
+// ============================================================================
+// AllocError Type
+// ============================================================================
+
+/// Error indicating that an allocation failed.
+///
+/// This error is returned when an allocator cannot satisfy an allocation
+/// request, typically due to:
+/// - Out of memory
+/// - Alignment requirements too strict
+/// - Size too large
+pub type AllocError {
+    // Empty - just a marker that allocation failed
+}
+
+impl AllocError {
+    /// Creates a new `AllocError`.
+    pub func new() -> AllocError {
+        return AllocError {}
+    }
+}
+
+impl Display for AllocError {
+    pub func to_string(this) -> Str {
+        return "allocation failed"
+    }
+}
+
+impl Debug for AllocError {
+    pub func debug_string(this) -> Str {
+        return "AllocError"
+    }
+}
+
+// ============================================================================
+// Allocator Behavior
+// ============================================================================
+
+/// A behavior for types that can allocate memory.
+///
+/// Allocators are responsible for:
+/// - Allocating blocks of memory with specified layouts
+/// - Deallocating previously allocated memory
+/// - Optionally growing or shrinking allocations in place
+///
+/// # Safety
+///
+/// Implementations must ensure:
+/// - Allocated memory is valid and aligned as requested
+/// - Memory is not used after deallocation
+/// - Pointers passed to `deallocate` were returned by `allocate`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::alloc::{Allocator, Layout, AllocError}
+///
+/// func allocate_array[T, A: Allocator](
+///     allocator: mut ref A,
+///     count: I64
+/// ) -> Outcome[RawPtr[T], AllocError] {
+///     let layout = Layout::array_layout(size_of[T](), align_of[T](), count)!
+///     let ptr = allocator.allocate(layout)!
+///     return Ok(ptr as RawPtr[T])
+/// }
+/// ```
+pub behavior Allocator {
+    /// Attempts to allocate a block of memory with the given layout.
+    ///
+    /// Returns a pointer to the allocated memory on success, or `AllocError`
+    /// if the allocation fails.
+    ///
+    /// The returned pointer is guaranteed to be:
+    /// - Non-null
+    /// - Aligned to at least `layout.align()`
+    /// - Valid for reads and writes of `layout.size()` bytes
+    func allocate(mut this, layout: Layout) -> Outcome[RawPtr[U8], AllocError]
+
+    /// Deallocates memory previously allocated by this allocator.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// - `ptr` must have been returned by a call to `allocate` on this allocator
+    /// - `layout` must be the same layout that was used to allocate `ptr`
+    /// - `ptr` must not be used after this call
+    lowlevel func deallocate(mut this, ptr: RawPtr[U8], layout: Layout)
+
+    /// Attempts to grow an allocation in place.
+    ///
+    /// Returns `Ok` if the allocation was successfully grown, or `Err` if
+    /// the allocation could not be grown in place.
+    ///
+    /// The default implementation always returns `Err`.
+    func grow(
+        mut this,
+        ptr: RawPtr[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[RawPtr[U8], AllocError] {
+        return Err(AllocError::new())
+    }
+
+    /// Attempts to shrink an allocation in place.
+    ///
+    /// Returns `Ok` if the allocation was successfully shrunk, or `Err` if
+    /// the allocation could not be shrunk in place.
+    ///
+    /// The default implementation always returns `Err`.
+    func shrink(
+        mut this,
+        ptr: RawPtr[U8],
+        old_layout: Layout,
+        new_layout: Layout
+    ) -> Outcome[RawPtr[U8], AllocError] {
+        return Err(AllocError::new())
+    }
+
+    /// Allocates zeroed memory.
+    ///
+    /// The default implementation calls `allocate` and then zeroes the memory.
+    func allocate_zeroed(mut this, layout: Layout) -> Outcome[RawPtr[U8], AllocError] {
+        let ptr_result: Outcome[RawPtr[U8], AllocError] = this.allocate(layout)
+        when ptr_result {
+            Ok(ptr) => {
+                // Zero the memory
+                lowlevel { memset(ptr, 0, layout.size()) }
+                return Ok(ptr)
+            },
+            Err(e) => return Err(e)
+        }
+    }
+}
+
+// ============================================================================
+// GlobalAlloc Behavior
+// ============================================================================
+
+/// A behavior for the global memory allocator.
+///
+/// This is a simpler interface than `Allocator`, designed for the global
+/// allocator. Unlike `Allocator`, it does not take `mut this` (operations
+/// on the global allocator must be internally synchronized).
+///
+/// # Safety
+///
+/// Implementations must be thread-safe and must ensure all invariants
+/// of allocated memory are maintained.
+pub behavior GlobalAlloc {
+    /// Allocate memory as described by the given `layout`.
+    ///
+    /// Returns a null pointer if allocation fails.
+    lowlevel func alloc(layout: Layout) -> RawPtr[U8]
+
+    /// Deallocate the block of memory at the given `ptr` pointer with the
+    /// given `layout`.
+    ///
+    /// # Safety
+    ///
+    /// - `ptr` must be currently allocated via this allocator
+    /// - `layout` must be the same layout used to allocate `ptr`
+    lowlevel func dealloc(ptr: RawPtr[U8], layout: Layout)
+
+    /// Allocate zero-initialized memory.
+    ///
+    /// The default implementation calls `alloc` and then zeroes the memory.
+    lowlevel func alloc_zeroed(layout: Layout) -> RawPtr[U8] {
+        let ptr: RawPtr[U8] = GlobalAlloc::alloc(layout)
+        if ptr.is_null() {
+            return ptr
+        }
+        lowlevel { memset(ptr, 0, layout.size()) }
+        return ptr
+    }
+
+    /// Shrink or grow a block of memory to the given `new_size`.
+    ///
+    /// Returns a null pointer if reallocation fails.
+    lowlevel func realloc(ptr: RawPtr[U8], layout: Layout, new_size: I64) -> RawPtr[U8]
+}
+
+// ============================================================================
+// Imports
+// ============================================================================
+
+use core::ptr::RawPtr
+use core::cmp::{PartialEq, Eq}
+use core::clone::{Duplicate, Copy}

@@ -36,18 +36,22 @@ struct TypePath {
 };
 
 // A generic argument can be either a type or a const expression
-// Examples: [I32], [I32, 100], [T, N]
+// Examples: [I32], [I32, 100], [T, N], [Item=I32] (associated type binding)
 struct GenericArg {
     std::variant<TypePtr, ExprPtr> value; // Type or const expression
     bool is_const = false;                // True if this is a const generic argument
+    std::optional<std::string> name;      // For associated type bindings: Item=I32 -> name="Item"
     SourceSpan span;
 
     // Helper constructors
     static GenericArg from_type(TypePtr type, SourceSpan sp) {
-        return GenericArg{std::move(type), false, sp};
+        return GenericArg{std::move(type), false, std::nullopt, sp};
     }
     static GenericArg from_const(ExprPtr expr, SourceSpan sp) {
-        return GenericArg{std::move(expr), true, sp};
+        return GenericArg{std::move(expr), true, std::nullopt, sp};
+    }
+    static GenericArg from_binding(std::string binding_name, TypePtr type, SourceSpan sp) {
+        return GenericArg{std::move(type), false, std::move(binding_name), sp};
     }
 
     [[nodiscard]] bool is_type() const {
@@ -55,6 +59,9 @@ struct GenericArg {
     }
     [[nodiscard]] bool is_expr() const {
         return std::holds_alternative<ExprPtr>(value);
+    }
+    [[nodiscard]] bool is_binding() const {
+        return name.has_value();
     }
     [[nodiscard]] TypePtr& as_type() {
         return std::get<TypePtr>(value);
@@ -673,7 +680,8 @@ struct GenericParam {
     std::string name;
     std::vector<TypePath> bounds;      // Trait bounds (only for type params)
     bool is_const = false;             // True if this is a const generic param
-    std::optional<TypePtr> const_type; // Type of const param (e.g., U64, I32)
+    std::optional<TypePtr> const_type;    // Type of const param (e.g., U64, I32)
+    std::optional<TypePtr> default_type;  // Default type for type param (e.g., T = Self)
     SourceSpan span;
 };
 

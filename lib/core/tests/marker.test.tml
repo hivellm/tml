@@ -1,0 +1,56 @@
+// Tests for marker types (PhantomPinned)
+use test
+
+use core::marker::PhantomPinned
+
+// A type that should not be moved after pinning
+type SelfRefStruct {
+    value: I64,
+    _pinned: PhantomPinned
+}
+
+impl SelfRefStruct {
+    pub func value(this) -> I64 {
+        return this.value
+    }
+}
+
+@test
+func test_phantom_pinned_basic() -> I32 {
+    // PhantomPinned can be created and used in structs
+    let pinned: PhantomPinned = PhantomPinned {}
+
+    // Can also use new()
+    let pinned2: PhantomPinned = PhantomPinned::new()
+
+    // Or default()
+    let pinned3: PhantomPinned = PhantomPinned::default()
+
+    return 0
+}
+
+@test
+func test_phantom_pinned_in_struct() -> I32 {
+    // PhantomPinned can be used as a field in structs
+    let s: SelfRefStruct = SelfRefStruct {
+        value: 42,
+        _pinned: PhantomPinned {}
+    }
+
+    assert_eq(s.value(), 42, "value should be 42")
+
+    return 0
+}
+
+@test
+func test_phantom_pinned_duplicate() -> I32 {
+    let pinned: PhantomPinned = PhantomPinned::new()
+    let pinned2: PhantomPinned = pinned.duplicate()
+
+    // Both should exist (no-op since PhantomPinned has no data)
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

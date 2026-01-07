@@ -1,0 +1,699 @@
+//! Async task primitives.
+//!
+//! This module provides fundamental types and behaviors for asynchronous
+//! programming in TML. These are the building blocks for the async/await system.
+//!
+//! # Core Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Poll`] | The result of a non-blocking operation: Ready or Pending |
+//! | [`Context`] | Carries a [`Waker`] for waking up suspended tasks |
+//! | [`Waker`] | Handle to wake up a task when it can make progress |
+//! | [`RawWaker`] | Low-level waker data for custom executors |
+//! | [`RawWakerVTable`] | Virtual function table for RawWaker operations |
+//!
+//! # Overview
+//!
+//! When an async operation cannot complete immediately, it returns `Pending`
+//! along with a mechanism to be notified when it can make progress. This is
+//! the foundation of cooperative async execution.
+//!
+//! ```tml
+//! use core::task::{Poll, Context}
+//! use core::pin::Pin
+//!
+//! behavior Future {
+//!     type Output
+//!     func poll(mut this: Pin[mut ref This], cx: mut ref Context) -> Poll[This::Output]
+//! }
+//! ```
+//!
+//! # The Waker Pattern
+//!
+//! When a future returns `Pending`, the executor needs to know when to poll
+//! it again. The `Waker` type provides this mechanism:
+//!
+//! 1. The executor creates a `Waker` and wraps it in a `Context`
+//! 2. When polling, the future receives the `Context`
+//! 3. If the future can't complete, it stores the waker and returns `Pending`
+//! 4. When the future can make progress, something calls `waker.wake()`
+//! 5. The executor is notified and polls the future again
+//!
+//! # Examples
+//!
+//! ## Simple Future
+//!
+//! ```tml
+//! use core::task::{Poll, Context}
+//! use core::pin::Pin
+//! use core::future::Future
+//!
+//! type Ready[T] {
+//!     value: Maybe[T]
+//! }
+//!
+//! impl[T] Future for Ready[T] {
+//!     type Output = T
+//!
+//!     func poll(mut this: Pin[mut ref This], _cx: mut ref Context) -> Poll[T] {
+//!         when this.value.take() {
+//!             Just(v) => return Poll::Ready(v),
+//!             Nothing => return Poll::Ready(panic("polled after completion"))
+//!         }
+//!     }
+//! }
+//! ```
+
+use core::pin::Pin
+use core::ops::{Deref, DerefMut}
+
+// ============================================================================
+// Poll Type
+// ============================================================================
+
+/// Indicates whether a value is available or if the current task has been
+/// scheduled to receive a wakeup instead.
+///
+/// This is the return type of [`Future::poll`], representing the result of
+/// attempting to make progress on an async operation.
+///
+/// # Variants
+///
+/// - `Ready(T)` - The operation completed successfully with value `T`
+/// - `Pending` - The operation could not complete yet; the task will be woken
+///   when progress can be made
+///
+/// # Examples
+///
+/// ## Returning Poll from a Future
+///
+/// ```tml
+/// use core::task::{Poll, Context}
+/// use core::pin::Pin
+///
+/// func poll_my_operation(cx: mut ref Context) -> Poll[I32] {
+///     if data_is_ready() {
+///         return Poll::Ready(42)
+///     } else {
+///         schedule_wakeup(cx.waker())
+///         return Poll::Pending
+///     }
+/// }
+/// ```
+///
+/// ## Mapping a Poll Value
+///
+/// ```tml
+/// let poll: Poll[I32] = Poll::Ready(10)
+/// let mapped: Poll[Str] = poll.map(do(n) { n.to_string() })
+/// ```
+pub enum Poll[T] {
+    /// The operation completed and produced a value.
+    Ready(T),
+
+    /// The operation is not yet complete.
+    ///
+    /// When a future returns `Pending`, it must have arranged for the
+    /// current task to be woken up when progress can be made.
+    Pending
+}
+
+impl[T] Poll[T] {
+    /// Returns `true` if this is `Ready`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ready: Poll[I32] = Poll::Ready(42)
+    /// let pending: Poll[I32] = Poll::Pending
+    ///
+    /// assert(ready.is_ready())
+    /// assert(not pending.is_ready())
+    /// ```
+    pub func is_ready(this) -> Bool {
+        when this {
+            Ready(_) => return true,
+            Pending => return false
+        }
+    }
+
+    /// Returns `true` if this is `Pending`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ready: Poll[I32] = Poll::Ready(42)
+    /// let pending: Poll[I32] = Poll::Pending
+    ///
+    /// assert(not ready.is_pending())
+    /// assert(pending.is_pending())
+    /// ```
+    pub func is_pending(this) -> Bool {
+        when this {
+            Ready(_) => return false,
+            Pending => return true
+        }
+    }
+
+    /// Maps a `Poll[T]` to `Poll[U]` by applying a function to the `Ready` value.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let poll: Poll[I32] = Poll::Ready(10)
+    /// let doubled: Poll[I32] = poll.map(do(n) { n * 2 })
+    /// // doubled is Poll::Ready(20)
+    /// ```
+    pub func map[U, F](this, f: F) -> Poll[U] where F: FnOnce[(T,), Output = U] {
+        when this {
+            Ready(t) => return Poll::Ready(f.call_once((t,))),
+            Pending => return Poll::Pending
+        }
+    }
+
+    /// Converts from `Poll[T]` to `Maybe[T]`.
+    ///
+    /// Returns `Just(t)` if `Ready(t)`, `Nothing` if `Pending`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ready: Poll[I32] = Poll::Ready(42)
+    /// let pending: Poll[I32] = Poll::Pending
+    ///
+    /// assert_eq(ready.ready(), Just(42))
+    /// assert_eq(pending.ready(), Nothing)
+    /// ```
+    pub func ready(this) -> Maybe[T] {
+        when this {
+            Ready(t) => return Just(t),
+            Pending => return Nothing
+        }
+    }
+}
+
+impl[T, E] Poll[Outcome[T, E]] {
+    /// Maps a `Poll[Outcome[T, E]]` to `Poll[Outcome[U, E]]` by applying
+    /// a function to the `Ok` value.
+    ///
+    /// This is useful when chaining operations on poll results that may fail.
+    pub func map_ok[U, F](this, f: F) -> Poll[Outcome[U, E]] where F: FnOnce[(T,), Output = U] {
+        when this {
+            Ready(result) => {
+                when result {
+                    Ok(t) => return Poll::Ready(Ok(f.call_once((t,)))),
+                    Err(e) => return Poll::Ready(Err(e))
+                }
+            },
+            Pending => return Poll::Pending
+        }
+    }
+
+    /// Maps a `Poll[Outcome[T, E]]` to `Poll[Outcome[T, F]]` by applying
+    /// a function to the `Err` value.
+    pub func map_err[F2, Func](this, f: Func) -> Poll[Outcome[T, F2]] where Func: FnOnce[(E,), Output = F2] {
+        when this {
+            Ready(result) => {
+                when result {
+                    Ok(t) => return Poll::Ready(Ok(t)),
+                    Err(e) => return Poll::Ready(Err(f.call_once((e,))))
+                }
+            },
+            Pending => return Poll::Pending
+        }
+    }
+}
+
+impl[T: Default] Default for Poll[T] {
+    /// Returns `Poll::Ready(Default::default())`.
+    pub func default() -> Poll[T] {
+        return Poll::Ready(Default::default())
+    }
+}
+
+impl[T: Duplicate] Duplicate for Poll[T] {
+    pub func duplicate(this) -> Poll[T] {
+        when this {
+            Ready(t) => return Poll::Ready(t.duplicate()),
+            Pending => return Poll::Pending
+        }
+    }
+}
+
+impl[T: Copy] Copy for Poll[T] {}
+
+impl[T: PartialEq] PartialEq for Poll[T] {
+    pub func eq(this, other: ref Poll[T]) -> Bool {
+        when (this, other) {
+            (Ready(a), Ready(b)) => return a.eq(b),
+            (Pending, Pending) => return true,
+            _ => return false
+        }
+    }
+}
+
+impl[T: Eq] Eq for Poll[T] {}
+
+// ============================================================================
+// RawWaker - Low-level waker type
+// ============================================================================
+
+/// A low-level handle to a waker.
+///
+/// `RawWaker` is used by executor implementations to create `Waker` instances.
+/// Most code should use `Waker` directly; `RawWaker` is only for advanced use
+/// cases like implementing custom executors.
+///
+/// # Creating a RawWaker
+///
+/// A `RawWaker` consists of:
+/// - A data pointer that identifies the task
+/// - A virtual function table (`RawWakerVTable`) with operations
+///
+/// # Safety
+///
+/// The functions in the vtable must be implemented correctly:
+/// - `clone` must return a valid `RawWaker`
+/// - `wake` must wake the task and consume the `RawWaker`
+/// - `wake_by_ref` must wake the task without consuming
+/// - `drop` must clean up resources
+pub type RawWaker {
+    /// Opaque data pointer identifying the waker.
+    data: RawPtr[Unit],
+
+    /// Virtual function table for waker operations.
+    vtable: ref RawWakerVTable
+}
+
+impl RawWaker {
+    /// Creates a new `RawWaker` from the given data pointer and vtable.
+    ///
+    /// # Safety
+    ///
+    /// The vtable functions must correctly handle the data pointer:
+    /// - They must be safe to call with the given data
+    /// - `clone`, `wake`, `wake_by_ref`, and `drop` must behave correctly
+    pub func new(data: RawPtr[Unit], vtable: ref RawWakerVTable) -> RawWaker {
+        return RawWaker { data: data, vtable: vtable }
+    }
+
+    /// Returns the data pointer.
+    pub func data(this) -> RawPtr[Unit] {
+        return this.data
+    }
+
+    /// Returns the vtable reference.
+    pub func vtable(this) -> ref RawWakerVTable {
+        return this.vtable
+    }
+}
+
+// ============================================================================
+// RawWakerVTable - Virtual function table for waker operations
+// ============================================================================
+
+/// A virtual function table for `RawWaker`.
+///
+/// This table contains function pointers for all operations on a waker.
+/// Executor implementations use this to define how waking behaves.
+///
+/// # Functions
+///
+/// All functions receive the `data` pointer from `RawWaker`:
+///
+/// - `clone`: Clone the waker, returning a new `RawWaker`
+/// - `wake`: Wake the task and consume the waker
+/// - `wake_by_ref`: Wake the task without consuming the waker
+/// - `drop`: Clean up the waker's resources
+///
+/// # Safety
+///
+/// All function pointers must be valid for the lifetime of the `RawWaker`
+/// and must correctly handle the data pointer they receive.
+pub type RawWakerVTable {
+    /// Function to clone the waker.
+    clone_fn: func(RawPtr[Unit]) -> RawWaker,
+
+    /// Function to wake by value (consumes the waker).
+    wake_fn: func(RawPtr[Unit]),
+
+    /// Function to wake by reference.
+    wake_by_ref_fn: func(RawPtr[Unit]),
+
+    /// Function to drop the waker.
+    drop_fn: func(RawPtr[Unit])
+}
+
+impl RawWakerVTable {
+    /// Creates a new `RawWakerVTable` from the given functions.
+    ///
+    /// # Safety
+    ///
+    /// All functions must correctly handle the data pointer from the waker.
+    pub func new(
+        clone_fn: func(RawPtr[Unit]) -> RawWaker,
+        wake_fn: func(RawPtr[Unit]),
+        wake_by_ref_fn: func(RawPtr[Unit]),
+        drop_fn: func(RawPtr[Unit])
+    ) -> RawWakerVTable {
+        return RawWakerVTable {
+            clone_fn: clone_fn,
+            wake_fn: wake_fn,
+            wake_by_ref_fn: wake_by_ref_fn,
+            drop_fn: drop_fn
+        }
+    }
+}
+
+// ============================================================================
+// Waker - High-level waker type
+// ============================================================================
+
+/// A handle for waking up a task.
+///
+/// `Waker` is the primary way for asynchronous code to signal that a task
+/// is ready to make progress. When a future cannot complete, it stores the
+/// waker and returns `Pending`. Later, when the operation can proceed,
+/// something calls `wake()` on the stored waker.
+///
+/// # Creating Wakers
+///
+/// Wakers are typically created by async runtimes/executors. User code
+/// receives wakers through the `Context` passed to `Future::poll`.
+///
+/// # Thread Safety
+///
+/// `Waker` is `Send + Sync`, allowing wakeups from any thread. This is
+/// essential for I/O completion notifications that may occur on
+/// background threads.
+///
+/// # Examples
+///
+/// ## Storing a Waker
+///
+/// ```tml
+/// type MyResource {
+///     waker: Maybe[Waker]
+/// }
+///
+/// impl MyResource {
+///     func poll_ready(mut this, cx: mut ref Context) -> Poll[Unit] {
+///         if this.is_ready() {
+///             return Poll::Ready(())
+///         }
+///         // Store waker for later notification
+///         this.waker = Just(cx.waker().duplicate())
+///         return Poll::Pending
+///     }
+///
+///     // Called when resource becomes ready
+///     func notify(mut this) {
+///         when this.waker.take() {
+///             Just(w) => w.wake(),
+///             Nothing => {}
+///         }
+///     }
+/// }
+/// ```
+pub type Waker {
+    /// The underlying raw waker.
+    waker: RawWaker
+}
+
+impl Waker {
+    /// Creates a new `Waker` from a `RawWaker`.
+    ///
+    /// # Safety
+    ///
+    /// The `RawWaker` must have a valid vtable with correctly implemented
+    /// functions that are safe to call.
+    pub func from_raw(waker: RawWaker) -> Waker {
+        return Waker { waker: waker }
+    }
+
+    /// Wake up the task associated with this waker.
+    ///
+    /// This consumes the waker. If you need to wake without consuming,
+    /// use `wake_by_ref()` instead.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Take the stored waker and wake the task
+    /// when stored_waker.take() {
+    ///     Just(w) => w.wake(),
+    ///     Nothing => {}
+    /// }
+    /// ```
+    pub func wake(this) {
+        let vtable: ref RawWakerVTable = this.waker.vtable
+        let data: RawPtr[Unit] = this.waker.data
+        // Call wake function (consumes the waker)
+        vtable.wake_fn(data)
+    }
+
+    /// Wake up the task associated with this waker by reference.
+    ///
+    /// This is useful when you need to wake multiple times or keep the
+    /// waker for later use.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Wake without consuming
+    /// stored_waker.wake_by_ref()
+    /// // Can still use stored_waker later
+    /// ```
+    pub func wake_by_ref(this) {
+        let vtable: ref RawWakerVTable = this.waker.vtable
+        vtable.wake_by_ref_fn(this.waker.data)
+    }
+
+    /// Returns whether this waker will wake the same task as another waker.
+    ///
+    /// Two wakers wake the same task if they have the same data pointer.
+    pub func will_wake(this, other: ref Waker) -> Bool {
+        return this.waker.data == other.waker.data
+    }
+
+    /// Extracts the underlying raw waker.
+    ///
+    /// This is useful for executor implementations that need to pass
+    /// the raw waker to lower-level APIs.
+    pub func as_raw(this) -> ref RawWaker {
+        return ref this.waker
+    }
+}
+
+impl Duplicate for Waker {
+    /// Creates a duplicate of this waker.
+    ///
+    /// The duplicated waker will wake the same task.
+    pub func duplicate(this) -> Waker {
+        let vtable: ref RawWakerVTable = this.waker.vtable
+        let new_raw: RawWaker = vtable.clone_fn(this.waker.data)
+        return Waker { waker: new_raw }
+    }
+}
+
+impl Drop for Waker {
+    /// Drops this waker, releasing its resources.
+    pub func drop(mut this) {
+        let vtable: ref RawWakerVTable = this.waker.vtable
+        vtable.drop_fn(this.waker.data)
+    }
+}
+
+// Waker is Send + Sync (can wake from any thread)
+impl Send for Waker {}
+impl Sync for Waker {}
+
+// ============================================================================
+// Context - Async context passed to futures
+// ============================================================================
+
+/// The context of an asynchronous task.
+///
+/// `Context` is passed to `Future::poll` and carries information about the
+/// current asynchronous context. Currently, it provides access to a `Waker`
+/// that can schedule the task to be polled again.
+///
+/// # Examples
+///
+/// ## Using Context in a Future
+///
+/// ```tml
+/// impl Future for MyFuture {
+///     type Output = I32
+///
+///     func poll(mut this: Pin[mut ref This], cx: mut ref Context) -> Poll[I32] {
+///         if this.is_ready() {
+///             return Poll::Ready(this.value)
+///         }
+///         // Store waker for later
+///         this.waker = Just(cx.waker().duplicate())
+///         return Poll::Pending
+///     }
+/// }
+/// ```
+///
+/// # Executor Usage
+///
+/// Executors create a `Context` before polling each task:
+///
+/// ```tml
+/// let waker: Waker = create_waker_for_task(task_id)
+/// var context: Context = Context::from_waker(ref waker)
+/// let poll_result: Poll[T] = future.poll(ref mut context)
+/// ```
+pub type Context[T] {
+    /// The waker for this context.
+    waker: ref Waker,
+    /// Phantom data for the local waker type (for future extension).
+    _marker: PhantomData[T]
+}
+
+impl Context[Unit] {
+    /// Creates a new `Context` from a `Waker` reference.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let waker: Waker = create_waker()
+    /// let ctx: Context = Context::from_waker(ref waker)
+    /// ```
+    pub func from_waker(waker: ref Waker) -> Context[Unit] {
+        return Context {
+            waker: waker,
+            _marker: PhantomData::new()
+        }
+    }
+}
+
+impl[T] Context[T] {
+    /// Returns a reference to the `Waker` for this context.
+    ///
+    /// The waker can be cloned and stored to wake the task later.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// func poll(cx: mut ref Context) -> Poll[I32] {
+    ///     let waker: Waker = cx.waker().duplicate()
+    ///     // Store waker for later notification
+    ///     return Poll::Pending
+    /// }
+    /// ```
+    pub func waker(this) -> ref Waker {
+        return this.waker
+    }
+}
+
+// ============================================================================
+// Ready - A future that is immediately ready
+// ============================================================================
+
+/// A future that is immediately ready with a value.
+///
+/// This is useful for wrapping a value as a future when you need to
+/// return a `impl Future` but already have the result.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::task::Ready
+///
+/// let future: Ready[I32] = Ready::new(42)
+/// // Polling this future returns Poll::Ready(42)
+/// ```
+pub type Ready[T] {
+    value: Maybe[T]
+}
+
+impl[T] Ready[T] {
+    /// Creates a new `Ready` future with the given value.
+    pub func new(value: T) -> Ready[T] {
+        return Ready { value: Just(value) }
+    }
+}
+
+// ============================================================================
+// Pending - A future that is never ready
+// ============================================================================
+
+/// A future that is never ready.
+///
+/// This is useful in situations where you need a future that never
+/// completes, such as infinite loops or placeholder implementations.
+///
+/// # Warning
+///
+/// Polling this future always returns `Pending` without scheduling a wakeup.
+/// In most executors, this would cause the task to never be polled again.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::task::Pending
+///
+/// let never: Pending[I32] = Pending::new()
+/// // Polling this future always returns Poll::Pending
+/// ```
+pub type Pending[T] {
+    _marker: PhantomData[T]
+}
+
+impl[T] Pending[T] {
+    /// Creates a new `Pending` future.
+    pub func new() -> Pending[T] {
+        return Pending { _marker: PhantomData::new() }
+    }
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Creates a future that is immediately ready with the given value.
+///
+/// This is a convenience function equivalent to `Ready::new(value)`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::task::ready
+///
+/// let fut = ready(42)
+/// ```
+pub func ready[T](value: T) -> Ready[T] {
+    return Ready::new(value)
+}
+
+/// Creates a future that is never ready.
+///
+/// This is a convenience function equivalent to `Pending::new()`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::task::pending
+///
+/// let never: Pending[I32] = pending()
+/// ```
+pub func pending[T]() -> Pending[T] {
+    return Pending::new()
+}
+
+// ============================================================================
+// Convenience re-exports
+// ============================================================================
+
+// Re-export PhantomData for convenience in this module
+use core::marker::PhantomData
+use core::clone::{Duplicate, Copy}
+use core::cmp::{PartialEq, Eq}
+use core::default::Default
+use core::ptr::RawPtr
+use core::ops::Drop
+use core::marker::{Send, Sync}

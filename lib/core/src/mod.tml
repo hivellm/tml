@@ -9,10 +9,15 @@
 // - fmt: Display and Debug behaviors for formatting
 // - convert: From, Into, TryFrom, TryInto, AsRef, AsMut for type conversions
 // - hash: Hash behavior for hashable types
-// - marker: Send, Sync, Sized, Unpin marker behaviors
+// - marker: Send, Sync, Sized marker behaviors
+// - pin: Pin type and Unpin marker behavior for pinned memory
+// - task: Poll, Context, Waker for async task primitives
+// - future: Future behavior and combinators
+// - async_iter: AsyncIterator for async streams
 // - mem: Memory utilities (size_of, swap, replace, forget)
 // - cell: Interior mutability (Cell, RefCell)
 // - str: String manipulation utilities
+// - bstr: Byte string types (ByteStr for non-UTF-8 data)
 // - char: Unicode scalar value (Char) type and operations
 // - ascii: ASCII character operations
 // - unicode: Unicode character classification and properties
@@ -39,6 +44,7 @@ pub mod marker   // Send, Sync, Sized, Unpin
 pub mod mem      // size_of, swap, replace, forget, ManuallyDrop
 pub mod cell     // Cell, RefCell
 pub mod str      // String utilities
+pub mod bstr     // ByteStr for non-UTF-8 byte strings
 pub mod char     // Char (Unicode scalar value), from_u32, DecodeUtf16
 pub mod ascii    // AsciiChar, escape_default
 pub mod unicode  // Unicode character classification and properties
@@ -53,3 +59,10 @@ pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
 pub mod collections  // List, HashMap behavior implementations
 pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr (no I/O)
+pub mod range    // Range, RangeInclusive, RangeFrom, RangeTo, RangeFull
+pub mod num      // Zero, One, Bounded, Saturating, Wrapping, NonZero
+pub mod pin      // Pin, Unpin - pinned memory locations
+pub mod task     // Poll, Context, Waker - async task primitives
+pub mod future     // Future behavior and combinators
+pub mod async_iter // AsyncIterator for async streams
+pub mod time       // Duration

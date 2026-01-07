@@ -410,7 +410,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                           dyn_alloca + ", i32 0, i32 1");
                 emit_line("  store ptr " + vtable + ", ptr " + vtable_field);
 
-                locals_[var_name] = VarInfo{dyn_alloca, var_type, nullptr, std::nullopt};
+                // Get semantic type for generic dyn dispatch (e.g., dyn Processor[I32])
+                types::TypePtr dyn_semantic = nullptr;
+                if (let.type_annotation) {
+                    dyn_semantic = resolve_parser_type_with_subs(**let.type_annotation, {});
+                }
+
+                locals_[var_name] = VarInfo{dyn_alloca, var_type, dyn_semantic, std::nullopt};
                 return;
             }
         }

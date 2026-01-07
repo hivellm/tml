@@ -1,0 +1,23 @@
+// Basic closure tests
+use test
+
+@test
+func test_closure_simple() -> I32 {
+    let add_one: func(I32) -> I32 = do(x: I32) -> I32 { x + 1 }
+    let result: I32 = add_one(5)
+    assert_eq(result, 6, "Closure should add one")
+    return 0
+}
+
+@test
+func test_closure_with_capture() -> I32 {
+    let offset: I32 = 10
+    let add_offset: func(I32) -> I32 = do(x: I32) -> I32 { x + offset }
+    let result: I32 = add_offset(5)
+    assert_eq(result, 15, "Closure should add captured offset")
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

@@ -1,0 +1,38 @@
+// Higher-order function tests with closures
+use test
+
+// Function that takes a closure as argument
+func apply(x: I32, f: func(I32) -> I32) -> I32 {
+    return f(x)
+}
+
+func apply_twice(x: I32, f: func(I32) -> I32) -> I32 {
+    return f(f(x))
+}
+
+@test
+func test_closure_as_argument() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = apply(5, double)
+    assert_eq(result, 10, "apply(5, double) should be 10")
+    return 0
+}
+
+@test
+func test_closure_applied_twice() -> I32 {
+    let add_three: func(I32) -> I32 = do(x: I32) -> I32 { x + 3 }
+    let result: I32 = apply_twice(0, add_three)
+    assert_eq(result, 6, "apply_twice(0, add_three) should be 6")
+    return 0
+}
+
+@test
+func test_inline_closure_argument() -> I32 {
+    let result: I32 = apply(7, do(x: I32) -> I32 { x + 1 })
+    assert_eq(result, 8, "apply with inline closure should work")
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

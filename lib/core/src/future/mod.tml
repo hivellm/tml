@@ -1,0 +1,475 @@
+//! Asynchronous values (Futures).
+//!
+//! This module provides the [`Future`] behavior and related types for
+//! asynchronous programming in TML.
+//!
+//! # The Future Behavior
+//!
+//! A future represents a value that may not be available yet. Instead of
+//! blocking until the value is ready, futures allow the program to continue
+//! doing other work.
+//!
+//! The core method is [`poll`], which attempts to resolve the future to its
+//! final value. If the value is ready, it returns `Poll::Ready(value)`. If
+//! not, it returns `Poll::Pending` and arranges for the task to be woken
+//! when progress can be made.
+//!
+//! # Async/Await
+//!
+//! While futures can be polled manually, the preferred way to use them is
+//! with async/await syntax:
+//!
+//! ```tml
+//! async func fetch_data() -> Str {
+//!     let response = http_get("example.com").await
+//!     return response.body
+//! }
+//! ```
+//!
+//! The compiler transforms async functions into state machines that
+//! implement `Future`.
+//!
+//! # Pinning
+//!
+//! Futures require [`Pin`] because async state machines may contain
+//! self-references (pointers to their own local variables across await
+//! points). Pinning guarantees the future won't be moved, keeping these
+//! internal pointers valid.
+//!
+//! # Examples
+//!
+//! ## Implementing a Simple Future
+//!
+//! ```tml
+//! use core::future::Future
+//! use core::task::{Context, Poll}
+//! use core::pin::Pin
+//!
+//! type Delay {
+//!     remaining: I32
+//! }
+//!
+//! impl Future for Delay {
+//!     type Output = Unit
+//!
+//!     func poll(mut this: Pin[mut ref This], cx: mut ref Context) -> Poll[Unit] {
+//!         if this.remaining <= 0 {
+//!             return Poll::Ready(())
+//!         }
+//!         this.remaining = this.remaining - 1
+//!         // Schedule to be polled again
+//!         cx.waker().wake_by_ref()
+//!         return Poll::Pending
+//!     }
+//! }
+//! ```
+//!
+//! ## Combining Futures
+//!
+//! ```tml
+//! use core::future::{Future, AndThen}
+//!
+//! let combined = my_future.and_then(do(result) {
+//!     process(result)
+//! })
+//! ```
+
+use core::pin::Pin
+use core::task::{Context, Poll, Ready, Pending}
+
+// ============================================================================
+// Future Behavior
+// ============================================================================
+
+/// A future represents an asynchronous computation.
+///
+/// The `Future` behavior is the core of TML's async system. A type implementing
+/// `Future` can be polled to check if the computation is complete.
+///
+/// # The Poll Method
+///
+/// `poll` is the only required method. It:
+/// 1. Receives a pinned mutable reference to self (for self-referential state)
+/// 2. Receives a `Context` containing a `Waker`
+/// 3. Returns `Poll::Ready(value)` when complete, or `Poll::Pending` when not
+///
+/// # Contract
+///
+/// When returning `Poll::Pending`, the future **must** arrange for the task's
+/// waker to be notified when progress can be made. Failing to do so will cause
+/// the task to sleep forever.
+///
+/// # Fused Futures
+///
+/// After returning `Poll::Ready`, a future's behavior on subsequent polls is
+/// undefined. If you need a future that can be safely polled after completion,
+/// use [`FusedFuture`] or wrap it with `fuse()`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::Future
+/// use core::task::{Context, Poll}
+/// use core::pin::Pin
+///
+/// type Counter {
+///     count: I32,
+///     target: I32
+/// }
+///
+/// impl Future for Counter {
+///     type Output = I32
+///
+///     func poll(mut this: Pin[mut ref This], cx: mut ref Context) -> Poll[I32] {
+///         this.count = this.count + 1
+///         if this.count >= this.target {
+///             return Poll::Ready(this.count)
+///         }
+///         cx.waker().wake_by_ref()
+///         return Poll::Pending
+///     }
+/// }
+/// ```
+pub behavior Future {
+    /// The type of value produced on completion.
+    type Output
+
+    /// Attempt to resolve the future to a final value.
+    ///
+    /// # Return Values
+    ///
+    /// - `Poll::Ready(value)` - The future completed with `value`
+    /// - `Poll::Pending` - The future is not yet complete
+    ///
+    /// # Waker Contract
+    ///
+    /// When returning `Poll::Pending`, the implementation must have arranged
+    /// for `cx.waker()` to be notified when the future can make progress.
+    ///
+    /// # Panics
+    ///
+    /// After returning `Poll::Ready`, calling `poll` again may panic or
+    /// return arbitrary results. Use `FusedFuture` for safe re-polling.
+    func poll(mut this: Pin[mut ref This], cx: mut ref Context[Unit]) -> Poll[This::Output]
+}
+
+// ============================================================================
+// FusedFuture Behavior
+// ============================================================================
+
+/// A future that tracks whether it has completed.
+///
+/// Unlike regular futures, a `FusedFuture` can be safely polled after it
+/// returns `Poll::Ready`. After completion, it will continue returning
+/// `Poll::Pending` or panic, depending on the implementation.
+///
+/// The `is_terminated` method returns `true` if the future has completed.
+///
+/// # Use Cases
+///
+/// - `select!` macro needs to know which futures have completed
+/// - Reusable future wrappers
+/// - Cancellation-safe code
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::FusedFuture
+///
+/// func poll_multiple[F: FusedFuture](futures: List[F]) {
+///     loop {
+///         for fut in futures.iter() {
+///             if not fut.is_terminated() {
+///                 when fut.poll(cx) {
+///                     Ready(v) => handle_result(v),
+///                     Pending => {}
+///                 }
+///             }
+///         }
+///     }
+/// }
+/// ```
+pub behavior FusedFuture: Future {
+    /// Returns `true` if the future has completed.
+    ///
+    /// Once this returns `true`, it should continue to return `true`
+    /// for subsequent calls.
+    func is_terminated(this) -> Bool
+}
+
+// ============================================================================
+// IntoFuture Behavior
+// ============================================================================
+
+/// Conversion into a `Future`.
+///
+/// By implementing `IntoFuture`, a type can be used with `.await`:
+///
+/// ```tml
+/// // If Request implements IntoFuture...
+/// let response = request.await  // Equivalent to: request.into_future().await
+/// ```
+///
+/// This is useful for types that can initiate async operations, like HTTP
+/// request builders that start the request when awaited.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::{Future, IntoFuture}
+///
+/// type RequestBuilder {
+///     url: Str
+/// }
+///
+/// impl IntoFuture for RequestBuilder {
+///     type Output = Response
+///     type IntoFuture = HttpFuture
+///
+///     func into_future(this) -> HttpFuture {
+///         return HttpFuture::new(this.url)
+///     }
+/// }
+///
+/// // Now you can:
+/// let response = RequestBuilder { url: "https://example.com" }.await
+/// ```
+pub behavior IntoFuture {
+    /// The output type when the future completes.
+    type Output
+
+    /// The future type returned by `into_future`.
+    type IntoFuture: Future[Output = This::Output]
+
+    /// Converts this type into a future.
+    func into_future(this) -> This::IntoFuture
+}
+
+// Every Future implements IntoFuture (returning itself)
+impl[F: Future] IntoFuture for F {
+    type Output = F::Output
+    type IntoFuture = F
+
+    func into_future(this) -> F {
+        return this
+    }
+}
+
+// ============================================================================
+// Future implementations for Ready and Pending
+// ============================================================================
+
+impl[T] Future for Ready[T] {
+    type Output = T
+
+    /// Polls the ready future.
+    ///
+    /// Returns `Poll::Ready(value)` on first poll, panics on subsequent polls.
+    func poll(mut this: Pin[mut ref This], _cx: mut ref Context[Unit]) -> Poll[T] {
+        when this.value.take() {
+            Just(v) => return Poll::Ready(v),
+            Nothing => panic("Ready future polled after completion")
+        }
+    }
+}
+
+impl[T] Future for Pending[T] {
+    type Output = T
+
+    /// Always returns `Poll::Pending`.
+    ///
+    /// Note: This does not register the waker, so the task will never be
+    /// woken. Use with caution.
+    func poll(mut this: Pin[mut ref This], _cx: mut ref Context[Unit]) -> Poll[T] {
+        return Poll::Pending
+    }
+}
+
+// ============================================================================
+// Map combinator
+// ============================================================================
+
+/// A future that maps the output of another future.
+///
+/// Created by calling `map()` on a future.
+pub type Map[Fut, F] {
+    future: Fut,
+    f: Maybe[F]
+}
+
+impl[Fut, F] Map[Fut, F] {
+    /// Creates a new Map future.
+    pub func new(future: Fut, f: F) -> Map[Fut, F] {
+        return Map { future: future, f: Just(f) }
+    }
+}
+
+// ============================================================================
+// AndThen combinator
+// ============================================================================
+
+/// A future that chains another future after this one completes.
+///
+/// Created by calling `and_then()` on a future.
+pub type AndThen[Fut, F] {
+    state: AndThenState[Fut, F]
+}
+
+/// Internal state for AndThen.
+enum AndThenState[Fut, F] {
+    First { future: Fut, f: F },
+    Second { future: F }  // F here is actually the output of calling f
+}
+
+// ============================================================================
+// Flatten
+// ============================================================================
+
+/// A future that flattens a nested future (Future of Future).
+///
+/// If you have `Future[Future[T]]`, flattening gives you `Future[T]`.
+pub type Flatten[Fut] {
+    state: FlattenState[Fut]
+}
+
+enum FlattenState[Fut] {
+    First { future: Fut },
+    Second { future: Fut }  // The inner future
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Wraps a value in a future that is immediately ready.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::ready
+///
+/// let fut = ready(42)
+/// assert_eq(fut.await, 42)
+/// ```
+pub func ready[T](value: T) -> Ready[T] {
+    return Ready { value: Just(value) }
+}
+
+/// Creates a future that is never ready.
+///
+/// # Warning
+///
+/// This future never completes and never wakes the task. Use with caution.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::pending
+///
+/// // This will hang forever:
+/// // pending().await
+/// ```
+pub func pending[T]() -> Pending[T] {
+    return Pending { _marker: core::marker::PhantomData::new() }
+}
+
+/// Polls a future, handling the Pin wrapper.
+///
+/// This is a helper for manually polling futures when you already have
+/// a pinned mutable reference.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::future::poll_fn
+///
+/// let custom_future = poll_fn(do(cx: mut ref Context) -> Poll[I32] {
+///     // Custom polling logic
+///     return Poll::Ready(42)
+/// })
+/// ```
+pub func poll_fn[F, T](f: F) -> PollFn[F] where F: FnMut[(mut ref Context[Unit],), Output = Poll[T]] {
+    return PollFn { f: f }
+}
+
+/// A future created from a poll function.
+pub type PollFn[F] {
+    f: F
+}
+
+// ============================================================================
+// Utility behaviors for futures
+// ============================================================================
+
+/// Extension methods for futures.
+///
+/// This behavior provides combinator methods that are automatically
+/// available on all `Future` implementations.
+pub behavior FutureExt: Future {
+    /// Maps the output of this future to a different type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let doubled = my_future.map(do(x) { x * 2 })
+    /// ```
+    func map[U, F](this, f: F) -> Map[This, F] where F: FnOnce[(This::Output,), Output = U] {
+        return Map::new(this, f)
+    }
+
+    /// Creates a future that executes another future after this one completes.
+    ///
+    /// The closure receives the output of this future and returns a new future.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let chained = first_future.and_then(do(result) {
+    ///     second_future(result)
+    /// })
+    /// ```
+    // func and_then[Fut, F](this, f: F) -> AndThen[This, F]
+    // where F: FnOnce[(This::Output,), Output = Fut], Fut: Future {
+    //     return AndThen { state: AndThenState::First { future: this, f: f } }
+    // }
+
+    /// Fuses this future, making it safe to poll after completion.
+    ///
+    /// After the inner future completes, `is_terminated()` returns `true`
+    /// and subsequent polls return `Poll::Pending`.
+    // func fuse(this) -> Fuse[This] {
+    //     return Fuse { future: Just(this) }
+    // }
+}
+
+// ============================================================================
+// Fuse wrapper
+// ============================================================================
+
+/// A future wrapper that is safe to poll after completion.
+///
+/// After the inner future completes, polling this wrapper returns
+/// `Poll::Pending` and `is_terminated()` returns `true`.
+pub type Fuse[Fut] {
+    future: Maybe[Fut]
+}
+
+impl[Fut] Fuse[Fut] {
+    /// Creates a new fused future.
+    pub func new(future: Fut) -> Fuse[Fut] {
+        return Fuse { future: Just(future) }
+    }
+
+    /// Returns whether the inner future has completed.
+    pub func is_terminated(this) -> Bool {
+        return this.future.is_nothing()
+    }
+}
+
+// ============================================================================
+// Re-exports
+// ============================================================================
+
+// Re-export task primitives commonly used with futures
+pub use core::task::{Context, Poll}
+pub use core::pin::Pin

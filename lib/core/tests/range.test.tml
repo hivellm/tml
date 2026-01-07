@@ -1,0 +1,131 @@
+// Tests for Range iterator types
+use test
+
+use core::range::{RangeIterI64, RangeInclusiveIterI64}
+
+// Note: Testing generic Range types (Range[I64], etc.) is blocked by a compiler
+// limitation with generic impl blocks. The iterator types (RangeIterI64, etc.)
+// are non-generic and work correctly.
+
+// ============ RangeIterI64 Tests ============
+
+@test
+func test_range_iter_basic() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 0, end: 5 }
+
+    let v0: Maybe[I64] = iter.next()
+    assert(v0.is_just(), "first should be Just")
+    assert_eq(v0.unwrap(), 0, "first value should be 0")
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 1, "second value should be 1")
+
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 2, "third value should be 2")
+
+    let v3: Maybe[I64] = iter.next()
+    assert_eq(v3.unwrap(), 3, "fourth value should be 3")
+
+    let v4: Maybe[I64] = iter.next()
+    assert_eq(v4.unwrap(), 4, "fifth value should be 4")
+
+    let v5: Maybe[I64] = iter.next()
+    assert(v5.is_nothing(), "should be Nothing after exhausted")
+
+    return 0
+}
+
+@test
+func test_range_iter_empty() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: 5, end: 5 }
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "empty range should return Nothing")
+    return 0
+}
+
+@test
+func test_range_iter_negative() -> I32 {
+    let mut iter: RangeIterI64 = RangeIterI64 { current: -2, end: 1 }
+
+    assert_eq(iter.next().unwrap(), -2, "should be -2")
+    assert_eq(iter.next().unwrap(), -1, "should be -1")
+    assert_eq(iter.next().unwrap(), 0, "should be 0")
+    assert(iter.next().is_nothing(), "should be exhausted")
+
+    return 0
+}
+
+// ============ RangeInclusiveIterI64 Tests ============
+
+@test
+func test_range_inclusive_iter_basic() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 1,
+        end: 3,
+        exhausted: false
+    }
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 1, "first value should be 1")
+
+    let v2: Maybe[I64] = iter.next()
+    assert_eq(v2.unwrap(), 2, "second value should be 2")
+
+    let v3: Maybe[I64] = iter.next()
+    assert_eq(v3.unwrap(), 3, "third value should be 3 (inclusive)")
+
+    let v4: Maybe[I64] = iter.next()
+    assert(v4.is_nothing(), "should be Nothing after exhausted")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_single_element() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 42,
+        end: 42,
+        exhausted: false
+    }
+
+    let v1: Maybe[I64] = iter.next()
+    assert_eq(v1.unwrap(), 42, "single element should be 42")
+
+    let v2: Maybe[I64] = iter.next()
+    assert(v2.is_nothing(), "should be Nothing after single element")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_empty() -> I32 {
+    // When start > end, range is empty
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 10,
+        end: 5,
+        exhausted: false
+    }
+
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "empty inclusive range should return Nothing")
+
+    return 0
+}
+
+@test
+func test_range_inclusive_already_exhausted() -> I32 {
+    let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 1,
+        end: 3,
+        exhausted: true  // already exhausted
+    }
+
+    let v: Maybe[I64] = iter.next()
+    assert(v.is_nothing(), "exhausted iterator should return Nothing")
+
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

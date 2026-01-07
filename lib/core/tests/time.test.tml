@@ -1,0 +1,301 @@
+// Time module tests - Duration type
+// Tests for core::time::Duration
+
+use test
+use core::time::Duration
+
+// ============================================================================
+// Construction Tests
+// ============================================================================
+
+@test
+func test_duration_new() -> I32 {
+    let d: Duration = Duration::new(5, 500000000)
+    assert(d.as_secs() == 5, "should have 5 seconds")
+    assert(d.subsec_nanos() == 500000000, "should have 500M nanos")
+    return 0
+}
+
+@test
+func test_duration_from_secs() -> I32 {
+    let d: Duration = Duration::from_secs(10)
+    assert(d.as_secs() == 10, "should have 10 seconds")
+    assert(d.subsec_nanos() == 0, "should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis() -> I32 {
+    let d: Duration = Duration::from_millis(2500)
+    assert(d.as_secs() == 2, "should have 2 seconds")
+    assert(d.subsec_millis() == 500, "should have 500 millis remainder")
+    return 0
+}
+
+@test
+func test_duration_from_micros() -> I32 {
+    let d: Duration = Duration::from_micros(1500000)
+    assert(d.as_secs() == 1, "should have 1 second")
+    assert(d.subsec_micros() == 500000, "should have 500000 micros remainder")
+    return 0
+}
+
+@test
+func test_duration_from_nanos() -> I32 {
+    let d: Duration = Duration::from_nanos(2500000000)
+    assert(d.as_secs() == 2, "should have 2 seconds")
+    assert(d.subsec_nanos() == 500000000, "should have 500M nanos remainder")
+    return 0
+}
+
+// ============================================================================
+// Accessor Tests
+// ============================================================================
+
+@test
+func test_duration_is_zero() -> I32 {
+    let zero: Duration = Duration::new(0, 0)
+    let nonzero: Duration = Duration::from_secs(1)
+    assert(zero.is_zero(), "Duration(0, 0) should be zero")
+    assert(not nonzero.is_zero(), "Duration(1s) should not be zero")
+    return 0
+}
+
+@test
+func test_duration_as_millis() -> I32 {
+    let d: Duration = Duration::new(2, 500000000)
+    assert(d.as_millis() == 2500, "2.5 seconds should be 2500 millis")
+    return 0
+}
+
+@test
+func test_duration_as_micros() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    assert(d.as_micros() == 1500000, "1.5 seconds should be 1500000 micros")
+    return 0
+}
+
+@test
+func test_duration_as_nanos() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    assert(d.as_nanos() == 1500000000, "1.5 seconds should be 1500000000 nanos")
+    return 0
+}
+
+@test
+func test_duration_subsec_nanos() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_nanos() == 123456789, "subsec_nanos should return 123456789")
+    return 0
+}
+
+@test
+func test_duration_subsec_millis() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_millis() == 123, "subsec_millis should return 123")
+    return 0
+}
+
+@test
+func test_duration_subsec_micros() -> I32 {
+    let d: Duration = Duration::new(5, 123456789)
+    assert(d.subsec_micros() == 123456, "subsec_micros should return 123456")
+    return 0
+}
+
+// ============================================================================
+// Arithmetic Tests
+// ============================================================================
+
+@test
+func test_duration_checked_add() -> I32 {
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Maybe[Duration] = d1.checked_add(d2)
+    when result {
+        Just(d) => {
+            assert(d.as_millis() == 1500, "1s + 500ms should be 1500ms")
+            return 0
+        },
+        Nothing => {
+            assert(false, "checked_add should not overflow")
+            return 1
+        }
+    }
+}
+
+@test
+func test_duration_checked_sub() -> I32 {
+    let d1: Duration = Duration::from_secs(2)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Maybe[Duration] = d1.checked_sub(d2)
+    when result {
+        Just(d) => {
+            assert(d.as_millis() == 1500, "2s - 500ms should be 1500ms")
+            return 0
+        },
+        Nothing => {
+            assert(false, "checked_sub should not underflow")
+            return 1
+        }
+    }
+}
+
+@test
+func test_duration_checked_sub_underflow() -> I32 {
+    let d1: Duration = Duration::from_millis(500)
+    let d2: Duration = Duration::from_secs(2)
+    let result: Maybe[Duration] = d1.checked_sub(d2)
+    when result {
+        Just(_) => {
+            assert(false, "500ms - 2s should underflow")
+            return 1
+        },
+        Nothing => {
+            return 0
+        }
+    }
+}
+
+@test
+func test_duration_saturating_add() -> I32 {
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Duration = d1.saturating_add(d2)
+    assert(result.as_millis() == 1500, "saturating_add: 1s + 500ms should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub() -> I32 {
+    let d1: Duration = Duration::from_secs(2)
+    let d2: Duration = Duration::from_millis(500)
+    let result: Duration = d1.saturating_sub(d2)
+    assert(result.as_millis() == 1500, "saturating_sub: 2s - 500ms should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_saturating_sub_clamp() -> I32 {
+    let d1: Duration = Duration::from_millis(500)
+    let d2: Duration = Duration::from_secs(2)
+    let result: Duration = d1.saturating_sub(d2)
+    assert(result.is_zero(), "saturating_sub should clamp to zero")
+    return 0
+}
+
+// ============================================================================
+// Multiplication and Division Tests
+// ============================================================================
+
+@test
+func test_duration_mul() -> I32 {
+    let d: Duration = Duration::from_millis(500)
+    let result: Duration = d.mul(3)
+    assert(result.as_millis() == 1500, "500ms * 3 should be 1500ms")
+    return 0
+}
+
+@test
+func test_duration_div() -> I32 {
+    let d: Duration = Duration::from_secs(6)
+    let result: Duration = d.div(2)
+    assert(result.as_secs() == 3, "6s / 2 should be 3s")
+    return 0
+}
+
+@test
+func test_duration_mul_with_nanos() -> I32 {
+    let d: Duration = Duration::new(1, 500000000)
+    let result: Duration = d.mul(2)
+    assert(result.as_secs() == 3, "1.5s * 2 should have 3 seconds")
+    assert(result.subsec_nanos() == 0, "1.5s * 2 should have 0 nanos")
+    return 0
+}
+
+// ============================================================================
+// Comparison Tests
+// ============================================================================
+
+@test
+func test_duration_eq() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = Duration::from_millis(5000)
+    assert(d1.eq(ref d2), "5s should equal 5000ms")
+    return 0
+}
+
+@test
+func test_duration_not_eq() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = Duration::from_secs(6)
+    assert(not d1.eq(ref d2), "5s should not equal 6s")
+    return 0
+}
+
+@test
+func test_duration_ordering() -> I32 {
+    // Test ordering via as_nanos comparison
+    let d1: Duration = Duration::from_secs(1)
+    let d2: Duration = Duration::from_secs(2)
+    let d3: Duration = Duration::from_millis(1000)
+
+    // d1 < d2
+    assert(d1.as_nanos() < d2.as_nanos(), "1s should be less than 2s")
+
+    // d2 > d1
+    assert(d2.as_nanos() > d1.as_nanos(), "2s should be greater than 1s")
+
+    // d1 == d3 (both 1 second)
+    assert(d1.as_nanos() == d3.as_nanos(), "1s should equal 1000ms")
+
+    return 0
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+@test
+func test_duration_zero() -> I32 {
+    let zero: Duration = Duration::new(0, 0)
+    assert(zero.is_zero(), "zero Duration should be zero")
+    assert(zero.as_secs() == 0, "zero should have 0 secs")
+    assert(zero.as_nanos() == 0, "zero should have 0 nanos")
+    return 0
+}
+
+@test
+func test_duration_nanos_conversion() -> I32 {
+    // Use from_nanos which handles overflow properly
+    let d: Duration = Duration::from_nanos(2000000000)
+    assert(d.as_secs() == 2, "2B nanos should be 2 seconds")
+    assert(d.subsec_nanos() == 0, "should have no remaining nanos")
+    return 0
+}
+
+@test
+func test_duration_from_millis_large() -> I32 {
+    let d: Duration = Duration::from_millis(3600000)
+    assert(d.as_secs() == 3600, "3600000ms should be 3600 seconds (1 hour)")
+    return 0
+}
+
+// ============================================================================
+// Behavior Implementation Tests
+// ============================================================================
+
+@test
+func test_duration_duplicate() -> I32 {
+    let d1: Duration = Duration::from_secs(5)
+    let d2: Duration = d1.duplicate()
+    assert(d1.eq(ref d2), "duplicated Duration should be equal")
+    return 0
+}
+
+@test
+func test_duration_default() -> I32 {
+    let d: Duration = Duration::default()
+    assert(d.is_zero(), "default Duration should be zero")
+    return 0
+}

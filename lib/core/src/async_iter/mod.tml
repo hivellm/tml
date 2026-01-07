@@ -1,0 +1,620 @@
+//! Asynchronous iterators (async streams).
+//!
+//! This module provides the [`AsyncIterator`] behavior, which is the async
+//! equivalent of [`Iterator`]. An async iterator produces a sequence of values
+//! asynchronously, allowing for efficient streaming of data.
+//!
+//! # The AsyncIterator Behavior
+//!
+//! [`AsyncIterator`] is similar to [`Iterator`], but its `poll_next` method
+//! returns `Poll[Maybe[Item]]` instead of `Maybe[Item]`, allowing for
+//! asynchronous iteration.
+//!
+//! ```tml
+//! use core::async_iter::AsyncIterator
+//! use core::task::{Context, Poll}
+//! use core::pin::Pin
+//!
+//! type Counter {
+//!     count: I64,
+//!     max: I64
+//! }
+//!
+//! impl AsyncIterator for Counter {
+//!     type Item = I64
+//!
+//!     func poll_next(
+//!         mut this: Pin[mut ref This],
+//!         cx: mut ref Context
+//!     ) -> Poll[Maybe[I64]] {
+//!         this.count = this.count + 1
+//!         if this.count <= this.max {
+//!             return Poll::Ready(Just(this.count))
+//!         }
+//!         return Poll::Ready(Nothing)
+//!     }
+//! }
+//! ```
+//!
+//! # Async For Loops
+//!
+//! Async iterators can be consumed with async for loops:
+//!
+//! ```tml
+//! async func process_stream[S: AsyncIterator](stream: S) {
+//!     for await item in stream {
+//!         process(item)
+//!     }
+//! }
+//! ```
+//!
+//! # Differences from Iterator
+//!
+//! | Aspect | Iterator | AsyncIterator |
+//! |--------|----------|---------------|
+//! | Method | `next()` returns `Maybe[Item]` | `poll_next()` returns `Poll[Maybe[Item]]` |
+//! | Blocking | Blocks until next item | Returns `Pending` if not ready |
+//! | Pinning | No pinning required | Requires `Pin[mut ref Self]` |
+//! | Usage | `for` loops | `for await` loops |
+//!
+//! # Creating Async Iterators
+//!
+//! ## From a Future
+//!
+//! ```tml
+//! use core::async_iter::from_iter
+//!
+//! // Convert a regular iterator into an async one
+//! let async_iter = from_iter([1, 2, 3, 4, 5].iter())
+//! ```
+//!
+//! ## Using Generators (when supported)
+//!
+//! ```tml
+//! async gen func countdown(from: I64) -> I64 {
+//!     var i: I64 = from
+//!     loop {
+//!         if i <= 0 { break }
+//!         yield i
+//!         i = i - 1
+//!     }
+//! }
+//! ```
+//!
+//! # Size Hints
+//!
+//! Like synchronous iterators, async iterators provide `size_hint()` to
+//! give bounds on the remaining number of items:
+//!
+//! ```tml
+//! let (lower, upper) = stream.size_hint()
+//! // lower: guaranteed minimum items
+//! // upper: optional maximum items
+//! ```
+
+use core::pin::Pin
+use core::task::{Context, Poll}
+use core::cmp::{PartialEq, Eq}
+use core::clone::{Duplicate, Copy}
+
+// ============================================================================
+// AsyncIterator Behavior
+// ============================================================================
+
+/// An asynchronous iterator.
+///
+/// `AsyncIterator` is the async equivalent of [`Iterator`]. It produces a
+/// sequence of values asynchronously, one at a time.
+///
+/// # The poll_next Method
+///
+/// The core method `poll_next` attempts to pull the next value from the
+/// iterator:
+///
+/// - `Poll::Ready(Just(item))` - An item is available
+/// - `Poll::Ready(Nothing)` - The iterator has finished
+/// - `Poll::Pending` - Not ready yet, will wake when ready
+///
+/// # Contract
+///
+/// When returning `Poll::Pending`, the implementation **must** arrange for
+/// the task's waker to be notified when progress can be made.
+///
+/// After returning `Poll::Ready(Nothing)`, subsequent calls to `poll_next`
+/// should also return `Poll::Ready(Nothing)`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::AsyncIterator
+/// use core::task::{Context, Poll}
+/// use core::pin::Pin
+///
+/// type Repeat[T] {
+///     value: T,
+///     remaining: I64
+/// }
+///
+/// impl[T: Duplicate] AsyncIterator for Repeat[T] {
+///     type Item = T
+///
+///     func poll_next(
+///         mut this: Pin[mut ref This],
+///         cx: mut ref Context
+///     ) -> Poll[Maybe[T]] {
+///         if this.remaining <= 0 {
+///             return Poll::Ready(Nothing)
+///         }
+///         this.remaining = this.remaining - 1
+///         return Poll::Ready(Just(this.value.duplicate()))
+///     }
+/// }
+/// ```
+pub behavior AsyncIterator {
+    /// The type of items yielded by the iterator.
+    type Item
+
+    /// Attempt to pull out the next value of this iterator.
+    ///
+    /// # Return Values
+    ///
+    /// - `Poll::Ready(Just(item))` - The next item is ready
+    /// - `Poll::Ready(Nothing)` - The iterator has finished
+    /// - `Poll::Pending` - The next item is not yet ready
+    ///
+    /// # Waker Contract
+    ///
+    /// When returning `Poll::Pending`, the implementation must have arranged
+    /// for `cx.waker()` to be notified when the next item becomes available.
+    func poll_next(
+        mut this: Pin[mut ref This],
+        cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[This::Item]]
+
+    /// Returns the bounds on the remaining length of the iterator.
+    ///
+    /// Returns a tuple where:
+    /// - The first element is a lower bound
+    /// - The second element is an optional upper bound
+    ///
+    /// The default implementation returns `(0, Nothing)`, indicating no
+    /// information about the iterator's length.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let stream = some_async_iterator()
+    /// let (lower, upper) = stream.size_hint()
+    /// println("At least {lower} items remaining")
+    /// ```
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        return (0, Nothing)
+    }
+}
+
+// ============================================================================
+// IntoAsyncIterator Behavior
+// ============================================================================
+
+/// Conversion into an [`AsyncIterator`].
+///
+/// By implementing `IntoAsyncIterator`, a type can be used in async for loops:
+///
+/// ```tml
+/// for await item in my_collection {
+///     // Process each item asynchronously
+/// }
+/// ```
+///
+/// The compiler desugars this into:
+///
+/// ```tml
+/// let mut iter = my_collection.into_async_iter()
+/// loop {
+///     when iter.poll_next(cx) {
+///         Poll::Ready(Just(item)) => { /* process item */ },
+///         Poll::Ready(Nothing) => break,
+///         Poll::Pending => /* yield to runtime */
+///     }
+/// }
+/// ```
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::IntoAsyncIterator
+///
+/// type AsyncRange {
+///     start: I64,
+///     end: I64
+/// }
+///
+/// impl IntoAsyncIterator for AsyncRange {
+///     type Item = I64
+///     type IntoAsyncIter = AsyncRangeIter
+///
+///     func into_async_iter(this) -> AsyncRangeIter {
+///         return AsyncRangeIter { current: this.start, end: this.end }
+///     }
+/// }
+/// ```
+pub behavior IntoAsyncIterator {
+    /// The type of elements being iterated over.
+    type Item
+
+    /// The async iterator type returned by `into_async_iter`.
+    type IntoAsyncIter: AsyncIterator
+
+    /// Converts this type into an async iterator.
+    func into_async_iter(this) -> This::IntoAsyncIter
+}
+
+// Every AsyncIterator implements IntoAsyncIterator (returning itself)
+impl[I: AsyncIterator] IntoAsyncIterator for I {
+    type Item = I::Item
+    type IntoAsyncIter = I
+
+    func into_async_iter(this) -> I {
+        return this
+    }
+}
+
+// ============================================================================
+// FromIterator - Convert sync iterator to async
+// ============================================================================
+
+/// An async iterator that wraps a synchronous iterator.
+///
+/// Created by [`from_iter`], this allows using any `Iterator` in async
+/// contexts. Each item is immediately ready since the underlying iterator
+/// is synchronous.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::from_iter
+///
+/// let numbers = [1, 2, 3, 4, 5]
+/// let async_nums = from_iter(numbers.iter())
+///
+/// for await n in async_nums {
+///     println("Got: {n}")
+/// }
+/// ```
+pub type FromIter[I] {
+    iter: I
+}
+
+impl[I: Iterator] FromIter[I] {
+    /// Creates a new `FromIter` from the given iterator.
+    pub func new(iter: I) -> FromIter[I] {
+        return FromIter { iter: iter }
+    }
+}
+
+impl[I: Iterator] AsyncIterator for FromIter[I] {
+    type Item = I::Item
+
+    /// Polls for the next item.
+    ///
+    /// Since the underlying iterator is synchronous, this always returns
+    /// `Poll::Ready` immediately with the next item (or `Nothing` if done).
+    func poll_next(
+        mut this: Pin[mut ref This],
+        _cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[I::Item]] {
+        return Poll::Ready(this.iter.next())
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+/// Converts a synchronous iterator into an async iterator.
+///
+/// The returned async iterator immediately yields each item from the
+/// underlying iterator without actually waiting.
+///
+/// This is useful for:
+/// - Using sync data in async contexts
+/// - Adapting existing iterators for async APIs
+/// - Mixing sync and async data sources
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::from_iter
+///
+/// // Convert an array iterator to async
+/// let async_iter = from_iter([1, 2, 3].iter())
+///
+/// // Use in async context
+/// for await item in async_iter {
+///     process(item)
+/// }
+/// ```
+pub func from_iter[I: Iterator](iter: I) -> FromIter[I] {
+    return FromIter::new(iter)
+}
+
+// ============================================================================
+// Once - Single item async iterator
+// ============================================================================
+
+/// An async iterator that yields exactly one item.
+///
+/// Created by [`once`].
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::once
+///
+/// let single = once(42)
+/// assert_eq(single.next().await, Just(42))
+/// assert_eq(single.next().await, Nothing)
+/// ```
+pub type Once[T] {
+    value: Maybe[T]
+}
+
+impl[T] Once[T] {
+    /// Creates a new `Once` that yields the given value.
+    pub func new(value: T) -> Once[T] {
+        return Once { value: Just(value) }
+    }
+}
+
+impl[T] AsyncIterator for Once[T] {
+    type Item = T
+
+    func poll_next(
+        mut this: Pin[mut ref This],
+        _cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[T]] {
+        return Poll::Ready(this.value.take())
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        if this.value.is_just() {
+            return (1, Just(1))
+        }
+        return (0, Just(0))
+    }
+}
+
+/// Creates an async iterator that yields exactly one item.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::once
+///
+/// let stream = once("hello")
+/// for await msg in stream {
+///     println(msg)  // Prints "hello" once
+/// }
+/// ```
+pub func once[T](value: T) -> Once[T] {
+    return Once::new(value)
+}
+
+// ============================================================================
+// Empty - Empty async iterator
+// ============================================================================
+
+/// An async iterator that yields nothing.
+///
+/// Created by [`empty`].
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::empty
+///
+/// let nothing: Empty[I32] = empty()
+/// assert_eq(nothing.next().await, Nothing)
+/// ```
+pub type Empty[T] {
+    _marker: core::marker::PhantomData[T]
+}
+
+impl[T] AsyncIterator for Empty[T] {
+    type Item = T
+
+    func poll_next(
+        mut this: Pin[mut ref This],
+        _cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[T]] {
+        return Poll::Ready(Nothing)
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        return (0, Just(0))
+    }
+}
+
+/// Creates an async iterator that yields no items.
+///
+/// This is useful as a placeholder or default value.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::empty
+///
+/// let stream: Empty[I32] = empty()
+/// // Immediately finishes without yielding anything
+/// ```
+pub func empty[T]() -> Empty[T] {
+    return Empty { _marker: core::marker::PhantomData::new() }
+}
+
+// ============================================================================
+// Repeat - Infinite repeating async iterator
+// ============================================================================
+
+/// An async iterator that repeats an item forever.
+///
+/// Created by [`repeat`].
+///
+/// # Warning
+///
+/// This iterator never ends! Always combine with a limiting adapter like
+/// `take` to avoid infinite loops.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::repeat
+///
+/// let ones = repeat(1).take(5)
+/// // Yields: 1, 1, 1, 1, 1
+/// ```
+pub type Repeat[T] {
+    value: T
+}
+
+impl[T: Duplicate] AsyncIterator for Repeat[T] {
+    type Item = T
+
+    func poll_next(
+        mut this: Pin[mut ref This],
+        _cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[T]] {
+        return Poll::Ready(Just(this.value.duplicate()))
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        // Infinite iterator - max I64 as lower bound, no upper bound
+        return (9223372036854775807, Nothing)
+    }
+}
+
+/// Creates an async iterator that repeats an item forever.
+///
+/// The item must implement `Duplicate` since it's returned multiple times.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::async_iter::repeat
+///
+/// // Repeat "hello" forever
+/// let hellos = repeat("hello")
+///
+/// // Take only the first 3
+/// let limited = hellos.take(3)
+/// ```
+pub func repeat[T: Duplicate](value: T) -> Repeat[T] {
+    return Repeat { value: value }
+}
+
+// ============================================================================
+// Take - Limit async iterator
+// ============================================================================
+
+/// An async iterator that yields at most `n` items.
+///
+/// Created by calling `take()` on an async iterator.
+pub type Take[I] {
+    inner: I,
+    remaining: I64
+}
+
+impl[I: AsyncIterator] Take[I] {
+    /// Creates a new `Take` iterator.
+    pub func new(inner: I, n: I64) -> Take[I] {
+        return Take { inner: inner, remaining: n }
+    }
+}
+
+impl[I: AsyncIterator] AsyncIterator for Take[I] {
+    type Item = I::Item
+
+    func poll_next(
+        mut this: Pin[mut ref This],
+        cx: mut ref Context[Unit]
+    ) -> Poll[Maybe[I::Item]] {
+        if this.remaining <= 0 {
+            return Poll::Ready(Nothing)
+        }
+
+        // Note: This is a simplified implementation
+        // A proper implementation would need to project the pin
+        this.remaining = this.remaining - 1
+
+        // For now, we need lowlevel to handle the pin projection
+        return lowlevel {
+            let inner_pin: Pin[mut ref I] = Pin::new_unchecked(ref this.inner)
+            inner_pin.poll_next(cx)
+        }
+    }
+
+    func size_hint(this) -> (I64, Maybe[I64]) {
+        let hint: (I64, Maybe[I64]) = this.inner.size_hint()
+        var capped_lower: I64 = hint.0
+        if capped_lower > this.remaining {
+            capped_lower = this.remaining
+        }
+
+        when hint.1 {
+            Just(u) => {
+                var capped_upper: I64 = u
+                if capped_upper > this.remaining {
+                    capped_upper = this.remaining
+                }
+                return (capped_lower, Just(capped_upper))
+            },
+            Nothing => return (capped_lower, Just(this.remaining))
+        }
+    }
+}
+
+// ============================================================================
+// AsyncIteratorExt - Extension methods
+// ============================================================================
+
+/// Extension methods for async iterators.
+///
+/// This behavior provides combinator methods that are automatically
+/// available on all `AsyncIterator` implementations.
+pub behavior AsyncIteratorExt: AsyncIterator {
+    /// Creates an async iterator that yields at most `n` items.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let stream = some_stream().take(5)
+    /// // Yields at most 5 items
+    /// ```
+    func take(this, n: I64) -> Take[This] {
+        return Take::new(this, n)
+    }
+
+    /// Counts the number of items in the async iterator.
+    ///
+    /// This consumes the iterator.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let count = stream.count().await
+    /// ```
+    // async func count(mut this) -> I64 {
+    //     var n: I64 = 0
+    //     loop {
+    //         when this.next().await {
+    //             Just(_) => n = n + 1,
+    //             Nothing => return n
+    //         }
+    //     }
+    // }
+}
+
+// ============================================================================
+// Imports needed for Iterator
+// ============================================================================
+
+use core::iter::Iterator

@@ -139,7 +139,363 @@ func test_mut_slice_basic() -> I32 {
     return 0
 }
 
-// Note: swap, reverse, and other MutSlice methods require generic impl
-// instantiation which is pending. Tests for these will be added once
-// generic impl method generation is fixed for Slice/MutSlice types.
+// ============================================================================
+// 3.5.3: Test slice as function parameter
+// ============================================================================
 
+// Function that takes a slice and sums its elements
+func sum_slice_manual(s: Slice[I32]) -> I64 {
+    let mut total: I64 = 0
+    let mut i: I64 = 0
+    loop {
+        if i >= s.len() {
+            return total
+        }
+        // Access via raw pointer arithmetic
+        let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
+        total = total + (val as I64)
+        i = i + 1
+    }
+    return total
+}
+
+// Function that counts non-zero elements in a slice
+func count_nonzero(s: Slice[I32]) -> I64 {
+    let mut count: I64 = 0
+    let mut i: I64 = 0
+    loop {
+        if i >= s.len() {
+            return count
+        }
+        let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
+        if val != 0 {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+@test
+func test_slice_as_parameter() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+    atomic_store(ptr_offset(ptr, 16), 5)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    // Pass slice to function
+    let sum: I64 = sum_slice_manual(slice)
+    assert_eq(sum, 15, "sum should be 1+2+3+4+5 = 15")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_multiple_calls() -> I32 {
+    let ptr: *Unit = alloc(16)
+    atomic_store(ptr, 0)
+    atomic_store(ptr_offset(ptr, 4), 5)
+    atomic_store(ptr_offset(ptr, 8), 0)
+    atomic_store(ptr_offset(ptr, 12), 10)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 4
+    }
+
+    // Multiple function calls with same slice
+    let sum: I64 = sum_slice_manual(slice)
+    let nonzero: I64 = count_nonzero(slice)
+
+    assert_eq(sum, 15, "sum should be 0+5+0+10 = 15")
+    assert_eq(nonzero, 2, "should have 2 non-zero elements")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// 3.5.4: Test slice iteration (type definitions only)
+// ============================================================================
+
+// Note: SliceIter, Chunks, and Windows types are defined in core::slice::iter.
+// Full iteration using the Iterator behavior requires generic behavior impl
+// instantiation which is pending compiler work. These tests verify that the
+// iteration types can be constructed correctly.
+
+use core::slice::{SliceIter, Chunks, Windows}
+
+@test
+func test_slice_iter_type_construction() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), 30)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 3
+    }
+
+    // Verify SliceIter can be constructed
+    let iter: SliceIter[I32] = SliceIter {
+        slice: slice,
+        index: 0
+    }
+
+    // Verify iter has correct len via direct field access
+    // (The len() method would also work but we test the type structure)
+    assert_eq(iter.slice.len, 3, "iter slice should have length 3")
+    assert_eq(iter.index, 0, "iter should start at index 0")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_chunks_type_construction() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+    atomic_store(ptr_offset(ptr, 16), 5)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    // Verify Chunks can be constructed
+    let chunks: Chunks[I32] = Chunks {
+        slice: slice,
+        chunk_size: 2
+    }
+
+    assert_eq(chunks.slice.len, 5, "chunks slice should have length 5")
+    assert_eq(chunks.chunk_size, 2, "chunk_size should be 2")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_windows_type_construction() -> I32 {
+    let ptr: *Unit = alloc(16)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 4)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 4
+    }
+
+    // Verify Windows can be constructed
+    let windows: Windows[I32] = Windows {
+        slice: slice,
+        window_size: 2,
+        index: 0
+    }
+
+    assert_eq(windows.slice.len, 4, "windows slice should have length 4")
+    assert_eq(windows.window_size, 2, "window_size should be 2")
+    assert_eq(windows.index, 0, "index should start at 0")
+
+    dealloc(ptr)
+    return 0
+}
+
+// ============================================================================
+// Additional Slice Tests
+// ============================================================================
+
+@test
+func test_slice_first_element() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 111)
+    atomic_store(ptr_offset(ptr, 4), 222)
+    atomic_store(ptr_offset(ptr, 8), 333)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 3
+    }
+
+    let first: I32 = atomic_load(ptr)
+    assert_eq(first, 111, "first element should be 111")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_last_element() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, 1)
+    atomic_store(ptr_offset(ptr, 4), 2)
+    atomic_store(ptr_offset(ptr, 8), 999)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 3
+    }
+
+    let last: I32 = atomic_load(ptr_offset(ptr, 8))
+    assert_eq(last, 999, "last element should be 999")
+
+    dealloc(ptr)
+    return 0
+}
+
+// Function to find max in slice
+func find_max(s: Slice[I32]) -> I32 {
+    if s.len() == 0 {
+        return 0
+    }
+
+    let mut max_val: I32 = atomic_load(s.data)
+    let mut i: I64 = 1
+    loop {
+        if i >= s.len() {
+            return max_val
+        }
+        let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
+        if val > max_val {
+            max_val = val
+        }
+        i = i + 1
+    }
+    return max_val
+}
+
+@test
+func test_slice_find_max() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 5)
+    atomic_store(ptr_offset(ptr, 4), 100)
+    atomic_store(ptr_offset(ptr, 8), 3)
+    atomic_store(ptr_offset(ptr, 12), 50)
+    atomic_store(ptr_offset(ptr, 16), 75)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    let max_val: I32 = find_max(slice)
+    assert_eq(max_val, 100, "max value should be 100")
+
+    dealloc(ptr)
+    return 0
+}
+
+// Function to find min in slice
+func find_min(s: Slice[I32]) -> I32 {
+    if s.len() == 0 {
+        return 0
+    }
+
+    let mut min_val: I32 = atomic_load(s.data)
+    let mut i: I64 = 1
+    loop {
+        if i >= s.len() {
+            return min_val
+        }
+        let val: I32 = atomic_load(ptr_offset(s.data, (i * 4) as I32))
+        if val < min_val {
+            min_val = val
+        }
+        i = i + 1
+    }
+    return min_val
+}
+
+@test
+func test_slice_find_min() -> I32 {
+    let ptr: *Unit = alloc(20)
+    atomic_store(ptr, 50)
+    atomic_store(ptr_offset(ptr, 4), 10)
+    atomic_store(ptr_offset(ptr, 8), 30)
+    atomic_store(ptr_offset(ptr, 12), -5)
+    atomic_store(ptr_offset(ptr, 16), 75)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 5
+    }
+
+    let min_val: I32 = find_min(slice)
+    assert_eq(min_val, -5, "min value should be -5")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_all_same_values() -> I32 {
+    let ptr: *Unit = alloc(16)
+    atomic_store(ptr, 42)
+    atomic_store(ptr_offset(ptr, 4), 42)
+    atomic_store(ptr_offset(ptr, 8), 42)
+    atomic_store(ptr_offset(ptr, 12), 42)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 4
+    }
+
+    let sum: I64 = sum_slice_manual(slice)
+    assert_eq(sum, 168, "sum should be 42*4 = 168")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_slice_with_negative_values() -> I32 {
+    let ptr: *Unit = alloc(12)
+    atomic_store(ptr, -10)
+    atomic_store(ptr_offset(ptr, 4), 20)
+    atomic_store(ptr_offset(ptr, 8), -5)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 3
+    }
+
+    let sum: I64 = sum_slice_manual(slice)
+    assert_eq(sum, 5, "sum should be -10+20-5 = 5")
+
+    dealloc(ptr)
+    return 0
+}
+
+@test
+func test_single_element_slice() -> I32 {
+    let ptr: *Unit = alloc(4)
+    atomic_store(ptr, 777)
+
+    let slice: Slice[I32] = Slice {
+        data: ptr,
+        len: 1
+    }
+
+    assert_eq(slice.len(), 1, "single element slice should have length 1")
+    assert(slice.is_empty() == false, "single element slice should not be empty")
+
+    let val: I32 = atomic_load(ptr)
+    assert_eq(val, 777, "single element should be 777")
+
+    dealloc(ptr)
+    return 0
+}

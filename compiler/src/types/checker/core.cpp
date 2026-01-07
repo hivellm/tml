@@ -261,13 +261,21 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
         }
         TypePtr ret = method.return_type ? resolve_type(**method.return_type) : make_unit();
 
+        // Extract method's type parameters (non-const generic params)
+        std::vector<std::string> method_type_params;
+        for (const auto& gp : method.generics) {
+            if (!gp.is_const) {
+                method_type_params.push_back(gp.name);
+            }
+        }
+
         // Extract method's const generic params
         std::vector<ConstGenericParam> method_const_params = extract_const_params(method.generics);
 
         methods.push_back(FuncSig{.name = method.name,
                                   .params = std::move(params),
                                   .return_type = std::move(ret),
-                                  .type_params = {},
+                                  .type_params = std::move(method_type_params),
                                   .is_async = method.is_async,
                                   .span = method.span,
                                   .const_params = std::move(method_const_params)});
@@ -317,12 +325,28 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
                                                      .default_type = std::move(default_type)});
     }
 
+    // Extract super behaviors from super_traits
+    std::vector<std::string> super_behaviors;
+    for (const auto& super : decl.super_traits) {
+        if (super && super->is<parser::NamedType>()) {
+            const auto& named = super->as<parser::NamedType>();
+            if (!named.path.segments.empty()) {
+                // Use the full path for the behavior name
+                std::string behavior_name = named.path.segments[0];
+                for (size_t i = 1; i < named.path.segments.size(); ++i) {
+                    behavior_name += "::" + named.path.segments[i];
+                }
+                super_behaviors.push_back(behavior_name);
+            }
+        }
+    }
+
     env_.define_behavior(BehaviorDef{.name = decl.name,
                                      .type_params = std::move(type_params),
                                      .const_params = std::move(const_params),
                                      .associated_types = std::move(associated_types),
                                      .methods = std::move(methods),
-                                     .super_behaviors = {},
+                                     .super_behaviors = std::move(super_behaviors),
                                      .methods_with_defaults = std::move(methods_with_defaults),
                                      .span = decl.span});
 }

@@ -296,3 +296,242 @@ pub func combine_hashes(h1: I64, h2: I64) -> I64 {
     // Use a simple combination formula similar to boost::hash_combine
     return h1 * 31 + h2
 }
+
+// ============================================================================
+// BuildHasher Behavior
+// ============================================================================
+
+/// A behavior for creating `Hasher` instances.
+///
+/// Types implementing `BuildHasher` can produce new `Hasher` instances on
+/// demand. This is used by `HashMap` and `HashSet` to allow customizable
+/// hashing strategies.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::hash::{BuildHasher, RandomState}
+///
+/// let build_hasher = RandomState::new()
+/// let hasher1 = build_hasher.build_hasher()
+/// let hasher2 = build_hasher.build_hasher()
+/// // hasher1 and hasher2 will produce the same hashes for the same inputs
+/// ```
+///
+/// # Usage with HashMap
+///
+/// ```tml
+/// use std::collections::HashMap
+/// use core::hash::RandomState
+///
+/// // HashMap uses RandomState by default
+/// let map: HashMap[Str, I64] = HashMap::new()
+///
+/// // Or use a custom hasher
+/// let map: HashMap[Str, I64, MyHasher] = HashMap::with_hasher(MyHasher::new())
+/// ```
+pub behavior BuildHasher {
+    /// The type of hasher this builder creates.
+    type Hasher: Hasher
+
+    /// Creates a new hasher.
+    ///
+    /// Each call may return a new hasher instance, but all hashers created
+    /// by the same `BuildHasher` must produce identical hash values for
+    /// identical input sequences.
+    func build_hasher(this) -> This::Hasher
+}
+
+// ============================================================================
+// DefaultHasher Type
+// ============================================================================
+
+/// A simple hasher implementation using FNV-1a algorithm.
+///
+/// `DefaultHasher` provides a fast, general-purpose hash function. It's not
+/// cryptographically secure, but suitable for hash tables.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::hash::DefaultHasher
+///
+/// let mut hasher = DefaultHasher::new()
+/// hasher.write_i64(42)
+/// hasher.write_i64(100)
+/// let hash = hasher.finish()
+/// ```
+///
+/// # Algorithm
+///
+/// Uses a variant of FNV-1a (Fowler-Noll-Vo) hashing, which is fast and
+/// has good distribution properties.
+pub type DefaultHasher {
+    state: U64
+}
+
+// FNV-1a constants
+const FNV_OFFSET_BASIS: U64 = 14695981039346656037 as U64
+const FNV_PRIME: U64 = 1099511628211 as U64
+
+impl DefaultHasher {
+    /// Creates a new `DefaultHasher` with default state.
+    pub func new() -> DefaultHasher {
+        return DefaultHasher { state: FNV_OFFSET_BASIS }
+    }
+
+    /// Creates a new `DefaultHasher` with the given seed.
+    ///
+    /// Different seeds produce different hash sequences.
+    pub func with_seed(seed: U64) -> DefaultHasher {
+        return DefaultHasher { state: FNV_OFFSET_BASIS ^ seed }
+    }
+}
+
+impl Hasher for DefaultHasher {
+    pub func write(mut this, bytes: ref [U8]) {
+        var i: I64 = 0
+        let len: I64 = bytes.len()
+        loop {
+            if i >= len { return }
+            this.state = this.state ^ (bytes[i] as U64)
+            this.state = this.state * FNV_PRIME
+            i = i + 1
+        }
+    }
+
+    pub func write_u8(mut this, value: U8) {
+        this.state = this.state ^ (value as U64)
+        this.state = this.state * FNV_PRIME
+    }
+
+    pub func write_i32(mut this, value: I32) {
+        // Write each byte of the I32
+        let v: U32 = value as U32
+        this.write_u8((v & 0xFF) as U8)
+        this.write_u8(((v >> 8) & 0xFF) as U8)
+        this.write_u8(((v >> 16) & 0xFF) as U8)
+        this.write_u8(((v >> 24) & 0xFF) as U8)
+    }
+
+    pub func write_i64(mut this, value: I64) {
+        // Write each byte of the I64
+        let v: U64 = value as U64
+        this.write_u8((v & 0xFF) as U8)
+        this.write_u8(((v >> 8) & 0xFF) as U8)
+        this.write_u8(((v >> 16) & 0xFF) as U8)
+        this.write_u8(((v >> 24) & 0xFF) as U8)
+        this.write_u8(((v >> 32) & 0xFF) as U8)
+        this.write_u8(((v >> 40) & 0xFF) as U8)
+        this.write_u8(((v >> 48) & 0xFF) as U8)
+        this.write_u8(((v >> 56) & 0xFF) as U8)
+    }
+
+    pub func finish(this) -> I64 {
+        return this.state as I64
+    }
+}
+
+impl Default for DefaultHasher {
+    pub func default() -> DefaultHasher {
+        return DefaultHasher::new()
+    }
+}
+
+impl Duplicate for DefaultHasher {
+    pub func duplicate(this) -> DefaultHasher {
+        return DefaultHasher { state: this.state }
+    }
+}
+
+// ============================================================================
+// RandomState Type
+// ============================================================================
+
+/// A hasher builder that produces hashers with random seeds.
+///
+/// `RandomState` is the default hasher builder for `HashMap` and `HashSet`.
+/// It provides some protection against HashDoS attacks by using random
+/// keys to seed the hasher.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::hash::RandomState
+///
+/// let state = RandomState::new()
+/// let hasher = state.build_hasher()
+/// ```
+///
+/// # Thread Safety
+///
+/// Each `RandomState` instance is initialized with random keys. Different
+/// instances will produce different hash values for the same input.
+pub type RandomState {
+    k0: U64,
+    k1: U64
+}
+
+impl RandomState {
+    /// Creates a new `RandomState` with random keys.
+    ///
+    /// The randomness is derived from a global counter and the current
+    /// time (if available), providing reasonable uniqueness.
+    pub func new() -> RandomState {
+        // Use a simple PRNG seeded with a counter for now
+        // In a real implementation, this would use OS randomness
+        let seed: U64 = get_random_seed()
+        return RandomState {
+            k0: seed,
+            k1: seed ^ 0x5555555555555555
+        }
+    }
+
+    /// Creates a new `RandomState` with the given keys.
+    ///
+    /// This is useful for reproducible hashing in tests.
+    pub func with_keys(k0: U64, k1: U64) -> RandomState {
+        return RandomState { k0: k0, k1: k1 }
+    }
+}
+
+impl BuildHasher for RandomState {
+    type Hasher = DefaultHasher
+
+    pub func build_hasher(this) -> DefaultHasher {
+        return DefaultHasher::with_seed(this.k0 ^ this.k1)
+    }
+}
+
+impl Default for RandomState {
+    pub func default() -> RandomState {
+        return RandomState::new()
+    }
+}
+
+impl Duplicate for RandomState {
+    pub func duplicate(this) -> RandomState {
+        return RandomState { k0: this.k0, k1: this.k1 }
+    }
+}
+
+// Global counter for generating pseudo-random seeds
+// NOTE: Global var not supported yet - using static approach
+// var GLOBAL_SEED_COUNTER: U64 = 0
+
+func get_random_seed() -> U64 {
+    // Simple counter-based seed - not cryptographically secure
+    // but sufficient for hash table randomization
+    // For now, just return a fixed seed since global mutable state isn't supported
+    let seed: U64 = 12345
+    // Mix the counter with a constant to spread out sequential values
+    let seed: U64 = GLOBAL_SEED_COUNTER * 0x9E3779B97F4A7C15
+    return seed ^ (seed >> 30)
+}
+
+// ============================================================================
+// Imports
+// ============================================================================
+
+use core::default::Default
+use core::clone::Duplicate

@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Iterator Consumer Method Documentation** (2026-01-07) - Documented blockers for iterator consumer tests
+  - Created `iter_consumers.test.tml` with documentation of blocked tests
+  - Identified that default behavior method dispatch on concrete types returns `()` instead of expected type
+  - Added workaround note: use `FromIterator::from_iter(iter)` instead of `iter.collect()`
+  - Updated tasks.md blockers table with new blocking issues
+
+- **collect/partition Method Notes** (2026-01-07) - Added notes about blocked iterator methods
+  - `collect[C: FromIterator[This::Item]](this) -> C` blocked on parser support for parameterized behavior bounds
+  - `partition[C](this, pred: func(ref This::Item) -> Bool) -> (C, C)` blocked for same reason
+  - Parser doesn't support constraint syntax like `C: FromIterator[This::Item]`
+  - Added workaround documentation in traits.tml
+
+- **SliceType `[T]` Method Support** (2026-01-07) - Methods on slice types now work correctly
+  - Added type checker support for `.len()`, `.is_empty()`, `.get()`, `.first()`, `.last()`, `.slice()`, `.iter()` on `[T]` slice types
+  - Added codegen support via `gen_slice_type_method()` function
+  - Slices are represented as fat pointers `{ ptr, i64 }` containing data pointer and length
+  - Files modified:
+    - `compiler/src/types/checker/expr.cpp` - SliceType method type checking
+    - `compiler/src/codegen/expr/method_slice.cpp` - SliceType method codegen
+    - `compiler/src/codegen/expr/method.cpp` - dispatch to slice type methods
+    - `compiler/src/codegen/expr/infer.cpp` - field access type inference for SliceType
+
+- **ref Str Method Dispatch** (2026-01-07) - Methods on `ref Str` now work correctly
+  - Fixed type checker to unwrap RefType before checking for PrimitiveType
+  - Fixed codegen to handle `ref Str` as receiver type
+  - Methods like `s.as_bytes()` where `s: ref Str` now compile correctly
+  - Files modified:
+    - `compiler/src/types/checker/expr.cpp` - unwrap RefType for primitive method lookup
+    - `compiler/src/codegen/expr/method_primitive.cpp` - unwrap RefType for codegen
+
+### Fixed
+- **Layout::from_size_align Negative Size Validation** (2026-01-07) - Added explicit check for negative sizes
+  - `from_size_align()` now returns `Err(LayoutError)` for negative sizes
+  - All 36 alloc tests now pass
+  - File modified: `lib/core/src/alloc.tml`
+
+- **Closure in Struct Fields Codegen** (2026-01-07) - Fixed closures stored in struct fields
+  - When a closure is loaded from a struct field and stored in a local variable, calling it now works correctly
+  - The bug was that function pointer variables always stored directly instead of in an alloca, causing double-dereference
+  - Changed `gen_let_stmt` to always allocate for function pointer types, matching other pointer types
+  - Files modified: `compiler/src/codegen/llvm_ir_gen_stmt.cpp`
+  - New tests: `closure_field.test.tml`, `closure_iter.test.tml`, `iter_map.test.tml`
+
+### Added
+- **Closure Iterator Adapter Tests** (2026-01-07) - Tests for Map adapter with closures
+  - Created `closure_iter.test.tml` with 5 tests for Map adapters using closures
+  - Created `iter_map.test.tml` with concrete MapOnceI32 adapter implementation
+  - Verified closures work correctly in iterator patterns (map, transform)
+
 - **Primitive Type Methods Support** (2026-01-07) - Methods on primitive types (I32, I64, Bool, etc.) now work correctly
   - Fixed codegen bug where `this` was incorrectly passed as pointer instead of by value for primitives
   - Added support for user-defined impl methods on primitive types (e.g., `impl I32 { func abs(this) -> I32 }`)

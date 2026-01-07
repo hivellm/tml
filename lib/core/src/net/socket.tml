@@ -89,28 +89,28 @@ impl SocketAddrV4 {
 }
 
 // Behavior implementations for SocketAddrV4
-extend SocketAddrV4 with Copy {}
-extend SocketAddrV4 with Duplicate {
+impl Copy for SocketAddrV4 {}
+impl Duplicate for SocketAddrV4 {
     func duplicate(this) -> SocketAddrV4 {
         SocketAddrV4 { ip: this.ip.duplicate(), port: this.port }
     }
 }
 
-extend SocketAddrV4 with PartialEq {
+impl PartialEq for SocketAddrV4 {
     func eq(this, other: ref SocketAddrV4) -> Bool {
         this.ip == other.ip and this.port == other.port
     }
 }
 
-extend SocketAddrV4 with Eq {}
+impl Eq for SocketAddrV4 {}
 
-extend SocketAddrV4 with PartialOrd {
+impl PartialOrd for SocketAddrV4 {
     func partial_cmp(this, other: ref SocketAddrV4) -> Maybe[Ordering] {
         Just(this.cmp(other))
     }
 }
 
-extend SocketAddrV4 with Ord {
+impl Ord for SocketAddrV4 {
     func cmp(this, other: ref SocketAddrV4) -> Ordering {
         let ip_ord = this.ip.cmp(ref other.ip)
         if ip_ord != Ordering::Equal {
@@ -123,14 +123,14 @@ extend SocketAddrV4 with Ord {
     }
 }
 
-extend SocketAddrV4 with Hash {
+impl Hash for SocketAddrV4 {
     func hash(this, hasher: mut ref Hasher) {
         this.ip.hash(hasher)
         hasher.write_u16(this.port)
     }
 }
 
-extend SocketAddrV4 with Display {
+impl Display for SocketAddrV4 {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         this.ip.fmt(f)
         f.write_str(":")
@@ -138,7 +138,7 @@ extend SocketAddrV4 with Display {
     }
 }
 
-extend SocketAddrV4 with Debug {
+impl Debug for SocketAddrV4 {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }
@@ -225,8 +225,8 @@ impl SocketAddrV6 {
 }
 
 // Behavior implementations for SocketAddrV6
-extend SocketAddrV6 with Copy {}
-extend SocketAddrV6 with Duplicate {
+impl Copy for SocketAddrV6 {}
+impl Duplicate for SocketAddrV6 {
     func duplicate(this) -> SocketAddrV6 {
         SocketAddrV6 {
             ip: this.ip.duplicate(),
@@ -237,7 +237,7 @@ extend SocketAddrV6 with Duplicate {
     }
 }
 
-extend SocketAddrV6 with PartialEq {
+impl PartialEq for SocketAddrV6 {
     func eq(this, other: ref SocketAddrV6) -> Bool {
         this.ip == other.ip
             and this.port == other.port
@@ -246,15 +246,15 @@ extend SocketAddrV6 with PartialEq {
     }
 }
 
-extend SocketAddrV6 with Eq {}
+impl Eq for SocketAddrV6 {}
 
-extend SocketAddrV6 with PartialOrd {
+impl PartialOrd for SocketAddrV6 {
     func partial_cmp(this, other: ref SocketAddrV6) -> Maybe[Ordering] {
         Just(this.cmp(other))
     }
 }
 
-extend SocketAddrV6 with Ord {
+impl Ord for SocketAddrV6 {
     func cmp(this, other: ref SocketAddrV6) -> Ordering {
         let ip_ord = this.ip.cmp(ref other.ip)
         if ip_ord != Ordering::Equal {
@@ -274,7 +274,7 @@ extend SocketAddrV6 with Ord {
     }
 }
 
-extend SocketAddrV6 with Hash {
+impl Hash for SocketAddrV6 {
     func hash(this, hasher: mut ref Hasher) {
         this.ip.hash(hasher)
         hasher.write_u16(this.port)
@@ -283,7 +283,7 @@ extend SocketAddrV6 with Hash {
     }
 }
 
-extend SocketAddrV6 with Display {
+impl Display for SocketAddrV6 {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         f.write_str("[")
         this.ip.fmt(f)
@@ -292,7 +292,7 @@ extend SocketAddrV6 with Display {
     }
 }
 
-extend SocketAddrV6 with Debug {
+impl Debug for SocketAddrV6 {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }
@@ -319,48 +319,48 @@ impl SocketAddr {
     /// Creates a new socket address from an IP address and port.
     pub func new(ip: IpAddr, port: U16) -> SocketAddr {
         when ip {
-            IpAddr::V4(addr) -> SocketAddr::V4(SocketAddrV4::new(addr, port)),
-            IpAddr::V6(addr) -> SocketAddr::V6(SocketAddrV6::new(addr, port, 0, 0)),
+            IpAddr::V4(addr) => SocketAddr::V4(SocketAddrV4::new(addr, port)),
+            IpAddr::V6(addr) => SocketAddr::V6(SocketAddrV6::new(addr, port, 0, 0)),
         }
     }
 
     /// Returns `true` if this is an IPv4 socket address.
     pub func is_ipv4(this) -> Bool {
         when this {
-            V4(_) -> true,
-            V6(_) -> false,
+            V4(_) => true,
+            V6(_) => false,
         }
     }
 
     /// Returns `true` if this is an IPv6 socket address.
     pub func is_ipv6(this) -> Bool {
         when this {
-            V4(_) -> false,
-            V6(_) -> true,
+            V4(_) => false,
+            V6(_) => true,
         }
     }
 
     /// Returns the IP address associated with this socket address.
     pub func ip(this) -> IpAddr {
         when this {
-            V4(addr) -> IpAddr::V4(addr.ip()),
-            V6(addr) -> IpAddr::V6(addr.ip()),
+            V4(addr) => IpAddr::V4(addr.ip()),
+            V6(addr) => IpAddr::V6(addr.ip()),
         }
     }
 
     /// Sets the IP address.
     pub func set_ip(mut this, ip: IpAddr) {
         when (mut this, ip) {
-            (V4(mut addr), IpAddr::V4(new_ip)) -> addr.set_ip(new_ip),
-            (V6(mut addr), IpAddr::V6(new_ip)) -> addr.set_ip(new_ip),
-            _ -> {
+            (V4(mut addr), IpAddr::V4(new_ip)) => addr.set_ip(new_ip),
+            (V6(mut addr), IpAddr::V6(new_ip)) => addr.set_ip(new_ip),
+            _ => {
                 // Type mismatch - convert the socket address
                 when ip {
-                    IpAddr::V4(new_ip) -> {
+                    IpAddr::V4(new_ip) => {
                         let port = this.port()
                         this = SocketAddr::V4(SocketAddrV4::new(new_ip, port))
                     },
-                    IpAddr::V6(new_ip) -> {
+                    IpAddr::V6(new_ip) => {
                         let port = this.port()
                         this = SocketAddr::V6(SocketAddrV6::new(new_ip, port, 0, 0))
                     },
@@ -372,51 +372,51 @@ impl SocketAddr {
     /// Returns the port number associated with this socket address.
     pub func port(this) -> U16 {
         when this {
-            V4(addr) -> addr.port(),
-            V6(addr) -> addr.port(),
+            V4(addr) => addr.port(),
+            V6(addr) => addr.port(),
         }
     }
 
     /// Sets the port number.
     pub func set_port(mut this, port: U16) {
         when mut this {
-            V4(mut addr) -> addr.set_port(port),
-            V6(mut addr) -> addr.set_port(port),
+            V4(mut addr) => addr.set_port(port),
+            V6(mut addr) => addr.set_port(port),
         }
     }
 }
 
 // Behavior implementations for SocketAddr
-extend SocketAddr with Copy {}
-extend SocketAddr with Duplicate {
+impl Copy for SocketAddr {}
+impl Duplicate for SocketAddr {
     func duplicate(this) -> SocketAddr {
         when this {
-            V4(addr) -> SocketAddr::V4(addr.duplicate()),
-            V6(addr) -> SocketAddr::V6(addr.duplicate()),
+            V4(addr) => SocketAddr::V4(addr.duplicate()),
+            V6(addr) => SocketAddr::V6(addr.duplicate()),
         }
     }
 }
 
-extend SocketAddr with PartialEq {
+impl PartialEq for SocketAddr {
     func eq(this, other: ref SocketAddr) -> Bool {
         when (this, other) {
-            (V4(a), V4(b)) -> a == b,
-            (V6(a), V6(b)) -> a == b,
-            _ -> false,
+            (V4(a), V4(b)) => a == b,
+            (V6(a), V6(b)) => a == b,
+            _ => false,
         }
     }
 }
 
-extend SocketAddr with Eq {}
+impl Eq for SocketAddr {}
 
-extend SocketAddr with Hash {
+impl Hash for SocketAddr {
     func hash(this, hasher: mut ref Hasher) {
         when this {
-            V4(addr) -> {
+            V4(addr) => {
                 hasher.write_u8(4)
                 addr.hash(hasher)
             },
-            V6(addr) -> {
+            V6(addr) => {
                 hasher.write_u8(6)
                 addr.hash(hasher)
             },
@@ -424,16 +424,16 @@ extend SocketAddr with Hash {
     }
 }
 
-extend SocketAddr with Display {
+impl Display for SocketAddr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         when this {
-            V4(addr) -> addr.fmt(f),
-            V6(addr) -> addr.fmt(f),
+            V4(addr) => addr.fmt(f),
+            V6(addr) => addr.fmt(f),
         }
     }
 }
 
-extend SocketAddr with Debug {
+impl Debug for SocketAddr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }

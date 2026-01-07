@@ -10,7 +10,7 @@
 //! - [`MutSlice`]: A mutable view into a contiguous sequence
 //! - Sorting: [`sort`], [`sort_by`], [`sort_by_key`] (see [`sort`] submodule)
 //! - Searching: [`binary_search`], [`binary_search_by`], [`contains`]
-//! - Iterators: [`Chunks`], [`Windows`] (see [`iter`] submodule)
+//! - Iterators: [`SliceIter`], [`Chunks`], [`Windows`] (see [`iter`] submodule)
 //! - Comparisons: [`starts_with`], [`ends_with`] (see [`cmp`] submodule)
 //!
 //! # Module Structure
@@ -59,7 +59,7 @@ pub mod cmp    // contains, starts_with, ends_with
 pub mod sort   // sort, sort_by, sort_by_key
 
 // Re-export commonly used items
-pub use iter::{Chunks, Windows}
+pub use iter::{Chunks, Windows, ChunksExact, SliceIter, SliceIterMut}
 pub use cmp::{SlicePartialEq}
 pub use sort::{SliceSort, SliceSortBy}
 

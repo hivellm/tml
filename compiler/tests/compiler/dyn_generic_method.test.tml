@@ -1,0 +1,73 @@
+// Test for dyn with methods
+// Also documents object safety restrictions
+use test
+
+// ============ Object-safe behavior (no generic methods) ============
+
+behavior Mapper {
+    // Non-generic methods are object-safe
+    func identity(this, value: I32) -> I32
+}
+
+type IdentityMapper {}
+
+impl Mapper for IdentityMapper {
+    func identity(this, value: I32) -> I32 {
+        return value
+    }
+}
+
+type DoubleMapper {}
+
+impl Mapper for DoubleMapper {
+    func identity(this, value: I32) -> I32 {
+        return value * 2
+    }
+}
+
+@test
+func test_dyn_method_basic() -> I32 {
+    let im: IdentityMapper = IdentityMapper {}
+    let dm: DoubleMapper = DoubleMapper {}
+
+    let dyn_im: dyn Mapper = im
+    let dyn_dm: dyn Mapper = dm
+
+    assert_eq(dyn_im.identity(5), 5, "IdentityMapper returns same value")
+    assert_eq(dyn_dm.identity(5), 10, "DoubleMapper doubles value")
+
+    return 0
+}
+
+// ============ Object Safety Documentation ============
+// Behaviors with generic methods are NOT object-safe
+// because vtables cannot contain pointers to generic functions.
+//
+// The following would NOT compile:
+//
+//   behavior Transformer {
+//       func transform[T](this, value: T) -> T  // Generic method
+//   }
+//
+//   let dyn_t: dyn Transformer = ...  // ERROR: not object-safe
+//
+// Error message:
+//   "Behavior 'Transformer' is not object-safe: method 'transform' has
+//    generic type parameters. Generic methods require monomorphization
+//    which is incompatible with dynamic dispatch."
+//
+// This is the same restriction as Rust's object safety rules.
+// To use dynamic dispatch, use concrete types in method signatures
+// or use the behavior's own type parameters (which are fixed at dyn creation).
+//
+// Example of object-safe generic behavior:
+//
+//   behavior Processor[T] {       // Behavior has type param
+//       func process(this, value: T) -> T  // Method uses behavior's T
+//   }
+//
+//   let dyn_p: dyn Processor[I32] = ...  // OK! T is fixed to I32
+
+func main() -> I32 {
+    return 0
+}

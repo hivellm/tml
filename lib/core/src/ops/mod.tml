@@ -32,6 +32,11 @@
 //! | [`MulAssign`] | `*=` | `a *= b` |
 //! | [`DivAssign`] | `/=` | `a /= b` |
 //! | [`RemAssign`] | `%=` | `a %= b` |
+//! | [`BitAndAssign`] | `&=` | `a &= b` |
+//! | [`BitOrAssign`] | `\|=` | `a \|= b` |
+//! | [`BitXorAssign`] | `^=` | `a ^= b` |
+//! | [`ShlAssign`] | `<<=` | `a <<= b` |
+//! | [`ShrAssign`] | `>>=` | `a >>= b` |
 //!
 //! # Examples
 //!
@@ -415,7 +420,7 @@ pub behavior Shl[Rhs = I32] {
     type Output
 
     /// Performs the `<<` operation.
-    func shl(this, rhs: Rhs) -> This::Output
+    func shift_left(this, rhs: Rhs) -> This::Output
 }
 
 /// The right shift operator `>>`.
@@ -439,80 +444,14 @@ pub behavior Shr[Rhs = I32] {
     type Output
 
     /// Performs the `>>` operation.
-    func shr(this, rhs: Rhs) -> This::Output
+    func shift_right(this, rhs: Rhs) -> This::Output
 }
 
 // ============================================================================
 // Indexing Operators
 // ============================================================================
-
-/// The indexing operator `[]` for immutable access.
-///
-/// Types implementing `Index` can be indexed using `container[index]` syntax,
-/// returning a reference to the element.
-///
-/// # Examples
-///
-/// ```tml
-/// use core::ops::Index
-///
-/// pub type Grid[T] {
-///     data: List[T],
-///     width: I64
-/// }
-///
-/// impl[T] Index[(I64, I64)] for Grid[T] {
-///     type Output = T
-///
-///     pub func index(this, idx: (I64, I64)) -> ref T {
-///         let (x, y) = idx
-///         return ref this.data.get(y * this.width + x)
-///     }
-/// }
-///
-/// let grid: Grid[I64] = create_grid()
-/// let value = grid[(2, 3)]  // Access element at (2, 3)
-/// ```
-///
-/// # Panics
-///
-/// Implementations should panic if the index is out of bounds.
-pub behavior Index[Idx] {
-    /// The type of the indexed element.
-    type Output
-
-    /// Performs the indexing operation, returning a reference.
-    func index(this, idx: Idx) -> ref This::Output
-}
-
-/// The indexing operator `[]` for mutable access.
-///
-/// Types implementing `IndexMut` can be mutably indexed, allowing assignment
-/// to indexed elements: `container[index] = value`.
-///
-/// # Examples
-///
-/// ```tml
-/// use core::ops::{Index, IndexMut}
-///
-/// impl[T] IndexMut[(I64, I64)] for Grid[T] {
-///     pub func index_mut(mut this, idx: (I64, I64)) -> mut ref T {
-///         let (x, y) = idx
-///         return mut ref this.data.get_mut(y * this.width + x)
-///     }
-/// }
-///
-/// let mut grid: Grid[I64] = create_grid()
-/// grid[(2, 3)] = 42  // Set element at (2, 3) to 42
-/// ```
-///
-/// # Prerequisite
-///
-/// `IndexMut` requires `Index` to also be implemented.
-pub behavior IndexMut[Idx]: Index[Idx] {
-    /// Performs the mutable indexing operation, returning a mutable reference.
-    func index_mut(mut this, idx: Idx) -> mut ref This::Output
-}
+// NOTE: Index and IndexMut are compiler builtins, not defined here.
+// See compiler/src/types/builtins for the definitions.
 
 // ============================================================================
 // Assignment Operators (Compound)
@@ -601,6 +540,91 @@ pub behavior DivAssign[Rhs = Self] {
 pub behavior RemAssign[Rhs = Self] {
     /// Performs the `%=` operation.
     func rem_assign(mut this, rhs: Rhs)
+}
+
+// ============================================================================
+// Bitwise Assignment Operators
+// ============================================================================
+
+/// The bitwise AND assignment operator `&=`.
+///
+/// Types implementing `BitAndAssign` can use the `&=` operator for in-place bitwise AND.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: U8 = 0b1111
+/// x &= 0b1010  // x is now 0b1010
+/// ```
+pub behavior BitAndAssign[Rhs = Self] {
+    /// Performs the `&=` operation.
+    func bitand_assign(mut this, rhs: Rhs)
+}
+
+/// The bitwise OR assignment operator `|=`.
+///
+/// Types implementing `BitOrAssign` can use the `|=` operator for in-place bitwise OR.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: U8 = 0b1010
+/// x |= 0b0101  // x is now 0b1111
+/// ```
+pub behavior BitOrAssign[Rhs = Self] {
+    /// Performs the `|=` operation.
+    func bitor_assign(mut this, rhs: Rhs)
+}
+
+/// The bitwise XOR assignment operator `^=`.
+///
+/// Types implementing `BitXorAssign` can use the `^=` operator for in-place bitwise XOR.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: U8 = 0b1111
+/// x ^= 0b1010  // x is now 0b0101
+/// ```
+pub behavior BitXorAssign[Rhs = Self] {
+    /// Performs the `^=` operation.
+    func bitxor_assign(mut this, rhs: Rhs)
+}
+
+/// The left shift assignment operator `<<=`.
+///
+/// Types implementing `ShlAssign` can use the `<<=` operator for in-place left shift.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: U8 = 0b0001
+/// x <<= 3  // x is now 0b1000
+/// ```
+pub behavior ShlAssign[Rhs = I32] {
+    /// Performs the `<<=` operation.
+    func shl_assign(mut this, rhs: Rhs)
+}
+
+/// The right shift assignment operator `>>=`.
+///
+/// Types implementing `ShrAssign` can use the `>>=` operator for in-place right shift.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: U8 = 0b1000
+/// x >>= 3  // x is now 0b0001
+/// ```
+///
+/// # Note
+///
+/// For signed integers, this is typically an arithmetic right shift
+/// (sign-extending). For unsigned integers, it's a logical right shift
+/// (zero-filling).
+pub behavior ShrAssign[Rhs = I32] {
+    /// Performs the `>>=` operation.
+    func shr_assign(mut this, rhs: Rhs)
 }
 
 // ============================================================================
@@ -834,89 +858,345 @@ impl Not for Bool {
 // ============================================================================
 // Drop Behavior (RAII)
 // ============================================================================
+// NOTE: Drop is a compiler builtin, not defined here.
+// See compiler/src/types/builtins for the definition.
 
-/// The `Drop` behavior enables automatic resource cleanup.
+// ============================================================================
+// BitAndAssign implementations for integers
+// ============================================================================
+
+/// `BitAndAssign` implementation for `I8`.
+impl BitAndAssign for I8 {
+    pub func bitand_assign(mut this, rhs: I8) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `I16`.
+impl BitAndAssign for I16 {
+    pub func bitand_assign(mut this, rhs: I16) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `I32`.
+impl BitAndAssign for I32 {
+    pub func bitand_assign(mut this, rhs: I32) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `I64`.
+impl BitAndAssign for I64 {
+    pub func bitand_assign(mut this, rhs: I64) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `U8`.
+impl BitAndAssign for U8 {
+    pub func bitand_assign(mut this, rhs: U8) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `U16`.
+impl BitAndAssign for U16 {
+    pub func bitand_assign(mut this, rhs: U16) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `U32`.
+impl BitAndAssign for U32 {
+    pub func bitand_assign(mut this, rhs: U32) { this = this & rhs }
+}
+
+/// `BitAndAssign` implementation for `U64`.
+impl BitAndAssign for U64 {
+    pub func bitand_assign(mut this, rhs: U64) { this = this & rhs }
+}
+
+// ============================================================================
+// BitOrAssign implementations for integers
+// ============================================================================
+
+/// `BitOrAssign` implementation for `I8`.
+impl BitOrAssign for I8 {
+    pub func bitor_assign(mut this, rhs: I8) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `I16`.
+impl BitOrAssign for I16 {
+    pub func bitor_assign(mut this, rhs: I16) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `I32`.
+impl BitOrAssign for I32 {
+    pub func bitor_assign(mut this, rhs: I32) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `I64`.
+impl BitOrAssign for I64 {
+    pub func bitor_assign(mut this, rhs: I64) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `U8`.
+impl BitOrAssign for U8 {
+    pub func bitor_assign(mut this, rhs: U8) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `U16`.
+impl BitOrAssign for U16 {
+    pub func bitor_assign(mut this, rhs: U16) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `U32`.
+impl BitOrAssign for U32 {
+    pub func bitor_assign(mut this, rhs: U32) { this = this | rhs }
+}
+
+/// `BitOrAssign` implementation for `U64`.
+impl BitOrAssign for U64 {
+    pub func bitor_assign(mut this, rhs: U64) { this = this | rhs }
+}
+
+// ============================================================================
+// BitXorAssign implementations for integers
+// ============================================================================
+
+/// `BitXorAssign` implementation for `I8`.
+impl BitXorAssign for I8 {
+    pub func bitxor_assign(mut this, rhs: I8) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `I16`.
+impl BitXorAssign for I16 {
+    pub func bitxor_assign(mut this, rhs: I16) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `I32`.
+impl BitXorAssign for I32 {
+    pub func bitxor_assign(mut this, rhs: I32) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `I64`.
+impl BitXorAssign for I64 {
+    pub func bitxor_assign(mut this, rhs: I64) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `U8`.
+impl BitXorAssign for U8 {
+    pub func bitxor_assign(mut this, rhs: U8) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `U16`.
+impl BitXorAssign for U16 {
+    pub func bitxor_assign(mut this, rhs: U16) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `U32`.
+impl BitXorAssign for U32 {
+    pub func bitxor_assign(mut this, rhs: U32) { this = this ^ rhs }
+}
+
+/// `BitXorAssign` implementation for `U64`.
+impl BitXorAssign for U64 {
+    pub func bitxor_assign(mut this, rhs: U64) { this = this ^ rhs }
+}
+
+// ============================================================================
+// ShlAssign implementations for integers
+// ============================================================================
+
+/// `ShlAssign` implementation for `I8`.
+impl ShlAssign for I8 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `I16`.
+impl ShlAssign for I16 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `I32`.
+impl ShlAssign for I32 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `I64`.
+impl ShlAssign for I64 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `U8`.
+impl ShlAssign for U8 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `U16`.
+impl ShlAssign for U16 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `U32`.
+impl ShlAssign for U32 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+/// `ShlAssign` implementation for `U64`.
+impl ShlAssign for U64 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+// ============================================================================
+// ShrAssign implementations for integers
+// ============================================================================
+
+/// `ShrAssign` implementation for `I8`.
+impl ShrAssign for I8 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `I16`.
+impl ShrAssign for I16 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `I32`.
+impl ShrAssign for I32 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `I64`.
+impl ShrAssign for I64 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `U8`.
+impl ShrAssign for U8 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `U16`.
+impl ShrAssign for U16 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `U32`.
+impl ShrAssign for U32 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+/// `ShrAssign` implementation for `U64`.
+impl ShrAssign for U64 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+// ============================================================================
+// Deref/DerefMut Behaviors
+// ============================================================================
+
+/// Used for immutable dereferencing operations.
 ///
-/// When a value goes out of scope, its `drop` method is called automatically
-/// if the type implements `Drop`. This enables RAII (Resource Acquisition Is
-/// Initialization) patterns for managing resources like file handles, network
-/// connections, memory allocations, etc.
+/// The `Deref` behavior is used to implement the dereference operator `*` for
+/// immutable access. Types implementing `Deref` can be treated as a reference
+/// to their `Target` type.
 ///
-/// # Drop Order
+/// # Deref Coercion
 ///
-/// Values are dropped in **reverse declaration order** (LIFO - Last In, First Out).
-/// For structs, fields are dropped in reverse declaration order after the
-/// struct's own drop method is called.
+/// When a type `T` implements `Deref[Target=U]`, values of type `ref T` will
+/// automatically coerce to `ref U` in contexts where `ref U` is expected.
+/// This is called "deref coercion".
 ///
 /// # Examples
 ///
-/// ## Basic Resource Cleanup
-///
 /// ```tml
-/// use core::ops::Drop
+/// use core::ops::Deref
 ///
-/// pub type FileHandle {
-///     fd: I32,
-///     path: Str
+/// pub type SmartPtr[T] {
+///     value: T
 /// }
 ///
-/// impl Drop for FileHandle {
-///     pub func drop(mut this) {
-///         // Close the file descriptor
-///         lowlevel { close_fd(this.fd) }
-///         println("Closed file: " + this.path)
+/// impl[T] Deref for SmartPtr[T] {
+///     type Target = T
+///
+///     pub func deref(this) -> ref T {
+///         return ref this.value
 ///     }
 /// }
 ///
-/// func process_file() {
-///     let file = FileHandle { fd: open("data.txt"), path: "data.txt" }
-///     // ... use file ...
-///     // file.drop() is called automatically when scope ends
-/// }
+/// let ptr = SmartPtr { value: 42 }
+/// let val: I32 = *ptr  // Dereference to get 42
 /// ```
 ///
-/// ## Nested Drops
+/// # Relationship with DerefMut
 ///
-/// ```tml
-/// pub type Connection {
-///     socket: Socket,
-///     buffer: Buffer
-/// }
+/// If you implement `Deref`, you often also want to implement `DerefMut`
+/// for mutable dereferencing. `DerefMut` requires `Deref`.
 ///
-/// impl Drop for Connection {
-///     pub func drop(mut this) {
-///         // Send disconnect message
-///         this.socket.send("DISCONNECT")
-///         // Socket and Buffer are dropped after this method returns
-///     }
-/// }
-/// ```
+/// # Use Cases
 ///
-/// # Important Notes
-///
-/// - Drop methods should not panic. Panicking in a drop method may lead to
-///   undefined behavior.
-/// - Drop is not called for values that have been moved.
-/// - Partial moves prevent automatic drop - ensure all fields are moved together
-///   or implement Drop to handle partial state.
-/// - The compiler automatically calls drop; you should rarely need to call
-///   it explicitly.
+/// - Smart pointers (`Heap[T]`, `Shared[T]`, `Sync[T]`)
+/// - Wrapper types that want to transparently expose their inner value
+/// - Types that want to support deref coercion
 ///
 /// # See Also
 ///
-/// - [`Heap[T]`](core::mem::Heap): Heap-allocated values with automatic cleanup
-/// - [`Shared[T]`](core::sync::Shared): Reference-counted values with drop
-pub behavior Drop {
-    /// Called when the value goes out of scope.
+/// - [`DerefMut`]: Mutable dereferencing
+pub behavior Deref {
+    /// The resulting type after dereferencing.
+    type Target
+
+    /// Dereferences the value.
     ///
-    /// This method is called automatically by the compiler when:
-    /// - A variable goes out of scope
-    /// - A temporary value is no longer needed
-    /// - A struct/enum value is being destroyed
-    ///
-    /// # Contract
-    ///
-    /// After `drop` returns, the value is considered destroyed and must not
-    /// be used again.
-    func drop(mut this)
+    /// Returns a reference to the target type.
+    func deref(this) -> ref This::Target
 }
+
+/// Used for mutable dereferencing operations.
+///
+/// The `DerefMut` behavior is used to implement the dereference operator `*`
+/// for mutable access. Types implementing `DerefMut` can be treated as a
+/// mutable reference to their `Target` type.
+///
+/// # Mutable Deref Coercion
+///
+/// When a type `T` implements `DerefMut`, values of type `mut ref T` will
+/// automatically coerce to `mut ref T::Target` in contexts where mutable
+/// access is needed.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::{Deref, DerefMut}
+///
+/// pub type SmartPtr[T] {
+///     value: T
+/// }
+///
+/// impl[T] Deref for SmartPtr[T] {
+///     type Target = T
+///     pub func deref(this) -> ref T { return ref this.value }
+/// }
+///
+/// impl[T] DerefMut for SmartPtr[T] {
+///     pub func deref_mut(mut this) -> mut ref T {
+///         return mut ref this.value
+///     }
+/// }
+///
+/// let mut ptr = SmartPtr { value: 42 }
+/// *ptr = 100  // Modify through the smart pointer
+/// ```
+///
+/// # Prerequisite
+///
+/// `DerefMut` requires `Deref` to be implemented (same `Target` type).
+///
+/// # See Also
+///
+/// - [`Deref`]: Immutable dereferencing
+pub behavior DerefMut: Deref {
+    /// Mutably dereferences the value.
+    ///
+    /// Returns a mutable reference to the target type.
+    func deref_mut(mut this) -> mut ref This::Target
+}
+
+// ============================================================================
+// Function Traits Submodule
+// ============================================================================
+
+/// Function traits for callable types (FnOnce, FnMut, Fn).
+///
+/// See the [`function`] module for details.
+pub mod function

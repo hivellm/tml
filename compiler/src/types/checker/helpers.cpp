@@ -152,6 +152,14 @@ bool types_compatible(const TypePtr& expected, const TypePtr& actual) {
             const auto& array_elem = actual->as<ArrayType>().element;
             return types_compatible(list_elem, array_elem);
         }
+        // Allow array [T; N] to be assigned to Slice[T]
+        // This enables automatic coercion in function calls: func foo(s: Slice[I32])
+        // can be called with an array: foo([1, 2, 3])
+        if (named.name == "Slice" && !named.type_args.empty()) {
+            const auto& slice_elem = named.type_args[0];
+            const auto& array_elem = actual->as<ArrayType>().element;
+            return types_compatible(slice_elem, array_elem);
+        }
     }
 
     // Allow closure to be assigned to function type if signatures match

@@ -1,0 +1,480 @@
+//! Time-related types.
+//!
+//! This module provides the [`Duration`] type for representing spans of time.
+//!
+//! # Duration
+//!
+//! A [`Duration`] represents a span of time, typically used for measuring
+//! elapsed time or specifying timeouts.
+//!
+//! ```tml
+//! use core::time::Duration
+//!
+//! let five_seconds = Duration::from_secs(5)
+//! let half_second = Duration::from_millis(500)
+//! let total = five_seconds + half_second
+//!
+//! assert_eq(total.as_millis(), 5500)
+//! ```
+//!
+//! # Precision
+//!
+//! `Duration` has nanosecond precision. It can represent spans up to
+//! approximately 584 years.
+//!
+//! # Note
+//!
+//! This module provides only the `Duration` type. For getting the current
+//! time, see `std::time::Instant` and `std::time::SystemTime`.
+
+use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+use core::ops::{Add, Sub}
+use core::fmt::{Display, Debug}
+use core::clone::{Duplicate, Copy}
+use core::default::Default
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Nanoseconds per second.
+pub const NANOS_PER_SEC: I64 = 1_000_000_000
+
+/// Nanoseconds per millisecond.
+pub const NANOS_PER_MILLI: I64 = 1_000_000
+
+/// Nanoseconds per microsecond.
+pub const NANOS_PER_MICRO: I64 = 1_000
+
+/// Milliseconds per second.
+pub const MILLIS_PER_SEC: I64 = 1_000
+
+/// Microseconds per second.
+pub const MICROS_PER_SEC: I64 = 1_000_000
+
+// ============================================================================
+// Duration Type
+// ============================================================================
+
+/// A span of time, with nanosecond precision.
+///
+/// # Creating Durations
+///
+/// ```tml
+/// use core::time::Duration
+///
+/// let d1 = Duration::from_secs(5)      // 5 seconds
+/// let d2 = Duration::from_millis(100)  // 100 milliseconds
+/// let d3 = Duration::from_micros(50)   // 50 microseconds
+/// let d4 = Duration::from_nanos(1000)  // 1000 nanoseconds
+///
+/// // Or create with seconds and nanoseconds
+/// let d5 = Duration::new(2, 500_000_000)  // 2.5 seconds
+/// ```
+///
+/// # Arithmetic
+///
+/// ```tml
+/// let a = Duration::from_secs(5)
+/// let b = Duration::from_secs(3)
+///
+/// let sum = a + b          // 8 seconds
+/// let diff = a - b         // 2 seconds
+/// let doubled = a * 2      // 10 seconds
+/// let halved = a / 2       // 2.5 seconds
+/// ```
+///
+/// # Accessing Components
+///
+/// ```tml
+/// let d = Duration::new(5, 500_000_000)  // 5.5 seconds
+///
+/// assert_eq(d.as_secs(), 5)
+/// assert_eq(d.subsec_nanos(), 500_000_000)
+/// assert_eq(d.as_millis(), 5500)
+/// ```
+///
+/// # Representation
+///
+/// Internally, a `Duration` stores seconds and nanoseconds separately.
+/// The nanoseconds component is always less than 1 second (1 billion nanos).
+pub type Duration {
+    secs: I64,
+    nanos: I32
+}
+
+impl Duration {
+    /// A duration of zero time.
+    pub const ZERO: Duration = Duration { secs: 0, nanos: 0 }
+
+    /// The maximum duration.
+    ///
+    /// This is approximately 584 years.
+    pub const MAX: Duration = Duration { secs: 9223372036854775807, nanos: 999999999 }
+
+    /// Creates a new `Duration` from seconds and additional nanoseconds.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `nanos >= 1_000_000_000` (1 second in nanoseconds).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::new(5, 500_000_000)  // 5.5 seconds
+    /// ```
+    pub func new(secs: I64, nanos: I32) -> Duration {
+        if nanos >= 1_000_000_000 or nanos < 0 {
+            panic("nanos must be in range [0, 999_999_999]")
+        }
+        return Duration { secs: secs, nanos: nanos }
+    }
+
+    /// Creates a new `Duration` from the specified number of whole seconds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_secs(5)
+    /// assert_eq(d.as_secs(), 5)
+    /// ```
+    pub func from_secs(secs: I64) -> Duration {
+        return Duration { secs: secs, nanos: 0 }
+    }
+
+    /// Creates a new `Duration` from the specified number of milliseconds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_millis(2500)
+    /// assert_eq(d.as_secs(), 2)
+    /// assert_eq(d.subsec_millis(), 500)
+    /// ```
+    pub func from_millis(millis: I64) -> Duration {
+        let secs: I64 = millis / 1000
+        let nanos: I32 = ((millis % 1000) * 1000000) as I32
+        return Duration { secs: secs, nanos: nanos }
+    }
+
+    /// Creates a new `Duration` from the specified number of microseconds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_micros(1_500_000)
+    /// assert_eq(d.as_secs(), 1)
+    /// assert_eq(d.subsec_micros(), 500_000)
+    /// ```
+    pub func from_micros(micros: I64) -> Duration {
+        let secs: I64 = micros / 1000000
+        let nanos: I32 = ((micros % 1000000) * 1000) as I32
+        return Duration { secs: secs, nanos: nanos }
+    }
+
+    /// Creates a new `Duration` from the specified number of nanoseconds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_nanos(1_500_000_000)
+    /// assert_eq(d.as_secs(), 1)
+    /// assert_eq(d.subsec_nanos(), 500_000_000)
+    /// ```
+    pub func from_nanos(nanos: I64) -> Duration {
+        let secs: I64 = nanos / 1000000000
+        let remaining_nanos: I32 = (nanos % 1000000000) as I32
+        return Duration { secs: secs, nanos: remaining_nanos }
+    }
+
+    /// Returns `true` if this duration spans no time.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert(Duration::ZERO.is_zero())
+    /// assert(not Duration::from_secs(1).is_zero())
+    /// ```
+    pub func is_zero(this) -> Bool {
+        return this.secs == 0 and this.nanos == 0
+    }
+
+    /// Returns the number of whole seconds contained in this duration.
+    ///
+    /// The returned value does not include the fractional (nanoseconds) part.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::new(5, 500_000_000)
+    /// assert_eq(d.as_secs(), 5)
+    /// ```
+    pub func as_secs(this) -> I64 {
+        return this.secs
+    }
+
+    /// Returns the fractional part in nanoseconds.
+    ///
+    /// This is always less than one second (less than 1 billion).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::new(5, 500_000_000)
+    /// assert_eq(d.subsec_nanos(), 500_000_000)
+    /// ```
+    pub func subsec_nanos(this) -> I32 {
+        return this.nanos
+    }
+
+    /// Returns the fractional part in whole milliseconds.
+    ///
+    /// This is always less than one second (less than 1000).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::new(5, 500_000_000)
+    /// assert_eq(d.subsec_millis(), 500)
+    /// ```
+    pub func subsec_millis(this) -> I32 {
+        return this.nanos / 1000000
+    }
+
+    /// Returns the fractional part in whole microseconds.
+    ///
+    /// This is always less than one second (less than 1,000,000).
+    pub func subsec_micros(this) -> I32 {
+        return this.nanos / 1000
+    }
+
+    /// Returns the total duration in whole milliseconds.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::new(5, 500_000_000)
+    /// assert_eq(d.as_millis(), 5500)
+    /// ```
+    pub func as_millis(this) -> I64 {
+        return this.secs * 1000 + (this.nanos as I64) / 1000000
+    }
+
+    /// Returns the total duration in whole microseconds.
+    pub func as_micros(this) -> I64 {
+        return this.secs * 1000000 + (this.nanos as I64) / 1000
+    }
+
+    /// Returns the total duration in nanoseconds.
+    ///
+    /// # Overflow
+    ///
+    /// Returns `Nothing` if the duration is too large to fit in an `I64`.
+    pub func as_nanos(this) -> I64 {
+        return this.secs * 1000000000 + (this.nanos as I64)
+    }
+
+    /// Checked duration addition. Returns `Nothing` if overflow occurred.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = Duration::from_secs(5)
+    /// let b = Duration::from_secs(3)
+    /// assert_eq(a.checked_add(b), Just(Duration::from_secs(8)))
+    /// ```
+    pub func checked_add(this, other: Duration) -> Maybe[Duration] {
+        let mut secs: I64 = this.secs + other.secs
+        let mut nanos: I32 = this.nanos + other.nanos
+
+        // Handle nanoseconds overflow
+        if nanos >= 1_000_000_000 {
+            nanos = nanos - 1_000_000_000
+            secs = secs + 1
+        }
+
+        // Check for seconds overflow
+        if secs < this.secs {
+            return Nothing
+        }
+
+        return Just(Duration { secs: secs, nanos: nanos })
+    }
+
+    /// Checked duration subtraction. Returns `Nothing` if the result would be negative.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = Duration::from_secs(5)
+    /// let b = Duration::from_secs(3)
+    /// assert_eq(a.checked_sub(b), Just(Duration::from_secs(2)))
+    /// assert_eq(b.checked_sub(a), Nothing)  // Would be negative
+    /// ```
+    pub func checked_sub(this, other: Duration) -> Maybe[Duration] {
+        if this.secs < other.secs {
+            return Nothing
+        }
+        if this.secs == other.secs and this.nanos < other.nanos {
+            return Nothing
+        }
+
+        let mut secs: I64 = this.secs - other.secs
+        let mut nanos: I32 = this.nanos - other.nanos
+
+        // Handle nanoseconds underflow
+        if nanos < 0 {
+            nanos = nanos + 1_000_000_000
+            secs = secs - 1
+        }
+
+        return Just(Duration { secs: secs, nanos: nanos })
+    }
+
+    /// Saturating duration addition. Returns max Duration on overflow.
+    pub func saturating_add(this, other: Duration) -> Duration {
+        when this.checked_add(other) {
+            Just(d) => return d,
+            Nothing => return Duration { secs: 9223372036854775807, nanos: 999999999 }
+        }
+    }
+
+    /// Saturating duration subtraction. Returns zero Duration on underflow.
+    pub func saturating_sub(this, other: Duration) -> Duration {
+        when this.checked_sub(other) {
+            Just(d) => return d,
+            Nothing => return Duration { secs: 0, nanos: 0 }
+        }
+    }
+
+    /// Multiplies this duration by an integer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_secs(5)
+    /// assert_eq(d.mul(2), Duration::from_secs(10))
+    /// ```
+    pub func mul(this, rhs: I32) -> Duration {
+        let total_nanos: I64 = (this.nanos as I64) * (rhs as I64)
+        let extra_secs: I64 = total_nanos / 1000000000
+        let remaining_nanos: I32 = (total_nanos % 1000000000) as I32
+
+        let new_secs: I64 = this.secs * (rhs as I64) + extra_secs
+        return Duration { secs: new_secs, nanos: remaining_nanos }
+    }
+
+    /// Divides this duration by an integer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `rhs` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let d = Duration::from_secs(10)
+    /// assert_eq(d.div(2), Duration::from_secs(5))
+    /// ```
+    pub func div(this, rhs: I32) -> Duration {
+        if rhs == 0 {
+            panic("division by zero")
+        }
+        let total_nanos: I64 = this.secs * 1000000000 + (this.nanos as I64)
+        let divided: I64 = total_nanos / (rhs as I64)
+        return Duration::from_nanos(divided)
+    }
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+impl PartialEq for Duration {
+    pub func eq(this, other: ref Duration) -> Bool {
+        return this.secs == other.secs and this.nanos == other.nanos
+    }
+}
+
+impl Eq for Duration {}
+
+impl PartialOrd for Duration {
+    pub func partial_cmp(this, other: ref Duration) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for Duration {
+    pub func cmp(this, other: ref Duration) -> Ordering {
+        if this.secs < other.secs {
+            return Ordering::Less
+        }
+        if this.secs > other.secs {
+            return Ordering::Greater
+        }
+        // secs are equal, compare nanos
+        if this.nanos < other.nanos {
+            return Ordering::Less
+        }
+        if this.nanos > other.nanos {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl Add for Duration {
+    type Output = Duration
+
+    pub func add(this, other: Duration) -> Duration {
+        when this.checked_add(other) {
+            Just(d) => return d,
+            Nothing => panic("duration overflow")
+        }
+    }
+}
+
+impl Sub for Duration {
+    type Output = Duration
+
+    pub func sub(this, other: Duration) -> Duration {
+        when this.checked_sub(other) {
+            Just(d) => return d,
+            Nothing => panic("duration underflow")
+        }
+    }
+}
+
+impl Default for Duration {
+    pub func default() -> Duration {
+        return Duration { secs: 0, nanos: 0 }
+    }
+}
+
+impl Duplicate for Duration {
+    pub func duplicate(this) -> Duration {
+        return Duration { secs: this.secs, nanos: this.nanos }
+    }
+}
+
+impl Copy for Duration {}
+
+impl Display for Duration {
+    pub func to_string(this) -> Str {
+        if this.nanos == 0 {
+            return this.secs.to_string() + "s"
+        }
+        let millis: I32 = this.subsec_millis()
+        if millis * 1000000 == this.nanos {
+            return this.secs.to_string() + "." + millis.to_string() + "s"
+        }
+        // Full precision
+        return this.secs.to_string() + "." + this.nanos.to_string() + "s"
+    }
+}
+
+impl Debug for Duration {
+    pub func debug_string(this) -> Str {
+        return "Duration(secs=" + this.secs.to_string() + ", nanos=" + this.nanos.to_string() + ")"
+    }
+}

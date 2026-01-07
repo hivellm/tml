@@ -1,0 +1,143 @@
+// Test closures with fold pattern
+use test
+
+// fold helper that works with arrays
+func fold_array(arr: [I32; 5], init: I32, f: func(I32, I32) -> I32) -> I32 {
+    var acc: I32 = init
+    var i: I32 = 0
+    loop {
+        if i >= 5 {
+            return acc
+        }
+        acc = f(acc, arr[i])
+        i = i + 1
+    }
+    return acc  // unreachable but required
+}
+
+// all helper that works with arrays
+func all_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Bool {
+    var i: I32 = 0
+    loop {
+        if i >= 5 {
+            return true
+        }
+        if not pred(arr[i]) {
+            return false
+        }
+        i = i + 1
+    }
+    return true  // unreachable but required
+}
+
+// any helper that works with arrays
+func any_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Bool {
+    var i: I32 = 0
+    loop {
+        if i >= 5 {
+            return false
+        }
+        if pred(arr[i]) {
+            return true
+        }
+        i = i + 1
+    }
+    return false  // unreachable but required
+}
+
+// find helper that works with arrays
+func find_array(arr: [I32; 5], pred: func(I32) -> Bool) -> Maybe[I32] {
+    var i: I32 = 0
+    loop {
+        if i >= 5 {
+            return Nothing
+        }
+        if pred(arr[i]) {
+            return Just(arr[i])
+        }
+        i = i + 1
+    }
+    return Nothing  // unreachable but required
+}
+
+@test
+func test_fold_sum() -> I32 {
+    let arr: [I32; 5] = [0, 1, 2, 3, 4]
+    let add: func(I32, I32) -> I32 = do(acc: I32, x: I32) -> I32 { acc + x }
+    let sum: I32 = fold_array(arr, 0, add)
+    // 0 + 1 + 2 + 3 + 4 = 10
+    assert_eq(sum, 10, "fold sum should be 10")
+    return 0
+}
+
+@test
+func test_fold_product() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let mul: func(I32, I32) -> I32 = do(acc: I32, x: I32) -> I32 { acc * x }
+    let product: I32 = fold_array(arr, 1, mul)
+    // 1 * 2 * 3 * 4 * 5 = 120
+    assert_eq(product, 120, "fold product should be 120")
+    return 0
+}
+
+@test
+func test_all_positive() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5]
+    let is_positive: func(I32) -> Bool = do(x: I32) -> Bool { x > 0 }
+    let result: Bool = all_array(arr, is_positive)
+    assert(result, "all should return true for positive numbers")
+    return 0
+}
+
+@test
+func test_all_false() -> I32 {
+    let arr: [I32; 5] = [0, 1, 2, 3, 4]
+    let is_positive: func(I32) -> Bool = do(x: I32) -> Bool { x > 0 }
+    let result: Bool = all_array(arr, is_positive)
+    assert(not result, "all should return false when 0 is in the array")
+    return 0
+}
+
+@test
+func test_any_match() -> I32 {
+    let arr: [I32; 5] = [1, 2, 5, 8, 10]
+    let is_five: func(I32) -> Bool = do(x: I32) -> Bool { x == 5 }
+    let result: Bool = any_array(arr, is_five)
+    assert(result, "any should find 5 in array")
+    return 0
+}
+
+@test
+func test_any_no_match() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 6]
+    let is_ten: func(I32) -> Bool = do(x: I32) -> Bool { x == 10 }
+    let result: Bool = any_array(arr, is_ten)
+    assert(not result, "any should not find 10 in array")
+    return 0
+}
+
+@test
+func test_find_match() -> I32 {
+    let arr: [I32; 5] = [1, 3, 6, 8, 10]
+    let is_even: func(I32) -> Bool = do(x: I32) -> Bool { x % 2 == 0 }
+    when find_array(arr, is_even) {
+        Just(n) => assert_eq(n, 6, "should find 6 as first even"),
+        Nothing => assert(false, "should have found a match")
+    }
+    return 0
+}
+
+@test
+func test_find_no_match() -> I32 {
+    let arr: [I32; 5] = [1, 3, 5, 7, 9]
+    let is_even: func(I32) -> Bool = do(x: I32) -> Bool { x % 2 == 0 }
+    when find_array(arr, is_even) {
+        Just(_) => assert(false, "should not find even number"),
+        Nothing => {}
+    }
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

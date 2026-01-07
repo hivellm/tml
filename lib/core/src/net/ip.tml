@@ -141,10 +141,10 @@ impl Ipv4Addr {
     /// - `192.168.0.0/16`
     pub func is_private(this) -> Bool {
         when this.octets {
-            [10, _, _, _] -> true,
-            [172, b, _, _] if b >= 16 and b <= 31 -> true,
-            [192, 168, _, _] -> true,
-            _ -> false,
+            [10, _, _, _] => true,
+            [172, b, _, _] if b >= 16 and b <= 31 => true,
+            [192, 168, _, _] => true,
+            _ => false,
         }
     }
 
@@ -162,10 +162,10 @@ impl Ipv4Addr {
     /// Returns `true` if this is a documentation address (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
     pub func is_documentation(this) -> Bool {
         when this.octets {
-            [192, 0, 2, _] -> true,
-            [198, 51, 100, _] -> true,
-            [203, 0, 113, _] -> true,
-            _ -> false,
+            [192, 0, 2, _] => true,
+            [198, 51, 100, _] => true,
+            [203, 0, 113, _] => true,
+            _ => false,
         }
     }
 
@@ -191,7 +191,10 @@ impl Ipv4Addr {
 
     /// Converts this address to an IPv6 compatible address (`::a.b.c.d`).
     pub func to_ipv6_compatible(this) -> Ipv6Addr {
-        let [a, b, c, d] = this.octets
+        let a: U8 = this.octets[0]
+        let b: U8 = this.octets[1]
+        let c: U8 = this.octets[2]
+        let d: U8 = this.octets[3]
         Ipv6Addr::new(0, 0, 0, 0, 0, 0,
             ((a as U16) shl 8) or (b as U16),
             ((c as U16) shl 8) or (d as U16))
@@ -199,7 +202,10 @@ impl Ipv4Addr {
 
     /// Converts this address to an IPv6 mapped address (`::ffff:a.b.c.d`).
     pub func to_ipv6_mapped(this) -> Ipv6Addr {
-        let [a, b, c, d] = this.octets
+        let a: U8 = this.octets[0]
+        let b: U8 = this.octets[1]
+        let c: U8 = this.octets[2]
+        let d: U8 = this.octets[3]
         Ipv6Addr::new(0, 0, 0, 0, 0, 0xFFFF,
             ((a as U16) shl 8) or (b as U16),
             ((c as U16) shl 8) or (d as U16))
@@ -207,14 +213,14 @@ impl Ipv4Addr {
 }
 
 // Behavior implementations for Ipv4Addr
-extend Ipv4Addr with Copy {}
-extend Ipv4Addr with Duplicate {
+impl Copy for Ipv4Addr {}
+impl Duplicate for Ipv4Addr {
     func duplicate(this) -> Ipv4Addr {
         Ipv4Addr { octets: this.octets }
     }
 }
 
-extend Ipv4Addr with PartialEq {
+impl PartialEq for Ipv4Addr {
     func eq(this, other: ref Ipv4Addr) -> Bool {
         this.octets[0] == other.octets[0]
             and this.octets[1] == other.octets[1]
@@ -223,37 +229,37 @@ extend Ipv4Addr with PartialEq {
     }
 }
 
-extend Ipv4Addr with Eq {}
+impl Eq for Ipv4Addr {}
 
-extend Ipv4Addr with PartialOrd {
+impl PartialOrd for Ipv4Addr {
     func partial_cmp(this, other: ref Ipv4Addr) -> Maybe[Ordering] {
         Just(this.cmp(other))
     }
 }
 
-extend Ipv4Addr with Ord {
+impl Ord for Ipv4Addr {
     func cmp(this, other: ref Ipv4Addr) -> Ordering {
-        let a = this.to_bits()
-        let b = other.to_bits()
+        let a: U32 = this.to_bits()
+        let b: U32 = other.to_bits()
         if a < b { Ordering::Less }
         else if a > b { Ordering::Greater }
         else { Ordering::Equal }
     }
 }
 
-extend Ipv4Addr with Hash {
+impl Hash for Ipv4Addr {
     func hash(this, hasher: mut ref Hasher) {
         hasher.write_u32(this.to_bits())
     }
 }
 
-extend Ipv4Addr with Default {
+impl Default for Ipv4Addr {
     func default() -> Ipv4Addr {
         Ipv4Addr::UNSPECIFIED
     }
 }
 
-extend Ipv4Addr with Display {
+impl Display for Ipv4Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         f.write_str(this.octets[0].to_string())
         f.write_str(".")
@@ -265,7 +271,7 @@ extend Ipv4Addr with Display {
     }
 }
 
-extend Ipv4Addr with Debug {
+impl Debug for Ipv4Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }
@@ -437,28 +443,28 @@ impl Ipv6Addr {
 }
 
 // Behavior implementations for Ipv6Addr
-extend Ipv6Addr with Copy {}
-extend Ipv6Addr with Duplicate {
+impl Copy for Ipv6Addr {}
+impl Duplicate for Ipv6Addr {
     func duplicate(this) -> Ipv6Addr {
         Ipv6Addr { segments: this.segments }
     }
 }
 
-extend Ipv6Addr with PartialEq {
+impl PartialEq for Ipv6Addr {
     func eq(this, other: ref Ipv6Addr) -> Bool {
         this.segments == other.segments
     }
 }
 
-extend Ipv6Addr with Eq {}
+impl Eq for Ipv6Addr {}
 
-extend Ipv6Addr with PartialOrd {
+impl PartialOrd for Ipv6Addr {
     func partial_cmp(this, other: ref Ipv6Addr) -> Maybe[Ordering] {
         Just(this.cmp(other))
     }
 }
 
-extend Ipv6Addr with Ord {
+impl Ord for Ipv6Addr {
     func cmp(this, other: ref Ipv6Addr) -> Ordering {
         let a = this.to_bits()
         let b = other.to_bits()
@@ -468,19 +474,19 @@ extend Ipv6Addr with Ord {
     }
 }
 
-extend Ipv6Addr with Hash {
+impl Hash for Ipv6Addr {
     func hash(this, hasher: mut ref Hasher) {
         hasher.write_u128(this.to_bits())
     }
 }
 
-extend Ipv6Addr with Default {
+impl Default for Ipv6Addr {
     func default() -> Ipv6Addr {
         Ipv6Addr::UNSPECIFIED
     }
 }
 
-extend Ipv6Addr with Display {
+impl Display for Ipv6Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         // Simplified display - full RFC 5952 formatting would be more complex
         let mut first = true
@@ -495,7 +501,7 @@ extend Ipv6Addr with Display {
     }
 }
 
-extend Ipv6Addr with Debug {
+impl Debug for Ipv6Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }
@@ -522,48 +528,48 @@ impl IpAddr {
     /// Returns `true` if this is an IPv4 address.
     pub func is_ipv4(this) -> Bool {
         when this {
-            V4(_) -> true,
-            V6(_) -> false,
+            V4(_) => true,
+            V6(_) => false,
         }
     }
 
     /// Returns `true` if this is an IPv6 address.
     pub func is_ipv6(this) -> Bool {
         when this {
-            V4(_) -> false,
-            V6(_) -> true,
+            V4(_) => false,
+            V6(_) => true,
         }
     }
 
     /// Returns `true` if this is the unspecified address.
     pub func is_unspecified(this) -> Bool {
         when this {
-            V4(addr) -> addr.is_unspecified(),
-            V6(addr) -> addr.is_unspecified(),
+            V4(addr) => addr.is_unspecified(),
+            V6(addr) => addr.is_unspecified(),
         }
     }
 
     /// Returns `true` if this is a loopback address.
     pub func is_loopback(this) -> Bool {
         when this {
-            V4(addr) -> addr.is_loopback(),
-            V6(addr) -> addr.is_loopback(),
+            V4(addr) => addr.is_loopback(),
+            V6(addr) => addr.is_loopback(),
         }
     }
 
     /// Returns `true` if this is a multicast address.
     pub func is_multicast(this) -> Bool {
         when this {
-            V4(addr) -> addr.is_multicast(),
-            V6(addr) -> addr.is_multicast(),
+            V4(addr) => addr.is_multicast(),
+            V6(addr) => addr.is_multicast(),
         }
     }
 
     /// Converts this to an IPv4 address if possible.
     pub func to_ipv4(this) -> Maybe[Ipv4Addr] {
         when this {
-            V4(addr) -> Just(addr),
-            V6(addr) -> addr.to_ipv4(),
+            V4(addr) => Just(addr),
+            V6(addr) => addr.to_ipv4(),
         }
     }
 
@@ -571,43 +577,43 @@ impl IpAddr {
     /// IPv4 addresses are converted to IPv4-mapped IPv6 addresses.
     pub func to_ipv6(this) -> Ipv6Addr {
         when this {
-            V4(addr) -> addr.to_ipv6_mapped(),
-            V6(addr) -> addr,
+            V4(addr) => addr.to_ipv6_mapped(),
+            V6(addr) => addr,
         }
     }
 }
 
 // Behavior implementations for IpAddr
-extend IpAddr with Copy {}
-extend IpAddr with Duplicate {
+impl Copy for IpAddr {}
+impl Duplicate for IpAddr {
     func duplicate(this) -> IpAddr {
         when this {
-            V4(addr) -> IpAddr::V4(addr.duplicate()),
-            V6(addr) -> IpAddr::V6(addr.duplicate()),
+            V4(addr) => IpAddr::V4(addr.duplicate()),
+            V6(addr) => IpAddr::V6(addr.duplicate()),
         }
     }
 }
 
-extend IpAddr with PartialEq {
+impl PartialEq for IpAddr {
     func eq(this, other: ref IpAddr) -> Bool {
         when (this, other) {
-            (V4(a), V4(b)) -> a == b,
-            (V6(a), V6(b)) -> a == b,
-            _ -> false,
+            (V4(a), V4(b)) => a == b,
+            (V6(a), V6(b)) => a == b,
+            _ => false,
         }
     }
 }
 
-extend IpAddr with Eq {}
+impl Eq for IpAddr {}
 
-extend IpAddr with Hash {
+impl Hash for IpAddr {
     func hash(this, hasher: mut ref Hasher) {
         when this {
-            V4(addr) -> {
+            V4(addr) => {
                 hasher.write_u8(4)
                 addr.hash(hasher)
             },
-            V6(addr) -> {
+            V6(addr) => {
                 hasher.write_u8(6)
                 addr.hash(hasher)
             },
@@ -615,16 +621,16 @@ extend IpAddr with Hash {
     }
 }
 
-extend IpAddr with Display {
+impl Display for IpAddr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         when this {
-            V4(addr) -> addr.fmt(f),
-            V6(addr) -> addr.fmt(f),
+            V4(addr) => addr.fmt(f),
+            V6(addr) => addr.fmt(f),
         }
     }
 }
 
-extend IpAddr with Debug {
+impl Debug for IpAddr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         Display::fmt(this, f)
     }

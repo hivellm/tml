@@ -1,0 +1,257 @@
+//! Range types for iteration and slicing.
+//!
+//! This module provides range types that represent intervals of values.
+//! Ranges are commonly used for iteration and slice indexing.
+//!
+//! # Range Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | `Range[Idx]` | Half-open range [start, end) |
+//! | `RangeInclusive[Idx]` | Closed range [start, end] |
+//! | `RangeFrom[Idx]` | Unbounded above [start, ..) |
+//! | `RangeTo[Idx]` | Unbounded below (.., end) |
+//! | `RangeFull` | Full range (..) |
+//!
+//! # Usage
+//!
+//! Create ranges using struct literal syntax:
+//!
+//! ```tml
+//! let range: Range[I64] = Range { start: 0, end: 10 }
+//! let inclusive: RangeInclusive[I64] = RangeInclusive { start: 1, end: 5, exhausted: false }
+//! ```
+//!
+//! Note: Generic static methods like `Range::new()` are not yet supported
+//! due to compiler limitations with monomorphization.
+
+use core::cmp::PartialOrd
+use core::iter::Iterator
+
+// ============================================================================
+// Range Types
+// ============================================================================
+
+/// A half-open range bounded inclusively below and exclusively above.
+///
+/// The range contains all values `x` where `start <= x < end`.
+/// It is empty if `start >= end`.
+///
+/// # Examples
+///
+/// ```tml
+/// let range: Range[I64] = Range { start: 3, end: 5 }
+/// assert(range.contains(3))
+/// assert(range.contains(4))
+/// assert(not range.contains(5))  // exclusive upper bound
+/// ```
+pub type Range[Idx] {
+    /// The lower bound of the range (inclusive).
+    start: Idx,
+    /// The upper bound of the range (exclusive).
+    end: Idx,
+}
+
+impl[Idx] Range[Idx] {
+    /// Returns `true` if the range contains no items.
+    ///
+    /// A range is empty if `start >= end`.
+    pub func is_empty(this) -> Bool where Idx: PartialOrd {
+        return not (this.start < this.end)
+    }
+
+    /// Returns `true` if `item` is contained in the range.
+    ///
+    /// Returns `true` if `start <= item < end`.
+    pub func contains(this, item: Idx) -> Bool where Idx: PartialOrd {
+        return this.start <= item and item < this.end
+    }
+}
+
+/// A range only bounded inclusively below.
+///
+/// Contains all values `x` where `start <= x`.
+///
+/// # Examples
+///
+/// ```tml
+/// let range: RangeFrom[I64] = RangeFrom { start: 5 }
+/// assert(range.contains(5))
+/// assert(range.contains(1000))
+/// assert(not range.contains(4))
+/// ```
+pub type RangeFrom[Idx] {
+    /// The lower bound of the range (inclusive).
+    start: Idx,
+}
+
+impl[Idx] RangeFrom[Idx] {
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: Idx) -> Bool where Idx: PartialOrd {
+        return this.start <= item
+    }
+}
+
+/// A range only bounded exclusively above.
+///
+/// Contains all values `x` where `x < end`.
+///
+/// # Examples
+///
+/// ```tml
+/// let range: RangeTo[I64] = RangeTo { end: 5 }
+/// assert(range.contains(0))
+/// assert(range.contains(4))
+/// assert(not range.contains(5))
+/// ```
+pub type RangeTo[Idx] {
+    /// The upper bound of the range (exclusive).
+    end: Idx,
+}
+
+impl[Idx] RangeTo[Idx] {
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: Idx) -> Bool where Idx: PartialOrd {
+        return item < this.end
+    }
+}
+
+/// An inclusive range bounded inclusively below and above.
+///
+/// Contains all values `x` where `start <= x <= end`.
+///
+/// # Examples
+///
+/// ```tml
+/// let range: RangeInclusive[I64] = RangeInclusive { start: 1, end: 5, exhausted: false }
+/// assert(range.contains(1))
+/// assert(range.contains(5))  // inclusive!
+/// assert(not range.contains(0))
+/// ```
+pub type RangeInclusive[Idx] {
+    /// The lower bound of the range (inclusive).
+    start: Idx,
+    /// The upper bound of the range (inclusive).
+    end: Idx,
+    /// Whether the iterator has been exhausted.
+    exhausted: Bool,
+}
+
+impl[Idx] RangeInclusive[Idx] {
+    /// Returns `true` if the range contains no items.
+    ///
+    /// A range is empty if `start > end` or if it has been exhausted.
+    pub func is_empty(this) -> Bool where Idx: PartialOrd {
+        return this.exhausted or this.start > this.end
+    }
+
+    /// Returns `true` if `item` is contained in the range.
+    ///
+    /// Returns `true` if `start <= item <= end`.
+    pub func contains(this, item: Idx) -> Bool where Idx: PartialOrd {
+        return this.start <= item and item <= this.end
+    }
+}
+
+/// An unbounded range representing all possible values.
+///
+/// This is primarily used for slicing operations where you want the full range.
+///
+/// # Examples
+///
+/// ```tml
+/// let full: RangeFull = RangeFull {}
+/// assert(full.contains(0))
+/// assert(full.contains(1000000))
+/// ```
+pub type RangeFull {}
+
+impl RangeFull {
+    /// Always returns `true` since the full range contains all values.
+    pub func contains[T](this, _item: T) -> Bool {
+        return true
+    }
+}
+
+// ============================================================================
+// Range Iterators
+// ============================================================================
+
+/// Iterator for `Range[I64]`.
+///
+/// Produces values from `current` to `end - 1`.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut iter: RangeIterI64 = RangeIterI64 { current: 0, end: 3 }
+/// assert(iter.next() == Just(0))
+/// assert(iter.next() == Just(1))
+/// assert(iter.next() == Just(2))
+/// assert(iter.next() == Nothing)
+/// ```
+pub type RangeIterI64 {
+    /// The current position in the iteration.
+    current: I64,
+    /// The exclusive upper bound.
+    end: I64,
+}
+
+impl Iterator for RangeIterI64 {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        if this.current < this.end {
+            let val: I64 = this.current
+            this.current = this.current + 1
+            return Just(val)
+        }
+        return Nothing
+    }
+}
+
+/// Iterator for `RangeInclusive[I64]`.
+///
+/// Produces values from `current` to `end` (inclusive).
+///
+/// # Examples
+///
+/// ```tml
+/// let mut iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+///     current: 1,
+///     end: 3,
+///     exhausted: false
+/// }
+/// assert(iter.next() == Just(1))
+/// assert(iter.next() == Just(2))
+/// assert(iter.next() == Just(3))
+/// assert(iter.next() == Nothing)
+/// ```
+pub type RangeInclusiveIterI64 {
+    /// The current position in the iteration.
+    current: I64,
+    /// The inclusive upper bound.
+    end: I64,
+    /// Whether the iterator has been exhausted.
+    exhausted: Bool,
+}
+
+impl Iterator for RangeInclusiveIterI64 {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        if this.exhausted {
+            return Nothing
+        }
+        if this.current < this.end {
+            let val: I64 = this.current
+            this.current = this.current + 1
+            return Just(val)
+        }
+        if this.current == this.end {
+            this.exhausted = true
+            return Just(this.current)
+        }
+        return Nothing
+    }
+}

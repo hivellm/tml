@@ -316,27 +316,40 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
 
                 std::string fn_name = "@tml_" + mangled_type_name + "_" + method;
-                std::string impl_receiver_ptr;
+                std::string impl_receiver_val;
+
+                // Determine the LLVM type for the receiver based on the impl type
+                std::string impl_llvm_type = llvm_type_name(named.name);
+                bool is_primitive_impl = (impl_llvm_type[0] != '%');
 
                 if (call.receiver->is<parser::IdentExpr>()) {
                     const auto& ident = call.receiver->as<parser::IdentExpr>();
                     auto it = locals_.find(ident.name);
                     if (it != locals_.end()) {
-                        impl_receiver_ptr = (it->second.type == "ptr") ? receiver : it->second.reg;
+                        if (is_primitive_impl) {
+                            // For primitives, pass the value directly
+                            impl_receiver_val = receiver;
+                        } else {
+                            // For structs, pass the pointer
+                            impl_receiver_val = (it->second.type == "ptr") ? receiver : it->second.reg;
+                        }
                     } else {
-                        impl_receiver_ptr = receiver;
+                        impl_receiver_val = receiver;
                     }
                 } else if (last_expr_type_.starts_with("%struct.")) {
                     std::string tmp = fresh_reg();
                     emit_line("  " + tmp + " = alloca " + last_expr_type_);
                     emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
-                    impl_receiver_ptr = tmp;
+                    impl_receiver_val = tmp;
                 } else {
-                    impl_receiver_ptr = receiver;
+                    impl_receiver_val = receiver;
                 }
 
                 std::vector<std::pair<std::string, std::string>> typed_args;
-                typed_args.push_back({"ptr", impl_receiver_ptr});
+                // For primitive types, pass the value with the correct type
+                // For structs/enums, pass as pointer
+                std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
+                typed_args.push_back({this_arg_type, impl_receiver_val});
 
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string val = gen_expr(*call.args[i]);
@@ -427,27 +440,40 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             }
             if (func_sig) {
                 std::string fn_name = "@tml_" + named2.name + "_" + method;
-                std::string impl_receiver_ptr;
+                std::string impl_receiver_val;
+
+                // Determine the LLVM type for the receiver based on the impl type
+                std::string impl_llvm_type = llvm_type_name(named2.name);
+                bool is_primitive_impl = (impl_llvm_type[0] != '%');
 
                 if (call.receiver->is<parser::IdentExpr>()) {
                     const auto& ident = call.receiver->as<parser::IdentExpr>();
                     auto it = locals_.find(ident.name);
                     if (it != locals_.end()) {
-                        impl_receiver_ptr = (it->second.type == "ptr") ? receiver : it->second.reg;
+                        if (is_primitive_impl) {
+                            // For primitives, pass the value directly
+                            impl_receiver_val = receiver;
+                        } else {
+                            // For structs, pass the pointer
+                            impl_receiver_val = (it->second.type == "ptr") ? receiver : it->second.reg;
+                        }
                     } else {
-                        impl_receiver_ptr = receiver;
+                        impl_receiver_val = receiver;
                     }
                 } else if (last_expr_type_.starts_with("%struct.")) {
                     std::string tmp = fresh_reg();
                     emit_line("  " + tmp + " = alloca " + last_expr_type_);
                     emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " + tmp);
-                    impl_receiver_ptr = tmp;
+                    impl_receiver_val = tmp;
                 } else {
-                    impl_receiver_ptr = receiver;
+                    impl_receiver_val = receiver;
                 }
 
                 std::vector<std::pair<std::string, std::string>> typed_args;
-                typed_args.push_back({"ptr", impl_receiver_ptr});
+                // For primitive types, pass the value with the correct type
+                // For structs/enums, pass as pointer
+                std::string this_arg_type = is_primitive_impl ? impl_llvm_type : "ptr";
+                typed_args.push_back({this_arg_type, impl_receiver_val});
 
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string val = gen_expr(*call.args[i]);
@@ -531,10 +557,54 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     std::string fn_ptr = fresh_reg();
                     emit_line("  " + fn_ptr + " = load ptr, ptr " + fn_ptr_loc);
 
+                    // Get method signature from behavior definition
+                    std::string return_llvm_type = "i32"; // default fallback
+                    auto behavior_def = env_.lookup_behavior(behavior_name);
+                    if (behavior_def) {
+                        // Build substitution map from behavior's type params to dyn's type args
+                        std::unordered_map<std::string, types::TypePtr> type_subs;
+                        if (it->second.semantic_type &&
+                            it->second.semantic_type->is<types::DynBehaviorType>()) {
+                            const auto& dyn_sem =
+                                it->second.semantic_type->as<types::DynBehaviorType>();
+                            for (size_t i = 0; i < behavior_def->type_params.size() &&
+                                               i < dyn_sem.type_args.size();
+                                 ++i) {
+                                type_subs[behavior_def->type_params[i]] = dyn_sem.type_args[i];
+                            }
+                        }
+
+                        for (const auto& m : behavior_def->methods) {
+                            if (m.name == method && m.return_type) {
+                                // Substitute type parameters before converting to LLVM type
+                                auto substituted_ret = types::substitute_type(m.return_type, type_subs);
+                                return_llvm_type = llvm_type_from_semantic(substituted_ret);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Generate method arguments
+                    std::string args_str = "ptr " + data_ptr;
+                    std::string args_types = "ptr";
+                    for (const auto& arg : call.args) {
+                        std::string arg_val = gen_expr(*arg);
+                        std::string arg_type = last_expr_type_;
+                        args_str += ", " + arg_type + " " + arg_val;
+                        args_types += ", " + arg_type;
+                    }
+
                     std::string result = fresh_reg();
-                    emit_line("  " + result + " = call i32 " + fn_ptr + "(ptr " + data_ptr + ")");
-                    last_expr_type_ = "i32";
-                    return result;
+                    if (return_llvm_type == "void") {
+                        emit_line("  call void " + fn_ptr + "(" + args_str + ")");
+                        last_expr_type_ = "void";
+                        return "";
+                    } else {
+                        emit_line("  " + result + " = call " + return_llvm_type + " " + fn_ptr +
+                                  "(" + args_str + ")");
+                        last_expr_type_ = return_llvm_type;
+                        return result;
+                    }
                 }
             }
         }

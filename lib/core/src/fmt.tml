@@ -1,7 +1,19 @@
 //! String formatting behaviors.
 //!
-//! This module provides the [`Display`] and [`Debug`] behaviors for converting
-//! values to strings.
+//! This module provides behaviors for converting values to various string
+//! representations.
+//!
+//! # Core Formatting Behaviors
+//!
+//! | Behavior | Description | Example |
+//! |----------|-------------|---------|
+//! | [`Display`] | User-facing output | `42`, `hello` |
+//! | [`Debug`] | Developer-facing output | `Point { x: 10, y: 20 }` |
+//! | [`Binary`] | Binary representation | `0b101010` |
+//! | [`Octal`] | Octal representation | `0o52` |
+//! | [`LowerHex`] | Lowercase hexadecimal | `0x2a` |
+//! | [`UpperHex`] | Uppercase hexadecimal | `0x2A` |
+//! | [`Pointer`] | Pointer address | `0x7fff5fbff8c8` |
 //!
 //! # Display vs Debug
 //!
@@ -368,3 +380,537 @@ impl Debug for Ordering {
         }
     }
 }
+
+// ============================================================================
+// Binary Behavior
+// ============================================================================
+
+/// Behavior for binary representation.
+///
+/// Types implementing `Binary` can be formatted as binary strings with the
+/// `0b` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Binary
+///
+/// let n: I32 = 42
+/// println(n.fmt_binary())  // "0b101010"
+///
+/// let byte: U8 = 255
+/// println(byte.fmt_binary())  // "0b11111111"
+/// ```
+pub behavior Binary {
+    /// Formats the value as a binary string with `0b` prefix.
+    func fmt_binary(this) -> Str
+}
+
+// Binary implementations for unsigned integers
+impl Binary for U8 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u8_to_binary_str(this)
+    }
+}
+
+impl Binary for U16 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u16_to_binary_str(this)
+    }
+}
+
+impl Binary for U32 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u32_to_binary_str(this)
+    }
+}
+
+impl Binary for U64 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u64_to_binary_str(this)
+    }
+}
+
+// Binary implementations for signed integers
+impl Binary for I8 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i8_to_binary_str(this)
+    }
+}
+
+impl Binary for I16 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i16_to_binary_str(this)
+    }
+}
+
+impl Binary for I32 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i32_to_binary_str(this)
+    }
+}
+
+impl Binary for I64 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i64_to_binary_str(this)
+    }
+}
+
+// Helper functions for binary conversion
+func u8_to_binary_str(n: U8) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U8 = n
+    loop {
+        if val == 0 { return result }
+        if val % 2 == 1 {
+            result = "1" + result
+        } else {
+            result = "0" + result
+        }
+        val = val / 2
+    }
+}
+
+func u16_to_binary_str(n: U16) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U16 = n
+    loop {
+        if val == 0 { return result }
+        if val % 2 == 1 {
+            result = "1" + result
+        } else {
+            result = "0" + result
+        }
+        val = val / 2
+    }
+}
+
+func u32_to_binary_str(n: U32) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U32 = n
+    loop {
+        if val == 0 { return result }
+        if val % 2 == 1 {
+            result = "1" + result
+        } else {
+            result = "0" + result
+        }
+        val = val / 2
+    }
+}
+
+func u64_to_binary_str(n: U64) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U64 = n
+    loop {
+        if val == 0 { return result }
+        if val % 2 == 1 {
+            result = "1" + result
+        } else {
+            result = "0" + result
+        }
+        val = val / 2
+    }
+}
+
+func i8_to_binary_str(n: I8) -> Str {
+    // For negative numbers, show two's complement
+    return u8_to_binary_str(n as U8)
+}
+
+func i16_to_binary_str(n: I16) -> Str {
+    return u16_to_binary_str(n as U16)
+}
+
+func i32_to_binary_str(n: I32) -> Str {
+    return u32_to_binary_str(n as U32)
+}
+
+func i64_to_binary_str(n: I64) -> Str {
+    return u64_to_binary_str(n as U64)
+}
+
+// ============================================================================
+// Octal Behavior
+// ============================================================================
+
+/// Behavior for octal representation.
+///
+/// Types implementing `Octal` can be formatted as octal strings with the
+/// `0o` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Octal
+///
+/// let n: I32 = 42
+/// println(n.fmt_octal())  // "0o52"
+///
+/// let perms: U16 = 0o755
+/// println(perms.fmt_octal())  // "0o755"
+/// ```
+pub behavior Octal {
+    /// Formats the value as an octal string with `0o` prefix.
+    func fmt_octal(this) -> Str
+}
+
+// Octal implementations for unsigned integers
+impl Octal for U8 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U16 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U32 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U64 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this)
+    }
+}
+
+// Octal implementations for signed integers
+impl Octal for I8 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U8) as U64)
+    }
+}
+
+impl Octal for I16 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U16) as U64)
+    }
+}
+
+impl Octal for I32 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U32) as U64)
+    }
+}
+
+impl Octal for I64 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+func u64_to_octal_str(n: U64) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U64 = n
+    loop {
+        if val == 0 { return result }
+        let digit: U64 = val % 8
+        result = digit_to_char(digit as I32) + result
+        val = val / 8
+    }
+}
+
+func digit_to_char(d: I32) -> Str {
+    when d {
+        0 => return "0",
+        1 => return "1",
+        2 => return "2",
+        3 => return "3",
+        4 => return "4",
+        5 => return "5",
+        6 => return "6",
+        7 => return "7",
+        8 => return "8",
+        9 => return "9",
+        _ => return "?"
+    }
+}
+
+// ============================================================================
+// LowerHex Behavior
+// ============================================================================
+
+/// Behavior for lowercase hexadecimal representation.
+///
+/// Types implementing `LowerHex` can be formatted as lowercase hex strings
+/// with the `0x` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::LowerHex
+///
+/// let n: I32 = 255
+/// println(n.fmt_lower_hex())  // "0xff"
+///
+/// let color: U32 = 0xFF5733
+/// println(color.fmt_lower_hex())  // "0xff5733"
+/// ```
+pub behavior LowerHex {
+    /// Formats the value as a lowercase hexadecimal string with `0x` prefix.
+    func fmt_lower_hex(this) -> Str
+}
+
+// LowerHex implementations for unsigned integers
+impl LowerHex for U8 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U16 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U32 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U64 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this, false)
+    }
+}
+
+// LowerHex implementations for signed integers
+impl LowerHex for I8 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U8) as U64, false)
+    }
+}
+
+impl LowerHex for I16 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U16) as U64, false)
+    }
+}
+
+impl LowerHex for I32 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U32) as U64, false)
+    }
+}
+
+impl LowerHex for I64 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+// ============================================================================
+// UpperHex Behavior
+// ============================================================================
+
+/// Behavior for uppercase hexadecimal representation.
+///
+/// Types implementing `UpperHex` can be formatted as uppercase hex strings
+/// with the `0x` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::UpperHex
+///
+/// let n: I32 = 255
+/// println(n.fmt_upper_hex())  // "0xFF"
+///
+/// let color: U32 = 0xFF5733
+/// println(color.fmt_upper_hex())  // "0xFF5733"
+/// ```
+pub behavior UpperHex {
+    /// Formats the value as an uppercase hexadecimal string with `0x` prefix.
+    func fmt_upper_hex(this) -> Str
+}
+
+// UpperHex implementations for unsigned integers
+impl UpperHex for U8 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U16 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U32 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U64 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this, true)
+    }
+}
+
+// UpperHex implementations for signed integers
+impl UpperHex for I8 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U8) as U64, true)
+    }
+}
+
+impl UpperHex for I16 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U16) as U64, true)
+    }
+}
+
+impl UpperHex for I32 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U32) as U64, true)
+    }
+}
+
+impl UpperHex for I64 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+// Shared hex conversion helper
+func u64_to_hex_str(n: U64, upper: Bool) -> Str {
+    if n == 0 { return "0" }
+    var result: Str = ""
+    var val: U64 = n
+    loop {
+        if val == 0 { return result }
+        let digit: U64 = val % 16
+        result = hex_digit(digit as I32, upper) + result
+        val = val / 16
+    }
+}
+
+func hex_digit(d: I32, upper: Bool) -> Str {
+    when d {
+        0 => return "0",
+        1 => return "1",
+        2 => return "2",
+        3 => return "3",
+        4 => return "4",
+        5 => return "5",
+        6 => return "6",
+        7 => return "7",
+        8 => return "8",
+        9 => return "9",
+        10 => { if upper { return "A" } else { return "a" } },
+        11 => { if upper { return "B" } else { return "b" } },
+        12 => { if upper { return "C" } else { return "c" } },
+        13 => { if upper { return "D" } else { return "d" } },
+        14 => { if upper { return "E" } else { return "e" } },
+        15 => { if upper { return "F" } else { return "f" } },
+        _ => return "?"
+    }
+}
+
+// ============================================================================
+// Pointer Behavior
+// ============================================================================
+
+/// Behavior for pointer address representation.
+///
+/// Types implementing `Pointer` can be formatted as memory addresses,
+/// typically in lowercase hexadecimal format.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Pointer
+/// use core::ptr::RawPtr
+///
+/// let ptr: RawPtr[I32] = get_some_pointer()
+/// println(ptr.fmt_pointer())  // "0x7fff5fbff8c8"
+/// ```
+///
+/// # Note
+///
+/// The exact format of pointer output may vary by platform. The address
+/// is typically shown in lowercase hexadecimal with the `0x` prefix.
+pub behavior Pointer {
+    /// Formats the value as a pointer address.
+    func fmt_pointer(this) -> Str
+}
+
+// ============================================================================
+// Write Behavior (for custom formatters)
+// ============================================================================
+
+/// A trait for writing formatted output.
+///
+/// This is the low-level interface used by formatting implementations.
+/// Most users should use `Display` or `Debug` instead.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Write
+///
+/// type StringWriter {
+///     buffer: Str
+/// }
+///
+/// impl Write for StringWriter {
+///     pub func write_str(mut this, s: Str) -> Outcome[Unit, FmtError] {
+///         this.buffer = this.buffer + s
+///         return Ok(())
+///     }
+/// }
+/// ```
+pub behavior Write {
+    /// Writes a string slice to this writer.
+    func write_str(mut this, s: Str) -> Outcome[Unit, FmtError]
+
+    /// Writes a single character to this writer.
+    func write_char(mut this, c: Char) -> Outcome[Unit, FmtError] {
+        return this.write_str(c.to_string())
+    }
+}
+
+/// The error type for formatting operations.
+///
+/// This error is returned when a formatting operation fails, typically
+/// due to an I/O error in the underlying writer.
+pub type FmtError {
+    // Empty - this is a marker type indicating formatting failure
+}
+
+impl FmtError {
+    /// Creates a new formatting error.
+    pub func new() -> FmtError {
+        return FmtError {}
+    }
+}
+
+impl Display for FmtError {
+    pub func to_string(this) -> Str {
+        return "formatting error"
+    }
+}
+
+impl Debug for FmtError {
+    pub func debug_string(this) -> Str {
+        return "FmtError"
+    }
+}
+
+// Import Char for write_char
+use core::char::Char

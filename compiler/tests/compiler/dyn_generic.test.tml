@@ -1,0 +1,65 @@
+// Test for generic behaviors in trait objects
+use test
+
+// ============ Generic Behavior ============
+
+behavior Processor[T] {
+    func process(this, value: T) -> T
+}
+
+type Doubler {}
+
+impl Processor[I32] for Doubler {
+    func process(this, value: I32) -> I32 {
+        return value * 2
+    }
+}
+
+type Tripler {}
+
+impl Processor[I32] for Tripler {
+    func process(this, value: I32) -> I32 {
+        return value * 3
+    }
+}
+
+@test
+func test_dyn_generic_behavior_basic() -> I32 {
+    let d: Doubler = Doubler {}
+    let dyn_proc: dyn Processor[I32] = d
+
+    let result: I32 = dyn_proc.process(5)
+    assert_eq(result, 10, "Doubler should double the value")
+    return 0
+}
+
+@test
+func test_dyn_generic_behavior_different_impls() -> I32 {
+    let d: Doubler = Doubler {}
+    let t: Tripler = Tripler {}
+
+    let dp: dyn Processor[I32] = d
+    let tp: dyn Processor[I32] = t
+
+    assert_eq(dp.process(4), 8, "Doubler: 4 * 2 = 8")
+    assert_eq(tp.process(4), 12, "Tripler: 4 * 3 = 12")
+    return 0
+}
+
+func apply_processor(p: dyn Processor[I32], value: I32) -> I32 {
+    return p.process(value)
+}
+
+@test
+func test_dyn_generic_as_parameter() -> I32 {
+    let d: Doubler = Doubler {}
+    let dyn_d: dyn Processor[I32] = d
+
+    let result: I32 = apply_processor(dyn_d, 7)
+    assert_eq(result, 14, "apply_processor(doubler, 7) = 14")
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

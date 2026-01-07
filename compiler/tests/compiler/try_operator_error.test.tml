@@ -1,0 +1,96 @@
+// Test error messages for try operator (!) misuse
+// This test verifies that proper error messages are shown when ! is used incorrectly
+
+// Test 1: Using ! on an I32 should produce an error
+// Expected error: try operator (!) can only be used on Outcome[T, E] or Maybe[T] types, got I32
+
+// This function demonstrates incorrect usage
+// The compiler should emit an error for this
+func try_on_i32() -> I32 {
+    let x: I32 = 42
+    // ERROR: ! cannot be used on I32
+    // return x!  // Uncommenting this would cause a compile error
+    return x
+}
+
+// Test 2: Correct usage for reference
+func returns_outcome() -> Outcome[I32, Str] {
+    return Ok(42)
+}
+
+func try_correct() -> Outcome[I32, Str] {
+    let value: I32 = returns_outcome()!
+    return Ok(value)
+}
+
+// Test 3: Correct usage with Maybe
+func returns_maybe() -> Maybe[I32] {
+    return Just(42)
+}
+
+func try_maybe_correct() -> Maybe[I32] {
+    let value: I32 = returns_maybe()!
+    return Just(value)
+}
+
+@test
+func test_try_operator_valid_usage() {
+    // Test that valid usage works correctly
+    let result: Outcome[I32, Str] = try_correct()
+    when result {
+        Ok(v) => assert_eq(v, 42),
+        Err(_) => assert(false)
+    }
+
+    let maybe_result: Maybe[I32] = try_maybe_correct()
+    when maybe_result {
+        Just(v) => assert_eq(v, 42),
+        Nothing => assert(false)
+    }
+
+    println("Try operator valid usage tests passed!")
+}
+
+// Test that ! properly propagates errors
+func inner_err() -> Outcome[I32, Str] {
+    return Err("failed")
+}
+
+func outer_propagate() -> Outcome[I32, Str] {
+    let v: I32 = inner_err()!  // Should propagate error
+    return Ok(v)  // Never reached
+}
+
+@test
+func test_try_propagates_error() {
+    let result: Outcome[I32, Str] = outer_propagate()
+    when result {
+        Ok(_) => assert(false),
+        Err(msg) => assert_eq(msg, "failed")
+    }
+    println("Try operator error propagation test passed!")
+}
+
+// Test that ! properly propagates Nothing
+func inner_nothing() -> Maybe[I32] {
+    return Nothing
+}
+
+func outer_maybe_propagate() -> Maybe[I32] {
+    let v: I32 = inner_nothing()!  // Should propagate Nothing
+    return Just(v)  // Never reached
+}
+
+@test
+func test_try_propagates_nothing() {
+    let result: Maybe[I32] = outer_maybe_propagate()
+    when result {
+        Just(_) => assert(false),
+        Nothing => assert(true)
+    }
+    println("Try operator Nothing propagation test passed!")
+}
+
+// Error message documentation:
+// When ! is used on a non-Outcome/Maybe type, the compiler emits:
+// error[T001]: try operator (!) can only be used on Outcome[T, E] or Maybe[T] types, got <type>

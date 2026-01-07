@@ -1,0 +1,279 @@
+//! Pinned memory locations.
+//!
+//! This module provides the [`Pin`] type, which is used to ensure that a value
+//! cannot be moved out of its memory location. This is essential for
+//! self-referential types and asynchronous programming.
+//!
+//! # What is Pinning?
+//!
+//! Normally, values in TML can be moved freely - the compiler may relocate
+//! them in memory at any time. This is usually fine, but some types have
+//! internal pointers that point to their own fields. Moving such types would
+//! invalidate these internal pointers.
+//!
+//! Pinning is a mechanism to prevent values from being moved. A `Pin[P]`
+//! wraps a pointer type `P` and guarantees that the pointed-to value will
+//! not be moved.
+//!
+//! # The Unpin Marker
+//!
+//! Types that implement the `Unpin` marker trait are safe to move even when
+//! pinned. Most types are `Unpin` - only types that need to be pinned for
+//! correctness (like self-referential structs) should not implement `Unpin`.
+//!
+//! # Pin and Futures
+//!
+//! The primary use case for `Pin` is with futures and async/await. When a
+//! future is polled, it may need to store pointers to its own local
+//! variables across await points. Pinning ensures these pointers remain valid.
+//!
+//! # Examples
+//!
+//! ## Basic Pinning
+//!
+//! ```tml
+//! use core::pin::Pin
+//!
+//! // Most types can be freely moved even when pinned
+//! let mut value: I32 = 42
+//! let pinned: Pin[ref I32] = Pin::new(ref value)
+//! // We can get a reference through the pin
+//! assert_eq(*pinned.get_ref(), 42)
+//! ```
+//!
+//! ## Heap-Pinning
+//!
+//! ```tml
+//! use core::pin::Pin
+//! use core::mem::Heap
+//!
+//! // Pin a heap-allocated value
+//! let boxed: Heap[I32] = Heap::new(42)
+//! let pinned: Pin[Heap[I32]] = Heap::pin(42)
+//! // The value cannot be moved out of the heap
+//! ```
+
+use core::ops::{Deref, DerefMut}
+
+// ============================================================================
+// Pin Type
+// ============================================================================
+
+/// A pinned pointer.
+///
+/// `Pin[P]` wraps a pointer type `P` and guarantees that the pointed-to value
+/// will not be moved. This is achieved by restricting access to the value:
+///
+/// - You can always get a shared reference through `Pin[P]`
+/// - Mutable access is only available if the target type implements `Unpin`
+/// - Moving the value out is only possible through `lowlevel` code
+///
+/// # Type Parameter
+///
+/// The `P` parameter is a pointer type, such as:
+/// - `ref T` - A shared reference
+/// - `mut ref T` - A mutable reference
+/// - `Heap[T]` - A heap pointer
+/// - `Shared[T]` - A reference-counted pointer
+///
+/// # Safety
+///
+/// The `Pin` type relies on the following invariants:
+/// 1. Once pinned, the value won't be moved until its Drop runs
+/// 2. Only types implementing `Unpin` can be moved out of a `Pin`
+/// 3. The `new_unchecked` function requires the caller to ensure these invariants
+///
+/// # Examples
+///
+/// ```tml
+/// let mut x: I32 = 42
+/// let pinned: Pin[ref I32] = Pin::new(ref x)
+/// assert_eq(*pinned.get_ref(), 42)
+/// ```
+pub type Pin[P] {
+    pointer: P
+}
+
+// ============================================================================
+// Pin constructors
+// ============================================================================
+
+impl[P] Pin[P] {
+    /// Constructs a new `Pin[P]` without checking that the target is `Unpin`.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// This function is `lowlevel` because the caller must guarantee:
+    /// 1. The pointed-to value will not be moved or invalidated
+    /// 2. The `Drop` implementation will not move the value
+    /// 3. No code will access the value in a way that could cause it to be moved
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Only use when you can guarantee the value won't move
+    /// let pinned: Pin[ref I32] = lowlevel { Pin::new_unchecked(ref value) }
+    /// ```
+    pub func new_unchecked(pointer: P) -> Pin[P] {
+        return Pin { pointer: pointer }
+    }
+
+    /// Converts this `Pin[P]` into the wrapped pointer.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// This is `lowlevel` because it allows access to the underlying pointer,
+    /// which could be used to move the pinned value.
+    pub func into_inner_unchecked(this) -> P {
+        return this.pointer
+    }
+}
+
+// ============================================================================
+// Pin methods for reference types
+// ============================================================================
+
+impl[T] Pin[ref T] {
+    /// Constructs a new `Pin[ref T]` wrapping the given reference.
+    ///
+    /// Because `T` is borrowed, it cannot be moved, so pinning is safe.
+    pub func new(pointer: ref T) -> Pin[ref T] {
+        return Pin { pointer: pointer }
+    }
+
+    /// Gets a shared reference to the pinned value.
+    pub func get_ref(this) -> ref T {
+        return this.pointer
+    }
+}
+
+impl[T] Pin[mut ref T] {
+    /// Constructs a new `Pin[mut ref T]` wrapping the given mutable reference.
+    ///
+    /// Because `T` is borrowed, it cannot be moved, so pinning is safe.
+    pub func new(pointer: mut ref T) -> Pin[mut ref T] {
+        return Pin { pointer: pointer }
+    }
+
+    /// Gets a shared reference to the pinned value.
+    pub func get_ref(this) -> ref T {
+        return this.pointer
+    }
+
+    /// Gets a mutable reference to the pinned value.
+    ///
+    /// This is only safe because `T: Unpin` or the caller guarantees
+    /// the value won't be moved through this reference.
+    pub func get_mut(mut this) -> mut ref T where T: Unpin {
+        return this.pointer
+    }
+
+    /// Gets a mutable reference to the pinned value without checking `Unpin`.
+    ///
+    /// # Safety (lowlevel)
+    ///
+    /// This is `lowlevel` because the caller must ensure the value is not
+    /// moved through the returned reference.
+    pub func get_unchecked_mut(mut this) -> mut ref T {
+        return this.pointer
+    }
+}
+
+// ============================================================================
+// Deref implementations for Pin
+// ============================================================================
+
+impl[T] Deref for Pin[ref T] {
+    type Target = T
+
+    pub func deref(this) -> ref T {
+        return this.pointer
+    }
+}
+
+impl[T] Deref for Pin[mut ref T] {
+    type Target = T
+
+    pub func deref(this) -> ref T {
+        return this.pointer
+    }
+}
+
+impl[T] DerefMut for Pin[mut ref T] where T: Unpin {
+    pub func deref_mut(mut this) -> mut ref T {
+        return this.pointer
+    }
+}
+
+// ============================================================================
+// Unpin Marker Trait
+// ============================================================================
+
+/// Types that can be safely moved after being pinned.
+///
+/// Most types implement `Unpin` because they don't contain self-referential
+/// pointers. Only types that store internal pointers that point to their own
+/// fields should NOT implement `Unpin`.
+///
+/// # Automatically Implemented
+///
+/// The compiler automatically implements `Unpin` for types that are safe to
+/// move. To opt out, use the [`PhantomPinned`] marker type from `core::marker`.
+///
+/// # Examples
+///
+/// ## Unpin Types
+///
+/// Most types are `Unpin`:
+/// ```tml
+/// // All primitives are Unpin
+/// let x: I32 = 42  // Unpin
+/// let s: Str = "hello"  // Unpin
+///
+/// // Most user types are Unpin
+/// type Point { x: I32, y: I32 }  // Unpin
+/// ```
+///
+/// ## Non-Unpin Types
+///
+/// Types with self-references should not be `Unpin`:
+/// ```tml
+/// use core::marker::PhantomPinned
+///
+/// type SelfReferential {
+///     data: Str,
+///     ptr: *const Str,  // Points to data field
+///     _pin: PhantomPinned  // Opts out of Unpin
+/// }
+/// ```
+pub behavior Unpin {
+    // Marker behavior - no methods required
+}
+
+// Default implementations - most types are Unpin
+impl Unpin for I8 {}
+impl Unpin for I16 {}
+impl Unpin for I32 {}
+impl Unpin for I64 {}
+impl Unpin for I128 {}
+impl Unpin for U8 {}
+impl Unpin for U16 {}
+impl Unpin for U32 {}
+impl Unpin for U64 {}
+impl Unpin for U128 {}
+impl Unpin for F32 {}
+impl Unpin for F64 {}
+impl Unpin for Bool {}
+impl Unpin for Char {}
+impl Unpin for Str {}
+impl Unpin for Unit {}
+
+// Pin itself is always Unpin
+impl[P] Unpin for Pin[P] {}
+
+// Generic Unpin implementations
+impl[T: Unpin] Unpin for Maybe[T] {}
+impl[T: Unpin, E: Unpin] Unpin for Outcome[T, E] {}
+
+// Note: PhantomData[T] is always Unpin regardless of T
+// (it doesn't actually contain T)

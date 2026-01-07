@@ -487,6 +487,27 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                     ret = resolve_parser_type_with_subs(*t.return_type, subs);
                 }
                 return types::make_func(std::move(params), ret);
+            } else if constexpr (std::is_same_v<T, parser::DynType>) {
+                // dyn Behavior[T] - convert to DynBehaviorType
+                std::string behavior_name;
+                if (!t.behavior.segments.empty()) {
+                    behavior_name = t.behavior.segments.back();
+                }
+
+                // Process type arguments if present (e.g., dyn Processor[I32])
+                std::vector<types::TypePtr> type_args;
+                if (t.generics.has_value()) {
+                    for (const auto& arg : t.generics->args) {
+                        if (arg.is_type()) {
+                            type_args.push_back(
+                                resolve_parser_type_with_subs(*arg.as_type(), subs));
+                        }
+                    }
+                }
+
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::DynBehaviorType{behavior_name, std::move(type_args), t.is_mut};
+                return result;
             } else if constexpr (std::is_same_v<T, parser::InferType>) {
                 // Infer type - return a type variable or Unit as placeholder
                 return types::make_unit();

@@ -811,10 +811,18 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         }
     }
 
-    // Add 'this' pointer as first parameter only for instance methods
+    // Add 'this' as first parameter only for instance methods
+    // For primitive types, pass by value; for structs/enums, pass by pointer
+    std::string this_type = "ptr"; // default for structs
     if (is_instance_method) {
-        params = "ptr %this";
-        param_types = "ptr";
+        // Check if implementing on a primitive type - pass by value if so
+        std::string llvm_type = llvm_type_name(type_name);
+        if (llvm_type[0] != '%') {
+            // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
+            this_type = llvm_type;
+        }
+        params = this_type + " %this";
+        param_types = this_type;
     }
 
     // Add remaining parameters
@@ -837,7 +845,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Register 'this' in locals only for instance methods
     if (is_instance_method) {
-        locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
+        locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
     }
 
     // Register other parameters in locals by creating allocas
@@ -934,10 +942,18 @@ void LLVMIRGen::gen_impl_method_instantiation(
         }
     }
 
-    // Add 'this' pointer as first parameter for instance methods
+    // Add 'this' as first parameter for instance methods
+    // For primitive types, pass by value; for structs/enums, pass by pointer
+    std::string this_type = "ptr"; // default for structs
     if (is_instance_method) {
-        params = "ptr %this";
-        param_types = "ptr";
+        // Check if implementing on a primitive type - pass by value if so
+        std::string llvm_type = llvm_type_name(mangled_type_name);
+        if (llvm_type[0] != '%') {
+            // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
+            this_type = llvm_type;
+        }
+        params = this_type + " %this";
+        param_types = this_type;
     }
 
     // Add remaining parameters with type substitution
@@ -961,7 +977,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
     // Register 'this' in locals
     if (is_instance_method) {
-        locals_["this"] = VarInfo{"%this", "ptr", nullptr, std::nullopt};
+        locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
     }
 
     // Register other parameters in locals by creating allocas

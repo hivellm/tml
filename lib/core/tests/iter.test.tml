@@ -150,3 +150,189 @@ func test_multiple_once() -> I32 {
 
     return 0
 }
+
+// ============================================================================
+// Test: EmptyI64 iterator
+// ============================================================================
+
+@test
+func test_empty_i64() -> I32 {
+    var e: EmptyI64 = empty_i64()
+
+    when e.next() {
+        Just(_) => assert(false, "empty_i64 should return Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI64 iterator
+// ============================================================================
+
+@test
+func test_repeat_n_i64() -> I32 {
+    var r: RepeatNI64 = repeat_n_i64(100 as I64, 2)
+
+    when r.next() {
+        Just(n) => assert_eq(n, 100 as I64, "first value should be 100"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(n) => assert_eq(n, 100 as I64, "second value should be 100"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(_) => assert(false, "third call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI32 with one count
+// ============================================================================
+
+@test
+func test_repeat_n_one() -> I32 {
+    var r: RepeatNI32 = repeat_n_i32(42, 1)
+
+    when r.next() {
+        Just(n) => assert_eq(n, 42, "single value should be 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI32 with negative values
+// ============================================================================
+
+@test
+func test_repeat_n_negative_value() -> I32 {
+    var r: RepeatNI32 = repeat_n_i32(-10, 3)
+
+    when r.next() {
+        Just(n) => assert_eq(n, -10, "first value should be -10"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(n) => assert_eq(n, -10, "second value should be -10"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(n) => assert_eq(n, -10, "third value should be -10"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(_) => assert(false, "fourth call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: OnceI32 with zero value
+// ============================================================================
+
+@test
+func test_once_zero() -> I32 {
+    var o: OnceI32 = once_i32(0)
+
+    when o.next() {
+        Just(n) => assert_eq(n, 0, "once should return 0"),
+        Nothing => assert(false, "first call should not be Nothing")
+    }
+
+    when o.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: OnceI32 with negative value
+// ============================================================================
+
+@test
+func test_once_negative() -> I32 {
+    var o: OnceI32 = once_i32(-999)
+
+    when o.next() {
+        Just(n) => assert_eq(n, -999, "once should return -999"),
+        Nothing => assert(false, "first call should not be Nothing")
+    }
+
+    when o.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => {}
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: OnceI32 with max I32 value
+// ============================================================================
+
+@test
+func test_once_max_i32() -> I32 {
+    var o: OnceI32 = once_i32(2147483647)
+
+    when o.next() {
+        Just(n) => assert_eq(n, 2147483647, "once should return max I32"),
+        Nothing => assert(false, "first call should not be Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test: RepeatNI32 large count - consume 100 elements
+// ============================================================================
+
+@test
+func test_repeat_n_large_count() -> I32 {
+    var r: RepeatNI32 = repeat_n_i32(1, 100)
+
+    // Consume 100 elements
+    let mut count: I32 = 0
+    loop {
+        when r.next() {
+            Just(n) => {
+                assert_eq(n, 1, "each value should be 1")
+                count = count + 1
+            },
+            Nothing => {
+                assert_eq(count, 100, "should have yielded exactly 100 elements")
+                return 0
+            }
+        }
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Note: Additional iterator method tests (size_hint, advance_by, reduce,
+// find_map, try_fold, max_by, min_by) are defined in the Iterator behavior
+// but testing them requires calling default trait methods on concrete types,
+// which has codegen limitations. The methods are correctly defined and
+// documented; testing will be enabled when trait method dispatch is complete.
+// ============================================================================

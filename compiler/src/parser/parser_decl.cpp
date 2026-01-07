@@ -1062,6 +1062,8 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
         auto name = std::string(unwrap(name_result).lexeme);
 
         std::vector<TypePath> bounds;
+        std::optional<TypePtr> default_type = std::nullopt;
+
         if (match(lexer::TokenKind::Colon)) {
             if (is_const) {
                 // For const generics, parse the type: const N: U64
@@ -1080,10 +1082,19 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
             }
         }
 
+        // Parse default type: T = DefaultType
+        if (!is_const && match(lexer::TokenKind::Assign)) {
+            auto type_result = parse_type();
+            if (is_err(type_result))
+                return unwrap_err(type_result);
+            default_type = std::move(unwrap(type_result));
+        }
+
         params.push_back(GenericParam{.name = std::move(name),
                                       .bounds = std::move(bounds),
                                       .is_const = is_const,
                                       .const_type = std::move(const_type),
+                                      .default_type = std::move(default_type),
                                       .span = param_span});
 
         if (!check(lexer::TokenKind::RBracket)) {

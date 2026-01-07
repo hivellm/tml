@@ -1,0 +1,143 @@
+// Test for dyn with associated types
+use test
+
+// ============ Associated Type in Behavior ============
+
+behavior Container {
+    type Item
+
+    func get(this) -> I32
+    func count(this) -> I32
+}
+
+type IntContainer {
+    value: I32
+}
+
+impl Container for IntContainer {
+    type Item = I32
+
+    func get(this) -> I32 {
+        return this.value
+    }
+
+    func count(this) -> I32 {
+        return 1
+    }
+}
+
+type PairContainer {
+    a: I32,
+    b: I32
+}
+
+impl Container for PairContainer {
+    type Item = I32
+
+    func get(this) -> I32 {
+        return this.a
+    }
+
+    func count(this) -> I32 {
+        return 2
+    }
+}
+
+// Test basic dyn with associated type
+@test
+func test_dyn_associated_basic() -> I32 {
+    let c: IntContainer = IntContainer { value: 42 }
+    let dyn_c: dyn Container = c
+
+    let result: I32 = dyn_c.get()
+    assert_eq(result, 42, "IntContainer.get() should return 42")
+    return 0
+}
+
+// Test heterogeneous dyn with associated types
+@test
+func test_dyn_associated_heterogeneous() -> I32 {
+    let ic: IntContainer = IntContainer { value: 10 }
+    let pc: PairContainer = PairContainer { a: 20, b: 30 }
+
+    let dyn_ic: dyn Container = ic
+    let dyn_pc: dyn Container = pc
+
+    assert_eq(dyn_ic.get(), 10, "IntContainer get")
+    assert_eq(dyn_pc.get(), 20, "PairContainer get (returns a)")
+
+    assert_eq(dyn_ic.count(), 1, "IntContainer count")
+    assert_eq(dyn_pc.count(), 2, "PairContainer count")
+
+    return 0
+}
+
+func sum_containers(c1: dyn Container, c2: dyn Container) -> I32 {
+    return c1.get() + c2.get()
+}
+
+@test
+func test_dyn_associated_as_parameter() -> I32 {
+    let ic: IntContainer = IntContainer { value: 5 }
+    let pc: PairContainer = PairContainer { a: 7, b: 0 }
+
+    let dyn_ic: dyn Container = ic
+    let dyn_pc: dyn Container = pc
+
+    let sum: I32 = sum_containers(dyn_ic, dyn_pc)
+    assert_eq(sum, 12, "5 + 7 = 12")
+
+    return 0
+}
+
+// ============ Explicit Associated Type Binding Syntax ============
+// Tests for dyn Behavior[Item=T] syntax
+
+behavior Producer {
+    type Item
+
+    func produce(this) -> I32
+}
+
+type IntProducer {
+    value: I32
+}
+
+impl Producer for IntProducer {
+    type Item = I32
+
+    func produce(this) -> I32 {
+        return this.value
+    }
+}
+
+// Test explicit associated type binding in dyn type
+@test
+func test_dyn_explicit_binding_syntax() -> I32 {
+    let p: IntProducer = IntProducer { value: 99 }
+
+    // Explicit binding syntax: dyn Producer[Item=I32]
+    let dyn_p: dyn Producer[Item=I32] = p
+
+    let result: I32 = dyn_p.produce()
+    assert_eq(result, 99, "Producer should produce 99")
+
+    return 0
+}
+
+// Test that regular dyn (without binding) still works
+@test
+func test_dyn_without_binding_still_works() -> I32 {
+    let p: IntProducer = IntProducer { value: 77 }
+
+    // Without explicit binding
+    let dyn_p: dyn Producer = p
+
+    assert_eq(dyn_p.produce(), 77, "Producer without explicit binding")
+
+    return 0
+}
+
+func main() -> I32 {
+    return 0
+}

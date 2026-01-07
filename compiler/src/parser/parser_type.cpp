@@ -360,8 +360,34 @@ auto Parser::parse_generic_args() -> Result<std::optional<GenericArgs>, ParseErr
             if (is_err(expr))
                 return unwrap_err(expr);
             args.push_back(GenericArg::from_const(std::move(unwrap(expr)), arg_span));
+        } else if (check(lexer::TokenKind::Identifier)) {
+            // Could be:
+            // 1. A type name: I32, Maybe[T]
+            // 2. An associated type binding: Item=I32
+            // Lookahead to check for '='
+            auto binding_saved_pos = pos_;
+            auto name_token = advance();
+
+            if (check(lexer::TokenKind::Assign)) {
+                // This is an associated type binding: Name=Type
+                advance(); // consume '='
+                auto type_result = parse_type();
+                if (is_err(type_result))
+                    return unwrap_err(type_result);
+                args.push_back(GenericArg::from_binding(
+                    std::string(name_token.lexeme),
+                    std::move(unwrap(type_result)),
+                    arg_span));
+            } else {
+                // Not a binding, restore position and parse as type
+                pos_ = binding_saved_pos;
+                auto type_result = parse_type();
+                if (is_err(type_result))
+                    return unwrap_err(type_result);
+                args.push_back(GenericArg::from_type(std::move(unwrap(type_result)), arg_span));
+            }
         } else {
-            // Try to parse as type first
+            // Try to parse as type (handles ref, mut ref, dyn, etc.)
             auto type_result = parse_type();
             if (is_err(type_result))
                 return unwrap_err(type_result);

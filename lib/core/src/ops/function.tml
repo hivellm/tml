@@ -1,0 +1,266 @@
+//! Function traits for callable types.
+//!
+//! This module provides behaviors for function-like types. These traits form
+//! a hierarchy that describes different levels of function calling capabilities:
+//!
+//! - [`FnOnce`] - Functions that can be called once, consuming `self`
+//! - [`FnMut`] - Functions that can be called multiple times with mutable state
+//! - [`Fn`] - Functions that can be called multiple times without mutation
+//!
+//! # Trait Hierarchy
+//!
+//! The function traits form a strict hierarchy:
+//!
+//! ```text
+//!        Fn
+//!         |
+//!         v
+//!      FnMut
+//!         |
+//!         v
+//!      FnOnce
+//! ```
+//!
+//! This means:
+//! - Every `Fn` is also `FnMut` and `FnOnce`
+//! - Every `FnMut` is also `FnOnce`
+//! - `FnOnce` is the most general trait
+//!
+//! # Closures
+//!
+//! Closures in TML automatically implement the appropriate function trait
+//! based on how they capture their environment:
+//!
+//! - Closures that don't capture anything or capture by copy implement `Fn`
+//! - Closures that mutate captured variables implement `FnMut`
+//! - Closures that consume captured variables implement `FnOnce`
+//!
+//! # Examples
+//!
+//! ## Using FnOnce
+//!
+//! ```tml
+//! // A function that consumes a closure
+//! func run_once[F: FnOnce[(), Output=I32]](f: F) -> I32 {
+//!     return f.call_once(())
+//! }
+//!
+//! let value = 42
+//! let closure = do() value  // Captures value by copy
+//! let result = run_once(closure)  // result == 42
+//! ```
+//!
+//! ## Using FnMut
+//!
+//! ```tml
+//! // A function that calls a closure multiple times
+//! func call_twice[F: FnMut[(), Output=I32]](mut f: F) -> I32 {
+//!     let a = f.call_mut(())
+//!     let b = f.call_mut(())
+//!     return a + b
+//! }
+//!
+//! let mut counter = 0
+//! let closure = do() {
+//!     counter = counter + 1
+//!     counter
+//! }
+//! let result = call_twice(closure)  // result == 3 (1 + 2)
+//! ```
+//!
+//! ## Using Fn
+//!
+//! ```tml
+//! // A function that calls a closure by reference
+//! func apply[F: Fn[I32, Output=I32]](f: ref F, x: I32) -> I32 {
+//!     return f.call(x)
+//! }
+//!
+//! let double = do(x: I32) x * 2
+//! let result = apply(ref double, 21)  // result == 42
+//! ```
+//!
+//! # Implementing Function Traits
+//!
+//! While closures automatically implement function traits, you can also
+//! implement them for your own types:
+//!
+//! ```tml
+//! type Adder {
+//!     amount: I32
+//! }
+//!
+//! impl FnOnce[(I32,)] for Adder {
+//!     type Output = I32
+//!
+//!     func call_once(this, args: (I32,)) -> I32 {
+//!         return args.0 + this.amount
+//!     }
+//! }
+//!
+//! impl FnMut[(I32,)] for Adder {
+//!     func call_mut(mut this, args: (I32,)) -> I32 {
+//!         return args.0 + this.amount
+//!     }
+//! }
+//!
+//! impl Fn[(I32,)] for Adder {
+//!     func call(this, args: (I32,)) -> I32 {
+//!         return args.0 + this.amount
+//!     }
+//! }
+//!
+//! let adder = Adder { amount: 10 }
+//! let result = adder.call((5,))  // result == 15
+//! ```
+
+// ============================================================================
+// FnOnce Behavior
+// ============================================================================
+
+/// A function that can be called once, consuming the function value.
+///
+/// `FnOnce` is implemented automatically by all closures. This is the most
+/// general function trait - any callable type can be called at least once.
+///
+/// The `Args` type parameter represents the tuple type of function arguments.
+///
+/// # When to use FnOnce
+///
+/// Use `FnOnce` when:
+/// - You only need to call the function once
+/// - The function may need to consume captured values
+/// - You want to accept the widest range of callables
+///
+/// # Examples
+///
+/// ```tml
+/// // Accept any callable that returns I32
+/// func run[F: FnOnce[(), Output=I32]](f: F) -> I32 {
+///     return f.call_once(())
+/// }
+/// ```
+pub behavior FnOnce[Args] {
+    /// The return type of this function.
+    type Output
+
+    /// Performs the call operation, consuming `self`.
+    ///
+    /// This method can only be called once on a given value.
+    func call_once(this, args: Args) -> This::Output
+}
+
+// ============================================================================
+// FnMut Behavior
+// ============================================================================
+
+/// A function that can be called multiple times, potentially mutating state.
+///
+/// `FnMut` is implemented by closures that mutate their captured environment.
+/// It extends `FnOnce`, so every `FnMut` can also be used as `FnOnce`.
+///
+/// # When to use FnMut
+///
+/// Use `FnMut` when:
+/// - You need to call the function multiple times
+/// - The function may maintain and modify internal state
+///
+/// # Examples
+///
+/// ```tml
+/// // A counter that increments each time it's called
+/// func count_calls[F: FnMut[(), Output=I32]](mut f: F, times: I32) -> I32 {
+///     let mut last: I32 = 0
+///     loop times {
+///         last = f.call_mut(())
+///     }
+///     return last
+/// }
+/// ```
+pub behavior FnMut[Args]: FnOnce[Args] {
+    /// Performs the call operation, potentially mutating `self`.
+    ///
+    /// This method can be called multiple times, but requires mutable access.
+    func call_mut(mut this, args: Args) -> This::Output
+}
+
+// ============================================================================
+// Fn Behavior
+// ============================================================================
+
+/// A function that can be called multiple times without mutation.
+///
+/// `Fn` is the most restrictive function trait. It is implemented by closures
+/// that only capture their environment by reference or by copy. These closures
+/// can be called concurrently from multiple threads.
+///
+/// `Fn` extends `FnMut`, which extends `FnOnce`, so every `Fn` can be used
+/// in any context that accepts callables.
+///
+/// # When to use Fn
+///
+/// Use `Fn` when:
+/// - You need to call the function multiple times
+/// - The function should not mutate any state
+/// - You may need to share the function across threads
+///
+/// # Examples
+///
+/// ```tml
+/// // Apply a function to each element
+/// func map_all[F: Fn[I32, Output=I32]](values: ref [I32; 3], f: ref F) -> [I32; 3] {
+///     return [
+///         f.call(values[0]),
+///         f.call(values[1]),
+///         f.call(values[2])
+///     ]
+/// }
+///
+/// let double = do(x: I32) x * 2
+/// let result = map_all(ref [1, 2, 3], ref double)  // [2, 4, 6]
+/// ```
+pub behavior Fn[Args]: FnMut[Args] {
+    /// Performs the call operation.
+    ///
+    /// This method can be called any number of times and only requires
+    /// a shared reference to `self`.
+    func call(this, args: Args) -> This::Output
+}
+
+// ============================================================================
+// Notes on Closure Implementation
+// ============================================================================
+
+// Closures in TML are implemented as anonymous structs that capture their
+// environment. The compiler automatically generates these structs and their
+// function trait implementations.
+//
+// For example, a closure like:
+//   let x = 10
+//   let add_x = do(n: I32) n + x
+//
+// Gets transformed into something like:
+//   type __Closure_add_x {
+//       x: I32  // captured value
+//   }
+//
+//   impl FnOnce[(I32,)] for __Closure_add_x {
+//       type Output = I32
+//       func call_once(this, args: (I32,)) -> I32 {
+//           return args.0 + this.x
+//       }
+//   }
+//
+//   impl FnMut[(I32,)] for __Closure_add_x {
+//       func call_mut(mut this, args: (I32,)) -> I32 {
+//           return args.0 + this.x
+//       }
+//   }
+//
+//   impl Fn[(I32,)] for __Closure_add_x {
+//       func call(this, args: (I32,)) -> I32 {
+//           return args.0 + this.x
+//       }
+//   }
+//
+//   let add_x = __Closure_add_x { x: 10 }

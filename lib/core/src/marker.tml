@@ -11,7 +11,9 @@
 //! | [`Send`] | Types that can be transferred across thread boundaries |
 //! | [`Sync`] | Types that can be shared between threads via references |
 //! | [`Sized`] | Types with a known size at compile time |
-//! | [`Unpin`] | Types that can be safely moved after being pinned |
+//! | [`Unpin`] | Types that can be safely moved after being pinned (re-exported from `core::pin`) |
+//! | [`PhantomData`] | Zero-sized type for marking unused type parameters |
+//! | [`PhantomPinned`] | Marker type that opts out of Unpin |
 //!
 //! # Thread Safety: Send and Sync
 //!
@@ -48,7 +50,8 @@
 //!
 //! [`Unpin`] indicates that a type can be safely moved even after being pinned.
 //! Most types are `Unpin`. The main exception is self-referential types used
-//! in async code.
+//! in async code. The `Unpin` behavior is defined in `core::pin` and re-exported
+//! here for convenience.
 
 // ============================================================================
 // Send Behavior (Marker)
@@ -167,40 +170,9 @@ pub behavior Sized {
     // No methods - this is a marker behavior
 }
 
-// ============================================================================
-// Unpin Behavior (Marker)
-// ============================================================================
-
-/// Marker behavior for types that can be safely moved after being pinned.
-///
-/// Pinning (`Pin[T]`) is a mechanism to prevent a value from being moved
-/// in memory. This is important for self-referential types where internal
-/// pointers would become invalid if the value moved.
-///
-/// # Automatic Implementation
-///
-/// Most types implement `Unpin`, meaning they can be freely moved even after
-/// being pinned. Only self-referential types need to opt out.
-///
-/// # Types That Are NOT Unpin
-///
-/// - Self-referential structs (contain pointers to themselves)
-/// - Async futures that hold references across await points
-///
-/// # Examples
-///
-/// ```tml
-/// // Most types are Unpin - can be moved freely
-/// let x: I64 = 42
-/// let pinned = Pin::new(x)
-/// let unpinned = pinned.into_inner()  // OK: I64 is Unpin
-///
-/// // Self-referential types are NOT Unpin
-/// // Moving them would invalidate internal pointers
-/// ```
-pub behavior Unpin {
-    // No methods - this is a marker behavior
-}
+// Note: Unpin behavior is defined in core::pin along with the Pin type.
+// Re-export it here for convenience.
+pub use core::pin::Unpin
 
 // ============================================================================
 // Send implementations for primitives
@@ -253,22 +225,7 @@ impl Sized for F64 {}
 impl Sized for Bool {}
 impl Sized for Str {}
 
-// ============================================================================
-// Unpin implementations for primitives
-// ============================================================================
-
-impl Unpin for I8 {}
-impl Unpin for I16 {}
-impl Unpin for I32 {}
-impl Unpin for I64 {}
-impl Unpin for U8 {}
-impl Unpin for U16 {}
-impl Unpin for U32 {}
-impl Unpin for U64 {}
-impl Unpin for F32 {}
-impl Unpin for F64 {}
-impl Unpin for Bool {}
-impl Unpin for Str {}
+// Note: Unpin implementations for primitives are in core::pin
 
 // ============================================================================
 // Send/Sync for Maybe[T] and Outcome[T, E]
@@ -277,9 +234,218 @@ impl Unpin for Str {}
 impl[T: Send] Send for Maybe[T] {}
 impl[T: Sync] Sync for Maybe[T] {}
 impl[T: Sized] Sized for Maybe[T] {}
-impl[T: Unpin] Unpin for Maybe[T] {}
+// Note: Unpin impl for Maybe is in core::pin
 
 impl[T: Send, E: Send] Send for Outcome[T, E] {}
 impl[T: Sync, E: Sync] Sync for Outcome[T, E] {}
 impl[T: Sized, E: Sized] Sized for Outcome[T, E] {}
-impl[T: Unpin, E: Unpin] Unpin for Outcome[T, E] {}
+// Note: Unpin impl for Outcome is in core::pin
+
+// ============================================================================
+// PhantomData - Zero-sized type for marking unused type parameters
+// ============================================================================
+
+/// Zero-sized type used to mark types that "logically" own or reference data
+/// of type `T`, even though they don't physically contain it.
+///
+/// # Use Cases
+///
+/// ## 1. Unused Type Parameters
+///
+/// When a type has a type parameter that isn't used in any field:
+///
+/// ```tml
+/// use core::marker::PhantomData
+///
+/// // TypeId is parameterized by T but doesn't store T
+/// pub type TypeId[T] {
+///     id: U64,
+///     _marker: PhantomData[T]
+/// }
+/// ```
+///
+/// ## 2. Indicating Ownership
+///
+/// When a type owns data through a raw pointer:
+///
+/// ```tml
+/// pub type RawVec[T] {
+///     ptr: RawPtr[T],      // Doesn't express ownership
+///     cap: I64,
+///     _marker: PhantomData[T]  // Indicates we logically own T
+/// }
+/// ```
+///
+/// ## 3. Variance and Lifetime Markers
+///
+/// PhantomData affects how a type relates to its type parameter for the
+/// purposes of variance and drop checking.
+///
+/// # Thread Safety
+///
+/// PhantomData inherits the Send/Sync properties of its type parameter:
+/// - `PhantomData[T]: Send` if `T: Send`
+/// - `PhantomData[T]: Sync` if `T: Sync`
+///
+/// # Memory Layout
+///
+/// PhantomData has zero size and zero alignment requirements. Adding a
+/// `PhantomData[T]` field to a struct doesn't change its size.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::marker::PhantomData
+///
+/// // A handle that's parameterized by a resource type
+/// pub type Handle[R] {
+///     id: I64,
+///     _phantom: PhantomData[R]
+/// }
+///
+/// impl[R] Handle[R] {
+///     pub func new(id: I64) -> Handle[R] {
+///         return Handle {
+///             id: id,
+///             _phantom: PhantomData
+///         }
+///     }
+/// }
+///
+/// // Different handle types are incompatible
+/// type FileResource {}
+/// type NetworkResource {}
+///
+/// let file_handle: Handle[FileResource] = Handle::new(1)
+/// let net_handle: Handle[NetworkResource] = Handle::new(2)
+/// // file_handle and net_handle are different types!
+/// ```
+pub type PhantomData[T] {
+    // Zero-sized - no fields needed
+    // The compiler treats this specially
+}
+
+impl[T] PhantomData[T] {
+    /// Creates a new PhantomData instance.
+    ///
+    /// This is a zero-cost operation since PhantomData has no data.
+    pub func new() -> PhantomData[T] {
+        return PhantomData[T] {}
+    }
+}
+
+impl[T] Default for PhantomData[T] {
+    /// Returns the default value of PhantomData.
+    ///
+    /// Since PhantomData has no data, this simply creates an instance.
+    pub func default() -> PhantomData[T] {
+        return PhantomData[T] {}
+    }
+}
+
+impl[T] Duplicate for PhantomData[T] {
+    /// Creates a duplicate of this PhantomData.
+    ///
+    /// Since PhantomData has no data, this is a no-op.
+    pub func duplicate(this) -> PhantomData[T] {
+        return PhantomData[T] {}
+    }
+}
+
+impl[T] Copy for PhantomData[T] {}
+
+// PhantomData inherits marker traits from T
+impl[T: Send] Send for PhantomData[T] {}
+impl[T: Sync] Sync for PhantomData[T] {}
+impl[T] Sized for PhantomData[T] {}
+// Note: Unpin impl for PhantomData is in core::pin
+
+// ============================================================================
+// PhantomPinned - Marker type that opts out of Unpin
+// ============================================================================
+
+/// A marker type which does not implement `Unpin`.
+///
+/// If a type contains a `PhantomPinned`, it will not implement `Unpin` by default.
+/// This is useful for creating self-referential structs that must not be moved
+/// in memory once pinned.
+///
+/// # Use Cases
+///
+/// ## 1. Self-Referential Structures
+///
+/// When you have a struct that contains pointers to itself:
+///
+/// ```tml
+/// use core::marker::PhantomPinned
+///
+/// pub type SelfRef {
+///     data: I64,
+///     ptr: RawPtr[I64],  // Points to `data`
+///     _pinned: PhantomPinned
+/// }
+/// ```
+///
+/// ## 2. Async Futures
+///
+/// Futures that hold references across `.await` points need to be pinned:
+///
+/// ```tml
+/// pub type MyFuture {
+///     state: I32,
+///     // Internal state may contain self-references
+///     _pinned: PhantomPinned
+/// }
+/// ```
+///
+/// # Important
+///
+/// - Types containing `PhantomPinned` cannot be moved after being pinned
+/// - Use `Pin[Heap[T]]` to create a pinned, heap-allocated instance
+/// - Stack pinning requires care with lifetimes and drop guarantees
+///
+/// # Thread Safety
+///
+/// `PhantomPinned` is both `Send` and `Sync` since it contains no data.
+/// However, the type containing it may not be, depending on its other fields.
+///
+/// # See Also
+///
+/// - [`Pin`](core::pin::Pin): The pinning wrapper type
+/// - [`Unpin`]: The trait that `PhantomPinned` deliberately does not implement
+pub type PhantomPinned {
+    // Empty - this is a marker type
+}
+
+impl PhantomPinned {
+    /// Creates a new `PhantomPinned` instance.
+    pub func new() -> PhantomPinned {
+        return PhantomPinned {}
+    }
+}
+
+impl Default for PhantomPinned {
+    /// Returns the default value of PhantomPinned.
+    pub func default() -> PhantomPinned {
+        return PhantomPinned {}
+    }
+}
+
+impl Duplicate for PhantomPinned {
+    /// Creates a duplicate of this PhantomPinned.
+    ///
+    /// Since PhantomPinned has no data, this is a no-op.
+    pub func duplicate(this) -> PhantomPinned {
+        return PhantomPinned {}
+    }
+}
+
+impl Copy for PhantomPinned {}
+
+// PhantomPinned is Send and Sync (no data)
+impl Send for PhantomPinned {}
+impl Sync for PhantomPinned {}
+impl Sized for PhantomPinned {}
+
+// NOTE: PhantomPinned explicitly does NOT implement Unpin
+// This is intentional - it's the whole purpose of this type

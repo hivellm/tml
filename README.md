@@ -145,9 +145,9 @@ func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-// Closures use 'do' keyword
-let double = do(x: I32) x * 2
-let sum = do(a: I32, b: I32) { return a + b }
+// Closures use 'do' keyword (type annotation required for closure bindings)
+let double: func(I32) -> I32 = do(x: I32) x * 2
+let sum: func(I32, I32) -> I32 = do(a: I32, b: I32) { return a + b }
 
 // Higher-order functions
 func apply_twice[T](value: T, f: func(T) -> T) -> T {
@@ -222,6 +222,100 @@ when msg {
     Number(n) => println(n.to_string()),
     Quit => return
 }
+```
+
+### Error Propagation with `!`
+
+```tml
+// The ! operator propagates errors early (like Rust's ?)
+func read_config() -> Outcome[Config, Str] {
+    let content = read_file("config.json")!  // Returns Err early if fails
+    let parsed = parse_json(content)!        // Chain multiple fallible ops
+    return Ok(parsed)
+}
+
+// Works with Maybe too
+func get_first_user() -> Maybe[User] {
+    let users = load_users()!     // Returns Nothing if Nothing
+    return users.first()
+}
+```
+
+### Drop and RAII
+
+```tml
+// Types implementing Drop get automatic cleanup
+pub behavior Drop {
+    pub func drop(mut this)
+}
+
+type FileHandle {
+    fd: I32
+}
+
+impl Drop for FileHandle {
+    pub func drop(mut this) {
+        close_fd(this.fd)  // Called automatically when out of scope
+    }
+}
+
+func process_file() {
+    let file = open("data.txt")
+    // ... use file ...
+}  // file.drop() called automatically here
+```
+
+### Slices
+
+```tml
+// Slices are fat pointers: { data_ptr, len }
+func sum_slice(s: Slice[I32]) -> I64 {
+    let mut total: I64 = 0
+    let mut i: I64 = 0
+    loop {
+        if i >= s.len() { return total }
+        total = total + s.get(i).unwrap() as I64
+        i = i + 1
+    }
+    return total
+}
+
+// Create from array
+let arr: [I32; 5] = [1, 2, 3, 4, 5]
+let slice = arr.as_slice()
+println(sum_slice(slice).to_string())  // 15
+```
+
+### Trait Objects (dyn Behavior)
+
+```tml
+behavior Shape {
+    func area(this) -> F64
+    func name(this) -> Str
+}
+
+type Circle { radius: F64 }
+type Rectangle { width: F64, height: F64 }
+
+impl Shape for Circle {
+    func area(this) -> F64 { 3.14159 * this.radius * this.radius }
+    func name(this) -> Str { "Circle" }
+}
+
+impl Shape for Rectangle {
+    func area(this) -> F64 { this.width * this.height }
+    func name(this) -> Str { "Rectangle" }
+}
+
+// Dynamic dispatch via dyn
+func print_shape(s: dyn Shape) {
+    println(s.name() + " area: " + s.area().to_string())
+}
+
+let c = Circle { radius: 2.0 }
+let r = Rectangle { width: 3.0, height: 4.0 }
+print_shape(c)  // Circle area: 12.566...
+print_shape(r)  // Rectangle area: 12.0
 ```
 
 ### FFI (Foreign Function Interface)
@@ -327,22 +421,36 @@ tml/
 | Lexer | Complete |
 | Parser (LL(1)) | Complete |
 | Type Checker | Complete (generics, closures, where clauses) |
+| Borrow Checker | Complete (integrated with Rust-style diagnostics) |
 | LLVM Backend | Complete (via text IR) |
 | Arrays | Complete (fixed-size with full method suite) |
+| Slices | Complete (Slice[T], MutSlice[T] fat pointers) |
 | Maybe/Outcome | Complete |
 | Pattern Matching | Complete |
-| Closures | Complete |
+| Closures | Complete (captures, HOF, iterators) |
+| Drop/RAII | Complete (automatic resource cleanup) |
+| Trait Objects | Complete (dyn Behavior, multiple methods) |
+| Error Propagation | Complete (`!` operator) |
 | FFI | Complete (@extern, @link) |
-| Test Framework | Complete (@test) |
+| Test Framework | Complete (@test, 85+ test files) |
 
-### Recent Features (Dec 2024)
+### Recent Features (Jan 2026)
 
+- **Core Library Tests** - Comprehensive tests for iter, slice, num, range, async_iter, marker modules
+- **Numeric Properties** - Zero, One, Bounded behaviors with full test coverage
+- **Range Types** - Range, RangeFrom, RangeTo, RangeFull types with iterator support
+- **ASCII Module** - Complete `core::ascii::AsciiChar` type with classification methods
+
+### Features (Dec 2025 - Jan 2026)
+
+- **Borrow Checker Integration** - Memory safety enforced at compile time with Rust-style diagnostics
+- **Drop/RAII** - Automatic resource cleanup when values go out of scope
+- **Dynamic Slices** - `Slice[T]` and `MutSlice[T]` fat pointer types with safe access
+- **Error Propagation** - `!` operator for early return on `Outcome[T,E]` and `Maybe[T]`
+- **Trait Objects** - `dyn Behavior` for dynamic dispatch with multiple methods
+- **Closures** - Full closure support with captures, higher-order functions
+- **Iterator Methods** - `fold`, `all`, `any`, `find`, `position`, `for_each`, `count`, `last`, `nth`
 - Fixed-size arrays with methods: `len`, `is_empty`, `get`, `first`, `last`, `map`, `eq`, `cmp`
-- Array element modification via index assignment
-- Maybe type with pattern matching for `Just(v)` and `Nothing`
-- Null literal support
-- Bitwise operators: `shl`, `shr`, `xor`
-- ASCII character utilities
 
 ## Documentation
 
