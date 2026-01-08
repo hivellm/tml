@@ -1,4 +1,26 @@
-// TML source code formatter - declaration formatting
+//! # Declaration Formatting
+//!
+//! This file implements formatting for all declaration types.
+//!
+//! ## Declaration Types
+//!
+//! | Declaration | Keyword    | Example                           |
+//! |-------------|------------|-----------------------------------|
+//! | Function    | `func`     | `func add(a: I32, b: I32) -> I32` |
+//! | Struct      | `type`     | `type Point { x: I32, y: I32 }`   |
+//! | Enum        | `type`     | `type Color { Red, Green, Blue }` |
+//! | Trait       | `behavior` | `behavior Show { func show() }`   |
+//! | Impl        | `impl`     | `impl Show for Point { ... }`     |
+//! | Const       | `const`    | `const PI: F64 = 3.14159`         |
+//! | Use         | `use`      | `use std::io`                     |
+//! | Module      | `mod`      | `mod utils { ... }`               |
+//!
+//! ## Helper Functions
+//!
+//! - `format_decorators()`: Format @attr annotations
+//! - `format_visibility()`: Format pub keyword
+//! - `format_generics()`: Format [T, U] parameters
+//! - `format_where_clause()`: Format where constraints
 
 #include "format/formatter.hpp"
 

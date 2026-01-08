@@ -1,4 +1,14 @@
-// TML source code formatter - statement formatting
+//! # Statement Formatting
+//!
+//! This file implements formatting for statement types.
+//!
+//! ## Statement Types
+//!
+//! | Statement   | Example                     |
+//! |-------------|-----------------------------|
+//! | `let`       | `let x: I32 = 42`           |
+//! | `var`       | `var count: I32 = 0`        |
+//! | Expression  | `foo()` or `x + y`          |
 
 #include "format/formatter.hpp"
 

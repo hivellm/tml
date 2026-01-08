@@ -1,5 +1,17 @@
-// TML source code formatter - core utilities
-// Produces consistently formatted TML code from an AST
+//! # Formatter Core Utilities
+//!
+//! This file implements core formatting infrastructure.
+//!
+//! ## Functions
+//!
+//! | Method          | Description                              |
+//! |-----------------|------------------------------------------|
+//! | `format()`      | Format complete module to string         |
+//! | `emit()`        | Write text to output buffer              |
+//! | `emit_line()`   | Write indented line with newline         |
+//! | `push_indent()` | Increase indentation level               |
+//! | `pop_indent()`  | Decrease indentation level               |
+//! | `indent_str()`  | Get current indentation string           |
 
 #include "format/formatter.hpp"
 

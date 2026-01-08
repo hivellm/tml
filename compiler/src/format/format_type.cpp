@@ -1,4 +1,19 @@
-// TML source code formatter - type formatting
+//! # Type Formatting
+//!
+//! This file implements formatting for type annotations.
+//!
+//! ## Type Kinds
+//!
+//! | Type       | Example                    |
+//! |------------|----------------------------|
+//! | Named      | `I32`, `Vec[T]`            |
+//! | Reference  | `ref T`, `mut ref T`       |
+//! | Pointer    | `ptr T`, `mut ptr T`       |
+//! | Array      | `[I32; 10]`                |
+//! | Slice      | `[I32]`                    |
+//! | Tuple      | `(I32, String)`            |
+//! | Function   | `func(I32) -> Bool`        |
+//! | Inferred   | `_`                        |
 
 #include "format/formatter.hpp"
 

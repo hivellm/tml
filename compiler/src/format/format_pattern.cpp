@@ -1,4 +1,19 @@
-// TML source code formatter - pattern formatting
+//! # Pattern Formatting
+//!
+//! This file implements formatting for pattern matching.
+//!
+//! ## Pattern Kinds
+//!
+//! | Pattern    | Example                    |
+//! |------------|----------------------------|
+//! | Wildcard   | `_`                        |
+//! | Identifier | `x`, `mut y`               |
+//! | Literal    | `42`, `"hello"`            |
+//! | Tuple      | `(a, b, c)`                |
+//! | Struct     | `Point { x, y }`           |
+//! | Enum       | `Some(value)`, `None`      |
+//! | Or         | `Red \| Green \| Blue`     |
+//! | Range      | `0 to 10`, `'a' through 'z'`|
 
 #include "format/formatter.hpp"
 

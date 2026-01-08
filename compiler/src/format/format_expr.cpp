@@ -1,4 +1,17 @@
-// TML source code formatter - expression formatting
+//! # Expression Formatting
+//!
+//! This file implements formatting for all expression types.
+//!
+//! ## Expression Types
+//!
+//! | Category     | Expressions                                    |
+//! |--------------|------------------------------------------------|
+//! | Literals     | Integer, float, string, char, bool             |
+//! | Operators    | Binary (+, -, and, or), Unary (-, not, ref)    |
+//! | Access       | Field (x.y), Index (x[i]), Method (x.foo())    |
+//! | Control      | if, when, loop, for, return, break, continue   |
+//! | Constructors | Struct { }, Tuple ( ), Array [ ]               |
+//! | Other        | Closure (do), Range (to), Cast (as), Try (!)   |
 
 #include "format/formatter.hpp"
 
