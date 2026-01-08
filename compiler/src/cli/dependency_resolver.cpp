@@ -1,3 +1,42 @@
+//! # Dependency Resolution System
+//!
+//! This file implements dependency resolution for TML projects. It handles
+//! finding, downloading, and building external dependencies specified in
+//! the project's `tml.toml` manifest file.
+//!
+//! ## Dependency Types
+//!
+//! | Type    | Manifest Syntax                        | Resolution Strategy      |
+//! |---------|----------------------------------------|--------------------------|
+//! | Path    | `dep = { path = "../lib" }`            | Build from local dir     |
+//! | Version | `dep = "1.2.3"`                        | Cache or registry lookup |
+//! | Git     | `dep = { git = "...", branch = "..." }`| Clone, checkout, build   |
+//!
+//! ## Resolution Process
+//!
+//! ```text
+//! 1. Parse tml.toml → Extract dependencies
+//! 2. For each dependency:
+//!    a. Check if already resolved (cycle detection)
+//!    b. Push to resolution stack
+//!    c. Resolve based on type (path/version/git)
+//!    d. Queue transitive dependencies
+//! 3. Topological sort for link order
+//! 4. Generate tml.lock file
+//! ```
+//!
+//! ## Cache Directory Structure
+//!
+//! ```text
+//! ~/.tml/cache/
+//!   ├─ registry/index/    # Package registry index
+//!   ├─ git/<url-hash>/    # Git dependency clones
+//!   │     ├─ source/      # Cloned repository
+//!   │     └─ build/       # Built artifacts
+//!   └─ <name>/<version>/  # Version-locked packages
+//!         └─ <name>.rlib
+//! ```
+
 #include "dependency_resolver.hpp"
 
 #include "cmd_build.hpp"
@@ -24,6 +63,10 @@ namespace tml::cli {
 // Helper Functions
 // ============================================================================
 
+/// Returns the default cache directory for dependencies.
+///
+/// - Windows: `%USERPROFILE%\.tml\cache`
+/// - Unix: `$HOME/.tml/cache`
 fs::path get_default_cache_dir() {
 #ifdef _WIN32
     char path[MAX_PATH];
@@ -41,6 +84,10 @@ fs::path get_default_cache_dir() {
 #endif
 }
 
+/// Builds a dependency from source and returns the rlib path.
+///
+/// Locates the main library file (from manifest or default locations),
+/// then invokes the build system to produce an rlib.
 std::optional<fs::path> build_dependency(const fs::path& source_dir, const fs::path& output_dir,
                                          bool verbose) {
     // Check for tml.toml in source directory
@@ -96,6 +143,7 @@ std::optional<fs::path> build_dependency(const fs::path& source_dir, const fs::p
 // DependencyResolver Implementation
 // ============================================================================
 
+/// Constructs a DependencyResolver with the given options.
 DependencyResolver::DependencyResolver(const DependencyResolverOptions& options)
     : options_(options) {
     if (options_.cache_dir.empty()) {
@@ -107,6 +155,7 @@ void DependencyResolver::set_error(const std::string& message) {
     error_message_ = message;
 }
 
+/// Detects circular dependencies by checking the resolution stack.
 bool DependencyResolver::detect_cycle(const std::string& name) {
     for (const auto& dep : resolution_stack_) {
         if (dep == name) {
@@ -124,6 +173,10 @@ bool DependencyResolver::detect_cycle(const std::string& name) {
     return false;
 }
 
+/// Resolves a path dependency (local directory).
+///
+/// Path dependencies are specified as `dep = { path = "../lib" }` and
+/// reference a local directory containing a TML project.
 std::optional<ResolvedDependency>
 DependencyResolver::resolve_path_dependency(const Dependency& dep, const fs::path& project_root) {
 
@@ -201,6 +254,10 @@ DependencyResolver::resolve_path_dependency(const Dependency& dep, const fs::pat
     return resolved;
 }
 
+/// Resolves a version dependency (registry lookup).
+///
+/// Version dependencies are specified as `dep = "1.2.3"` and are looked
+/// up first in the local cache, then in the package registry.
 std::optional<ResolvedDependency>
 DependencyResolver::resolve_version_dependency(const Dependency& dep) {
     // Check local cache first
@@ -262,6 +319,10 @@ DependencyResolver::resolve_version_dependency(const Dependency& dep) {
     return std::nullopt;
 }
 
+/// Resolves a git dependency (clone and build).
+///
+/// Git dependencies are specified as `dep = { git = "https://...", branch = "main" }`
+/// and are cloned to the cache directory, then built.
 std::optional<ResolvedDependency>
 DependencyResolver::resolve_git_dependency(const Dependency& dep) {
     // Git dependency resolution:
@@ -552,7 +613,20 @@ DependencyResolver::get_link_objects(const DependencyResolutionResult& resolved,
 // ============================================================================
 // Lockfile Implementation
 // ============================================================================
+//
+// The lockfile (`tml.lock`) records exact versions and sources of all
+// dependencies, ensuring reproducible builds. Format is TOML-like:
+//
+// version = "1"
+//
+// [[package]]
+// name = "my-dep"
+// version = "1.2.3"
+// source = "registry"
+// hash = "sha256:..."
+// dependencies = ["other-dep"]
 
+/// Loads a lockfile from disk.
 std::optional<Lockfile> Lockfile::load(const fs::path& path) {
     if (!fs::exists(path)) {
         return std::nullopt;

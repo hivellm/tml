@@ -1,3 +1,35 @@
+//! # Object Compiler
+//!
+//! This file implements the final stage of compilation: converting LLVM IR
+//! to native object files and linking them into executables or libraries.
+//!
+//! ## Compilation Pipeline
+//!
+//! ```text
+//! .ll (LLVM IR) → clang -c → .obj/.o (Object File)
+//!                                    ↓
+//! Multiple objects → clang/llvm-ar → .exe/.dll/.a/.so
+//! ```
+//!
+//! ## Output Types
+//!
+//! | Type       | Windows     | Unix        | Command              |
+//! |------------|-------------|-------------|----------------------|
+//! | Executable | `.exe`      | (no ext)    | `clang -o`           |
+//! | Static Lib | `.lib`      | `.a`        | `llvm-ar rcs`        |
+//! | Dynamic Lib| `.dll`      | `.so`       | `clang -shared`      |
+//!
+//! ## Optimization Levels
+//!
+//! | Level | Flag  | Description                    |
+//! |-------|-------|--------------------------------|
+//! | 0     | `-O0` | No optimization                |
+//! | 1     | `-O1` | Basic optimizations            |
+//! | 2     | `-O2` | Standard optimizations         |
+//! | 3     | `-O3` | Aggressive optimizations       |
+//! | 4     | `-Os` | Optimize for size              |
+//! | 5     | `-Oz` | Optimize for size (aggressive) |
+
 #include "object_compiler.hpp"
 
 #include <algorithm>
@@ -15,6 +47,7 @@
 
 namespace tml::cli {
 
+/// Returns the platform-specific object file extension.
 std::string get_object_extension() {
 #ifdef _WIN32
     return ".obj";
@@ -23,6 +56,7 @@ std::string get_object_extension() {
 #endif
 }
 
+/// Converts an optimization level to the corresponding clang flag.
 std::string get_optimization_flag(int level) {
     switch (level) {
     case 0:
@@ -42,14 +76,17 @@ std::string get_optimization_flag(int level) {
     }
 }
 
-// Helper to convert path to forward slashes for cross-platform compatibility
+/// Converts backslashes to forward slashes for cross-platform compatibility.
+///
+/// Clang on Windows accepts both path styles, but using forward slashes
+/// avoids potential escaping issues in command strings.
 static std::string to_forward_slashes(const fs::path& path) {
     std::string result = path.string();
     std::replace(result.begin(), result.end(), '\\', '/');
     return result;
 }
 
-// Helper to quote a command path only if it contains spaces
+/// Quotes a command path if it contains spaces.
 static std::string quote_command(const std::string& cmd) {
     if (cmd.find(' ') != std::string::npos) {
         return "\"" + cmd + "\"";
@@ -57,6 +94,18 @@ static std::string quote_command(const std::string& cmd) {
     return cmd;
 }
 
+/// Compiles an LLVM IR file to a native object file.
+///
+/// ## Clang Flags Used
+///
+/// - `-c`: Compile only (no linking)
+/// - `-target`: Target triple for cross-compilation
+/// - `-march=native -mtune=native`: CPU-specific optimizations
+/// - `-fomit-frame-pointer`: Better code generation
+/// - `-funroll-loops`: Loop unrolling optimization
+/// - `-flto[=thin]`: Link-Time Optimization (if enabled)
+/// - `-g`: Debug information (if enabled)
+/// - `-fPIC`: Position-independent code (for shared libs)
 ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
                                          const std::optional<fs::path>& output_file,
                                          const std::string& clang_path,
@@ -163,6 +212,21 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
     return result;
 }
 
+/// Links multiple object files into a final output.
+///
+/// ## Output Types
+///
+/// - **Executable**: Uses clang as linker driver
+/// - **Static Library**: Uses llvm-ar (or system ar)
+/// - **Dynamic Library**: Uses clang with -shared
+///
+/// ## Platform Differences
+///
+/// | Feature          | Windows              | Unix                 |
+/// |------------------|----------------------|----------------------|
+/// | Linker           | lld                  | system ld or lld     |
+/// | DLL imports      | .lib import library  | not needed           |
+/// | Symbol export    | -export-all-symbols  | -fPIC                |
 LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::path& output_file,
                         const std::string& clang_path, const LinkOptions& options) {
     LinkResult result;
@@ -365,6 +429,11 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
 // Batch Compilation
 // ============================================================================
 
+/// Compiles multiple LLVM IR files to objects in parallel.
+///
+/// Uses a thread pool with atomic index for work distribution.
+/// Each thread grabs the next file index and compiles it until
+/// all files are processed.
 BatchCompileResult compile_ll_batch(const std::vector<fs::path>& ll_files,
                                     const std::string& clang_path,
                                     const ObjectCompileOptions& options, int num_threads) {

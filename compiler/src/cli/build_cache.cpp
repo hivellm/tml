@@ -1,3 +1,39 @@
+//! # Build Cache System
+//!
+//! This file implements the incremental build cache for the TML compiler.
+//! It stores compiled MIR (Mid-level IR) and object files to avoid
+//! recompilation when source files haven't changed.
+//!
+//! ## Architecture
+//!
+//! ```text
+//! MirCache
+//!   ├─ Module-level caching (*.mir)
+//!   │     └─ Key: source_path + content_hash + opt_level + debug_info
+//!   └─ Function-level caching (*.fmir)
+//!         └─ Key: source_path::func_name + signature + body + deps
+//! ```
+//!
+//! ## Cache Directory Structure
+//!
+//! ```text
+//! build/debug/.cache/
+//!   ├─ mir_cache.idx         # Module cache index
+//!   ├─ func_cache.idx        # Function cache index
+//!   ├─ <hash>.mir            # Cached MIR modules
+//!   ├─ <hash>.obj/.o         # Cached object files
+//!   └─ func_<hash>.fmir      # Cached function MIR
+//! ```
+//!
+//! ## Cache Invalidation
+//!
+//! A cache entry is invalidated when:
+//! 1. Source file content changes (hash mismatch)
+//! 2. Optimization level changes
+//! 3. Debug info setting changes
+//! 4. Cached file is missing or corrupted
+//! 5. For functions: signature, body, or dependencies change
+
 #include "build_cache.hpp"
 
 #include <fstream>
@@ -6,13 +42,17 @@
 
 namespace tml::cli {
 
-// Thread-local global phase timer
+// Thread-local global phase timer for tracking compilation phases
 thread_local PhaseTimer* g_phase_timer = nullptr;
 
 // ============================================================================
 // Utility Functions
 // ============================================================================
 
+/// Computes a hash of file content for cache key generation.
+///
+/// Uses std::hash for fast hashing. The hash is returned as a
+/// 16-character hexadecimal string.
 std::string hash_file_content(const std::string& content) {
     // Simple hash using std::hash - for production, consider xxHash or SHA256
     std::hash<std::string> hasher;
@@ -23,6 +63,9 @@ std::string hash_file_content(const std::string& content) {
     return oss.str();
 }
 
+/// Gets the modification time of a file.
+///
+/// Returns 0 if the file doesn't exist or an error occurs.
 int64_t get_mtime(const fs::path& path) {
     try {
         auto ftime = fs::last_write_time(path);
@@ -36,12 +79,19 @@ int64_t get_mtime(const fs::path& path) {
 // MirCache Implementation
 // ============================================================================
 
+/// Constructs a MirCache with the specified cache directory.
+///
+/// Creates the cache directory if it doesn't exist.
 MirCache::MirCache(const fs::path& cache_dir) : cache_dir_(cache_dir) {
     fs::create_directories(cache_dir_);
     index_file_ = cache_dir_ / "mir_cache.idx";
     func_index_file_ = cache_dir_ / "func_cache.idx";
 }
 
+/// Lazily loads the module cache index from disk.
+///
+/// Index format (pipe-delimited):
+/// `source_path|source_hash|mir_file|object_file|mtime|opt_level|debug_info`
 void MirCache::load_index() const {
     if (loaded_)
         return;
@@ -91,6 +141,7 @@ void MirCache::load_index() const {
     }
 }
 
+/// Persists the module cache index to disk.
 void MirCache::save_index() const {
     std::ofstream file(index_file_);
     if (!file)
@@ -124,6 +175,14 @@ fs::path MirCache::get_obj_path(const std::string& cache_key) const {
 #endif
 }
 
+/// Checks if a valid cache entry exists for the given source file.
+///
+/// Returns true only if:
+/// 1. A cache entry exists for the source path
+/// 2. The content hash matches (source unchanged)
+/// 3. The optimization level matches
+/// 4. The debug info setting matches
+/// 5. The cached MIR file exists on disk
 bool MirCache::has_valid_cache(const std::string& source_path, const std::string& content_hash,
                                int opt_level, bool debug_info) const {
     load_index();
@@ -322,7 +381,21 @@ MirCache::CacheStats MirCache::get_stats() const {
 // ============================================================================
 // Per-Function Caching Implementation
 // ============================================================================
+//
+// Function-level caching enables incremental compilation at a finer
+// granularity than module-level caching. If only one function in a
+// file changes, only that function needs to be recompiled.
+//
+// Each function is cached based on:
+// - Function signature hash (parameters, return type)
+// - Function body hash (all instructions)
+// - Dependencies hash (used types from module)
+// - Optimization level
 
+/// Lazily loads the function cache index from disk.
+///
+/// Index format (pipe-delimited):
+/// `source_path|func_name|sig_hash|body_hash|deps_hash|mir_file|opt_level`
 void MirCache::load_func_index() const {
     if (func_loaded_)
         return;
@@ -393,7 +466,7 @@ fs::path MirCache::get_func_mir_path(const std::string& cache_key) const {
     return cache_dir_ / (cache_key + ".fmir");
 }
 
-// Helper to convert MIR type to string for hashing
+/// Converts a MIR type to a string representation for hashing.
 static std::string mir_type_to_string(const mir::MirTypePtr& type) {
     if (!type)
         return "void";
@@ -401,6 +474,10 @@ static std::string mir_type_to_string(const mir::MirTypePtr& type) {
     return printer.print_type(type);
 }
 
+/// Computes a hash of a function's signature.
+///
+/// The signature hash includes parameter names/types and return type.
+/// If the signature changes (e.g., new parameter added), the cache is invalidated.
 std::string MirCache::hash_function_signature(const mir::Function& func) {
     std::ostringstream oss;
 
@@ -420,6 +497,14 @@ std::string MirCache::hash_function_signature(const mir::Function& func) {
     return result.str();
 }
 
+/// Computes a hash of a function's body (all instructions).
+///
+/// The body hash captures the structure of the function:
+/// - Block IDs
+/// - Instruction types and results
+/// - Terminators
+///
+/// Any change to the function's implementation invalidates the cache.
 std::string MirCache::hash_function_body(const mir::Function& func) {
     std::ostringstream oss;
 
@@ -449,6 +534,11 @@ std::string MirCache::hash_function_body(const mir::Function& func) {
     return result.str();
 }
 
+/// Computes a hash of a function's type dependencies.
+///
+/// This hash captures which structs/enums the function uses. If a used
+/// type's definition changes, the function needs to be recompiled even
+/// if its own body hasn't changed.
 std::string MirCache::hash_function_deps(const mir::Function& func, const mir::Module& module) {
     std::ostringstream oss;
 

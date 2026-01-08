@@ -1,3 +1,46 @@
+//! # CLI Command Dispatcher
+//!
+//! This file implements the main entry point for the TML compiler CLI.
+//! It parses command-line arguments and routes to the appropriate command handler.
+//!
+//! ## Architecture
+//!
+//! ```text
+//! tml_main()
+//!   ├─ --help, -h     → print_usage()
+//!   ├─ --version, -V  → print_version()
+//!   ├─ lex            → run_lex()
+//!   ├─ parse          → run_parse()
+//!   ├─ check          → run_check()
+//!   ├─ build          → run_build() / run_build_ex()
+//!   ├─ run            → run_run()
+//!   ├─ test           → run_test()
+//!   ├─ fmt            → run_fmt()
+//!   ├─ lint           → run_lint()
+//!   ├─ init           → run_init()
+//!   ├─ rlib           → run_rlib()
+//!   ├─ cache          → run_cache()
+//!   ├─ build-all      → run_parallel_build()
+//!   └─ add/update/rm  → package management
+//! ```
+//!
+//! ## Command Categories
+//!
+//! | Category       | Commands                    | Description                    |
+//! |----------------|-----------------------------|--------------------------------|
+//! | Compilation    | lex, parse, check, build    | Compile TML source code        |
+//! | Execution      | run, test                   | Build and run programs         |
+//! | Tooling        | fmt, lint                   | Code formatting and linting    |
+//! | Project        | init, rlib, cache           | Project and library management |
+//! | Dependencies   | add, update, rm, deps       | Package management             |
+//!
+//! ## Global Flags
+//!
+//! These flags are available for all commands:
+//! - `--verbose` / `-v`: Enable verbose output
+//! - `--help` / `-h`: Show usage information
+//! - `--version` / `-V`: Show compiler version
+
 #include "build_config.hpp"
 #include "cmd_build.hpp"
 #include "cmd_cache.hpp"
@@ -18,7 +61,27 @@
 
 namespace tml::cli {
 
-// Main dispatcher - routes commands to appropriate handlers
+/// Main entry point for the TML compiler CLI.
+///
+/// Parses command-line arguments and dispatches to the appropriate
+/// command handler based on the first argument.
+///
+/// ## Return Codes
+///
+/// | Code | Meaning                              |
+/// |------|--------------------------------------|
+/// | 0    | Success                              |
+/// | 1    | Error (compilation, runtime, etc.)   |
+///
+/// ## Examples
+///
+/// ```bash
+/// tml build main.tml              # Compile to executable
+/// tml build main.tml --release    # Compile with optimizations
+/// tml run main.tml                # Build and run
+/// tml test                        # Run all tests
+/// tml fmt src/*.tml               # Format source files
+/// ```
 int tml_main(int argc, char* argv[]) {
     if (argc < 2) {
         print_usage();

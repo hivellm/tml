@@ -1,3 +1,40 @@
+//! # Diagnostic System
+//!
+//! This file implements the diagnostic emitter for compiler errors, warnings,
+//! and notes. It produces rich, Rust-style error messages with source context.
+//!
+//! ## Output Format
+//!
+//! ```text
+//! error[E0001]: cannot borrow `x` as mutable because it is already borrowed
+//!   --> src/main.tml:5:10
+//!     |
+//!   4 | let r = ref x
+//!     |         ----- immutable borrow occurs here
+//!   5 | let m = mut ref x
+//!     |         ^^^^^^^^^ mutable borrow occurs here
+//!     |
+//!   = note: first borrow must be released before mutably borrowing
+//!   = help: consider using a block scope to limit the first borrow
+//! ```
+//!
+//! ## Diagnostic Components
+//!
+//! | Component      | Description                              | Color         |
+//! |----------------|------------------------------------------|---------------|
+//! | Header         | Severity + code + message                | Red/Yellow    |
+//! | Location       | File:line:column                         | Blue          |
+//! | Primary Label  | Main error location (^^^)                | Red           |
+//! | Secondary Label| Related locations (---)                  | Blue          |
+//! | Notes          | Additional context                       | Cyan          |
+//! | Help           | Suggestions for fixing                   | Green         |
+//! | Fix-it         | Concrete code replacement                | Green         |
+//!
+//! ## Output Formats
+//!
+//! - **Text**: Human-readable terminal output with ANSI colors
+//! - **JSON**: Machine-readable format for IDE integration
+
 #include "diagnostic.hpp"
 
 #include <algorithm>
@@ -24,6 +61,10 @@ namespace tml::cli {
 // Terminal Detection
 // ============================================================================
 
+/// Detects if the terminal supports ANSI color codes.
+///
+/// On Windows 10+, enables virtual terminal processing for ANSI support.
+/// On Unix, checks if stderr is a TTY and TERM is not "dumb".
 bool terminal_supports_colors() {
 #ifdef _WIN32
     // Enable ANSI colors on Windows 10+
@@ -649,7 +690,18 @@ void DiagnosticEmitter::note(const std::string& message, const SourceSpan& span)
 // ============================================================================
 // "Did You Mean?" Suggestions Implementation
 // ============================================================================
+//
+// Uses Levenshtein distance (edit distance) to find similar identifiers
+// when an unknown name is encountered. This helps suggest corrections like:
+//
+//   error: unknown function `pirntln`
+//     = help: did you mean `println`?
 
+/// Computes the Levenshtein distance between two strings.
+///
+/// The Levenshtein distance is the minimum number of single-character
+/// edits (insertions, deletions, substitutions) required to transform
+/// one string into another. Case-insensitive comparison is used.
 size_t levenshtein_distance(const std::string& s1, const std::string& s2) {
     const size_t m = s1.length();
     const size_t n = s2.length();
@@ -691,6 +743,9 @@ size_t levenshtein_distance(const std::string& s1, const std::string& s2) {
     return prev_row[n];
 }
 
+/// Finds the most similar candidate to the input string.
+///
+/// Returns an empty string if no candidate is within max_distance.
 std::string find_similar(const std::string& input, const std::vector<std::string>& candidates,
                          size_t max_distance) {
     if (input.empty() || candidates.empty()) {
@@ -718,6 +773,9 @@ std::string find_similar(const std::string& input, const std::vector<std::string
     return best_match;
 }
 
+/// Finds multiple similar candidates, sorted by distance.
+///
+/// Returns up to max_results candidates within max_distance.
 std::vector<std::string> find_similar_candidates(const std::string& input,
                                                  const std::vector<std::string>& candidates,
                                                  size_t max_results, size_t max_distance) {

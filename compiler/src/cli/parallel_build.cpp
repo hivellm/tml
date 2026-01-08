@@ -1,3 +1,40 @@
+//! # Parallel Build System
+//!
+//! This file implements multi-threaded compilation for the TML compiler.
+//! It coordinates parallel compilation of multiple source files while
+//! respecting inter-module dependencies.
+//!
+//! ## Architecture
+//!
+//! ```text
+//! ParallelBuilder
+//!   ├─ DependencyGraph      # Tracks file dependencies (DAG)
+//!   ├─ BuildQueue           # Thread-safe job queue
+//!   └─ Worker threads       # Parallel compilation workers
+//!
+//! Build Flow:
+//! 1. discover_source_files() - Find all .tml files
+//! 2. resolve_dependencies()  - Parse imports, build DAG
+//! 3. worker_thread()         - Compile files in parallel
+//!    └─ compile_job()        - Lex → Parse → Check → Codegen → Object
+//! ```
+//!
+//! ## Dependency Resolution
+//!
+//! Files are compiled in topological order based on `use` statements:
+//! - Files with no dependencies compile first
+//! - When a file completes, dependents become ready
+//! - Circular dependencies fall back to sequential build
+//!
+//! ## Thread Safety
+//!
+//! | Component        | Synchronization                          |
+//! |------------------|------------------------------------------|
+//! | DependencyGraph  | Mutex-protected maps                     |
+//! | BuildQueue       | Mutex + condition variable               |
+//! | BuildStats       | Atomic counters                          |
+//! | LLVM IR files    | Thread-unique filenames                  |
+
 #include "parallel_build.hpp"
 
 #include "borrow/checker.hpp"
@@ -27,7 +64,18 @@ namespace tml::cli {
 // ============================================================================
 // DependencyGraph Implementation
 // ============================================================================
+//
+// The dependency graph tracks which files depend on which other files.
+// It maintains:
+// - deps_: file → [dependencies]
+// - rdeps_: file → [dependents] (reverse mapping)
+// - pending_count_: file → number of unfinished dependencies
+// - completed_: set of finished files
 
+/// Adds a file and its dependencies to the graph.
+///
+/// Only internal dependencies (files being built) are counted.
+/// External dependencies (stdlib, etc.) are ignored.
 void DependencyGraph::add_file(const std::string& file, const std::vector<std::string>& deps) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -43,6 +91,7 @@ void DependencyGraph::add_file(const std::string& file, const std::vector<std::s
     }
 }
 
+/// Returns files that are ready to compile (no pending dependencies).
 std::vector<std::string> DependencyGraph::get_ready_files() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -55,6 +104,10 @@ std::vector<std::string> DependencyGraph::get_ready_files() const {
     return ready;
 }
 
+/// Marks a file as completed and notifies its dependents.
+///
+/// When a file completes, all files that depend on it have their
+/// pending count decremented. This may make them ready to compile.
 void DependencyGraph::mark_complete(const std::string& file) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -76,6 +129,11 @@ bool DependencyGraph::all_complete() const {
     return completed_.size() == deps_.size();
 }
 
+/// Detects circular dependencies using DFS.
+///
+/// Returns true if any cycle is found in the dependency graph.
+/// Cycles prevent topological ordering and require fallback to
+/// sequential compilation.
 bool DependencyGraph::has_cycles() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -157,13 +215,20 @@ std::vector<std::string> DependencyGraph::topological_sort() const {
 // ============================================================================
 // BuildQueue Implementation
 // ============================================================================
+//
+// Thread-safe queue for build jobs. Workers wait on the condition
+// variable until a job is available or the stop flag is set.
 
+/// Pushes a job to the queue and notifies waiting workers.
 void BuildQueue::push(std::shared_ptr<BuildJob> job) {
     std::lock_guard<std::mutex> lock(mutex);
     queue.push(job);
     cv.notify_one();
 }
 
+/// Pops a job from the queue, waiting up to timeout_ms.
+///
+/// Returns nullptr if the queue is empty after the timeout.
 std::shared_ptr<BuildJob> BuildQueue::pop(int timeout_ms) {
     std::unique_lock<std::mutex> lock(mutex);
 
@@ -200,7 +265,13 @@ size_t BuildQueue::size() {
 // ============================================================================
 // ParallelBuilder Implementation
 // ============================================================================
+//
+// Main orchestrator for parallel builds. Manages the dependency graph,
+// job queue, and worker threads.
 
+/// Constructs a ParallelBuilder with the specified thread count.
+///
+/// If num_threads is 0, defaults to 8 threads.
 ParallelBuilder::ParallelBuilder(int num_threads) : num_threads(num_threads) {
     if (this->num_threads == 0) {
         // Default to 8 threads for optimal parallel performance
@@ -449,6 +520,18 @@ void ParallelBuilder::notify_dependents(std::shared_ptr<BuildJob> job) {
     }
 }
 
+/// Compiles a single source file through the full pipeline.
+///
+/// ## Compilation Pipeline
+///
+/// 1. **Lexing**: Tokenize source code
+/// 2. **Parsing**: Build AST from tokens
+/// 3. **Type Checking**: Verify types and resolve symbols
+/// 4. **Borrow Checking**: Verify ownership rules
+/// 5. **Code Generation**: Generate LLVM IR
+/// 6. **Object Compilation**: Compile IR to native object file
+///
+/// Thread-safe: Uses unique temporary filenames per thread.
 bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
     if (verbose) {
         std::cout << "[" << (stats.completed + stats.failed + 1) << "/" << stats.total_files
@@ -631,6 +714,9 @@ std::vector<fs::path> ParallelBuilder::get_object_files() const {
 // File Discovery
 // ============================================================================
 
+/// Recursively discovers all .tml source files in a directory.
+///
+/// Excludes files in `build/` directories to avoid recompiling artifacts.
 std::vector<fs::path> discover_source_files(const fs::path& root_dir) {
     std::vector<fs::path> files;
 
@@ -664,6 +750,17 @@ std::vector<fs::path> discover_source_files(const fs::path& root_dir) {
 // Entry Point
 // ============================================================================
 
+/// Entry point for `tml build-all` command.
+///
+/// ## Arguments
+///
+/// | Argument      | Description                              |
+/// |---------------|------------------------------------------|
+/// | `-jN`         | Use N threads for compilation            |
+/// | `--clean`     | Clean cache before building              |
+/// | `--no-cache`  | Disable incremental caching              |
+/// | `--lto`       | Enable Link-Time Optimization            |
+/// | `-O0...-O3`   | Set optimization level                   |
 int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     // Parse arguments
     int num_threads = 0;
