@@ -1,5 +1,28 @@
-// LLVM IR generator - Main generate function
-// Handles: generate, infer_print_type
+//! # LLVM IR Generator - Main Entry Point
+//!
+//! This file implements the main code generation entry point.
+//!
+//! ## `generate()` Pipeline
+//!
+//! 1. **Reset state**: Clear buffers, counters, and caches
+//! 2. **Register builtins**: Ordering, Maybe, Outcome enums
+//! 3. **Emit preamble**: Target triple, data layout
+//! 4. **Process declarations**: Structs, enums, functions
+//! 5. **Generate pending generics**: Monomorphized instantiations
+//! 6. **Emit string literals**: Global string constants
+//! 7. **Assemble output**: Combine all sections
+//!
+//! ## Builtin Enums
+//!
+//! Pre-registered for immediate use:
+//! - `Ordering { Less=0, Equal=1, Greater=2 }`
+//! - `Maybe[T] { Just(T), Nothing }`
+//! - `Outcome[T, E] { Ok(T), Err(E) }`
+//! - `Poll[T] { Ready(T), Pending }`
+//!
+//! ## Print Type Inference
+//!
+//! `infer_print_type()` determines the format specifier for print calls.
 
 #include "codegen/llvm_ir_gen.hpp"
 

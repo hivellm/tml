@@ -1,5 +1,26 @@
-// LLVM IR generator - Synchronization builtin functions
-// Handles: spinlock, threading, channels, mutex, waitgroup primitives
+//! # LLVM IR Generator - Synchronization Builtins
+//!
+//! This file implements thread synchronization intrinsics.
+//!
+//! ## Spinlock
+//!
+//! | Function       | Implementation              |
+//! |----------------|-----------------------------|
+//! | `spin_lock`    | CAS loop until acquired     |
+//! | `spin_unlock`  | Atomic store 0              |
+//! | `spin_trylock` | Single CAS attempt          |
+//!
+//! ## Threading
+//!
+//! | Function       | Runtime Call                |
+//! |----------------|----------------------------|
+//! | `thread_yield` | `@thread_yield`            |
+//! | `thread_id`    | `@thread_id`               |
+//! | `thread_sleep` | `@thread_sleep`            |
+//!
+//! ## Channels / Mutex / WaitGroup
+//!
+//! Higher-level primitives delegated to runtime functions.
 
 #include "codegen/llvm_ir_gen.hpp"
 

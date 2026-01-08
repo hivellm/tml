@@ -1,5 +1,27 @@
-// LLVM IR generator - Binary expression generation
-// Handles: arithmetic, comparison, logical, bitwise, assignment operators
+//! # LLVM IR Generator - Binary Expressions
+//!
+//! This file implements binary operator code generation.
+//!
+//! ## Operator Categories
+//!
+//! | Category    | Operators                    | LLVM Instructions   |
+//! |-------------|------------------------------|---------------------|
+//! | Arithmetic  | `+` `-` `*` `/` `%`          | add, sub, mul, div  |
+//! | Comparison  | `==` `!=` `<` `>` `<=` `>=`  | icmp, fcmp          |
+//! | Logical     | `and` `or`                   | and, or (short-circuit)|
+//! | Bitwise     | `&` `\|` `^` `<<` `>>`        | and, or, xor, shl, shr|
+//! | Assignment  | `=`                          | store               |
+//!
+//! ## Type Handling
+//!
+//! - Integer operations use `add`, `sub`, `mul`, `sdiv`/`udiv`
+//! - Float operations use `fadd`, `fsub`, `fmul`, `fdiv`
+//! - Comparisons use `icmp`/`fcmp` with appropriate predicates
+//!
+//! ## Assignment
+//!
+//! Assignment to identifiers uses `store` instruction.
+//! Compound assignments (+=, -=, etc.) are lowered to load-op-store.
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"

@@ -1,6 +1,27 @@
-// LLVM IR generator - Builtin function call dispatch
-// Main entry point for gen_call that delegates to specialized builtin handlers
-// Handles: enum constructors, indirect calls, generic functions, user-defined functions
+//! # LLVM IR Generator - Function Call Dispatcher
+//!
+//! This file implements the main function call dispatch logic.
+//!
+//! ## Call Resolution Order
+//!
+//! `gen_call()` resolves calls in this priority:
+//!
+//! 1. **Primitive static methods**: `I32::default()`, `Bool::default()`
+//! 2. **Enum constructors**: `Maybe::Just(x)`, `Outcome::Ok(v)`
+//! 3. **Builtin functions**: print, panic, assert, math, etc.
+//! 4. **Generic functions**: Instantiate and call monomorphized version
+//! 5. **User-defined functions**: Direct call to defined function
+//! 6. **Indirect calls**: Call through function pointer
+//!
+//! ## Path Expressions
+//!
+//! Path expressions like `Type::method` or `Module::func` are resolved
+//! by joining segments with `::` and looking up the mangled name.
+//!
+//! ## Generic Instantiation
+//!
+//! Generic calls trigger monomorphization - a specialized version of
+//! the function is generated for the concrete type arguments.
 
 #include "codegen/llvm_ir_gen.hpp"
 

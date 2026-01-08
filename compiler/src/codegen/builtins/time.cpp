@@ -1,5 +1,25 @@
-// LLVM IR generator - Time builtin functions
-// Handles: time_ms, time_us, time_ns, elapsed_*, sleep_*, Instant::*, Duration::*
+//! # LLVM IR Generator - Time Builtins
+//!
+//! This file implements time measurement intrinsics.
+//!
+//! ## Time Reading
+//!
+//! | Function  | Runtime Call      |
+//! |-----------|-------------------|
+//! | `time_ms` | `@time_ms`        |
+//! | `time_us` | `@time_us`        |
+//! | `time_ns` | `@time_ns`        |
+//!
+//! ## Sleep
+//!
+//! | Function   | Runtime Call      |
+//! |------------|-------------------|
+//! | `sleep_ms` | `@sleep_ms`       |
+//! | `sleep_us` | `@sleep_us`       |
+//!
+//! ## Elapsed Time
+//!
+//! `elapsed_ms`, `elapsed_us`, `elapsed_ns` compute time since start.
 
 #include "codegen/llvm_ir_gen.hpp"
 

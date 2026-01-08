@@ -1,5 +1,16 @@
-// LLVM IR generator - Maybe[T] method calls
-// Extracted from method.cpp for maintainability
+//! # LLVM IR Generator - Maybe[T] Methods
+//!
+//! This file implements methods for the `Maybe[T]` optional type.
+//!
+//! ## Methods
+//!
+//! | Method       | Signature               | Description             |
+//! |--------------|-------------------------|-------------------------|
+//! | `is_just`    | `() -> Bool`            | Check if Just variant   |
+//! | `is_nothing` | `() -> Bool`            | Check if Nothing variant|
+//! | `unwrap`     | `() -> T`               | Extract value or panic  |
+//! | `unwrap_or`  | `(T) -> T`              | Extract or default      |
+//! | `map`        | `(func(T)->U) -> Maybe[U]` | Transform if Just    |
 
 #include "codegen/llvm_ir_gen.hpp"
 

@@ -1,5 +1,20 @@
-// LLVM IR generator - Collection methods
-// Handles: List, HashMap, Buffer instance methods (push, pop, get, set, etc.)
+//! # LLVM IR Generator - Collection Methods
+//!
+//! This file implements instance methods for collection types.
+//!
+//! ## List Methods
+//!
+//! `push`, `pop`, `get`, `set`, `len`, `capacity`, `clear`, `is_empty`
+//!
+//! ## HashMap Methods
+//!
+//! `insert`, `get`, `remove`, `contains`, `len`, `clear`
+//!
+//! ## Buffer Methods
+//!
+//! `get`, `set`, `len`, `fill`
+//!
+//! Methods delegate to runtime functions like `@list_push`, `@hashmap_get`.
 
 #include "codegen/llvm_ir_gen.hpp"
 

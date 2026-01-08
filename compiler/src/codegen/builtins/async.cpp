@@ -1,5 +1,18 @@
-// LLVM IR generator - Async builtin functions
-// Handles: block_on for synchronous execution of async functions
+//! # LLVM IR Generator - Async Builtins
+//!
+//! This file implements async runtime intrinsics.
+//!
+//! ## block_on
+//!
+//! `block_on(async_fn()) -> T`
+//!
+//! Executes an async function synchronously. The async function
+//! returns `Poll[T]`, and block_on extracts the value from `Poll.Ready`.
+//!
+//! ## Current Model
+//!
+//! In the synchronous execution model, async functions return
+//! `Poll.Ready` immediately, so block_on simply extracts the payload.
 
 #include "codegen/llvm_ir_gen.hpp"
 

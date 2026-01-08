@@ -1,5 +1,33 @@
-// LLVM IR generator - Primitive type methods
-// Handles: Integer, Float, Bool methods (add, sub, mul, div, to_string, hash, cmp, etc.)
+//! # LLVM IR Generator - Primitive Type Methods
+//!
+//! This file implements method calls on primitive types.
+//!
+//! ## Integer Methods
+//!
+//! | Method       | Description              |
+//! |--------------|--------------------------|
+//! | `add`, `sub` | Arithmetic with overflow |
+//! | `mul`, `div` | Multiplication, division |
+//! | `to_string`  | Convert to string        |
+//! | `hash`       | Hash value               |
+//! | `cmp`        | Compare, returns Ordering|
+//! | `abs`        | Absolute value           |
+//!
+//! ## Float Methods
+//!
+//! | Method    | Description         |
+//! |-----------|---------------------|
+//! | `sqrt`    | Square root         |
+//! | `floor`   | Round down          |
+//! | `ceil`    | Round up            |
+//! | `round`   | Round to nearest    |
+//! | `to_string` | Convert to string |
+//!
+//! ## Bool Methods
+//!
+//! | Method      | Description |
+//! |-------------|-------------|
+//! | `to_string` | "true"/"false" |
 
 #include "codegen/llvm_ir_gen.hpp"
 

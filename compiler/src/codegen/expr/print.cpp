@@ -1,5 +1,21 @@
-// LLVM IR generator - Format print
-// Handles: gen_format_print for formatted string output
+//! # LLVM IR Generator - Formatted Print
+//!
+//! This file implements format string printing.
+//!
+//! ## Format Syntax
+//!
+//! | Format   | Description                    |
+//! |----------|--------------------------------|
+//! | `{}`     | Default format for value       |
+//! | `{:.N}`  | Float with N decimal places    |
+//!
+//! ## Example
+//!
+//! ```tml
+//! println("x = {}, y = {:.2}", x, y)
+//! ```
+//!
+//! Generates printf calls with appropriate format specifiers.
 
 #include "codegen/llvm_ir_gen.hpp"
 

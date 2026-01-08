@@ -1,5 +1,28 @@
-// LLVM IR generator - Expression dispatcher
-// Routes expression generation to specialized handlers in expr/ directory
+//! # LLVM IR Generator - Expression Dispatcher
+//!
+//! This file implements the main expression code generation dispatcher.
+//!
+//! ## Expression Routing
+//!
+//! `gen_expr()` routes each expression kind to its specialized handler:
+//!
+//! | Expression Type  | Handler           | Location              |
+//! |------------------|-------------------|-----------------------|
+//! | Literal          | `gen_literal`     | This file             |
+//! | Identifier       | `gen_ident`       | This file             |
+//! | Binary           | `gen_binary`      | expr/binary.cpp       |
+//! | Unary            | `gen_unary`       | expr/unary.cpp        |
+//! | Call             | `gen_call`        | This file             |
+//! | Method call      | `gen_method_call` | expr/method.cpp       |
+//! | If/Ternary       | `gen_if`          | llvm_ir_gen_control.cpp|
+//! | Loop/For/While   | `gen_loop`        | llvm_ir_gen_control.cpp|
+//! | Struct           | `gen_struct_expr` | expr/struct.cpp       |
+//! | Array/Index      | `gen_array`       | expr/collections.cpp  |
+//! | Closure          | `gen_closure`     | expr/closure.cpp      |
+//!
+//! ## Literal Generation
+//!
+//! `gen_literal()` handles integer, float, bool, char, and string literals.
 
 #include "codegen/llvm_ir_gen.hpp"
 

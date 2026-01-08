@@ -1,5 +1,31 @@
-// LLVM IR generator - Statement generation
-// Handles: let statements, expression statements
+//! # LLVM IR Generator - Statements
+//!
+//! This file implements statement code generation.
+//!
+//! ## Statement Types
+//!
+//! | Statement | Handler          | Description                    |
+//! |-----------|------------------|--------------------------------|
+//! | `let`     | `gen_let_stmt`   | Immutable binding with alloca  |
+//! | `var`     | `gen_let_stmt`   | Mutable binding with alloca    |
+//! | `expr`    | `gen_expr_stmt`  | Expression as statement        |
+//!
+//! ## Variable Allocation
+//!
+//! Variables are stack-allocated via LLVM `alloca`:
+//! ```llvm
+//! %x = alloca i32
+//! store i32 42, ptr %x
+//! ```
+//!
+//! ## Drop Insertion
+//!
+//! For types implementing Drop, destructor calls are inserted at scope exit.
+//! `extract_type_name_for_drop()` extracts the type name to look up drop glue.
+//!
+//! ## Pattern Binding
+//!
+//! Destructuring patterns generate multiple allocas and stores.
 
 #include "codegen/llvm_ir_gen.hpp"
 

@@ -1,5 +1,30 @@
-// LLVM IR generator - Core utilities
-// Handles: constructor, fresh_reg, fresh_label, emit, emit_line, report_error, add_string_literal
+//! # LLVM IR Generator - Core Utilities
+//!
+//! This file implements fundamental codegen utilities.
+//!
+//! ## Register Allocation
+//!
+//! | Method        | Returns         | Example        |
+//! |---------------|-----------------|----------------|
+//! | `fresh_reg`   | Unique register | `%t0`, `%t1`   |
+//! | `fresh_label` | Unique label    | `if.then0`     |
+//!
+//! ## Output Emission
+//!
+//! | Method      | Description                    |
+//! |-------------|--------------------------------|
+//! | `emit`      | Emit raw text (no newline)     |
+//! | `emit_line` | Emit text with newline         |
+//!
+//! ## String Literals
+//!
+//! `add_string_literal()` registers a string constant and returns its
+//! global variable name (`@.str.0`, `@.str.1`, etc.). These are emitted
+//! in the module preamble.
+//!
+//! ## Error Reporting
+//!
+//! `report_error()` collects codegen errors for later reporting.
 
 #include "codegen/llvm_ir_gen.hpp"
 

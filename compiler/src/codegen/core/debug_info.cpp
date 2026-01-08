@@ -1,5 +1,30 @@
-// LLVM IR generator - Debug Information Generation
-// Implements DWARF debug info metadata for source-level debugging
+//! # LLVM IR Generator - Debug Information
+//!
+//! This file generates DWARF debug metadata for source-level debugging.
+//!
+//! ## Purpose
+//!
+//! When compiled with `-g` or `--debug`, the compiler emits LLVM debug
+//! metadata that maps generated code back to TML source locations.
+//!
+//! ## DWARF Metadata
+//!
+//! | Metadata Type    | Purpose                           |
+//! |------------------|-----------------------------------|
+//! | `DIFile`         | Source file reference             |
+//! | `DICompileUnit`  | Compilation unit                  |
+//! | `DISubprogram`   | Function debug info               |
+//! | `DILocation`     | Source line/column mapping        |
+//! | `DIBasicType`    | Primitive type debug info         |
+//!
+//! ## Key Methods
+//!
+//! | Method                  | Purpose                        |
+//! |-------------------------|--------------------------------|
+//! | `emit_debug_info_header`| Emit file and compile unit    |
+//! | `emit_debug_info_footer`| Emit all collected metadata   |
+//! | `emit_function_debug`   | Emit function subprogram      |
+//! | `emit_debug_location`   | Emit source location marker   |
 
 #include "codegen/llvm_ir_gen.hpp"
 

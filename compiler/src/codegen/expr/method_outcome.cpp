@@ -1,5 +1,17 @@
-// LLVM IR generator - Outcome[T, E] method calls
-// Extracted from method.cpp for maintainability
+//! # LLVM IR Generator - Outcome[T, E] Methods
+//!
+//! This file implements methods for the `Outcome[T, E]` result type.
+//!
+//! ## Methods
+//!
+//! | Method       | Signature                 | Description             |
+//! |--------------|---------------------------|-------------------------|
+//! | `is_ok`      | `() -> Bool`              | Check if Ok variant     |
+//! | `is_err`     | `() -> Bool`              | Check if Err variant    |
+//! | `unwrap`     | `() -> T`                 | Extract value or panic  |
+//! | `unwrap_err` | `() -> E`                 | Extract error or panic  |
+//! | `ok`         | `() -> Maybe[T]`          | Convert to Maybe        |
+//! | `err`        | `() -> Maybe[E]`          | Get error as Maybe      |
 
 #include "codegen/llvm_ir_gen.hpp"
 

@@ -1,5 +1,29 @@
-// LLVM IR generator - Closure expression generation
-// Handles: closure/lambda expressions with captured variables
+//! # LLVM IR Generator - Closures
+//!
+//! This file implements closure expression code generation.
+//!
+//! ## Closure Syntax
+//!
+//! TML uses `do(params) expr` syntax for closures:
+//! ```tml
+//! let add = do(a: I32, b: I32) a + b
+//! ```
+//!
+//! ## Implementation
+//!
+//! Closures are lowered to:
+//! 1. A generated function `@tml_closure_N`
+//! 2. A capture struct if variables are captured
+//! 3. A function pointer (or fat pointer for captures)
+//!
+//! ## Captured Variables
+//!
+//! Captured variables are stored in a heap-allocated struct.
+//! The closure function receives this struct as an implicit first parameter.
+//!
+//! ## Non-capturing Closures
+//!
+//! Closures without captures can be used as plain function pointers.
 
 #include "codegen/llvm_ir_gen.hpp"
 

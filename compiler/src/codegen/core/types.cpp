@@ -1,7 +1,35 @@
-// LLVM IR generator - Type conversion and mangling
-// Handles: llvm_type_name, llvm_type, llvm_type_ptr, llvm_type_from_semantic
-// Handles: mangle_type, mangle_type_args, mangle_struct_name, mangle_func_name
-// Handles: resolve_parser_type_with_subs, unify_types
+//! # LLVM IR Generator - Types
+//!
+//! This file implements type conversion and name mangling.
+//!
+//! ## Type Conversion
+//!
+//! | TML Type   | LLVM Type     |
+//! |------------|---------------|
+//! | I8, U8     | i8            |
+//! | I16, U16   | i16           |
+//! | I32, U32   | i32           |
+//! | I64, U64   | i64           |
+//! | I128, U128 | i128          |
+//! | F32        | float         |
+//! | F64        | double        |
+//! | Bool       | i1            |
+//! | Char       | i32           |
+//! | Str        | ptr           |
+//! | Unit       | void          |
+//! | *T         | ptr           |
+//! | ref T      | ptr           |
+//! | Struct     | %struct.Name  |
+//!
+//! ## Name Mangling
+//!
+//! | Method              | Purpose                        |
+//! |---------------------|--------------------------------|
+//! | `mangle_type`       | Type name for generics         |
+//! | `mangle_struct_name`| Generic struct instantiation   |
+//! | `mangle_func_name`  | Generic function instantiation |
+//!
+//! Example: `List[I32]` becomes `List_I32`
 
 #include "codegen/llvm_ir_gen.hpp"
 

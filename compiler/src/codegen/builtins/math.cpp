@@ -1,6 +1,23 @@
-// LLVM IR generator - Math builtin functions
-// Handles: float conversions, rounding, sqrt, pow, bit manipulation,
-//          special float values, SIMD operations, black_box
+//! # LLVM IR Generator - Math Builtins
+//!
+//! This file implements mathematical builtin functions.
+//!
+//! ## Functions
+//!
+//! | Function    | LLVM Intrinsic/Code         |
+//! |-------------|----------------------------|
+//! | `sqrt`      | `@llvm.sqrt.f64`           |
+//! | `pow`       | `@llvm.pow.f64`            |
+//! | `abs`       | Select or `@llvm.abs`      |
+//! | `floor`     | `@llvm.floor.f64`          |
+//! | `ceil`      | `@llvm.ceil.f64`           |
+//! | `round`     | `@llvm.round.f64`          |
+//! | `black_box` | Inline asm barrier         |
+//!
+//! ## Black Box
+//!
+//! `black_box()` prevents LLVM from optimizing away a value.
+//! Used in benchmarks to ensure computations aren't eliminated.
 
 #include "codegen/llvm_ir_gen.hpp"
 

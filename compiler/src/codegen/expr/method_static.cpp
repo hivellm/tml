@@ -1,5 +1,22 @@
-// LLVM IR generator - Static method calls
-// Handles: Type::method() calls for List, HashMap, Buffer, File, Path, and primitives
+//! # LLVM IR Generator - Static Method Calls
+//!
+//! This file implements `Type::method()` static method calls.
+//!
+//! ## Supported Types
+//!
+//! | Type    | Static Methods            |
+//! |---------|---------------------------|
+//! | List    | `new()`, `with_capacity()`|
+//! | HashMap | `new()`, `with_capacity()`|
+//! | Buffer  | `new()`, `with_capacity()`|
+//! | File    | `open()`, `create()`      |
+//! | Path    | `new()`                   |
+//! | I32, etc| `default()`, `max()`, `min()`|
+//!
+//! ## Generic Handling
+//!
+//! Generic static methods like `List[I32]::new()` extract the type
+//! argument and call the appropriate runtime function.
 
 #include "codegen/llvm_ir_gen.hpp"
 

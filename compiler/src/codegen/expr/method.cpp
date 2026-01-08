@@ -1,12 +1,30 @@
-// LLVM IR generator - Method calls dispatcher
-// Main entry point for method dispatch. Delegates to specialized handlers:
-// - method_static.cpp: Type::method() static calls
-// - method_primitive.cpp: Integer, Float, Bool methods
-// - method_collection.cpp: List, HashMap, Buffer methods
-// - method_slice.cpp: Slice, MutSlice methods
-// - method_maybe.cpp: Maybe[T] methods
-// - method_outcome.cpp: Outcome[T,E] methods
-// - method_array.cpp: Array[T; N] methods
+//! # LLVM IR Generator - Method Call Dispatcher
+//!
+//! This file is the main entry point for method call code generation.
+//! It delegates to specialized handlers based on receiver type.
+//!
+//! ## Dispatch Order
+//!
+//! 1. Static methods: `Type::method()` → method_static.cpp
+//! 2. Primitive methods: `.to_string()`, `.abs()` → method_primitive.cpp
+//! 3. Collection methods: `.push()`, `.get()` → method_collection.cpp
+//! 4. Slice methods: `.len()`, `.get()` → method_slice.cpp
+//! 5. Maybe methods: `.unwrap()`, `.map()` → method_maybe.cpp
+//! 6. Outcome methods: `.unwrap()`, `.ok()` → method_outcome.cpp
+//! 7. Array methods: `.len()`, `.get()` → method_array.cpp
+//! 8. User-defined methods: Look up in impl blocks
+//!
+//! ## Specialized Files
+//!
+//! | File                    | Handles                        |
+//! |-------------------------|--------------------------------|
+//! | method_static.cpp       | `Type::method()` static calls  |
+//! | method_primitive.cpp    | Integer, Float, Bool methods   |
+//! | method_collection.cpp   | List, HashMap, Buffer methods  |
+//! | method_slice.cpp        | Slice, MutSlice methods        |
+//! | method_maybe.cpp        | Maybe[T] methods               |
+//! | method_outcome.cpp      | Outcome[T,E] methods           |
+//! | method_array.cpp        | Array[T; N] methods            |
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/module.hpp"

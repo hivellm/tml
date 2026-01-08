@@ -1,6 +1,27 @@
-// LLVM IR generator - Atomic builtin functions
-// Handles: atomic_load, atomic_store, atomic_add, atomic_sub, atomic_exchange,
-//          atomic_cas, atomic_cas_val, atomic_and, atomic_or, fence, fence_acquire, fence_release
+//! # LLVM IR Generator - Atomic Builtins
+//!
+//! This file implements atomic operation intrinsics.
+//!
+//! ## Atomic Operations
+//!
+//! | Function         | LLVM Instruction             |
+//! |------------------|------------------------------|
+//! | `atomic_load`    | `load atomic seq_cst`        |
+//! | `atomic_store`   | `store atomic seq_cst`       |
+//! | `atomic_add`     | `atomicrmw add seq_cst`      |
+//! | `atomic_sub`     | `atomicrmw sub seq_cst`      |
+//! | `atomic_exchange`| `atomicrmw xchg seq_cst`     |
+//! | `atomic_cas`     | `cmpxchg seq_cst`            |
+//! | `atomic_and`     | `atomicrmw and seq_cst`      |
+//! | `atomic_or`      | `atomicrmw or seq_cst`       |
+//!
+//! ## Memory Fences
+//!
+//! | Function        | LLVM Instruction             |
+//! |-----------------|------------------------------|
+//! | `fence_acquire` | `fence acquire`              |
+//! | `fence_release` | `fence release`              |
+//! | `fence`         | `fence seq_cst`              |
 
 #include "codegen/llvm_ir_gen.hpp"
 

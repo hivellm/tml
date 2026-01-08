@@ -1,5 +1,24 @@
-// LLVM IR generator - Type inference
-// Handles: infer_expr_type for generics instantiation
+//! # LLVM IR Generator - Type Inference
+//!
+//! This file implements expression type inference for codegen.
+//!
+//! ## Purpose
+//!
+//! `infer_expr_type()` infers the semantic type of an expression.
+//! This is used during monomorphization to determine concrete types
+//! for generic instantiation.
+//!
+//! ## Inference Rules
+//!
+//! | Expression | Inferred Type                   |
+//! |------------|---------------------------------|
+//! | Int lit    | I32 (default)                   |
+//! | Float lit  | F64 (default)                   |
+//! | Bool lit   | Bool                            |
+//! | String lit | Str                             |
+//! | Identifier | Look up in locals/globals       |
+//! | Call       | Return type of function         |
+//! | Field      | Type of struct field            |
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/module.hpp"

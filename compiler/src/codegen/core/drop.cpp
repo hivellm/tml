@@ -1,5 +1,34 @@
-// LLVM IR generator - Drop/RAII support
-// Implements automatic drop call generation at scope exit
+//! # LLVM IR Generator - Drop/RAII Support
+//!
+//! This file implements automatic destructor calls at scope exit.
+//!
+//! ## RAII in TML
+//!
+//! Types implementing the `Drop` behavior have their `drop()` method
+//! called automatically when they go out of scope.
+//!
+//! ## Drop Scope Stack
+//!
+//! `drop_scopes_` tracks variables needing drop per lexical scope:
+//!
+//! | Method            | Action                              |
+//! |-------------------|-------------------------------------|
+//! | `push_drop_scope` | Enter new scope (e.g., block)       |
+//! | `pop_drop_scope`  | Exit scope                          |
+//! | `register_for_drop`| Track variable for later drop      |
+//! | `emit_scope_drops`| Emit drop calls at scope exit       |
+//!
+//! ## Drop Order
+//!
+//! Drops are emitted in LIFO order (last declared, first dropped),
+//! matching Rust's drop semantics.
+//!
+//! ## Generated Code
+//!
+//! ```llvm
+//! ; At scope exit:
+//! call void @tml_Resource_drop(ptr %resource)
+//! ```
 
 #include "codegen/llvm_ir_gen.hpp"
 

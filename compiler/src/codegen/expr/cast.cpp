@@ -1,5 +1,24 @@
-// LLVM IR generator - Cast expression generation
-// Handles: type casts between integers, floats, pointers, booleans
+//! # LLVM IR Generator - Type Casts
+//!
+//! This file implements type cast code generation.
+//!
+//! ## Cast Operations
+//!
+//! | From → To        | LLVM Instruction              |
+//! |------------------|-------------------------------|
+//! | int → int (wider)| `sext` or `zext`              |
+//! | int → int (narrow)| `trunc`                      |
+//! | int → float      | `sitofp` or `uitofp`          |
+//! | float → int      | `fptosi` or `fptoui`          |
+//! | float → float    | `fpext` or `fptrunc`          |
+//! | ptr → ptr        | `bitcast` (opaque ptrs: noop) |
+//! | int → bool       | `icmp ne 0`                   |
+//!
+//! ## TML Cast Syntax
+//!
+//! ```tml
+//! let x = value as I64
+//! ```
 
 #include "codegen/llvm_ir_gen.hpp"
 

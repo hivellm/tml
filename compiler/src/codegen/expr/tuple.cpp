@@ -1,5 +1,22 @@
-// LLVM IR generator - Tuple expression generation
-// Handles: tuple expressions like (a, b, c)
+//! # LLVM IR Generator - Tuples
+//!
+//! This file implements tuple expression code generation.
+//!
+//! ## Tuple Construction
+//!
+//! `(a, b, c)` creates an anonymous struct:
+//! ```llvm
+//! %tuple = alloca { i32, i32, i32 }
+//! ; store each element
+//! ```
+//!
+//! ## Unit Type
+//!
+//! Empty tuple `()` is the Unit type, represented as `{}`.
+//!
+//! ## Tuple Access
+//!
+//! `tuple.0`, `tuple.1` access elements by index via GEP.
 
 #include "codegen/llvm_ir_gen.hpp"
 

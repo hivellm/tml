@@ -1,5 +1,35 @@
-// LLVM IR generator - Target specification
-// Handles cross-compilation targets and platform-specific details
+//! # LLVM IR Generator - Target Specification
+//!
+//! This file implements cross-compilation target handling.
+//!
+//! ## Target Triple
+//!
+//! LLVM target triples follow the format: `arch-vendor-os-env`
+//! Example: `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`
+//!
+//! ## Supported Architectures
+//!
+//! | Arch    | String    | Description       |
+//! |---------|-----------|-------------------|
+//! | X86_64  | x86_64    | 64-bit Intel/AMD  |
+//! | Aarch64 | aarch64   | 64-bit ARM        |
+//! | X86     | i686      | 32-bit Intel      |
+//! | Arm     | arm       | 32-bit ARM        |
+//! | Wasm32  | wasm32    | WebAssembly 32-bit|
+//!
+//! ## Supported Operating Systems
+//!
+//! | OS      | String   |
+//! |---------|----------|
+//! | Windows | windows  |
+//! | Linux   | linux    |
+//! | MacOS   | darwin   |
+//! | FreeBSD | freebsd  |
+//!
+//! ## Key Functions
+//!
+//! - `parse_target_triple()`: Parse string to Target struct
+//! - `detect_host_target()`: Auto-detect current platform
 
 #include "codegen/target.hpp"
 

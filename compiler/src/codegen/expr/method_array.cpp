@@ -1,5 +1,18 @@
-// LLVM IR generator - Array method calls
-// Handles: len, is_empty, get, first, last, map, eq, ne, cmp for arrays
+//! # LLVM IR Generator - Array Methods
+//!
+//! This file implements methods for fixed-size array types `[T; N]`.
+//!
+//! ## Methods
+//!
+//! | Method     | Signature            | Description              |
+//! |------------|----------------------|--------------------------|
+//! | `len`      | `() -> I64`          | Returns N (compile-time) |
+//! | `is_empty` | `() -> Bool`         | Returns N == 0           |
+//! | `get`      | `(I64) -> T`         | Element at index         |
+//! | `first`    | `() -> T`            | First element            |
+//! | `last`     | `() -> T`            | Last element             |
+//! | `eq`, `ne` | `([T; N]) -> Bool`   | Element-wise comparison  |
+//! | `cmp`      | `([T; N]) -> Ordering`| Lexicographic compare   |
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/module.hpp"

@@ -1,6 +1,16 @@
-// LLVM IR generator - Slice/MutSlice methods
-// Handles: len, is_empty for Slice and MutSlice types
-// Also handles SliceType [T] methods
+//! # LLVM IR Generator - Slice Methods
+//!
+//! This file implements methods for slice types `[T]`.
+//!
+//! ## Methods
+//!
+//! | Method     | Description              |
+//! |------------|--------------------------|
+//! | `len`      | Number of elements       |
+//! | `is_empty` | Check if length is zero  |
+//! | `get`      | Get element by index     |
+//!
+//! Handles both `Slice[T]` named type and `[T]` slice type syntax.
 
 #include "codegen/llvm_ir_gen.hpp"
 

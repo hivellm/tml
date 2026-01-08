@@ -1,11 +1,27 @@
-// LLVM IR generator - String and Char builtin functions
-// Handles: str_len, str_hash, str_eq, str_concat, str_substring,
-//          str_contains, str_starts_with, str_ends_with, str_to_upper,
-//          str_to_lower, str_trim, str_char_at
-// Char:    char_is_alphabetic, char_is_numeric, char_is_alphanumeric,
-//          char_is_whitespace, char_is_uppercase, char_is_lowercase,
-//          char_is_ascii, char_is_control, char_to_uppercase, char_to_lowercase,
-//          char_to_digit, char_from_digit, char_code, char_from_code
+//! # LLVM IR Generator - String/Char Builtins
+//!
+//! This file implements string and character intrinsics.
+//!
+//! ## String Functions
+//!
+//! | Function          | Runtime Call            |
+//! |-------------------|-------------------------|
+//! | `str_len`         | `@strlen`               |
+//! | `str_hash`        | `@tml_str_hash`         |
+//! | `str_eq`          | `@strcmp`               |
+//! | `str_concat`      | `@tml_str_concat`       |
+//! | `str_substring`   | `@tml_str_substring`    |
+//! | `str_contains`    | `@strstr` != null       |
+//! | `str_char_at`     | Index into string       |
+//!
+//! ## Char Functions
+//!
+//! | Function             | Implementation          |
+//! |----------------------|-------------------------|
+//! | `char_is_alphabetic` | Range check A-Za-z      |
+//! | `char_is_numeric`    | Range check 0-9         |
+//! | `char_to_uppercase`  | Subtract 32 if lower    |
+//! | `char_to_lowercase`  | Add 32 if upper         |
 
 #include "codegen/llvm_ir_gen.hpp"
 

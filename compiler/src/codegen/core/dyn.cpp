@@ -1,5 +1,31 @@
-// LLVM IR generator - Dynamic dispatch and vtables
-// Handles: register_impl, emit_dyn_type, get_vtable, emit_vtables
+//! # LLVM IR Generator - Dynamic Dispatch
+//!
+//! This file implements vtables for `dyn Behavior` types.
+//!
+//! ## Vtable Structure
+//!
+//! Each `impl Behavior for Type` generates a vtable:
+//! ```llvm
+//! @vtable.Point.Display = global [1 x ptr] [ptr @Point_display]
+//! ```
+//!
+//! ## Dyn Type Layout
+//!
+//! `dyn Behavior` is a fat pointer: `{ data: ptr, vtable: ptr }`
+//!
+//! ## Key Methods
+//!
+//! | Method            | Purpose                              |
+//! |-------------------|--------------------------------------|
+//! | `register_impl`   | Register impl for vtable generation  |
+//! | `emit_dyn_type`   | Emit fat pointer struct              |
+//! | `get_vtable`      | Get vtable name for type+behavior    |
+//! | `emit_vtables`    | Emit all registered vtables          |
+//!
+//! ## Method Order
+//!
+//! `behavior_method_order_` ensures consistent vtable slot ordering
+//! across all implementations of a behavior.
 
 #include "codegen/llvm_ir_gen.hpp"
 

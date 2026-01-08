@@ -1,5 +1,32 @@
-// LLVM IR generator - Assert builtin functions
-// Handles: assert_eq, assert_ne, assert
+//! # LLVM IR Generator - Assert Builtins
+//!
+//! This file implements assertion intrinsics for testing and debugging.
+//!
+//! ## Functions
+//!
+//! | Function    | Comparison | On Failure         |
+//! |-------------|------------|---------------------|
+//! | `assert`    | `cond`     | panic if false      |
+//! | `assert_eq` | `icmp eq`  | panic if not equal  |
+//! | `assert_ne` | `icmp ne`  | panic if equal      |
+//!
+//! ## Type Handling
+//!
+//! - **Strings**: Uses `str_eq` runtime function
+//! - **Integers**: Automatic sign extension for mixed types (i32/i64)
+//! - **Booleans**: Direct `icmp` comparison
+//!
+//! ## Generated Pattern
+//!
+//! ```llvm
+//! %cmp = icmp eq i32 %left, %right
+//! br i1 %cmp, label %assert_ok, label %assert_fail
+//! assert_fail:
+//!   call void @panic(ptr @msg)
+//!   unreachable
+//! assert_ok:
+//!   ; continue
+//! ```
 
 #include "codegen/llvm_ir_gen.hpp"
 

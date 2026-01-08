@@ -1,3 +1,34 @@
+//! # C Header Generator
+//!
+//! This file generates C header files for TML FFI exports.
+//!
+//! ## Purpose
+//!
+//! When `--emit-header` is passed to the compiler, this generates a `.h` file
+//! that C/C++ code can include to call TML functions.
+//!
+//! ## Type Mapping
+//!
+//! | TML Type   | C Type        |
+//! |------------|---------------|
+//! | I8-I64     | int8_t-int64_t|
+//! | U8-U64     | uint8_t-uint64_t|
+//! | F32, F64   | float, double |
+//! | Bool       | bool          |
+//! | Str        | const char*   |
+//! | *T         | T*            |
+//! | ref T      | const T*      |
+//!
+//! ## Generated Output
+//!
+//! ```c
+//! #ifndef TML_MODULE_H
+//! #define TML_MODULE_H
+//! #include <stdint.h>
+//! int32_t add(int32_t a, int32_t b);
+//! #endif
+//! ```
+
 #include <algorithm>
 #include <cctype>
 #include <codegen/c_header_gen.hpp>

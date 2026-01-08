@@ -1,5 +1,33 @@
-// LLVM IR generator - Declaration generation
-// Handles: struct, enum, function declarations
+//! # LLVM IR Generator - Declarations
+//!
+//! This file implements declaration code generation.
+//!
+//! ## Declaration Types
+//!
+//! | Declaration | Handler            | LLVM Output              |
+//! |-------------|--------------------|--------------------------|
+//! | Struct      | `gen_struct_decl`  | `%struct.Name = type {}` |
+//! | Enum        | `gen_enum_decl`    | Tagged union struct      |
+//! | Function    | `gen_func_decl`    | `define` or `declare`    |
+//! | Impl        | `gen_impl_decl`    | Method generation        |
+//!
+//! ## Struct Layout
+//!
+//! Structs become LLVM struct types with sequential field layout.
+//! Generic structs are deferred until monomorphization.
+//!
+//! ## Enum Layout
+//!
+//! Enums use a tagged union representation:
+//! - Tag field (i32) identifies the variant
+//! - Union field holds the largest payload
+//!
+//! ## Function Generation
+//!
+//! Functions are generated with:
+//! - Parameter allocas at entry block
+//! - Body code generation
+//! - Implicit return for Unit-returning functions
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "types/type.hpp"

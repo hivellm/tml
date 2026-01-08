@@ -1,18 +1,23 @@
-// LLVM IR generator - Await expression generation
-// Handles: async/await for Future[T] values
-//
-// Async functions return Poll[T] where:
-//   Poll[T] = { i32 tag, T data }
-//   tag 0 = Ready(T) - the value is available
-//   tag 1 = Pending - not yet ready (would yield to scheduler)
-//
-// The await expression:
-// 1. Calls the async function (which returns Poll[T])
-// 2. Extracts the value from Poll.Ready
-//
-// Note: Full async/await would require state machine transformation and a scheduler.
-// This implementation assumes async functions always return Ready immediately,
-// which is correct for synchronous/single-threaded execution.
+//! # LLVM IR Generator - Await Expression
+//!
+//! This file implements the `await` expression for async functions.
+//!
+//! ## Poll[T] Type
+//!
+//! Async functions return `Poll[T]`:
+//! - `Ready(T)` - tag 0, value is available
+//! - `Pending` - tag 1, would yield to scheduler
+//!
+//! ## Await Behavior
+//!
+//! 1. Call async function (returns Poll[T])
+//! 2. Extract value from Poll.Ready
+//!
+//! ## Current Limitations
+//!
+//! Full async/await would require state machine transformation.
+//! Current implementation assumes sync execution where async
+//! functions always return Ready immediately.
 
 #include "codegen/llvm_ir_gen.hpp"
 

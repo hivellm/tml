@@ -1,5 +1,29 @@
-// LLVM IR generator - Try operator (!) for error propagation
-// Handles unwrapping Outcome[T, E] and Maybe[T] with early return on error
+//! # LLVM IR Generator - Try Operator
+//!
+//! This file implements the `!` (try) operator for error propagation.
+//!
+//! ## Syntax
+//!
+//! ```tml
+//! let value = fallible_call()!
+//! ```
+//!
+//! ## Behavior
+//!
+//! For `Outcome[T, E]`: Returns T if Ok, early-returns Err if error.
+//! For `Maybe[T]`: Returns T if Just, early-returns Nothing.
+//!
+//! ## Generated Code
+//!
+//! ```llvm
+//! ; Check tag (0 = Ok/Just, 1 = Err/Nothing)
+//! %is_ok = icmp eq i32 %tag, 0
+//! br i1 %is_ok, label %success, label %propagate
+//! propagate:
+//!   ret %enum_type %value  ; early return
+//! success:
+//!   ; extract inner value
+//! ```
 
 #include "codegen/llvm_ir_gen.hpp"
 

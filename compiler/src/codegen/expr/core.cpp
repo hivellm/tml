@@ -1,5 +1,31 @@
-// LLVM IR generator - Core expression generation
-// Handles: literals, identifiers, lowlevel blocks, interpolated strings
+//! # LLVM IR Generator - Core Expressions
+//!
+//! This file implements fundamental expression code generation.
+//!
+//! ## Literal Generation
+//!
+//! | Literal Type | LLVM Type | Example Output      |
+//! |--------------|-----------|---------------------|
+//! | Integer      | i32/i64   | `42`                |
+//! | Float        | double    | `3.14`              |
+//! | Bool         | i1        | `1` or `0`          |
+//! | String       | ptr       | `@.str.0`           |
+//! | Char         | i32       | `65` (Unicode)      |
+//! | Null         | ptr       | `null`              |
+//!
+//! ## Identifier Resolution
+//!
+//! `gen_ident()` resolves variable references by looking up the
+//! variable's alloca register and emitting a load instruction.
+//!
+//! ## Lowlevel Blocks
+//!
+//! `@lowlevel { }` blocks disable safety checks and allow raw
+//! pointer operations.
+//!
+//! ## String Interpolation
+//!
+//! `"Hello {name}!"` is lowered to sprintf-style formatting.
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"

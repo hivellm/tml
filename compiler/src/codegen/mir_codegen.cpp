@@ -1,6 +1,27 @@
-// MIR-based LLVM IR Code Generator Implementation
-//
-// This generates LLVM IR directly from MIR, which is already in SSA form.
+//! # MIR-based LLVM IR Code Generator
+//!
+//! This file generates LLVM IR directly from MIR (Mid-level IR).
+//!
+//! ## Advantages of MIR-based Codegen
+//!
+//! MIR is already in SSA form, which maps naturally to LLVM IR:
+//! - No need for SSA construction during codegen
+//! - Direct mapping from MIR values to LLVM registers
+//! - Simplified control flow handling
+//!
+//! ## Generation Pipeline
+//!
+//! | Phase            | Method              | Output                |
+//! |------------------|---------------------|-----------------------|
+//! | Preamble         | `emit_preamble`     | Target triple, attrs  |
+//! | Type definitions | `emit_type_defs`    | Struct/enum layouts   |
+//! | Functions        | `emit_function`     | Function definitions  |
+//! | Basic blocks     | `emit_basic_block`  | Labels and terminators|
+//! | Instructions     | `emit_instruction`  | LLVM instructions     |
+//!
+//! ## Value Mapping
+//!
+//! `value_regs_` maps MIR value IDs to LLVM register names (%t0, %t1, etc.).
 
 #include "codegen/mir_codegen.hpp"
 

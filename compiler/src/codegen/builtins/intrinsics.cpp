@@ -1,6 +1,103 @@
-// LLVM IR generator - Intrinsic functions
-// Handles: @intrinsic decorated functions from core::intrinsics
-// These are compiler-implemented primitives that generate inline LLVM IR
+//! # LLVM IR Generator - Compiler Intrinsics
+//!
+//! This file implements compiler intrinsics that map directly to LLVM instructions.
+//! Intrinsics are `@intrinsic` decorated functions from `core::intrinsics`.
+//!
+//! ## Arithmetic Intrinsics
+//!
+//! | Intrinsic   | Integer   | Float    |
+//! |-------------|-----------|----------|
+//! | `llvm_add`  | `add`     | `fadd`   |
+//! | `llvm_sub`  | `sub`     | `fsub`   |
+//! | `llvm_mul`  | `mul`     | `fmul`   |
+//! | `llvm_div`  | `sdiv`    | `fdiv`   |
+//! | `llvm_rem`  | `srem`    | `frem`   |
+//! | `llvm_neg`  | `sub 0,x` | `fneg`   |
+//!
+//! ## Comparison Intrinsics
+//!
+//! | Intrinsic  | Integer     | Float       |
+//! |------------|-------------|-------------|
+//! | `llvm_eq`  | `icmp eq`   | `fcmp oeq`  |
+//! | `llvm_ne`  | `icmp ne`   | `fcmp one`  |
+//! | `llvm_lt`  | `icmp slt`  | `fcmp olt`  |
+//! | `llvm_le`  | `icmp sle`  | `fcmp ole`  |
+//! | `llvm_gt`  | `icmp sgt`  | `fcmp ogt`  |
+//! | `llvm_ge`  | `icmp sge`  | `fcmp oge`  |
+//!
+//! ## Bitwise Intrinsics
+//!
+//! | Intrinsic   | LLVM Instruction |
+//! |-------------|------------------|
+//! | `llvm_and`  | `and`            |
+//! | `llvm_or`   | `or`             |
+//! | `llvm_xor`  | `xor`            |
+//! | `llvm_not`  | `xor x, -1`      |
+//! | `llvm_shl`  | `shl`            |
+//! | `llvm_shr`  | `ashr`           |
+//!
+//! ## Memory Intrinsics
+//!
+//! | Intrinsic     | Description                     |
+//! |---------------|---------------------------------|
+//! | `ptr_read`    | Load from pointer               |
+//! | `ptr_write`   | Store to pointer                |
+//! | `ptr_offset`  | GEP-based pointer arithmetic    |
+//!
+//! ## Slice Intrinsics
+//!
+//! | Intrinsic        | Description                   |
+//! |------------------|-------------------------------|
+//! | `slice_get`      | Get element reference         |
+//! | `slice_get_mut`  | Get mutable element reference |
+//! | `slice_set`      | Set element value             |
+//! | `slice_offset`   | Offset slice pointer          |
+//! | `slice_swap`     | Swap two elements             |
+//!
+//! ## Array Intrinsics
+//!
+//! | Intrinsic            | Description                  |
+//! |----------------------|------------------------------|
+//! | `array_as_ptr`       | Get array data pointer       |
+//! | `array_as_mut_ptr`   | Get mutable array pointer    |
+//! | `array_offset_ptr`   | Offset within array          |
+//!
+//! ## Compiler Hints
+//!
+//! | Intrinsic     | LLVM                      |
+//! |---------------|---------------------------|
+//! | `unreachable` | `unreachable`             |
+//! | `assume`      | `@llvm.assume`            |
+//! | `likely`      | `@llvm.expect.i1(x,true)` |
+//! | `unlikely`    | `@llvm.expect.i1(x,false)`|
+//! | `fence`       | `fence seq_cst`           |
+//!
+//! ## Bit Manipulation
+//!
+//! | Intrinsic    | LLVM Intrinsic      |
+//! |--------------|---------------------|
+//! | `ctlz`       | `@llvm.ctlz`        |
+//! | `cttz`       | `@llvm.cttz`        |
+//! | `ctpop`      | `@llvm.ctpop`       |
+//! | `bswap`      | `@llvm.bswap`       |
+//! | `bitreverse` | `@llvm.bitreverse`  |
+//!
+//! ## Math Intrinsics
+//!
+//! | Intrinsic  | LLVM Intrinsic  |
+//! |------------|-----------------|
+//! | `sqrt`     | `@llvm.sqrt`    |
+//! | `sin`      | `@llvm.sin`     |
+//! | `cos`      | `@llvm.cos`     |
+//! | `log`      | `@llvm.log`     |
+//! | `exp`      | `@llvm.exp`     |
+//! | `pow`      | `@llvm.pow`     |
+//! | `floor`    | `@llvm.floor`   |
+//! | `ceil`     | `@llvm.ceil`    |
+//! | `round`    | `@llvm.round`   |
+//! | `trunc`    | `@llvm.trunc`   |
+//! | `fma`      | `@llvm.fma`     |
+//! | `fabs`     | `@llvm.fabs`    |
 
 #include "codegen/llvm_ir_gen.hpp"
 

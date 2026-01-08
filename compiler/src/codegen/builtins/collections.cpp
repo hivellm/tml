@@ -1,5 +1,23 @@
-// LLVM IR generator - Collections builtin functions
-// Handles: list_*, hashmap_*, buffer_*
+//! # LLVM IR Generator - Collection Builtins
+//!
+//! This file implements collection intrinsic function calls.
+//!
+//! ## List Functions
+//!
+//! `list_create`, `list_destroy`, `list_push`, `list_pop`,
+//! `list_get`, `list_set`, `list_len`, `list_capacity`
+//!
+//! ## HashMap Functions
+//!
+//! `hashmap_create`, `hashmap_destroy`, `hashmap_insert`,
+//! `hashmap_get`, `hashmap_remove`, `hashmap_contains`
+//!
+//! ## Buffer Functions
+//!
+//! `buffer_create`, `buffer_destroy`, `buffer_get`,
+//! `buffer_set`, `buffer_len`
+//!
+//! All functions delegate to runtime implementations.
 
 #include "codegen/llvm_ir_gen.hpp"
 

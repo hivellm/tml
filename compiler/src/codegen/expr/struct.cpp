@@ -1,5 +1,30 @@
-// LLVM IR generator - Struct expressions
-// Handles: gen_struct_expr, gen_struct_expr_ptr, gen_field, get_field_index, get_field_type
+//! # LLVM IR Generator - Struct Expressions
+//!
+//! This file implements struct construction and field access.
+//!
+//! ## Struct Construction
+//!
+//! `Point { x: 10, y: 20 }` generates:
+//! ```llvm
+//! %ptr = alloca %struct.Point
+//! %field0 = getelementptr %struct.Point, ptr %ptr, i32 0, i32 0
+//! store i32 10, ptr %field0
+//! %field1 = getelementptr %struct.Point, ptr %ptr, i32 0, i32 1
+//! store i32 20, ptr %field1
+//! ```
+//!
+//! ## Field Access
+//!
+//! `point.x` generates a GEP and load for the field at its index.
+//!
+//! ## Key Functions
+//!
+//! | Function            | Purpose                           |
+//! |---------------------|-----------------------------------|
+//! | `gen_struct_expr`   | Construct struct value            |
+//! | `gen_struct_expr_ptr`| Return pointer to struct         |
+//! | `gen_field`         | Access field                      |
+//! | `get_field_index`   | Look up field position            |
 
 #include "codegen/llvm_ir_gen.hpp"
 

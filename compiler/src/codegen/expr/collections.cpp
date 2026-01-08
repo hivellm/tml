@@ -1,5 +1,27 @@
-// LLVM IR generator - Collections and paths
-// Handles: gen_array, gen_index, gen_path
+//! # LLVM IR Generator - Collections and Paths
+//!
+//! This file implements array literals, indexing, and path expressions.
+//!
+//! ## Array Literals
+//!
+//! `[1, 2, 3]` creates a fixed-size array on the stack:
+//! ```llvm
+//! %arr = alloca [3 x i64]
+//! ; store each element at its index
+//! ```
+//!
+//! ## Array Indexing
+//!
+//! `arr[i]` generates GEP and load:
+//! ```llvm
+//! %ptr = getelementptr [N x T], ptr %arr, i64 0, i64 %i
+//! %val = load T, ptr %ptr
+//! ```
+//!
+//! ## Path Expressions
+//!
+//! Multi-segment paths like `Module::func` or `Enum::Variant` are
+//! resolved and generate the appropriate call or enum constructor.
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"

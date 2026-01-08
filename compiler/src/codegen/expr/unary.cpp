@@ -1,5 +1,27 @@
-// LLVM IR generator - Unary expression generation
-// Handles: negation, not, bitwise not, ref, deref, increment, decrement
+//! # LLVM IR Generator - Unary Expressions
+//!
+//! This file implements unary operator code generation.
+//!
+//! ## Operators
+//!
+//! | Operator | TML Syntax  | LLVM Instruction       |
+//! |----------|-------------|------------------------|
+//! | Negate   | `-x`        | `sub 0, x` or `fneg`   |
+//! | Not      | `not x`     | `xor x, 1` (bool)      |
+//! | BitNot   | `~x`        | `xor x, -1`            |
+//! | Ref      | `ref x`     | Return alloca ptr      |
+//! | RefMut   | `mut ref x` | Return alloca ptr      |
+//! | Deref    | `*ptr`      | `load` from ptr        |
+//!
+//! ## Reference Operations
+//!
+//! `ref` and `mut ref` return the address of a variable without loading:
+//! - For identifiers: return the alloca register directly
+//! - For field access: return GEP to field
+//!
+//! ## Dereference
+//!
+//! `*ptr` emits a `load` instruction from the pointer.
 
 #include "codegen/llvm_ir_gen.hpp"
 

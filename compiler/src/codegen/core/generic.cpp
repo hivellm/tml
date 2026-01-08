@@ -1,5 +1,33 @@
-// LLVM IR generator - Generic instantiation
-// Handles: generate_pending_instantiations, require_enum_instantiation, require_func_instantiation
+//! # LLVM IR Generator - Generic Instantiation
+//!
+//! This file implements monomorphization of generic types and functions.
+//!
+//! ## Monomorphization Strategy
+//!
+//! TML uses monomorphization like Rust: each use of a generic with concrete
+//! types generates a specialized version of the code.
+//!
+//! ## Instantiation Pipeline
+//!
+//! | Phase | What Happens                                    |
+//! |-------|------------------------------------------------|
+//! | 1     | Collect pending struct instantiations          |
+//! | 2     | Collect pending enum instantiations            |
+//! | 3     | Collect pending function instantiations        |
+//! | 4     | Loop until no new instantiations (handles recursion) |
+//!
+//! ## Key Methods
+//!
+//! | Method                        | Purpose                          |
+//! |-------------------------------|----------------------------------|
+//! | `generate_pending_instantiations` | Main instantiation loop      |
+//! | `require_struct_instantiation`| Queue struct for instantiation   |
+//! | `require_enum_instantiation`  | Queue enum for instantiation     |
+//! | `require_func_instantiation`  | Queue function for instantiation |
+//!
+//! ## Naming Convention
+//!
+//! Instantiated names include type arguments: `List_I32`, `HashMap_Str_I32`
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"

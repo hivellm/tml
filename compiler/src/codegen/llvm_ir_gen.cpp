@@ -1,5 +1,15 @@
-// LLVM IR text generator for TML
-// Generates LLVM IR as text (.ll format) for compilation with clang
+//! # LLVM IR Generator - Module Index
+//!
+//! This file documents the structure of the LLVM IR code generator.
+//! The implementation is split into modular components for maintainability.
+//!
+//! ## Architecture Overview
+//!
+//! The generator produces LLVM IR text (.ll format) which is then compiled
+//! to native code via clang/LLVM. This approach provides portability and
+//! leverages LLVM's optimization passes.
+//!
+//! ## Module Organization
 //
 // This file has been split into modular components:
 //

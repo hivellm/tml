@@ -1,6 +1,29 @@
-// LLVM IR generator - Runtime declarations and module imports
-// Handles: emit_header, emit_runtime_decls, emit_module_lowlevel_decls
-// Handles: emit_module_pure_tml_functions, emit_string_constants
+//! # LLVM IR Generator - Runtime Declarations
+//!
+//! This file emits runtime declarations and module imports.
+//!
+//! ## Emitted Sections
+//!
+//! | Method                         | Emits                         |
+//! |--------------------------------|-------------------------------|
+//! | `emit_header`                  | Target triple, comments       |
+//! | `emit_runtime_decls`           | Struct types, C functions     |
+//! | `emit_module_lowlevel_decls`   | FFI function declarations     |
+//! | `emit_module_pure_tml_functions`| Imported TML functions       |
+//! | `emit_string_constants`        | Global string literals        |
+//!
+//! ## Runtime Types
+//!
+//! | Type            | Layout              | Purpose             |
+//! |-----------------|---------------------|---------------------|
+//! | `%struct.tml_str` | `{ ptr, i64 }`    | String slice        |
+//! | `%struct.File`  | `{ ptr }`           | File handle         |
+//! | `%struct.Path`  | `{ ptr }`           | Path string         |
+//! | `%struct.Ordering` | `{ i32 }`        | Comparison result   |
+//!
+//! ## External Functions
+//!
+//! Declares C standard library functions: printf, puts, malloc, free, exit.
 
 #include "codegen/llvm_ir_gen.hpp"
 #include "lexer/lexer.hpp"

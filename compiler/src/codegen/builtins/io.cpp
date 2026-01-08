@@ -1,5 +1,23 @@
-// LLVM IR generator - IO builtin functions
-// Handles: print, println, panic
+//! # LLVM IR Generator - I/O Builtins
+//!
+//! This file implements builtin I/O function code generation.
+//!
+//! ## Functions
+//!
+//! | Function  | Generated Code                      |
+//! |-----------|-------------------------------------|
+//! | `print`   | `printf` with format specifier      |
+//! | `println` | `printf` with newline               |
+//! | `panic`   | `@panic(ptr)` then unreachable      |
+//!
+//! ## Print Type Detection
+//!
+//! Print infers the format specifier from argument type:
+//! - I32 → `%d`
+//! - I64 → `%lld`
+//! - F64 → `%f`
+//! - Bool → `true`/`false`
+//! - Str → `%s`
 
 #include "codegen/llvm_ir_gen.hpp"
 

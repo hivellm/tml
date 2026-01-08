@@ -1,5 +1,30 @@
-// LLVM IR generator - Control flow
-// Handles: if, block, loop, while, for, return
+//! # LLVM IR Generator - Control Flow
+//!
+//! This file implements control flow expression code generation.
+//!
+//! ## Control Flow Structures
+//!
+//! | Expression | Handler       | LLVM Pattern                    |
+//! |------------|---------------|---------------------------------|
+//! | `if`       | `gen_if`      | br + phi for value-returning    |
+//! | `ternary`  | `gen_ternary` | br + phi (always value-returning)|
+//! | `if let`   | `gen_if_let`  | Pattern match with branch       |
+//! | `when`     | `gen_when`    | Switch or cascading br          |
+//! | `block`    | `gen_block`   | Sequential statements           |
+//! | `loop`     | `gen_loop`    | Infinite loop with br           |
+//! | `while`    | `gen_while`   | Conditional loop                |
+//! | `for`      | `gen_for`     | Iterator loop                   |
+//! | `return`   | `gen_return`  | ret instruction                 |
+//!
+//! ## Phi Nodes
+//!
+//! When control flow merges with values (e.g., if-else expression),
+//! LLVM phi nodes select the correct value based on predecessor block.
+//!
+//! ## Loop Labels
+//!
+//! `current_loop_start_` and `current_loop_end_` track loop boundaries
+//! for break/continue generation.
 
 #include "codegen/llvm_ir_gen.hpp"
 

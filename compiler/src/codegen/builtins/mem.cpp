@@ -1,6 +1,29 @@
-// LLVM IR generator - Memory builtin functions
-// Handles: alloc, dealloc, mem_alloc, mem_free, mem_copy, mem_move,
-//          mem_set, mem_zero, mem_compare, mem_eq, read_i32, write_i32, ptr_offset
+//! # LLVM IR Generator - Memory Builtins
+//!
+//! This file implements low-level memory intrinsics.
+//!
+//! ## Allocation
+//!
+//! | Function   | LLVM Call                  |
+//! |------------|----------------------------|
+//! | `alloc`    | `@malloc`                  |
+//! | `dealloc`  | `@free`                    |
+//! | `mem_alloc`| `@malloc`                  |
+//! | `mem_free` | `@free`                    |
+//!
+//! ## Memory Operations
+//!
+//! | Function      | LLVM Intrinsic           |
+//! |---------------|--------------------------|
+//! | `mem_copy`    | `@llvm.memcpy`           |
+//! | `mem_move`    | `@llvm.memmove`          |
+//! | `mem_set`     | `@llvm.memset`           |
+//! | `mem_zero`    | `@llvm.memset` with 0    |
+//! | `mem_compare` | `@memcmp`                |
+//!
+//! ## Pointer Arithmetic
+//!
+//! `ptr_offset`, `read_i32`, `write_i32` for raw memory access.
 
 #include "codegen/llvm_ir_gen.hpp"
 
