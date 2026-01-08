@@ -1,0 +1,206 @@
+//! The Peekable adapter.
+//!
+//! This module provides the `Peekable` iterator adapter which allows peeking
+//! at the next element without consuming it.
+
+// PartialEq is a builtin behavior - no import needed
+
+// ============================================================================
+// Peekable Adapter
+// ============================================================================
+
+/// An iterator with a `peek()` method that returns an optional reference
+/// to the next element without consuming it.
+///
+/// This struct is created by the [`peekable`] function. See its documentation
+/// for more details.
+///
+/// Peeking is useful when you need to look ahead in an iterator to make
+/// decisions without consuming elements prematurely.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 3)
+/// var pk: Peekable[RepeatNI32] = peekable(iter)
+/// // pk.peek() returns Just(ref 42) without consuming
+/// // pk.next() returns Just(42) and advances
+/// ```
+pub type Peekable[I: Iterator] {
+    iter: I,
+    peeked: Maybe[Maybe[I::Item]]
+}
+
+impl[I: Iterator] Iterator for Peekable[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.peeked {
+            Just(value) => {
+                this.peeked = Nothing
+                return value
+            },
+            Nothing => return this.iter.next()
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let peek_len: I64 = when this.peeked {
+            Just(Just(_)) => 1,
+            Just(Nothing) => 0,
+            Nothing => 0
+        }
+        let hint: (I64, Maybe[I64]) = this.iter.size_hint()
+        let lo: I64 = hint.0
+        let hi: Maybe[I64] = hint.1
+        let lo_total: I64 = lo + peek_len
+        let hi_total: Maybe[I64] = when hi {
+            Just(h) => Just(h + peek_len),
+            Nothing => Nothing
+        }
+        return (lo_total, hi_total)
+    }
+}
+
+// ============================================================================
+// Peekable Methods
+// ============================================================================
+
+impl[I: Iterator] Peekable[I] {
+    /// Returns a reference to the next element without consuming it.
+    ///
+    /// Like `next`, but does not advance the iterator. If the iterator is
+    /// exhausted, returns `Nothing`. Multiple calls to `peek` without calling
+    /// `next` will return the same element.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var pk: Peekable[OnceI32] = peekable(once_i32(5))
+    /// // pk.peek() returns Just(ref 5)
+    /// // pk.peek() returns Just(ref 5) again
+    /// // pk.next() returns Just(5) and advances
+    /// // pk.peek() returns Nothing
+    /// ```
+    pub func peek(mut this) -> Maybe[ref I::Item] {
+        when this.peeked {
+            Just(Just(item)) => return Just(ref item),
+            Just(Nothing) => return Nothing,
+            Nothing => {
+                this.peeked = Just(this.iter.next())
+                when this.peeked {
+                    Just(Just(item)) => return Just(ref item),
+                    _ => return Nothing
+                }
+            }
+        }
+    }
+
+    /// Returns a mutable reference to the next element without consuming it.
+    ///
+    /// Like `peek`, but returns a mutable reference, allowing modification
+    /// of the peeked value before consuming it.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var pk: Peekable[OnceI32] = peekable(once_i32(5))
+    /// when pk.peek_mut() {
+    ///     Just(x) => *x = 10,  // Modify the peeked value
+    ///     Nothing => {}
+    /// }
+    /// // pk.next() now returns Just(10)
+    /// ```
+    pub func peek_mut(mut this) -> Maybe[mut ref I::Item] {
+        when this.peeked {
+            Just(Just(item)) => return Just(mut ref item),
+            Just(Nothing) => return Nothing,
+            Nothing => {
+                this.peeked = Just(this.iter.next())
+                when this.peeked {
+                    Just(Just(item)) => return Just(mut ref item),
+                    _ => return Nothing
+                }
+            }
+        }
+    }
+
+    /// Consumes and returns the next value if the predicate returns true.
+    ///
+    /// If the next value satisfies the predicate, it is consumed and returned.
+    /// Otherwise, `Nothing` is returned and the value remains in the iterator.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var pk: Peekable[OnceI32] = peekable(once_i32(5))
+    /// // pk.next_if(do(x: ref I32) -> Bool { *x > 3 }) returns Just(5)
+    /// ```
+    pub func next_if(mut this, pred: func(ref I::Item) -> Bool) -> Maybe[I::Item] {
+        when this.peek() {
+            Just(item) => {
+                if pred(item) {
+                    return this.next()
+                }
+                return Nothing
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    /// Consumes and returns the next value if it equals `expected`.
+    ///
+    /// If the next value equals the expected value, it is consumed and returned.
+    /// Otherwise, `Nothing` is returned and the value remains in the iterator.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// var pk: Peekable[OnceI32] = peekable(once_i32(5))
+    /// // pk.next_if_eq(ref 5) returns Just(5)
+    /// // pk.next_if_eq(ref 5) returns Nothing (already consumed)
+    /// ```
+    pub func next_if_eq(mut this, expected: ref I::Item) -> Maybe[I::Item] where I::Item: PartialEq {
+        when this.peek() {
+            Just(item) => {
+                if item.eq(expected) {
+                    return this.next()
+                }
+                return Nothing
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator which can use the `peek` method to look at the
+/// next element of the iterator without consuming it.
+///
+/// Calling `peek` returns a reference to the next element without advancing
+/// the iterator. This is useful for lookahead operations.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(1, 5)
+/// var pk: Peekable[RepeatNI32] = peekable(iter)
+///
+/// // Look at the next element without consuming
+/// when pk.peek() {
+///     Just(x) => {
+///         // *x is the next value
+///     },
+///     Nothing => {}
+/// }
+/// ```
+pub func peekable[I: Iterator](iter: I) -> Peekable[I] {
+    return Peekable { iter: iter, peeked: Nothing }
+}

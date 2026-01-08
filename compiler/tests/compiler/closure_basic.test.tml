@@ -18,6 +18,3 @@ func test_closure_with_capture() -> I32 {
     return 0
 }
 
-func main() -> I32 {
-    return 0
-}

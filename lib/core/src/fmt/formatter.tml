@@ -1,0 +1,473 @@
+//! The Formatter type for fine-grained formatting control.
+//!
+//! This module provides the `Formatter` type, which allows precise control
+//! over formatting options like width, precision, alignment, and fill
+//! characters.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::fmt::{Formatter, Alignment}
+//!
+//! let mut fmt = Formatter::new()
+//! fmt.set_width(10)
+//! fmt.set_align(Alignment::Right)
+//! fmt.set_fill('0')
+//!
+//! let result = fmt.pad("42")  // "0000000042"
+//! ```
+
+// Alignment and Sign are defined in this module (core::fmt), not builtins
+
+// ============================================================================
+// Formatter Type
+// ============================================================================
+
+/// A formatter for controlling output formatting.
+///
+/// `Formatter` provides fine-grained control over how values are formatted,
+/// including width, precision, alignment, fill characters, and sign display.
+///
+/// # Creating a Formatter
+///
+/// ```tml
+/// let fmt = Formatter::new()  // Default settings
+/// ```
+///
+/// # Formatting Options
+///
+/// | Option | Method | Description |
+/// |--------|--------|-------------|
+/// | Width | `set_width()` | Minimum output width |
+/// | Precision | `set_precision()` | Decimal places for floats, max chars for strings |
+/// | Alignment | `set_align()` | Left, Right, or Center |
+/// | Fill | `set_fill()` | Padding character (default: space) |
+/// | Sign | `set_sign()` | Sign display for numbers |
+/// | Alternate | `set_alternate()` | Alternate formatting mode |
+///
+/// # Examples
+///
+/// ## Padding Numbers
+///
+/// ```tml
+/// let mut fmt = Formatter::new()
+/// fmt.set_width(8)
+/// fmt.set_fill('0')
+/// fmt.set_align(Alignment::Right)
+///
+/// println(fmt.pad("42"))    // "00000042"
+/// println(fmt.pad("-42"))   // "000000-42" (note: sign after padding)
+/// ```
+///
+/// ## Centering Text
+///
+/// ```tml
+/// let mut fmt = Formatter::new()
+/// fmt.set_width(20)
+/// fmt.set_fill('-')
+/// fmt.set_align(Alignment::Center)
+///
+/// println(fmt.pad("Hello"))  // "-------Hello--------"
+/// ```
+///
+/// ## Precision for Floats
+///
+/// ```tml
+/// let mut fmt = Formatter::new()
+/// fmt.set_precision(2)
+///
+/// println(fmt.format_float(3.14159))  // "3.14"
+/// ```
+pub type Formatter {
+    width: Maybe[I64],
+    precision: Maybe[I64],
+    align: Alignment,
+    fill: Char,
+    sign: Sign,
+    alternate: Bool,
+    sign_aware_zero_pad: Bool
+}
+
+impl Formatter {
+    /// Creates a new `Formatter` with default settings.
+    ///
+    /// Default settings:
+    /// - No minimum width
+    /// - No precision limit
+    /// - Left alignment
+    /// - Space fill character
+    /// - Minus sign only (for negative numbers)
+    /// - No alternate mode
+    pub func new() -> Formatter {
+        return Formatter {
+            width: Nothing,
+            precision: Nothing,
+            align: Alignment::Left,
+            fill: ' ',
+            sign: Sign::Minus,
+            alternate: false,
+            sign_aware_zero_pad: false
+        }
+    }
+
+    // ========================================================================
+    // Setters
+    // ========================================================================
+
+    /// Sets the minimum width for formatted output.
+    ///
+    /// If the formatted value is shorter than the width, it will be padded
+    /// according to the alignment and fill settings.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_width(10)
+    /// println(fmt.pad("hi"))  // "hi        " (left-aligned by default)
+    /// ```
+    pub func set_width(mut this, w: I64) {
+        this.width = Just(w)
+    }
+
+    /// Sets the precision for formatted output.
+    ///
+    /// For floating-point numbers, this is the number of decimal places.
+    /// For strings, this is the maximum number of characters.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_precision(2)
+    /// // Float: 3.14159 -> "3.14"
+    /// // String: "hello" (5 chars) with precision 3 -> "hel"
+    /// ```
+    pub func set_precision(mut this, p: I64) {
+        this.precision = Just(p)
+    }
+
+    /// Sets the alignment for padded output.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_width(10)
+    ///
+    /// fmt.set_align(Alignment::Left)
+    /// println(fmt.pad("hi"))    // "hi        "
+    ///
+    /// fmt.set_align(Alignment::Right)
+    /// println(fmt.pad("hi"))    // "        hi"
+    ///
+    /// fmt.set_align(Alignment::Center)
+    /// println(fmt.pad("hi"))    // "    hi    "
+    /// ```
+    pub func set_align(mut this, a: Alignment) {
+        this.align = a
+    }
+
+    /// Sets the fill character for padding.
+    ///
+    /// Default is space (`' '`).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_width(10)
+    /// fmt.set_fill('-')
+    /// println(fmt.pad("hi"))  // "hi--------"
+    /// ```
+    pub func set_fill(mut this, c: Char) {
+        this.fill = c
+    }
+
+    /// Sets how the sign should be displayed for numbers.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    ///
+    /// fmt.set_sign(Sign::Minus)  // Default: only show minus for negative
+    /// fmt.set_sign(Sign::Plus)   // Always show sign: +42 or -42
+    /// fmt.set_sign(Sign::Space)  // Space for positive: " 42" or "-42"
+    /// ```
+    pub func set_sign(mut this, s: Sign) {
+        this.sign = s
+    }
+
+    /// Enables alternate formatting mode.
+    ///
+    /// The effect of alternate mode depends on the type being formatted:
+    /// - Hex: Includes `0x` prefix
+    /// - Binary: Includes `0b` prefix
+    /// - Octal: Includes `0o` prefix
+    /// - Debug: May use "pretty" multi-line format
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_alternate(true)
+    /// // With alternate: "0xff"
+    /// // Without: "ff"
+    /// ```
+    pub func set_alternate(mut this, alt: Bool) {
+        this.alternate = alt
+    }
+
+    /// Enables sign-aware zero padding.
+    ///
+    /// When enabled with a width, the sign comes before the zeros:
+    /// `-42` with width 6 becomes `-00042` instead of `000-42`.
+    pub func set_sign_aware_zero_pad(mut this, pad: Bool) {
+        this.sign_aware_zero_pad = pad
+    }
+
+    // ========================================================================
+    // Getters
+    // ========================================================================
+
+    /// Returns the configured width, if any.
+    pub func width(this) -> Maybe[I64] {
+        return this.width
+    }
+
+    /// Returns the configured precision, if any.
+    pub func precision(this) -> Maybe[I64] {
+        return this.precision
+    }
+
+    /// Returns the configured alignment.
+    pub func align(this) -> Alignment {
+        return this.align
+    }
+
+    /// Returns the configured fill character.
+    pub func fill(this) -> Char {
+        return this.fill
+    }
+
+    /// Returns the configured sign mode.
+    pub func sign(this) -> Sign {
+        return this.sign
+    }
+
+    /// Returns whether alternate mode is enabled.
+    pub func alternate(this) -> Bool {
+        return this.alternate
+    }
+
+    /// Returns whether sign-aware zero padding is enabled.
+    pub func sign_aware_zero_pad(this) -> Bool {
+        return this.sign_aware_zero_pad
+    }
+
+    // ========================================================================
+    // Formatting Methods
+    // ========================================================================
+
+    /// Pads a string to the configured width.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_width(10)
+    /// fmt.set_align(Alignment::Right)
+    /// fmt.set_fill('.')
+    ///
+    /// println(fmt.pad("test"))  // "......test"
+    /// ```
+    pub func pad(this, s: Str) -> Str {
+        when this.width {
+            Nothing => return s,
+            Just(w) => {
+                let len: I64 = string_len(s)
+                if len >= w {
+                    return s
+                }
+                let pad_total: I64 = w - len
+                let fill_str: Str = char_to_str(this.fill)
+
+                when this.align {
+                    Alignment::Left => {
+                        return s + repeat_char(fill_str, pad_total)
+                    },
+                    Alignment::Right => {
+                        return repeat_char(fill_str, pad_total) + s
+                    },
+                    Alignment::Center => {
+                        let left_pad: I64 = pad_total / 2
+                        let right_pad: I64 = pad_total - left_pad
+                        return repeat_char(fill_str, left_pad) + s + repeat_char(fill_str, right_pad)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Pads a number string with sign-aware zero padding.
+    ///
+    /// The sign is placed before the zeros:
+    /// `-42` with width 6 becomes `-00042`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut fmt = Formatter::new()
+    /// fmt.set_width(6)
+    ///
+    /// println(fmt.pad_integral(true, "", "42"))   // "000042"
+    /// println(fmt.pad_integral(false, "", "42"))  // "-00042"
+    /// ```
+    pub func pad_integral(this, is_positive: Bool, prefix: Str, num: Str) -> Str {
+        var sign_str: Str = ""
+        when this.sign {
+            Sign::Minus => {
+                if not is_positive {
+                    sign_str = "-"
+                }
+            },
+            Sign::Plus => {
+                if is_positive {
+                    sign_str = "+"
+                } else {
+                    sign_str = "-"
+                }
+            },
+            Sign::Space => {
+                if is_positive {
+                    sign_str = " "
+                } else {
+                    sign_str = "-"
+                }
+            }
+        }
+
+        let full: Str = sign_str + prefix + num
+
+        when this.width {
+            Nothing => return full,
+            Just(w) => {
+                let len: I64 = string_len(full)
+                if len >= w {
+                    return full
+                }
+
+                if this.sign_aware_zero_pad {
+                    // Sign-aware: sign, then zeros, then number
+                    let pad_count: I64 = w - len
+                    return sign_str + prefix + repeat_char("0", pad_count) + num
+                } else {
+                    // Normal padding
+                    return this.pad(full)
+                }
+            }
+        }
+    }
+
+    /// Applies precision truncation to a string.
+    ///
+    /// If precision is set and the string is longer, it is truncated.
+    pub func apply_precision(this, s: Str) -> Str {
+        when this.precision {
+            Nothing => return s,
+            Just(p) => {
+                let len: I64 = string_len(s)
+                if len <= p {
+                    return s
+                }
+                return string_slice(s, 0, p)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Returns the length of a string.
+func string_len(s: Str) -> I64 {
+    return lowlevel { str_len(s) }
+}
+
+/// Converts a character to a string.
+func char_to_str(c: Char) -> Str {
+    return lowlevel { char_to_string(c) }
+}
+
+/// Repeats a string n times.
+func repeat_char(s: Str, n: I64) -> Str {
+    if n <= 0 {
+        return ""
+    }
+    var result: Str = ""
+    var i: I64 = 0
+    loop {
+        if i >= n {
+            return result
+        }
+        result = result + s
+        i = i + 1
+    }
+}
+
+/// Returns a slice of a string from start to end (exclusive).
+func string_slice(s: Str, start: I64, end: I64) -> Str {
+    return lowlevel { str_slice(s, start, end) }
+}
+
+// ============================================================================
+// Arguments Type (for format string processing)
+// ============================================================================
+
+/// Represents the arguments to a format string.
+///
+/// This type is used internally by formatting macros to hold the arguments
+/// that will be formatted into the output string.
+///
+/// # Note
+///
+/// This is a low-level type. Most users should use the formatting behaviors
+/// (`Display`, `Debug`, etc.) directly instead.
+pub type Arguments {
+    pieces: Str
+}
+
+impl Arguments {
+    /// Creates empty arguments.
+    pub func new() -> Arguments {
+        return Arguments { pieces: "" }
+    }
+
+    /// Creates arguments from a single string.
+    pub func from_str(s: Str) -> Arguments {
+        return Arguments { pieces: s }
+    }
+
+    /// Returns the formatted string.
+    pub func as_str(this) -> Str {
+        return this.pieces
+    }
+}
+
+impl Display for Arguments {
+    pub func to_string(this) -> Str {
+        return this.pieces
+    }
+}
+
+impl Debug for Arguments {
+    pub func debug_string(this) -> Str {
+        return "Arguments \{ pieces: " + this.pieces.debug_string() + " \}"
+    }
+}
+
+// Import Display/Debug for Arguments impl
+use core::fmt::traits::Display
+use core::fmt::traits::Debug

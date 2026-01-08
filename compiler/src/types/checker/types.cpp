@@ -329,14 +329,52 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             return make_func(func->params, func->return_type);
         }
 
-        // Then try enum variant lookup
+        // Then try enum variant lookup (local enums first)
         auto enum_def = env_.lookup_enum(segments[0]);
+        std::string module_path = "";
+
+        // If not found locally, check imports
+        if (!enum_def) {
+            auto imported_path = env_.resolve_imported_symbol(segments[0]);
+            if (imported_path.has_value()) {
+                size_t pos = imported_path->rfind("::");
+                if (pos != std::string::npos) {
+                    module_path = imported_path->substr(0, pos);
+                    auto module = env_.get_module(module_path);
+                    if (module) {
+                        auto enum_it = module->enums.find(segments[0]);
+                        if (enum_it != module->enums.end()) {
+                            enum_def = enum_it->second;
+                        }
+                    }
+                }
+            }
+        }
+
         if (enum_def) {
             for (const auto& variant_pair : enum_def->variants) {
                 if (variant_pair.first == segments[1]) {
-                    auto type = std::make_shared<Type>();
-                    type->kind = NamedType{segments[0], "", {}};
-                    return type;
+                    // Get type arguments from path_expr.generics if provided
+                    std::vector<TypePtr> type_args;
+                    if (path_expr.generics) {
+                        for (const auto& arg : path_expr.generics->args) {
+                            if (arg.is_type()) {
+                                type_args.push_back(resolve_type(*arg.as_type()));
+                            }
+                        }
+                    }
+
+                    auto enum_type = std::make_shared<Type>();
+                    enum_type->kind = NamedType{segments[0], module_path, std::move(type_args)};
+
+                    const auto& payload_types = variant_pair.second;
+                    if (payload_types.empty()) {
+                        // No payload - return enum type directly
+                        return enum_type;
+                    } else {
+                        // Has payload - return function type: payload_types -> enum_type
+                        return make_func(payload_types, enum_type);
+                    }
                 }
             }
         }

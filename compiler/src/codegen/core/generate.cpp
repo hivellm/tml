@@ -408,6 +408,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         if (!block_terminated_) {
                             if (ret_type == "void") {
                                 emit_line("  ret void");
+                            } else if (ret_type == "ptr") {
+                                emit_line("  ret ptr null");
                             } else {
                                 emit_line("  ret " + ret_type + " 0");
                             }
@@ -415,6 +417,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     } else {
                         if (ret_type == "void") {
                             emit_line("  ret void");
+                        } else if (ret_type == "ptr") {
+                            emit_line("  ret ptr null");
                         } else {
                             emit_line("  ret " + ret_type + " 0");
                         }
@@ -565,6 +569,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                             if (!block_terminated_) {
                                 if (ret_type == "void") {
                                     emit_line("  ret void");
+                                } else if (ret_type == "ptr") {
+                                    emit_line("  ret ptr null");
                                 } else {
                                     emit_line("  ret " + ret_type + " 0");
                                 }

@@ -137,7 +137,3 @@ func test_dyn_without_binding_still_works() -> I32 {
 
     return 0
 }
-
-func main() -> I32 {
-    return 0
-}

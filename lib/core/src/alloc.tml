@@ -48,7 +48,7 @@
 //! assert_eq(i32_layout.align(), 4)
 //! ```
 
-use core::fmt::{Display, Debug}
+// Display and Debug are builtin behaviors - no import needed
 
 // ============================================================================
 // Layout Type
@@ -100,15 +100,20 @@ impl Layout {
     /// assert_eq(layout.align(), 8)
     /// ```
     pub func from_size_align(size: I64, align: I64) -> Outcome[Layout, LayoutError] {
+        // Check size is non-negative
+        if size < 0 {
+            return Err(LayoutError::with_message("size must be non-negative"))
+        }
+
         // Check alignment is power of two
         if align <= 0 or (align & (align - 1)) != 0 {
-            return Err(LayoutError::new("alignment must be a power of two"))
+            return Err(LayoutError::with_message("alignment must be a power of two"))
         }
 
         // Check size doesn't overflow when aligned
         let aligned_size: I64 = (size + align - 1) & (0 - align)
         if aligned_size < size {
-            return Err(LayoutError::new("size overflow when aligned"))
+            return Err(LayoutError::with_message("size overflow when aligned"))
         }
 
         return Ok(Layout { size_: size, align_: align })
@@ -147,34 +152,43 @@ impl Layout {
     /// ```
     pub func array_layout(elem_size: I64, elem_align: I64, n: I64) -> Outcome[Layout, LayoutError] {
         if n < 0 {
-            return Err(LayoutError::new("negative array length"))
+            return Err(LayoutError::with_message("negative array length"))
         }
 
         // Check for overflow
         let total_size: I64 = elem_size * n
         if n != 0 and total_size / n != elem_size {
-            return Err(LayoutError::new("array size overflow"))
+            return Err(LayoutError::with_message("array size overflow"))
         }
 
         return Layout::from_size_align(total_size, elem_align)
     }
 
-    /// Returns the amount of padding needed to align `self.size()` to `align`.
+    /// Returns the amount of padding needed to align `align` to `self.align()`.
     ///
-    /// The return value is always less than `align`.
+    /// Given a value/offset `align`, this computes how much padding is needed
+    /// to round it up to the next multiple of this layout's alignment.
+    ///
+    /// The return value is always less than `self.align()`.
     pub func padding_needed_for(this, align: I64) -> I64 {
-        let len: I64 = this.size_
-        let align_m1: I64 = align - 1
-        return (0 - len) & align_m1
+        let layout_align: I64 = this.align_
+        if layout_align <= 0 {
+            return 0
+        }
+        let remainder: I64 = align % layout_align
+        if remainder == 0 {
+            return 0
+        }
+        return layout_align - remainder
     }
 
     /// Creates a layout by rounding the size up to a multiple of the alignment.
     ///
     /// This is useful when you need to allocate multiple items with the same
     /// layout consecutively.
-    pub func pad_to_align(this) -> Layout {
+    pub func pad_to_align(this) -> Outcome[Layout, LayoutError] {
         let new_size: I64 = (this.size_ + this.align_ - 1) & (0 - this.align_)
-        return Layout { size_: new_size, align_: this.align_ }
+        return Ok(Layout { size_: new_size, align_: this.align_ })
     }
 
     /// Creates a layout for `n` copies of `self`, with padding between each.
@@ -185,20 +199,25 @@ impl Layout {
     /// Returns `Err(LayoutError)` if the total size would overflow.
     pub func repeat(this, n: I64) -> Outcome[(Layout, I64), LayoutError] {
         if n < 0 {
-            return Err(LayoutError::new("negative repeat count"))
+            return Err(LayoutError::with_message("negative repeat count"))
         }
 
-        let padded: Layout = this.pad_to_align()
-        let stride: I64 = padded.size()
+        let padded_result: Outcome[Layout, LayoutError] = this.pad_to_align()
+        when padded_result {
+            Ok(padded) => {
+                let stride: I64 = padded.size()
 
-        // Check for overflow
-        let total_size: I64 = stride * n
-        if n != 0 and total_size / n != stride {
-            return Err(LayoutError::new("repeat size overflow"))
+                // Check for overflow
+                let total_size: I64 = stride * n
+                if n != 0 and total_size / n != stride {
+                    return Err(LayoutError::with_message("repeat size overflow"))
+                }
+
+                let layout: Layout = Layout::from_size_align_unchecked(total_size, this.align_)
+                return Ok((layout, stride))
+            },
+            Err(e) => return Err(e)
         }
-
-        let layout: Layout = Layout::from_size_align_unchecked(total_size, this.align_)
-        return Ok((layout, stride))
     }
 
     /// Extends this layout with another layout, returning the combined layout
@@ -208,7 +227,7 @@ impl Layout {
     /// - Size: self.size() + padding + other.size()
     /// - Alignment: max(self.align(), other.align())
     pub func extend(this, other: Layout) -> Outcome[(Layout, I64), LayoutError] {
-        let new_align: I64 = this.align_
+        var new_align: I64 = this.align_
         if other.align_ > new_align {
             new_align = other.align_
         }
@@ -219,7 +238,7 @@ impl Layout {
         // Check for overflow
         let new_size: I64 = offset + other.size_
         if new_size < offset {
-            return Err(LayoutError::new("layout extend overflow"))
+            return Err(LayoutError::with_message("layout extend overflow"))
         }
 
         let layout_result: Outcome[Layout, LayoutError] = Layout::from_size_align(new_size, new_align)
@@ -234,10 +253,75 @@ impl Layout {
     /// Returns `Err` if `align` is not a power of two or is less than
     /// `self.align()`.
     pub func align_to(this, align: I64) -> Outcome[Layout, LayoutError] {
-        if align < this.align_ {
-            return Err(LayoutError::new("cannot reduce alignment"))
+        var new_align: I64 = align
+        if this.align_ > new_align {
+            new_align = this.align_
         }
-        return Layout::from_size_align(this.size_, align)
+        return Layout::from_size_align(this.size_, new_align)
+    }
+
+    /// Returns true if this layout has zero size.
+    pub func is_zero_sized(this) -> Bool {
+        return this.size_ == 0
+    }
+
+    /// Returns a "dangling" pointer suitable for zero-sized types.
+    ///
+    /// The returned value is the alignment of this layout.
+    pub func dangling(this) -> I64 {
+        return this.align_
+    }
+
+    /// Returns a new layout with the given size but same alignment.
+    pub func with_size(this, new_size: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::from_size_align(new_size, this.align_)
+    }
+
+    /// Returns a new layout with the given alignment but same size.
+    pub func with_align(this, new_align: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::from_size_align(this.size_, new_align)
+    }
+
+    /// Creates a layout for an array with given element size, alignment, and count.
+    ///
+    /// This is a convenience function that calls `array_layout`.
+    pub func array_of(elem_size: I64, elem_align: I64, n: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::array_layout(elem_size, elem_align, n)
+    }
+
+    /// Creates a layout for an array with given element size, alignment, and count.
+    ///
+    /// Alias for `array_of`.
+    pub func array(elem_size: I64, elem_align: I64, n: I64) -> Outcome[Layout, LayoutError] {
+        return Layout::array_layout(elem_size, elem_align, n)
+    }
+
+    /// Extends this layout with another layout without padding (packed).
+    ///
+    /// The resulting layout has alignment of 1.
+    pub func extend_packed(this, other: Layout) -> Outcome[Layout, LayoutError] {
+        let new_size: I64 = this.size_ + other.size_
+        if new_size < this.size_ {
+            return Err(LayoutError::with_message("layout extend overflow"))
+        }
+        return Ok(Layout::from_size_align_unchecked(new_size, 1))
+    }
+
+    /// Creates a layout for `n` copies of `self` without padding (packed).
+    pub func repeat_packed(this, n: I64) -> Outcome[Layout, LayoutError] {
+        if n < 0 {
+            return Err(LayoutError::with_message("negative repeat count"))
+        }
+        let total_size: I64 = this.size_ * n
+        if n != 0 and total_size / n != this.size_ {
+            return Err(LayoutError::with_message("repeat size overflow"))
+        }
+        return Ok(Layout::from_size_align_unchecked(total_size, this.align_))
+    }
+
+    /// Returns true if this layout equals another layout.
+    pub func equals(this, other: Layout) -> Bool {
+        return this.size_ == other.size_ and this.align_ == other.align_
     }
 }
 
@@ -284,8 +368,13 @@ pub type LayoutError {
 }
 
 impl LayoutError {
+    /// Creates a new `LayoutError` with a default message.
+    pub func new() -> LayoutError {
+        return LayoutError { message: "invalid parameters to Layout::from_size_align" }
+    }
+
     /// Creates a new `LayoutError` with the given message.
-    pub func new(message: Str) -> LayoutError {
+    pub func with_message(message: Str) -> LayoutError {
         return LayoutError { message: message }
     }
 
@@ -297,7 +386,7 @@ impl LayoutError {
 
 impl Display for LayoutError {
     pub func to_string(this) -> Str {
-        return "layout error: " + this.message
+        return this.message
     }
 }
 
@@ -331,7 +420,7 @@ impl AllocError {
 
 impl Display for AllocError {
     pub func to_string(this) -> Str {
-        return "allocation failed"
+        return "memory allocation failed"
     }
 }
 
@@ -488,9 +577,160 @@ pub behavior GlobalAlloc {
 }
 
 // ============================================================================
+// Utility Functions
+// ============================================================================
+
+/// Returns true if `n` is a power of two.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_power_of_two(1))
+/// assert(is_power_of_two(2))
+/// assert(is_power_of_two(4))
+/// assert(not is_power_of_two(0))
+/// assert(not is_power_of_two(3))
+/// ```
+pub func is_power_of_two(n: I64) -> Bool {
+    return n > 0 and (n & (n - 1)) == 0
+}
+
+/// Returns true if `align` is a valid alignment (positive power of two).
+pub func is_valid_align(align: I64) -> Bool {
+    return is_power_of_two(align)
+}
+
+/// Rounds `addr` up to the next multiple of `align`.
+///
+/// `align` must be a power of two.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(align_up(10, 8), 16)
+/// assert_eq(align_up(16, 8), 16)
+/// assert_eq(align_up(0, 8), 0)
+/// ```
+pub func align_up(addr: I64, align: I64) -> I64 {
+    let mask: I64 = align - 1
+    return (addr + mask) & (0 - align)
+}
+
+/// Rounds `addr` down to the previous multiple of `align`.
+///
+/// `align` must be a power of two.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(align_down(10, 8), 8)
+/// assert_eq(align_down(16, 8), 16)
+/// assert_eq(align_down(7, 8), 0)
+/// ```
+pub func align_down(addr: I64, align: I64) -> I64 {
+    return addr & (0 - align)
+}
+
+/// Returns true if `addr` is aligned to `align`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert(is_aligned(0, 8))
+/// assert(is_aligned(8, 8))
+/// assert(not is_aligned(1, 8))
+/// ```
+pub func is_aligned(addr: I64, align: I64) -> Bool {
+    return (addr & (align - 1)) == 0
+}
+
+/// Returns the number of bytes needed to pad `addr` to the next multiple of `align`.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(padding_needed(10, 8), 6)
+/// assert_eq(padding_needed(16, 8), 0)
+/// ```
+pub func padding_needed(addr: I64, align: I64) -> I64 {
+    let aligned: I64 = align_up(addr, align)
+    return aligned - addr
+}
+
+/// Returns the smallest power of two greater than or equal to `n`.
+///
+/// Returns 1 for n <= 1.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(next_power_of_two(1), 1)
+/// assert_eq(next_power_of_two(3), 4)
+/// assert_eq(next_power_of_two(5), 8)
+/// assert_eq(next_power_of_two(8), 8)
+/// ```
+pub func next_power_of_two(n: I64) -> I64 {
+    if n <= 1 {
+        return 1
+    }
+    // Find the position of the highest set bit
+    var v: I64 = n - 1
+    v = v | (v >> 1)
+    v = v | (v >> 2)
+    v = v | (v >> 4)
+    v = v | (v >> 8)
+    v = v | (v >> 16)
+    v = v | (v >> 32)
+    return v + 1
+}
+
+// ============================================================================
+// Layout Presets
+// ============================================================================
+
+/// Returns the layout for a U8.
+pub func layout_u8() -> Layout {
+    return Layout::from_size_align_unchecked(1, 1)
+}
+
+/// Returns the layout for a U16.
+pub func layout_u16() -> Layout {
+    return Layout::from_size_align_unchecked(2, 2)
+}
+
+/// Returns the layout for a U32.
+pub func layout_u32() -> Layout {
+    return Layout::from_size_align_unchecked(4, 4)
+}
+
+/// Returns the layout for a U64.
+pub func layout_u64() -> Layout {
+    return Layout::from_size_align_unchecked(8, 8)
+}
+
+/// Returns the layout for a U128.
+pub func layout_u128() -> Layout {
+    return Layout::from_size_align_unchecked(16, 16)
+}
+
+/// Returns the layout for a pointer (64-bit systems).
+pub func layout_ptr() -> Layout {
+    return Layout::from_size_align_unchecked(8, 8)
+}
+
+/// Returns the default alignment for allocations.
+pub func default_alloc_align() -> I64 {
+    return 16
+}
+
+/// Returns the minimum allocation size.
+pub func min_alloc_size() -> I64 {
+    return 16
+}
+
+// ============================================================================
 // Imports
 // ============================================================================
 
 use core::ptr::RawPtr
-use core::cmp::{PartialEq, Eq}
-use core::clone::{Duplicate, Copy}
+// PartialEq, Eq, Duplicate, Copy are builtins - no import needed

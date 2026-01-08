@@ -1,0 +1,96 @@
+//! The Cycle adapter.
+//!
+//! This module provides the `Cycle` iterator adapter which repeats an
+//! iterator endlessly.
+
+// Duplicate is a builtin behavior - no import needed
+
+// ============================================================================
+// Cycle Adapter
+// ============================================================================
+
+/// An iterator that repeats endlessly.
+///
+/// This struct is created by the [`cycle`] function. See its documentation
+/// for more details.
+///
+/// # Warning
+///
+/// This iterator is **infinite**! Always use it with limiting adapters like
+/// `take` to avoid infinite loops.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 2)
+/// let cycled: Cycle[RepeatNI32] = cycle(iter)
+/// let limited: Take[Cycle[RepeatNI32]] = take(cycled, 5)
+/// // Yields 42, 42, 42, 42, 42 (repeating the original 2 elements)
+/// ```
+pub type Cycle[I] {
+    orig: I,
+    iter: I
+}
+
+impl[I: Iterator + Duplicate] Iterator for Cycle[I] where I::Item: Duplicate {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter.next() {
+            Just(item) => return Just(item),
+            Nothing => {
+                this.iter = this.orig.duplicate()
+                return this.iter.next()
+            }
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let hint: (I64, Maybe[I64]) = this.orig.size_hint()
+        let lo: I64 = hint.0
+        if lo == 0 {
+            let iter_hint: (I64, Maybe[I64]) = this.iter.size_hint()
+            let iter_lo: I64 = iter_hint.0
+            if iter_lo == 0 {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+        return (I64::MAX, Nothing)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that repeats endlessly.
+///
+/// After the iterator is exhausted, it resets and starts again from the
+/// beginning. This creates an infinite iterator.
+///
+/// # Warning
+///
+/// **This creates an infinite iterator!** Always combine with adapters like
+/// `take` to limit iterations, or your program will loop forever.
+///
+/// # Requirements
+///
+/// Both the iterator and its items must implement `Duplicate` since the
+/// iterator needs to be reset when exhausted.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(1, 3)
+/// let infinite: Cycle[RepeatNI32] = cycle(nums)
+/// let five: Take[Cycle[RepeatNI32]] = take(infinite, 5)
+/// // Yields 1, 1, 1, 1, 1 (cycling through the 3-element iterator)
+/// ```
+pub func cycle[I: Iterator + Duplicate](iter: I) -> Cycle[I] where I::Item: Duplicate {
+    return Cycle { orig: iter.duplicate(), iter: iter }
+}

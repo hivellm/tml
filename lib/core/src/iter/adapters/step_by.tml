@@ -1,0 +1,79 @@
+//! The StepBy adapter.
+//!
+//! This module provides the `StepBy` iterator adapter which steps through
+//! elements by a given amount.
+
+// ============================================================================
+// StepBy Adapter
+// ============================================================================
+
+/// An iterator that steps through by a given amount.
+///
+/// This struct is created by the [`step_by`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(1, 10)
+/// let evens: StepBy[RepeatNI32] = step_by(iter, 2)
+/// // Yields every other element
+/// ```
+pub type StepBy[I] {
+    iter: I,
+    step: I64,
+    first_take: Bool
+}
+
+impl[I: Iterator] Iterator for StepBy[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.first_take {
+            this.first_take = false
+            return this.iter.next()
+        }
+
+        // Skip (step - 1) elements
+        var i: I64 = 1
+        loop {
+            if i >= this.step {
+                break
+            }
+            when this.iter.next() {
+                Just(_) => {},
+                Nothing => return Nothing
+            }
+            i = i + 1
+        }
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that steps through by a given amount.
+///
+/// The first element is always returned. Then, every `step`th element is
+/// returned.
+///
+/// # Panics
+///
+/// The method will panic if the given step is `0`.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 10)
+/// let stepped: StepBy[RepeatNI32] = step_by(iter, 3)
+/// // Yields elements at positions 0, 3, 6, 9
+/// ```
+pub func step_by[I: Iterator](iter: I, step: I64) -> StepBy[I] {
+    return StepBy { iter: iter, step: step, first_take: true }
+}

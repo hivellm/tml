@@ -1,0 +1,412 @@
+//! Coroutine and Generator behaviors.
+//!
+//! This module defines the behaviors for coroutines (also known as generators),
+//! which are functions that can suspend execution and yield multiple values
+//! over time.
+//!
+//! # Overview
+//!
+//! Coroutines are a generalization of iterators. While iterators produce values
+//! on demand, coroutines can also receive values when resumed and can return
+//! a final value when completed.
+//!
+//! # Coroutine States
+//!
+//! A coroutine can be in one of several states:
+//! - **Yielded**: The coroutine has yielded a value and can be resumed
+//! - **Complete**: The coroutine has finished and returned a final value
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::{Coroutine, CoroutineState}
+//!
+//! // A simple generator that yields 1, 2, 3
+//! gen func count_to_three() -> impl Coroutine[Unit, Yield = I32, Return = Str] {
+//!     yield 1
+//!     yield 2
+//!     yield 3
+//!     return "done"
+//! }
+//!
+//! var gen = count_to_three()
+//! println(gen.resume(()))  // Yielded(1)
+//! println(gen.resume(()))  // Yielded(2)
+//! println(gen.resume(()))  // Yielded(3)
+//! println(gen.resume(()))  // Complete("done")
+//! ```
+
+// Display, Debug are builtins - no import needed
+
+// ============================================================================
+// CoroutineState Enum
+// ============================================================================
+
+/// The result of a coroutine resumption.
+///
+/// This enum represents the possible states a coroutine can be in after
+/// being resumed.
+///
+/// # Type Parameters
+///
+/// - `Y` - The type of values yielded by the coroutine
+/// - `R` - The type of the final return value
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::CoroutineState
+///
+/// when state {
+///     CoroutineState::Yielded(value) => {
+///         println("Got value: " + value.to_string())
+///     },
+///     CoroutineState::Complete(result) => {
+///         println("Finished with: " + result.to_string())
+///     }
+/// }
+/// ```
+pub type CoroutineState[Y, R] {
+    /// The coroutine yielded a value and can be resumed.
+    Yielded(Y),
+    /// The coroutine completed and returned a final value.
+    Complete(R)
+}
+
+impl[Y, R] CoroutineState[Y, R] {
+    /// Returns `true` if this is a `Yielded` state.
+    pub func is_yielded(this) -> Bool {
+        when this {
+            CoroutineState::Yielded(_) => return true,
+            CoroutineState::Complete(_) => return false
+        }
+    }
+
+    /// Returns `true` if this is a `Complete` state.
+    pub func is_complete(this) -> Bool {
+        when this {
+            CoroutineState::Yielded(_) => return false,
+            CoroutineState::Complete(_) => return true
+        }
+    }
+}
+
+impl[Y: Debug, R: Debug] Debug for CoroutineState[Y, R] {
+    pub func debug_string(this) -> Str {
+        when this {
+            CoroutineState::Yielded(y) => {
+                return "Yielded(" + y.debug_string() + ")"
+            },
+            CoroutineState::Complete(r) => {
+                return "Complete(" + r.debug_string() + ")"
+            }
+        }
+    }
+}
+
+impl[Y: Display, R: Display] Display for CoroutineState[Y, R] {
+    pub func to_string(this) -> Str {
+        when this {
+            CoroutineState::Yielded(y) => {
+                return "Yielded(" + y.to_string() + ")"
+            },
+            CoroutineState::Complete(r) => {
+                return "Complete(" + r.to_string() + ")"
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Coroutine Behavior
+// ============================================================================
+
+/// The behavior implemented by all coroutines.
+///
+/// A coroutine is a stateful computation that can suspend execution,
+/// yield intermediate values, receive input when resumed, and eventually
+/// return a final value.
+///
+/// # Type Parameters
+///
+/// - `R` - The type of value passed to `resume()` (the resumption argument)
+///
+/// # Associated Types
+///
+/// - `Yield` - The type of values yielded by the coroutine
+/// - `Return` - The type of the final return value
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::{Coroutine, CoroutineState}
+///
+/// pub type Counter {
+///     current: I32,
+///     max: I32
+/// }
+///
+/// impl Coroutine[Unit] for Counter {
+///     type Yield = I32
+///     type Return = Str
+///
+///     pub func resume(mut this, _arg: Unit) -> CoroutineState[I32, Str] {
+///         if this.current <= this.max {
+///             let value = this.current
+///             this.current = this.current + 1
+///             return CoroutineState::Yielded(value)
+///         }
+///         return CoroutineState::Complete("done counting")
+///     }
+/// }
+/// ```
+///
+/// # Coroutine with Input
+///
+/// Coroutines can receive values when resumed:
+///
+/// ```tml
+/// pub type Accumulator {
+///     sum: I64
+/// }
+///
+/// impl Coroutine[I64] for Accumulator {
+///     type Yield = I64  // Yields current sum
+///     type Return = I64 // Returns final sum
+///
+///     pub func resume(mut this, input: I64) -> CoroutineState[I64, I64] {
+///         if input == 0 {
+///             return CoroutineState::Complete(this.sum)
+///         }
+///         this.sum = this.sum + input
+///         return CoroutineState::Yielded(this.sum)
+///     }
+/// }
+/// ```
+pub behavior Coroutine[R] {
+    /// The type of value yielded by the coroutine.
+    type Yield
+
+    /// The type of value returned when the coroutine completes.
+    type Return
+
+    /// Resumes the coroutine with the given argument.
+    ///
+    /// Returns `Yielded(value)` if the coroutine yielded,
+    /// or `Complete(result)` if it finished.
+    ///
+    /// # Panics
+    ///
+    /// May panic if called after the coroutine has already completed.
+    func resume(mut this, arg: R) -> CoroutineState[Self::Yield, Self::Return]
+}
+
+// ============================================================================
+// Generator Behavior (Simpler Form)
+// ============================================================================
+
+/// A simplified coroutine that takes no input.
+///
+/// Generators are coroutines that don't receive any input when resumed.
+/// They simply produce values until exhausted.
+///
+/// # Relationship with Iterator
+///
+/// Generators can be easily converted to iterators since they produce
+/// values on demand without needing input.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::Generator
+///
+/// pub type Range {
+///     current: I64,
+///     end: I64
+/// }
+///
+/// impl Generator for Range {
+///     type Yield = I64
+///     type Return = Unit
+///
+///     pub func resume(mut this) -> CoroutineState[I64, Unit] {
+///         if this.current < this.end {
+///             let value = this.current
+///             this.current = this.current + 1
+///             return CoroutineState::Yielded(value)
+///         }
+///         return CoroutineState::Complete(())
+///     }
+/// }
+/// ```
+pub behavior Generator {
+    /// The type of value yielded by the generator.
+    type Yield
+
+    /// The type of value returned when the generator completes.
+    type Return
+
+    /// Resumes the generator.
+    func resume(mut this) -> CoroutineState[Self::Yield, Self::Return]
+}
+
+// Blanket implementation: Generator is a Coroutine[Unit]
+// impl[G: Generator] Coroutine[Unit] for G {
+//     type Yield = G::Yield
+//     type Return = G::Return
+//
+//     pub func resume(mut this, _arg: Unit) -> CoroutineState[Self::Yield, Self::Return] {
+//         return Generator::resume(ref mut this)
+//     }
+// }
+
+// ============================================================================
+// GeneratorState (Alias)
+// ============================================================================
+
+/// Alias for `CoroutineState` when used with generators.
+///
+/// This is provided for convenience and clarity when working with generators
+/// rather than full coroutines.
+pub type GeneratorState[Y, R] = CoroutineState[Y, R]
+
+// ============================================================================
+// Pin-based Coroutine (for self-referential generators)
+// ============================================================================
+
+/// A coroutine that requires pinning.
+///
+/// Some coroutines contain self-referential data and must be pinned in
+/// memory before they can be resumed. This behavior extends `Coroutine`
+/// for such cases.
+///
+/// # When to Use
+///
+/// Use `PinnedCoroutine` when your coroutine:
+/// - Contains references to its own fields
+/// - Holds borrowed data across yield points
+/// - Needs stable memory addresses
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::PinnedCoroutine
+/// use core::pin::Pin
+///
+/// impl PinnedCoroutine[Unit] for SelfReferential {
+///     type Yield = I32
+///     type Return = Unit
+///
+///     pub func resume(this: Pin[mut ref Self], _arg: Unit)
+///         -> CoroutineState[I32, Unit]
+///     {
+///         // Safe to hold self-references here
+///         // ...
+///     }
+/// }
+/// ```
+pub behavior PinnedCoroutine[R] {
+    /// The type of value yielded.
+    type Yield
+
+    /// The type of the final return value.
+    type Return
+
+    /// Resumes the pinned coroutine.
+    ///
+    /// The coroutine must be pinned to ensure self-references remain valid.
+    // Note: Pin type would need to be imported/defined
+    // func resume(this: Pin[mut ref Self], arg: R) -> CoroutineState[Self::Yield, Self::Return]
+    func resume_pinned(mut this, arg: R) -> CoroutineState[Self::Yield, Self::Return]
+}
+
+// ============================================================================
+// Helper Types for Coroutine Implementation
+// ============================================================================
+
+/// Represents the internal state of a coroutine's execution.
+///
+/// This is used by the compiler to track where a coroutine should
+/// resume from after yielding.
+pub type CoroutineResumePoint {
+    /// The coroutine has not started yet.
+    Start,
+    /// The coroutine is at a specific yield point.
+    AtYield(I64),
+    /// The coroutine has finished.
+    Finished
+}
+
+impl Debug for CoroutineResumePoint {
+    pub func debug_string(this) -> Str {
+        when this {
+            CoroutineResumePoint::Start => return "Start",
+            CoroutineResumePoint::AtYield(n) => {
+                return "AtYield(" + n.debug_string() + ")"
+            },
+            CoroutineResumePoint::Finished => return "Finished"
+        }
+    }
+}
+
+/// A completed coroutine that always returns the same value.
+///
+/// This is useful as a return type for coroutines that have already
+/// produced all their values.
+pub type Ready[T] {
+    value: Maybe[T]
+}
+
+impl[T] Ready[T] {
+    /// Creates a ready coroutine with the given value.
+    pub func new(value: T) -> Ready[T] {
+        return Ready { value: Just(value) }
+    }
+
+    /// Creates an exhausted ready coroutine.
+    pub func exhausted() -> Ready[T] {
+        return Ready { value: Nothing }
+    }
+}
+
+impl[T: Duplicate] Generator for Ready[T] {
+    type Yield = T
+    type Return = Unit
+
+    pub func resume(mut this) -> CoroutineState[T, Unit] {
+        when this.value {
+            Just(v) => {
+                this.value = Nothing
+                return CoroutineState::Yielded(v.duplicate())
+            },
+            Nothing => {
+                return CoroutineState::Complete(())
+            }
+        }
+    }
+}
+
+/// A coroutine that yields values from an iterator.
+pub type FromIter[I] {
+    iter: I
+}
+
+impl[I] FromIter[I] {
+    /// Creates a generator from an iterator.
+    pub func new(iter: I) -> FromIter[I] {
+        return FromIter { iter: iter }
+    }
+}
+
+// Note: This would need Iterator behavior to be in scope
+// impl[I: Iterator] Generator for FromIter[I] {
+//     type Yield = I::Item
+//     type Return = Unit
+//
+//     pub func resume(mut this) -> CoroutineState[I::Item, Unit] {
+//         when this.iter.next() {
+//             Just(item) => return CoroutineState::Yielded(item),
+//             Nothing => return CoroutineState::Complete(())
+//         }
+//     }
+// }

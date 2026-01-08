@@ -67,7 +67,3 @@ func test_dyn_method_basic() -> I32 {
 //   }
 //
 //   let dyn_p: dyn Processor[I32] = ...  // OK! T is fixed to I32
-
-func main() -> I32 {
-    return 0
-}

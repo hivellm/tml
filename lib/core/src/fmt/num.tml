@@ -1,0 +1,240 @@
+//! Numeric formatting behaviors.
+//!
+//! This module provides behaviors for formatting numbers in various bases
+//! and scientific notation.
+//!
+//! # Numeric Formatting Behaviors
+//!
+//! | Behavior | Base | Prefix | Example |
+//! |----------|------|--------|---------|
+//! | [`Binary`] | 2 | `0b` | `0b101010` |
+//! | [`Octal`] | 8 | `0o` | `0o52` |
+//! | [`LowerHex`] | 16 | `0x` | `0x2a` |
+//! | [`UpperHex`] | 16 | `0x` | `0x2A` |
+//! | [`LowerExp`] | 10 | - | `4.2e1` |
+//! | [`UpperExp`] | 10 | - | `4.2E1` |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::fmt::*
+//!
+//! let n: I32 = 42
+//!
+//! println(n.fmt_binary())      // "0b101010"
+//! println(n.fmt_octal())       // "0o52"
+//! println(n.fmt_lower_hex())   // "0x2a"
+//! println(n.fmt_upper_hex())   // "0x2A"
+//!
+//! let f: F64 = 1234.5
+//! println(f.fmt_lower_exp())   // "1.2345e3"
+//! println(f.fmt_upper_exp())   // "1.2345E3"
+//! ```
+
+// ============================================================================
+// Binary Behavior
+// ============================================================================
+
+/// Behavior for binary (base 2) representation.
+///
+/// Types implementing `Binary` can be formatted as binary strings with the
+/// `0b` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Binary
+///
+/// let n: U8 = 42
+/// println(n.fmt_binary())  // "0b101010"
+///
+/// let mask: U8 = 0b11110000
+/// println(mask.fmt_binary())  // "0b11110000"
+/// ```
+///
+/// # Two's Complement
+///
+/// For signed integers, negative numbers are shown in two's complement form:
+///
+/// ```tml
+/// let neg: I8 = -1
+/// println(neg.fmt_binary())  // "0b11111111"
+/// ```
+pub behavior Binary {
+    /// Formats the value as a binary string with `0b` prefix.
+    func fmt_binary(this) -> Str
+}
+
+// ============================================================================
+// Octal Behavior
+// ============================================================================
+
+/// Behavior for octal (base 8) representation.
+///
+/// Types implementing `Octal` can be formatted as octal strings with the
+/// `0o` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Octal
+///
+/// let n: I32 = 42
+/// println(n.fmt_octal())  // "0o52"
+///
+/// let perms: U16 = 0o755
+/// println(perms.fmt_octal())  // "0o755"
+/// ```
+///
+/// # Use Cases
+///
+/// Octal is commonly used for:
+/// - Unix file permissions (e.g., `0o755`)
+/// - Legacy systems compatibility
+pub behavior Octal {
+    /// Formats the value as an octal string with `0o` prefix.
+    func fmt_octal(this) -> Str
+}
+
+// ============================================================================
+// LowerHex Behavior
+// ============================================================================
+
+/// Behavior for lowercase hexadecimal (base 16) representation.
+///
+/// Types implementing `LowerHex` can be formatted as lowercase hex strings
+/// with the `0x` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::LowerHex
+///
+/// let n: I32 = 255
+/// println(n.fmt_lower_hex())  // "0xff"
+///
+/// let color: U32 = 0xFF5733
+/// println(color.fmt_lower_hex())  // "0xff5733"
+/// ```
+///
+/// # Use Cases
+///
+/// Hexadecimal is commonly used for:
+/// - Memory addresses
+/// - Color values (RGB)
+/// - Byte data representation
+/// - Cryptographic hashes
+pub behavior LowerHex {
+    /// Formats the value as a lowercase hexadecimal string with `0x` prefix.
+    func fmt_lower_hex(this) -> Str
+}
+
+// ============================================================================
+// UpperHex Behavior
+// ============================================================================
+
+/// Behavior for uppercase hexadecimal (base 16) representation.
+///
+/// Types implementing `UpperHex` can be formatted as uppercase hex strings
+/// with the `0x` prefix.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::UpperHex
+///
+/// let n: I32 = 255
+/// println(n.fmt_upper_hex())  // "0xFF"
+///
+/// let color: U32 = 0xFF5733
+/// println(color.fmt_upper_hex())  // "0xFF5733"
+/// ```
+pub behavior UpperHex {
+    /// Formats the value as an uppercase hexadecimal string with `0x` prefix.
+    func fmt_upper_hex(this) -> Str
+}
+
+// ============================================================================
+// Pointer Behavior
+// ============================================================================
+
+/// Behavior for pointer address representation.
+///
+/// Types implementing `Pointer` can be formatted as memory addresses,
+/// typically in lowercase hexadecimal format.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Pointer
+/// use core::ptr::RawPtr
+///
+/// let ptr: RawPtr[I32] = get_some_pointer()
+/// println(ptr.fmt_pointer())  // "0x7fff5fbff8c8"
+/// ```
+///
+/// # Platform Differences
+///
+/// The exact format may vary by platform:
+/// - 32-bit: 8 hex digits (e.g., `0x12345678`)
+/// - 64-bit: 16 hex digits (e.g., `0x00007fff5fbff8c8`)
+pub behavior Pointer {
+    /// Formats the value as a pointer address.
+    func fmt_pointer(this) -> Str
+}
+
+// ============================================================================
+// LowerExp Behavior
+// ============================================================================
+
+/// Behavior for lowercase scientific notation.
+///
+/// Types implementing `LowerExp` can be formatted in scientific notation
+/// using lowercase 'e' for the exponent.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::LowerExp
+///
+/// let f: F64 = 1234.5
+/// println(f.fmt_lower_exp())  // "1.2345e3"
+///
+/// let small: F64 = 0.00042
+/// println(small.fmt_lower_exp())  // "4.2e-4"
+/// ```
+///
+/// # Format
+///
+/// The format is: `mantissa e exponent`
+/// - One digit before the decimal point
+/// - Exponent shows power of 10
+pub behavior LowerExp {
+    /// Formats the value in lowercase scientific notation.
+    func fmt_lower_exp(this) -> Str
+}
+
+// ============================================================================
+// UpperExp Behavior
+// ============================================================================
+
+/// Behavior for uppercase scientific notation.
+///
+/// Types implementing `UpperExp` can be formatted in scientific notation
+/// using uppercase 'E' for the exponent.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::UpperExp
+///
+/// let f: F64 = 1234.5
+/// println(f.fmt_upper_exp())  // "1.2345E3"
+///
+/// let small: F64 = 0.00042
+/// println(small.fmt_upper_exp())  // "4.2E-4"
+/// ```
+pub behavior UpperExp {
+    /// Formats the value in uppercase scientific notation.
+    func fmt_upper_exp(this) -> Str
+}

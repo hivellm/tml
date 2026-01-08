@@ -26,10 +26,9 @@
 //! let mapped = v4.to_ipv6_mapped()
 //! ```
 
-use core::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd}
-use core::clone::{Copy, Duplicate}
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::hash::{Hash, Hasher}
-use core::fmt::{Debug, Display, Formatter, FormatResult}
+// Note: Formatter and FormatResult would need real imports if used
 use core::default::Default
 use core::option::Maybe::{Just, Nothing}
 
@@ -418,26 +417,26 @@ impl Ipv6Addr {
     /// IPv4-compatible address, otherwise returns Nothing.
     pub func to_ipv4(this) -> Maybe[Ipv4Addr] {
         if this.is_ipv4_mapped() or this.is_ipv4_compatible() {
-            let a = (this.segments[6] shr 8) as U8
-            let b = (this.segments[6] and 0xFF) as U8
-            let c = (this.segments[7] shr 8) as U8
-            let d = (this.segments[7] and 0xFF) as U8
-            Just(Ipv4Addr::new(a, b, c, d))
+            let a: U8 = (this.segments[6] shr 8) as U8
+            let b: U8 = (this.segments[6] and 0xFF) as U8
+            let c: U8 = (this.segments[7] shr 8) as U8
+            let d: U8 = (this.segments[7] and 0xFF) as U8
+            return Just(Ipv4Addr::new(a, b, c, d))
         } else {
-            Nothing
+            return Nothing
         }
     }
 
     /// Converts this address to an IPv4 address if it is an IPv4-mapped address.
     pub func to_ipv4_mapped(this) -> Maybe[Ipv4Addr] {
         if this.is_ipv4_mapped() {
-            let a = (this.segments[6] shr 8) as U8
-            let b = (this.segments[6] and 0xFF) as U8
-            let c = (this.segments[7] shr 8) as U8
-            let d = (this.segments[7] and 0xFF) as U8
-            Just(Ipv4Addr::new(a, b, c, d))
+            let a: U8 = (this.segments[6] shr 8) as U8
+            let b: U8 = (this.segments[6] and 0xFF) as U8
+            let c: U8 = (this.segments[7] shr 8) as U8
+            let d: U8 = (this.segments[7] and 0xFF) as U8
+            return Just(Ipv4Addr::new(a, b, c, d))
         } else {
-            Nothing
+            return Nothing
         }
     }
 }
@@ -466,11 +465,15 @@ impl PartialOrd for Ipv6Addr {
 
 impl Ord for Ipv6Addr {
     func cmp(this, other: ref Ipv6Addr) -> Ordering {
-        let a = this.to_bits()
-        let b = other.to_bits()
-        if a < b { Ordering::Less }
-        else if a > b { Ordering::Greater }
-        else { Ordering::Equal }
+        let a: U128 = this.to_bits()
+        let b: U128 = other.to_bits()
+        if a < b {
+            return Ordering::Less
+        } else if a > b {
+            return Ordering::Greater
+        } else {
+            return Ordering::Equal
+        }
     }
 }
 
@@ -482,28 +485,31 @@ impl Hash for Ipv6Addr {
 
 impl Default for Ipv6Addr {
     func default() -> Ipv6Addr {
-        Ipv6Addr::UNSPECIFIED
+        return Ipv6Addr::UNSPECIFIED
     }
 }
 
 impl Display for Ipv6Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
         // Simplified display - full RFC 5952 formatting would be more complex
-        let mut first = true
-        for segment in this.segments {
-            if not first {
+        var i: I64 = 0
+        loop {
+            if i >= 8 {
+                return Ok(())
+            }
+            if i > 0 {
                 f.write_str(":")
             }
-            f.write_str(segment.to_hex_string())
-            first = false
+            f.write_str(this.segments[i].to_string())
+            i = i + 1
         }
-        Ok(unit)
+        return Ok(())
     }
 }
 
 impl Debug for Ipv6Addr {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        Display::fmt(this, f)
+        return Display::fmt(this, f)
     }
 }
 

@@ -1,0 +1,52 @@
+//! The DoubleEndedIterator behavior.
+
+/// An iterator that can iterate from both ends.
+pub behavior DoubleEndedIterator: Iterator {
+    /// Removes and returns an element from the end of the iterator.
+    pub func next_back(mut this) -> Maybe[This::Item]
+
+    /// Advances the iterator from the back by `n` elements.
+    pub func advance_back_by(mut this, n: I64) -> Outcome[Unit, I64] {
+        let mut i: I64 = 0
+        loop {
+            if i >= n {
+                return Ok(())
+            }
+            when this.next_back() {
+                Just(_) => i = i + 1,
+                Nothing => return Err(n - i)
+            }
+        }
+    }
+
+    /// Returns the nth element from the end of the iterator.
+    pub func nth_back(mut this, n: I64) -> Maybe[This::Item] {
+        let _result: Outcome[Unit, I64] = this.advance_back_by(n)
+        return this.next_back()
+    }
+
+    /// Folds every element from the back into an accumulator.
+    pub func rfold[B](mut this, init: B, f: func(B, This::Item) -> B) -> B {
+        let mut acc: B = init
+        loop {
+            when this.next_back() {
+                Just(x) => acc = f(acc, x),
+                Nothing => return acc
+            }
+        }
+    }
+
+    /// Searches from the back for an element matching a predicate.
+    pub func rfind(mut this, pred: func(ref This::Item) -> Bool) -> Maybe[This::Item] {
+        loop {
+            when this.next_back() {
+                Just(x) => {
+                    if pred(ref x) {
+                        return Just(x)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}

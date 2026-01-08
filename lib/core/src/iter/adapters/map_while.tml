@@ -1,0 +1,74 @@
+//! The MapWhile adapter.
+//!
+//! This module provides the `MapWhile` iterator adapter which maps while
+//! the function returns `Just`.
+
+// ============================================================================
+// MapWhile Adapter
+// ============================================================================
+
+/// An iterator that maps while the function returns `Just`.
+///
+/// This struct is created by the [`map_while`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(5, 10)
+/// let mapped = map_while(iter, do(x: I32) -> Maybe[I64] {
+///     if x > 0 { Just(x as I64 * 2) } else { Nothing }
+/// })
+/// ```
+pub type MapWhile[I, F] {
+    iter: I,
+    f: F,
+    done: Bool
+}
+
+impl[I: Iterator, F, B] Iterator for MapWhile[I, F] where F = func(I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => {
+                when this.f(item) {
+                    Just(mapped) => return Just(mapped),
+                    Nothing => {
+                        this.done = true
+                        return Nothing
+                    }
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that maps while the function returns `Just`.
+///
+/// Similar to `filter_map`, but stops iterating as soon as the function
+/// returns `Nothing` for the first time.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(3, 20)
+/// let result = map_while(nums, do(x: I32) -> Maybe[I32] {
+///     if x < 10 { Just(x * x) } else { Nothing }
+/// })
+/// ```
+pub func map_while[I: Iterator, F, B](iter: I, f: F) -> MapWhile[I, F] where F = func(I::Item) -> Maybe[B] {
+    return MapWhile { iter: iter, f: f, done: false }
+}

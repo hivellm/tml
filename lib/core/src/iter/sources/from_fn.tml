@@ -1,0 +1,78 @@
+//! The FromFn iterator source.
+//!
+//! This module provides the `FromFn` iterator which yields elements from a
+//! generator function.
+
+// ============================================================================
+// FromFn Iterator
+// ============================================================================
+
+/// An iterator where each iteration calls a generator function.
+///
+/// This struct is created by the [`from_fn`] function. See its documentation
+/// for more details.
+///
+/// The generator returns `Maybe[T]`, where `Just(value)` yields the value
+/// and `Nothing` ends the iterator. This provides full control over both
+/// the yielded values and the termination condition.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var count: I32 = 0
+/// var iter: FromFn[func() -> Maybe[I32]] = from_fn(do() -> Maybe[I32] {
+///     if count >= 3 {
+///         return Nothing
+///     }
+///     count = count + 1
+///     return Just(count)
+/// })
+/// // Yields 1, 2, 3, then Nothing
+/// ```
+pub type FromFn[F] {
+    gen: F
+}
+
+impl[F, T] Iterator for FromFn[F] where F = func() -> Maybe[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        return this.gen()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator from a generator function.
+///
+/// The generator function is called for each element. It returns `Maybe[T]`:
+/// - `Just(value)` yields the value and the iterator continues
+/// - `Nothing` ends the iterator
+///
+/// This is the most flexible way to create an iterator, as you have full
+/// control over both the values produced and when iteration terminates.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Create a countdown iterator
+/// var n: I32 = 5
+/// let countdown = from_fn(do() -> Maybe[I32] {
+///     if n <= 0 {
+///         return Nothing
+///     }
+///     let current: I32 = n
+///     n = n - 1
+///     return Just(current)
+/// })
+/// // Yields 5, 4, 3, 2, 1, then Nothing
+/// ```
+pub func from_fn[F, T](gen: F) -> FromFn[F] where F = func() -> Maybe[T] {
+    return FromFn { gen: gen }
+}

@@ -254,7 +254,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
         return_type = std::move(unwrap(type_result));
     }
 
-    // Where clause
+    // Where clause (may be on next line)
+    skip_newlines();
     std::optional<WhereClause> where_clause;
     auto where_result = parse_where_clause();
     if (is_err(where_result))

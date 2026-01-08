@@ -1,0 +1,92 @@
+//! The Chain adapter.
+//!
+//! This module provides the `Chain` iterator adapter which chains two
+//! iterators together sequentially.
+
+// ============================================================================
+// Chain Adapter
+// ============================================================================
+
+/// An iterator that chains two iterators together sequentially.
+///
+/// This struct is created by the [`chain`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let first: OnceI32 = once_i32(1)
+/// let second: OnceI32 = once_i32(2)
+/// let chained: Chain[OnceI32, OnceI32] = chain(first, second)
+/// // Yields 1, then 2
+/// ```
+pub type Chain[A, B] {
+    first: Maybe[A],
+    second: B
+}
+
+impl[A: Iterator, B: Iterator] Iterator for Chain[A, B] where A::Item = B::Item {
+    type Item = A::Item
+
+    pub func next(mut this) -> Maybe[A::Item] {
+        when this.first {
+            Just(iter) => {
+                when iter.next() {
+                    Just(item) => return Just(item),
+                    Nothing => {
+                        this.first = Nothing
+                        return this.second.next()
+                    }
+                }
+            },
+            Nothing => return this.second.next()
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let zero: I64 = 0
+        let first_hint: (I64, Maybe[I64]) = when this.first {
+            Just(iter) => iter.size_hint(),
+            Nothing => (zero, Just(zero))
+        }
+        let second_hint: (I64, Maybe[I64]) = this.second.size_hint()
+
+        let lo: I64 = first_hint.0 + second_hint.0
+
+        let hi: Maybe[I64] = when first_hint.1 {
+            Just(a) => {
+                when second_hint.1 {
+                    Just(b) => Just(a + b),
+                    Nothing => Nothing
+                }
+            },
+            Nothing => Nothing
+        }
+
+        return (lo, hi)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that chains two iterators together.
+///
+/// The resulting iterator yields all elements from the first iterator,
+/// followed by all elements from the second.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let a: OnceI32 = once_i32(1)
+/// let b: OnceI32 = once_i32(2)
+/// let combined: Chain[OnceI32, OnceI32] = chain(a, b)
+/// ```
+pub func chain[A: Iterator, B: Iterator](first: A, second: B) -> Chain[A, B] where A::Item = B::Item {
+    return Chain { first: Just(first), second: second }
+}

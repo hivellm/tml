@@ -33,7 +33,3 @@ func test_dyn_coercion() -> I32 {
     assert_eq(result, 456, "dyn dispatch should work")
     return 0
 }
-
-func main() -> I32 {
-    return 0
-}

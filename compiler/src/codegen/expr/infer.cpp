@@ -356,6 +356,27 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 result->kind = types::NamedType{struct_name, "", {}};
                 return result;
             }
+            // Handle slice type: { ptr, i64 }
+            if (field_llvm_type == "{ ptr, i64 }") {
+                // This is a slice - we need to look up the actual element type
+                // For now, default to U8 for byte slices
+                auto elem_type = types::make_primitive(types::PrimitiveKind::U8);
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::SliceType{elem_type};
+                return result;
+            }
+        }
+        // Also try to look up field type from type checker environment
+        if (obj_type && obj_type->is<types::NamedType>()) {
+            const auto& named = obj_type->as<types::NamedType>();
+            auto struct_def = env_.lookup_struct(named.name);
+            if (struct_def) {
+                for (const auto& [fname, ftype] : struct_def->fields) {
+                    if (fname == field.field) {
+                        return ftype;
+                    }
+                }
+            }
         }
     }
     // Handle closure expressions
@@ -688,9 +709,40 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             const auto& named = receiver_type->as<types::NamedType>();
             std::string qualified_name = named.name + "::" + call.method;
 
+            // Build type substitution map from receiver's type args
+            std::unordered_map<std::string, types::TypePtr> type_subs;
+            if (!named.type_args.empty()) {
+                // Look up the struct/impl to get generic parameter names
+                auto impl_it = pending_generic_impls_.find(named.name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    for (size_t i = 0;
+                         i < impl_it->second->generics.size() && i < named.type_args.size(); ++i) {
+                        type_subs[impl_it->second->generics[i].name] = named.type_args[i];
+                    }
+                } else if (env_.module_registry()) {
+                    // Check imported structs for type params
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto struct_it = mod.structs.find(named.name);
+                        if (struct_it != mod.structs.end() &&
+                            !struct_it->second.type_params.empty()) {
+                            for (size_t i = 0; i < struct_it->second.type_params.size() &&
+                                               i < named.type_args.size();
+                                 ++i) {
+                                type_subs[struct_it->second.type_params[i]] = named.type_args[i];
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Look up function in environment
             auto func_sig = env_.lookup_func(qualified_name);
             if (func_sig) {
+                if (!type_subs.empty()) {
+                    return types::substitute_type(func_sig->return_type, type_subs);
+                }
                 return func_sig->return_type;
             }
 
@@ -700,6 +752,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 if (module) {
                     auto func_it = module->functions.find(qualified_name);
                     if (func_it != module->functions.end()) {
+                        if (!type_subs.empty()) {
+                            return types::substitute_type(func_it->second.return_type, type_subs);
+                        }
                         return func_it->second.return_type;
                     }
                 }
@@ -718,6 +773,9 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 if (module) {
                     auto func_it = module->functions.find(qualified_name);
                     if (func_it != module->functions.end()) {
+                        if (!type_subs.empty()) {
+                            return types::substitute_type(func_it->second.return_type, type_subs);
+                        }
                         return func_it->second.return_type;
                     }
                 }

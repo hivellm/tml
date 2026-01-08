@@ -80,7 +80,8 @@
 //! }
 //! ```
 
-use core::fmt::{Display, Debug}
+// Display, Debug are builtins - no import needed
+use core::fmt::FmtError
 use core::option::Maybe
 use core::iter::Iterator
 
@@ -947,3 +948,13 @@ pub func error_chain[E: Error](error: ref E) -> ErrorChain {
         current: Just(error as ref dyn Error)
     }
 }
+
+// ============================================================================
+// Error implementation for FmtError
+// ============================================================================
+
+/// `FmtError` implements `Error` for integration with the error handling system.
+///
+/// Formatting errors are typically unrecoverable, but implementing `Error`
+/// allows them to be chained and wrapped like other errors.
+impl Error for FmtError {}

@@ -1,0 +1,7 @@
+//! The FromIterator behavior.
+
+/// Conversion from an [`Iterator`].
+pub behavior FromIterator[T] {
+    /// Creates a value from an iterator.
+    pub func from_iter[I: Iterator](iter: I) -> This where I::Item = T
+}

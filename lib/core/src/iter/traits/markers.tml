@@ -1,0 +1,42 @@
+//! Iterator marker behaviors.
+
+/// A marker behavior for iterators that always return `Nothing` after
+/// returning `Nothing` once.
+///
+/// # Fused Iterators
+///
+/// An iterator is "fused" if, after returning `Nothing` once, it always
+/// returns `Nothing` on subsequent calls to `next()`. Most standard
+/// iterators are already fused, but this trait provides a guarantee.
+///
+/// # Why This Matters
+///
+/// Some code may rely on the guarantee that once an iterator returns
+/// `Nothing`, it won't suddenly start yielding elements again. Implementing
+/// `FusedIterator` signals that your iterator has this property.
+pub behavior FusedIterator: Iterator {
+}
+
+/// A marker behavior for iterators whose `size_hint` is exact.
+///
+/// # Trusted Length
+///
+/// When an iterator implements `TrustedLen`, it guarantees that:
+///
+/// 1. The lower bound from `size_hint()` is always accurate
+/// 2. If the upper bound is `Just(n)`, it will yield exactly `n` elements
+/// 3. If the upper bound is `Nothing`, the iterator may be infinite
+///
+/// # Why This Matters
+///
+/// This marker enables certain optimizations. For example, when collecting
+/// into a `Vec`, the collection can pre-allocate exactly the right amount
+/// of memory without needing to grow the buffer.
+///
+/// # Safety Note
+///
+/// Implementing this trait incorrectly can lead to undefined behavior in
+/// optimized code paths. Only implement it if your `size_hint` is truly
+/// accurate.
+pub behavior TrustedLen: Iterator {
+}

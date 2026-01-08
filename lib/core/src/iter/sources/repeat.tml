@@ -1,0 +1,73 @@
+//! The Repeat iterator source.
+//!
+//! This module provides the `Repeat` iterator which yields an element
+//! infinitely.
+
+// Duplicate is a builtin behavior - no import needed
+
+// ============================================================================
+// Repeat Iterator
+// ============================================================================
+
+/// An iterator that repeats an element endlessly.
+///
+/// This struct is created by the [`repeat`] function. See its documentation
+/// for more details.
+///
+/// # Warning
+///
+/// This iterator is **infinite**! Always use it with limiting adapters like
+/// `take` to avoid infinite loops.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let ones: Repeat[I32] = repeat(1)
+/// let five_ones: Take[Repeat[I32]] = take(ones, 5)
+/// // five_ones yields 1, 1, 1, 1, 1
+/// ```
+pub type Repeat[T] {
+    value: T
+}
+
+impl[T: Duplicate] Iterator for Repeat[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        return Just(this.value.duplicate())
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return (I64::MAX, Nothing)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that repeats an element endlessly.
+///
+/// # Warning
+///
+/// **This creates an infinite iterator!** Always combine with adapters like
+/// `take` to limit iterations, or your program will loop forever.
+///
+/// # Requirements
+///
+/// The element must implement `Duplicate` since it's cloned for each iteration.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let zeros: Repeat[I32] = repeat(0)
+/// let three_zeros: Take[Repeat[I32]] = take(zeros, 3)
+/// // Yields 0, 0, 0
+/// ```
+pub func repeat[T: Duplicate](value: T) -> Repeat[T] {
+    return Repeat { value: value }
+}

@@ -1,0 +1,522 @@
+//! Range iteration support.
+//!
+//! This module provides the `Step` behavior and Iterator implementations
+//! for range types, enabling ranges to be used as iterators.
+//!
+//! # The Step Behavior
+//!
+//! The `Step` behavior defines how to move between values in a sequence.
+//! Types implementing `Step` can be used as the index type for range iteration.
+//!
+//! # Supported Types
+//!
+//! All integer types implement `Step`:
+//! - Signed: `I8`, `I16`, `I32`, `I64`
+//! - Unsigned: `U8`, `U16`, `U32`, `U64`
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::range::*
+//! use core::iter::*
+//!
+//! // Iterate over a range
+//! var range: Range[I32] = Range { start: 0, end: 5 }
+//! loop {
+//!     when range.next() {
+//!         Just(n) => print(n),  // 0, 1, 2, 3, 4
+//!         Nothing => break
+//!     }
+//! }
+//! ```
+
+use core::range::Range
+use core::range::RangeInclusive
+use core::range::RangeFrom
+// PartialOrd is a builtin behavior - no import needed
+
+// ============================================================================
+// Step Behavior
+// ============================================================================
+
+/// A behavior for types that have a notion of successor and predecessor.
+///
+/// Types implementing `Step` can be used as the index type for range iteration.
+/// This behavior provides the operations needed to step through a sequence
+/// of values.
+///
+/// # Safety
+///
+/// Implementations must ensure that:
+/// - `forward_checked(n)` returns `Nothing` if the result would overflow
+/// - `backward_checked(n)` returns `Nothing` if the result would underflow
+/// - `steps_between(a, b)` returns the exact number of steps, or `Nothing` if overflow
+///
+/// # Example
+///
+/// ```tml
+/// // Step is implemented for all integer types
+/// let start: I32 = 0
+/// let next: Maybe[I32] = start.forward_checked(1)  // Just(1)
+/// let prev: Maybe[I32] = start.backward_checked(1) // Just(-1)
+/// ```
+pub behavior Step {
+    /// Returns the number of successor steps required to get from `start` to `end`.
+    ///
+    /// Returns `Nothing` if the number of steps would overflow.
+    /// Returns `Just(0)` if `start == end`.
+    /// Returns `Nothing` if `start > end` (would require backward steps).
+    func steps_between(start: ref Self, end: ref Self) -> Maybe[I64]
+
+    /// Returns the value that would be obtained by taking the successor
+    /// of `this` value `count` times.
+    ///
+    /// Returns `Nothing` if the result would overflow.
+    func forward_checked(this, count: I64) -> Maybe[Self]
+
+    /// Returns the value that would be obtained by taking the predecessor
+    /// of `this` value `count` times.
+    ///
+    /// Returns `Nothing` if the result would underflow.
+    func backward_checked(this, count: I64) -> Maybe[Self]
+}
+
+// ============================================================================
+// Step Implementations for Integer Types
+// ============================================================================
+
+impl Step for I8 {
+    pub func steps_between(start: ref I8, end: ref I8) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[I8] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // I8::MAX = 127
+        if result > 127 {
+            return Nothing
+        }
+        return Just(result as I8)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[I8] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) - count
+        // I8::MIN = -128
+        if result < -128 {
+            return Nothing
+        }
+        return Just(result as I8)
+    }
+}
+
+impl Step for I16 {
+    pub func steps_between(start: ref I16, end: ref I16) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[I16] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // I16::MAX = 32767
+        if result > 32767 {
+            return Nothing
+        }
+        return Just(result as I16)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[I16] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) - count
+        // I16::MIN = -32768
+        if result < -32768 {
+            return Nothing
+        }
+        return Just(result as I16)
+    }
+}
+
+impl Step for I32 {
+    pub func steps_between(start: ref I32, end: ref I32) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[I32] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // I32::MAX = 2147483647
+        if result > 2147483647 {
+            return Nothing
+        }
+        return Just(result as I32)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[I32] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) - count
+        // I32::MIN = -2147483648
+        if result < -2147483648 {
+            return Nothing
+        }
+        return Just(result as I32)
+    }
+}
+
+impl Step for I64 {
+    pub func steps_between(start: ref I64, end: ref I64) -> Maybe[I64] {
+        if *start <= *end {
+            // For I64, check for overflow when computing the difference
+            // If both are positive or both are negative, subtraction is safe
+            // If end >= 0 and start < 0, the difference might overflow
+            if *end >= 0 and *start < 0 {
+                let pos_part: I64 = *end
+                let neg_part: I64 = 0 - *start
+                // I64::MAX = 9223372036854775807
+                if pos_part > 9223372036854775807 - neg_part {
+                    return Nothing
+                }
+            }
+            return Just(*end - *start)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[I64] {
+        if count < 0 {
+            return Nothing
+        }
+        // Check for overflow: this + count > I64::MAX
+        // I64::MAX = 9223372036854775807
+        if this > 0 and count > 9223372036854775807 - this {
+            return Nothing
+        }
+        return Just(this + count)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[I64] {
+        if count < 0 {
+            return Nothing
+        }
+        // Check for underflow: this - count < I64::MIN
+        // I64::MIN = -9223372036854775808
+        // Rewritten to avoid overflow: count > this - I64::MIN
+        // But this - I64::MIN can overflow, so we check differently:
+        // this - count < I64::MIN  =>  this < I64::MIN + count
+        // Since I64::MIN + count could overflow if count is large,
+        // we use: count > this + 9223372036854775808 (but that overflows too)
+        // Simpler: if this >= 0, then this - count >= -count >= I64::MIN only if count <= this + 9223372036854775808
+        // Actually, let's just compute and check if result would be valid
+        // If this >= count, result is non-negative, so no underflow
+        // If this < count, result could be negative
+        // For negative this: this - count is more negative
+        // Underflow if this - count < -9223372036854775808
+        // i.e., count > this + 9223372036854775808
+        // But we can't compute this + 9223372036854775808 without overflow
+        // So we rewrite: count - this > 9223372036854775808 (if this < 0, -this is positive)
+        // Actually simpler approach: if result wraps, detect it
+        let result: I64 = this - count
+        // If this >= 0 and count > this, result is negative (ok as long as >= MIN)
+        // If this < 0 and result > this, we wrapped (underflow)
+        if this < 0 and result > this {
+            return Nothing
+        }
+        return Just(result)
+    }
+}
+
+impl Step for U8 {
+    pub func steps_between(start: ref U8, end: ref U8) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[U8] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // U8::MAX = 255
+        if result > 255 {
+            return Nothing
+        }
+        return Just(result as U8)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[U8] {
+        if count < 0 {
+            return Nothing
+        }
+        let this_i64: I64 = this as I64
+        if count > this_i64 {
+            return Nothing
+        }
+        return Just((this_i64 - count) as U8)
+    }
+}
+
+impl Step for U16 {
+    pub func steps_between(start: ref U16, end: ref U16) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[U16] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // U16::MAX = 65535
+        if result > 65535 {
+            return Nothing
+        }
+        return Just(result as U16)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[U16] {
+        if count < 0 {
+            return Nothing
+        }
+        let this_i64: I64 = this as I64
+        if count > this_i64 {
+            return Nothing
+        }
+        return Just((this_i64 - count) as U16)
+    }
+}
+
+impl Step for U32 {
+    pub func steps_between(start: ref U32, end: ref U32) -> Maybe[I64] {
+        if *start <= *end {
+            return Just((*end - *start) as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[U32] {
+        if count < 0 {
+            return Nothing
+        }
+        let result: I64 = (this as I64) + count
+        // U32::MAX = 4294967295
+        if result > 4294967295 {
+            return Nothing
+        }
+        return Just(result as U32)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[U32] {
+        if count < 0 {
+            return Nothing
+        }
+        let this_i64: I64 = this as I64
+        if count > this_i64 {
+            return Nothing
+        }
+        return Just((this_i64 - count) as U32)
+    }
+}
+
+impl Step for U64 {
+    pub func steps_between(start: ref U64, end: ref U64) -> Maybe[I64] {
+        if *start <= *end {
+            let diff: U64 = *end - *start
+            // Check if diff fits in I64 (I64::MAX = 9223372036854775807)
+            // As U64: 9223372036854775807
+            if diff > 9223372036854775807 {
+                return Nothing
+            }
+            return Just(diff as I64)
+        }
+        return Nothing
+    }
+
+    pub func forward_checked(this, count: I64) -> Maybe[U64] {
+        if count < 0 {
+            return Nothing
+        }
+        let count_u64: U64 = count as U64
+        // U64::MAX = 18446744073709551615
+        // Check: this + count_u64 > U64::MAX
+        // Rewrite: count_u64 > U64::MAX - this
+        // U64::MAX - this won't underflow since this <= U64::MAX
+        let max_add: U64 = 18446744073709551615 - this
+        if count_u64 > max_add {
+            return Nothing
+        }
+        return Just(this + count_u64)
+    }
+
+    pub func backward_checked(this, count: I64) -> Maybe[U64] {
+        if count < 0 {
+            return Nothing
+        }
+        let count_u64: U64 = count as U64
+        if count_u64 > this {
+            return Nothing
+        }
+        return Just(this - count_u64)
+    }
+}
+
+// ============================================================================
+// Iterator Implementations for Range Types
+// ============================================================================
+
+/// Iterator implementation for `Range[T]` where `T` implements `Step`.
+///
+/// Produces values from `start` to `end - 1`.
+///
+/// # Example
+///
+/// ```tml
+/// var range: Range[I32] = Range { start: 0, end: 3 }
+/// // range.next() returns Just(0), Just(1), Just(2), Nothing
+/// ```
+impl[T: Step + PartialOrd] Iterator for Range[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.start < this.end {
+            let val: T = this.start
+            when this.start.forward_checked(1) {
+                Just(next_val) => {
+                    this.start = next_val
+                },
+                Nothing => {
+                    // Overflow - set start to end to stop iteration
+                    this.start = this.end
+                }
+            }
+            return Just(val)
+        }
+        return Nothing
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when Step::steps_between(ref this.start, ref this.end) {
+            Just(n) => return (n, Just(n)),
+            Nothing => return (0, Nothing)
+        }
+    }
+}
+
+/// Iterator implementation for `RangeInclusive[T]` where `T` implements `Step`.
+///
+/// Produces values from `start` to `end` (inclusive).
+///
+/// # Example
+///
+/// ```tml
+/// var range: RangeInclusive[I32] = RangeInclusive { start: 1, end: 3, exhausted: false }
+/// // range.next() returns Just(1), Just(2), Just(3), Nothing
+/// ```
+impl[T: Step + PartialOrd] Iterator for RangeInclusive[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.exhausted {
+            return Nothing
+        }
+
+        if this.start < this.end {
+            let val: T = this.start
+            when this.start.forward_checked(1) {
+                Just(next_val) => {
+                    this.start = next_val
+                },
+                Nothing => {
+                    // Overflow while not at end yet - this shouldn't happen
+                    // for valid ranges, but handle it gracefully
+                    this.exhausted = true
+                }
+            }
+            return Just(val)
+        }
+
+        // start == end: yield the last element and mark as exhausted
+        if not (this.start > this.end) {
+            this.exhausted = true
+            return Just(this.start)
+        }
+
+        // start > end: empty range
+        return Nothing
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        if this.exhausted {
+            return (0, Just(0))
+        }
+        when Step::steps_between(ref this.start, ref this.end) {
+            Just(n) => {
+                let total: I64 = n + 1  // +1 because inclusive
+                return (total, Just(total))
+            },
+            Nothing => return (0, Nothing)
+        }
+    }
+}
+
+/// Iterator implementation for `RangeFrom[T]` where `T` implements `Step`.
+///
+/// Produces values starting from `start` and continuing indefinitely.
+///
+/// # Warning
+///
+/// This iterator is infinite! Always use limiting adapters like `take`.
+///
+/// # Example
+///
+/// ```tml
+/// var range: RangeFrom[I32] = RangeFrom { start: 5 }
+/// let limited = take(range, 3)
+/// // limited.next() returns Just(5), Just(6), Just(7), Nothing
+/// ```
+impl[T: Step] Iterator for RangeFrom[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        let val: T = this.start
+        when this.start.forward_checked(1) {
+            Just(next_val) => {
+                this.start = next_val
+                return Just(val)
+            },
+            Nothing => {
+                // Overflow - can't continue
+                return Nothing
+            }
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        // I64::MAX = 9223372036854775807
+        return (9223372036854775807, Nothing)
+    }
+}

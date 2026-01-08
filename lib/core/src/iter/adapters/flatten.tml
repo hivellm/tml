@@ -1,0 +1,82 @@
+//! The Flatten adapter.
+//!
+//! This module provides the `Flatten` iterator adapter which flattens one
+//! level of nesting from an iterator of iterators.
+
+use core::iter::IntoIterator
+
+// ============================================================================
+// Flatten Adapter
+// ============================================================================
+
+/// An iterator that flattens one level of nesting.
+///
+/// This struct is created by the [`flatten`] function. See its documentation
+/// for more details.
+///
+/// Given an iterator of iterators (or anything that implements `IntoIterator`),
+/// `Flatten` concatenates all the inner iterators into a single sequence.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // If you have an iterator of iterators: [[1, 2], [3, 4], [5]]
+/// // flatten yields: [1, 2, 3, 4, 5]
+/// ```
+pub type Flatten[I, U] {
+    iter: I,
+    current: Maybe[U]
+}
+
+impl[I: Iterator, U: Iterator] Iterator for Flatten[I, U] where I::Item: IntoIterator[IntoIter = U] {
+    type Item = U::Item
+
+    pub func next(mut this) -> Maybe[U::Item] {
+        loop {
+            when this.current {
+                Just(inner) => {
+                    when inner.next() {
+                        Just(item) => return Just(item),
+                        Nothing => {
+                            this.current = Nothing
+                        }
+                    }
+                },
+                Nothing => {}
+            }
+
+            when this.iter.next() {
+                Just(item) => {
+                    this.current = Just(item.into_iter())
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that flattens one level of nesting.
+///
+/// This is useful when you have an iterator of iterators (or an iterator of
+/// collections that implement `IntoIterator`) and want a single flat sequence.
+///
+/// Only one level of nesting is flattened. To flatten multiple levels, chain
+/// multiple `flatten` calls.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Given an iterator yielding [[a, b], [c], [d, e, f]]
+/// // flatten produces [a, b, c, d, e, f]
+/// ```
+pub func flatten[I: Iterator, U: Iterator](iter: I) -> Flatten[I, U] where I::Item: IntoIterator[IntoIter = U] {
+    return Flatten { iter: iter, current: Nothing }
+}

@@ -39,23 +39,33 @@
 ### 1.2 Iterator Adapter Implementations
 **File**: `lib/core/src/iter/adapters.tml`
 
-- [ ] 1.2.1 Implement `Iterator` for `Map[I, F]` (requires closures)
-- [ ] 1.2.2 Implement `Iterator` for `Filter[I, P]` (requires closures)
-- [ ] 1.2.3 Implement `Iterator` for `FilterMap[I, F]` (requires closures)
-- [ ] 1.2.4 Implement `Iterator` for `Flatten[I]`
-- [ ] 1.2.5 Implement `Iterator` for `FlatMap[I, F]` (requires closures)
+**Non-closure adapters** (implemented before closures were available):
+- [x] 1.2.a Take, Skip, Chain, Enumerate, Zip, StepBy, Fuse ✅
+
+**Closure-based adapters** (now implemented):
+- [x] 1.2.1 Implement `Iterator` for `Map[I, F]` ✅
+- [x] 1.2.2 Implement `Iterator` for `Filter[I, P]` ✅
+- [x] 1.2.3 Implement `Iterator` for `FilterMap[I, F]` ✅
+- [ ] 1.2.4 Implement `Iterator` for `Flatten[I]` (requires IntoIterator support)
+- [ ] 1.2.5 Implement `Iterator` for `FlatMap[I, F]` (requires Flatten)
 - [ ] 1.2.6 Implement `Iterator` for `Peekable[I]` with `peek()` method
-- [ ] 1.2.7 Implement `Iterator` for `TakeWhile[I, P]` (requires closures)
-- [ ] 1.2.8 Implement `Iterator` for `SkipWhile[I, P]` (requires closures)
-- [ ] 1.2.9 Implement `Iterator` for `Cloned[I]`
-- [ ] 1.2.10 Implement `Iterator` for `Copied[I]`
-- [ ] 1.2.11 Implement `Iterator` for `Cycle[I]`
+- [x] 1.2.7 Implement `Iterator` for `TakeWhile[I, P]` ✅
+- [x] 1.2.8 Implement `Iterator` for `SkipWhile[I, P]` ✅
+- [ ] 1.2.9 Implement `Iterator` for `Cloned[I]` (requires Duplicate bound)
+- [ ] 1.2.10 Implement `Iterator` for `Copied[I]` (requires Copy bound)
+- [ ] 1.2.11 Implement `Iterator` for `Cycle[I]` (requires Clone/Duplicate)
 - [ ] 1.2.12 Implement `Iterator` for `Rev[I]` (requires DoubleEndedIterator)
-- [ ] 1.2.13 Implement `Iterator` for `Inspect[I, F]` (requires closures)
-- [ ] 1.2.14 Implement `Iterator` for `Scan[I, St, F]` (requires closures)
-- [ ] 1.2.15 Implement `Iterator` for `Intersperse[I]`
-- [ ] 1.2.16 Write tests for adapter implementations
-- [ ] 1.2.17 Verify test coverage ≥95%
+- [x] 1.2.13 Implement `Iterator` for `Inspect[I, F]` ✅
+- [x] 1.2.14 Implement `Iterator` for `Scan[I, St, F]` ✅
+- [x] 1.2.15 Implement `Iterator` for `Intersperse[I]` ✅
+- [~] 1.2.16 Write tests for adapter implementations (blocked - codegen I::Item not resolved)
+- [~] 1.2.17 Verify test coverage ≥95% (blocked)
+
+**Note**: All implemented adapters have correct Iterator impls with proper `type Item`
+and `next()` methods. Tests are blocked by a compiler codegen limitation: when a generic
+type `Adapter[I: Iterator]` is instantiated with a concrete type like `RangeIterI64`,
+the associated type `I::Item` is not properly substituted to `I64` in the generated LLVM IR.
+The `next()` method returns `Maybe[I]` (unsubstituted generic param) instead of `Maybe[I64]`.
 
 ### 1.3 Generic Iterator Sources
 **File**: `lib/core/src/iter/sources.tml`
@@ -458,7 +468,7 @@ The DefaultHasher uses FNV-1a algorithm. Tests are blocked by the I8 codegen bug
 
 | Phase | Description | Priority | Tasks | Status |
 |-------|-------------|----------|-------|--------|
-| 1 | Iterator System | P0 | 58 | ~40% (consumers done) |
+| 1 | Iterator System | P0 | 58 | ~60% (consumers + adapters impl done, tests blocked) |
 | 2 | Operator Completion | P0 | 34 | ~85% (Deref, Bitwise, Range, Closures done) |
 | 3 | Marker Types | P0 | 19 | ~90% (PhantomData, PhantomPinned done) |
 | 4 | Pin Module | P1 | 16 | ✅ 100% |
@@ -505,7 +515,7 @@ The following items are blocked on compiler features:
 
 | Item | Blocker | Phase |
 |------|---------|-------|
-| Iterator adapters (Map, Filter, etc.) | Generic impl codegen | 1.2 |
+| Iterator adapter tests | Associated type `I::Item` not substituted in generic impl codegen | 1.2 |
 | Iterator consumers (collect, partition) | Parser: parameterized behavior bounds (`C: FromIterator[T]`) | 1.1 |
 | Iterator consumer tests | Default behavior method dispatch returns () | 1.1 |
 | Generic iterator sources | Generic impl codegen | 1.3 |

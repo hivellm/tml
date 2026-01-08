@@ -1,0 +1,331 @@
+//! Floating-point number formatting.
+//!
+//! This module provides specialized formatting for floating-point types,
+//! including precision control, scientific notation, and special value handling.
+//!
+//! # Formatting Modes
+//!
+//! | Mode | Description | Example |
+//! |------|-------------|---------|
+//! | Default | Normal decimal | `3.14159` |
+//! | Fixed | Fixed decimal places | `3.14` (precision 2) |
+//! | Scientific | Exponential notation | `3.14e0` |
+//! | Hex | Hexadecimal float | `0x1.91eb86p+1` |
+//!
+//! # Special Values
+//!
+//! - `inf` / `-inf` - Infinity
+//! - `nan` - Not a Number
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::fmt::float::*
+//!
+//! let pi: F64 = 3.14159265358979
+//!
+//! // Default formatting
+//! println(format_float(pi))  // "3.14159265358979"
+//!
+//! // Fixed precision
+//! println(format_float_precision(pi, 2))  // "3.14"
+//!
+//! // Scientific notation
+//! println(format_float_exp(pi, false))  // "3.14159265358979e0"
+//! ```
+
+use core::fmt::traits::{Display, Debug}
+
+// ============================================================================
+// Float Formatting Options
+// ============================================================================
+
+/// Options for floating-point formatting.
+pub type FloatFormatOptions {
+    /// Number of decimal places (Nothing = auto)
+    precision: Maybe[I64],
+    /// Use uppercase for exponent (E vs e)
+    uppercase: Bool,
+    /// Always show decimal point
+    always_decimal: Bool,
+    /// Minimum width (with padding)
+    min_width: Maybe[I64],
+    /// Use sign-aware zero padding
+    zero_pad: Bool
+}
+
+impl FloatFormatOptions {
+    /// Creates default formatting options.
+    pub func default() -> FloatFormatOptions {
+        return FloatFormatOptions {
+            precision: Nothing,
+            uppercase: false,
+            always_decimal: false,
+            min_width: Nothing,
+            zero_pad: false
+        }
+    }
+
+    /// Creates options with fixed precision.
+    pub func with_precision(p: I64) -> FloatFormatOptions {
+        return FloatFormatOptions {
+            precision: Just(p),
+            uppercase: false,
+            always_decimal: false,
+            min_width: Nothing,
+            zero_pad: false
+        }
+    }
+
+    /// Creates options for scientific notation.
+    pub func scientific(uppercase: Bool) -> FloatFormatOptions {
+        return FloatFormatOptions {
+            precision: Nothing,
+            uppercase: uppercase,
+            always_decimal: true,
+            min_width: Nothing,
+            zero_pad: false
+        }
+    }
+}
+
+// ============================================================================
+// F32 Formatting
+// ============================================================================
+
+/// Formats an F32 value with default formatting.
+pub func format_f32(value: F32) -> Str {
+    return lowlevel { f32_to_string(value) }
+}
+
+/// Formats an F32 value with specified precision.
+pub func format_f32_precision(value: F32, precision: I64) -> Str {
+    return lowlevel { f32_to_string_precision(value, precision) }
+}
+
+/// Formats an F32 value in scientific notation.
+pub func format_f32_exp(value: F32, uppercase: Bool) -> Str {
+    return lowlevel { f32_to_exp_string(value, uppercase) }
+}
+
+/// Returns true if the F32 is NaN.
+pub func is_nan_f32(value: F32) -> Bool {
+    return lowlevel { f32_is_nan(value) }
+}
+
+/// Returns true if the F32 is infinite.
+pub func is_infinite_f32(value: F32) -> Bool {
+    return lowlevel { f32_is_infinite(value) }
+}
+
+/// Returns true if the F32 is finite (not NaN or infinite).
+pub func is_finite_f32(value: F32) -> Bool {
+    return not is_nan_f32(value) and not is_infinite_f32(value)
+}
+
+// ============================================================================
+// F64 Formatting
+// ============================================================================
+
+/// Formats an F64 value with default formatting.
+pub func format_f64(value: F64) -> Str {
+    return lowlevel { f64_to_string(value) }
+}
+
+/// Formats an F64 value with specified precision.
+pub func format_f64_precision(value: F64, precision: I64) -> Str {
+    return lowlevel { f64_to_string_precision(value, precision) }
+}
+
+/// Formats an F64 value in scientific notation.
+pub func format_f64_exp(value: F64, uppercase: Bool) -> Str {
+    return lowlevel { f64_to_exp_string(value, uppercase) }
+}
+
+/// Returns true if the F64 is NaN.
+pub func is_nan_f64(value: F64) -> Bool {
+    return lowlevel { f64_is_nan(value) }
+}
+
+/// Returns true if the F64 is infinite.
+pub func is_infinite_f64(value: F64) -> Bool {
+    return lowlevel { f64_is_infinite(value) }
+}
+
+/// Returns true if the F64 is finite (not NaN or infinite).
+pub func is_finite_f64(value: F64) -> Bool {
+    return not is_nan_f64(value) and not is_infinite_f64(value)
+}
+
+// ============================================================================
+// Generic Float Formatting
+// ============================================================================
+
+/// Formats a float with the given options.
+pub func format_float(value: F64) -> Str {
+    if is_nan_f64(value) {
+        return "NaN"
+    }
+    if is_infinite_f64(value) {
+        if value < 0.0 {
+            return "-inf"
+        }
+        return "inf"
+    }
+    return format_f64(value)
+}
+
+/// Formats a float with specified precision.
+pub func format_float_precision(value: F64, precision: I64) -> Str {
+    if is_nan_f64(value) {
+        return "NaN"
+    }
+    if is_infinite_f64(value) {
+        if value < 0.0 {
+            return "-inf"
+        }
+        return "inf"
+    }
+    return format_f64_precision(value, precision)
+}
+
+/// Formats a float in scientific notation.
+pub func format_float_exp(value: F64, uppercase: Bool) -> Str {
+    if is_nan_f64(value) {
+        if uppercase {
+            return "NAN"
+        }
+        return "nan"
+    }
+    if is_infinite_f64(value) {
+        if uppercase {
+            if value < 0.0 {
+                return "-INF"
+            }
+            return "INF"
+        }
+        if value < 0.0 {
+            return "-inf"
+        }
+        return "inf"
+    }
+    return format_f64_exp(value, uppercase)
+}
+
+// ============================================================================
+// Float Parts
+// ============================================================================
+
+/// Represents the parts of a formatted float.
+pub type FloatParts {
+    /// Sign ("-" or "" or "+")
+    sign: Str,
+    /// Integer part before decimal
+    integer: Str,
+    /// Fractional part after decimal
+    fraction: Str,
+    /// Exponent (for scientific notation)
+    exponent: Maybe[I64]
+}
+
+impl FloatParts {
+    /// Formats the parts as a regular decimal string.
+    pub func to_decimal(this) -> Str {
+        if this.fraction.len() > 0 {
+            return this.sign + this.integer + "." + this.fraction
+        }
+        return this.sign + this.integer
+    }
+
+    /// Formats the parts in scientific notation.
+    pub func to_scientific(this, uppercase: Bool) -> Str {
+        var result: Str = this.sign + this.integer
+        if this.fraction.len() > 0 {
+            result = result + "." + this.fraction
+        }
+        when this.exponent {
+            Just(exp) => {
+                if uppercase {
+                    result = result + "E"
+                } else {
+                    result = result + "e"
+                }
+                if exp >= 0 {
+                    result = result + "+"
+                }
+                result = result + exp.to_string()
+            },
+            Nothing => {}
+        }
+        return result
+    }
+}
+
+impl Display for FloatParts {
+    pub func to_string(this) -> Str {
+        return this.to_decimal()
+    }
+}
+
+impl Debug for FloatParts {
+    pub func debug_string(this) -> Str {
+        return "FloatParts \{ sign: " + this.sign.debug_string() + ", integer: " + this.integer.debug_string() + ", fraction: " + this.fraction.debug_string() + ", exponent: " + this.exponent.debug_string() + " \}"
+    }
+}
+
+// ============================================================================
+// Float Constants Display
+// ============================================================================
+
+/// Returns the string representation of positive infinity.
+pub func infinity_str() -> Str {
+    return "inf"
+}
+
+/// Returns the string representation of negative infinity.
+pub func neg_infinity_str() -> Str {
+    return "-inf"
+}
+
+/// Returns the string representation of NaN.
+pub func nan_str() -> Str {
+    return "NaN"
+}
+
+// ============================================================================
+// Rounding Helpers
+// ============================================================================
+
+/// Rounds a float to the given number of decimal places.
+pub func round_to_precision(value: F64, precision: I64) -> F64 {
+    if precision <= 0 {
+        return round(value)
+    }
+    let multiplier: F64 = pow10(precision)
+    return round(value * multiplier) / multiplier
+}
+
+/// Computes 10^n for small positive n.
+func pow10(n: I64) -> F64 {
+    if n <= 0 { return 1.0 }
+    if n == 1 { return 10.0 }
+    if n == 2 { return 100.0 }
+    if n == 3 { return 1000.0 }
+    if n == 4 { return 10000.0 }
+    if n == 5 { return 100000.0 }
+    if n == 6 { return 1000000.0 }
+
+    var result: F64 = 1.0
+    var i: I64 = 0
+    loop {
+        if i >= n { break }
+        result = result * 10.0
+        i = i + 1
+    }
+    return result
+}
+
+/// Rounds a float to the nearest integer.
+func round(value: F64) -> F64 {
+    return lowlevel { f64_round(value) }
+}

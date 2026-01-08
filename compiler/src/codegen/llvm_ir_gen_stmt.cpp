@@ -472,14 +472,21 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         }
     }
 
-    // For function/closure types, store the function pointer directly
+    // For function/closure types, allocate and store the function pointer
+    // This ensures consistency: local vars always point to allocas that hold the value
     if (let.type_annotation) {
         if (let.type_annotation.value()->is<parser::FuncType>()) {
             if (let.init.has_value()) {
                 std::string closure_fn = gen_expr(*let.init.value());
-                // closure_fn is like "@tml_closure_0", store it as a function pointer
-                // Also capture closure info if it was a closure with captures
-                VarInfo info{closure_fn, "ptr", nullptr, std::nullopt};
+                // closure_fn could be "@tml_closure_0" for direct closures
+                // or "%reg" for function pointers loaded from struct fields
+
+                // Allocate space to hold the function pointer
+                std::string alloca_reg = fresh_reg();
+                emit_line("  " + alloca_reg + " = alloca ptr");
+                emit_line("  store ptr " + closure_fn + ", ptr " + alloca_reg);
+
+                VarInfo info{alloca_reg, "ptr", nullptr, std::nullopt};
                 if (last_closure_captures_.has_value()) {
                     info.closure_captures = last_closure_captures_;
                     last_closure_captures_ = std::nullopt; // Clear after use

@@ -14,7 +14,41 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (bin.left->is<parser::IdentExpr>()) {
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
             if (it != locals_.end()) {
-                emit_line("  store " + it->second.type + " " + right + ", ptr " + it->second.reg);
+                // Handle integer truncation if needed (e.g., i32 result to i8 variable)
+                std::string value_to_store = right;
+                std::string right_type = last_expr_type_;
+                std::string target_type = it->second.type;
+
+                // Helper to get integer size
+                auto get_int_size = [](const std::string& t) -> int {
+                    if (t == "i8")
+                        return 8;
+                    if (t == "i16")
+                        return 16;
+                    if (t == "i32")
+                        return 32;
+                    if (t == "i64")
+                        return 64;
+                    if (t == "i128")
+                        return 128;
+                    return 0;
+                };
+
+                if (right_type != target_type) {
+                    int right_size = get_int_size(right_type);
+                    int target_size = get_int_size(target_type);
+
+                    if (right_size > 0 && target_size > 0 && right_size > target_size) {
+                        // Truncate to smaller type
+                        std::string trunc_reg = fresh_reg();
+                        emit_line("  " + trunc_reg + " = trunc " + right_type + " " + right +
+                                  " to " + target_type);
+                        value_to_store = trunc_reg;
+                    }
+                }
+
+                emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
+                          it->second.reg);
             }
         } else if (bin.left->is<parser::UnaryExpr>()) {
             const auto& unary = bin.left->as<parser::UnaryExpr>();

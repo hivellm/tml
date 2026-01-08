@@ -1,0 +1,79 @@
+//! The Copied adapter.
+//!
+//! This module provides the `Copied` iterator adapter which copies borrowed
+//! elements, converting an iterator over references to an iterator over values.
+
+// Copy is a builtin behavior - no import needed
+
+// ============================================================================
+// Copied Adapter
+// ============================================================================
+
+/// An iterator that copies the elements of an underlying iterator.
+///
+/// This struct is created by the [`copied`] function. See its documentation
+/// for more details.
+///
+/// `Copied` is similar to [`Cloned`], but works with types that implement
+/// `Copy` instead of `Duplicate`. For `Copy` types, this is more efficient
+/// as it uses a simple bitwise copy.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // If you have an iterator yielding [ref 1, ref 2, ref 3]
+/// // copied yields [1, 2, 3] (owned copies via bitwise copy)
+/// ```
+pub type Copied[I] {
+    iter: I
+}
+
+impl[I: Iterator, T: Copy] Iterator for Copied[I] where I::Item = ref T {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        when this.iter.next() {
+            Just(item) => return Just(*item),
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that copies the elements of the underlying iterator.
+///
+/// This is useful when you have an iterator over `ref T` but need `T`.
+/// Each referenced element is copied using a simple dereference.
+///
+/// # Requirements
+///
+/// The underlying type `T` must implement `Copy`. For types that only
+/// implement `Duplicate` (but not `Copy`), use [`cloned`] instead.
+///
+/// # Efficiency
+///
+/// `copied` is more efficient than `cloned` for `Copy` types because it
+/// performs a simple bitwise copy rather than calling a method.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Convert iterator over references to iterator over owned values
+/// // let refs: Iterator[Item = ref I32] = ...
+/// // let owned: Copied[...] = copied(refs)
+/// // Now yields I32 instead of ref I32
+/// ```
+pub func copied[I: Iterator, T: Copy](iter: I) -> Copied[I] where I::Item = ref T {
+    return Copied { iter: iter }
+}

@@ -1,0 +1,533 @@
+//! Range types and behaviors.
+//!
+//! This module provides the `RangeBounds` behavior and various range types
+//! for expressing ranges of values. Ranges are commonly used for slicing
+//! and iteration.
+//!
+//! # Range Syntax
+//!
+//! TML uses keyword-based range syntax for clarity:
+//!
+//! | Syntax | Type | Description |
+//! |--------|------|-------------|
+//! | `start to end` | `Range[T]` | Half-open: [start, end) |
+//! | `start through end` | `RangeInclusive[T]` | Closed: [start, end] |
+//! | `start to` | `RangeFrom[T]` | No upper bound: [start, ∞) |
+//! | `to end` | `RangeTo[T]` | No lower bound: [0, end) |
+//! | `through end` | `RangeToInclusive[T]` | No lower bound, inclusive: [0, end] |
+//! | `..` | `RangeFull` | All elements |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::*
+//!
+//! // Iteration
+//! loop i in 0 to 10 {
+//!     println(i.to_string())  // 0, 1, 2, ..., 9
+//! }
+//!
+//! loop i in 0 through 10 {
+//!     println(i.to_string())  // 0, 1, 2, ..., 10
+//! }
+//!
+//! // Slicing
+//! let arr = [1, 2, 3, 4, 5]
+//! let slice = arr[1 to 4]      // [2, 3, 4]
+//! let slice = arr[1 through 4] // [2, 3, 4, 5]
+//! let slice = arr[2 to]        // [3, 4, 5]
+//! let slice = arr[to 3]        // [1, 2, 3]
+//! ```
+
+// Display, Debug, PartialOrd, Ord, Ordering are builtin - no import needed
+
+// ============================================================================
+// Bound Enum
+// ============================================================================
+
+/// An endpoint of a range.
+///
+/// Used by `RangeBounds::start_bound` and `RangeBounds::end_bound` to
+/// describe the bounds of a range.
+///
+/// # Variants
+///
+/// - `Included(T)` - The bound includes the value
+/// - `Excluded(T)` - The bound excludes the value
+/// - `Unbounded` - There is no bound in this direction
+pub type Bound[T] {
+    /// An inclusive bound.
+    Included(T),
+    /// An exclusive bound.
+    Excluded(T),
+    /// An infinite bound (no limit in this direction).
+    Unbounded
+}
+
+/// Creates an included bound.
+pub func bound_included[T](value: T) -> Bound[T] {
+    return Bound::Included(value)
+}
+
+/// Creates an excluded bound.
+pub func bound_excluded[T](value: T) -> Bound[T] {
+    return Bound::Excluded(value)
+}
+
+/// Creates an unbounded bound.
+pub func bound_unbounded[T]() -> Bound[T] {
+    return Bound::Unbounded
+}
+
+impl[T] Bound[T] {
+    /// Creates an included bound.
+    pub func included(value: T) -> Bound[T] {
+        return Bound::Included(value)
+    }
+
+    /// Creates an excluded bound.
+    pub func excluded(value: T) -> Bound[T] {
+        return Bound::Excluded(value)
+    }
+
+    /// Creates an unbounded bound.
+    pub func unbounded() -> Bound[T] {
+        return Bound::Unbounded
+    }
+
+    /// Returns `true` if this is an `Included` bound.
+    pub func is_included(this) -> Bool {
+        when this {
+            Bound::Included(_) => return true,
+            Bound::Excluded(_) => return false,
+            Bound::Unbounded => return false
+        }
+    }
+
+    /// Returns `true` if this is an `Excluded` bound.
+    pub func is_excluded(this) -> Bool {
+        when this {
+            Bound::Included(_) => return false,
+            Bound::Excluded(_) => return true,
+            Bound::Unbounded => return false
+        }
+    }
+
+    /// Returns `true` if this is `Unbounded`.
+    pub func is_unbounded(this) -> Bool {
+        when this {
+            Bound::Included(_) => return false,
+            Bound::Excluded(_) => return false,
+            Bound::Unbounded => return true
+        }
+    }
+}
+
+impl[T: Duplicate] Bound[T] {
+    /// Clones the inner value.
+    pub func cloned(this) -> Bound[T] {
+        when this {
+            Bound::Included(t) => return Bound::Included(t.duplicate()),
+            Bound::Excluded(t) => return Bound::Excluded(t.duplicate()),
+            Bound::Unbounded => return Bound::Unbounded
+        }
+    }
+}
+
+impl[T: Debug] Debug for Bound[T] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Bound::Included(t) => return "Included(" + t.debug_string() + ")",
+            Bound::Excluded(t) => return "Excluded(" + t.debug_string() + ")",
+            Bound::Unbounded => return "Unbounded"
+        }
+    }
+}
+
+impl[T: Display] Display for Bound[T] {
+    pub func to_string(this) -> Str {
+        when this {
+            Bound::Included(t) => return "Included(" + t.to_string() + ")",
+            Bound::Excluded(t) => return "Excluded(" + t.to_string() + ")",
+            Bound::Unbounded => return "Unbounded"
+        }
+    }
+}
+
+// ============================================================================
+// Range Types
+// ============================================================================
+
+/// A half-open range: [start, end).
+///
+/// Created with the `start to end` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = 1 to 5  // Range { start: 1, end: 5 }
+///
+/// loop i in range {
+///     println(i.to_string())  // 1, 2, 3, 4
+/// }
+/// ```
+pub type Range[T] {
+    /// The lower bound (inclusive).
+    start: T,
+    /// The upper bound (exclusive).
+    end: T
+}
+
+impl[T] Range[T] {
+    /// Creates a new range.
+    pub func new(start: T, end: T) -> Range[T] {
+        return Range { start: start, end: end }
+    }
+}
+
+impl[T: PartialOrd] Range[T] {
+    /// Returns `true` if the range contains no items.
+    pub func is_empty(this) -> Bool {
+        // Empty if start >= end
+        when this.start.partial_cmp(ref this.end) {
+            Just(Ordering::Less) => return false,
+            Just(Ordering::Equal) => return true,
+            Just(Ordering::Greater) => return true,
+            Nothing => return true
+        }
+    }
+
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: ref T) -> Bool {
+        // item >= start
+        let ge_start: Bool = when item.partial_cmp(ref this.start) {
+            Just(Ordering::Greater) => true,
+            Just(Ordering::Equal) => true,
+            Just(Ordering::Less) => false,
+            Nothing => false
+        }
+
+        // item < end
+        let lt_end: Bool = when item.partial_cmp(ref this.end) {
+            Just(Ordering::Less) => true,
+            Just(Ordering::Equal) => false,
+            Just(Ordering::Greater) => false,
+            Nothing => false
+        }
+
+        return ge_start and lt_end
+    }
+}
+
+impl[T: Debug] Debug for Range[T] {
+    pub func debug_string(this) -> Str {
+        return this.start.debug_string() + " to " + this.end.debug_string()
+    }
+}
+
+impl[T: Display] Display for Range[T] {
+    pub func to_string(this) -> Str {
+        return this.start.to_string() + " to " + this.end.to_string()
+    }
+}
+
+// ============================================================================
+// RangeInclusive
+// ============================================================================
+
+/// A closed range: [start, end].
+///
+/// Created with the `start through end` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = 1 through 5  // Includes 5
+///
+/// loop i in range {
+///     println(i.to_string())  // 1, 2, 3, 4, 5
+/// }
+/// ```
+pub type RangeInclusive[T] {
+    /// The lower bound (inclusive).
+    start: T,
+    /// The upper bound (inclusive).
+    end: T,
+    /// Whether the range has been exhausted (for iteration).
+    exhausted: Bool
+}
+
+impl[T] RangeInclusive[T] {
+    /// Creates a new inclusive range.
+    pub func new(start: T, end: T) -> RangeInclusive[T] {
+        return RangeInclusive {
+            start: start,
+            end: end,
+            exhausted: false
+        }
+    }
+
+    /// Returns the start value.
+    pub func start(this) -> ref T {
+        return ref this.start
+    }
+
+    /// Returns the end value.
+    pub func end(this) -> ref T {
+        return ref this.end
+    }
+
+    /// Converts to a tuple of (start, end).
+    pub func into_inner(this) -> (T, T) {
+        return (this.start, this.end)
+    }
+}
+
+impl[T: PartialOrd] RangeInclusive[T] {
+    /// Returns `true` if the range contains no items.
+    pub func is_empty(this) -> Bool {
+        if this.exhausted {
+            return true
+        }
+        when this.start.partial_cmp(ref this.end) {
+            Just(Ordering::Greater) => return true,
+            Just(Ordering::Equal) => return false,
+            Just(Ordering::Less) => return false,
+            Nothing => return true
+        }
+    }
+
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: ref T) -> Bool {
+        // item >= start
+        let ge_start: Bool = when item.partial_cmp(ref this.start) {
+            Just(Ordering::Greater) => true,
+            Just(Ordering::Equal) => true,
+            Just(Ordering::Less) => false,
+            Nothing => false
+        }
+
+        // item <= end
+        let le_end: Bool = when item.partial_cmp(ref this.end) {
+            Just(Ordering::Less) => true,
+            Just(Ordering::Equal) => true,
+            Just(Ordering::Greater) => false,
+            Nothing => false
+        }
+
+        return ge_start and le_end
+    }
+}
+
+impl[T: Debug] Debug for RangeInclusive[T] {
+    pub func debug_string(this) -> Str {
+        return this.start.debug_string() + " through " + this.end.debug_string()
+    }
+}
+
+impl[T: Display] Display for RangeInclusive[T] {
+    pub func to_string(this) -> Str {
+        return this.start.to_string() + " through " + this.end.to_string()
+    }
+}
+
+// ============================================================================
+// RangeFrom
+// ============================================================================
+
+/// A range with only a lower bound: [start, ∞).
+///
+/// Created with the `start to` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = 5 to  // All values >= 5
+///
+/// // Common use: slice from index to end
+/// let arr = [1, 2, 3, 4, 5]
+/// let tail = arr[2 to]  // [3, 4, 5]
+/// ```
+pub type RangeFrom[T] {
+    /// The lower bound (inclusive).
+    start: T
+}
+
+impl[T] RangeFrom[T] {
+    /// Creates a new range from the given start.
+    pub func new(start: T) -> RangeFrom[T] {
+        return RangeFrom { start: start }
+    }
+}
+
+impl[T: PartialOrd] RangeFrom[T] {
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: ref T) -> Bool {
+        when item.partial_cmp(ref this.start) {
+            Just(Ordering::Greater) => return true,
+            Just(Ordering::Equal) => return true,
+            Just(Ordering::Less) => return false,
+            Nothing => return false
+        }
+    }
+}
+
+impl[T: Debug] Debug for RangeFrom[T] {
+    pub func debug_string(this) -> Str {
+        return this.start.debug_string() + " to"
+    }
+}
+
+impl[T: Display] Display for RangeFrom[T] {
+    pub func to_string(this) -> Str {
+        return this.start.to_string() + " to"
+    }
+}
+
+// ============================================================================
+// RangeTo
+// ============================================================================
+
+/// A range with only an upper bound: [0, end).
+///
+/// Created with the `to end` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = to 5  // All values < 5 (starting from 0)
+///
+/// // Common use: slice from beginning
+/// let arr = [1, 2, 3, 4, 5]
+/// let head = arr[to 3]  // [1, 2, 3]
+/// ```
+pub type RangeTo[T] {
+    /// The upper bound (exclusive).
+    end: T
+}
+
+impl[T] RangeTo[T] {
+    /// Creates a new range to the given end.
+    pub func new(end: T) -> RangeTo[T] {
+        return RangeTo { end: end }
+    }
+}
+
+impl[T: PartialOrd] RangeTo[T] {
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: ref T) -> Bool {
+        when item.partial_cmp(ref this.end) {
+            Just(Ordering::Less) => return true,
+            Just(Ordering::Equal) => return false,
+            Just(Ordering::Greater) => return false,
+            Nothing => return false
+        }
+    }
+}
+
+impl[T: Debug] Debug for RangeTo[T] {
+    pub func debug_string(this) -> Str {
+        return "to " + this.end.debug_string()
+    }
+}
+
+impl[T: Display] Display for RangeTo[T] {
+    pub func to_string(this) -> Str {
+        return "to " + this.end.to_string()
+    }
+}
+
+// ============================================================================
+// RangeToInclusive
+// ============================================================================
+
+/// A range with only an inclusive upper bound: [0, end].
+///
+/// Created with the `through end` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = through 5  // All values <= 5
+///
+/// let arr = [1, 2, 3, 4, 5]
+/// let head = arr[through 3]  // [1, 2, 3, 4] (indices 0..=3)
+/// ```
+pub type RangeToInclusive[T] {
+    /// The upper bound (inclusive).
+    end: T
+}
+
+impl[T] RangeToInclusive[T] {
+    /// Creates a new inclusive range to the given end.
+    pub func new(end: T) -> RangeToInclusive[T] {
+        return RangeToInclusive { end: end }
+    }
+}
+
+impl[T: PartialOrd] RangeToInclusive[T] {
+    /// Returns `true` if `item` is contained in the range.
+    pub func contains(this, item: ref T) -> Bool {
+        when item.partial_cmp(ref this.end) {
+            Just(Ordering::Less) => return true,
+            Just(Ordering::Equal) => return true,
+            Just(Ordering::Greater) => return false,
+            Nothing => return false
+        }
+    }
+}
+
+impl[T: Debug] Debug for RangeToInclusive[T] {
+    pub func debug_string(this) -> Str {
+        return "through " + this.end.debug_string()
+    }
+}
+
+impl[T: Display] Display for RangeToInclusive[T] {
+    pub func to_string(this) -> Str {
+        return "through " + this.end.to_string()
+    }
+}
+
+// ============================================================================
+// RangeFull
+// ============================================================================
+
+/// An unbounded range (all values).
+///
+/// Created with the `..` syntax.
+///
+/// # Examples
+///
+/// ```tml
+/// let range = ..  // All indices
+///
+/// // Common use: get entire slice
+/// let arr = [1, 2, 3, 4, 5]
+/// let all = arr[..]  // [1, 2, 3, 4, 5]
+/// ```
+pub type RangeFull {}
+
+impl RangeFull {
+    /// Creates a new full range.
+    pub func new() -> RangeFull {
+        return RangeFull {}
+    }
+
+    /// Returns `true` - full range contains everything.
+    pub func contains[T](this, _item: ref T) -> Bool {
+        return true
+    }
+}
+
+impl Debug for RangeFull {
+    pub func debug_string(this) -> Str {
+        return ".."
+    }
+}
+
+impl Display for RangeFull {
+    pub func to_string(this) -> Str {
+        return ".."
+    }
+}

@@ -1,0 +1,85 @@
+//! The RepeatWith iterator source.
+//!
+//! This module provides the `RepeatWith` iterator which yields elements
+//! computed by a generator function infinitely.
+
+// ============================================================================
+// RepeatWith Iterator
+// ============================================================================
+
+/// An iterator that repeats elements using a generator function.
+///
+/// This struct is created by the [`repeat_with`] function. See its documentation
+/// for more details.
+///
+/// Each call to `next()` invokes the generator function to produce a new
+/// element. This is useful when you need different values each iteration
+/// (e.g., random numbers) or when the value is expensive to clone.
+///
+/// # Warning
+///
+/// This iterator is **infinite**! Always use it with limiting adapters like
+/// `take` to avoid infinite loops.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var counter: I32 = 0
+/// let iter: RepeatWith[func() -> I32] = repeat_with(do() -> I32 {
+///     counter = counter + 1
+///     counter
+/// })
+/// // Yields 1, 2, 3, 4, ... (incrementing counter each time)
+/// ```
+pub type RepeatWith[F] {
+    gen: F
+}
+
+impl[F, T] Iterator for RepeatWith[F] where F = func() -> T {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        return Just(this.gen())
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return (I64::MAX, Nothing)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that repeats elements using a generator function.
+///
+/// # Warning
+///
+/// **This creates an infinite iterator!** Always combine with adapters like
+/// `take` to limit iterations, or your program will loop forever.
+///
+/// # Use Cases
+///
+/// - Generating unique values (e.g., random numbers, UUIDs)
+/// - Values that are expensive to clone
+/// - Stateful iteration where each value depends on previous state
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Generate incrementing values
+/// var n: I32 = 0
+/// let nums = repeat_with(do() -> I32 {
+///     n = n + 1
+///     n
+/// })
+/// let first_five: Take[...] = take(nums, 5)
+/// // Yields 1, 2, 3, 4, 5
+/// ```
+pub func repeat_with[F, T](gen: F) -> RepeatWith[F] where F = func() -> T {
+    return RepeatWith { gen: gen }
+}

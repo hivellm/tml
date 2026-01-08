@@ -1,0 +1,67 @@
+//! The Enumerate adapter.
+//!
+//! This module provides the `Enumerate` iterator adapter which yields
+//! pairs of (index, element).
+
+// ============================================================================
+// Enumerate Adapter
+// ============================================================================
+
+/// An iterator that yields pairs of (index, element).
+///
+/// This struct is created by the [`enumerate`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 3)
+/// let indexed: Enumerate[RepeatNI32] = enumerate(iter)
+/// // Yields (0, 42), (1, 42), (2, 42)
+/// ```
+pub type Enumerate[I] {
+    iter: I,
+    index: I64
+}
+
+impl[I: Iterator] Iterator for Enumerate[I] {
+    type Item = (I64, I::Item)
+
+    pub func next(mut this) -> Maybe[(I64, I::Item)] {
+        when this.iter.next() {
+            Just(item) => {
+                let idx: I64 = this.index
+                this.index = this.index + 1
+                return Just((idx, item))
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields pairs of (index, element).
+///
+/// The index starts at 0 and increments by 1 for each element.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var data: RepeatNI32 = repeat_n_i32(10, 5)
+/// let indexed: Enumerate[RepeatNI32] = enumerate(data)
+/// // for (idx, val) in indexed { ... }
+/// ```
+pub func enumerate[I: Iterator](iter: I) -> Enumerate[I] {
+    return Enumerate { iter: iter, index: 0 }
+}

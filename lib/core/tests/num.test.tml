@@ -364,6 +364,3 @@ func test_i32_min_max_constants() -> I32 {
 // Note: I8, I16, U8, U16, U32 constant tests temporarily disabled due to I8 codegen bug
 // The bug is that return -128 generates i32 subtraction instead of i8 constant
 
-func main() -> I32 {
-    return 0
-}

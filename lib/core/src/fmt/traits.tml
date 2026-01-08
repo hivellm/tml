@@ -1,0 +1,364 @@
+//! Core formatting behaviors.
+//!
+//! This module defines the fundamental formatting behaviors that types can
+//! implement to control how they are converted to strings.
+
+// ============================================================================
+// Display Behavior
+// ============================================================================
+
+/// Behavior for user-facing string representation.
+///
+/// Types implementing `Display` can be converted to human-readable strings.
+/// This is the primary formatting behavior, used by `println()`, string
+/// interpolation, and anywhere clean output is needed.
+///
+/// # When to Implement
+///
+/// Implement `Display` when your type has a natural, user-friendly string
+/// representation. Not all types have an obvious `Display` representation -
+/// in those cases, only implement [`Debug`].
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Display
+///
+/// pub type Temperature {
+///     celsius: F64
+/// }
+///
+/// impl Display for Temperature {
+///     pub func to_string(this) -> Str {
+///         return this.celsius.to_string() + "°C"
+///     }
+/// }
+///
+/// let temp = Temperature { celsius: 23.5 }
+/// println(temp.to_string())  // "23.5°C"
+/// ```
+///
+/// # Relationship with Debug
+///
+/// - `Display` is for end users - clean, readable output
+/// - `Debug` is for developers - shows structure and internals
+///
+/// Many types implement both, but some only implement `Debug` when there's
+/// no clear user-facing representation.
+pub behavior Display {
+    /// Formats the value for display to end users.
+    ///
+    /// This should produce clean, human-readable output without implementation
+    /// details or extra debugging information.
+    func to_string(this) -> Str
+}
+
+// ============================================================================
+// Debug Behavior
+// ============================================================================
+
+/// Behavior for programmer-facing debug representation.
+///
+/// Types implementing `Debug` can produce output suitable for debugging and
+/// logging. Unlike [`Display`], `Debug` output should show the structure of
+/// the value, making it easier to understand during development.
+///
+/// # Conventions
+///
+/// `Debug` output follows these conventions:
+///
+/// - **Strings**: Quoted with escape sequences: `"hello\nworld"`
+/// - **Structs**: Show field names: `Point { x: 10, y: 20 }`
+/// - **Enums**: Show variant names: `Just(42)`, `Nothing`
+/// - **Collections**: Show contents: `[1, 2, 3]` or `{key: value}`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Debug
+///
+/// pub type Point { x: I64, y: I64 }
+///
+/// impl Debug for Point {
+///     pub func debug_string(this) -> Str {
+///         return "Point { x: " + this.x.debug_string() +
+///                ", y: " + this.y.debug_string() + " }"
+///     }
+/// }
+///
+/// let p = Point { x: 10, y: 20 }
+/// println(p.debug_string())  // "Point { x: 10, y: 20 }"
+/// ```
+///
+/// # Using Debug Builders
+///
+/// For complex types, use the builder helpers for consistent formatting:
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugStruct}
+///
+/// impl Debug for Point {
+///     pub func debug_string(this) -> Str {
+///         return DebugStruct::new("Point")
+///             .field("x", this.x.debug_string())
+///             .field("y", this.y.debug_string())
+///             .finish()
+///     }
+/// }
+/// ```
+pub behavior Debug {
+    /// Formats the value for debugging purposes.
+    ///
+    /// This should produce output that shows the internal structure of the
+    /// value, suitable for debugging and logging.
+    func debug_string(this) -> Str
+}
+
+// ============================================================================
+// Write Behavior
+// ============================================================================
+
+/// A behavior for writing formatted output to a destination.
+///
+/// This is the low-level interface used by formatting implementations.
+/// Types implementing `Write` can be used as output destinations for
+/// formatted data.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Write, FmtError}
+///
+/// pub type StringWriter {
+///     buffer: Str
+/// }
+///
+/// impl StringWriter {
+///     pub func new() -> StringWriter {
+///         return StringWriter { buffer: "" }
+///     }
+///
+///     pub func into_string(this) -> Str {
+///         return this.buffer
+///     }
+/// }
+///
+/// impl Write for StringWriter {
+///     pub func write_str(mut this, s: Str) -> Outcome[Unit, FmtError] {
+///         this.buffer = this.buffer + s
+///         return Ok(())
+///     }
+/// }
+///
+/// var writer = StringWriter::new()
+/// writer.write_str("Hello, ")
+/// writer.write_str("World!")
+/// println(writer.into_string())  // "Hello, World!"
+/// ```
+pub behavior Write {
+    /// Writes a string slice to this writer.
+    ///
+    /// Returns `Ok(())` on success, or `Err(FmtError)` if the write failed.
+    func write_str(mut this, s: Str) -> Outcome[Unit, FmtError]
+
+    /// Writes a single character to this writer.
+    ///
+    /// The default implementation converts the character to a string and
+    /// calls `write_str`. Types may override this for efficiency.
+    func write_char(mut this, c: Char) -> Outcome[Unit, FmtError] {
+        return this.write_str(char_to_string(c))
+    }
+
+    /// Writes a formatted string to this writer.
+    ///
+    /// This is a convenience method that calls `write_str`.
+    func write_fmt(mut this, s: Str) -> Outcome[Unit, FmtError] {
+        return this.write_str(s)
+    }
+}
+
+// Helper function for char conversion
+func char_to_string(c: Char) -> Str {
+    return lowlevel { char_to_string(c) }
+}
+
+// ============================================================================
+// FmtError Type
+// ============================================================================
+
+/// The error type for formatting operations.
+///
+/// This error is returned when a formatting operation fails. In most cases,
+/// this indicates that the underlying writer encountered an error (such as
+/// an I/O error).
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Write, FmtError}
+///
+/// func write_number(writer: mut ref impl Write, n: I64) -> Outcome[Unit, FmtError] {
+///     return writer.write_str(n.to_string())
+/// }
+/// ```
+pub type FmtError {
+    // Empty - this is a marker type indicating formatting failure
+    // In a full implementation, this might contain error details
+}
+
+impl FmtError {
+    /// Creates a new formatting error.
+    pub func new() -> FmtError {
+        return FmtError {}
+    }
+}
+
+impl Display for FmtError {
+    pub func to_string(this) -> Str {
+        return "formatting error"
+    }
+}
+
+impl Debug for FmtError {
+    pub func debug_string(this) -> Str {
+        return "FmtError"
+    }
+}
+
+// Note: Error behavior impl for FmtError is in core::error module
+// to avoid circular dependencies
+
+// ============================================================================
+// Alignment Enum
+// ============================================================================
+
+/// Specifies the alignment for formatted output.
+///
+/// When formatting with a minimum width, `Alignment` controls where the
+/// content is positioned within that width.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Alignment, Formatter}
+///
+/// let mut fmt = Formatter::new()
+/// fmt.set_width(10)
+/// fmt.set_fill('-')
+///
+/// fmt.set_align(Alignment::Left)
+/// println(fmt.pad("hi"))   // "hi--------"
+///
+/// fmt.set_align(Alignment::Center)
+/// println(fmt.pad("hi"))   // "----hi----"
+///
+/// fmt.set_align(Alignment::Right)
+/// println(fmt.pad("hi"))   // "--------hi"
+/// ```
+pub type Alignment {
+    /// Left-align the content (pad on the right).
+    Left,
+    /// Right-align the content (pad on the left).
+    Right,
+    /// Center the content (pad on both sides).
+    Center
+}
+
+impl Display for Alignment {
+    pub func to_string(this) -> Str {
+        when this {
+            Alignment::Left => return "Left",
+            Alignment::Right => return "Right",
+            Alignment::Center => return "Center",
+        }
+    }
+}
+
+impl Debug for Alignment {
+    pub func debug_string(this) -> Str {
+        when this {
+            Alignment::Left => return "Alignment::Left",
+            Alignment::Right => return "Alignment::Right",
+            Alignment::Center => return "Alignment::Center",
+        }
+    }
+}
+
+// ============================================================================
+// Sign Enum
+// ============================================================================
+
+/// Specifies how the sign of a number should be displayed.
+///
+/// # Variants
+///
+/// - `Minus`: Only show sign for negative numbers (default)
+/// - `Plus`: Always show sign (+ for positive, - for negative)
+/// - `Space`: Use space for positive, - for negative
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::Sign
+///
+/// let n: I32 = 42
+/// // Sign::Minus -> "42"
+/// // Sign::Plus  -> "+42"
+/// // Sign::Space -> " 42"
+/// ```
+pub type Sign {
+    /// Only show sign for negative numbers (default).
+    Minus,
+    /// Always show sign (+ for positive, - for negative).
+    Plus,
+    /// Use space for positive, minus for negative.
+    Space
+}
+
+impl Display for Sign {
+    pub func to_string(this) -> Str {
+        when this {
+            Sign::Minus => return "Minus",
+            Sign::Plus => return "Plus",
+            Sign::Space => return "Space",
+        }
+    }
+}
+
+impl Debug for Sign {
+    pub func debug_string(this) -> Str {
+        when this {
+            Sign::Minus => return "Sign::Minus",
+            Sign::Plus => return "Sign::Plus",
+            Sign::Space => return "Sign::Space",
+        }
+    }
+}
+
+// ============================================================================
+// DebugAsDisplay Wrapper
+// ============================================================================
+
+/// A wrapper that uses `Display` formatting for `Debug` output.
+///
+/// This is useful when you want to use a `Display` implementation in a
+/// context that expects `Debug`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Display, Debug, DebugAsDisplay}
+///
+/// let s = "hello"
+/// let wrapped = DebugAsDisplay { value: s }
+/// println(wrapped.debug_string())  // "hello" (no quotes)
+/// ```
+pub type DebugAsDisplay[T: Display] {
+    value: T
+}
+
+impl[T: Display] Debug for DebugAsDisplay[T] {
+    pub func debug_string(this) -> Str {
+        return this.value.to_string()
+    }
+}

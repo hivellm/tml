@@ -51,6 +51,3 @@ func test_phantom_pinned_duplicate() -> I32 {
     return 0
 }
 
-func main() -> I32 {
-    return 0
-}

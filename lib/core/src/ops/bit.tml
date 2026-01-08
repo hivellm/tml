@@ -1,0 +1,387 @@
+//! Bitwise operators.
+//!
+//! This module provides behaviors for bitwise operations:
+//! - [`BitAnd`] for `&`
+//! - [`BitOr`] for `|`
+//! - [`BitXor`] for `^`
+//! - [`Not`] for `not` (logical/bitwise negation)
+//! - [`Shl`] for `<<`
+//! - [`Shr`] for `>>`
+//!
+//! # Examples
+//!
+//! ```tml
+//! let a: U8 = 0b1100
+//! let b: U8 = 0b1010
+//!
+//! let and_result = a & b   // 0b1000
+//! let or_result = a | b    // 0b1110
+//! let xor_result = a ^ b   // 0b0110
+//! let shl_result = a << 2  // 0b110000
+//! let shr_result = a >> 2  // 0b0011
+//! ```
+
+// ============================================================================
+// BitAnd Behavior
+// ============================================================================
+
+/// The bitwise AND operator `&`.
+///
+/// Types implementing `BitAnd` can perform bitwise AND using the `&` operator.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: U8 = 0b1100
+/// let b: U8 = 0b1010
+/// let c = a & b  // 0b1000
+/// ```
+pub behavior BitAnd[Rhs = Self] {
+    /// The resulting type after applying `&`.
+    type Output
+
+    /// Performs the `&` operation.
+    func bitand(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// BitOr Behavior
+// ============================================================================
+
+/// The bitwise OR operator `|`.
+///
+/// Types implementing `BitOr` can perform bitwise OR using the `|` operator.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: U8 = 0b1100
+/// let b: U8 = 0b1010
+/// let c = a | b  // 0b1110
+/// ```
+pub behavior BitOr[Rhs = Self] {
+    /// The resulting type after applying `|`.
+    type Output
+
+    /// Performs the `|` operation.
+    func bitor(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// BitXor Behavior
+// ============================================================================
+
+/// The bitwise XOR operator `^`.
+///
+/// Types implementing `BitXor` can perform bitwise XOR using the `^` operator.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: U8 = 0b1100
+/// let b: U8 = 0b1010
+/// let c = a ^ b  // 0b0110
+/// ```
+pub behavior BitXor[Rhs = Self] {
+    /// The resulting type after applying `^`.
+    type Output
+
+    /// Performs the `^` operation.
+    func bitxor(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// Not Behavior
+// ============================================================================
+
+/// The logical/bitwise negation operator `not`.
+///
+/// For `Bool`, this performs logical negation.
+/// For integers, this performs bitwise NOT (ones' complement).
+///
+/// # Examples
+///
+/// ```tml
+/// let a = true
+/// let b = not a  // false
+///
+/// let x: U8 = 0b00001111
+/// let y = not x  // 0b11110000
+/// ```
+pub behavior Not {
+    /// The resulting type after applying `not`.
+    type Output
+
+    /// Performs the `not` operation.
+    func negate(this) -> This::Output
+}
+
+// ============================================================================
+// Shl Behavior
+// ============================================================================
+
+/// The left shift operator `<<`.
+///
+/// Types implementing `Shl` can be left-shifted using the `<<` operator.
+///
+/// # Examples
+///
+/// ```tml
+/// let a: U8 = 0b0001
+/// let b = a << 3  // 0b1000
+/// ```
+pub behavior Shl[Rhs = I32] {
+    /// The resulting type after applying `<<`.
+    type Output
+
+    /// Performs the `<<` operation.
+    func shift_left(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// Shr Behavior
+// ============================================================================
+
+/// The right shift operator `>>`.
+///
+/// Types implementing `Shr` can be right-shifted using the `>>` operator.
+///
+/// For signed integers, this is an arithmetic right shift (sign-extending).
+/// For unsigned integers, this is a logical right shift (zero-filling).
+///
+/// # Examples
+///
+/// ```tml
+/// let a: U8 = 0b1000
+/// let b = a >> 3  // 0b0001
+/// ```
+pub behavior Shr[Rhs = I32] {
+    /// The resulting type after applying `>>`.
+    type Output
+
+    /// Performs the `>>` operation.
+    func shift_right(this, rhs: Rhs) -> This::Output
+}
+
+// ============================================================================
+// Compound Assignment Operators
+// ============================================================================
+
+/// The bitwise AND assignment operator `&=`.
+pub behavior BitAndAssign[Rhs = Self] {
+    /// Performs the `&=` operation.
+    func bitand_assign(mut this, rhs: Rhs)
+}
+
+/// The bitwise OR assignment operator `|=`.
+pub behavior BitOrAssign[Rhs = Self] {
+    /// Performs the `|=` operation.
+    func bitor_assign(mut this, rhs: Rhs)
+}
+
+/// The bitwise XOR assignment operator `^=`.
+pub behavior BitXorAssign[Rhs = Self] {
+    /// Performs the `^=` operation.
+    func bitxor_assign(mut this, rhs: Rhs)
+}
+
+/// The left shift assignment operator `<<=`.
+pub behavior ShlAssign[Rhs = I32] {
+    /// Performs the `<<=` operation.
+    func shl_assign(mut this, rhs: Rhs)
+}
+
+/// The right shift assignment operator `>>=`.
+pub behavior ShrAssign[Rhs = I32] {
+    /// Performs the `>>=` operation.
+    func shr_assign(mut this, rhs: Rhs)
+}
+
+// ============================================================================
+// Not implementation for Bool
+// ============================================================================
+
+impl Not for Bool {
+    type Output = Bool
+    pub func negate(this) -> Bool { return not this }
+}
+
+// ============================================================================
+// BitAndAssign implementations
+// ============================================================================
+
+impl BitAndAssign for I8 {
+    pub func bitand_assign(mut this, rhs: I8) { this = this & rhs }
+}
+
+impl BitAndAssign for I16 {
+    pub func bitand_assign(mut this, rhs: I16) { this = this & rhs }
+}
+
+impl BitAndAssign for I32 {
+    pub func bitand_assign(mut this, rhs: I32) { this = this & rhs }
+}
+
+impl BitAndAssign for I64 {
+    pub func bitand_assign(mut this, rhs: I64) { this = this & rhs }
+}
+
+impl BitAndAssign for U8 {
+    pub func bitand_assign(mut this, rhs: U8) { this = this & rhs }
+}
+
+impl BitAndAssign for U16 {
+    pub func bitand_assign(mut this, rhs: U16) { this = this & rhs }
+}
+
+impl BitAndAssign for U32 {
+    pub func bitand_assign(mut this, rhs: U32) { this = this & rhs }
+}
+
+impl BitAndAssign for U64 {
+    pub func bitand_assign(mut this, rhs: U64) { this = this & rhs }
+}
+
+// ============================================================================
+// BitOrAssign implementations
+// ============================================================================
+
+impl BitOrAssign for I8 {
+    pub func bitor_assign(mut this, rhs: I8) { this = this | rhs }
+}
+
+impl BitOrAssign for I16 {
+    pub func bitor_assign(mut this, rhs: I16) { this = this | rhs }
+}
+
+impl BitOrAssign for I32 {
+    pub func bitor_assign(mut this, rhs: I32) { this = this | rhs }
+}
+
+impl BitOrAssign for I64 {
+    pub func bitor_assign(mut this, rhs: I64) { this = this | rhs }
+}
+
+impl BitOrAssign for U8 {
+    pub func bitor_assign(mut this, rhs: U8) { this = this | rhs }
+}
+
+impl BitOrAssign for U16 {
+    pub func bitor_assign(mut this, rhs: U16) { this = this | rhs }
+}
+
+impl BitOrAssign for U32 {
+    pub func bitor_assign(mut this, rhs: U32) { this = this | rhs }
+}
+
+impl BitOrAssign for U64 {
+    pub func bitor_assign(mut this, rhs: U64) { this = this | rhs }
+}
+
+// ============================================================================
+// BitXorAssign implementations
+// ============================================================================
+
+impl BitXorAssign for I8 {
+    pub func bitxor_assign(mut this, rhs: I8) { this = this ^ rhs }
+}
+
+impl BitXorAssign for I16 {
+    pub func bitxor_assign(mut this, rhs: I16) { this = this ^ rhs }
+}
+
+impl BitXorAssign for I32 {
+    pub func bitxor_assign(mut this, rhs: I32) { this = this ^ rhs }
+}
+
+impl BitXorAssign for I64 {
+    pub func bitxor_assign(mut this, rhs: I64) { this = this ^ rhs }
+}
+
+impl BitXorAssign for U8 {
+    pub func bitxor_assign(mut this, rhs: U8) { this = this ^ rhs }
+}
+
+impl BitXorAssign for U16 {
+    pub func bitxor_assign(mut this, rhs: U16) { this = this ^ rhs }
+}
+
+impl BitXorAssign for U32 {
+    pub func bitxor_assign(mut this, rhs: U32) { this = this ^ rhs }
+}
+
+impl BitXorAssign for U64 {
+    pub func bitxor_assign(mut this, rhs: U64) { this = this ^ rhs }
+}
+
+// ============================================================================
+// ShlAssign implementations
+// ============================================================================
+
+impl ShlAssign for I8 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for I16 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for I32 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for I64 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for U8 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for U16 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for U32 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+impl ShlAssign for U64 {
+    pub func shl_assign(mut this, rhs: I32) { this = this << rhs }
+}
+
+// ============================================================================
+// ShrAssign implementations
+// ============================================================================
+
+impl ShrAssign for I8 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for I16 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for I32 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for I64 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for U8 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for U16 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for U32 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}
+
+impl ShrAssign for U64 {
+    pub func shr_assign(mut this, rhs: I32) { this = this >> rhs }
+}

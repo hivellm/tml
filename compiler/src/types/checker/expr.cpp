@@ -578,11 +578,48 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         if (call.args.size() != func.params.size()) {
             error("Wrong number of arguments", call.callee->span);
         }
+
+        // Infer generic type substitutions from argument types
+        // This is needed for generic enum variant constructors like Option::Some(42)
+        std::unordered_map<std::string, TypePtr> substitutions;
+
         for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
             auto arg_type = check_expr(*call.args[i]);
-            (void)arg_type;
+            auto& param_type = func.params[i];
+
+            // If the parameter type is a NamedType that could be a type parameter (T, U, etc.)
+            // and it has no type_args, it might be a generic type parameter
+            if (param_type->is<NamedType>()) {
+                const auto& named = param_type->as<NamedType>();
+                // Check if this is a type parameter: empty type_args, empty module_path,
+                // and not a known type (struct, enum, primitive, etc.)
+                if (named.type_args.empty() && named.module_path.empty() && !named.name.empty()) {
+                    bool is_type_param = true;
+                    // Check if it's a known type (struct, enum, primitive, etc.)
+                    if (env_.lookup_struct(named.name) || env_.lookup_enum(named.name)) {
+                        is_type_param = false;
+                    }
+                    auto& builtins = env_.builtin_types();
+                    if (builtins.find(named.name) != builtins.end()) {
+                        is_type_param = false;
+                    }
+                    if (is_type_param) {
+                        substitutions[named.name] = arg_type;
+                    }
+                }
+            } else if (param_type->is<GenericType>()) {
+                const auto& gen = param_type->as<GenericType>();
+                substitutions[gen.name] = arg_type;
+            }
         }
-        return func.return_type;
+
+        // Apply substitutions to the return type
+        TypePtr return_type = func.return_type;
+        if (!substitutions.empty()) {
+            return_type = substitute_type(return_type, substitutions);
+        }
+
+        return return_type;
     }
 
     return make_unit();
@@ -723,8 +760,13 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
     }
 
     // Handle primitive type builtin methods (core::ops)
-    if (receiver_type->is<PrimitiveType>()) {
-        auto& prim = receiver_type->as<PrimitiveType>();
+    // Unwrap reference type if present
+    TypePtr prim_type = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        prim_type = receiver_type->as<RefType>().inner;
+    }
+    if (prim_type->is<PrimitiveType>()) {
+        auto& prim = prim_type->as<PrimitiveType>();
         auto kind = prim.kind;
 
         // Integer and float arithmetic methods
@@ -794,6 +836,24 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         // borrow_mut() returns mut ref Self for all primitives (BorrowMut behavior)
         if (call.method == "borrow_mut") {
             return std::make_shared<Type>(RefType{true, receiver_type});
+        }
+
+        // Str-specific methods
+        if (kind == PrimitiveKind::Str) {
+            // len() returns I64 (byte length)
+            if (call.method == "len") {
+                return make_primitive(PrimitiveKind::I64);
+            }
+            // is_empty() returns Bool
+            if (call.method == "is_empty") {
+                return make_primitive(PrimitiveKind::Bool);
+            }
+            // as_bytes() returns ref [U8]
+            if (call.method == "as_bytes") {
+                auto u8_type = make_primitive(PrimitiveKind::U8);
+                auto slice_type = std::make_shared<Type>(SliceType{u8_type});
+                return std::make_shared<Type>(RefType{false, slice_type});
+            }
         }
 
         // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
@@ -1101,6 +1161,63 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         }
 
         // to_string() returns Str
+        if (call.method == "to_string" || call.method == "debug_string") {
+            return make_primitive(PrimitiveKind::Str);
+        }
+    }
+
+    // Handle SliceType methods (e.g., [T].len(), [T].get(0), etc.)
+    if (receiver_type->is<SliceType>()) {
+        auto& slice = receiver_type->as<SliceType>();
+        TypePtr elem_type = slice.element;
+
+        // len() returns I64
+        if (call.method == "len") {
+            return make_primitive(PrimitiveKind::I64);
+        }
+
+        // is_empty() returns Bool
+        if (call.method == "is_empty") {
+            return make_primitive(PrimitiveKind::Bool);
+        }
+
+        // get(index) returns Maybe[ref T]
+        if (call.method == "get") {
+            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            std::vector<TypePtr> type_args = {ref_type};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // first(), last() return Maybe[ref T]
+        if (call.method == "first" || call.method == "last") {
+            auto ref_type = std::make_shared<Type>(RefType{false, elem_type});
+            std::vector<TypePtr> type_args = {ref_type};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // slice(start, end) returns Slice[T]
+        if (call.method == "slice") {
+            return receiver_type;
+        }
+
+        // iter() returns SliceIter[T]
+        if (call.method == "iter" || call.method == "into_iter") {
+            std::vector<TypePtr> type_args = {elem_type};
+            return std::make_shared<Type>(NamedType{"SliceIter", "", type_args});
+        }
+
+        // push() returns unit (for dynamic slices)
+        if (call.method == "push") {
+            return make_unit();
+        }
+
+        // pop() returns Maybe[T]
+        if (call.method == "pop") {
+            std::vector<TypePtr> type_args = {elem_type};
+            return std::make_shared<Type>(NamedType{"Maybe", "", type_args});
+        }
+
+        // to_string(), debug_string() return Str
         if (call.method == "to_string" || call.method == "debug_string") {
             return make_primitive(PrimitiveKind::Str);
         }

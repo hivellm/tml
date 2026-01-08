@@ -1,0 +1,11 @@
+// Test: Nested submodule support
+// Verifies that deeply nested modules like core::iter::traits work
+use test
+use core::iter::traits::*
+
+@test
+func test_traits_module_loads() -> I32 {
+    // If this compiles, the nested module core::iter::traits was loaded
+    // The Iterator behavior should be available
+    return 0
+}

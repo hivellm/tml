@@ -126,6 +126,3 @@ func test_range_inclusive_already_exhausted() -> I32 {
     return 0
 }
 
-func main() -> I32 {
-    return 0
-}

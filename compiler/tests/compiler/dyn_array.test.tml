@@ -63,7 +63,3 @@ func test_dyn_heterogeneous() -> I32 {
     assert_eq(va + vb, 15, "Sum of values")
     return 0
 }
-
-func main() -> I32 {
-    return 0
-}

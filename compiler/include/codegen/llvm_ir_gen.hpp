@@ -78,6 +78,10 @@ private:
     // Maps associated type names to their concrete types (e.g., "Item" -> I32)
     std::unordered_map<std::string, types::TypePtr> current_associated_types_;
 
+    // Current generic type parameter substitutions (for resolving T in impl[T] blocks)
+    // Maps type parameter names to their concrete types (e.g., "T" -> I64)
+    std::unordered_map<std::string, types::TypePtr> current_type_subs_;
+
     // Current module prefix (for generating imported module functions)
     std::string
         current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml
@@ -422,6 +426,8 @@ private:
                             const std::string& enum_type_name, const std::string& tag_val,
                             const types::NamedType& named) -> std::optional<std::string>;
     auto gen_array_method(const parser::MethodCallExpr& call, const std::string& method)
+        -> std::optional<std::string>;
+    auto gen_slice_type_method(const parser::MethodCallExpr& call, const std::string& method)
         -> std::optional<std::string>;
 
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;

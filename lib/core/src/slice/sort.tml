@@ -46,7 +46,7 @@
 //! ```
 
 use core::slice::{MutSlice}
-use core::cmp::{Ordering, Ord}
+// Ordering, Ord are builtins - no import needed
 
 // ============================================================================
 // Sort Behaviors

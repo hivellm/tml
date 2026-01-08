@@ -1,0 +1,82 @@
+//! The Rev adapter.
+//!
+//! This module provides the `Rev` iterator adapter which reverses a
+//! double-ended iterator.
+
+use core::iter::DoubleEndedIterator
+
+// ============================================================================
+// Rev Adapter
+// ============================================================================
+
+/// An iterator that reverses a double-ended iterator.
+///
+/// This struct is created by the [`rev`] function. See its documentation
+/// for more details.
+///
+/// `Rev` swaps the behavior of `next` and `next_back` from the underlying
+/// iterator, effectively reversing the iteration order.
+///
+/// # Requirements
+///
+/// The underlying iterator must implement `DoubleEndedIterator`, which
+/// provides the `next_back` method needed to iterate in reverse.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // If you have a double-ended iterator yielding [1, 2, 3]
+/// // rev yields [3, 2, 1]
+/// ```
+pub type Rev[I] {
+    iter: I
+}
+
+impl[I: DoubleEndedIterator] Iterator for Rev[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        return this.iter.next_back()
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+impl[I: DoubleEndedIterator] DoubleEndedIterator for Rev[I] {
+    pub func next_back(mut this) -> Maybe[I::Item] {
+        return this.iter.next()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that reverses a double-ended iterator.
+///
+/// The resulting iterator yields elements in reverse order. This is achieved
+/// by calling `next_back` on the underlying iterator instead of `next`.
+///
+/// # Requirements
+///
+/// The underlying iterator must implement `DoubleEndedIterator`. Not all
+/// iterators support this - only those that can efficiently traverse in
+/// both directions.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Reverse a slice iterator
+/// // let slice_iter: SliceIter[I32] = slice.iter()
+/// // let reversed: Rev[SliceIter[I32]] = rev(slice_iter)
+/// // Now yields elements from end to beginning
+/// ```
+pub func rev[I: DoubleEndedIterator](iter: I) -> Rev[I] {
+    return Rev { iter: iter }
+}

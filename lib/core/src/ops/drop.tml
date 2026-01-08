@@ -1,0 +1,352 @@
+//! Resource cleanup behavior.
+//!
+//! This module contains the `Drop` behavior, which allows types to run
+//! custom cleanup code when they go out of scope.
+//!
+//! # The Drop Behavior
+//!
+//! When a value goes out of scope, TML automatically calls its `drop` method
+//! if it implements `Drop`. This is useful for:
+//!
+//! - Closing file handles
+//! - Releasing memory
+//! - Flushing buffers
+//! - Releasing locks
+//! - Any other cleanup that needs to happen
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::Drop
+//!
+//! pub type FileHandle {
+//!     fd: I32
+//! }
+//!
+//! impl Drop for FileHandle {
+//!     pub func drop(mut this) {
+//!         // Close the file descriptor
+//!         close_fd(this.fd)
+//!     }
+//! }
+//!
+//! func example() {
+//!     let file = FileHandle { fd: open("test.txt") }
+//!     // ... use file ...
+//! }  // file.drop() is called here automatically
+//! ```
+//!
+//! # Drop Order
+//!
+//! Values are dropped in reverse order of declaration:
+//!
+//! ```tml
+//! func example() {
+//!     let a = Resource::new("A")  // Created first
+//!     let b = Resource::new("B")  // Created second
+//!     // ... use a and b ...
+//! }  // b is dropped first, then a
+//! ```
+//!
+//! # Struct Fields
+//!
+//! When a struct is dropped, its fields are dropped after the struct's
+//! `drop` method (if any) completes. Fields are dropped in declaration order.
+//!
+//! # Copy Types Cannot Implement Drop
+//!
+//! Types that implement `Duplicate` (copy semantics) cannot implement `Drop`.
+//! This is because copy types are trivially copied and have no ownership
+//! semantics that would require cleanup.
+
+// Display, Debug are builtins - no import needed
+
+// ============================================================================
+// Drop Behavior
+// ============================================================================
+
+/// Custom cleanup code when a value goes out of scope.
+///
+/// Types implementing `Drop` can run custom code when they are destroyed.
+/// This is useful for managing resources that need explicit cleanup.
+///
+/// # When Drop is Called
+///
+/// The `drop` method is called automatically when:
+/// - A variable goes out of scope
+/// - A value is reassigned
+/// - A value is explicitly dropped with `drop(value)`
+///
+/// # Panics in Drop
+///
+/// If `drop` panics, the program will abort. It's important to handle
+/// errors gracefully in drop implementations.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::Drop
+///
+/// pub type Guard {
+///     name: Str
+/// }
+///
+/// impl Drop for Guard {
+///     pub func drop(mut this) {
+///         println("Dropping guard: " + this.name)
+///     }
+/// }
+///
+/// func example() {
+///     let g = Guard { name: "my_guard" }
+///     println("Guard active")
+/// }
+/// // Output:
+/// // Guard active
+/// // Dropping guard: my_guard
+/// ```
+pub behavior Drop {
+    /// Executes the destructor for this type.
+    ///
+    /// This method is called implicitly when the value goes out of scope,
+    /// and cannot be called explicitly (use `drop(value)` instead).
+    ///
+    /// # Implementor Notes
+    ///
+    /// - Keep drop implementations fast and infallible when possible
+    /// - Don't panic in drop unless absolutely necessary
+    /// - Fields are dropped automatically after this method returns
+    func drop(mut this)
+}
+
+// ============================================================================
+// drop_in_place Function
+// ============================================================================
+
+/// Executes the destructor of the pointed-to value.
+///
+/// This is semantically equivalent to calling `ptr.read()` and then
+/// dropping the result, but is more efficient because it doesn't
+/// move the value.
+///
+/// # Safety
+///
+/// This function is lowlevel because:
+/// - The pointer must be valid and properly aligned
+/// - The pointer must point to an initialized value
+/// - After calling, the value is considered uninitialized
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::drop_in_place
+///
+/// lowlevel {
+///     var value = String::from("hello")
+///     drop_in_place(ref mut value)  // Drops the string
+///     // value is now uninitialized, must not be used
+/// }
+/// ```
+pub func drop_in_place[T](value: mut ref T) {
+    lowlevel {
+        // This is a compiler intrinsic that:
+        // 1. Calls T::drop if T implements Drop
+        // 2. Recursively drops all fields
+        drop_in_place(value)
+    }
+}
+
+// ============================================================================
+// ManuallyDrop Wrapper
+// ============================================================================
+
+/// A wrapper to inhibit compiler from automatically calling `Drop::drop`.
+///
+/// This wrapper prevents the inner value from being dropped when the
+/// `ManuallyDrop` goes out of scope. The contained value must be
+/// manually dropped using `ManuallyDrop::drop()` or taken out with
+/// `ManuallyDrop::take()`.
+///
+/// # Use Cases
+///
+/// - Implementing custom drop logic
+/// - Moving values out of types that implement Drop
+/// - Union fields that need manual management
+/// - FFI boundaries where ownership is transferred
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::ManuallyDrop
+///
+/// var x = ManuallyDrop::new(String::from("hello"))
+///
+/// // The string won't be dropped when x goes out of scope
+/// // We must explicitly drop it:
+/// ManuallyDrop::drop(ref mut x)
+/// ```
+///
+/// # Warning
+///
+/// Forgetting to drop the inner value will cause a memory leak.
+/// Use this type carefully and ensure proper cleanup.
+pub type ManuallyDrop[T] {
+    value: T
+}
+
+impl[T] ManuallyDrop[T] {
+    /// Wraps a value to be manually dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = ManuallyDrop::new(vec![1, 2, 3])
+    /// ```
+    pub func new(value: T) -> ManuallyDrop[T] {
+        return ManuallyDrop { value: value }
+    }
+
+    /// Extracts the value from the `ManuallyDrop` container.
+    ///
+    /// This allows the value to be dropped normally again.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let x = ManuallyDrop::new(String::from("hello"))
+    /// let s = ManuallyDrop::into_inner(x)
+    /// // s will be dropped normally
+    /// ```
+    pub func into_inner(slot: ManuallyDrop[T]) -> T {
+        return slot.value
+    }
+
+    /// Takes the value out, leaving the slot in an unspecified state.
+    ///
+    /// # Safety
+    ///
+    /// After calling this, the `ManuallyDrop` must not be used again
+    /// unless it is reinitialized.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var x = ManuallyDrop::new(String::from("hello"))
+    /// let s = ManuallyDrop::take(ref mut x)
+    /// // x is now in an unspecified state
+    /// ```
+    pub func take(slot: mut ref ManuallyDrop[T]) -> T {
+        lowlevel {
+            return ptr_read(ref slot.value)
+        }
+    }
+
+    /// Manually drops the contained value.
+    ///
+    /// This is exactly equivalent to calling `drop_in_place` on the
+    /// contained value.
+    ///
+    /// # Safety
+    ///
+    /// After calling this, the contained value is considered dropped
+    /// and must not be used again.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// var x = ManuallyDrop::new(String::from("hello"))
+    /// ManuallyDrop::drop(ref mut x)
+    /// // The string has been dropped
+    /// ```
+    pub func drop(slot: mut ref ManuallyDrop[T]) {
+        lowlevel {
+            drop_in_place(ref mut slot.value)
+        }
+    }
+
+    /// Gets a reference to the contained value.
+    pub func get(this) -> ref T {
+        return ref this.value
+    }
+
+    /// Gets a mutable reference to the contained value.
+    pub func get_mut(mut this) -> mut ref T {
+        return ref mut this.value
+    }
+}
+
+impl[T: Debug] Debug for ManuallyDrop[T] {
+    pub func debug_string(this) -> Str {
+        return "ManuallyDrop(" + this.value.debug_string() + ")"
+    }
+}
+
+impl[T: Display] Display for ManuallyDrop[T] {
+    pub func to_string(this) -> Str {
+        return this.value.to_string()
+    }
+}
+
+impl[T: Default] Default for ManuallyDrop[T] {
+    pub func default() -> ManuallyDrop[T] {
+        return ManuallyDrop::new(T::default())
+    }
+}
+
+impl[T: Duplicate] Duplicate for ManuallyDrop[T] {
+    pub func duplicate(this) -> ManuallyDrop[T] {
+        return ManuallyDrop::new(this.value.duplicate())
+    }
+}
+
+// ============================================================================
+// ScopeGuard Helper
+// ============================================================================
+
+/// A guard that runs a closure when dropped.
+///
+/// This is useful for ensuring cleanup code runs even if a function
+/// returns early or panics.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::ScopeGuard
+///
+/// func with_lock(lock: mut ref Lock) {
+///     lock.acquire()
+///     let _guard = ScopeGuard::new(do() { lock.release() })
+///
+///     // ... do work that might return early or panic ...
+///
+/// }  // lock.release() is called here via the guard
+/// ```
+pub type ScopeGuard[F] {
+    func_opt: Maybe[F],
+    enabled: Bool
+}
+
+impl[F] ScopeGuard[F] {
+    /// Creates a new scope guard that will run the closure on drop.
+    pub func new(f: F) -> ScopeGuard[F] {
+        return ScopeGuard {
+            func_opt: Just(f),
+            enabled: true
+        }
+    }
+
+    /// Disables the guard, preventing the closure from running on drop.
+    ///
+    /// Use this when the cleanup is no longer needed (e.g., success path).
+    pub func defuse(mut this) {
+        this.enabled = false
+    }
+
+    /// Re-enables a previously defused guard.
+    pub func arm(mut this) {
+        this.enabled = true
+    }
+}
+
+// Note: Drop impl for ScopeGuard would call f() if enabled
+// This requires the compiler to support Drop behavior invocation

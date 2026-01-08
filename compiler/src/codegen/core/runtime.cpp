@@ -283,6 +283,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @str_hash(ptr)");
     emit_line("declare ptr @str_concat(ptr, ptr)");
     emit_line("declare ptr @str_substring(ptr, i32, i32)");
+    emit_line("declare ptr @str_slice(ptr, i64, i64)");
     emit_line("declare i32 @str_contains(ptr, ptr)");
     emit_line("declare i32 @str_starts_with(ptr, ptr)");
     emit_line("declare i32 @str_ends_with(ptr, ptr)");

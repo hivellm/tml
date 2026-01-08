@@ -1,0 +1,68 @@
+//! The FilterMap adapter.
+//!
+//! This module provides the `FilterMap` iterator adapter which both filters
+//! and maps in one operation.
+
+// ============================================================================
+// FilterMap Adapter
+// ============================================================================
+
+/// An iterator that both filters and maps in one operation.
+///
+/// This struct is created by the [`filter_map`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Parse strings, keeping only valid numbers
+/// let filter_mapped = filter_map(iter, do(s: Str) -> Maybe[I32] { s.parse_i32() })
+/// ```
+pub type FilterMap[I, F] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F, B] Iterator for FilterMap[I, F] where F = func(I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    when this.f(item) {
+                        Just(mapped) => return Just(mapped),
+                        Nothing => {}
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that both filters and maps in one operation.
+///
+/// The closure `f` is called on each element and returns `Maybe[B]`.
+/// Elements for which `f` returns `Just(value)` are yielded; elements
+/// for which `f` returns `Nothing` are skipped.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(5, 10)
+/// let result = filter_map(iter, do(x: I32) -> Maybe[I32] {
+///     if x > 0 { Just(x * 2) } else { Nothing }
+/// })
+/// ```
+pub func filter_map[I: Iterator, F, B](iter: I, f: F) -> FilterMap[I, F] where F = func(I::Item) -> Maybe[B] {
+    return FilterMap { iter: iter, f: f }
+}

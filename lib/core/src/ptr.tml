@@ -65,7 +65,7 @@
 //! copy_nonoverlapping(src, dst, 10)
 //! ```
 
-use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+// PartialEq, Eq, PartialOrd, Ord, Ordering are builtins - no import needed
 use core::hash::Hash
 use core::option::Maybe
 

@@ -33,6 +33,3 @@ func test_inline_closure_argument() -> I32 {
     return 0
 }
 
-func main() -> I32 {
-    return 0
-}

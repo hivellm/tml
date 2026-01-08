@@ -374,10 +374,8 @@ auto Parser::parse_generic_args() -> Result<std::optional<GenericArgs>, ParseErr
                 auto type_result = parse_type();
                 if (is_err(type_result))
                     return unwrap_err(type_result);
-                args.push_back(GenericArg::from_binding(
-                    std::string(name_token.lexeme),
-                    std::move(unwrap(type_result)),
-                    arg_span));
+                args.push_back(GenericArg::from_binding(std::string(name_token.lexeme),
+                                                        std::move(unwrap(type_result)), arg_span));
             } else {
                 // Not a binding, restore position and parse as type
                 pos_ = binding_saved_pos;

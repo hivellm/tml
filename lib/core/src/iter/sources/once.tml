@@ -1,0 +1,72 @@
+//! The Once iterator source.
+//!
+//! This module provides the `Once` iterator which yields exactly one element.
+
+// ============================================================================
+// Once Iterator
+// ============================================================================
+
+/// An iterator that yields exactly one element.
+///
+/// This struct is created by the [`once`] function. See its documentation
+/// for more details.
+///
+/// After yielding its single element, `Once` returns `Nothing` forever.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: Once[I32] = once(42)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Nothing
+/// ```
+pub type Once[T] {
+    value: Maybe[T]
+}
+
+impl[T] Iterator for Once[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        let result: Maybe[T] = this.value
+        this.value = Nothing
+        return result
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when this.value {
+            Just(_) => {
+                let one: I64 = 1
+                return (one, Just(one))
+            },
+            Nothing => {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields exactly one element.
+///
+/// After the single element is yielded, the iterator returns `Nothing` forever.
+/// This is useful for creating a single-element iterator to chain with others.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: Once[I32] = once(42)
+/// // First call to next() returns Just(42)
+/// // All subsequent calls return Nothing
+/// ```
+pub func once[T](value: T) -> Once[T] {
+    return Once { value: Just(value) }
+}

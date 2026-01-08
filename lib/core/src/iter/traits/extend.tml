@@ -1,0 +1,7 @@
+//! The Extend behavior.
+
+/// Extend a collection with the contents of an iterator.
+pub behavior Extend[T] {
+    /// Extends the collection with elements from the iterator.
+    pub func extend[I: Iterator](mut this, iter: I) where I::Item = T
+}

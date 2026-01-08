@@ -25,7 +25,7 @@
 //! Note: Generic static methods like `Range::new()` are not yet supported
 //! due to compiler limitations with monomorphization.
 
-use core::cmp::PartialOrd
+// PartialOrd is a builtin behavior - no import needed
 use core::iter::Iterator
 
 // ============================================================================

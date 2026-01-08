@@ -8,12 +8,18 @@ namespace tml::codegen {
 auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
                                      const std::string& receiver, const std::string& receiver_ptr,
                                      types::TypePtr receiver_type) -> std::optional<std::string> {
-    if (!receiver_type || !receiver_type->is<types::PrimitiveType>()) {
+    // Unwrap reference type if present
+    types::TypePtr inner_type = receiver_type;
+    if (receiver_type && receiver_type->is<types::RefType>()) {
+        inner_type = receiver_type->as<types::RefType>().inner;
+    }
+
+    if (!inner_type || !inner_type->is<types::PrimitiveType>()) {
         return std::nullopt;
     }
 
     const std::string& method = call.method;
-    const auto& prim = receiver_type->as<types::PrimitiveType>();
+    const auto& prim = inner_type->as<types::PrimitiveType>();
     auto kind = prim.kind;
 
     bool is_integer = (kind == types::PrimitiveKind::I8 || kind == types::PrimitiveKind::I16 ||
@@ -312,6 +318,37 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return result;
     }
 
+    // Str-specific methods
+    if (kind == types::PrimitiveKind::Str) {
+        // len() -> I64 (byte length of string)
+        if (method == "len") {
+            std::string len32 = fresh_reg();
+            emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = sext i32 " + len32 + " to i64");
+            last_expr_type_ = "i64";
+            return result;
+        }
+
+        // is_empty() -> Bool
+        if (method == "is_empty") {
+            std::string len32 = fresh_reg();
+            emit_line("  " + len32 + " = call i32 @str_len(ptr " + receiver + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp eq i32 " + len32 + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // as_bytes() -> ref [U8] (returns pointer to string data)
+        if (method == "as_bytes") {
+            // For now, return the string pointer itself as a slice
+            // In TML, strings are already represented as pointers to their data
+            last_expr_type_ = "ptr";
+            return receiver;
+        }
+    }
+
     // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)
     // Convert PrimitiveKind to type name
     std::string type_name;
@@ -354,6 +391,12 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         break;
     case types::PrimitiveKind::Bool:
         type_name = "Bool";
+        break;
+    case types::PrimitiveKind::Str:
+        type_name = "Str";
+        break;
+    case types::PrimitiveKind::Char:
+        type_name = "Char";
         break;
     default:
         return std::nullopt;

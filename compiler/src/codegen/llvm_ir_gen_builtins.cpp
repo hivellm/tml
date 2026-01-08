@@ -250,7 +250,130 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
     // ============ ENUM CONSTRUCTORS ============
 
-    // Check if this is an enum constructor
+    // Check if this is an enum constructor via PathExpr (e.g., Option::Some(42))
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path_expr = call.callee->as<parser::PathExpr>();
+        const auto& segments = path_expr.path.segments;
+        if (segments.size() == 2) {
+            const std::string& enum_name = segments[0];
+            const std::string& variant_name = segments[1];
+
+            // First check pending generic enums
+            auto gen_enum_it = pending_generic_enums_.find(enum_name);
+            if (gen_enum_it != pending_generic_enums_.end()) {
+                const auto& gen_enum_decl = *gen_enum_it->second;
+                for (size_t variant_idx = 0; variant_idx < gen_enum_decl.variants.size();
+                     ++variant_idx) {
+                    const auto& variant = gen_enum_decl.variants[variant_idx];
+                    if (variant.name == variant_name) {
+                        // Found generic enum constructor via PathExpr
+                        std::string enum_type;
+
+                        // Check if variant has payload
+                        bool has_payload =
+                            variant.tuple_fields.has_value() && !variant.tuple_fields->empty();
+
+                        // If we have expected type from context, use it
+                        if (!expected_enum_type_.empty()) {
+                            enum_type = expected_enum_type_;
+                        } else if (!current_ret_type_.empty() &&
+                                   current_ret_type_.find("%struct." + enum_name + "__") == 0) {
+                            enum_type = current_ret_type_;
+                        } else {
+                            // Infer type from arguments
+                            std::vector<types::TypePtr> inferred_type_args;
+                            if (has_payload && !call.args.empty()) {
+                                types::TypePtr arg_type = infer_expr_type(*call.args[0]);
+                                inferred_type_args.push_back(arg_type);
+                            } else {
+                                // No payload to infer from - default to I32
+                                inferred_type_args.push_back(types::make_i32());
+                            }
+                            std::string mangled_name =
+                                require_enum_instantiation(enum_name, inferred_type_args);
+                            enum_type = "%struct." + mangled_name;
+                        }
+
+                        std::string result = fresh_reg();
+                        std::string enum_val = fresh_reg();
+
+                        // Create enum value on stack
+                        emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                        // Set tag (field 0)
+                        std::string tag_ptr = fresh_reg();
+                        emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type +
+                                  ", ptr " + enum_val + ", i32 0, i32 0");
+                        emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " +
+                                  tag_ptr);
+
+                        // Set payload if present
+                        if (has_payload && !call.args.empty()) {
+                            std::string payload = gen_expr(*call.args[0]);
+
+                            std::string payload_ptr = fresh_reg();
+                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                            std::string payload_typed_ptr = fresh_reg();
+                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                      " to ptr");
+                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                      payload_typed_ptr);
+                        }
+
+                        // Load the complete enum value
+                        emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                        last_expr_type_ = enum_type;
+                        return result;
+                    }
+                }
+            }
+
+            // Then check non-generic enums
+            auto enum_it = env_.all_enums().find(enum_name);
+            if (enum_it != env_.all_enums().end()) {
+                const auto& enum_def = enum_it->second;
+                for (size_t variant_idx = 0; variant_idx < enum_def.variants.size();
+                     ++variant_idx) {
+                    const auto& [vname, payload_types] = enum_def.variants[variant_idx];
+                    if (vname == variant_name) {
+                        std::string enum_type = "%struct." + enum_name;
+                        std::string result = fresh_reg();
+                        std::string enum_val = fresh_reg();
+
+                        emit_line("  " + enum_val + " = alloca " + enum_type + ", align 8");
+
+                        std::string tag_ptr = fresh_reg();
+                        emit_line("  " + tag_ptr + " = getelementptr inbounds " + enum_type +
+                                  ", ptr " + enum_val + ", i32 0, i32 0");
+                        emit_line("  store i32 " + std::to_string(variant_idx) + ", ptr " +
+                                  tag_ptr);
+
+                        if (!payload_types.empty() && !call.args.empty()) {
+                            std::string payload = gen_expr(*call.args[0]);
+
+                            std::string payload_ptr = fresh_reg();
+                            emit_line("  " + payload_ptr + " = getelementptr inbounds " +
+                                      enum_type + ", ptr " + enum_val + ", i32 0, i32 1");
+
+                            std::string payload_typed_ptr = fresh_reg();
+                            emit_line("  " + payload_typed_ptr + " = bitcast ptr " + payload_ptr +
+                                      " to ptr");
+                            emit_line("  store " + last_expr_type_ + " " + payload + ", ptr " +
+                                      payload_typed_ptr);
+                        }
+
+                        emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
+                        last_expr_type_ = enum_type;
+                        return result;
+                    }
+                }
+            }
+        }
+    }
+
+    // Check if this is an enum constructor via bare IdentExpr (e.g., Some(42))
     if (call.callee->is<parser::IdentExpr>()) {
         const auto& ident = call.callee->as<parser::IdentExpr>();
 
@@ -559,6 +682,170 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             emit_line(")" + dbg_suffix);
             last_expr_type_ = ret_type;
             return result;
+        }
+    }
+
+    // ============ GENERIC STRUCT STATIC METHODS ============
+    // Handle calls like Range::new(0, 10) where Range is a generic struct
+    // These need type inference from expected_enum_type_ context
+
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>().path;
+        if (path.segments.size() == 2) {
+            const std::string& type_name = path.segments[0];
+            const std::string& method = path.segments[1];
+
+            // Check if this is an imported generic struct
+            std::vector<std::string> imported_type_params;
+            if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto struct_it = mod.structs.find(type_name);
+                    if (struct_it != mod.structs.end() && !struct_it->second.type_params.empty()) {
+                        imported_type_params = struct_it->second.type_params;
+                        break;
+                    }
+                }
+            }
+
+            // Also check local generic structs
+            bool is_local_generic = pending_generic_structs_.count(type_name) > 0 ||
+                                    pending_generic_impls_.count(type_name) > 0;
+
+            if (!imported_type_params.empty() || is_local_generic) {
+                // This is a generic struct static method - infer type args
+                std::string mangled_type_name = type_name;
+                std::unordered_map<std::string, types::TypePtr> type_subs;
+                std::vector<std::string> generic_names;
+
+                // Get generic parameter names
+                auto impl_it = pending_generic_impls_.find(type_name);
+                if (impl_it != pending_generic_impls_.end()) {
+                    for (const auto& g : impl_it->second->generics) {
+                        generic_names.push_back(g.name);
+                    }
+                } else if (!imported_type_params.empty()) {
+                    generic_names = imported_type_params;
+                }
+
+                // Try to infer from expected_enum_type_
+                if (!expected_enum_type_.empty() &&
+                    expected_enum_type_.find("%struct." + type_name + "__") == 0) {
+                    mangled_type_name = expected_enum_type_.substr(8); // Remove "%struct."
+
+                    // Extract type args from mangled name (e.g., Range__I64 -> I64)
+                    std::string suffix = mangled_type_name.substr(type_name.length());
+                    if (suffix.starts_with("__") && generic_names.size() == 1) {
+                        std::string type_arg_str = suffix.substr(2);
+                        types::TypePtr type_arg = nullptr;
+
+                        auto make_prim = [](types::PrimitiveKind kind) -> types::TypePtr {
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::PrimitiveType{kind};
+                            return t;
+                        };
+
+                        if (type_arg_str == "I64")
+                            type_arg = types::make_i64();
+                        else if (type_arg_str == "I32")
+                            type_arg = types::make_i32();
+                        else if (type_arg_str == "I8")
+                            type_arg = make_prim(types::PrimitiveKind::I8);
+                        else if (type_arg_str == "I16")
+                            type_arg = make_prim(types::PrimitiveKind::I16);
+                        else if (type_arg_str == "U8")
+                            type_arg = make_prim(types::PrimitiveKind::U8);
+                        else if (type_arg_str == "U16")
+                            type_arg = make_prim(types::PrimitiveKind::U16);
+                        else if (type_arg_str == "U32")
+                            type_arg = make_prim(types::PrimitiveKind::U32);
+                        else if (type_arg_str == "U64")
+                            type_arg = make_prim(types::PrimitiveKind::U64);
+                        else if (type_arg_str == "F32")
+                            type_arg = make_prim(types::PrimitiveKind::F32);
+                        else if (type_arg_str == "F64")
+                            type_arg = types::make_f64();
+                        else if (type_arg_str == "Bool")
+                            type_arg = types::make_bool();
+                        else if (type_arg_str == "Str")
+                            type_arg = types::make_str();
+                        else
+                            type_arg = types::make_i64(); // Default fallback
+
+                        if (type_arg && !generic_names.empty()) {
+                            type_subs[generic_names[0]] = type_arg;
+                        }
+                    }
+                }
+
+                // If we successfully inferred type args, generate the monomorphized call
+                if (!type_subs.empty()) {
+                    std::string qualified_name = type_name + "::" + method;
+                    auto func_sig = env_.lookup_func(qualified_name);
+
+                    // If not found locally, search modules
+                    if (!func_sig && env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            auto func_it2 = mod.functions.find(qualified_name);
+                            if (func_it2 != mod.functions.end()) {
+                                func_sig = func_it2->second;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (func_sig) {
+                        // Request impl method instantiation
+                        std::string mangled_method = "tml_" + mangled_type_name + "_" + method;
+                        if (generated_impl_methods_.find(mangled_method) ==
+                            generated_impl_methods_.end()) {
+                            if (impl_it != pending_generic_impls_.end() ||
+                                !imported_type_params.empty()) {
+                                pending_impl_method_instantiations_.push_back(PendingImplMethod{
+                                    mangled_type_name, method, type_subs, type_name});
+                                generated_impl_methods_.insert(mangled_method);
+                            }
+                        }
+
+                        // Generate arguments
+                        std::vector<std::pair<std::string, std::string>> typed_args;
+                        for (size_t i = 0; i < call.args.size(); ++i) {
+                            std::string val = gen_expr(*call.args[i]);
+                            std::string arg_type = last_expr_type_;
+                            if (i < func_sig->params.size()) {
+                                auto param_type =
+                                    types::substitute_type(func_sig->params[i], type_subs);
+                                arg_type = llvm_type_from_semantic(param_type);
+                            }
+                            typed_args.push_back({arg_type, val});
+                        }
+
+                        auto return_type = types::substitute_type(func_sig->return_type, type_subs);
+                        std::string ret_type = llvm_type_from_semantic(return_type);
+                        std::string fn_name_call = "@tml_" + mangled_type_name + "_" + method;
+
+                        std::string args_str;
+                        for (size_t i = 0; i < typed_args.size(); ++i) {
+                            if (i > 0)
+                                args_str += ", ";
+                            args_str += typed_args[i].first + " " + typed_args[i].second;
+                        }
+
+                        std::string result = fresh_reg();
+                        if (ret_type == "void") {
+                            emit_line("  call void " + fn_name_call + "(" + args_str + ")");
+                            last_expr_type_ = "void";
+                            return "void";
+                        } else {
+                            emit_line("  " + result + " = call " + ret_type + " " + fn_name_call +
+                                      "(" + args_str + ")");
+                            last_expr_type_ = ret_type;
+                            return result;
+                        }
+                    }
+                }
+            }
         }
     }
 

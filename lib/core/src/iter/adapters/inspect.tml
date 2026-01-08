@@ -1,0 +1,73 @@
+//! The Inspect adapter.
+//!
+//! This module provides the `Inspect` iterator adapter which calls a function
+//! on each element without changing it, useful for debugging.
+
+// ============================================================================
+// Inspect Adapter
+// ============================================================================
+
+/// An iterator that calls a function on each element without changing it.
+///
+/// This struct is created by the [`inspect`] function. See its documentation
+/// for more details.
+///
+/// `Inspect` is useful for debugging iterator chains - you can use it to
+/// print or log elements as they pass through without modifying the values.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(42, 3)
+/// let debug: Inspect[RepeatNI32, func(ref I32)] = inspect(nums, do(x: ref I32) {
+///     // Debug print each element
+/// })
+/// ```
+pub type Inspect[I, F] {
+    iter: I,
+    f: F
+}
+
+impl[I: Iterator, F] Iterator for Inspect[I, F] where F = func(ref I::Item) {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter.next() {
+            Just(item) => {
+                this.f(ref item)
+                return Just(item)
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that calls a function on each element without changing it.
+///
+/// The closure `f` is called on a reference to each element for its side effects.
+/// The element is then yielded unchanged. This is primarily useful for debugging
+/// iterator chains.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(5, 3)
+/// let inspected: Inspect[RepeatNI32, func(ref I32)] = inspect(iter, do(x: ref I32) {
+///     // Print or log *x here for debugging
+/// })
+/// ```
+pub func inspect[I: Iterator, F](iter: I, f: F) -> Inspect[I, F] where F = func(ref I::Item) {
+    return Inspect { iter: iter, f: f }
+}

@@ -1,0 +1,590 @@
+//! Implementations of formatting behaviors for built-in types.
+//!
+//! This module provides implementations of `Display`, `Debug`, and other
+//! formatting behaviors for all primitive types and common generic types.
+
+// Display, Debug, Ordering are builtins - no import needed
+use core::fmt::num::{Binary, Octal, LowerHex, UpperHex, LowerExp, UpperExp}
+use core::fmt::helpers::{
+    u8_to_binary_str, u16_to_binary_str, u32_to_binary_str, u64_to_binary_str,
+    i8_to_binary_str, i16_to_binary_str, i32_to_binary_str, i64_to_binary_str,
+    u64_to_octal_str, u64_to_hex_str
+}
+
+// ============================================================================
+// Display implementations for primitives
+// ============================================================================
+
+impl Display for I8 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i8_to_string(this) }
+    }
+}
+
+impl Display for I16 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i16_to_string(this) }
+    }
+}
+
+impl Display for I32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i32_to_string(this) }
+    }
+}
+
+impl Display for I64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { i64_to_string(this) }
+    }
+}
+
+impl Display for U8 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u8_to_string(this) }
+    }
+}
+
+impl Display for U16 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u16_to_string(this) }
+    }
+}
+
+impl Display for U32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u32_to_string(this) }
+    }
+}
+
+impl Display for U64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { u64_to_string(this) }
+    }
+}
+
+impl Display for F32 {
+    pub func to_string(this) -> Str {
+        return lowlevel { f32_to_string(this) }
+    }
+}
+
+impl Display for F64 {
+    pub func to_string(this) -> Str {
+        return lowlevel { f64_to_string(this) }
+    }
+}
+
+impl Display for Bool {
+    pub func to_string(this) -> Str {
+        if this {
+            return "true"
+        }
+        return "false"
+    }
+}
+
+impl Display for Str {
+    pub func to_string(this) -> Str {
+        return this
+    }
+}
+
+impl Display for Char {
+    pub func to_string(this) -> Str {
+        return lowlevel { char_to_string(this) }
+    }
+}
+
+impl Display for Unit {
+    pub func to_string(this) -> Str {
+        return "()"
+    }
+}
+
+// ============================================================================
+// Debug implementations for primitives
+// ============================================================================
+
+impl Debug for I8 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i8_to_string(this) }
+    }
+}
+
+impl Debug for I16 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i16_to_string(this) }
+    }
+}
+
+impl Debug for I32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i32_to_string(this) }
+    }
+}
+
+impl Debug for I64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { i64_to_string(this) }
+    }
+}
+
+impl Debug for U8 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u8_to_string(this) }
+    }
+}
+
+impl Debug for U16 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u16_to_string(this) }
+    }
+}
+
+impl Debug for U32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u32_to_string(this) }
+    }
+}
+
+impl Debug for U64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { u64_to_string(this) }
+    }
+}
+
+impl Debug for F32 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { f32_to_string(this) }
+    }
+}
+
+impl Debug for F64 {
+    pub func debug_string(this) -> Str {
+        return lowlevel { f64_to_string(this) }
+    }
+}
+
+impl Debug for Bool {
+    pub func debug_string(this) -> Str {
+        if this {
+            return "true"
+        }
+        return "false"
+    }
+}
+
+impl Debug for Str {
+    pub func debug_string(this) -> Str {
+        // Debug output includes quotes
+        return "\"" + this + "\""
+    }
+}
+
+impl Debug for Char {
+    pub func debug_string(this) -> Str {
+        // Debug output includes single quotes
+        return "'" + lowlevel { char_to_string(this) } + "'"
+    }
+}
+
+impl Debug for Unit {
+    pub func debug_string(this) -> Str {
+        return "()"
+    }
+}
+
+// ============================================================================
+// Display and Debug for Maybe[T]
+// ============================================================================
+
+impl[T: Display] Display for Maybe[T] {
+    pub func to_string(this) -> Str {
+        when this {
+            Just(val) => return "Just(" + val.to_string() + ")",
+            Nothing => return "Nothing",
+        }
+    }
+}
+
+impl[T: Debug] Debug for Maybe[T] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Just(val) => return "Just(" + val.debug_string() + ")",
+            Nothing => return "Nothing",
+        }
+    }
+}
+
+// ============================================================================
+// Display and Debug for Outcome[T, E]
+// ============================================================================
+
+impl[T: Display, E: Display] Display for Outcome[T, E] {
+    pub func to_string(this) -> Str {
+        when this {
+            Ok(val) => return "Ok(" + val.to_string() + ")",
+            Err(e) => return "Err(" + e.to_string() + ")",
+        }
+    }
+}
+
+impl[T: Debug, E: Debug] Debug for Outcome[T, E] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Ok(val) => return "Ok(" + val.debug_string() + ")",
+            Err(e) => return "Err(" + e.debug_string() + ")",
+        }
+    }
+}
+
+// ============================================================================
+// Display and Debug for Ordering
+// ============================================================================
+
+impl Display for Ordering {
+    pub func to_string(this) -> Str {
+        when this {
+            Ordering::Less => return "Less",
+            Ordering::Equal => return "Equal",
+            Ordering::Greater => return "Greater",
+        }
+    }
+}
+
+impl Debug for Ordering {
+    pub func debug_string(this) -> Str {
+        when this {
+            Ordering::Less => return "Ordering::Less",
+            Ordering::Equal => return "Ordering::Equal",
+            Ordering::Greater => return "Ordering::Greater",
+        }
+    }
+}
+
+// ============================================================================
+// Binary implementations
+// ============================================================================
+
+impl Binary for U8 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u8_to_binary_str(this)
+    }
+}
+
+impl Binary for U16 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u16_to_binary_str(this)
+    }
+}
+
+impl Binary for U32 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u32_to_binary_str(this)
+    }
+}
+
+impl Binary for U64 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + u64_to_binary_str(this)
+    }
+}
+
+impl Binary for I8 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i8_to_binary_str(this)
+    }
+}
+
+impl Binary for I16 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i16_to_binary_str(this)
+    }
+}
+
+impl Binary for I32 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i32_to_binary_str(this)
+    }
+}
+
+impl Binary for I64 {
+    pub func fmt_binary(this) -> Str {
+        return "0b" + i64_to_binary_str(this)
+    }
+}
+
+// ============================================================================
+// Octal implementations
+// ============================================================================
+
+impl Octal for U8 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U16 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U32 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+impl Octal for U64 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this)
+    }
+}
+
+impl Octal for I8 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U8) as U64)
+    }
+}
+
+impl Octal for I16 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U16) as U64)
+    }
+}
+
+impl Octal for I32 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str((this as U32) as U64)
+    }
+}
+
+impl Octal for I64 {
+    pub func fmt_octal(this) -> Str {
+        return "0o" + u64_to_octal_str(this as U64)
+    }
+}
+
+// ============================================================================
+// LowerHex implementations
+// ============================================================================
+
+impl LowerHex for U8 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U16 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U32 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+impl LowerHex for U64 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this, false)
+    }
+}
+
+impl LowerHex for I8 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U8) as U64, false)
+    }
+}
+
+impl LowerHex for I16 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U16) as U64, false)
+    }
+}
+
+impl LowerHex for I32 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U32) as U64, false)
+    }
+}
+
+impl LowerHex for I64 {
+    pub func fmt_lower_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, false)
+    }
+}
+
+// ============================================================================
+// UpperHex implementations
+// ============================================================================
+
+impl UpperHex for U8 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U16 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U32 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+impl UpperHex for U64 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this, true)
+    }
+}
+
+impl UpperHex for I8 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U8) as U64, true)
+    }
+}
+
+impl UpperHex for I16 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U16) as U64, true)
+    }
+}
+
+impl UpperHex for I32 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str((this as U32) as U64, true)
+    }
+}
+
+impl UpperHex for I64 {
+    pub func fmt_upper_hex(this) -> Str {
+        return "0x" + u64_to_hex_str(this as U64, true)
+    }
+}
+
+// ============================================================================
+// LowerExp and UpperExp implementations for floats
+// ============================================================================
+
+impl LowerExp for F32 {
+    pub func fmt_lower_exp(this) -> Str {
+        return lowlevel { f32_to_exp_string(this, false) }
+    }
+}
+
+impl LowerExp for F64 {
+    pub func fmt_lower_exp(this) -> Str {
+        return lowlevel { f64_to_exp_string(this, false) }
+    }
+}
+
+impl UpperExp for F32 {
+    pub func fmt_upper_exp(this) -> Str {
+        return lowlevel { f32_to_exp_string(this, true) }
+    }
+}
+
+impl UpperExp for F64 {
+    pub func fmt_upper_exp(this) -> Str {
+        return lowlevel { f64_to_exp_string(this, true) }
+    }
+}
+
+// ============================================================================
+// Display and Debug for tuples (2-tuples)
+// ============================================================================
+
+impl[A: Display, B: Display] Display for (A, B) {
+    pub func to_string(this) -> Str {
+        return "(" + this.0.to_string() + ", " + this.1.to_string() + ")"
+    }
+}
+
+impl[A: Debug, B: Debug] Debug for (A, B) {
+    pub func debug_string(this) -> Str {
+        return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ")"
+    }
+}
+
+// ============================================================================
+// Display and Debug for 3-tuples
+// ============================================================================
+
+impl[A: Display, B: Display, C: Display] Display for (A, B, C) {
+    pub func to_string(this) -> Str {
+        return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " + this.2.to_string() + ")"
+    }
+}
+
+impl[A: Debug, B: Debug, C: Debug] Debug for (A, B, C) {
+    pub func debug_string(this) -> Str {
+        return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " + this.2.debug_string() + ")"
+    }
+}
+
+// ============================================================================
+// Display and Debug for 4-tuples
+// ============================================================================
+
+impl[A: Display, B: Display, C: Display, D: Display] Display for (A, B, C, D) {
+    pub func to_string(this) -> Str {
+        return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
+               this.2.to_string() + ", " + this.3.to_string() + ")"
+    }
+}
+
+impl[A: Debug, B: Debug, C: Debug, D: Debug] Debug for (A, B, C, D) {
+    pub func debug_string(this) -> Str {
+        return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
+               this.2.debug_string() + ", " + this.3.debug_string() + ")"
+    }
+}
+
+// ============================================================================
+// Display and Debug for 5-tuples
+// ============================================================================
+
+impl[A: Display, B: Display, C: Display, D: Display, E: Display] Display for (A, B, C, D, E) {
+    pub func to_string(this) -> Str {
+        return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
+               this.2.to_string() + ", " + this.3.to_string() + ", " +
+               this.4.to_string() + ")"
+    }
+}
+
+impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug] Debug for (A, B, C, D, E) {
+    pub func debug_string(this) -> Str {
+        return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
+               this.2.debug_string() + ", " + this.3.debug_string() + ", " +
+               this.4.debug_string() + ")"
+    }
+}
+
+// ============================================================================
+// Display and Debug for 6-tuples
+// ============================================================================
+
+impl[A: Display, B: Display, C: Display, D: Display, E: Display, F: Display] Display for (A, B, C, D, E, F) {
+    pub func to_string(this) -> Str {
+        return "(" + this.0.to_string() + ", " + this.1.to_string() + ", " +
+               this.2.to_string() + ", " + this.3.to_string() + ", " +
+               this.4.to_string() + ", " + this.5.to_string() + ")"
+    }
+}
+
+impl[A: Debug, B: Debug, C: Debug, D: Debug, E: Debug, F: Debug] Debug for (A, B, C, D, E, F) {
+    pub func debug_string(this) -> Str {
+        return "(" + this.0.debug_string() + ", " + this.1.debug_string() + ", " +
+               this.2.debug_string() + ", " + this.3.debug_string() + ", " +
+               this.4.debug_string() + ", " + this.5.debug_string() + ")"
+    }
+}

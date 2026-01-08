@@ -70,7 +70,7 @@
 //! ```
 
 use core::iter::Iterator
-use core::cmp::PartialEq
+// PartialEq is a builtin behavior - no import needed
 use core::default::Default
 
 // ============================================================================

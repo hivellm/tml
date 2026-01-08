@@ -1,0 +1,368 @@
+//! Runtime formatting types.
+//!
+//! This module provides the types used for runtime formatting, including
+//! argument handling and format specification parsing.
+//!
+//! # Runtime vs Compile-time Formatting
+//!
+//! TML supports both compile-time format string checking (through macros)
+//! and runtime formatting (through this module). The types here are used
+//! internally by formatting macros.
+//!
+//! # Overview
+//!
+//! The key types in this module are:
+//!
+//! - [`Argument`] - A single formatted argument
+//! - [`ArgumentV1`] - Version 1 format argument representation
+//! - [`Count`] - Width/precision specification
+//! - [`FormatSpec`] - Complete format specification
+
+// Display, Debug, Alignment, Sign - Display/Debug are builtins, Alignment/Sign are defined in traits.tml
+
+// ============================================================================
+// Argument Types
+// ============================================================================
+
+/// A formatted argument for the formatting machinery.
+///
+/// This type represents a value that has been prepared for formatting,
+/// along with the function to format it.
+///
+/// # Note
+///
+/// This is an internal type used by formatting macros. Users should not
+/// typically need to create `Argument` values directly.
+pub type Argument {
+    /// The formatted string representation
+    formatted: Str
+}
+
+impl Argument {
+    /// Creates a new argument from a Display value.
+    pub func new_display[T: Display](value: ref T) -> Argument {
+        return Argument { formatted: value.to_string() }
+    }
+
+    /// Creates a new argument from a Debug value.
+    pub func new_debug[T: Debug](value: ref T) -> Argument {
+        return Argument { formatted: value.debug_string() }
+    }
+
+    /// Creates a new argument with a specific formatter function.
+    pub func new_with(formatted: Str) -> Argument {
+        return Argument { formatted: formatted }
+    }
+
+    /// Returns the formatted string.
+    pub func as_str(this) -> Str {
+        return this.formatted
+    }
+}
+
+// ============================================================================
+// Count - Width and Precision Specification
+// ============================================================================
+
+/// Specification for width or precision in a format string.
+///
+/// Width and precision can be:
+/// - A literal value: `{:10}` or `{:.5}`
+/// - An argument index: `{:1$}` or `{:.2$}`
+/// - Inferred from the next argument: `{:*}` or `{:.*}`
+pub type Count {
+    /// Literal value
+    Is(I64),
+    /// Refers to an argument by index
+    Param(I64),
+    /// Not specified
+    Implied
+}
+
+impl Count {
+    /// Returns the count value, resolving from args if needed.
+    pub func resolve(this, args: ref [Argument]) -> Maybe[I64] {
+        when this {
+            Count::Is(n) => return Just(n),
+            Count::Param(idx) => {
+                // In a full implementation, we'd parse the argument as I64
+                // For now, return Nothing
+                return Nothing
+            },
+            Count::Implied => return Nothing
+        }
+    }
+}
+
+impl Display for Count {
+    pub func to_string(this) -> Str {
+        when this {
+            Count::Is(n) => return "Is(" + n.to_string() + ")",
+            Count::Param(idx) => return "Param(" + idx.to_string() + ")",
+            Count::Implied => return "Implied",
+        }
+    }
+}
+
+impl Debug for Count {
+    pub func debug_string(this) -> Str {
+        when this {
+            Count::Is(n) => return "Count::Is(" + n.debug_string() + ")",
+            Count::Param(idx) => return "Count::Param(" + idx.debug_string() + ")",
+            Count::Implied => return "Count::Implied",
+        }
+    }
+}
+
+// ============================================================================
+// FormatSpec - Complete Format Specification
+// ============================================================================
+
+/// A complete format specification parsed from a format string.
+///
+/// This represents all the formatting options that can be specified
+/// for a single argument, like `{:>+10.5}`.
+///
+/// # Fields
+///
+/// - `fill` - The fill character for padding
+/// - `align` - Alignment within the width
+/// - `sign` - Sign display mode
+/// - `alternate` - Alternate formatting mode (`#`)
+/// - `zero_pad` - Zero padding mode (`0`)
+/// - `width` - Minimum width specification
+/// - `precision` - Precision specification
+pub type FormatSpec {
+    fill: Char,
+    align: Alignment,
+    sign: Sign,
+    alternate: Bool,
+    zero_pad: Bool,
+    width: Count,
+    precision: Count
+}
+
+impl FormatSpec {
+    /// Creates a new `FormatSpec` with default values.
+    pub func new() -> FormatSpec {
+        return FormatSpec {
+            fill: ' ',
+            align: Alignment::Left,
+            sign: Sign::Minus,
+            alternate: false,
+            zero_pad: false,
+            width: Count::Implied,
+            precision: Count::Implied
+        }
+    }
+
+    /// Creates a format spec with the given width.
+    pub func with_width(width: I64) -> FormatSpec {
+        return FormatSpec {
+            fill: ' ',
+            align: Alignment::Left,
+            sign: Sign::Minus,
+            alternate: false,
+            zero_pad: false,
+            width: Count::Is(width),
+            precision: Count::Implied
+        }
+    }
+
+    /// Creates a format spec with the given precision.
+    pub func with_precision(precision: I64) -> FormatSpec {
+        return FormatSpec {
+            fill: ' ',
+            align: Alignment::Left,
+            sign: Sign::Minus,
+            alternate: false,
+            zero_pad: false,
+            width: Count::Implied,
+            precision: Count::Is(precision)
+        }
+    }
+}
+
+impl Debug for FormatSpec {
+    pub func debug_string(this) -> Str {
+        return "FormatSpec \{ fill: " + this.fill.debug_string() + ", align: " + this.align.debug_string() + ", sign: " + this.sign.debug_string() + ", alternate: " + this.alternate.debug_string() + ", zero_pad: " + this.zero_pad.debug_string() + ", width: " + this.width.debug_string() + ", precision: " + this.precision.debug_string() + " \}"
+    }
+}
+
+// ============================================================================
+// Placeholder - Format Placeholder
+// ============================================================================
+
+/// Represents a placeholder in a format string.
+///
+/// A placeholder like `{0:>10}` contains:
+/// - Position: `0` (which argument to use)
+/// - Spec: `>10` (how to format it)
+pub type Placeholder {
+    /// The argument position (or name hash)
+    position: I64,
+    /// The format specification
+    format: FormatSpec
+}
+
+impl Placeholder {
+    /// Creates a new placeholder with default formatting.
+    pub func new(position: I64) -> Placeholder {
+        return Placeholder {
+            position: position,
+            format: FormatSpec::new()
+        }
+    }
+
+    /// Creates a placeholder with a specific format.
+    pub func with_format(position: I64, format: FormatSpec) -> Placeholder {
+        return Placeholder {
+            position: position,
+            format: format
+        }
+    }
+}
+
+// ============================================================================
+// UnsafeArg - For trusted macro-generated code
+// ============================================================================
+
+/// Marker type indicating that formatting arguments come from a trusted source.
+///
+/// This type is used internally by the formatting macros to indicate that
+/// the arguments have been validated at compile time.
+///
+/// # Safety
+///
+/// This type should only be created by formatting macros, not by user code.
+pub type UnsafeArg {
+    // Private field to prevent construction outside this module
+    _private: Unit
+}
+
+impl UnsafeArg {
+    /// Creates a new UnsafeArg.
+    ///
+    /// # Safety
+    ///
+    /// This should only be called by formatting macros that have validated
+    /// the format string at compile time.
+    pub func new() -> UnsafeArg {
+        return UnsafeArg { _private: () }
+    }
+}
+
+// ============================================================================
+// Formatting Functions
+// ============================================================================
+
+/// Formats arguments into a string using the given pieces and placeholders.
+///
+/// This is the core formatting function used by format macros.
+///
+/// # Arguments
+///
+/// - `pieces` - The literal string pieces between placeholders
+/// - `args` - The formatted arguments
+///
+/// # Returns
+///
+/// The formatted string with all placeholders replaced.
+pub func format_args(pieces: ref [Str], args: ref [Argument]) -> Str {
+    var result: Str = ""
+    var arg_idx: I64 = 0
+    var piece_idx: I64 = 0
+    let piece_count: I64 = pieces.len()
+    let arg_count: I64 = args.len()
+
+    loop {
+        if piece_idx >= piece_count {
+            break
+        }
+
+        // Add the literal piece
+        result = result + pieces[piece_idx]
+        piece_idx = piece_idx + 1
+
+        // Add the argument if there is one
+        if arg_idx < arg_count {
+            result = result + args[arg_idx].as_str()
+            arg_idx = arg_idx + 1
+        }
+    }
+
+    return result
+}
+
+/// Simple format function that joins arguments with a separator.
+pub func format_join(args: ref [Str], sep: Str) -> Str {
+    if args.len() == 0 {
+        return ""
+    }
+
+    var result: Str = args[0]
+    var i: I64 = 1
+    let len: I64 = args.len()
+
+    loop {
+        if i >= len {
+            break
+        }
+        result = result + sep + args[i]
+        i = i + 1
+    }
+
+    return result
+}
+
+// ============================================================================
+// Debug implementations for slices
+// ============================================================================
+
+/// Helper to format a slice of Debug items.
+pub func debug_slice[T: Debug](slice: ref [T]) -> Str {
+    if slice.len() == 0 {
+        return "[]"
+    }
+
+    var result: Str = "["
+    var i: I64 = 0
+    let len: I64 = slice.len()
+
+    loop {
+        if i >= len {
+            break
+        }
+        if i > 0 {
+            result = result + ", "
+        }
+        result = result + slice[i].debug_string()
+        i = i + 1
+    }
+
+    return result + "]"
+}
+
+/// Helper to format a slice of Display items.
+pub func display_slice[T: Display](slice: ref [T]) -> Str {
+    if slice.len() == 0 {
+        return "[]"
+    }
+
+    var result: Str = "["
+    var i: I64 = 0
+    let len: I64 = slice.len()
+
+    loop {
+        if i >= len {
+            break
+        }
+        if i > 0 {
+            result = result + ", "
+        }
+        result = result + slice[i].to_string()
+        i = i + 1
+    }
+
+    return result + "]"
+}

@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Iterator Adapter Implementations** (2026-01-07) - Implemented Iterator for closure-based adapters
+  - Map[I, F]: transforms each element via closure
+  - Filter[I, P]: yields elements matching predicate
+  - FilterMap[I, F]: combines filter and map
+  - TakeWhile[I, P], SkipWhile[I, P]: conditional iteration
+  - Scan[I, St, F]: stateful transformation
+  - Inspect[I, F]: side-effects without changing values
+  - Intersperse[I]: inserts separator between elements
+  - MapWhile[I, F]: map until Nothing
+  - Constructor functions added for all adapters
+  - Tests blocked by codegen limitation: `I::Item` not substituted in generic impls
+  - File: `lib/core/src/iter/adapters.tml`
+
 - **Iterator Consumer Method Documentation** (2026-01-07) - Documented blockers for iterator consumer tests
   - Created `iter_consumers.test.tml` with documentation of blocked tests
   - Identified that default behavior method dispatch on concrete types returns `()` instead of expected type

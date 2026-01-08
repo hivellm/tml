@@ -36,6 +36,7 @@ int32_t str_eq(const char* a, const char* b);
 int32_t str_hash(const char* s);
 const char* str_concat(const char* a, const char* b);
 const char* str_substring(const char* s, int32_t start, int32_t len);
+const char* str_slice(const char* s, int64_t start, int64_t end);
 int32_t str_contains(const char* haystack, const char* needle);
 int32_t str_starts_with(const char* s, const char* prefix);
 int32_t str_ends_with(const char* s, const char* suffix);

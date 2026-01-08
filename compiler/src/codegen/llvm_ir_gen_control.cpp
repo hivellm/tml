@@ -748,7 +748,22 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                     }
                 }
             }
-            emit_line("  ret " + current_ret_type_ + " " + val);
+            // Handle integer type extension when actual differs from expected
+            std::string final_val = val;
+            if (val_type != current_ret_type_) {
+                // Integer extension: i32 -> i64, i16 -> i64, i8 -> i64
+                if (current_ret_type_ == "i64" &&
+                    (val_type == "i32" || val_type == "i16" || val_type == "i8")) {
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = sext " + val_type + " " + val + " to i64");
+                    final_val = ext_reg;
+                } else if (current_ret_type_ == "i32" && (val_type == "i16" || val_type == "i8")) {
+                    std::string ext_reg = fresh_reg();
+                    emit_line("  " + ext_reg + " = sext " + val_type + " " + val + " to i32");
+                    final_val = ext_reg;
+                }
+            }
+            emit_line("  ret " + current_ret_type_ + " " + final_val);
         }
     } else {
         emit_line("  ret void");

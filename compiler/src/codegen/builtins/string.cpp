@@ -20,8 +20,10 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
             std::string s = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @str_len(ptr " + s + ")");
+            last_expr_type_ = "i32";
             return result;
         }
+        last_expr_type_ = "i32";
         return "0";
     }
 
@@ -31,8 +33,10 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
             std::string s = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @str_hash(ptr " + s + ")");
+            last_expr_type_ = "i32";
             return result;
         }
+        last_expr_type_ = "i32";
         return "0";
     }
 
@@ -58,8 +62,10 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
             std::string b = gen_expr(*call.args[1]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_concat(ptr " + a + ", ptr " + b + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -72,8 +78,39 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
             std::string result = fresh_reg();
             emit_line("  " + result + " = call ptr @str_substring(ptr " + s + ", i32 " + start +
                       ", i32 " + len + ")");
+            last_expr_type_ = "ptr";
             return result;
         }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // str_slice(s, start, end) -> Str
+    if (fn_name == "str_slice") {
+        if (call.args.size() >= 3) {
+            std::string s = gen_expr(*call.args[0]);
+            std::string start = gen_expr(*call.args[1]);
+            std::string start_type = last_expr_type_;
+            std::string end = gen_expr(*call.args[2]);
+            std::string end_type = last_expr_type_;
+            // Ensure start and end are i64 (runtime expects i64)
+            std::string start_i64 = start;
+            std::string end_i64 = end;
+            if (start_type != "i64") {
+                start_i64 = fresh_reg();
+                emit_line("  " + start_i64 + " = sext " + start_type + " " + start + " to i64");
+            }
+            if (end_type != "i64") {
+                end_i64 = fresh_reg();
+                emit_line("  " + end_i64 + " = sext " + end_type + " " + end + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_slice(ptr " + s + ", i64 " + start_i64 +
+                      ", i64 " + end_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
         return "null";
     }
 
@@ -370,11 +407,203 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
     if (fn_name == "char_to_string") {
         if (!call.args.empty()) {
             std::string c = gen_expr(*call.args[0]);
+            std::string c_type = last_expr_type_;
+            // Truncate i32 (TML Char) to i8 for the runtime function
+            std::string c_i8 = c;
+            if (c_type == "i32") {
+                c_i8 = fresh_reg();
+                emit_line("  " + c_i8 + " = trunc i32 " + c + " to i8");
+            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call ptr @char_to_string(i8 " + c + ")");
+            emit_line("  " + result + " = call ptr @char_to_string(i8 " + c_i8 + ")");
             last_expr_type_ = "ptr";
             return result;
         }
+        return "null";
+    }
+
+    // ========================================================================
+    // Integer to String Conversions
+    // ========================================================================
+
+    // i8_to_string(n) -> Str
+    if (fn_name == "i8_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = sext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // i16_to_string(n) -> Str
+    if (fn_name == "i16_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = sext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // i32_to_string(n) -> Str
+    if (fn_name == "i32_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = sext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // i64_to_string(n) -> Str
+    if (fn_name == "i64_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            // Extend smaller types to i64
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = sext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // u8_to_string(n) -> Str
+    if (fn_name == "u8_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            // Extend to i64 for the runtime
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = zext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // u16_to_string(n) -> Str
+    if (fn_name == "u16_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = zext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // u32_to_string(n) -> Str
+    if (fn_name == "u32_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_i64 = n;
+            if (n_type != "i64") {
+                n_i64 = fresh_reg();
+                emit_line("  " + n_i64 + " = zext " + n_type + " " + n + " to i64");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n_i64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // u64_to_string(n) -> Str
+    if (fn_name == "u64_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @i64_to_string(i64 " + n + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f32_to_string(n) -> Str
+    if (fn_name == "f32_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            // Extend float to double for the runtime
+            std::string n_f64 = n;
+            if (n_type == "float") {
+                n_f64 = fresh_reg();
+                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @f64_to_str(double " + n_f64 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f64_to_string(n) -> Str
+    if (fn_name == "f64_to_string") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @f64_to_str(double " + n + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
         return "null";
     }
 

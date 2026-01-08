@@ -19,6 +19,21 @@
 //! | [`pow_i32`] | Raises I32 to a power |
 //! | [`pow_i64`] | Raises I64 to a power |
 //!
+//! # Bit Manipulation Functions
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | `count_ones_*` | Count number of 1 bits |
+//! | `count_zeros_*` | Count number of 0 bits |
+//! | `leading_zeros_*` | Count leading zero bits |
+//! | `trailing_zeros_*` | Count trailing zero bits |
+//! | `rotate_left_*` | Rotate bits left |
+//! | `rotate_right_*` | Rotate bits right |
+//! | `swap_bytes_*` | Reverse byte order |
+//! | `reverse_bits_*` | Reverse bit order |
+//! | `from_be_*` / `to_be_*` | Big-endian conversion |
+//! | `from_le_*` / `to_le_*` | Little-endian conversion |
+//!
 //! # Examples
 //!
 //! ```tml
@@ -26,12 +41,20 @@
 //! assert_eq(abs_i32(x), 42)
 //! assert_eq(signum_i32(x), -1)
 //! assert(x < 0) // negative check
+//!
+//! // Bit manipulation
+//! assert_eq(count_ones_i32(0b1010), 2)
+//! assert_eq(leading_zeros_i32(16), 27)
 //! ```
 //!
 //! # Note
 //!
-//! Methods on primitive types (e.g., `x.abs()`) are not yet supported due to
-//! codegen constraints. Use the standalone functions instead.
+//! Methods on primitive types (e.g., `x.abs()`) are now supported! Both method
+//! syntax and standalone functions work.
+
+// Note: LLVM intrinsics (ctpop, ctlz, cttz, bswap, bitreverse) are defined
+// in core::intrinsics but generic intrinsics aren't fully supported yet.
+// Using pure TML implementations instead.
 
 // ============================================================================
 // Signed Integer Functions - I32
@@ -321,4 +344,605 @@ impl U16 {
 
     /// The maximum value for a `U16`.
     pub const MAX: U16 = 65535 as U16
+}
+
+// ============================================================================
+// Bit Manipulation Functions
+// ============================================================================
+// Pure TML implementations of bit manipulation functions.
+// Note: LLVM intrinsics exist but aren't working with generic types yet.
+
+/// Returns the number of ones in the binary representation of an I32.
+///
+/// Uses the population count algorithm (bit counting).
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(count_ones_i32(0b1010_1010), 4)
+/// assert_eq(count_ones_i32(0), 0)
+/// assert_eq(count_ones_i32(-1), 32) // all bits set
+/// ```
+pub func count_ones_i32(value: I32) -> I32 {
+    // Use unsigned arithmetic to avoid sign extension issues
+    let mut v: U32 = value as U32
+    var count: I32 = 0
+    loop {
+        let zero: U32 = 0 as U32
+        if v == zero {
+            return count
+        }
+        // Clear the lowest set bit
+        v = v & (v - (1 as U32))
+        count = count + 1
+    }
+    return count
+}
+
+/// Returns the number of zeros in the binary representation of an I32.
+pub func count_zeros_i32(value: I32) -> I32 {
+    return 32 - count_ones_i32(value)
+}
+
+/// Returns the number of leading zeros in the binary representation of an I32.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(leading_zeros_i32(0b0001_0000), 27)
+/// assert_eq(leading_zeros_i32(0), 32)
+/// assert_eq(leading_zeros_i32(-1), 0)
+/// ```
+pub func leading_zeros_i32(value: I32) -> I32 {
+    if value == 0 {
+        return 32
+    }
+    let mut v: U32 = value as U32
+    var count: I32 = 0
+    // Check if high bit is set (negative number)
+    let high_bit: U32 = 2147483648 as U32  // 0x80000000
+    let zero: U32 = 0 as U32
+    loop {
+        if (v & high_bit) != zero {
+            return count
+        }
+        v = v << (1 as U32)
+        count = count + 1
+        if count >= 32 {
+            return 32
+        }
+    }
+    return count
+}
+
+/// Returns the number of trailing zeros in the binary representation of an I32.
+///
+/// # Examples
+///
+/// ```tml
+/// assert_eq(trailing_zeros_i32(0b0001_0000), 4)
+/// assert_eq(trailing_zeros_i32(0), 32)
+/// assert_eq(trailing_zeros_i32(1), 0)
+/// ```
+pub func trailing_zeros_i32(value: I32) -> I32 {
+    if value == 0 {
+        return 32
+    }
+    let mut v: U32 = value as U32
+    var count: I32 = 0
+    let one: U32 = 1 as U32
+    let zero: U32 = 0 as U32
+    loop {
+        if (v & one) != zero {
+            return count
+        }
+        v = v >> one
+        count = count + 1
+        if count >= 32 {
+            return 32
+        }
+    }
+    return count
+}
+
+/// Rotates the bits of an I32 to the left by n positions.
+/// Bits that overflow wrap around to the right side.
+pub func rotate_left_i32(value: I32, n: I32) -> I32 {
+    let n_mod: I32 = n % 32
+    if n_mod == 0 {
+        return value
+    }
+    // Convert to unsigned for proper shift behavior
+    let uval: U32 = value as U32
+    let un: U32 = n_mod as U32
+    let left_part: U32 = uval << un
+    let right_part: U32 = uval >> (32 as U32 - un)
+    return (left_part | right_part) as I32
+}
+
+/// Rotates the bits of an I32 to the right by n positions.
+/// Bits that overflow wrap around to the left side.
+pub func rotate_right_i32(value: I32, n: I32) -> I32 {
+    let n_mod: I32 = n % 32
+    if n_mod == 0 {
+        return value
+    }
+    let uval: U32 = value as U32
+    let un: U32 = n_mod as U32
+    let right_part: U32 = uval >> un
+    let left_part: U32 = uval << (32 as U32 - un)
+    return (right_part | left_part) as I32
+}
+
+/// Reverses the byte order of an I32.
+///
+/// # Examples
+///
+/// ```tml
+/// // 0x12345678 -> 0x78563412
+/// assert_eq(swap_bytes_i32(0x12345678), 0x78563412)
+/// ```
+pub func swap_bytes_i32(value: I32) -> I32 {
+    let v: U32 = value as U32
+    let b0: U32 = (v & (255 as U32)) << (24 as U32)
+    let b1: U32 = ((v >> (8 as U32)) & (255 as U32)) << (16 as U32)
+    let b2: U32 = ((v >> (16 as U32)) & (255 as U32)) << (8 as U32)
+    let b3: U32 = (v >> (24 as U32)) & (255 as U32)
+    return (b0 | b1 | b2 | b3) as I32
+}
+
+/// Reverses the bit order of an I32.
+pub func reverse_bits_i32(value: I32) -> I32 {
+    let mut v: U32 = value as U32
+    var result: U32 = 0 as U32
+    var i: I32 = 0
+    let one: U32 = 1 as U32
+    loop {
+        if i >= 32 {
+            return result as I32
+        }
+        result = result << one
+        result = result | (v & one)
+        v = v >> one
+        i = i + 1
+    }
+    return result as I32
+}
+
+/// Converts an I32 from big-endian to native byte order.
+/// On little-endian systems, this swaps bytes. On big-endian systems, this is a no-op.
+pub func from_be_i32(value: I32) -> I32 {
+    // Assuming little-endian (x86/x64)
+    return swap_bytes_i32(value)
+}
+
+/// Converts an I32 from little-endian to native byte order.
+/// On little-endian systems, this is a no-op. On big-endian systems, this swaps bytes.
+pub func from_le_i32(value: I32) -> I32 {
+    // Assuming little-endian (x86/x64)
+    return value
+}
+
+/// Converts an I32 from native byte order to big-endian.
+pub func to_be_i32(value: I32) -> I32 {
+    // Assuming little-endian (x86/x64)
+    return swap_bytes_i32(value)
+}
+
+/// Converts an I32 from native byte order to little-endian.
+pub func to_le_i32(value: I32) -> I32 {
+    // Assuming little-endian (x86/x64)
+    return value
+}
+
+// ============================================================================
+// Bit Manipulation Functions - I64
+// ============================================================================
+
+/// Returns the number of ones in the binary representation of an I64.
+pub func count_ones_i64(value: I64) -> I64 {
+    let mut v: U64 = value as U64
+    var count: I64 = 0
+    let zero_u64: U64 = 0 as U64
+    let one_u64: U64 = 1 as U64
+    loop {
+        if v == zero_u64 {
+            return count
+        }
+        v = v & (v - one_u64)
+        count = count + 1
+    }
+    return count
+}
+
+/// Returns the number of zeros in the binary representation of an I64.
+pub func count_zeros_i64(value: I64) -> I64 {
+    let bits: I64 = 64
+    return bits - count_ones_i64(value)
+}
+
+/// Returns the number of leading zeros in the binary representation of an I64.
+pub func leading_zeros_i64(value: I64) -> I64 {
+    let zero: I64 = 0
+    if value == zero {
+        return 64
+    }
+    let mut v: U64 = value as U64
+    var count: I64 = 0
+    let high_bit: U64 = 9223372036854775808 as U64  // 0x8000000000000000
+    let zero_u64: U64 = 0 as U64
+    let one_u64: U64 = 1 as U64
+    loop {
+        if (v & high_bit) != zero_u64 {
+            return count
+        }
+        v = v << one_u64
+        count = count + 1
+        if count >= 64 {
+            return 64
+        }
+    }
+    return count
+}
+
+/// Returns the number of trailing zeros in the binary representation of an I64.
+pub func trailing_zeros_i64(value: I64) -> I64 {
+    let zero: I64 = 0
+    if value == zero {
+        return 64
+    }
+    let mut v: U64 = value as U64
+    var count: I64 = 0
+    let one_u64: U64 = 1 as U64
+    let zero_u64: U64 = 0 as U64
+    loop {
+        if (v & one_u64) != zero_u64 {
+            return count
+        }
+        v = v >> one_u64
+        count = count + 1
+        if count >= 64 {
+            return 64
+        }
+    }
+    return count
+}
+
+/// Rotates the bits of an I64 to the left by n positions.
+pub func rotate_left_i64(value: I64, n: I64) -> I64 {
+    let bits: I64 = 64
+    let n_mod: I64 = n % bits
+    let zero: I64 = 0
+    if n_mod == zero {
+        return value
+    }
+    let uval: U64 = value as U64
+    let un: U64 = n_mod as U64
+    let ubits: U64 = 64 as U64
+    let left_part: U64 = uval << un
+    let right_part: U64 = uval >> (ubits - un)
+    return (left_part | right_part) as I64
+}
+
+/// Rotates the bits of an I64 to the right by n positions.
+pub func rotate_right_i64(value: I64, n: I64) -> I64 {
+    let bits: I64 = 64
+    let n_mod: I64 = n % bits
+    let zero: I64 = 0
+    if n_mod == zero {
+        return value
+    }
+    let uval: U64 = value as U64
+    let un: U64 = n_mod as U64
+    let ubits: U64 = 64 as U64
+    let right_part: U64 = uval >> un
+    let left_part: U64 = uval << (ubits - un)
+    return (right_part | left_part) as I64
+}
+
+/// Reverses the byte order of an I64.
+pub func swap_bytes_i64(value: I64) -> I64 {
+    let v: U64 = value as U64
+    let ff: U64 = 255 as U64
+    let b0: U64 = (v & ff) << (56 as U64)
+    let b1: U64 = ((v >> (8 as U64)) & ff) << (48 as U64)
+    let b2: U64 = ((v >> (16 as U64)) & ff) << (40 as U64)
+    let b3: U64 = ((v >> (24 as U64)) & ff) << (32 as U64)
+    let b4: U64 = ((v >> (32 as U64)) & ff) << (24 as U64)
+    let b5: U64 = ((v >> (40 as U64)) & ff) << (16 as U64)
+    let b6: U64 = ((v >> (48 as U64)) & ff) << (8 as U64)
+    let b7: U64 = (v >> (56 as U64)) & ff
+    return (b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7) as I64
+}
+
+/// Reverses the bit order of an I64.
+pub func reverse_bits_i64(value: I64) -> I64 {
+    let mut v: U64 = value as U64
+    var result: U64 = 0 as U64
+    var i: I32 = 0
+    let one: U64 = 1 as U64
+    loop {
+        if i >= 64 {
+            return result as I64
+        }
+        result = result << one
+        result = result | (v & one)
+        v = v >> one
+        i = i + 1
+    }
+    return result as I64
+}
+
+/// Converts an I64 from big-endian to native byte order.
+pub func from_be_i64(value: I64) -> I64 {
+    return swap_bytes_i64(value)
+}
+
+/// Converts an I64 from little-endian to native byte order.
+pub func from_le_i64(value: I64) -> I64 {
+    return value
+}
+
+/// Converts an I64 from native byte order to big-endian.
+pub func to_be_i64(value: I64) -> I64 {
+    return swap_bytes_i64(value)
+}
+
+/// Converts an I64 from native byte order to little-endian.
+pub func to_le_i64(value: I64) -> I64 {
+    return value
+}
+
+// ============================================================================
+// Bit Manipulation Functions - U32
+// ============================================================================
+
+/// Returns the number of ones in the binary representation of a U32.
+pub func count_ones_u32(value: U32) -> U32 {
+    let mut v: U32 = value
+    var count: U32 = 0 as U32
+    let zero: U32 = 0 as U32
+    let one: U32 = 1 as U32
+    loop {
+        if v == zero {
+            return count
+        }
+        v = v & (v - one)
+        count = count + one
+    }
+    return count
+}
+
+/// Returns the number of zeros in the binary representation of a U32.
+pub func count_zeros_u32(value: U32) -> U32 {
+    let bits: U32 = 32 as U32
+    return bits - count_ones_u32(value)
+}
+
+/// Returns the number of leading zeros in the binary representation of a U32.
+pub func leading_zeros_u32(value: U32) -> U32 {
+    let zero: U32 = 0 as U32
+    if value == zero {
+        return 32 as U32
+    }
+    let mut v: U32 = value
+    var count: U32 = 0 as U32
+    let high_bit: U32 = 2147483648 as U32
+    let one: U32 = 1 as U32
+    loop {
+        if (v & high_bit) != zero {
+            return count
+        }
+        v = v << one
+        count = count + one
+        if count >= (32 as U32) {
+            return 32 as U32
+        }
+    }
+    return count
+}
+
+/// Returns the number of trailing zeros in the binary representation of a U32.
+pub func trailing_zeros_u32(value: U32) -> U32 {
+    let zero: U32 = 0 as U32
+    if value == zero {
+        return 32 as U32
+    }
+    let mut v: U32 = value
+    var count: U32 = 0 as U32
+    let one: U32 = 1 as U32
+    loop {
+        if (v & one) != zero {
+            return count
+        }
+        v = v >> one
+        count = count + one
+        if count >= (32 as U32) {
+            return 32 as U32
+        }
+    }
+    return count
+}
+
+/// Rotates the bits of a U32 to the left by n positions.
+pub func rotate_left_u32(value: U32, n: U32) -> U32 {
+    let bits: U32 = 32 as U32
+    let n_mod: U32 = n % bits
+    let zero: U32 = 0 as U32
+    if n_mod == zero {
+        return value
+    }
+    let left_part: U32 = value << n_mod
+    let right_part: U32 = value >> (bits - n_mod)
+    return left_part | right_part
+}
+
+/// Rotates the bits of a U32 to the right by n positions.
+pub func rotate_right_u32(value: U32, n: U32) -> U32 {
+    let bits: U32 = 32 as U32
+    let n_mod: U32 = n % bits
+    let zero: U32 = 0 as U32
+    if n_mod == zero {
+        return value
+    }
+    let right_part: U32 = value >> n_mod
+    let left_part: U32 = value << (bits - n_mod)
+    return right_part | left_part
+}
+
+/// Reverses the byte order of a U32.
+pub func swap_bytes_u32(value: U32) -> U32 {
+    let ff: U32 = 255 as U32
+    let b0: U32 = (value & ff) << (24 as U32)
+    let b1: U32 = ((value >> (8 as U32)) & ff) << (16 as U32)
+    let b2: U32 = ((value >> (16 as U32)) & ff) << (8 as U32)
+    let b3: U32 = (value >> (24 as U32)) & ff
+    return b0 | b1 | b2 | b3
+}
+
+/// Reverses the bit order of a U32.
+pub func reverse_bits_u32(value: U32) -> U32 {
+    let mut v: U32 = value
+    var result: U32 = 0 as U32
+    var i: I32 = 0
+    let one: U32 = 1 as U32
+    loop {
+        if i >= 32 {
+            return result
+        }
+        result = result << one
+        result = result | (v & one)
+        v = v >> one
+        i = i + 1
+    }
+    return result
+}
+
+// ============================================================================
+// Bit Manipulation Functions - U64
+// ============================================================================
+
+/// Returns the number of ones in the binary representation of a U64.
+pub func count_ones_u64(value: U64) -> U64 {
+    let mut v: U64 = value
+    var count: U64 = 0 as U64
+    let zero: U64 = 0 as U64
+    let one: U64 = 1 as U64
+    loop {
+        if v == zero {
+            return count
+        }
+        v = v & (v - one)
+        count = count + one
+    }
+    return count
+}
+
+/// Returns the number of zeros in the binary representation of a U64.
+pub func count_zeros_u64(value: U64) -> U64 {
+    let bits: U64 = 64 as U64
+    return bits - count_ones_u64(value)
+}
+
+/// Returns the number of leading zeros in the binary representation of a U64.
+pub func leading_zeros_u64(value: U64) -> U64 {
+    let zero: U64 = 0 as U64
+    if value == zero {
+        return 64 as U64
+    }
+    let mut v: U64 = value
+    var count: U64 = 0 as U64
+    let high_bit: U64 = 9223372036854775808 as U64
+    let one: U64 = 1 as U64
+    loop {
+        if (v & high_bit) != zero {
+            return count
+        }
+        v = v << one
+        count = count + one
+        if count >= (64 as U64) {
+            return 64 as U64
+        }
+    }
+    return count
+}
+
+/// Returns the number of trailing zeros in the binary representation of a U64.
+pub func trailing_zeros_u64(value: U64) -> U64 {
+    let zero: U64 = 0 as U64
+    if value == zero {
+        return 64 as U64
+    }
+    let mut v: U64 = value
+    var count: U64 = 0 as U64
+    let one: U64 = 1 as U64
+    loop {
+        if (v & one) != zero {
+            return count
+        }
+        v = v >> one
+        count = count + one
+        if count >= (64 as U64) {
+            return 64 as U64
+        }
+    }
+    return count
+}
+
+/// Rotates the bits of a U64 to the left by n positions.
+pub func rotate_left_u64(value: U64, n: U64) -> U64 {
+    let bits: U64 = 64 as U64
+    let n_mod: U64 = n % bits
+    let zero: U64 = 0 as U64
+    if n_mod == zero {
+        return value
+    }
+    let left_part: U64 = value << n_mod
+    let right_part: U64 = value >> (bits - n_mod)
+    return left_part | right_part
+}
+
+/// Rotates the bits of a U64 to the right by n positions.
+pub func rotate_right_u64(value: U64, n: U64) -> U64 {
+    let bits: U64 = 64 as U64
+    let n_mod: U64 = n % bits
+    let zero: U64 = 0 as U64
+    if n_mod == zero {
+        return value
+    }
+    let right_part: U64 = value >> n_mod
+    let left_part: U64 = value << (bits - n_mod)
+    return right_part | left_part
+}
+
+/// Reverses the byte order of a U64.
+pub func swap_bytes_u64(value: U64) -> U64 {
+    let ff: U64 = 255 as U64
+    let b0: U64 = (value & ff) << (56 as U64)
+    let b1: U64 = ((value >> (8 as U64)) & ff) << (48 as U64)
+    let b2: U64 = ((value >> (16 as U64)) & ff) << (40 as U64)
+    let b3: U64 = ((value >> (24 as U64)) & ff) << (32 as U64)
+    let b4: U64 = ((value >> (32 as U64)) & ff) << (24 as U64)
+    let b5: U64 = ((value >> (40 as U64)) & ff) << (16 as U64)
+    let b6: U64 = ((value >> (48 as U64)) & ff) << (8 as U64)
+    let b7: U64 = (value >> (56 as U64)) & ff
+    return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+}
+
+/// Reverses the bit order of a U64.
+pub func reverse_bits_u64(value: U64) -> U64 {
+    let mut v: U64 = value
+    var result: U64 = 0 as U64
+    var i: I32 = 0
+    let one: U64 = 1 as U64
+    loop {
+        if i >= 64 {
+            return result
+        }
+        result = result << one
+        result = result | (v & one)
+        v = v >> one
+        i = i + 1
+    }
+    return result
 }

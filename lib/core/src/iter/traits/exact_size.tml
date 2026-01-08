@@ -1,0 +1,12 @@
+//! The ExactSizeIterator behavior.
+
+/// An iterator that knows its exact length.
+pub behavior ExactSizeIterator: Iterator {
+    /// Returns the exact number of remaining elements.
+    pub func len(this) -> I64
+
+    /// Returns whether the iterator is empty.
+    pub func is_empty(this) -> Bool {
+        return this.len() == 0
+    }
+}

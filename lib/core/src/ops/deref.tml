@@ -1,0 +1,79 @@
+//! Dereference operators.
+//!
+//! This module provides behaviors for dereferencing:
+//! - [`Deref`] for immutable dereferencing
+//! - [`DerefMut`] for mutable dereferencing
+//!
+//! # Deref Coercion
+//!
+//! When a type implements `Deref`, values of type `ref T` will automatically
+//! coerce to `ref T::Target` in contexts where that is expected.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::{Deref, DerefMut}
+//!
+//! pub type SmartPtr[T] {
+//!     value: T
+//! }
+//!
+//! impl[T] Deref for SmartPtr[T] {
+//!     type Target = T
+//!     pub func deref(this) -> ref T { return ref this.value }
+//! }
+//!
+//! impl[T] DerefMut for SmartPtr[T] {
+//!     pub func deref_mut(mut this) -> mut ref T {
+//!         return mut ref this.value
+//!     }
+//! }
+//!
+//! let ptr = SmartPtr { value: 42 }
+//! let val: I32 = *ptr  // Dereference to get 42
+//! ```
+
+// ============================================================================
+// Deref Behavior
+// ============================================================================
+
+/// Used for immutable dereferencing operations.
+///
+/// The `Deref` behavior is used to implement the dereference operator `*` for
+/// immutable access. Types implementing `Deref` can be treated as a reference
+/// to their `Target` type.
+///
+/// # Use Cases
+///
+/// - Smart pointers (`Heap[T]`, `Shared[T]`, `Sync[T]`)
+/// - Wrapper types that want to transparently expose their inner value
+/// - Types that want to support deref coercion
+pub behavior Deref {
+    /// The resulting type after dereferencing.
+    type Target
+
+    /// Dereferences the value.
+    ///
+    /// Returns a reference to the target type.
+    func deref(this) -> ref This::Target
+}
+
+// ============================================================================
+// DerefMut Behavior
+// ============================================================================
+
+/// Used for mutable dereferencing operations.
+///
+/// The `DerefMut` behavior is used to implement the dereference operator `*`
+/// for mutable access. Types implementing `DerefMut` can be treated as a
+/// mutable reference to their `Target` type.
+///
+/// # Prerequisite
+///
+/// `DerefMut` requires `Deref` to be implemented (same `Target` type).
+pub behavior DerefMut: Deref {
+    /// Mutably dereferences the value.
+    ///
+    /// Returns a mutable reference to the target type.
+    func deref_mut(mut this) -> mut ref This::Target
+}

@@ -1,0 +1,312 @@
+//! Tuple implementations.
+//!
+//! This module provides behavior implementations for tuple types of various arities.
+//!
+//! TML supports tuples up to 12 elements, though this module provides
+//! implementations for the most commonly used sizes (2-6 elements).
+//!
+//! # Examples
+//!
+//! ```tml
+//! // Creating tuples
+//! let pair: (I32, Str) = (42, "hello")
+//! let triple: (I32, I32, I32) = (1, 2, 3)
+//!
+//! // Accessing elements
+//! let first = pair.0    // 42
+//! let second = pair.1   // "hello"
+//!
+//! // Pattern matching
+//! let (x, y, z) = triple
+//! ```
+
+// PartialEq, Eq, PartialOrd, Ord, Ordering are builtins - no import needed
+use core::default::Default
+use core::clone::Clone
+
+// ============================================================================
+// Default implementations for tuples
+// ============================================================================
+
+impl[A: Default, B: Default] Default for (A, B) {
+    pub func default() -> (A, B) {
+        return (A::default(), B::default())
+    }
+}
+
+impl[A: Default, B: Default, C: Default] Default for (A, B, C) {
+    pub func default() -> (A, B, C) {
+        return (A::default(), B::default(), C::default())
+    }
+}
+
+impl[A: Default, B: Default, C: Default, D: Default] Default for (A, B, C, D) {
+    pub func default() -> (A, B, C, D) {
+        return (A::default(), B::default(), C::default(), D::default())
+    }
+}
+
+impl[A: Default, B: Default, C: Default, D: Default, E: Default] Default for (A, B, C, D, E) {
+    pub func default() -> (A, B, C, D, E) {
+        return (A::default(), B::default(), C::default(), D::default(), E::default())
+    }
+}
+
+impl[A: Default, B: Default, C: Default, D: Default, E: Default, F: Default] Default for (A, B, C, D, E, F) {
+    pub func default() -> (A, B, C, D, E, F) {
+        return (A::default(), B::default(), C::default(), D::default(), E::default(), F::default())
+    }
+}
+
+// ============================================================================
+// Clone implementations for tuples
+// ============================================================================
+
+impl[A: Clone, B: Clone] Clone for (A, B) {
+    pub func clone(this) -> (A, B) {
+        return (this.0.clone(), this.1.clone())
+    }
+}
+
+impl[A: Clone, B: Clone, C: Clone] Clone for (A, B, C) {
+    pub func clone(this) -> (A, B, C) {
+        return (this.0.clone(), this.1.clone(), this.2.clone())
+    }
+}
+
+impl[A: Clone, B: Clone, C: Clone, D: Clone] Clone for (A, B, C, D) {
+    pub func clone(this) -> (A, B, C, D) {
+        return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone())
+    }
+}
+
+impl[A: Clone, B: Clone, C: Clone, D: Clone, E: Clone] Clone for (A, B, C, D, E) {
+    pub func clone(this) -> (A, B, C, D, E) {
+        return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone(), this.4.clone())
+    }
+}
+
+impl[A: Clone, B: Clone, C: Clone, D: Clone, E: Clone, F: Clone] Clone for (A, B, C, D, E, F) {
+    pub func clone(this) -> (A, B, C, D, E, F) {
+        return (this.0.clone(), this.1.clone(), this.2.clone(), this.3.clone(), this.4.clone(), this.5.clone())
+    }
+}
+
+// ============================================================================
+// PartialEq implementations for tuples
+// ============================================================================
+
+impl[A: PartialEq, B: PartialEq] PartialEq for (A, B) {
+    pub func eq(this, other: ref (A, B)) -> Bool {
+        return this.0.eq(ref other.0) and this.1.eq(ref other.1)
+    }
+
+    pub func ne(this, other: ref (A, B)) -> Bool {
+        return this.0.ne(ref other.0) or this.1.ne(ref other.1)
+    }
+}
+
+impl[A: PartialEq, B: PartialEq, C: PartialEq] PartialEq for (A, B, C) {
+    pub func eq(this, other: ref (A, B, C)) -> Bool {
+        return this.0.eq(ref other.0) and this.1.eq(ref other.1) and this.2.eq(ref other.2)
+    }
+
+    pub func ne(this, other: ref (A, B, C)) -> Bool {
+        return this.0.ne(ref other.0) or this.1.ne(ref other.1) or this.2.ne(ref other.2)
+    }
+}
+
+impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq] PartialEq for (A, B, C, D) {
+    pub func eq(this, other: ref (A, B, C, D)) -> Bool {
+        return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
+               this.2.eq(ref other.2) and this.3.eq(ref other.3)
+    }
+
+    pub func ne(this, other: ref (A, B, C, D)) -> Bool {
+        return this.0.ne(ref other.0) or this.1.ne(ref other.1) or
+               this.2.ne(ref other.2) or this.3.ne(ref other.3)
+    }
+}
+
+impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq, E: PartialEq] PartialEq for (A, B, C, D, E) {
+    pub func eq(this, other: ref (A, B, C, D, E)) -> Bool {
+        return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
+               this.2.eq(ref other.2) and this.3.eq(ref other.3) and
+               this.4.eq(ref other.4)
+    }
+
+    pub func ne(this, other: ref (A, B, C, D, E)) -> Bool {
+        return this.0.ne(ref other.0) or this.1.ne(ref other.1) or
+               this.2.ne(ref other.2) or this.3.ne(ref other.3) or
+               this.4.ne(ref other.4)
+    }
+}
+
+impl[A: PartialEq, B: PartialEq, C: PartialEq, D: PartialEq, E: PartialEq, F: PartialEq] PartialEq for (A, B, C, D, E, F) {
+    pub func eq(this, other: ref (A, B, C, D, E, F)) -> Bool {
+        return this.0.eq(ref other.0) and this.1.eq(ref other.1) and
+               this.2.eq(ref other.2) and this.3.eq(ref other.3) and
+               this.4.eq(ref other.4) and this.5.eq(ref other.5)
+    }
+
+    pub func ne(this, other: ref (A, B, C, D, E, F)) -> Bool {
+        return this.0.ne(ref other.0) or this.1.ne(ref other.1) or
+               this.2.ne(ref other.2) or this.3.ne(ref other.3) or
+               this.4.ne(ref other.4) or this.5.ne(ref other.5)
+    }
+}
+
+// ============================================================================
+// Eq implementations for tuples
+// ============================================================================
+
+impl[A: Eq, B: Eq] Eq for (A, B) {}
+
+impl[A: Eq, B: Eq, C: Eq] Eq for (A, B, C) {}
+
+impl[A: Eq, B: Eq, C: Eq, D: Eq] Eq for (A, B, C, D) {}
+
+impl[A: Eq, B: Eq, C: Eq, D: Eq, E: Eq] Eq for (A, B, C, D, E) {}
+
+impl[A: Eq, B: Eq, C: Eq, D: Eq, E: Eq, F: Eq] Eq for (A, B, C, D, E, F) {}
+
+// ============================================================================
+// PartialOrd implementations for tuples
+// ============================================================================
+
+impl[A: PartialOrd, B: PartialOrd] PartialOrd for (A, B) {
+    pub func partial_cmp(this, other: ref (A, B)) -> Maybe[Ordering] {
+        when this.0.partial_cmp(ref other.0) {
+            Nothing => return Nothing,
+            Just(Ordering::Equal) => return this.1.partial_cmp(ref other.1),
+            Just(ord) => return Just(ord)
+        }
+    }
+}
+
+impl[A: PartialOrd, B: PartialOrd, C: PartialOrd] PartialOrd for (A, B, C) {
+    pub func partial_cmp(this, other: ref (A, B, C)) -> Maybe[Ordering] {
+        when this.0.partial_cmp(ref other.0) {
+            Nothing => return Nothing,
+            Just(Ordering::Equal) => {
+                when this.1.partial_cmp(ref other.1) {
+                    Nothing => return Nothing,
+                    Just(Ordering::Equal) => return this.2.partial_cmp(ref other.2),
+                    Just(ord) => return Just(ord)
+                }
+            },
+            Just(ord) => return Just(ord)
+        }
+    }
+}
+
+impl[A: PartialOrd, B: PartialOrd, C: PartialOrd, D: PartialOrd] PartialOrd for (A, B, C, D) {
+    pub func partial_cmp(this, other: ref (A, B, C, D)) -> Maybe[Ordering] {
+        when this.0.partial_cmp(ref other.0) {
+            Nothing => return Nothing,
+            Just(Ordering::Equal) => {
+                when this.1.partial_cmp(ref other.1) {
+                    Nothing => return Nothing,
+                    Just(Ordering::Equal) => {
+                        when this.2.partial_cmp(ref other.2) {
+                            Nothing => return Nothing,
+                            Just(Ordering::Equal) => return this.3.partial_cmp(ref other.3),
+                            Just(ord) => return Just(ord)
+                        }
+                    },
+                    Just(ord) => return Just(ord)
+                }
+            },
+            Just(ord) => return Just(ord)
+        }
+    }
+}
+
+// ============================================================================
+// Ord implementations for tuples
+// ============================================================================
+
+impl[A: Ord, B: Ord] Ord for (A, B) {
+    pub func cmp(this, other: ref (A, B)) -> Ordering {
+        when this.0.cmp(ref other.0) {
+            Ordering::Equal => return this.1.cmp(ref other.1),
+            ord => return ord
+        }
+    }
+}
+
+impl[A: Ord, B: Ord, C: Ord] Ord for (A, B, C) {
+    pub func cmp(this, other: ref (A, B, C)) -> Ordering {
+        when this.0.cmp(ref other.0) {
+            Ordering::Equal => {
+                when this.1.cmp(ref other.1) {
+                    Ordering::Equal => return this.2.cmp(ref other.2),
+                    ord => return ord
+                }
+            },
+            ord => return ord
+        }
+    }
+}
+
+impl[A: Ord, B: Ord, C: Ord, D: Ord] Ord for (A, B, C, D) {
+    pub func cmp(this, other: ref (A, B, C, D)) -> Ordering {
+        when this.0.cmp(ref other.0) {
+            Ordering::Equal => {
+                when this.1.cmp(ref other.1) {
+                    Ordering::Equal => {
+                        when this.2.cmp(ref other.2) {
+                            Ordering::Equal => return this.3.cmp(ref other.3),
+                            ord => return ord
+                        }
+                    },
+                    ord => return ord
+                }
+            },
+            ord => return ord
+        }
+    }
+}
+
+// ============================================================================
+// Unit type implementations
+// ============================================================================
+
+/// Unit type `()` is the empty tuple, with no elements.
+/// It is often used to represent "no value" or as a placeholder type.
+
+impl Default for Unit {
+    pub func default() -> Unit {
+        return ()
+    }
+}
+
+impl Clone for Unit {
+    pub func clone(this) -> Unit {
+        return ()
+    }
+}
+
+impl PartialEq for Unit {
+    pub func eq(this, other: ref Unit) -> Bool {
+        return true
+    }
+
+    pub func ne(this, other: ref Unit) -> Bool {
+        return false
+    }
+}
+
+impl Eq for Unit {}
+
+impl PartialOrd for Unit {
+    pub func partial_cmp(this, other: ref Unit) -> Maybe[Ordering] {
+        return Just(Ordering::Equal)
+    }
+}
+
+impl Ord for Unit {
+    pub func cmp(this, other: ref Unit) -> Ordering {
+        return Ordering::Equal
+    }
+}

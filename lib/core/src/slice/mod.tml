@@ -63,8 +63,7 @@ pub use iter::{Chunks, Windows, ChunksExact, SliceIter, SliceIterMut}
 pub use cmp::{SlicePartialEq}
 pub use sort::{SliceSort, SliceSortBy}
 
-use core::cmp::{Ordering, Ord}
-use core::clone::Copy
+// Ordering, Ord, Copy are builtins - no import needed
 
 // ============================================================================
 // Slice Type

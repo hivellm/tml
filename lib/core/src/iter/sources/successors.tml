@@ -1,0 +1,94 @@
+//! The Successors iterator source.
+//!
+//! This module provides the `Successors` iterator which yields successive
+//! values computed from an initial value.
+
+// ============================================================================
+// Successors Iterator
+// ============================================================================
+
+/// An iterator of successive elements computed from an initial value.
+///
+/// This struct is created by the [`successors`] function. See its documentation
+/// for more details.
+///
+/// Each element is computed by applying a successor function to the previous
+/// element. The iterator continues until the successor function returns
+/// `Nothing`.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Geometric sequence: 1, 2, 4, 8, 16, ...
+/// var iter = successors(Just(1), do(n: ref I32) -> Maybe[I32] {
+///     let next: I32 = *n * 2
+///     if next > 100 {
+///         return Nothing
+///     }
+///     return Just(next)
+/// })
+/// ```
+pub type Successors[T, F] {
+    next_value: Maybe[T],
+    succ: F
+}
+
+impl[T, F] Iterator for Successors[T, F] where F = func(ref T) -> Maybe[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        when this.next_value {
+            Just(value) => {
+                this.next_value = this.succ(ref value)
+                return Just(value)
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator of successive values starting from an initial value.
+///
+/// The first value yielded is the `first` parameter (if `Just`). For each
+/// subsequent value, the successor function is called with a reference to
+/// the current value to produce the next value. When the function returns
+/// `Nothing`, the iterator ends.
+///
+/// # Use Cases
+///
+/// - Mathematical sequences (arithmetic, geometric, Fibonacci, etc.)
+/// - Linked list traversal
+/// - Any sequence where each value depends on the previous
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Fibonacci-like sequence
+/// let fibs = successors(Just((0, 1)), do(pair: ref (I32, I32)) -> Maybe[(I32, I32)] {
+///     let next: I32 = pair.0 + pair.1
+///     if next > 100 {
+///         return Nothing
+///     }
+///     return Just((pair.1, next))
+/// })
+///
+/// // Arithmetic sequence: 0, 5, 10, 15, ... up to 50
+/// let by_fives = successors(Just(0), do(n: ref I32) -> Maybe[I32] {
+///     let next: I32 = *n + 5
+///     if next > 50 {
+///         return Nothing
+///     }
+///     return Just(next)
+/// })
+/// ```
+pub func successors[T, F](first: Maybe[T], succ: F) -> Successors[T, F] where F = func(ref T) -> Maybe[T] {
+    return Successors { next_value: first, succ: succ }
+}

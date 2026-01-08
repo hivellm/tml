@@ -1,0 +1,80 @@
+//! The FlatMap adapter.
+//!
+//! This module provides the `FlatMap` iterator adapter which maps each
+//! element to an iterator, then flattens the result.
+
+// ============================================================================
+// FlatMap Adapter
+// ============================================================================
+
+/// An iterator that maps each element to an iterator, then flattens.
+///
+/// This struct is created by the [`flat_map`] function. See its documentation
+/// for more details.
+///
+/// `FlatMap` is equivalent to `map` followed by `flatten`, but more efficient
+/// as it combines both operations in a single pass.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // If you have an iterator [1, 2] and a function that produces
+/// // iterators [a, b] for each element, flat_map yields [a1, b1, a2, b2]
+/// ```
+pub type FlatMap[I, F, U] {
+    iter: I,
+    f: F,
+    current: Maybe[U]
+}
+
+impl[I: Iterator, F, U: Iterator] Iterator for FlatMap[I, F, U] where F = func(I::Item) -> U {
+    type Item = U::Item
+
+    pub func next(mut this) -> Maybe[U::Item] {
+        loop {
+            when this.current {
+                Just(inner) => {
+                    when inner.next() {
+                        Just(item) => return Just(item),
+                        Nothing => {
+                            this.current = Nothing
+                        }
+                    }
+                },
+                Nothing => {}
+            }
+
+            when this.iter.next() {
+                Just(item) => {
+                    this.current = Just(this.f(item))
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that maps each element to an iterator, then flattens.
+///
+/// This is a combination of [`map`] and [`flatten`] in a single adapter.
+/// The function `f` is applied to each element of the input iterator,
+/// producing an iterator for each. All these inner iterators are then
+/// concatenated into a single sequence.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Suppose each number n maps to an iterator yielding n copies of n
+/// // flat_map([1, 2, 3], f) might yield [1, 2, 2, 3, 3, 3]
+/// ```
+pub func flat_map[I: Iterator, F, U: Iterator](iter: I, f: F) -> FlatMap[I, F, U] where F = func(I::Item) -> U {
+    return FlatMap { iter: iter, f: f, current: Nothing }
+}

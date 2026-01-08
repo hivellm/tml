@@ -1,0 +1,84 @@
+//! The Take adapter.
+//!
+//! This module provides the `Take` iterator adapter which yields at most
+//! `n` elements from the underlying iterator.
+
+// ============================================================================
+// Take Adapter
+// ============================================================================
+
+/// An iterator that yields at most `n` elements from the underlying iterator.
+///
+/// This struct is created by the [`take`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let iter: OnceI32 = once_i32(42)
+/// let taken: Take[OnceI32] = take(iter, 1)
+/// ```
+pub type Take[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Take[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return this.iter.next()
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let hint: (I64, Maybe[I64]) = this.iter.size_hint()
+        let lo: I64 = hint.0
+        let hi: Maybe[I64] = hint.1
+
+        var lo_bound: I64 = lo
+        if lo > this.remaining {
+            lo_bound = this.remaining
+        }
+
+        let hi_bound: Maybe[I64] = when hi {
+            Just(h) => {
+                if h > this.remaining {
+                    Just(this.remaining)
+                } else {
+                    Just(h)
+                }
+            },
+            Nothing => Just(this.remaining)
+        }
+
+        return (lo_bound, hi_bound)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields at most `n` elements.
+///
+/// After `n` elements have been yielded, the iterator will return `Nothing`
+/// even if the underlying iterator has more elements.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(5, 10)
+/// let taken: Take[RepeatNI32] = take(iter, 3)
+/// // Only yields 3 elements instead of 10
+/// ```
+pub func take[I: Iterator](iter: I, n: I64) -> Take[I] {
+    return Take { iter: iter, remaining: n }
+}

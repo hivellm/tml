@@ -1,0 +1,69 @@
+//! The TakeWhile adapter.
+//!
+//! This module provides the `TakeWhile` iterator adapter which yields
+//! elements while a predicate is true.
+
+// ============================================================================
+// TakeWhile Adapter
+// ============================================================================
+
+/// An iterator that yields elements while a predicate is true.
+///
+/// This struct is created by the [`take_while`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(1, 10)
+/// let small = take_while(nums, do(x: ref I32) -> Bool { *x < 5 })
+/// ```
+pub type TakeWhile[I, P] {
+    iter: I,
+    pred: P,
+    done: Bool
+}
+
+impl[I: Iterator, P] Iterator for TakeWhile[I, P] where P = func(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.done {
+            return Nothing
+        }
+        when this.iter.next() {
+            Just(item) => {
+                if this.pred(ref item) {
+                    return Just(item)
+                }
+                this.done = true
+                return Nothing
+            },
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields elements while a predicate is true.
+///
+/// The predicate is called on a reference to each element. Elements are
+/// yielded as long as the predicate returns `true`. As soon as it returns
+/// `false`, the iterator stops forever.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 100)
+/// let limited = take_while(iter, do(x: ref I32) -> Bool { *x < 50 })
+/// ```
+pub func take_while[I: Iterator, P](iter: I, pred: P) -> TakeWhile[I, P] where P = func(ref I::Item) -> Bool {
+    return TakeWhile { iter: iter, pred: pred, done: false }
+}

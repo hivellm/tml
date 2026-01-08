@@ -1,0 +1,287 @@
+//! Legacy type-suffixed iterator sources.
+//!
+//! This module provides type-suffixed versions of iterator sources for
+//! compatibility when generic type inference is not available.
+//!
+//! # Provided Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`EmptyI32`] | Empty iterator for I32 |
+//! | [`EmptyI64`] | Empty iterator for I64 |
+//! | [`OnceI32`] | Single-element iterator for I32 |
+//! | [`OnceI64`] | Single-element iterator for I64 |
+//! | [`RepeatNI32`] | Repeat N times for I32 |
+//! | [`RepeatNI64`] | Repeat N times for I64 |
+
+// ============================================================================
+// EmptyI32
+// ============================================================================
+
+/// An iterator that yields no I32 values.
+///
+/// This is the type-suffixed version of `Empty[I32]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: EmptyI32 = empty_i32()
+/// // iter.next() always returns Nothing
+/// ```
+pub type EmptyI32 {
+    _done: Bool
+}
+
+impl Iterator for EmptyI32 {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        return Nothing
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let zero: I64 = 0
+        return (zero, Just(zero))
+    }
+}
+
+/// Creates an iterator that yields no I32 values.
+pub func empty_i32() -> EmptyI32 {
+    return EmptyI32 { _done: true }
+}
+
+// ============================================================================
+// EmptyI64
+// ============================================================================
+
+/// An iterator that yields no I64 values.
+///
+/// This is the type-suffixed version of `Empty[I64]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: EmptyI64 = empty_i64()
+/// // iter.next() always returns Nothing
+/// ```
+pub type EmptyI64 {
+    _done: Bool
+}
+
+impl Iterator for EmptyI64 {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        return Nothing
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let zero: I64 = 0
+        return (zero, Just(zero))
+    }
+}
+
+/// Creates an iterator that yields no I64 values.
+pub func empty_i64() -> EmptyI64 {
+    return EmptyI64 { _done: true }
+}
+
+// ============================================================================
+// OnceI32
+// ============================================================================
+
+/// An iterator that yields exactly one I32 value.
+///
+/// This is the type-suffixed version of `Once[I32]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: OnceI32 = once_i32(42)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Nothing
+/// ```
+pub type OnceI32 {
+    value: Maybe[I32]
+}
+
+impl Iterator for OnceI32 {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        let result: Maybe[I32] = this.value
+        this.value = Nothing
+        return result
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when this.value {
+            Just(_) => {
+                let one: I64 = 1
+                return (one, Just(one))
+            },
+            Nothing => {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+    }
+}
+
+/// Creates an iterator that yields exactly one I32 value.
+pub func once_i32(value: I32) -> OnceI32 {
+    return OnceI32 { value: Just(value) }
+}
+
+// ============================================================================
+// OnceI64
+// ============================================================================
+
+/// An iterator that yields exactly one I64 value.
+///
+/// This is the type-suffixed version of `Once[I64]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: OnceI64 = once_i64(42)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Nothing
+/// ```
+pub type OnceI64 {
+    value: Maybe[I64]
+}
+
+impl Iterator for OnceI64 {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        let result: Maybe[I64] = this.value
+        this.value = Nothing
+        return result
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when this.value {
+            Just(_) => {
+                let one: I64 = 1
+                return (one, Just(one))
+            },
+            Nothing => {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+    }
+}
+
+/// Creates an iterator that yields exactly one I64 value.
+pub func once_i64(value: I64) -> OnceI64 {
+    return OnceI64 { value: Just(value) }
+}
+
+// ============================================================================
+// RepeatNI32
+// ============================================================================
+
+/// An iterator that repeats an I32 value a fixed number of times.
+///
+/// This is the type-suffixed version of `RepeatN[I32]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(7, 3)
+/// // Yields 7, 7, 7, then Nothing
+/// ```
+pub type RepeatNI32 {
+    value: I32,
+    remaining: I64
+}
+
+impl Iterator for RepeatNI32 {
+    type Item = I32
+
+    pub func next(mut this) -> Maybe[I32] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return Just(this.value)
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        var n: I64 = 0
+        if this.remaining > 0 {
+            n = this.remaining
+        }
+        return (n, Just(n))
+    }
+}
+
+/// Creates an iterator that repeats an I32 value a fixed number of times.
+pub func repeat_n_i32(value: I32, n: I64) -> RepeatNI32 {
+    return RepeatNI32 { value: value, remaining: n }
+}
+
+// ============================================================================
+// RepeatNI64
+// ============================================================================
+
+/// An iterator that repeats an I64 value a fixed number of times.
+///
+/// This is the type-suffixed version of `RepeatN[I64]` for use when generic
+/// type inference is not available.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI64 = repeat_n_i64(7, 3)
+/// // Yields 7, 7, 7, then Nothing
+/// ```
+pub type RepeatNI64 {
+    value: I64,
+    remaining: I64
+}
+
+impl Iterator for RepeatNI64 {
+    type Item = I64
+
+    pub func next(mut this) -> Maybe[I64] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return Just(this.value)
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        var n: I64 = 0
+        if this.remaining > 0 {
+            n = this.remaining
+        }
+        return (n, Just(n))
+    }
+}
+
+/// Creates an iterator that repeats an I64 value a fixed number of times.
+pub func repeat_n_i64(value: I64, n: I64) -> RepeatNI64 {
+    return RepeatNI64 { value: value, remaining: n }
+}

@@ -1,0 +1,139 @@
+//! String formatting utilities.
+//!
+//! This module provides behaviors and types for converting values to various
+//! string representations, similar to Rust's `std::fmt` module.
+//!
+//! # Core Formatting Behaviors
+//!
+//! | Behavior | Description | Method | Example Output |
+//! |----------|-------------|--------|----------------|
+//! | [`Display`] | User-facing output | `to_string()` | `42`, `hello` |
+//! | [`Debug`] | Developer-facing output | `debug_string()` | `Point { x: 10, y: 20 }` |
+//! | [`Binary`] | Binary representation | `fmt_binary()` | `0b101010` |
+//! | [`Octal`] | Octal representation | `fmt_octal()` | `0o52` |
+//! | [`LowerHex`] | Lowercase hexadecimal | `fmt_lower_hex()` | `0x2a` |
+//! | [`UpperHex`] | Uppercase hexadecimal | `fmt_upper_hex()` | `0x2A` |
+//! | [`Pointer`] | Pointer address | `fmt_pointer()` | `0x7fff5fbff8c8` |
+//! | [`LowerExp`] | Lowercase scientific | `fmt_lower_exp()` | `1.234e5` |
+//! | [`UpperExp`] | Uppercase scientific | `fmt_upper_exp()` | `1.234E5` |
+//!
+//! # Display vs Debug
+//!
+//! The two most commonly used formatting behaviors are:
+//!
+//! - **[`Display`]**: For user-facing output. Should produce clean, readable text.
+//! - **[`Debug`]**: For developer-facing output. Should show the internal structure.
+//!
+//! ```tml
+//! use core::fmt::*
+//!
+//! let s = "hello"
+//! println(s.to_string())      // hello (Display)
+//! println(s.debug_string())   // "hello" (Debug - with quotes)
+//!
+//! let opt = Just(42)
+//! println(opt.to_string())    // Just(42)
+//! println(opt.debug_string()) // Just(42)
+//! ```
+//!
+//! # Implementing Display and Debug
+//!
+//! For custom types, implement `Display` and `Debug`:
+//!
+//! ```tml
+//! use core::fmt::{Display, Debug}
+//!
+//! pub type Point { x: I64, y: I64 }
+//!
+//! impl Display for Point {
+//!     pub func to_string(this) -> Str {
+//!         return "(" + this.x.to_string() + ", " + this.y.to_string() + ")"
+//!     }
+//! }
+//!
+//! impl Debug for Point {
+//!     pub func debug_string(this) -> Str {
+//!         return "Point { x: " + this.x.debug_string() + ", y: " + this.y.debug_string() + " }"
+//!     }
+//! }
+//! ```
+//!
+//! # Debug Builders
+//!
+//! For complex types, use the debug builder helpers:
+//!
+//! ```tml
+//! use core::fmt::{Debug, DebugStruct}
+//!
+//! impl Debug for MyStruct {
+//!     pub func debug_string(this) -> Str {
+//!         return DebugStruct::new("MyStruct")
+//!             .field("name", this.name.debug_string())
+//!             .field("value", this.value.debug_string())
+//!             .finish()
+//!     }
+//! }
+//! ```
+//!
+//! # Numeric Formatting
+//!
+//! Integer types support multiple representations:
+//!
+//! ```tml
+//! use core::fmt::*
+//!
+//! let n: I32 = 42
+//! println(n.to_string())       // "42" (decimal)
+//! println(n.fmt_binary())      // "0b101010"
+//! println(n.fmt_octal())       // "0o52"
+//! println(n.fmt_lower_hex())   // "0x2a"
+//! println(n.fmt_upper_hex())   // "0x2A"
+//! ```
+//!
+//! # Formatting with Precision and Width
+//!
+//! Use the `Formatter` type for fine-grained control:
+//!
+//! ```tml
+//! use core::fmt::*
+//!
+//! let mut fmt = Formatter::new()
+//! fmt.set_width(10)
+//! fmt.set_precision(2)
+//! fmt.set_align(Alignment::Right)
+//! fmt.set_fill(' ')
+//!
+//! let result = fmt.pad("42")  // "        42"
+//! ```
+//!
+//! # Module Organization
+//!
+//! - `traits` - Core formatting behaviors (Display, Debug, etc.)
+//! - `builders` - Debug builder helpers (DebugStruct, DebugList, etc.)
+//! - `num` - Numeric formatting (Binary, Octal, Hex, Exp)
+//! - `formatter` - Formatter type and formatting options
+//! - `impls` - Implementations for primitive types
+//! - `helpers` - Internal helper functions
+//! - `rt` - Runtime formatting types (Argument, Count, FormatSpec)
+//! - `float` - Floating-point formatting utilities
+//!
+//! All items are re-exported at the module root for convenience.
+
+// Declare submodules
+pub mod traits
+pub mod builders
+pub mod num
+pub mod formatter
+pub mod impls
+pub mod helpers
+pub mod rt
+pub mod float
+
+// Re-export all public items
+pub use traits::*
+pub use builders::*
+pub use num::*
+pub use formatter::*
+pub use impls::*
+pub use rt::*
+pub use float::*

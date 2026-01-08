@@ -94,6 +94,70 @@ void TypeEnv::import_all_from(const std::string& module_path) {
     for (const auto& [name, type_ptr] : module->type_aliases) {
         import_symbol(module_path, name, std::nullopt);
     }
+
+    // Process re-exports (pub use declarations)
+    for (const auto& re_export : module->re_exports) {
+        // First, load the source module if not already loaded
+        load_native_module(re_export.source_path);
+
+        auto source_module = module_registry_->get_module(re_export.source_path);
+        if (!source_module) {
+            TML_DEBUG_LN(
+                "[MODULE] Warning: Re-export source module not found: " << re_export.source_path);
+            continue;
+        }
+
+        if (re_export.is_glob) {
+            // Glob re-export: import all symbols from source module
+            for (const auto& [name, func_sig] : source_module->functions) {
+                if (name.find("::") == std::string::npos) {
+                    import_symbol(re_export.source_path, name, std::nullopt);
+                }
+            }
+            for (const auto& [name, struct_def] : source_module->structs) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
+            for (const auto& [name, enum_def] : source_module->enums) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
+            for (const auto& [name, behavior_def] : source_module->behaviors) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
+            for (const auto& [name, type_ptr] : source_module->type_aliases) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
+
+            // Recursively process re-exports from the source module
+            for (const auto& nested_re_export : source_module->re_exports) {
+                load_native_module(nested_re_export.source_path);
+                auto nested_module = module_registry_->get_module(nested_re_export.source_path);
+                if (nested_module && nested_re_export.is_glob) {
+                    for (const auto& [name, func_sig] : nested_module->functions) {
+                        if (name.find("::") == std::string::npos) {
+                            import_symbol(nested_re_export.source_path, name, std::nullopt);
+                        }
+                    }
+                    for (const auto& [name, struct_def] : nested_module->structs) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    for (const auto& [name, enum_def] : nested_module->enums) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    for (const auto& [name, behavior_def] : nested_module->behaviors) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    for (const auto& [name, type_ptr] : nested_module->type_aliases) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                }
+            }
+        } else if (!re_export.symbols.empty()) {
+            // Specific symbols re-export
+            for (const auto& symbol : re_export.symbols) {
+                import_symbol(re_export.source_path, symbol, std::nullopt);
+            }
+        }
+    }
 }
 
 auto TypeEnv::resolve_imported_symbol(const std::string& name) const -> std::optional<std::string> {
@@ -247,25 +311,40 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             }
             std::cerr << "=========================\n\n";
 
-            // Panic - abort compilation
-            std::cerr << "FATAL: Cannot continue - module '" << module_path
-                      << "' failed to parse\n";
-            std::exit(1);
+            if (abort_on_module_error_) {
+                // Panic - abort compilation
+                std::cerr << "FATAL: Cannot continue - module '" << module_path
+                          << "' failed to parse\n";
+                std::exit(1);
+            }
+            return false;
         }
         all_parsed.push_back(
             std::make_pair(std::move(parsed.decls), std::move(parsed.source_code)));
     }
 
-    // If any file in a directory module failed to parse, abort
+    // If any file in a directory module failed to parse, abort (unless in non-fatal mode)
     if (had_errors) {
-        std::cerr << "FATAL: Cannot continue - module '" << module_path << "' has parse errors\n";
-        std::exit(1);
+        if (abort_on_module_error_) {
+            std::cerr << "FATAL: Cannot continue - module '" << module_path
+                      << "' has parse errors\n";
+            std::exit(1);
+        }
+        // In non-fatal mode, continue with successfully parsed files if any
+        if (all_parsed.empty()) {
+            return false;
+        }
+        TML_DEBUG_LN("[MODULE] Continuing with " << all_parsed.size()
+                                                 << " successfully parsed files (despite errors)");
     }
 
     if (all_parsed.empty()) {
-        std::cerr << "FATAL: Module '" << module_path
-                  << "' is empty or all files failed to parse\n";
-        std::exit(1);
+        if (abort_on_module_error_) {
+            std::cerr << "FATAL: Module '" << module_path
+                      << "' is empty or all files failed to parse\n";
+            std::exit(1);
+        }
+        return false;
     }
     TML_DEBUG_LN("[MODULE] Parsed " << all_parsed.size() << " files for module: " << module_path);
 
@@ -662,6 +741,60 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         }
                     }
                 }
+            } else if (decl->is<parser::ModDecl>()) {
+                const auto& mod_decl = decl->as<parser::ModDecl>();
+
+                // Only process public mod declarations
+                if (mod_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Register submodule path: e.g., for "pub mod traits" in core::iter,
+                // the submodule path is "core::iter::traits"
+                std::string submod_path = module_path + "::" + mod_decl.name;
+                mod.submodules[mod_decl.name] = submod_path;
+                TML_DEBUG_LN("[MODULE] Registered submodule: " << mod_decl.name << " -> "
+                                                               << submod_path);
+            } else if (decl->is<parser::UseDecl>()) {
+                const auto& use_decl = decl->as<parser::UseDecl>();
+
+                // Build the source module path from use declaration
+                std::string use_path;
+                for (size_t i = 0; i < use_decl.path.segments.size(); ++i) {
+                    if (i > 0)
+                        use_path += "::";
+                    use_path += use_decl.path.segments[i];
+                }
+
+                // Handle relative paths: if path doesn't start with known prefix,
+                // treat it as relative to current module
+                if (!use_path.empty() && use_path.find("core::") != 0 &&
+                    use_path.find("std::") != 0 && use_path.find("test") != 0) {
+                    // Relative path - prepend current module path
+                    use_path = module_path + "::" + use_path;
+                }
+
+                // Load the dependency module (for all use declarations, not just public)
+                // This ensures that methods from imported modules are available
+                // Note: We use a flag to avoid aborting on dependency failures
+                bool prev_abort_on_error = abort_on_module_error_;
+                abort_on_module_error_ = false;
+                load_native_module(use_path);
+                abort_on_module_error_ = prev_abort_on_error;
+
+                // Only create re-export entry for public use declarations
+                if (use_decl.vis == parser::Visibility::Public) {
+                    // Create re-export entry
+                    ReExport re_export{.source_path = use_path,
+                                       .is_glob = use_decl.is_glob,
+                                       .symbols =
+                                           use_decl.symbols.value_or(std::vector<std::string>{}),
+                                       .alias = use_decl.alias};
+
+                    mod.re_exports.push_back(std::move(re_export));
+                    TML_DEBUG_LN("[MODULE] Registered re-export: "
+                                 << use_path << (use_decl.is_glob ? "::*" : ""));
+                }
             }
         }
     }
@@ -744,64 +877,97 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
     // Core library modules - load from filesystem
     if (module_path.substr(0, 6) == "core::") {
-        // Extract module name: "core::mem" -> "mem"
+        // Extract module name: "core::mem" -> "mem", "core::iter::traits" -> "iter::traits"
         std::string module_name = module_path.substr(6);
+
+        // Convert module path to filesystem path: "iter::traits" -> "iter/traits"
+        std::string fs_module_path = module_name;
+        size_t pos = 0;
+        while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
+            fs_module_path.replace(pos, 2, "/");
+            pos += 1;
+        }
 
         // Get current working directory for reference
         auto cwd = std::filesystem::current_path();
 
         // Try multiple possible paths for the module file
         std::vector<std::filesystem::path> search_paths = {
-            std::filesystem::path("lib") / "core" / "src" / (module_name + ".tml"),
-            std::filesystem::path("lib") / "core" / "src" / module_name / "mod.tml",
+            std::filesystem::path("lib") / "core" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("lib") / "core" / "src" / fs_module_path / "mod.tml",
             std::filesystem::path("..") / ".." / "lib" / "core" / "src" /
-                (module_name + ".tml"), // From build/
+                (fs_module_path + ".tml"), // From build/
+            std::filesystem::path("..") / ".." / "lib" / "core" / "src" / fs_module_path /
+                "mod.tml", // From build/
             std::filesystem::path("..") / "lib" / "core" / "src" /
-                (module_name + ".tml"),                                     // From tests/
-            std::filesystem::path("core") / "src" / (module_name + ".tml"), // From lib/
+                (fs_module_path + ".tml"), // From tests/
+            std::filesystem::path("..") / "lib" / "core" / "src" / fs_module_path /
+                "mod.tml",                                                      // From tests/
+            std::filesystem::path("core") / "src" / (fs_module_path + ".tml"),  // From lib/
+            std::filesystem::path("core") / "src" / fs_module_path / "mod.tml", // From lib/
             // Add absolute paths based on CWD
-            cwd / "lib" / "core" / "src" / (module_name + ".tml"),
-            cwd / "lib" / "core" / "src" / module_name / "mod.tml",
-            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / (module_name + ".tml"),
-            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / module_name / "mod.tml",
+            cwd / "lib" / "core" / "src" / (fs_module_path + ".tml"),
+            cwd / "lib" / "core" / "src" / fs_module_path / "mod.tml",
+            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / (fs_module_path + ".tml"),
+            std::filesystem::path("F:/Node/hivellm/tml/lib/core/src") / fs_module_path / "mod.tml",
         };
 
+        TML_DEBUG_LN("[MODULE] Looking for core module: " << module_path << " (fs_path: "
+                                                          << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
+            TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
+                TML_DEBUG_LN("[MODULE]   FOUND!");
                 return load_module_from_file(module_path, module_file.string());
             }
         }
 
         // Module file not found
+        std::cerr << "error: core module file not found: " << module_path << "\n";
         return false;
     }
 
     // Standard library modules - load from filesystem
     if (module_path.substr(0, 5) == "std::") {
-        // Extract module name: "std::math" -> "math"
+        // Extract module name: "std::math" -> "math", "std::collections::hash" ->
+        // "collections::hash"
         std::string module_name = module_path.substr(5);
+
+        // Convert module path to filesystem path: "collections::hash" -> "collections/hash"
+        std::string fs_module_path = module_name;
+        size_t pos = 0;
+        while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
+            fs_module_path.replace(pos, 2, "/");
+            pos += 1;
+        }
+
+        // Get current working directory for reference
+        auto cwd = std::filesystem::current_path();
 
         // Try multiple possible paths for the module file
         std::vector<std::filesystem::path> search_paths = {
-            std::filesystem::path("lib") / "std" / "src" / (module_name + ".tml"),
-            std::filesystem::path("lib") / "std" / "src" / module_name / "mod.tml",
+            std::filesystem::path("lib") / "std" / "src" / (fs_module_path + ".tml"),
+            std::filesystem::path("lib") / "std" / "src" / fs_module_path / "mod.tml",
             std::filesystem::path("..") / ".." / "lib" / "std" / "src" /
-                (module_name + ".tml"), // From build/
-            std::filesystem::path("..") / ".." / "lib" / "std" / "src" / module_name /
+                (fs_module_path + ".tml"), // From build/
+            std::filesystem::path("..") / ".." / "lib" / "std" / "src" / fs_module_path /
                 "mod.tml", // From build/
             std::filesystem::path("..") / "lib" / "std" / "src" /
-                (module_name + ".tml"), // From tests/
-            std::filesystem::path("..") / "lib" / "std" / "src" / module_name /
-                "mod.tml",                                                  // From tests/
-            std::filesystem::path("std") / "src" / (module_name + ".tml"),  // From lib/
-            std::filesystem::path("std") / "src" / module_name / "mod.tml", // From lib/
+                (fs_module_path + ".tml"), // From tests/
+            std::filesystem::path("..") / "lib" / "std" / "src" / fs_module_path /
+                "mod.tml",                                                     // From tests/
+            std::filesystem::path("std") / "src" / (fs_module_path + ".tml"),  // From lib/
+            std::filesystem::path("std") / "src" / fs_module_path / "mod.tml", // From lib/
+            // Add absolute paths based on CWD
+            cwd / "lib" / "std" / "src" / (fs_module_path + ".tml"),
+            cwd / "lib" / "std" / "src" / fs_module_path / "mod.tml",
             // Absolute fallback
-            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / (module_name + ".tml"),
-            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / module_name / "mod.tml",
+            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / (fs_module_path + ".tml"),
+            std::filesystem::path("F:/Node/hivellm/tml/lib/std/src") / fs_module_path / "mod.tml",
         };
 
-        TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path << " (name: " << module_name
-                                                         << ")");
+        TML_DEBUG_LN("[MODULE] Looking for std module: " << module_path
+                                                         << " (fs_path: " << fs_module_path << ")");
         for (const auto& module_file : search_paths) {
             TML_DEBUG_LN("[MODULE]   Checking: " << module_file);
             if (std::filesystem::exists(module_file)) {
@@ -817,13 +983,23 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
 
     // Local module - try to load from source directory
     // This supports "use algorithms" to load "algorithms.tml" from the same directory
+    // Also supports nested modules like "utils::helpers" -> "utils/helpers.tml"
+
+    // Convert module path to filesystem path: "utils::helpers" -> "utils/helpers"
+    std::string fs_module_path = module_path;
+    size_t pos = 0;
+    while ((pos = fs_module_path.find("::", pos)) != std::string::npos) {
+        fs_module_path.replace(pos, 2, "/");
+        pos += 1;
+    }
+
     if (!source_directory_.empty()) {
         std::filesystem::path source_dir(source_directory_);
 
         // Try multiple patterns for local modules
         std::vector<std::filesystem::path> search_paths = {
-            source_dir / (module_path + ".tml"),  // algorithms.tml
-            source_dir / module_path / "mod.tml", // algorithms/mod.tml
+            source_dir / (fs_module_path + ".tml"),  // algorithms.tml or utils/helpers.tml
+            source_dir / fs_module_path / "mod.tml", // algorithms/mod.tml or utils/helpers/mod.tml
         };
 
         for (const auto& module_file : search_paths) {
@@ -837,8 +1013,8 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
     // Also try current working directory
     auto cwd = std::filesystem::current_path();
     std::vector<std::filesystem::path> cwd_paths = {
-        cwd / (module_path + ".tml"),
-        cwd / module_path / "mod.tml",
+        cwd / (fs_module_path + ".tml"),
+        cwd / fs_module_path / "mod.tml",
     };
 
     for (const auto& module_file : cwd_paths) {

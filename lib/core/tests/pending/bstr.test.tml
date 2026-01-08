@@ -204,6 +204,3 @@ func test_bytestr_hash_different_strings() -> I32 {
 // - to_ascii_uppercase/lowercase tests (return () instead of [U8])
 // - ordering tests (cmp method has issues)
 
-func main() -> I32 {
-    return 0
-}

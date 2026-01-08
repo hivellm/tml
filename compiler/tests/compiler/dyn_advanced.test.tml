@@ -112,7 +112,3 @@ func test_dyn_return_value() -> I32 {
     assert_eq(area, 49, "Square area via dyn should be 49")
     return 0
 }
-
-func main() -> I32 {
-    return 0
-}

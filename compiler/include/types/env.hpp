@@ -238,6 +238,8 @@ private:
     std::string current_module_path_;
     std::string source_directory_; // Directory of the main source file for local module resolution
     std::unordered_map<std::string, ImportedSymbol> imported_symbols_; // local_name -> import info
+    bool abort_on_module_error_ =
+        true; // If false, don't abort on module load errors (used for dependency loading)
 
     void init_builtins();
     void init_builtin_types();

@@ -59,7 +59,3 @@ func test_dyn_generic_as_parameter() -> I32 {
     assert_eq(result, 14, "apply_processor(doubler, 7) = 14")
     return 0
 }
-
-func main() -> I32 {
-    return 0
-}

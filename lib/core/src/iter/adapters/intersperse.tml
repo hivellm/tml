@@ -1,0 +1,95 @@
+//! The Intersperse adapter.
+//!
+//! This module provides the `Intersperse` iterator adapter which places a
+//! separator between adjacent elements.
+
+// Duplicate is a builtin behavior - no import needed
+
+// ============================================================================
+// Intersperse Adapter
+// ============================================================================
+
+/// An iterator that places a separator between adjacent elements.
+///
+/// This struct is created by the [`intersperse`] function. See its documentation
+/// for more details.
+///
+/// The separator is inserted between every pair of adjacent elements. The
+/// separator must implement `Duplicate` because it is yielded multiple times.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // For an iterator yielding [1, 2, 3] with separator 0:
+/// // intersperse yields [1, 0, 2, 0, 3]
+/// ```
+pub type Intersperse[I: Iterator] {
+    iter: I,
+    sep: I::Item,
+    next_is_sep: Bool,
+    next_item: Maybe[I::Item]
+}
+
+impl[I: Iterator] Iterator for Intersperse[I] where I::Item: Duplicate {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if this.next_is_sep {
+            this.next_is_sep = false
+            return Just(this.sep.duplicate())
+        }
+
+        when this.next_item {
+            Just(item) => {
+                this.next_item = Nothing
+                when this.iter.next() {
+                    Just(following) => {
+                        this.next_item = Just(following)
+                        this.next_is_sep = true
+                    },
+                    Nothing => {}
+                }
+                return Just(item)
+            },
+            Nothing => {
+                when this.iter.next() {
+                    Just(first) => {
+                        when this.iter.next() {
+                            Just(second) => {
+                                this.next_item = Just(second)
+                                this.next_is_sep = true
+                            },
+                            Nothing => {}
+                        }
+                        return Just(first)
+                    },
+                    Nothing => return Nothing
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that places a separator between adjacent elements.
+///
+/// The separator is inserted between every pair of adjacent elements from the
+/// underlying iterator. The separator must implement `Duplicate` since it's
+/// yielded multiple times.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Given an iterator yielding [a, b, c] and separator x:
+/// // intersperse yields [a, x, b, x, c]
+/// ```
+pub func intersperse[I: Iterator](iter: I, sep: I::Item) -> Intersperse[I] where I::Item: Duplicate {
+    return Intersperse { iter: iter, sep: sep, next_is_sep: false, next_item: Nothing }
+}

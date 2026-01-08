@@ -74,11 +74,11 @@
 //! Sources create iterators from scratch:
 //!
 //! ```tml
-//! use core::iter::sources::*
+//! use core::iter::*
 //!
-//! let empty = empty_i32()        // Yields nothing
-//! let single = once_i64(42)      // Yields exactly one element
-//! let repeated = repeat_n_i32(7, 3)  // Yields 7 three times
+//! let empty: Empty[I32] = empty()  // Yields nothing
+//! let single = once(42)            // Yields exactly one element
+//! let repeated = repeat_n(7, 3)    // Yields 7 three times
 //! ```
 //!
 //! # Iterator Adapters
@@ -86,7 +86,7 @@
 //! Adapters transform iterators into new iterators:
 //!
 //! ```tml
-//! use core::iter::adapters::*
+//! use core::iter::*
 //!
 //! // Take first 10 elements
 //! let first_ten = take(iter, 10)
@@ -109,17 +109,23 @@
 //!
 //! # Module Organization
 //!
-//! - [`traits`] - Core iterator behaviors
-//! - [`sources`] - Iterator source types (`empty`, `once`, `repeat_n`)
-//! - [`adapters`] - Iterator adapters (`take`, `skip`, `chain`, etc.)
+//! - `traits` - Core iterator behaviors (`Iterator`, `IntoIterator`, etc.)
+//! - `sources` - Iterator source types (`empty`, `once`, `repeat_n`, etc.)
+//! - `adapters` - Iterator adapters (`take`, `skip`, `map`, `filter`, etc.)
+//! - `range` - Range iteration support (`Step` behavior)
 //!
 //! All items are re-exported at the module root for convenience.
 
+// Declare submodules (directories with mod.tml)
 pub mod traits
 pub mod adapters
 pub mod sources
 
-// Re-export all from submodules
+// Range module (single file, not a directory)
+pub mod range
+
+// Re-export all public items from submodules for convenience
 pub use traits::*
 pub use adapters::*
 pub use sources::*
+pub use range::*

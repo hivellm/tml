@@ -55,11 +55,9 @@ pub mod ascii  // ASCII array methods (uses core::ascii::Char)
 // Re-export iterator types
 pub use iter::{ArrayIter}
 
-use core::cmp::{Ordering, PartialEq, Eq, PartialOrd, Ord}
-use core::clone::{Duplicate, Copy}
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::hash::{Hash}
 use core::default::Default
-use core::fmt::{Display, Debug}
 use core::iter::{Iterator, IntoIterator, FromIterator}
 use core::convert::{TryFrom, AsRef, AsMut}
 use core::borrow::{Borrow, BorrowMut}

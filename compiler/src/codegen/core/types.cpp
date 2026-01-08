@@ -84,35 +84,51 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
 
             // Check if this is a generic type with type arguments
             if (named.generics.has_value() && !named.generics->args.empty()) {
-                // Check if this is a known generic struct/enum
+                // Convert parser type args to semantic types first
+                std::vector<types::TypePtr> type_args;
+                for (const auto& arg : named.generics->args) {
+                    if (arg.is_type()) {
+                        types::TypePtr semantic_type =
+                            resolve_parser_type_with_subs(*arg.as_type(), {});
+                        type_args.push_back(semantic_type);
+                    }
+                }
+
+                // Check if this is a known generic struct/enum - locally defined
                 auto it = pending_generic_structs_.find(base_name);
                 if (it != pending_generic_structs_.end()) {
-                    // Convert parser type args to semantic types
-                    std::vector<types::TypePtr> type_args;
-                    for (const auto& arg : named.generics->args) {
-                        if (arg.is_type()) {
-                            types::TypePtr semantic_type =
-                                resolve_parser_type_with_subs(*arg.as_type(), {});
-                            type_args.push_back(semantic_type);
-                        }
-                    }
                     // Get mangled name and ensure instantiation
                     std::string mangled = require_struct_instantiation(base_name, type_args);
                     return "%struct." + mangled;
                 }
-                // Check enum
+
+                // Check enum locally defined
                 auto enum_it = pending_generic_enums_.find(base_name);
                 if (enum_it != pending_generic_enums_.end()) {
-                    std::vector<types::TypePtr> type_args;
-                    for (const auto& arg : named.generics->args) {
-                        if (arg.is_type()) {
-                            types::TypePtr semantic_type =
-                                resolve_parser_type_with_subs(*arg.as_type(), {});
-                            type_args.push_back(semantic_type);
-                        }
-                    }
                     std::string mangled = require_enum_instantiation(base_name, type_args);
                     return "%struct." + mangled;
+                }
+
+                // Check imported generic structs from module registry
+                if (env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto struct_it = mod.structs.find(base_name);
+                        if (struct_it != mod.structs.end() &&
+                            !struct_it->second.type_params.empty()) {
+                            // Found imported generic struct
+                            std::string mangled =
+                                require_struct_instantiation(base_name, type_args);
+                            return "%struct." + mangled;
+                        }
+                        // Also check enums
+                        auto import_enum_it = mod.enums.find(base_name);
+                        if (import_enum_it != mod.enums.end() &&
+                            !import_enum_it->second.type_params.empty()) {
+                            std::string mangled = require_enum_instantiation(base_name, type_args);
+                            return "%struct." + mangled;
+                        }
+                    }
                 }
             }
 
@@ -506,7 +522,8 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                 }
 
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::DynBehaviorType{behavior_name, std::move(type_args), t.is_mut};
+                result->kind =
+                    types::DynBehaviorType{behavior_name, std::move(type_args), t.is_mut};
                 return result;
             } else if constexpr (std::is_same_v<T, parser::InferType>) {
                 // Infer type - return a type variable or Unit as placeholder

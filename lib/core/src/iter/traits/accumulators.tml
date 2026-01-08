@@ -1,0 +1,256 @@
+//! Accumulator behaviors for iterators.
+
+/// Trait for types that can be created by summing an iterator.
+pub behavior Sum[A = This] {
+    /// Method which takes an iterator and generates Self from the elements
+    /// by "summing up" the items.
+    pub func sum[I: Iterator](iter: I) -> This where I::Item = A
+}
+
+/// Trait for types that can be created by multiplying elements of an iterator.
+pub behavior Product[A = This] {
+    /// Method which takes an iterator and generates Self from the elements
+    /// by taking the "product" of the items.
+    pub func product[I: Iterator](iter: I) -> This where I::Item = A
+}
+
+// Implementations for primitive integer types
+impl Sum for I8 {
+    pub func sum[I: Iterator](mut iter: I) -> I8 where I::Item = I8 {
+        let mut acc: I8 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for I8 {
+    pub func product[I: Iterator](mut iter: I) -> I8 where I::Item = I8 {
+        let mut acc: I8 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for I16 {
+    pub func sum[I: Iterator](mut iter: I) -> I16 where I::Item = I16 {
+        let mut acc: I16 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for I16 {
+    pub func product[I: Iterator](mut iter: I) -> I16 where I::Item = I16 {
+        let mut acc: I16 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for I32 {
+    pub func sum[I: Iterator](mut iter: I) -> I32 where I::Item = I32 {
+        let mut acc: I32 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for I32 {
+    pub func product[I: Iterator](mut iter: I) -> I32 where I::Item = I32 {
+        let mut acc: I32 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for I64 {
+    pub func sum[I: Iterator](mut iter: I) -> I64 where I::Item = I64 {
+        let mut acc: I64 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for I64 {
+    pub func product[I: Iterator](mut iter: I) -> I64 where I::Item = I64 {
+        let mut acc: I64 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for U8 {
+    pub func sum[I: Iterator](mut iter: I) -> U8 where I::Item = U8 {
+        let mut acc: U8 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for U8 {
+    pub func product[I: Iterator](mut iter: I) -> U8 where I::Item = U8 {
+        let mut acc: U8 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for U16 {
+    pub func sum[I: Iterator](mut iter: I) -> U16 where I::Item = U16 {
+        let mut acc: U16 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for U16 {
+    pub func product[I: Iterator](mut iter: I) -> U16 where I::Item = U16 {
+        let mut acc: U16 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for U32 {
+    pub func sum[I: Iterator](mut iter: I) -> U32 where I::Item = U32 {
+        let mut acc: U32 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for U32 {
+    pub func product[I: Iterator](mut iter: I) -> U32 where I::Item = U32 {
+        let mut acc: U32 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for U64 {
+    pub func sum[I: Iterator](mut iter: I) -> U64 where I::Item = U64 {
+        let mut acc: U64 = 0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for U64 {
+    pub func product[I: Iterator](mut iter: I) -> U64 where I::Item = U64 {
+        let mut acc: U64 = 1
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for F32 {
+    pub func sum[I: Iterator](mut iter: I) -> F32 where I::Item = F32 {
+        let mut acc: F32 = 0.0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for F32 {
+    pub func product[I: Iterator](mut iter: I) -> F32 where I::Item = F32 {
+        let mut acc: F32 = 1.0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Sum for F64 {
+    pub func sum[I: Iterator](mut iter: I) -> F64 where I::Item = F64 {
+        let mut acc: F64 = 0.0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc + x,
+                Nothing => return acc
+            }
+        }
+    }
+}
+
+impl Product for F64 {
+    pub func product[I: Iterator](mut iter: I) -> F64 where I::Item = F64 {
+        let mut acc: F64 = 1.0
+        loop {
+            when iter.next() {
+                Just(x) => acc = acc * x,
+                Nothing => return acc
+            }
+        }
+    }
+}

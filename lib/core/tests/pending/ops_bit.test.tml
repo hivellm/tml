@@ -1,0 +1,288 @@
+// Tests for bitwise operators (core::ops::bit)
+use test
+
+use core::ops::{Not, BitAndAssign, BitOrAssign, BitXorAssign, ShlAssign, ShrAssign}
+
+// ============================================================================
+// Not Tests (Bool)
+// ============================================================================
+
+@test
+func test_not_bool_true() -> I32 {
+    let a: Bool = true
+    let result: Bool = a.negate()
+    assert(result == false, "not true should be false")
+    return 0
+}
+
+@test
+func test_not_bool_false() -> I32 {
+    let a: Bool = false
+    let result: Bool = a.negate()
+    assert(result == true, "not false should be true")
+    return 0
+}
+
+// ============================================================================
+// Bitwise AND Assignment Tests
+// ============================================================================
+
+@test
+func test_bitand_assign_i32() -> I32 {
+    var a: I32 = 15   // 0b1111
+    let b: I32 = 10   // 0b1010
+    a.bitand_assign(b)
+    assert_eq(a, 10, "15 &= 10 should be 10")  // 0b1010
+    return 0
+}
+
+@test
+func test_bitand_assign_u32() -> I32 {
+    var a: U32 = 255 as U32    // 0xFF
+    let b: U32 = 15 as U32     // 0x0F
+    a.bitand_assign(b)
+    let expected: U32 = 15 as U32
+    assert(a == expected, "255 &= 15 should be 15")
+    return 0
+}
+
+@test
+func test_bitand_assign_i64() -> I32 {
+    var a: I64 = 0b11110000
+    let b: I64 = 0b10101010
+    a.bitand_assign(b)
+    assert_eq(a, 0b10100000, "bitand_assign should work on I64")
+    return 0
+}
+
+// ============================================================================
+// Bitwise OR Assignment Tests
+// ============================================================================
+
+@test
+func test_bitor_assign_i32() -> I32 {
+    var a: I32 = 12   // 0b1100
+    let b: I32 = 10   // 0b1010
+    a.bitor_assign(b)
+    assert_eq(a, 14, "12 |= 10 should be 14")  // 0b1110
+    return 0
+}
+
+@test
+func test_bitor_assign_u32() -> I32 {
+    var a: U32 = 240 as U32    // 0xF0
+    let b: U32 = 15 as U32     // 0x0F
+    a.bitor_assign(b)
+    let expected: U32 = 255 as U32
+    assert(a == expected, "240 |= 15 should be 255")
+    return 0
+}
+
+@test
+func test_bitor_assign_zero() -> I32 {
+    var a: I32 = 42
+    let b: I32 = 0
+    a.bitor_assign(b)
+    assert_eq(a, 42, "x |= 0 should be x")
+    return 0
+}
+
+// ============================================================================
+// Bitwise XOR Assignment Tests
+// ============================================================================
+
+@test
+func test_bitxor_assign_i32() -> I32 {
+    var a: I32 = 12   // 0b1100
+    let b: I32 = 10   // 0b1010
+    a.bitxor_assign(b)
+    assert_eq(a, 6, "12 ^= 10 should be 6")  // 0b0110
+    return 0
+}
+
+@test
+func test_bitxor_assign_same_value() -> I32 {
+    var a: I32 = 42
+    let b: I32 = 42
+    a.bitxor_assign(b)
+    assert_eq(a, 0, "x ^= x should be 0")
+    return 0
+}
+
+@test
+func test_bitxor_assign_u64() -> I32 {
+    var a: U64 = 0b11110000 as U64
+    let b: U64 = 0b10101010 as U64
+    a.bitxor_assign(b)
+    let expected: U64 = 0b01011010 as U64
+    assert(a == expected, "XOR should toggle bits")
+    return 0
+}
+
+// ============================================================================
+// Shift Left Assignment Tests
+// ============================================================================
+
+@test
+func test_shl_assign_i32() -> I32 {
+    var a: I32 = 1
+    a.shl_assign(4)
+    assert_eq(a, 16, "1 <<= 4 should be 16")
+    return 0
+}
+
+@test
+func test_shl_assign_u32() -> I32 {
+    var a: U32 = 3 as U32
+    a.shl_assign(2)
+    let expected: U32 = 12 as U32
+    assert(a == expected, "3 <<= 2 should be 12")
+    return 0
+}
+
+@test
+func test_shl_assign_zero_shift() -> I32 {
+    var a: I32 = 42
+    a.shl_assign(0)
+    assert_eq(a, 42, "x <<= 0 should be x")
+    return 0
+}
+
+@test
+func test_shl_assign_i64() -> I32 {
+    var a: I64 = 1
+    a.shl_assign(32)
+    assert_eq(a, 4294967296, "1 <<= 32 should be 2^32")
+    return 0
+}
+
+// ============================================================================
+// Shift Right Assignment Tests
+// ============================================================================
+
+@test
+func test_shr_assign_i32() -> I32 {
+    var a: I32 = 16
+    a.shr_assign(4)
+    assert_eq(a, 1, "16 >>= 4 should be 1")
+    return 0
+}
+
+@test
+func test_shr_assign_u32() -> I32 {
+    var a: U32 = 256 as U32
+    a.shr_assign(4)
+    let expected: U32 = 16 as U32
+    assert(a == expected, "256 >>= 4 should be 16")
+    return 0
+}
+
+@test
+func test_shr_assign_zero_shift() -> I32 {
+    var a: I32 = 42
+    a.shr_assign(0)
+    assert_eq(a, 42, "x >>= 0 should be x")
+    return 0
+}
+
+@test
+func test_shr_assign_large() -> I32 {
+    var a: I64 = 4294967296  // 2^32
+    a.shr_assign(16)
+    assert_eq(a, 65536, "2^32 >>= 16 should be 2^16")
+    return 0
+}
+
+// ============================================================================
+// Combined Bitwise Operations Tests
+// ============================================================================
+
+@test
+func test_bit_manipulation_sequence() -> I32 {
+    var flags: I32 = 0
+
+    // Set bits 0 and 2
+    flags.bitor_assign(1)   // bit 0
+    flags.bitor_assign(4)   // bit 2
+    assert_eq(flags, 5, "flags should be 5 (bits 0 and 2)")
+
+    // Toggle bit 1
+    flags.bitxor_assign(2)
+    assert_eq(flags, 7, "flags should be 7 (bits 0, 1, 2)")
+
+    // Clear bit 0
+    flags.bitand_assign(0b11111110)
+    assert_eq(flags, 6, "flags should be 6 (bits 1 and 2)")
+
+    return 0
+}
+
+@test
+func test_shift_multiplication() -> I32 {
+    // Shifting left by n is equivalent to multiplying by 2^n
+    var a: I32 = 5
+    a.shl_assign(3)  // 5 * 8
+    assert_eq(a, 40, "5 << 3 should be 40")
+    return 0
+}
+
+@test
+func test_shift_division() -> I32 {
+    // Shifting right by n is equivalent to dividing by 2^n
+    var a: I32 = 80
+    a.shr_assign(3)  // 80 / 8
+    assert_eq(a, 10, "80 >> 3 should be 10")
+    return 0
+}
+
+// ============================================================================
+// Bitwise with Different Integer Sizes
+// ============================================================================
+
+@test
+func test_bitand_assign_i8() -> I32 {
+    var a: I8 = 127 as I8
+    let b: I8 = 15 as I8
+    a.bitand_assign(b)
+    let expected: I8 = 15 as I8
+    assert(a == expected, "127 &= 15 should be 15 for I8")
+    return 0
+}
+
+@test
+func test_bitor_assign_i16() -> I32 {
+    var a: I16 = 256 as I16
+    let b: I16 = 255 as I16
+    a.bitor_assign(b)
+    let expected: I16 = 511 as I16
+    assert(a == expected, "256 |= 255 should be 511 for I16")
+    return 0
+}
+
+@test
+func test_bitxor_assign_u8() -> I32 {
+    var a: U8 = 255 as U8
+    let b: U8 = 170 as U8  // 0b10101010
+    a.bitxor_assign(b)
+    let expected: U8 = 85 as U8  // 0b01010101
+    assert(a == expected, "255 ^= 170 should be 85 for U8")
+    return 0
+}
+
+@test
+func test_shl_assign_u16() -> I32 {
+    var a: U16 = 1 as U16
+    a.shl_assign(8)
+    let expected: U16 = 256 as U16
+    assert(a == expected, "1 <<= 8 should be 256 for U16")
+    return 0
+}
+
+@test
+func test_shr_assign_u8() -> I32 {
+    var a: U8 = 128 as U8
+    a.shr_assign(4)
+    let expected: U8 = 8 as U8
+    assert(a == expected, "128 >>= 4 should be 8 for U8")
+    return 0
+}

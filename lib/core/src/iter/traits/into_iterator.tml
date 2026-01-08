@@ -1,0 +1,13 @@
+//! The IntoIterator behavior.
+
+/// Conversion into an [`Iterator`].
+pub behavior IntoIterator {
+    /// The type of elements being iterated over.
+    type Item
+
+    /// The iterator type returned.
+    type IntoIter: Iterator
+
+    /// Creates an iterator from a value.
+    pub func into_iter(this) -> This::IntoIter
+}

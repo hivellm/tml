@@ -1,0 +1,69 @@
+//! The Filter adapter.
+//!
+//! This module provides the `Filter` iterator adapter which yields only
+//! elements matching a predicate.
+
+// ============================================================================
+// Filter Adapter
+// ============================================================================
+
+/// An iterator that yields only elements matching a predicate.
+///
+/// This struct is created by the [`filter`] function. See its documentation
+/// for more details.
+///
+/// # Notes
+///
+/// `Filter` is lazy - the predicate is only called when elements are
+/// consumed.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(5, 10)
+/// let filtered: Filter[RepeatNI32, func(ref I32) -> Bool] = filter(iter, do(x: ref I32) -> Bool { *x > 3 })
+/// ```
+pub type Filter[I, P] {
+    iter: I,
+    pred: P
+}
+
+impl[I: Iterator, P] Iterator for Filter[I, P] where P = func(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if this.pred(ref item) {
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields only elements matching a predicate.
+///
+/// The closure `pred` is called on a reference to each element. Only elements
+/// for which `pred` returns `true` are yielded.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(42, 5)
+/// let even_only: Filter[RepeatNI32, func(ref I32) -> Bool] = filter(nums, do(x: ref I32) -> Bool { *x % 2 == 0 })
+/// ```
+pub func filter[I: Iterator, P](iter: I, pred: P) -> Filter[I, P] where P = func(ref I::Item) -> Bool {
+    return Filter { iter: iter, pred: pred }
+}

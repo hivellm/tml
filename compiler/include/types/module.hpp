@@ -20,11 +20,12 @@ struct StructDef;
 struct EnumDef;
 struct BehaviorDef;
 
-// Re-exported symbol info
+// Re-exported symbol info from pub use declarations
 struct ReExport {
-    std::string local_name;    // Name as it appears in this module
-    std::string source_module; // Original module path
-    std::string source_name;   // Original symbol name
+    std::string source_path;          // Full source module path (e.g., "core::iter::traits")
+    bool is_glob = false;             // Whether this is a glob import (pub use foo::*)
+    std::vector<std::string> symbols; // Specific symbols if not glob (pub use foo::{a, b})
+    std::optional<std::string> alias; // Optional alias (pub use foo as bar)
 };
 
 // Represents a single module with its symbols

@@ -1,0 +1,479 @@
+//! Debug formatting builder helpers.
+//!
+//! This module provides builder types for creating consistent `Debug`
+//! implementations. These builders handle formatting details like indentation,
+//! field separators, and brackets automatically.
+//!
+//! # Available Builders
+//!
+//! | Builder | Use Case | Example Output |
+//! |---------|----------|----------------|
+//! | [`DebugStruct`] | Named structs | `Point { x: 10, y: 20 }` |
+//! | [`DebugTuple`] | Tuple structs | `Point(10, 20)` |
+//! | [`DebugList`] | Lists/arrays | `[1, 2, 3]` |
+//! | [`DebugSet`] | Sets | `{1, 2, 3}` |
+//! | [`DebugMap`] | Maps | `{"key": "value"}` |
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::fmt::{Debug, DebugStruct}
+//!
+//! pub type Person {
+//!     name: Str,
+//!     age: I32
+//! }
+//!
+//! impl Debug for Person {
+//!     pub func debug_string(this) -> Str {
+//!         return DebugStruct::new("Person")
+//!             .field("name", this.name.debug_string())
+//!             .field("age", this.age.debug_string())
+//!             .finish()
+//!     }
+//! }
+//!
+//! let p = Person { name: "Alice", age: 30 }
+//! println(p.debug_string())  // Person { name: "Alice", age: 30 }
+//! ```
+
+// ============================================================================
+// DebugStruct Builder
+// ============================================================================
+
+/// A builder for creating `Debug` output for struct-like types.
+///
+/// Creates output in the format: `TypeName { field1: value1, field2: value2 }`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugStruct}
+///
+/// pub type Point { x: I64, y: I64 }
+///
+/// impl Debug for Point {
+///     pub func debug_string(this) -> Str {
+///         return DebugStruct::new("Point")
+///             .field("x", this.x.debug_string())
+///             .field("y", this.y.debug_string())
+///             .finish()
+///     }
+/// }
+///
+/// let p = Point { x: 10, y: 20 }
+/// println(p.debug_string())  // "Point { x: 10, y: 20 }"
+/// ```
+///
+/// # Finishing Without Fields
+///
+/// For unit structs or structs you want to show without fields:
+///
+/// ```tml
+/// return DebugStruct::new("UnitType").finish()
+/// // Output: "UnitType"
+/// ```
+pub type DebugStruct {
+    name: Str,
+    fields: Str,
+    has_fields: Bool
+}
+
+impl DebugStruct {
+    /// Creates a new `DebugStruct` builder with the given type name.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let builder = DebugStruct::new("MyType")
+    /// ```
+    pub func new(name: Str) -> DebugStruct {
+        return DebugStruct {
+            name: name,
+            fields: "",
+            has_fields: false
+        }
+    }
+
+    /// Adds a field to the struct output.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The field name
+    /// * `value` - The debug string representation of the field value
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// DebugStruct::new("Point")
+    ///     .field("x", "10")
+    ///     .field("y", "20")
+    ///     .finish()  // "Point { x: 10, y: 20 }"
+    /// ```
+    pub func field(this, name: Str, value: Str) -> DebugStruct {
+        var fields: Str = this.fields
+        if this.has_fields {
+            fields = fields + ", "
+        }
+        fields = fields + name + ": " + value
+        return DebugStruct {
+            name: this.name,
+            fields: fields,
+            has_fields: true
+        }
+    }
+
+    /// Adds a field with non-exhaustive marker.
+    ///
+    /// Use this to indicate that not all fields are shown:
+    ///
+    /// ```tml
+    /// DebugStruct::new("LargeStruct")
+    ///     .field("important", "value")
+    ///     .finish_non_exhaustive()  // "LargeStruct { important: value, .. }"
+    /// ```
+    pub func field_with(this, name: Str, value: Str) -> DebugStruct {
+        return this.field(name, value)
+    }
+
+    /// Finishes building and returns the formatted string.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let result = DebugStruct::new("Point")
+    ///     .field("x", "10")
+    ///     .finish()  // "Point { x: 10 }"
+    /// ```
+    pub func finish(this) -> Str {
+        if this.has_fields {
+            return this.name + " \{ " + this.fields + " \}"
+        }
+        return this.name
+    }
+
+    /// Finishes with a non-exhaustive marker (`..`).
+    ///
+    /// Indicates that there are more fields not shown:
+    ///
+    /// ```tml
+    /// let result = DebugStruct::new("Config")
+    ///     .field("visible", "true")
+    ///     .finish_non_exhaustive()  // "Config { visible: true, .. }"
+    /// ```
+    pub func finish_non_exhaustive(this) -> Str {
+        if this.has_fields {
+            return this.name + " \{ " + this.fields + ", .. \}"
+        }
+        return this.name + " \{ .. \}"
+    }
+}
+
+// ============================================================================
+// DebugTuple Builder
+// ============================================================================
+
+/// A builder for creating `Debug` output for tuple-like types.
+///
+/// Creates output in the format: `TypeName(value1, value2)`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugTuple}
+///
+/// pub type Pair[A, B] { first: A, second: B }
+///
+/// impl[A: Debug, B: Debug] Debug for Pair[A, B] {
+///     pub func debug_string(this) -> Str {
+///         return DebugTuple::new("Pair")
+///             .field(this.first.debug_string())
+///             .field(this.second.debug_string())
+///             .finish()
+///     }
+/// }
+///
+/// let p = Pair { first: 1, second: "hello" }
+/// println(p.debug_string())  // "Pair(1, \"hello\")"
+/// ```
+pub type DebugTuple {
+    name: Str,
+    fields: Str,
+    has_fields: Bool
+}
+
+impl DebugTuple {
+    /// Creates a new `DebugTuple` builder with the given type name.
+    pub func new(name: Str) -> DebugTuple {
+        return DebugTuple {
+            name: name,
+            fields: "",
+            has_fields: false
+        }
+    }
+
+    /// Adds a field to the tuple output.
+    ///
+    /// Unlike `DebugStruct`, tuple fields don't have names.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// DebugTuple::new("Point")
+    ///     .field("10")
+    ///     .field("20")
+    ///     .finish()  // "Point(10, 20)"
+    /// ```
+    pub func field(this, value: Str) -> DebugTuple {
+        var fields: Str = this.fields
+        if this.has_fields {
+            fields = fields + ", "
+        }
+        fields = fields + value
+        return DebugTuple {
+            name: this.name,
+            fields: fields,
+            has_fields: true
+        }
+    }
+
+    /// Finishes building and returns the formatted string.
+    pub func finish(this) -> Str {
+        if this.has_fields {
+            return this.name + "(" + this.fields + ")"
+        }
+        return this.name + "()"
+    }
+
+    /// Finishes with a non-exhaustive marker.
+    pub func finish_non_exhaustive(this) -> Str {
+        if this.has_fields {
+            return this.name + "(" + this.fields + ", ..)"
+        }
+        return this.name + "(..)"
+    }
+}
+
+// ============================================================================
+// DebugList Builder
+// ============================================================================
+
+/// A builder for creating `Debug` output for list-like types.
+///
+/// Creates output in the format: `[value1, value2, value3]`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugList}
+///
+/// pub type IntList { items: List[I32] }
+///
+/// impl Debug for IntList {
+///     pub func debug_string(this) -> Str {
+///         var builder = DebugList::new()
+///         for item in this.items {
+///             builder = builder.entry(item.debug_string())
+///         }
+///         return builder.finish()
+///     }
+/// }
+///
+/// let list = IntList { items: [1, 2, 3] }
+/// println(list.debug_string())  // "[1, 2, 3]"
+/// ```
+pub type DebugList {
+    entries: Str,
+    has_entries: Bool
+}
+
+impl DebugList {
+    /// Creates a new `DebugList` builder.
+    pub func new() -> DebugList {
+        return DebugList {
+            entries: "",
+            has_entries: false
+        }
+    }
+
+    /// Adds an entry to the list.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// DebugList::new()
+    ///     .entry("1")
+    ///     .entry("2")
+    ///     .entry("3")
+    ///     .finish()  // "[1, 2, 3]"
+    /// ```
+    pub func entry(this, value: Str) -> DebugList {
+        var entries: Str = this.entries
+        if this.has_entries {
+            entries = entries + ", "
+        }
+        entries = entries + value
+        return DebugList {
+            entries: entries,
+            has_entries: true
+        }
+    }
+
+    /// Adds multiple entries from an iterator.
+    ///
+    /// Note: This is a convenience method that adds entries one at a time.
+    pub func entries(this, values: Str) -> DebugList {
+        // For simplicity, this just adds the string as-is
+        // In a full implementation, this would iterate
+        return this.entry(values)
+    }
+
+    /// Finishes building and returns the formatted string.
+    pub func finish(this) -> Str {
+        return "[" + this.entries + "]"
+    }
+}
+
+// ============================================================================
+// DebugSet Builder
+// ============================================================================
+
+/// A builder for creating `Debug` output for set-like types.
+///
+/// Creates output in the format: `{value1, value2, value3}`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugSet}
+///
+/// impl Debug for MySet {
+///     pub func debug_string(this) -> Str {
+///         var builder = DebugSet::new()
+///         for item in this.items {
+///             builder = builder.entry(item.debug_string())
+///         }
+///         return builder.finish()
+///     }
+/// }
+/// ```
+pub type DebugSet {
+    entries: Str,
+    has_entries: Bool
+}
+
+impl DebugSet {
+    /// Creates a new `DebugSet` builder.
+    pub func new() -> DebugSet {
+        return DebugSet {
+            entries: "",
+            has_entries: false
+        }
+    }
+
+    /// Adds an entry to the set.
+    pub func entry(this, value: Str) -> DebugSet {
+        var entries: Str = this.entries
+        if this.has_entries {
+            entries = entries + ", "
+        }
+        entries = entries + value
+        return DebugSet {
+            entries: entries,
+            has_entries: true
+        }
+    }
+
+    /// Finishes building and returns the formatted string.
+    pub func finish(this) -> Str {
+        return "\{" + this.entries + "\}"
+    }
+}
+
+// ============================================================================
+// DebugMap Builder
+// ============================================================================
+
+/// A builder for creating `Debug` output for map-like types.
+///
+/// Creates output in the format: `{key1: value1, key2: value2}`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::fmt::{Debug, DebugMap}
+///
+/// impl Debug for MyMap {
+///     pub func debug_string(this) -> Str {
+///         var builder = DebugMap::new()
+///         for (key, value) in this.entries {
+///             builder = builder.entry(key.debug_string(), value.debug_string())
+///         }
+///         return builder.finish()
+///     }
+/// }
+/// ```
+pub type DebugMap {
+    entries: Str,
+    has_entries: Bool
+}
+
+impl DebugMap {
+    /// Creates a new `DebugMap` builder.
+    pub func new() -> DebugMap {
+        return DebugMap {
+            entries: "",
+            has_entries: false
+        }
+    }
+
+    /// Adds a key-value entry to the map.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// DebugMap::new()
+    ///     .entry("\"name\"", "\"Alice\"")
+    ///     .entry("\"age\"", "30")
+    ///     .finish()  // {"name": "Alice", "age": 30}
+    /// ```
+    pub func entry(this, key: Str, value: Str) -> DebugMap {
+        var entries: Str = this.entries
+        if this.has_entries {
+            entries = entries + ", "
+        }
+        entries = entries + key + ": " + value
+        return DebugMap {
+            entries: entries,
+            has_entries: true
+        }
+    }
+
+    /// Adds a key (without value yet).
+    ///
+    /// Call `value()` after this to complete the entry.
+    pub func key(this, k: Str) -> DebugMapKey {
+        return DebugMapKey {
+            map: this,
+            key_str: k
+        }
+    }
+
+    /// Finishes building and returns the formatted string.
+    pub func finish(this) -> Str {
+        return "\{" + this.entries + "\}"
+    }
+}
+
+/// Intermediate builder for a map key waiting for its value.
+pub type DebugMapKey {
+    map: DebugMap,
+    key_str: Str
+}
+
+impl DebugMapKey {
+    /// Sets the value for the pending key entry.
+    pub func value(this, v: Str) -> DebugMap {
+        return this.map.entry(this.key_str, v)
+    }
+}

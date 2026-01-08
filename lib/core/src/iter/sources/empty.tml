@@ -1,0 +1,62 @@
+//! The Empty iterator source.
+//!
+//! This module provides the `Empty` iterator which yields no elements.
+
+// ============================================================================
+// Empty Iterator
+// ============================================================================
+
+/// An iterator that yields nothing.
+///
+/// This struct is created by the [`empty`] function. See its documentation
+/// for more details.
+///
+/// `Empty` is useful when you need an iterator of a specific type that
+/// produces no elements. This can be helpful as a default or placeholder
+/// in generic code.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let nothing: Empty[I32] = empty()
+/// // nothing.next() always returns Nothing
+/// ```
+pub type Empty[T] {
+    _marker: Unit
+}
+
+impl[T] Iterator for Empty[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        return Nothing
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let zero: I64 = 0
+        return (zero, Just(zero))
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields nothing.
+///
+/// This is useful when you need an empty iterator of a specific type,
+/// for example as a default or placeholder in generic code.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let iter: Empty[String] = empty()
+/// // iter.next() returns Nothing immediately
+/// ```
+pub func empty[T]() -> Empty[T] {
+    return Empty { _marker: () }
+}

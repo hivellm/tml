@@ -1,0 +1,83 @@
+//! The OnceWith iterator source.
+//!
+//! This module provides the `OnceWith` iterator which yields a single element
+//! computed lazily from a generator function.
+
+// ============================================================================
+// OnceWith Iterator
+// ============================================================================
+
+/// An iterator that yields a single element computed lazily.
+///
+/// This struct is created by the [`once_with`] function. See its documentation
+/// for more details.
+///
+/// Unlike [`Once`], the element is not computed when the iterator is created,
+/// but only when `next()` is first called. This is useful for expensive
+/// computations that should be deferred.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: OnceWith[func() -> I32] = once_with(do() -> I32 { 42 })
+/// // The closure is called when next() is invoked
+/// ```
+pub type OnceWith[F] {
+    gen: Maybe[F]
+}
+
+impl[F, T] Iterator for OnceWith[F] where F = func() -> T {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        when this.gen {
+            Just(f) => {
+                this.gen = Nothing
+                return Just(f())
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when this.gen {
+            Just(_) => {
+                let one: I64 = 1
+                return (one, Just(one))
+            },
+            Nothing => {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that yields a single element computed lazily.
+///
+/// The generator function is only called when `next()` is first called,
+/// not when the iterator is created. This allows deferring expensive
+/// computations until they are actually needed.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// let expensive = once_with(do() -> I32 {
+///     // This computation is deferred
+///     compute_expensive_value()
+/// })
+/// // Generator not called yet
+/// // expensive.next() calls the generator and returns Just(result)
+/// // expensive.next() returns Nothing
+/// ```
+pub func once_with[F, T](gen: F) -> OnceWith[F] where F = func() -> T {
+    return OnceWith { gen: Just(gen) }
+}

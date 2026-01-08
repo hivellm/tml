@@ -1,0 +1,119 @@
+// Tests for drop and ManuallyDrop (core::ops::drop)
+use test
+
+use core::ops::drop::ManuallyDrop
+
+// ============================================================================
+// ManuallyDrop Tests
+// ============================================================================
+
+@test
+func test_manually_drop_new() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(42)
+    let value: I64 = *md.get()
+    assert_eq(value, 42, "ManuallyDrop should hold 42")
+    return 0
+}
+
+@test
+func test_manually_drop_get() -> I32 {
+    let md: ManuallyDrop[I32] = ManuallyDrop::new(100)
+    let ref_value: ref I32 = md.get()
+    assert_eq(*ref_value, 100, "get() should return reference to value")
+    return 0
+}
+
+@test
+func test_manually_drop_get_mut() -> I32 {
+    var md: ManuallyDrop[I32] = ManuallyDrop::new(10)
+    let ref_mut: mut ref I32 = md.get_mut()
+    *ref_mut = 20
+    assert_eq(*md.get(), 20, "get_mut() should allow mutation")
+    return 0
+}
+
+@test
+func test_manually_drop_into_inner() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(999)
+    let value: I64 = ManuallyDrop::into_inner(md)
+    assert_eq(value, 999, "into_inner should return the value")
+    return 0
+}
+
+@test
+func test_manually_drop_debug_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(42)
+    let s: Str = md.debug_string()
+    assert(s == "ManuallyDrop(42)", "debug_string should be 'ManuallyDrop(42)'")
+    return 0
+}
+
+@test
+func test_manually_drop_to_string() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::new(123)
+    let s: Str = md.to_string()
+    assert(s == "123", "to_string should return inner value's string")
+    return 0
+}
+
+@test
+func test_manually_drop_default() -> I32 {
+    let md: ManuallyDrop[I64] = ManuallyDrop::default()
+    assert_eq(*md.get(), 0, "default ManuallyDrop[I64] should hold 0")
+    return 0
+}
+
+@test
+func test_manually_drop_duplicate() -> I32 {
+    let md1: ManuallyDrop[I32] = ManuallyDrop::new(42)
+    let md2: ManuallyDrop[I32] = md1.duplicate()
+    assert_eq(*md1.get(), 42, "original should still have 42")
+    assert_eq(*md2.get(), 42, "duplicate should have 42")
+    return 0
+}
+
+// ============================================================================
+// ManuallyDrop with different types
+// ============================================================================
+
+@test
+func test_manually_drop_i8() -> I32 {
+    let md: ManuallyDrop[I8] = ManuallyDrop::new(127 as I8)
+    let value: I8 = *md.get()
+    let expected: I8 = 127 as I8
+    assert(value == expected, "should hold I8 value")
+    return 0
+}
+
+@test
+func test_manually_drop_bool() -> I32 {
+    let md_true: ManuallyDrop[Bool] = ManuallyDrop::new(true)
+    let md_false: ManuallyDrop[Bool] = ManuallyDrop::new(false)
+    assert(*md_true.get() == true, "should hold true")
+    assert(*md_false.get() == false, "should hold false")
+    return 0
+}
+
+// Note: Drop behavior tests cannot be fully tested without runtime support
+// for calling drop() automatically. The following tests document the API.
+
+// ============================================================================
+// drop_in_place documentation test
+// ============================================================================
+
+// Note: drop_in_place is a lowlevel function that requires unsafe context
+// It cannot be tested directly in safe code, but we document its existence
+
+@test
+func test_drop_behavior_documented() -> I32 {
+    // The Drop behavior is defined as:
+    // pub behavior Drop {
+    //     func drop(mut this)
+    // }
+    //
+    // Types implementing Drop will have their drop() method called
+    // automatically when they go out of scope.
+    //
+    // This test just ensures the module compiles correctly.
+    return 0
+}

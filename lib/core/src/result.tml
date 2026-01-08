@@ -69,8 +69,7 @@
 //! - [`or_else`] provides fallback operations
 
 use core::iter::Iterator
-use core::cmp::PartialEq
-use core::clone::Duplicate
+// PartialEq, Duplicate are builtin behaviors - no import needed
 use core::default::Default
 
 // ============================================================================

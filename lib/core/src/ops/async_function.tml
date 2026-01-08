@@ -1,0 +1,397 @@
+//! Async function behaviors.
+//!
+//! This module defines behaviors for async callable types, mirroring the
+//! `Fn`, `FnMut`, and `FnOnce` behaviors but for async contexts.
+//!
+//! # Overview
+//!
+//! Async functions are functions that return a `Future` when called.
+//! This module provides three behaviors:
+//!
+//! - [`AsyncFn`]: Async functions callable by shared reference
+//! - [`AsyncFnMut`]: Async functions callable by mutable reference
+//! - [`AsyncFnOnce`]: Async functions callable by value (consuming)
+//!
+//! # Relationship with Fn Traits
+//!
+//! Just as `Fn`, `FnMut`, and `FnOnce` form a hierarchy for sync functions,
+//! `AsyncFn`, `AsyncFnMut`, and `AsyncFnOnce` form a parallel hierarchy:
+//!
+//! ```text
+//! AsyncFnOnce
+//!     ^
+//!     |
+//! AsyncFnMut
+//!     ^
+//!     |
+//!  AsyncFn
+//! ```
+//!
+//! Every `AsyncFn` is also `AsyncFnMut`, and every `AsyncFnMut` is also
+//! `AsyncFnOnce`.
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::AsyncFn
+//!
+//! async func fetch_data(url: Str) -> Str {
+//!     // ... async implementation
+//! }
+//!
+//! // fetch_data implements AsyncFn[(Str,), Output = Str]
+//! ```
+
+// Display, Debug are builtins - no import needed
+
+// ============================================================================
+// AsyncFnOnce Behavior
+// ============================================================================
+
+/// An async version of `FnOnce` - callable once by value.
+///
+/// This is the most general async function behavior. All async closures
+/// and async functions implement this behavior.
+///
+/// # Type Parameters
+///
+/// - `Args` - A tuple of the argument types
+///
+/// # Associated Types
+///
+/// - `Output` - The output type of the async function (what the Future resolves to)
+/// - `CallOnceFuture` - The concrete Future type returned by `call_once`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::AsyncFnOnce
+///
+/// async func consume_and_process(data: Vec[I32]) -> I64 {
+///     // This function takes ownership of data
+///     let sum = data.iter().sum()
+///     return sum
+/// }
+///
+/// // Can only be called once since it consumes its environment
+/// let result = consume_and_process(my_data).await
+/// ```
+pub behavior AsyncFnOnce[Args] {
+    /// The type returned by the async function after awaiting.
+    type Output
+
+    /// The future returned from `call_once`.
+    type CallOnceFuture  // : Future[Output = Self::Output]
+
+    /// Calls the async function, consuming self.
+    ///
+    /// Returns a Future that, when awaited, produces `Self::Output`.
+    func call_once(this, args: Args) -> Self::CallOnceFuture
+}
+
+// ============================================================================
+// AsyncFnMut Behavior
+// ============================================================================
+
+/// An async version of `FnMut` - callable by mutable reference.
+///
+/// Async functions that may mutate their captured environment implement
+/// this behavior. Every `AsyncFnMut` is also `AsyncFnOnce`.
+///
+/// # Type Parameters
+///
+/// - `Args` - A tuple of the argument types
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::AsyncFnMut
+///
+/// var counter = 0
+/// let increment = async do() {
+///     counter = counter + 1
+///     return counter
+/// }
+///
+/// // Can be called multiple times with mutable access
+/// let a = increment().await  // 1
+/// let b = increment().await  // 2
+/// ```
+pub behavior AsyncFnMut[Args]: AsyncFnOnce[Args] {
+    /// The future returned from `call_mut`.
+    type CallMutFuture  // : Future[Output = Self::Output]
+
+    /// Calls the async function with mutable access to self.
+    func call_mut(mut this, args: Args) -> Self::CallMutFuture
+}
+
+// ============================================================================
+// AsyncFn Behavior
+// ============================================================================
+
+/// An async version of `Fn` - callable by shared reference.
+///
+/// Async functions that don't mutate their captured environment implement
+/// this behavior. Every `AsyncFn` is also `AsyncFnMut` and `AsyncFnOnce`.
+///
+/// # Type Parameters
+///
+/// - `Args` - A tuple of the argument types
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::AsyncFn
+///
+/// let base_url = "https://api.example.com"
+/// let fetch = async do(path: Str) -> Str {
+///     // base_url is captured by reference, not mutated
+///     return http_get(base_url + path).await
+/// }
+///
+/// // Can be called multiple times concurrently
+/// let (a, b) = join(fetch("/users"), fetch("/posts")).await
+/// ```
+pub behavior AsyncFn[Args]: AsyncFnMut[Args] {
+    /// The future returned from `call`.
+    type CallFuture  // : Future[Output = Self::Output]
+
+    /// Calls the async function with shared access to self.
+    func call(this, args: Args) -> Self::CallFuture
+}
+
+// ============================================================================
+// IntoFuture Behavior
+// ============================================================================
+
+/// Conversion into a `Future`.
+///
+/// Types implementing `IntoFuture` can be converted into a future and
+/// then awaited. This is what makes `.await` work on various types.
+///
+/// # How .await Works
+///
+/// When you write `expr.await`, the compiler:
+/// 1. Calls `expr.into_future()` to get a `Future`
+/// 2. Polls that future to completion
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::IntoFuture
+///
+/// pub type Request {
+///     url: Str
+/// }
+///
+/// impl IntoFuture for Request {
+///     type Output = Response
+///     type IntoFuture = RequestFuture
+///
+///     pub func into_future(this) -> RequestFuture {
+///         return RequestFuture::new(this)
+///     }
+/// }
+///
+/// // Now Request can be awaited directly:
+/// let response = Request { url: "https://example.com" }.await
+/// ```
+pub behavior IntoFuture {
+    /// The output type of the future.
+    type Output
+
+    /// The future type that this converts into.
+    type IntoFuture  // : Future[Output = Self::Output]
+
+    /// Converts this value into a future.
+    func into_future(this) -> Self::IntoFuture
+}
+
+// ============================================================================
+// AsyncDrop Behavior
+// ============================================================================
+
+/// Async cleanup when a value goes out of scope.
+///
+/// Similar to `Drop`, but allows async operations during cleanup.
+/// This is useful for resources that need async operations to properly
+/// clean up, such as network connections or database handles.
+///
+/// # Important Notes
+///
+/// - `AsyncDrop` requires an async runtime to be active
+/// - If dropped outside an async context, behavior is implementation-defined
+/// - Consider providing a sync `close()` method as an alternative
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::AsyncDrop
+///
+/// pub type Connection {
+///     handle: ConnectionHandle
+/// }
+///
+/// impl AsyncDrop for Connection {
+///     async pub func drop(mut this) {
+///         // Send goodbye message before closing
+///         this.handle.send("QUIT").await
+///         this.handle.close().await
+///     }
+/// }
+/// ```
+pub behavior AsyncDrop {
+    /// Performs async cleanup.
+    ///
+    /// Called automatically when the value goes out of scope in an
+    /// async context.
+    async func drop(mut this)
+}
+
+// ============================================================================
+// Helper Types
+// ============================================================================
+
+/// A future that is immediately ready with a value.
+///
+/// This is useful for implementing async functions that don't actually
+/// need to do any async work.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ops::Ready
+///
+/// let fut = Ready::new(42)
+/// let value = fut.await  // Returns 42 immediately
+/// ```
+pub type ReadyFuture[T] {
+    value: Maybe[T]
+}
+
+impl[T] ReadyFuture[T] {
+    /// Creates a future that is immediately ready with the given value.
+    pub func new(value: T) -> ReadyFuture[T] {
+        return ReadyFuture { value: Just(value) }
+    }
+}
+
+// Note: Future behavior implementation would go here
+// impl[T] Future for ReadyFuture[T] {
+//     type Output = T
+//
+//     pub func poll(mut this, cx: mut ref Context) -> Poll[T] {
+//         when this.value.take() {
+//             Just(v) => return Poll::Ready(v),
+//             Nothing => panic("ReadyFuture polled after completion")
+//         }
+//     }
+// }
+
+impl[T] IntoFuture for ReadyFuture[T] {
+    type Output = T
+    type IntoFuture = ReadyFuture[T]
+
+    pub func into_future(this) -> ReadyFuture[T] {
+        return this
+    }
+}
+
+/// A future that never completes.
+///
+/// Useful for creating infinite loops or as a placeholder.
+pub type PendingFuture[T] {
+    _marker: Unit  // PhantomData equivalent
+}
+
+impl[T] PendingFuture[T] {
+    /// Creates a future that will never resolve.
+    pub func new() -> PendingFuture[T] {
+        return PendingFuture { _marker: () }
+    }
+}
+
+// Note: Future behavior implementation would go here
+// impl[T] Future for PendingFuture[T] {
+//     type Output = T
+//
+//     pub func poll(mut this, cx: mut ref Context) -> Poll[T] {
+//         return Poll::Pending
+//     }
+// }
+
+/// Wraps a synchronous function to be used in async context.
+///
+/// The function is called synchronously when the future is first polled.
+pub type LazyFuture[F, T] {
+    func_opt: Maybe[F],
+    _output: Unit  // PhantomData[T]
+}
+
+impl[F, T] LazyFuture[F, T] {
+    /// Creates a lazy future from a function.
+    pub func new(f: F) -> LazyFuture[F, T] {
+        return LazyFuture {
+            func_opt: Just(f),
+            _output: ()
+        }
+    }
+}
+
+// ============================================================================
+// Poll Type (for Future implementations)
+// ============================================================================
+
+/// Indicates whether a future is ready or pending.
+///
+/// This is the return type of `Future::poll`.
+pub type Poll[T] {
+    /// The future completed and produced a value.
+    Ready(T),
+    /// The future is not yet ready.
+    Pending
+}
+
+impl[T] Poll[T] {
+    /// Returns `true` if this is `Ready`.
+    pub func is_ready(this) -> Bool {
+        when this {
+            Poll::Ready(_) => return true,
+            Poll::Pending => return false
+        }
+    }
+
+    /// Returns `true` if this is `Pending`.
+    pub func is_pending(this) -> Bool {
+        when this {
+            Poll::Ready(_) => return false,
+            Poll::Pending => return true
+        }
+    }
+
+    /// Maps the value if ready.
+    pub func map[U](this, f: func(T) -> U) -> Poll[U] {
+        when this {
+            Poll::Ready(t) => return Poll::Ready(f(t)),
+            Poll::Pending => return Poll::Pending
+        }
+    }
+}
+
+impl[T: Debug] Debug for Poll[T] {
+    pub func debug_string(this) -> Str {
+        when this {
+            Poll::Ready(t) => return "Ready(" + t.debug_string() + ")",
+            Poll::Pending => return "Pending"
+        }
+    }
+}
+
+impl[T: Display] Display for Poll[T] {
+    pub func to_string(this) -> Str {
+        when this {
+            Poll::Ready(t) => return "Ready(" + t.to_string() + ")",
+            Poll::Pending => return "Pending"
+        }
+    }
+}

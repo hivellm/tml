@@ -18,6 +18,66 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 return it->second.reg;
             }
         }
+        // Handle field access: ref this.field, ref x.field
+        if (unary.operand->is<parser::FieldExpr>()) {
+            const auto& field_expr = unary.operand->as<parser::FieldExpr>();
+
+            // Get the struct pointer
+            std::string struct_ptr;
+            types::TypePtr base_type = infer_expr_type(*field_expr.object);
+
+            if (field_expr.object->is<parser::IdentExpr>()) {
+                const auto& ident = field_expr.object->as<parser::IdentExpr>();
+                auto local_it = locals_.find(ident.name);
+                if (local_it != locals_.end()) {
+                    struct_ptr = local_it->second.reg;
+                }
+            }
+
+            if (!struct_ptr.empty() && base_type) {
+                // Get the field index
+                std::string type_name;
+                std::vector<types::TypePtr> type_args;
+                if (base_type->is<types::NamedType>()) {
+                    type_name = base_type->as<types::NamedType>().name;
+                    type_args = base_type->as<types::NamedType>().type_args;
+                } else if (base_type->is<types::RefType>()) {
+                    auto inner = base_type->as<types::RefType>().inner;
+                    if (inner && inner->is<types::NamedType>()) {
+                        type_name = inner->as<types::NamedType>().name;
+                        type_args = inner->as<types::NamedType>().type_args;
+                    }
+                }
+
+                if (!type_name.empty()) {
+                    auto struct_def = env_.lookup_struct(type_name);
+                    int field_idx = -1;
+                    if (struct_def) {
+                        for (size_t i = 0; i < struct_def->fields.size(); ++i) {
+                            if (struct_def->fields[i].first == field_expr.field) {
+                                field_idx = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (field_idx >= 0) {
+                        std::string llvm_struct_type = llvm_type_name(type_name);
+                        if (!type_args.empty()) {
+                            llvm_struct_type =
+                                "%struct." + mangle_struct_name(type_name, type_args);
+                        }
+
+                        std::string field_ptr = fresh_reg();
+                        emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type +
+                                  ", ptr " + struct_ptr + ", i32 0, i32 " +
+                                  std::to_string(field_idx));
+                        last_expr_type_ = "ptr";
+                        return field_ptr;
+                    }
+                }
+            }
+        }
         report_error("Can only take reference of variables", unary.span);
         last_expr_type_ = "ptr";
         return "null";

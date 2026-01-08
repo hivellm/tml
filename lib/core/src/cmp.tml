@@ -577,8 +577,46 @@ impl Eq for U64 {}
 impl Eq for Bool {}
 
 // ============================================================================
-// Ord implementations for integer primitives
+// PartialOrd/Ord implementations for signed integer primitives
 // ============================================================================
+
+impl PartialOrd for I8 {
+    pub func partial_cmp(this, other: ref I8) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for I8 {
+    pub func cmp(this, other: ref I8) -> Ordering {
+        let o: I8 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl PartialOrd for I16 {
+    pub func partial_cmp(this, other: ref I16) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for I16 {
+    pub func cmp(this, other: ref I16) -> Ordering {
+        let o: I16 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
 
 impl PartialOrd for I32 {
     pub func partial_cmp(this, other: ref I32) -> Maybe[Ordering] {
@@ -615,6 +653,148 @@ impl Ord for I64 {
             return Ordering::Greater
         }
         return Ordering::Equal
+    }
+}
+
+// ============================================================================
+// PartialOrd/Ord implementations for unsigned integer primitives
+// ============================================================================
+
+impl PartialOrd for U8 {
+    pub func partial_cmp(this, other: ref U8) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for U8 {
+    pub func cmp(this, other: ref U8) -> Ordering {
+        let o: U8 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl PartialOrd for U16 {
+    pub func partial_cmp(this, other: ref U16) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for U16 {
+    pub func cmp(this, other: ref U16) -> Ordering {
+        let o: U16 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl PartialOrd for U32 {
+    pub func partial_cmp(this, other: ref U32) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for U32 {
+    pub func cmp(this, other: ref U32) -> Ordering {
+        let o: U32 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+impl PartialOrd for U64 {
+    pub func partial_cmp(this, other: ref U64) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for U64 {
+    pub func cmp(this, other: ref U64) -> Ordering {
+        let o: U64 = *other
+        if this < o {
+            return Ordering::Less
+        }
+        if this > o {
+            return Ordering::Greater
+        }
+        return Ordering::Equal
+    }
+}
+
+// ============================================================================
+// PartialOrd for floating point (no Ord - NaN breaks totality)
+// ============================================================================
+
+impl PartialOrd for F32 {
+    pub func partial_cmp(this, other: ref F32) -> Maybe[Ordering] {
+        let o: F32 = *other
+        // NaN comparisons return Nothing
+        if this != this or o != o {
+            return Nothing
+        }
+        if this < o {
+            return Just(Ordering::Less)
+        }
+        if this > o {
+            return Just(Ordering::Greater)
+        }
+        return Just(Ordering::Equal)
+    }
+}
+
+impl PartialOrd for F64 {
+    pub func partial_cmp(this, other: ref F64) -> Maybe[Ordering] {
+        let o: F64 = *other
+        // NaN comparisons return Nothing
+        if this != this or o != o {
+            return Nothing
+        }
+        if this < o {
+            return Just(Ordering::Less)
+        }
+        if this > o {
+            return Just(Ordering::Greater)
+        }
+        return Just(Ordering::Equal)
+    }
+}
+
+// ============================================================================
+// PartialOrd/Ord for Bool
+// ============================================================================
+
+impl PartialOrd for Bool {
+    pub func partial_cmp(this, other: ref Bool) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl Ord for Bool {
+    pub func cmp(this, other: ref Bool) -> Ordering {
+        let o: Bool = *other
+        // false < true
+        if this == o {
+            return Ordering::Equal
+        }
+        if this {
+            return Ordering::Greater  // true > false
+        }
+        return Ordering::Less  // false < true
     }
 }
 

@@ -2,6 +2,8 @@
 // Handles: generate_pending_instantiations, require_enum_instantiation, require_func_instantiation
 
 #include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "parser/parser.hpp"
 
 namespace tml::codegen {
 
@@ -100,6 +102,7 @@ void LLVMIRGen::generate_pending_instantiations() {
             pending_impl_method_instantiations_.clear();
 
             for (const auto& pim : pending) {
+                // First check locally defined impls
                 auto impl_it = pending_generic_impls_.find(pim.base_type_name);
                 if (impl_it != pending_generic_impls_.end()) {
                     const auto& impl = *impl_it->second;
@@ -109,6 +112,72 @@ void LLVMIRGen::generate_pending_instantiations() {
                             gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
                                                           impl.generics);
                             break;
+                        }
+                    }
+                } else if (env_.module_registry()) {
+                    // Check imported modules - need to re-parse to get impl AST
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    bool found = false;
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        if (found)
+                            break;
+
+                        // Check if this module has the struct
+                        auto struct_it = mod.structs.find(pim.base_type_name);
+                        if (struct_it == mod.structs.end())
+                            continue;
+
+                        // Re-parse the module source to get impl AST
+                        if (mod.source_code.empty())
+                            continue;
+
+                        auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
+                        lexer::Lexer lex(source);
+                        auto tokens = lex.tokenize();
+                        if (lex.has_errors())
+                            continue;
+
+                        parser::Parser mod_parser(std::move(tokens));
+                        auto module_name_stem = mod.name;
+                        if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
+                            module_name_stem = module_name_stem.substr(pos + 2);
+                        }
+                        auto parse_result = mod_parser.parse_module(module_name_stem);
+                        if (!std::holds_alternative<parser::Module>(parse_result))
+                            continue;
+
+                        const auto& parsed_mod = std::get<parser::Module>(parse_result);
+
+                        // Find the impl block for this type
+                        for (const auto& decl : parsed_mod.decls) {
+                            if (!decl->is<parser::ImplDecl>())
+                                continue;
+                            const auto& impl_decl = decl->as<parser::ImplDecl>();
+
+                            // Check if this impl is for our type
+                            if (!impl_decl.self_type)
+                                continue;
+                            if (!impl_decl.self_type->is<parser::NamedType>())
+                                continue;
+                            const auto& target = impl_decl.self_type->as<parser::NamedType>();
+                            if (target.path.segments.empty())
+                                continue;
+                            if (target.path.segments.back() != pim.base_type_name)
+                                continue;
+
+                            // Find the method
+                            for (size_t mi = 0; mi < impl_decl.methods.size(); ++mi) {
+                                const auto& method_decl = impl_decl.methods[mi];
+                                if (method_decl.name == pim.method_name) {
+                                    gen_impl_method_instantiation(pim.mangled_type_name,
+                                                                  method_decl, pim.type_subs,
+                                                                  impl_decl.generics);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found)
+                                break;
                         }
                     }
                 }

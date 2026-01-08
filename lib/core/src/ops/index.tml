@@ -1,0 +1,82 @@
+//! Indexing operators.
+//!
+//! This module provides behaviors for indexing operations:
+//! - [`Index`] for immutable indexing `container[idx]`
+//! - [`IndexMut`] for mutable indexing `container[idx] = value`
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::ops::{Index, IndexMut}
+//!
+//! pub type Matrix {
+//!     data: List[F64],
+//!     rows: I64,
+//!     cols: I64
+//! }
+//!
+//! impl Index[(I64, I64)] for Matrix {
+//!     type Output = F64
+//!
+//!     pub func index(this, idx: (I64, I64)) -> ref F64 {
+//!         let (row, col) = idx
+//!         return ref this.data.get(row * this.cols + col)
+//!     }
+//! }
+//!
+//! let m = Matrix { ... }
+//! let value = m[(1, 2)]  // Access row 1, column 2
+//! ```
+
+// ============================================================================
+// Index Behavior
+// ============================================================================
+
+/// Used for immutable indexing operations (`container[idx]`).
+///
+/// Types implementing `Index` can be indexed with square brackets.
+///
+/// # Examples
+///
+/// ```tml
+/// let list = vec![1, 2, 3]
+/// let second = list[1]  // 2
+/// ```
+pub behavior Index[Idx] {
+    /// The returned type after indexing.
+    type Output
+
+    /// Performs the indexing operation.
+    ///
+    /// # Panics
+    ///
+    /// May panic if the index is out of bounds.
+    func index(this, idx: Idx) -> ref This::Output
+}
+
+// ============================================================================
+// IndexMut Behavior
+// ============================================================================
+
+/// Used for mutable indexing operations (`container[idx] = value`).
+///
+/// Types implementing `IndexMut` can be mutably indexed with square brackets.
+///
+/// # Prerequisite
+///
+/// `IndexMut` requires `Index` to be implemented with the same `Idx` type.
+///
+/// # Examples
+///
+/// ```tml
+/// let mut list = vec![1, 2, 3]
+/// list[1] = 42  // list is now [1, 42, 3]
+/// ```
+pub behavior IndexMut[Idx]: Index[Idx] {
+    /// Performs the mutable indexing operation.
+    ///
+    /// # Panics
+    ///
+    /// May panic if the index is out of bounds.
+    func index_mut(mut this, idx: Idx) -> mut ref This::Output
+}

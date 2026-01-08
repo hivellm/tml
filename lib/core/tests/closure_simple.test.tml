@@ -1,0 +1,11 @@
+// Simple closure test
+use test
+
+@test
+func test_closure_direct() -> I32 {
+    let double: func(I32) -> I32 = do(x: I32) -> I32 { x * 2 }
+    let result: I32 = double(5)
+    assert_eq(result, 10, "5 * 2 should be 10")
+    return 0
+}
+

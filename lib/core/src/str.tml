@@ -669,3 +669,50 @@ pub func concat(a: Str, b: Str) -> Str {
 pub func concat_all(parts: List[Str]) -> Str {
     return join(parts, "")
 }
+
+// ============================================================================
+// Str Methods
+// ============================================================================
+
+impl Str {
+    /// Returns the length of this string in bytes.
+    ///
+    /// Note: This returns the byte length, not the character count. For UTF-8
+    /// strings with multi-byte characters, this may differ from the visible
+    /// character count.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let s = "hello"
+    /// assert(s.len() == 5)
+    /// ```
+    pub func len(this) -> I64 {
+        return lowlevel { str_len(this) }
+    }
+
+    /// Returns `true` if this string is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// assert("".is_empty())
+    /// assert(not "hello".is_empty())
+    /// ```
+    pub func is_empty(this) -> Bool {
+        return this.len() == 0
+    }
+
+    /// Returns the underlying bytes of this string as a byte slice.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let s = "abc"
+    /// let bytes: ref [U8] = s.as_bytes()
+    /// assert(bytes[0] == 97)  // 'a'
+    /// ```
+    pub func as_bytes(this) -> ref [U8] {
+        return lowlevel { str_as_bytes(this) }
+    }
+}

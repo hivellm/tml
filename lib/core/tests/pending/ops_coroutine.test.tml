@@ -1,0 +1,241 @@
+// Tests for coroutine types (core::ops::coroutine)
+use test
+
+use core::ops::coroutine::{CoroutineState, CoroutineResumePoint, Ready}
+
+// ============================================================================
+// CoroutineState Tests
+// ============================================================================
+
+@test
+func test_coroutine_state_yielded() -> I32 {
+    let state: CoroutineState[I64, Str] = CoroutineState::Yielded(42)
+    assert(state.is_yielded(), "should be yielded")
+    assert(not state.is_complete(), "should not be complete")
+    return 0
+}
+
+@test
+func test_coroutine_state_complete() -> I32 {
+    let state: CoroutineState[I64, Str] = CoroutineState::Complete("done")
+    assert(not state.is_yielded(), "should not be yielded")
+    assert(state.is_complete(), "should be complete")
+    return 0
+}
+
+@test
+func test_coroutine_state_debug_yielded() -> I32 {
+    let state: CoroutineState[I64, I64] = CoroutineState::Yielded(42)
+    let s: Str = state.debug_string()
+    assert(s == "Yielded(42)", "debug should be 'Yielded(42)'")
+    return 0
+}
+
+@test
+func test_coroutine_state_debug_complete() -> I32 {
+    let state: CoroutineState[I64, I64] = CoroutineState::Complete(99)
+    let s: Str = state.debug_string()
+    assert(s == "Complete(99)", "debug should be 'Complete(99)'")
+    return 0
+}
+
+@test
+func test_coroutine_state_to_string_yielded() -> I32 {
+    let state: CoroutineState[I64, I64] = CoroutineState::Yielded(10)
+    let s: Str = state.to_string()
+    assert(s == "Yielded(10)", "to_string should be 'Yielded(10)'")
+    return 0
+}
+
+@test
+func test_coroutine_state_to_string_complete() -> I32 {
+    let state: CoroutineState[I64, I64] = CoroutineState::Complete(20)
+    let s: Str = state.to_string()
+    assert(s == "Complete(20)", "to_string should be 'Complete(20)'")
+    return 0
+}
+
+// ============================================================================
+// CoroutineResumePoint Tests
+// ============================================================================
+
+@test
+func test_resume_point_start() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::Start
+    let s: Str = rp.debug_string()
+    assert(s == "Start", "debug should be 'Start'")
+    return 0
+}
+
+@test
+func test_resume_point_at_yield() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::AtYield(5)
+    let s: Str = rp.debug_string()
+    assert(s == "AtYield(5)", "debug should be 'AtYield(5)'")
+    return 0
+}
+
+@test
+func test_resume_point_finished() -> I32 {
+    let rp: CoroutineResumePoint = CoroutineResumePoint::Finished
+    let s: Str = rp.debug_string()
+    assert(s == "Finished", "debug should be 'Finished'")
+    return 0
+}
+
+// ============================================================================
+// Ready Generator Tests
+// ============================================================================
+
+@test
+func test_ready_new() -> I32 {
+    let ready: Ready[I64] = Ready::new(42)
+    // Ready wraps a value in Just
+    when ready.value {
+        Just(v) => {
+            assert_eq(v, 42, "should hold 42")
+            return 0
+        },
+        Nothing => {
+            assert(false, "should not be Nothing")
+            return 1
+        }
+    }
+}
+
+@test
+func test_ready_exhausted() -> I32 {
+    let ready: Ready[I64] = Ready::exhausted()
+    when ready.value {
+        Just(_) => {
+            assert(false, "should not be Just")
+            return 1
+        },
+        Nothing => {
+            return 0
+        }
+    }
+}
+
+@test
+func test_ready_resume_yields_then_completes() -> I32 {
+    var ready: Ready[I64] = Ready::new(42)
+
+    // First resume should yield the value
+    let state1: CoroutineState[I64, Unit] = ready.resume()
+    when state1 {
+        CoroutineState::Yielded(v) => {
+            assert_eq(v, 42, "should yield 42")
+        },
+        CoroutineState::Complete(_) => {
+            assert(false, "first call should yield, not complete")
+            return 1
+        }
+    }
+
+    // Second resume should complete
+    let state2: CoroutineState[I64, Unit] = ready.resume()
+    when state2 {
+        CoroutineState::Yielded(_) => {
+            assert(false, "second call should complete, not yield")
+            return 1
+        },
+        CoroutineState::Complete(_) => {
+            // Expected
+        }
+    }
+
+    return 0
+}
+
+@test
+func test_ready_exhausted_resume() -> I32 {
+    var ready: Ready[I64] = Ready::exhausted()
+
+    // Resume on exhausted should immediately complete
+    let state: CoroutineState[I64, Unit] = ready.resume()
+    when state {
+        CoroutineState::Yielded(_) => {
+            assert(false, "exhausted should not yield")
+            return 1
+        },
+        CoroutineState::Complete(_) => {
+            return 0
+        }
+    }
+}
+
+// ============================================================================
+// Manual Coroutine-like Implementation
+// ============================================================================
+
+// A simple counter that acts like a generator
+pub type CounterGen {
+    current: I64,
+    max: I64
+}
+
+impl CounterGen {
+    pub func new(max: I64) -> CounterGen {
+        return CounterGen { current: 0, max: max }
+    }
+
+    pub func resume(mut this) -> CoroutineState[I64, Str] {
+        if this.current < this.max {
+            let value: I64 = this.current
+            this.current = this.current + 1
+            return CoroutineState::Yielded(value)
+        }
+        return CoroutineState::Complete("done")
+    }
+}
+
+@test
+func test_counter_gen_yields_values() -> I32 {
+    var gen: CounterGen = CounterGen::new(3)
+
+    // Should yield 0, 1, 2, then complete
+    let s0: CoroutineState[I64, Str] = gen.resume()
+    when s0 {
+        CoroutineState::Yielded(v) => assert_eq(v, 0, "should yield 0"),
+        _ => { assert(false, "should yield 0"); return 1 }
+    }
+
+    let s1: CoroutineState[I64, Str] = gen.resume()
+    when s1 {
+        CoroutineState::Yielded(v) => assert_eq(v, 1, "should yield 1"),
+        _ => { assert(false, "should yield 1"); return 1 }
+    }
+
+    let s2: CoroutineState[I64, Str] = gen.resume()
+    when s2 {
+        CoroutineState::Yielded(v) => assert_eq(v, 2, "should yield 2"),
+        _ => { assert(false, "should yield 2"); return 1 }
+    }
+
+    let s3: CoroutineState[I64, Str] = gen.resume()
+    when s3 {
+        CoroutineState::Complete(msg) => assert(msg == "done", "should complete with 'done'"),
+        _ => { assert(false, "should complete"); return 1 }
+    }
+
+    return 0
+}
+
+@test
+func test_counter_gen_empty() -> I32 {
+    var gen: CounterGen = CounterGen::new(0)
+
+    // Should immediately complete
+    let state: CoroutineState[I64, Str] = gen.resume()
+    when state {
+        CoroutineState::Complete(msg) => {
+            assert(msg == "done", "should complete with 'done'")
+            return 0
+        },
+        _ => {
+            assert(false, "should complete immediately")
+            return 1
+        }
+    }
+}

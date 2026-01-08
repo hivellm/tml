@@ -1,0 +1,69 @@
+//! The Scan adapter.
+//!
+//! This module provides the `Scan` iterator adapter which maintains state
+//! while transforming elements.
+
+// ============================================================================
+// Scan Adapter
+// ============================================================================
+
+/// An iterator that maintains state while transforming elements.
+///
+/// This struct is created by the [`scan`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Running sum example
+/// var nums: RepeatNI32 = repeat_n_i32(1, 5)
+/// let running_sum = scan(nums, 0, do(state: mut ref I32, x: I32) -> Maybe[I32] {
+///     *state = *state + x
+///     Just(*state)
+/// })
+/// // Yields 1, 2, 3, 4, 5
+/// ```
+pub type Scan[I, St, F] {
+    iter: I,
+    state: St,
+    f: F
+}
+
+impl[I: Iterator, St, F, B] Iterator for Scan[I, St, F] where F = func(mut ref St, I::Item) -> Maybe[B] {
+    type Item = B
+
+    pub func next(mut this) -> Maybe[B] {
+        when this.iter.next() {
+            Just(item) => return this.f(mut ref this.state, item),
+            Nothing => return Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that maintains state while transforming elements.
+///
+/// `scan` is similar to `fold`, but instead of returning a single accumulated
+/// value, it yields each intermediate state. The function can also return
+/// `Nothing` to terminate early.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(2, 4)
+/// let factorials = scan(iter, 1, do(acc: mut ref I32, x: I32) -> Maybe[I32] {
+///     *acc = *acc * x
+///     Just(*acc)
+/// })
+/// // Yields 2, 4, 8, 16
+/// ```
+pub func scan[I: Iterator, St, F, B](iter: I, initial: St, f: F) -> Scan[I, St, F] where F = func(mut ref St, I::Item) -> Maybe[B] {
+    return Scan { iter: iter, state: initial, f: f }
+}

@@ -27,10 +27,8 @@
 //! This module provides only the `Duration` type. For getting the current
 //! time, see `std::time::Instant` and `std::time::SystemTime`.
 
-use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::ops::{Add, Sub}
-use core::fmt::{Display, Debug}
-use core::clone::{Duplicate, Copy}
 use core::default::Default
 
 // ============================================================================

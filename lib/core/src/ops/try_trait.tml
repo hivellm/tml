@@ -1,0 +1,172 @@
+//! The `Try` operator trait for early return.
+//!
+//! This module provides the behavior that powers the `?` operator,
+//! allowing early return on error or absence of value.
+//!
+//! # Examples
+//!
+//! ```tml
+//! func divide(a: I64, b: I64) -> Outcome[I64, Str] {
+//!     if b == 0 {
+//!         return Err("division by zero")
+//!     }
+//!     return Ok(a / b)
+//! }
+//!
+//! func calculate() -> Outcome[I64, Str] {
+//!     let x = divide(10, 2)?  // Returns early if Err
+//!     let y = divide(x, 2)?
+//!     return Ok(y)
+//! }
+//! ```
+
+// ============================================================================
+// Try Behavior
+// ============================================================================
+
+/// The behavior powering the `?` operator.
+///
+/// `Try` allows extracting the "success" value from a type and early-returning
+/// on the "failure" case.
+///
+/// # Types that implement Try
+///
+/// - `Outcome[T, E]` - Success is `Ok(T)`, failure is `Err(E)`
+/// - `Maybe[T]` - Success is `Just(T)`, failure is `Nothing`
+///
+/// # The ? Operator
+///
+/// When you use `?` on a value of type `T: Try`:
+///
+/// ```tml
+/// let value = maybe_error_value?
+/// ```
+///
+/// This expands to approximately:
+///
+/// ```tml
+/// let value = when maybe_error_value.branch() {
+///     ControlFlow::Continue(c) => c,
+///     ControlFlow::Break(b) => return Try::from_residual(b),
+/// }
+/// ```
+pub behavior Try {
+    /// The type of values produced when the operation succeeds.
+    type Output
+
+    /// The type of values produced when the operation fails.
+    type Residual
+
+    /// Constructs this type from a successful value.
+    func from_output(output: This::Output) -> Self
+
+    /// Constructs this type from a residual (failure) value.
+    func from_residual(residual: This::Residual) -> Self
+
+    /// Determines whether to continue or break early.
+    func branch(this) -> ControlFlow[This::Output, This::Residual]
+}
+
+// ============================================================================
+// ControlFlow Type
+// ============================================================================
+
+/// Indicates whether to continue or break early from an operation.
+///
+/// Used by the `?` operator to determine control flow.
+pub type ControlFlow[C, B] {
+    /// Continue with the given value.
+    Continue(C),
+    /// Break early with the given residual.
+    Break(B)
+}
+
+impl[C, B] ControlFlow[C, B] {
+    /// Returns `true` if this is `Continue`.
+    pub func is_continue(this) -> Bool {
+        when this {
+            ControlFlow::Continue(_) => return true,
+            ControlFlow::Break(_) => return false,
+        }
+    }
+
+    /// Returns `true` if this is `Break`.
+    pub func is_break(this) -> Bool {
+        when this {
+            ControlFlow::Continue(_) => return false,
+            ControlFlow::Break(_) => return true,
+        }
+    }
+}
+
+// ============================================================================
+// Try implementation for Outcome[T, E]
+// ============================================================================
+
+impl[T, E] Try for Outcome[T, E] {
+    type Output = T
+    type Residual = E
+
+    pub func from_output(output: T) -> Outcome[T, E] {
+        return Ok(output)
+    }
+
+    pub func from_residual(residual: E) -> Outcome[T, E] {
+        return Err(residual)
+    }
+
+    pub func branch(this) -> ControlFlow[T, E] {
+        when this {
+            Ok(v) => return ControlFlow::Continue(v),
+            Err(e) => return ControlFlow::Break(e),
+        }
+    }
+}
+
+// ============================================================================
+// Try implementation for Maybe[T]
+// ============================================================================
+
+impl[T] Try for Maybe[T] {
+    type Output = T
+    type Residual = Unit
+
+    pub func from_output(output: T) -> Maybe[T] {
+        return Just(output)
+    }
+
+    pub func from_residual(residual: Unit) -> Maybe[T] {
+        return Nothing
+    }
+
+    pub func branch(this) -> ControlFlow[T, Unit] {
+        when this {
+            Just(v) => return ControlFlow::Continue(v),
+            Nothing => return ControlFlow::Break(()),
+        }
+    }
+}
+
+// ============================================================================
+// FromResidual Behavior
+// ============================================================================
+
+/// Allows converting from a residual type to another Try type.
+///
+/// This enables `?` to work across different error types.
+pub behavior FromResidual[R] {
+    /// Creates this type from a residual.
+    func from_residual(residual: R) -> Self
+}
+
+impl[T, E] FromResidual[E] for Outcome[T, E] {
+    pub func from_residual(residual: E) -> Outcome[T, E] {
+        return Err(residual)
+    }
+}
+
+impl[T] FromResidual[Unit] for Maybe[T] {
+    pub func from_residual(residual: Unit) -> Maybe[T] {
+        return Nothing
+    }
+}

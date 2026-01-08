@@ -1,0 +1,71 @@
+// Test: Basic submodule support
+// Verifies that the compiler correctly resolves nested module paths
+use test
+use core::iter::*
+
+@test
+func test_once_i32_from_iter() -> I32 {
+    // OnceI32 is defined in sources.tml (sibling file in iter/)
+    var iter: OnceI32 = once_i32(42)
+    when iter.next() {
+        Just(x) => assert_eq(x, 42, "once_i32 should yield 42"),
+        Nothing => assert(false, "once_i32 should yield one value")
+    }
+    return 0
+}
+
+@test
+func test_once_i32_exhausts() -> I32 {
+    var iter: OnceI32 = once_i32(100)
+    // First call should yield
+    when iter.next() {
+        Just(_) => {},
+        Nothing => assert(false, "First next() should yield")
+    }
+    // Second call should be Nothing
+    when iter.next() {
+        Just(_) => assert(false, "Second next() should be Nothing"),
+        Nothing => {}
+    }
+    return 0
+}
+
+@test
+func test_repeat_n_i64() -> I32 {
+    var iter: RepeatNI64 = repeat_n_i64(7, 3)
+    var sum: I64 = 0
+    var count: I64 = 0
+
+    loop {
+        when iter.next() {
+            Just(x) => {
+                sum = sum + x
+                count = count + 1
+            },
+            Nothing => break
+        }
+    }
+
+    assert_eq(sum, 21, "repeat_n should sum to 21")
+    assert_eq(count, 3, "repeat_n should yield 3 times")
+    return 0
+}
+
+@test
+func test_take_adapter() -> I32 {
+    // Take is defined in adapters.tml (sibling file in iter/)
+    let src: OnceI32 = once_i32(5)
+    let taken: Take[OnceI32] = take(src, 1)
+    // Type exists and compiles - that's the test
+    return 0
+}
+
+@test
+func test_empty_i32() -> I32 {
+    var iter: EmptyI32 = empty_i32()
+    when iter.next() {
+        Just(_) => assert(false, "empty should never yield"),
+        Nothing => {}
+    }
+    return 0
+}

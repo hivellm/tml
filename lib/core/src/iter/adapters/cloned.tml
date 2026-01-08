@@ -1,0 +1,75 @@
+//! The Cloned adapter.
+//!
+//! This module provides the `Cloned` iterator adapter which clones borrowed
+//! elements, converting an iterator over references to an iterator over values.
+
+// Duplicate is a builtin behavior - no import needed
+
+// ============================================================================
+// Cloned Adapter
+// ============================================================================
+
+/// An iterator that clones borrowed elements.
+///
+/// This struct is created by the [`cloned`] function. See its documentation
+/// for more details.
+///
+/// `Cloned` is useful when you have an iterator yielding references (`ref T`)
+/// but need owned values (`T`). Each element is duplicated using the
+/// `Duplicate` behavior.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // If you have an iterator yielding [ref 1, ref 2, ref 3]
+/// // cloned yields [1, 2, 3] (owned copies)
+/// ```
+pub type Cloned[I] {
+    iter: I
+}
+
+impl[I: Iterator, T: Duplicate] Iterator for Cloned[I] where I::Item = ref T {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        when this.iter.next() {
+            Just(item) => return Just(item.duplicate()),
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        return this.iter.size_hint()
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that clones the elements of the underlying iterator.
+///
+/// This is useful when you have an iterator over `ref T` but need `T`.
+/// Each referenced element is duplicated using the `Duplicate` behavior.
+///
+/// # Requirements
+///
+/// The underlying type `T` must implement `Duplicate`. For types that
+/// implement `Copy`, consider using [`copied`] instead, which is more
+/// efficient for trivially copyable types.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// // Convert iterator over references to iterator over owned values
+/// // let refs: Iterator[Item = ref String] = ...
+/// // let owned: Cloned[...] = cloned(refs)
+/// // Now yields String instead of ref String
+/// ```
+pub func cloned[I: Iterator, T: Duplicate](iter: I) -> Cloned[I] where I::Item = ref T {
+    return Cloned { iter: iter }
+}

@@ -1,0 +1,88 @@
+//! Iterator adapter types.
+//!
+//! This module provides iterator adapters - types that wrap existing iterators
+//! and transform their output in various ways. Adapters are the building blocks
+//! of iterator chains.
+//!
+//! # Lazy Evaluation
+//!
+//! All adapters are lazy - they do no work until the iterator is consumed.
+//! Creating an adapter just sets up the transformation pipeline.
+//!
+//! # Available Adapters
+//!
+//! | Adapter | Description |
+//! |---------|-------------|
+//! | [`Take`] | Yields at most N elements |
+//! | [`Skip`] | Skips the first N elements |
+//! | [`Chain`] | Chains two iterators together |
+//! | [`Enumerate`] | Yields (index, element) pairs |
+//! | [`Zip`] | Zips two iterators into pairs |
+//! | [`StepBy`] | Steps through by a given amount |
+//! | [`Fuse`] | Guarantees Nothing forever after first Nothing |
+//! | [`Map`] | Transforms each element using a function |
+//! | [`Filter`] | Yields only elements matching a predicate |
+//! | [`FilterMap`] | Both filters and maps in one operation |
+//! | [`TakeWhile`] | Yields elements while predicate is true |
+//! | [`SkipWhile`] | Skips elements while predicate is true |
+//! | [`MapWhile`] | Maps while function returns Just |
+//! | [`Scan`] | Stateful transformation with early termination |
+//! | [`Inspect`] | Calls a function on each element (for debugging) |
+//! | [`Intersperse`] | Places separator between elements |
+//! | [`Peekable`] | Allows peeking at next element without consuming |
+//! | [`Cycle`] | Repeats an iterator endlessly |
+//! | [`FlatMap`] | Maps then flattens the result |
+//! | [`Flatten`] | Flattens one level of nesting |
+//! | [`Cloned`] | Clones borrowed elements (for Duplicate types) |
+//! | [`Copied`] | Copies borrowed elements (for Copy types) |
+//! | [`Rev`] | Reverses a double-ended iterator |
+
+// Re-export all adapters from submodules
+pub use take::*
+pub use skip::*
+pub use chain::*
+pub use enumerate::*
+pub use zip::*
+pub use step_by::*
+pub use fuse::*
+pub use map::*
+pub use filter::*
+pub use filter_map::*
+pub use take_while::*
+pub use skip_while::*
+pub use map_while::*
+pub use scan::*
+pub use inspect::*
+pub use intersperse::*
+pub use peekable::*
+pub use cycle::*
+pub use flat_map::*
+pub use flatten::*
+pub use cloned::*
+pub use copied::*
+pub use rev::*
+
+// Declare submodules
+pub mod take
+pub mod skip
+pub mod chain
+pub mod enumerate
+pub mod zip
+pub mod step_by
+pub mod fuse
+pub mod map
+pub mod filter
+pub mod filter_map
+pub mod take_while
+pub mod skip_while
+pub mod map_while
+pub mod scan
+pub mod inspect
+pub mod intersperse
+pub mod peekable
+pub mod cycle
+pub mod flat_map
+pub mod flatten
+pub mod cloned
+pub mod copied
+pub mod rev

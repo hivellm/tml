@@ -20,7 +20,7 @@
 //! ```
 
 use core::slice::{Slice}
-use core::cmp::PartialEq
+// PartialEq is a builtin behavior - no import needed
 
 // ============================================================================
 // Contains and Search

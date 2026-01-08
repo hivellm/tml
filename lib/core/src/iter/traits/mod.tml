@@ -1,0 +1,30 @@
+//! Iterator behaviors.
+//!
+//! This module contains all the core behaviors for TML's iterator system.
+//!
+//! # Core Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Iterator`] | The core behavior for all iterators |
+//! | [`IntoIterator`] | Conversion into an iterator |
+//! | [`FromIterator`] | Building collections from iterators |
+//! | [`DoubleEndedIterator`] | Iteration from both ends |
+//! | [`ExactSizeIterator`] | Iterators with known length |
+//!
+//! # Marker Behaviors
+//!
+//! | Marker | Description |
+//! |--------|-------------|
+//! | [`FusedIterator`] | Guarantees `Nothing` forever after first `Nothing` |
+//! | [`TrustedLen`] | Guarantees accurate `size_hint` bounds |
+//!
+//! # Accumulator Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Sum`] | Types that can be created by summing iterator elements |
+//! | [`Product`] | Types that can be created by multiplying iterator elements |
+
+// All .tml files in this directory are automatically part of this module
+// when loaded via mod.tml

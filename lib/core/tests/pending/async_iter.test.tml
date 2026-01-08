@@ -58,6 +58,3 @@ func test_repeat_negative_value() -> I32 {
 // - IntoAsyncIterator tests
 // - Empty type tests (requires PhantomData)
 
-func main() -> I32 {
-    return 0
-}

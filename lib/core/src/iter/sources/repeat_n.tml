@@ -1,0 +1,79 @@
+//! The RepeatN iterator source.
+//!
+//! This module provides the `RepeatN` iterator which yields an element
+//! a fixed number of times.
+
+// Duplicate is a builtin behavior - no import needed
+
+// ============================================================================
+// RepeatN Iterator
+// ============================================================================
+
+/// An iterator that repeats an element a fixed number of times.
+///
+/// This struct is created by the [`repeat_n`] function. See its documentation
+/// for more details.
+///
+/// Unlike [`Repeat`], this iterator has a finite length and will terminate
+/// after yielding the specified number of elements.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatN[I32] = repeat_n(42, 3)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Just(42)
+/// // iter.next() returns Nothing
+/// ```
+pub type RepeatN[T] {
+    value: T,
+    remaining: I64
+}
+
+impl[T: Duplicate] Iterator for RepeatN[T] {
+    type Item = T
+
+    pub func next(mut this) -> Maybe[T] {
+        if this.remaining <= 0 {
+            return Nothing
+        }
+        this.remaining = this.remaining - 1
+        return Just(this.value.duplicate())
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        var n: I64 = 0
+        if this.remaining > 0 {
+            n = this.remaining
+        }
+        return (n, Just(n))
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that repeats an element exactly `n` times.
+///
+/// Unlike [`repeat`], this iterator has a finite length and doesn't
+/// require limiting adapters. After `n` elements, the iterator terminates.
+///
+/// # Requirements
+///
+/// The element must implement `Duplicate` since it's cloned for each iteration.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatN[I32] = repeat_n(7, 4)
+/// // Yields 7, 7, 7, 7, then Nothing
+/// ```
+pub func repeat_n[T: Duplicate](value: T, n: I64) -> RepeatN[T] {
+    return RepeatN { value: value, remaining: n }
+}

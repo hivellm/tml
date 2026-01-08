@@ -3,8 +3,7 @@
 //! This module provides the [`Wrapping`] wrapper type which performs
 //! wrapping (modular) arithmetic operations.
 
-use core::cmp::{PartialEq, Eq, PartialOrd, Ord, Ordering}
-use core::clone::{Duplicate, Copy}
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Duplicate, Copy are builtins - no import needed
 use core::default::Default
 
 // ============================================================================

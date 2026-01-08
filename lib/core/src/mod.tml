@@ -44,7 +44,7 @@ pub mod marker   // Send, Sync, Sized, Unpin
 pub mod mem      // size_of, swap, replace, forget, ManuallyDrop
 pub mod cell     // Cell, RefCell
 pub mod str      // String utilities
-pub mod bstr     // ByteStr for non-UTF-8 byte strings
+// pub mod bstr     // ByteStr for non-UTF-8 byte strings (TODO: needs "ref this.field" codegen)
 pub mod char     // Char (Unicode scalar value), from_u32, DecodeUtf16
 pub mod ascii    // AsciiChar, escape_default
 pub mod unicode  // Unicode character classification and properties
@@ -58,7 +58,7 @@ pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
 pub mod collections  // List, HashMap behavior implementations
-pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr (no I/O)
+// pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr (TODO: fix syntax issues)
 pub mod range    // Range, RangeInclusive, RangeFrom, RangeTo, RangeFull
 pub mod num      // Zero, One, Bounded, Saturating, Wrapping, NonZero
 pub mod pin      // Pin, Unpin - pinned memory locations
@@ -66,3 +66,4 @@ pub mod task     // Poll, Context, Waker - async task primitives
 pub mod future     // Future behavior and combinators
 pub mod async_iter // AsyncIterator for async streams
 pub mod time       // Duration
+pub mod tuple      // Tuple implementations (Default, Clone, PartialEq, Ord, etc.)

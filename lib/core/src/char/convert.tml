@@ -5,7 +5,8 @@
 
 use core::option::Maybe
 use core::result::Outcome
-use core::fmt::{Display, Debug, Formatter, FormatResult}
+// Display, Debug are builtins - no import needed
+// Note: Formatter and FormatResult would need real imports if used
 use core::error::Error
 use core::char::Char
 

@@ -1,0 +1,90 @@
+//! The Skip adapter.
+//!
+//! This module provides the `Skip` iterator adapter which skips the first
+//! `n` elements of the underlying iterator.
+
+// ============================================================================
+// Skip Adapter
+// ============================================================================
+
+/// An iterator that skips the first `n` elements of the underlying iterator.
+///
+/// This struct is created by the [`skip`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(42, 5)
+/// let skipped: Skip[RepeatNI32] = skip(iter, 2)
+/// // Now yields only 3 elements instead of 5
+/// ```
+pub type Skip[I] {
+    iter: I,
+    remaining: I64
+}
+
+impl[I: Iterator] Iterator for Skip[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        loop {
+            if this.remaining <= 0 {
+                return this.iter.next()
+            }
+            this.remaining = this.remaining - 1
+            when this.iter.next() {
+                Just(_) => {},
+                Nothing => return Nothing
+            }
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        let hint: (I64, Maybe[I64]) = this.iter.size_hint()
+        let lo: I64 = hint.0
+        let hi: Maybe[I64] = hint.1
+
+        var lo_bound: I64 = lo - this.remaining
+        if lo_bound < 0 {
+            lo_bound = 0
+        }
+
+        let hi_bound: Maybe[I64] = when hi {
+            Just(h) => {
+                var bound: I64 = h - this.remaining
+                if bound < 0 {
+                    bound = 0
+                }
+                Just(bound)
+            },
+            Nothing => Nothing
+        }
+
+        return (lo_bound, hi_bound)
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that skips the first `n` elements.
+///
+/// After skipping `n` elements, the iterator yields the remaining elements
+/// from the underlying iterator.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(7, 10)
+/// let after_five: Skip[RepeatNI32] = skip(iter, 5)
+/// // Skips first 5, yields remaining 5
+/// ```
+pub func skip[I: Iterator](iter: I, n: I64) -> Skip[I] {
+    return Skip { iter: iter, remaining: n }
+}

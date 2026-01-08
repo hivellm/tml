@@ -439,3 +439,260 @@ impl[T, E] From[T] for Outcome[T, E] {
         return Ok(value)
     }
 }
+
+// ============================================================================
+// TryFrom narrowing conversions: larger to smaller (fallible)
+// ============================================================================
+// These conversions may fail if the value doesn't fit in the target type.
+
+/// Error type for numeric conversion failures.
+pub type TryFromIntError {
+    /// Attempted to convert a value that was too large for the target type.
+    Overflow,
+    /// Attempted to convert a negative value to an unsigned type.
+    NegativeToUnsigned
+}
+
+/// `I16` -> `I8` (narrowing conversion, may overflow)
+impl TryFrom[I16] for I8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I16) -> Outcome[I8, TryFromIntError] {
+        if value < -128 or value > 127 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I8)
+    }
+}
+
+/// `I32` -> `I8` (narrowing conversion, may overflow)
+impl TryFrom[I32] for I8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I32) -> Outcome[I8, TryFromIntError] {
+        if value < -128 or value > 127 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I8)
+    }
+}
+
+/// `I32` -> `I16` (narrowing conversion, may overflow)
+impl TryFrom[I32] for I16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I32) -> Outcome[I16, TryFromIntError] {
+        if value < -32768 or value > 32767 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I16)
+    }
+}
+
+/// `I64` -> `I8` (narrowing conversion, may overflow)
+impl TryFrom[I64] for I8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I64) -> Outcome[I8, TryFromIntError] {
+        if value < -128 or value > 127 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I8)
+    }
+}
+
+/// `I64` -> `I16` (narrowing conversion, may overflow)
+impl TryFrom[I64] for I16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I64) -> Outcome[I16, TryFromIntError] {
+        if value < -32768 or value > 32767 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I16)
+    }
+}
+
+/// `I64` -> `I32` (narrowing conversion, may overflow)
+impl TryFrom[I64] for I32 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I64) -> Outcome[I32, TryFromIntError] {
+        if value < -2147483648 or value > 2147483647 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I32)
+    }
+}
+
+/// `U16` -> `U8` (narrowing conversion, may overflow)
+impl TryFrom[U16] for U8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U16) -> Outcome[U8, TryFromIntError] {
+        if value > 255 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U8)
+    }
+}
+
+/// `U32` -> `U8` (narrowing conversion, may overflow)
+impl TryFrom[U32] for U8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U32) -> Outcome[U8, TryFromIntError] {
+        if value > 255 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U8)
+    }
+}
+
+/// `U32` -> `U16` (narrowing conversion, may overflow)
+impl TryFrom[U32] for U16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U32) -> Outcome[U16, TryFromIntError] {
+        if value > 65535 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U16)
+    }
+}
+
+/// `U64` -> `U8` (narrowing conversion, may overflow)
+impl TryFrom[U64] for U8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U64) -> Outcome[U8, TryFromIntError] {
+        if value > 255 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U8)
+    }
+}
+
+/// `U64` -> `U16` (narrowing conversion, may overflow)
+impl TryFrom[U64] for U16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U64) -> Outcome[U16, TryFromIntError] {
+        if value > 65535 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U16)
+    }
+}
+
+/// `U64` -> `U32` (narrowing conversion, may overflow)
+impl TryFrom[U64] for U32 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U64) -> Outcome[U32, TryFromIntError] {
+        if value > 4294967295 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as U32)
+    }
+}
+
+// ============================================================================
+// TryFrom signed/unsigned cross conversions
+// ============================================================================
+
+/// `I8` -> `U8` (may fail if negative)
+impl TryFrom[I8] for U8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I8) -> Outcome[U8, TryFromIntError] {
+        if value < 0 {
+            return Err(TryFromIntError::NegativeToUnsigned)
+        }
+        return Ok(value as U8)
+    }
+}
+
+/// `I16` -> `U16` (may fail if negative)
+impl TryFrom[I16] for U16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I16) -> Outcome[U16, TryFromIntError] {
+        if value < 0 {
+            return Err(TryFromIntError::NegativeToUnsigned)
+        }
+        return Ok(value as U16)
+    }
+}
+
+/// `I32` -> `U32` (may fail if negative)
+impl TryFrom[I32] for U32 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I32) -> Outcome[U32, TryFromIntError] {
+        if value < 0 {
+            return Err(TryFromIntError::NegativeToUnsigned)
+        }
+        return Ok(value as U32)
+    }
+}
+
+/// `I64` -> `U64` (may fail if negative)
+impl TryFrom[I64] for U64 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: I64) -> Outcome[U64, TryFromIntError] {
+        if value < 0 {
+            return Err(TryFromIntError::NegativeToUnsigned)
+        }
+        return Ok(value as U64)
+    }
+}
+
+/// `U8` -> `I8` (may overflow if > 127)
+impl TryFrom[U8] for I8 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U8) -> Outcome[I8, TryFromIntError] {
+        if value > 127 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I8)
+    }
+}
+
+/// `U16` -> `I16` (may overflow if > 32767)
+impl TryFrom[U16] for I16 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U16) -> Outcome[I16, TryFromIntError] {
+        if value > 32767 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I16)
+    }
+}
+
+/// `U32` -> `I32` (may overflow if > 2147483647)
+impl TryFrom[U32] for I32 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U32) -> Outcome[I32, TryFromIntError] {
+        if value > 2147483647 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I32)
+    }
+}
+
+/// `U64` -> `I64` (may overflow if > 9223372036854775807)
+impl TryFrom[U64] for I64 {
+    type Error = TryFromIntError
+
+    pub func try_from(value: U64) -> Outcome[I64, TryFromIntError] {
+        if value > 9223372036854775807 {
+            return Err(TryFromIntError::Overflow)
+        }
+        return Ok(value as I64)
+    }
+}

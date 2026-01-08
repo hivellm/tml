@@ -1,0 +1,81 @@
+//! The Fuse adapter.
+//!
+//! This module provides the `Fuse` iterator adapter which guarantees that
+//! `Nothing` is returned forever after the first `Nothing`.
+
+// ============================================================================
+// Fuse Adapter
+// ============================================================================
+
+/// An iterator that guarantees `Nothing` is returned forever after the first.
+///
+/// This struct is created by the [`fuse`] function. See its documentation
+/// for more details.
+///
+/// After an iterator returns `Nothing`, subsequent calls to `next()` may or
+/// may not return `Just` again. `Fuse` guarantees that once `Nothing` is
+/// returned, it will always return `Nothing`.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: OnceI32 = once_i32(42)
+/// let fused: Fuse[OnceI32] = fuse(iter)
+/// // After yielding 42, always returns Nothing
+/// ```
+pub type Fuse[I] {
+    iter: Maybe[I]
+}
+
+impl[I: Iterator] Iterator for Fuse[I] {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        when this.iter {
+            Just(it) => {
+                when it.next() {
+                    Just(item) => return Just(item),
+                    Nothing => {
+                        this.iter = Nothing
+                        return Nothing
+                    }
+                }
+            },
+            Nothing => return Nothing
+        }
+    }
+
+    pub func size_hint(this) -> (I64, Maybe[I64]) {
+        when this.iter {
+            Just(it) => return it.size_hint(),
+            Nothing => {
+                let zero: I64 = 0
+                return (zero, Just(zero))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates a fused iterator that guarantees `Nothing` forever after exhaustion.
+///
+/// Most iterators already behave this way, but `fuse` provides a guarantee.
+/// This is useful when interfacing with code that assumes an exhausted
+/// iterator stays exhausted.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: OnceI32 = once_i32(1)
+/// let safe: Fuse[OnceI32] = fuse(iter)
+/// ```
+pub func fuse[I: Iterator](iter: I) -> Fuse[I] {
+    return Fuse { iter: Just(iter) }
+}

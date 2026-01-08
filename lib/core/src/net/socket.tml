@@ -28,10 +28,9 @@
 //! let addr: SocketAddr = SocketAddr::V4(v4)
 //! ```
 
-use core::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd}
-use core::clone::{Copy, Duplicate}
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
 use core::hash::{Hash, Hasher}
-use core::fmt::{Debug, Display, Formatter, FormatResult}
+// Note: Formatter and FormatResult would need real imports if used
 use core::option::Maybe::{Just, Nothing}
 
 use super::ip::{IpAddr, Ipv4Addr, Ipv6Addr}

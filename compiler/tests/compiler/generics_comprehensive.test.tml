@@ -285,8 +285,3 @@ func test_outcome_both_variants() -> I32 {
 
     return 0
 }
-
-// Main entry point for running without @test framework
-func main() -> I32 {
-    return 0
-}

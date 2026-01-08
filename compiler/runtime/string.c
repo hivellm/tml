@@ -71,6 +71,25 @@ const char* str_substring(const char* s, int32_t start, int32_t len) {
     return str_buffer;
 }
 
+// str_slice(s: Str, start: I64, end: I64) -> Str (exclusive end)
+const char* str_slice(const char* s, int64_t start, int64_t end) {
+    if (!s)
+        return "";
+    int64_t slen = (int64_t)strlen(s);
+    if (start < 0)
+        start = 0;
+    if (end > slen)
+        end = slen;
+    if (start >= end)
+        return "";
+    int64_t len = end - start;
+    if (len >= (int64_t)sizeof(str_buffer))
+        len = sizeof(str_buffer) - 1;
+    memcpy(str_buffer, s + start, len);
+    str_buffer[len] = '\0';
+    return str_buffer;
+}
+
 // str_contains(haystack: Str, needle: Str) -> Bool
 int32_t str_contains(const char* haystack, const char* needle) {
     if (!haystack || !needle)

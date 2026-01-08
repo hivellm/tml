@@ -33,6 +33,11 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     // Non-generic struct: generate immediately
     std::string type_name = "%struct." + s.name;
 
+    // Check if already emitted (can happen with re-exports across modules)
+    if (struct_types_.find(s.name) != struct_types_.end()) {
+        return;
+    }
+
     // Collect field types and register field info
     std::vector<std::string> field_types;
     std::vector<FieldInfo> fields;
@@ -41,6 +46,10 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         field_types.push_back(ft);
         fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
     }
+
+    // Register first to prevent duplicates from recursive types
+    struct_types_[s.name] = type_name;
+    struct_fields_[s.name] = fields;
 
     // Emit struct type definition
     std::string def = type_name + " = type { ";
@@ -51,10 +60,6 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     }
     def += " }";
     emit_line(def);
-
-    // Register for later use
-    struct_types_[s.name] = type_name;
-    struct_fields_[s.name] = fields;
 }
 
 // Generate a specialized version of a generic struct
@@ -147,6 +152,23 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
     // If enum has generic parameters, defer generation until instantiated
     if (!e.generics.empty()) {
         pending_generic_enums_[e.name] = &e;
+        return;
+    }
+
+    // Skip builtin enums that are already declared in the runtime
+    if (e.name == "Ordering") {
+        // Register variant values for builtin enums but don't emit type definition
+        int tag = 0;
+        for (const auto& variant : e.variants) {
+            std::string key = e.name + "::" + variant.name;
+            enum_variants_[key] = tag++;
+        }
+        struct_types_[e.name] = "%struct." + e.name;
+        return;
+    }
+
+    // Check if already emitted (can happen with re-exports across modules)
+    if (struct_types_.find(e.name) != struct_types_.end()) {
         return;
     }
 
@@ -738,7 +760,32 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                     std::string wrapped = wrap_in_poll_ready(result, last_expr_type_);
                     emit_line("  ret " + current_poll_type_ + " " + wrapped);
                 } else {
-                    emit_line("  ret " + ret_type + " " + result);
+                    // Fix: if returning ptr type with "0" placeholder (from loops), use null
+                    if (ret_type == "ptr" && result == "0") {
+                        emit_line("  ret ptr null");
+                    } else {
+                        // Handle integer type extension when actual differs from expected
+                        std::string final_result = result;
+                        std::string actual_type = last_expr_type_;
+                        if (actual_type != ret_type) {
+                            // Integer extension: i32 -> i64, i16 -> i64, i8 -> i64
+                            if (ret_type == "i64" &&
+                                (actual_type == "i32" || actual_type == "i16" ||
+                                 actual_type == "i8")) {
+                                std::string ext_reg = fresh_reg();
+                                emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                          " to i64");
+                                final_result = ext_reg;
+                            } else if (ret_type == "i32" &&
+                                       (actual_type == "i16" || actual_type == "i8")) {
+                                std::string ext_reg = fresh_reg();
+                                emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                          " to i32");
+                                final_result = ext_reg;
+                            }
+                        }
+                        emit_line("  ret " + ret_type + " " + final_result);
+                    }
                 }
                 block_terminated_ = true;
             }
@@ -773,7 +820,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Skip builtin types that have hard-coded implementations in method.cpp
     // These use lowlevel blocks in TML source but are handled directly by codegen
     if (type_name == "File" || type_name == "Path" || type_name == "List" ||
-        type_name == "HashMap" || type_name == "Buffer") {
+        type_name == "HashMap" || type_name == "Buffer" || type_name == "Ordering") {
         return;
     }
 
@@ -783,6 +830,13 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     }
 
     std::string method_name = type_name + "_" + method.name;
+
+    // Skip if already generated (can happen with re-exports across modules)
+    std::string llvm_name = "@tml_" + method_name;
+    if (generated_functions_.count(llvm_name)) {
+        return;
+    }
+    generated_functions_.insert(llvm_name);
     current_func_ = method_name;
     current_impl_type_ = type_name; // Set impl type for 'this' field access
     locals_.clear();
@@ -821,8 +875,14 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
             this_type = llvm_type;
         }
-        params = this_type + " %this";
-        param_types = this_type;
+        // Skip 'this' parameter for Unit type (void is not valid in LLVM parameter lists)
+        if (this_type != "void") {
+            params = this_type + " %this";
+            param_types = this_type;
+        } else {
+            // For Unit, treat as no-arg method
+            is_instance_method = false;
+        }
     }
 
     // Add remaining parameters
@@ -872,7 +932,30 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (method.body->expr.has_value() && !block_terminated_) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
-                emit_line("  ret " + ret_type + " " + result);
+                // Fix: if returning ptr type with "0" placeholder (from loops), use null
+                if (ret_type == "ptr" && result == "0") {
+                    emit_line("  ret ptr null");
+                } else {
+                    // Handle integer type extension when actual differs from expected
+                    std::string final_result = result;
+                    std::string actual_type = last_expr_type_;
+                    if (actual_type != ret_type) {
+                        if (ret_type == "i64" &&
+                            (actual_type == "i32" || actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i64");
+                            final_result = ext_reg;
+                        } else if (ret_type == "i32" &&
+                                   (actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i32");
+                            final_result = ext_reg;
+                        }
+                    }
+                    emit_line("  ret " + ret_type + " " + final_result);
+                }
                 block_terminated_ = true;
             }
         }
@@ -911,10 +994,12 @@ void LLVMIRGen::gen_impl_method_instantiation(
     std::string saved_impl_type = current_impl_type_;
     bool saved_terminated = block_terminated_;
     auto saved_locals = locals_;
+    auto saved_type_subs = current_type_subs_;
 
     std::string method_name = mangled_type_name + "_" + method.name;
     current_func_ = method_name;
     current_impl_type_ = mangled_type_name;
+    current_type_subs_ = type_subs; // Set type substitutions for the method body
     locals_.clear();
     block_terminated_ = false;
 
@@ -999,7 +1084,30 @@ void LLVMIRGen::gen_impl_method_instantiation(
         if (method.body->expr.has_value()) {
             std::string result = gen_expr(*method.body->expr.value());
             if (ret_type != "void" && !block_terminated_) {
-                emit_line("  ret " + ret_type + " " + result);
+                // Fix: if returning ptr type with "0" placeholder (from loops), use null
+                if (ret_type == "ptr" && result == "0") {
+                    emit_line("  ret ptr null");
+                } else {
+                    // Handle integer type extension when actual differs from expected
+                    std::string final_result = result;
+                    std::string actual_type = last_expr_type_;
+                    if (actual_type != ret_type) {
+                        if (ret_type == "i64" &&
+                            (actual_type == "i32" || actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i64");
+                            final_result = ext_reg;
+                        } else if (ret_type == "i32" &&
+                                   (actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i32");
+                            final_result = ext_reg;
+                        }
+                    }
+                    emit_line("  ret " + ret_type + " " + final_result);
+                }
                 block_terminated_ = true;
             }
         }
@@ -1024,6 +1132,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
     current_func_ = saved_func;
     current_ret_type_ = saved_ret_type;
     current_impl_type_ = saved_impl_type;
+    current_type_subs_ = saved_type_subs;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
     current_scope_id_ = 0;
@@ -1176,7 +1285,30 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
             if (ret_type != "void" && !block_terminated_) {
                 // Emit drops before returning
                 emit_all_drops();
-                emit_line("  ret " + ret_type + " " + result);
+                // Fix: if returning ptr type with "0" placeholder (from loops), use null
+                if (ret_type == "ptr" && result == "0") {
+                    emit_line("  ret ptr null");
+                } else {
+                    // Handle integer type extension when actual differs from expected
+                    std::string final_result = result;
+                    std::string actual_type = last_expr_type_;
+                    if (actual_type != ret_type) {
+                        if (ret_type == "i64" &&
+                            (actual_type == "i32" || actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i64");
+                            final_result = ext_reg;
+                        } else if (ret_type == "i32" &&
+                                   (actual_type == "i16" || actual_type == "i8")) {
+                            std::string ext_reg = fresh_reg();
+                            emit_line("  " + ext_reg + " = sext " + actual_type + " " + result +
+                                      " to i32");
+                            final_result = ext_reg;
+                        }
+                    }
+                    emit_line("  ret " + ret_type + " " + final_result);
+                }
                 block_terminated_ = true;
             }
         }

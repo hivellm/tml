@@ -1,0 +1,71 @@
+//! The SkipWhile adapter.
+//!
+//! This module provides the `SkipWhile` iterator adapter which skips
+//! elements while a predicate is true.
+
+// ============================================================================
+// SkipWhile Adapter
+// ============================================================================
+
+/// An iterator that skips elements while a predicate is true.
+///
+/// This struct is created by the [`skip_while`] function. See its documentation
+/// for more details.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var nums: RepeatNI32 = repeat_n_i32(1, 10)
+/// let after_small = skip_while(nums, do(x: ref I32) -> Bool { *x < 5 })
+/// ```
+pub type SkipWhile[I, P] {
+    iter: I,
+    pred: P,
+    skipping: Bool
+}
+
+impl[I: Iterator, P] Iterator for SkipWhile[I, P] where P = func(ref I::Item) -> Bool {
+    type Item = I::Item
+
+    pub func next(mut this) -> Maybe[I::Item] {
+        if not this.skipping {
+            return this.iter.next()
+        }
+        // Still in skipping phase
+        loop {
+            when this.iter.next() {
+                Just(item) => {
+                    if not this.pred(ref item) {
+                        this.skipping = false
+                        return Just(item)
+                    }
+                },
+                Nothing => return Nothing
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Constructor Function
+// ============================================================================
+
+/// Creates an iterator that skips elements while a predicate is true.
+///
+/// The predicate is called on a reference to each element. Elements are
+/// skipped as long as the predicate returns `true`. Once it returns `false`,
+/// all remaining elements are yielded.
+///
+/// # Example
+///
+/// ```tml
+/// use core::iter::*
+///
+/// var iter: RepeatNI32 = repeat_n_i32(10, 100)
+/// let after_tens = skip_while(iter, do(x: ref I32) -> Bool { *x >= 10 })
+/// ```
+pub func skip_while[I: Iterator, P](iter: I, pred: P) -> SkipWhile[I, P] where P = func(ref I::Item) -> Bool {
+    return SkipWhile { iter: iter, pred: pred, skipping: true }
+}

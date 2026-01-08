@@ -1,0 +1,49 @@
+//! Iterator source types.
+//!
+//! This module provides types that create iterators from scratch rather than
+//! by transforming existing iterators. These are the "starting points" for
+//! iterator chains.
+//!
+//! # Available Sources
+//!
+//! | Source | Description |
+//! |--------|-------------|
+//! | [`Empty`] | Yields nothing |
+//! | [`Once`] | Yields exactly one element |
+//! | [`OnceWith`] | Yields one element computed lazily |
+//! | [`Repeat`] | Yields an element infinitely |
+//! | [`RepeatN`] | Yields an element N times |
+//! | [`RepeatWith`] | Yields computed elements infinitely |
+//! | [`FromFn`] | Yields elements from a function |
+//! | [`Successors`] | Yields successive values from a seed |
+//!
+//! # Legacy Type-Suffixed Versions
+//!
+//! For compatibility when generic type inference is not available,
+//! type-suffixed versions are provided:
+//!
+//! - `EmptyI32`, `EmptyI64` - Empty iterators for specific types
+//! - `OnceI32`, `OnceI64` - Single-element iterators
+//! - `RepeatNI32`, `RepeatNI64` - Repeat N times
+
+// Re-export all sources from submodules
+pub use empty::*
+pub use once::*
+pub use once_with::*
+pub use repeat::*
+pub use repeat_n::*
+pub use repeat_with::*
+pub use from_fn::*
+pub use successors::*
+pub use legacy::*
+
+// Declare submodules
+pub mod empty
+pub mod once
+pub mod once_with
+pub mod repeat
+pub mod repeat_n
+pub mod repeat_with
+pub mod from_fn
+pub mod successors
+pub mod legacy

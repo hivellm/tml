@@ -77,8 +77,8 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 // because the vtable cannot contain pointers to generic functions
                 for (const auto& method : behavior_def->methods) {
                     if (!method.type_params.empty()) {
-                        error("Behavior '" + behavior_name +
-                                  "' is not object-safe: method '" + method.name +
+                        error("Behavior '" + behavior_name + "' is not object-safe: method '" +
+                                  method.name +
                                   "' has generic type parameters. "
                                   "Generic methods require monomorphization which is incompatible "
                                   "with dynamic dispatch.",
