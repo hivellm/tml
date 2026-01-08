@@ -128,10 +128,43 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
 
 auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
     switch (lit.token.kind) {
-    case lexer::TokenKind::IntLiteral:
+    case lexer::TokenKind::IntLiteral: {
+        const auto& int_val = lit.token.int_value();
+        if (!int_val.suffix.empty()) {
+            const auto& suffix = int_val.suffix;
+            if (suffix == "i8")
+                return make_primitive(PrimitiveKind::I8);
+            if (suffix == "i16")
+                return make_primitive(PrimitiveKind::I16);
+            if (suffix == "i32")
+                return make_primitive(PrimitiveKind::I32);
+            if (suffix == "i64")
+                return make_primitive(PrimitiveKind::I64);
+            if (suffix == "i128")
+                return make_primitive(PrimitiveKind::I128);
+            if (suffix == "u8")
+                return make_primitive(PrimitiveKind::U8);
+            if (suffix == "u16")
+                return make_primitive(PrimitiveKind::U16);
+            if (suffix == "u32")
+                return make_primitive(PrimitiveKind::U32);
+            if (suffix == "u64")
+                return make_primitive(PrimitiveKind::U64);
+            if (suffix == "u128")
+                return make_primitive(PrimitiveKind::U128);
+        }
         return make_i64();
-    case lexer::TokenKind::FloatLiteral:
+    }
+    case lexer::TokenKind::FloatLiteral: {
+        const auto& float_val = lit.token.float_value();
+        if (!float_val.suffix.empty()) {
+            if (float_val.suffix == "f32")
+                return make_primitive(PrimitiveKind::F32);
+            if (float_val.suffix == "f64")
+                return make_primitive(PrimitiveKind::F64);
+        }
         return make_f64();
+    }
     case lexer::TokenKind::StringLiteral:
         return make_str();
     case lexer::TokenKind::CharLiteral:

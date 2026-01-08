@@ -127,6 +127,17 @@ auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSi
                     return module_registry_->lookup_function(module_path, name);
                 }
             }
+
+            // Final fallback: search all modules for "Type::method" pattern
+            // This handles cases where we're inside module code generation
+            // and need to find methods on types defined in the same or other modules
+            const auto& all_modules = module_registry_->get_all_modules();
+            for (const auto& [mod_path, mod] : all_modules) {
+                auto func_it = mod.functions.find(name);
+                if (func_it != mod.functions.end()) {
+                    return func_it->second;
+                }
+            }
         }
     }
     return std::nullopt;

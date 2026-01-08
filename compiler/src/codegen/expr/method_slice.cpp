@@ -7,16 +7,35 @@
 namespace tml::codegen {
 
 // Handle SliceType [T] methods (the parser slice type, not the Slice named type)
+// Also handles ref [T] (ReferenceType containing SliceType)
 // Returns empty optional if this isn't a slice type or method isn't recognized
 auto LLVMIRGen::gen_slice_type_method(const parser::MethodCallExpr& call, const std::string& method)
     -> std::optional<std::string> {
     // Infer receiver type
     types::TypePtr receiver_semantic_type = infer_expr_type(*call.receiver);
-    if (!receiver_semantic_type || !receiver_semantic_type->is<types::SliceType>()) {
+    if (!receiver_semantic_type) {
         return std::nullopt;
     }
 
-    const auto& slice_type = receiver_semantic_type->as<types::SliceType>();
+    // Handle both direct SliceType and ref [T] (ReferenceType containing SliceType)
+    const types::SliceType* slice_type_ptr = nullptr;
+    bool is_reference = false;
+
+    if (receiver_semantic_type->is<types::SliceType>()) {
+        slice_type_ptr = &receiver_semantic_type->as<types::SliceType>();
+    } else if (receiver_semantic_type->is<types::RefType>()) {
+        const auto& ref_type = receiver_semantic_type->as<types::RefType>();
+        if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+            slice_type_ptr = &ref_type.inner->as<types::SliceType>();
+            is_reference = true;
+        }
+    }
+
+    if (!slice_type_ptr) {
+        return std::nullopt;
+    }
+
+    const auto& slice_type = *slice_type_ptr;
     types::TypePtr elem_type = slice_type.element;
 
     std::string elem_llvm_type = llvm_type_from_semantic(elem_type, true);

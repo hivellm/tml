@@ -84,6 +84,7 @@ struct FuncSig {
     std::string since_version = {};      ///< Version when this status was assigned.
     std::vector<WhereConstraint> where_constraints = {}; ///< Generic constraints.
     bool is_lowlevel = false;                            ///< True for C runtime functions.
+    bool is_intrinsic = false;                           ///< True for @intrinsic compiler builtins.
 
     // FFI support (@extern and @link decorators)
     std::optional<std::string> extern_abi = std::nullopt;  ///< ABI: "c", "c++", "stdcall", etc.
@@ -430,7 +431,7 @@ public:
     [[nodiscard]] auto get_all_modules() const -> std::vector<std::pair<std::string, Module>>;
 
     /// Loads a native (builtin) module on demand.
-    bool load_native_module(const std::string& module_path);
+    bool load_native_module(const std::string& module_path, bool silent = false);
 
     /// Loads and registers a module from a TML source file.
     bool load_module_from_file(const std::string& module_path, const std::string& file_path);
@@ -468,6 +469,8 @@ private:
     std::string source_directory_;                    ///< Source directory for local imports.
     std::unordered_map<std::string, ImportedSymbol> imported_symbols_; ///< Imported symbols.
     bool abort_on_module_error_ = true; ///< Abort on module load errors.
+    std::unordered_set<std::string>
+        loading_modules_; ///< Modules currently being loaded (cycle detection).
 
     // Builtin initialization
     void init_builtins();            ///< Initialize all builtins.

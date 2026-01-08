@@ -1,0 +1,77 @@
+// Test that nested field method calls mutate the field in place
+use test
+
+// Simple counter that increments
+type Counter {
+    value: I64
+}
+
+impl Counter {
+    pub func next(mut this) -> I64 {
+        let current: I64 = this.value
+        this.value = this.value + 1
+        return current
+    }
+}
+
+// Wrapper containing a counter
+type Wrapper {
+    counter: Counter,
+    name: I64
+}
+
+impl Wrapper {
+    // This method calls this.counter.next() which should mutate the counter in place
+    pub func advance(mut this) -> I64 {
+        return this.counter.next()
+    }
+}
+
+@test
+func test_direct_counter() -> I32 {
+    let mut counter: Counter = Counter { value: 0 }
+
+    let first: I64 = counter.next()
+    assert(first == 0, "direct_counter: first should be 0")
+
+    let second: I64 = counter.next()
+    assert(second == 1, "direct_counter: second should be 1")
+
+    let third: I64 = counter.next()
+    assert(third == 2, "direct_counter: third should be 2")
+
+    return 0
+}
+
+@test
+func test_nested_field_mutation() -> I32 {
+    let mut wrapper: Wrapper = Wrapper { counter: Counter { value: 10 }, name: 42 }
+
+    // Call advance() which internally calls this.counter.next()
+    let first: I64 = wrapper.advance()
+    assert(first == 10, "nested_mutation: first advance should return 10")
+
+    // The counter should have been mutated in place
+    let second: I64 = wrapper.advance()
+    assert(second == 11, "nested_mutation: second advance should return 11")
+
+    let third: I64 = wrapper.advance()
+    assert(third == 12, "nested_mutation: third advance should return 12")
+
+    return 0
+}
+
+@test
+func test_direct_nested_call() -> I32 {
+    let mut wrapper: Wrapper = Wrapper { counter: Counter { value: 100 }, name: 0 }
+
+    // Call counter.next() directly through the wrapper
+    let first: I64 = wrapper.counter.next()
+    assert(first == 100, "direct_nested: first should be 100")
+
+    // Should have mutated in place
+    let second: I64 = wrapper.counter.next()
+    assert(second == 101, "direct_nested: second should be 101")
+
+    return 0
+}

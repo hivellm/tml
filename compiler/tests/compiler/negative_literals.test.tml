@@ -1,0 +1,65 @@
+// Test negative literal codegen for I8/I16 types
+use test
+
+// Helper functions that return negative literals
+func get_min_i8() -> I8 {
+    return -128
+}
+
+func get_max_i8() -> I8 {
+    return 127
+}
+
+func get_neg_one_i8() -> I8 {
+    return -1
+}
+
+func get_min_i16() -> I16 {
+    return -32768
+}
+
+func get_max_i16() -> I16 {
+    return 32767
+}
+
+func get_neg_one_i16() -> I16 {
+    return -1
+}
+
+@test
+func test_i8_negative_literals() -> I32 {
+    let min: I8 = get_min_i8()
+    let max: I8 = get_max_i8()
+    let neg_one: I8 = get_neg_one_i8()
+
+    assert(min == -128, "I8 min should be -128")
+    assert(max == 127, "I8 max should be 127")
+    assert(neg_one == -1, "I8 neg_one should be -1")
+
+    return 0
+}
+
+@test
+func test_i16_negative_literals() -> I32 {
+    let min: I16 = get_min_i16()
+    let max: I16 = get_max_i16()
+    let neg_one: I16 = get_neg_one_i16()
+
+    assert(min == -32768, "I16 min should be -32768")
+    assert(max == 32767, "I16 max should be 32767")
+    assert(neg_one == -1, "I16 neg_one should be -1")
+
+    return 0
+}
+
+@test
+func test_direct_negative_return() -> I32 {
+    // Test inline negative literals
+    let a: I8 = -50
+    let b: I16 = -1000
+
+    assert(a == -50, "Direct I8 literal should work")
+    assert(b == -1000, "Direct I16 literal should work")
+
+    return 0
+}

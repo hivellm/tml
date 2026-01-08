@@ -1,0 +1,781 @@
+[DEBUG] check_module called
+[MODULE] Found test module at: "lib\\test\\src\\assertions\\mod.tml"
+[MODULE] load_module_from_file: lib\test\src\assertions\mod.tml (stem: "mod")
+[MODULE] Loading directory module from: "lib\\test\\src\\assertions"
+[MODULE]   Parsing: "mod.tml"
+[MODULE]   OK: "mod.tml"
+[MODULE] Parsed 1 files for module: test
+[MODULE] Loaded test from lib\test\src\assertions\mod.tml (10 functions)
+[MODULE] Looking for core module: core::marker::PhantomPinned (fs_path: marker/PhantomPinned)
+[MODULE]   Checking: "lib\\core\\src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "lib\\core\\src\\marker/PhantomPinned\\mod.tml"
+[MODULE]   Checking: "..\\..\\lib\\core\\src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "..\\..\\lib\\core\\src\\marker/PhantomPinned\\mod.tml"
+[MODULE]   Checking: "..\\lib\\core\\src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "..\\lib\\core\\src\\marker/PhantomPinned\\mod.tml"
+[MODULE]   Checking: "core\\src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "core\\src\\marker/PhantomPinned\\mod.tml"
+[MODULE]   Checking: "F:\\Node\\hivellm\\tml\\lib\\core\\src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "F:\\Node\\hivellm\\tml\\lib\\core\\src\\marker/PhantomPinned\\mod.tml"
+[MODULE]   Checking: "F:/Node/hivellm/tml/lib/core/src\\marker/PhantomPinned.tml"
+[MODULE]   Checking: "F:/Node/hivellm/tml/lib/core/src\\marker/PhantomPinned\\mod.tml"
+[MODULE] Looking for core module: core::marker (fs_path: marker)
+[MODULE]   Checking: "lib\\core\\src\\marker.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\marker.tml (stem: "marker")
+[MODULE] Parsed 1 files for module: core::marker
+[MODULE] Looking for core module: core::pin::Unpin (fs_path: pin/Unpin)
+[MODULE]   Checking: "lib\\core\\src\\pin/Unpin.tml"
+[MODULE]   Checking: "lib\\core\\src\\pin/Unpin\\mod.tml"
+[MODULE]   Checking: "..\\..\\lib\\core\\src\\pin/Unpin.tml"
+[MODULE]   Checking: "..\\..\\lib\\core\\src\\pin/Unpin\\mod.tml"
+[MODULE]   Checking: "..\\lib\\core\\src\\pin/Unpin.tml"
+[MODULE]   Checking: "..\\lib\\core\\src\\pin/Unpin\\mod.tml"
+[MODULE]   Checking: "core\\src\\pin/Unpin.tml"
+[MODULE]   Checking: "core\\src\\pin/Unpin\\mod.tml"
+[MODULE]   Checking: "F:\\Node\\hivellm\\tml\\lib\\core\\src\\pin/Unpin.tml"
+[MODULE]   Checking: "F:\\Node\\hivellm\\tml\\lib\\core\\src\\pin/Unpin\\mod.tml"
+[MODULE]   Checking: "F:/Node/hivellm/tml/lib/core/src\\pin/Unpin.tml"
+[MODULE]   Checking: "F:/Node/hivellm/tml/lib/core/src\\pin/Unpin\\mod.tml"
+[MODULE] Looking for core module: core::pin (fs_path: pin)
+[MODULE]   Checking: "lib\\core\\src\\pin.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\pin.tml (stem: "pin")
+[MODULE] Parsed 1 files for module: core::pin
+[MODULE] Looking for core module: core::ops (fs_path: ops)
+[MODULE]   Checking: "lib\\core\\src\\ops.tml"
+[MODULE]   Checking: "lib\\core\\src\\ops\\mod.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops\mod.tml (stem: "mod")
+[MODULE] Loading directory module from: "lib\\core\\src\\ops"
+[MODULE]   Parsing: "arith.tml"
+[MODULE]   OK: "arith.tml"
+[MODULE]   Parsing: "async_function.tml"
+[MODULE]   OK: "async_function.tml"
+[MODULE]   Parsing: "bit.tml"
+[MODULE]   OK: "bit.tml"
+[MODULE]   Parsing: "coroutine.tml"
+[MODULE]   OK: "coroutine.tml"
+[MODULE]   Parsing: "deref.tml"
+[MODULE]   OK: "deref.tml"
+[MODULE]   Parsing: "drop.tml"
+[MODULE]   OK: "drop.tml"
+[MODULE]   Parsing: "function.tml"
+[MODULE]   OK: "function.tml"
+[MODULE]   Parsing: "index.tml"
+[MODULE]   OK: "index.tml"
+[MODULE]   Parsing: "mod.tml"
+[MODULE]   OK: "mod.tml"
+[MODULE]   Parsing: "range.tml"
+[MODULE]   OK: "range.tml"
+[MODULE]   Parsing: "try_trait.tml"
+[MODULE]   OK: "try_trait.tml"
+[MODULE] Parsed 11 files for module: core::ops
+[MODULE] Registered impl method: I8::add in module core::ops
+[MODULE] Registered impl method: I16::add in module core::ops
+[MODULE] Registered impl method: I32::add in module core::ops
+[MODULE] Registered impl method: I64::add in module core::ops
+[MODULE] Registered impl method: U8::add in module core::ops
+[MODULE] Registered impl method: U16::add in module core::ops
+[MODULE] Registered impl method: U32::add in module core::ops
+[MODULE] Registered impl method: U64::add in module core::ops
+[MODULE] Registered impl method: F32::add in module core::ops
+[MODULE] Registered impl method: F64::add in module core::ops
+[MODULE] Registered impl method: I8::sub in module core::ops
+[MODULE] Registered impl method: I16::sub in module core::ops
+[MODULE] Registered impl method: I32::sub in module core::ops
+[MODULE] Registered impl method: I64::sub in module core::ops
+[MODULE] Registered impl method: U8::sub in module core::ops
+[MODULE] Registered impl method: U16::sub in module core::ops
+[MODULE] Registered impl method: U32::sub in module core::ops
+[MODULE] Registered impl method: U64::sub in module core::ops
+[MODULE] Registered impl method: F32::sub in module core::ops
+[MODULE] Registered impl method: F64::sub in module core::ops
+[MODULE] Registered impl method: I8::mul in module core::ops
+[MODULE] Registered impl method: I16::mul in module core::ops
+[MODULE] Registered impl method: I32::mul in module core::ops
+[MODULE] Registered impl method: I64::mul in module core::ops
+[MODULE] Registered impl method: U8::mul in module core::ops
+[MODULE] Registered impl method: U16::mul in module core::ops
+[MODULE] Registered impl method: U32::mul in module core::ops
+[MODULE] Registered impl method: U64::mul in module core::ops
+[MODULE] Registered impl method: F32::mul in module core::ops
+[MODULE] Registered impl method: F64::mul in module core::ops
+[MODULE] Registered impl method: I8::div in module core::ops
+[MODULE] Registered impl method: I16::div in module core::ops
+[MODULE] Registered impl method: I32::div in module core::ops
+[MODULE] Registered impl method: I64::div in module core::ops
+[MODULE] Registered impl method: U8::div in module core::ops
+[MODULE] Registered impl method: U16::div in module core::ops
+[MODULE] Registered impl method: U32::div in module core::ops
+[MODULE] Registered impl method: U64::div in module core::ops
+[MODULE] Registered impl method: F32::div in module core::ops
+[MODULE] Registered impl method: F64::div in module core::ops
+[MODULE] Registered impl method: I8::rem in module core::ops
+[MODULE] Registered impl method: I16::rem in module core::ops
+[MODULE] Registered impl method: I32::rem in module core::ops
+[MODULE] Registered impl method: I64::rem in module core::ops
+[MODULE] Registered impl method: U8::rem in module core::ops
+[MODULE] Registered impl method: U16::rem in module core::ops
+[MODULE] Registered impl method: U32::rem in module core::ops
+[MODULE] Registered impl method: U64::rem in module core::ops
+[MODULE] Registered impl method: I8::neg in module core::ops
+[MODULE] Registered impl method: I16::neg in module core::ops
+[MODULE] Registered impl method: I32::neg in module core::ops
+[MODULE] Registered impl method: I64::neg in module core::ops
+[MODULE] Registered impl method: F32::neg in module core::ops
+[MODULE] Registered impl method: F64::neg in module core::ops
+[MODULE] Registered struct: ReadyFuture in module core::ops
+[MODULE] Registered impl method: ReadyFuture::new in module core::ops
+[MODULE] Registered impl method: ReadyFuture::into_future in module core::ops
+[MODULE] Registered struct: PendingFuture in module core::ops
+[MODULE] Registered impl method: PendingFuture::new in module core::ops
+[MODULE] Registered struct: LazyFuture in module core::ops
+[MODULE] Registered impl method: LazyFuture::new in module core::ops
+[MODULE] Registered enum: Poll in module core::ops
+[MODULE] Registered impl method: Poll::is_ready in module core::ops
+[MODULE] Registered impl method: Poll::is_pending in module core::ops
+[MODULE] Registered impl method: Poll::map in module core::ops
+[MODULE] Registered impl method: Poll::debug_string in module core::ops
+[MODULE] Registered impl method: Poll::to_string in module core::ops
+[MODULE] Registered impl method: Bool::negate in module core::ops
+[MODULE] Registered impl method: I8::bitand_assign in module core::ops
+[MODULE] Registered impl method: I16::bitand_assign in module core::ops
+[MODULE] Registered impl method: I32::bitand_assign in module core::ops
+[MODULE] Registered impl method: I64::bitand_assign in module core::ops
+[MODULE] Registered impl method: U8::bitand_assign in module core::ops
+[MODULE] Registered impl method: U16::bitand_assign in module core::ops
+[MODULE] Registered impl method: U32::bitand_assign in module core::ops
+[MODULE] Registered impl method: U64::bitand_assign in module core::ops
+[MODULE] Registered impl method: I8::bitor_assign in module core::ops
+[MODULE] Registered impl method: I16::bitor_assign in module core::ops
+[MODULE] Registered impl method: I32::bitor_assign in module core::ops
+[MODULE] Registered impl method: I64::bitor_assign in module core::ops
+[MODULE] Registered impl method: U8::bitor_assign in module core::ops
+[MODULE] Registered impl method: U16::bitor_assign in module core::ops
+[MODULE] Registered impl method: U32::bitor_assign in module core::ops
+[MODULE] Registered impl method: U64::bitor_assign in module core::ops
+[MODULE] Registered impl method: I8::bitxor_assign in module core::ops
+[MODULE] Registered impl method: I16::bitxor_assign in module core::ops
+[MODULE] Registered impl method: I32::bitxor_assign in module core::ops
+[MODULE] Registered impl method: I64::bitxor_assign in module core::ops
+[MODULE] Registered impl method: U8::bitxor_assign in module core::ops
+[MODULE] Registered impl method: U16::bitxor_assign in module core::ops
+[MODULE] Registered impl method: U32::bitxor_assign in module core::ops
+[MODULE] Registered impl method: U64::bitxor_assign in module core::ops
+[MODULE] Registered impl method: I8::shl_assign in module core::ops
+[MODULE] Registered impl method: I16::shl_assign in module core::ops
+[MODULE] Registered impl method: I32::shl_assign in module core::ops
+[MODULE] Registered impl method: I64::shl_assign in module core::ops
+[MODULE] Registered impl method: U8::shl_assign in module core::ops
+[MODULE] Registered impl method: U16::shl_assign in module core::ops
+[MODULE] Registered impl method: U32::shl_assign in module core::ops
+[MODULE] Registered impl method: U64::shl_assign in module core::ops
+[MODULE] Registered impl method: I8::shr_assign in module core::ops
+[MODULE] Registered impl method: I16::shr_assign in module core::ops
+[MODULE] Registered impl method: I32::shr_assign in module core::ops
+[MODULE] Registered impl method: I64::shr_assign in module core::ops
+[MODULE] Registered impl method: U8::shr_assign in module core::ops
+[MODULE] Registered impl method: U16::shr_assign in module core::ops
+[MODULE] Registered impl method: U32::shr_assign in module core::ops
+[MODULE] Registered impl method: U64::shr_assign in module core::ops
+[MODULE] Registered enum: CoroutineState in module core::ops
+[MODULE] Registered impl method: CoroutineState::is_yielded in module core::ops
+[MODULE] Registered impl method: CoroutineState::is_complete in module core::ops
+[MODULE] Registered impl method: CoroutineState::debug_string in module core::ops
+[MODULE] Registered impl method: CoroutineState::to_string in module core::ops
+[MODULE] Registered enum: CoroutineResumePoint in module core::ops
+[MODULE] Registered impl method: CoroutineResumePoint::debug_string in module core::ops
+[MODULE] Registered struct: Ready in module core::ops
+[MODULE] Registered impl method: Ready::new in module core::ops
+[MODULE] Registered impl method: Ready::exhausted in module core::ops
+[MODULE] Registered impl method: Ready::resume in module core::ops
+[MODULE] Registered struct: FromIter in module core::ops
+[MODULE] Registered impl method: FromIter::new in module core::ops
+[MODULE] Registered struct: ManuallyDrop in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::new in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::into_inner in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::take in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::drop in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::get in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::get_mut in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::debug_string in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::to_string in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::default in module core::ops
+[MODULE] Registered impl method: ManuallyDrop::duplicate in module core::ops
+[MODULE] Registered struct: ScopeGuard in module core::ops
+[MODULE] Registered impl method: ScopeGuard::new in module core::ops
+[MODULE] Registered impl method: ScopeGuard::defuse in module core::ops
+[MODULE] Registered impl method: ScopeGuard::arm in module core::ops
+[MODULE] Registered submodule: arith -> core::ops::arith
+[MODULE] Registered submodule: bit -> core::ops::bit
+[MODULE] Registered submodule: deref -> core::ops::deref
+[MODULE] Registered submodule: index -> core::ops::index
+[MODULE] Registered submodule: function -> core::ops::function
+[MODULE] Registered submodule: try_trait -> core::ops::try_trait
+[MODULE] Registered submodule: drop -> core::ops::drop
+[MODULE] Registered submodule: range -> core::ops::range
+[MODULE] Registered submodule: coroutine -> core::ops::coroutine
+[MODULE] Registered submodule: async_function -> core::ops::async_function
+[MODULE] Looking for core module: core::ops::arith (fs_path: ops/arith)
+[MODULE]   Checking: "lib\\core\\src\\ops/arith.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/arith.tml (stem: "arith")
+[MODULE] Parsed 1 files for module: core::ops::arith
+[MODULE] Registered impl method: I8::add in module core::ops::arith
+[MODULE] Registered impl method: I16::add in module core::ops::arith
+[MODULE] Registered impl method: I32::add in module core::ops::arith
+[MODULE] Registered impl method: I64::add in module core::ops::arith
+[MODULE] Registered impl method: U8::add in module core::ops::arith
+[MODULE] Registered impl method: U16::add in module core::ops::arith
+[MODULE] Registered impl method: U32::add in module core::ops::arith
+[MODULE] Registered impl method: U64::add in module core::ops::arith
+[MODULE] Registered impl method: F32::add in module core::ops::arith
+[MODULE] Registered impl method: F64::add in module core::ops::arith
+[MODULE] Registered impl method: I8::sub in module core::ops::arith
+[MODULE] Registered impl method: I16::sub in module core::ops::arith
+[MODULE] Registered impl method: I32::sub in module core::ops::arith
+[MODULE] Registered impl method: I64::sub in module core::ops::arith
+[MODULE] Registered impl method: U8::sub in module core::ops::arith
+[MODULE] Registered impl method: U16::sub in module core::ops::arith
+[MODULE] Registered impl method: U32::sub in module core::ops::arith
+[MODULE] Registered impl method: U64::sub in module core::ops::arith
+[MODULE] Registered impl method: F32::sub in module core::ops::arith
+[MODULE] Registered impl method: F64::sub in module core::ops::arith
+[MODULE] Registered impl method: I8::mul in module core::ops::arith
+[MODULE] Registered impl method: I16::mul in module core::ops::arith
+[MODULE] Registered impl method: I32::mul in module core::ops::arith
+[MODULE] Registered impl method: I64::mul in module core::ops::arith
+[MODULE] Registered impl method: U8::mul in module core::ops::arith
+[MODULE] Registered impl method: U16::mul in module core::ops::arith
+[MODULE] Registered impl method: U32::mul in module core::ops::arith
+[MODULE] Registered impl method: U64::mul in module core::ops::arith
+[MODULE] Registered impl method: F32::mul in module core::ops::arith
+[MODULE] Registered impl method: F64::mul in module core::ops::arith
+[MODULE] Registered impl method: I8::div in module core::ops::arith
+[MODULE] Registered impl method: I16::div in module core::ops::arith
+[MODULE] Registered impl method: I32::div in module core::ops::arith
+[MODULE] Registered impl method: I64::div in module core::ops::arith
+[MODULE] Registered impl method: U8::div in module core::ops::arith
+[MODULE] Registered impl method: U16::div in module core::ops::arith
+[MODULE] Registered impl method: U32::div in module core::ops::arith
+[MODULE] Registered impl method: U64::div in module core::ops::arith
+[MODULE] Registered impl method: F32::div in module core::ops::arith
+[MODULE] Registered impl method: F64::div in module core::ops::arith
+[MODULE] Registered impl method: I8::rem in module core::ops::arith
+[MODULE] Registered impl method: I16::rem in module core::ops::arith
+[MODULE] Registered impl method: I32::rem in module core::ops::arith
+[MODULE] Registered impl method: I64::rem in module core::ops::arith
+[MODULE] Registered impl method: U8::rem in module core::ops::arith
+[MODULE] Registered impl method: U16::rem in module core::ops::arith
+[MODULE] Registered impl method: U32::rem in module core::ops::arith
+[MODULE] Registered impl method: U64::rem in module core::ops::arith
+[MODULE] Registered impl method: I8::neg in module core::ops::arith
+[MODULE] Registered impl method: I16::neg in module core::ops::arith
+[MODULE] Registered impl method: I32::neg in module core::ops::arith
+[MODULE] Registered impl method: I64::neg in module core::ops::arith
+[MODULE] Registered impl method: F32::neg in module core::ops::arith
+[MODULE] Registered impl method: F64::neg in module core::ops::arith
+[MODULE] Loaded core::ops::arith from lib\core\src\ops/arith.tml (54 functions)
+[MODULE] Registered re-export: core::ops::arith::*
+[MODULE] Looking for core module: core::ops::bit (fs_path: ops/bit)
+[MODULE]   Checking: "lib\\core\\src\\ops/bit.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/bit.tml (stem: "bit")
+[MODULE] Parsed 1 files for module: core::ops::bit
+[MODULE] Registered impl method: Bool::negate in module core::ops::bit
+[MODULE] Registered impl method: I8::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: I16::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: I32::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: I64::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: U8::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: U16::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: U32::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: U64::bitand_assign in module core::ops::bit
+[MODULE] Registered impl method: I8::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: I16::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: I32::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: I64::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: U8::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: U16::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: U32::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: U64::bitor_assign in module core::ops::bit
+[MODULE] Registered impl method: I8::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: I16::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: I32::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: I64::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: U8::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: U16::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: U32::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: U64::bitxor_assign in module core::ops::bit
+[MODULE] Registered impl method: I8::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: I16::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: I32::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: I64::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: U8::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: U16::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: U32::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: U64::shl_assign in module core::ops::bit
+[MODULE] Registered impl method: I8::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: I16::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: I32::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: I64::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: U8::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: U16::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: U32::shr_assign in module core::ops::bit
+[MODULE] Registered impl method: U64::shr_assign in module core::ops::bit
+[MODULE] Loaded core::ops::bit from lib\core\src\ops/bit.tml (41 functions)
+[MODULE] Registered re-export: core::ops::bit::*
+[MODULE] Looking for core module: core::ops::deref (fs_path: ops/deref)
+[MODULE]   Checking: "lib\\core\\src\\ops/deref.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/deref.tml (stem: "deref")
+[MODULE] Parsed 1 files for module: core::ops::deref
+[MODULE] Loaded core::ops::deref from lib\core\src\ops/deref.tml (0 functions)
+[MODULE] Registered re-export: core::ops::deref::*
+[MODULE] Looking for core module: core::ops::index (fs_path: ops/index)
+[MODULE]   Checking: "lib\\core\\src\\ops/index.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/index.tml (stem: "index")
+[MODULE] Parsed 1 files for module: core::ops::index
+[MODULE] Loaded core::ops::index from lib\core\src\ops/index.tml (0 functions)
+[MODULE] Registered re-export: core::ops::index::*
+[MODULE] Looking for core module: core::ops::function (fs_path: ops/function)
+[MODULE]   Checking: "lib\\core\\src\\ops/function.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/function.tml (stem: "function")
+[MODULE] Parsed 1 files for module: core::ops::function
+[MODULE] Loaded core::ops::function from lib\core\src\ops/function.tml (0 functions)
+[MODULE] Registered re-export: core::ops::function::*
+[MODULE] Looking for core module: core::ops::try_trait (fs_path: ops/try_trait)
+[MODULE]   Checking: "lib\\core\\src\\ops/try_trait.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/try_trait.tml (stem: "try_trait")
+[MODULE] Parsed 1 files for module: core::ops::try_trait
+[MODULE] Registered enum: ControlFlow in module core::ops::try_trait
+[MODULE] Registered impl method: ControlFlow::is_continue in module core::ops::try_trait
+[MODULE] Registered impl method: ControlFlow::is_break in module core::ops::try_trait
+[MODULE] Registered impl method: Outcome::from_output in module core::ops::try_trait
+[MODULE] Registered impl method: Outcome::from_residual in module core::ops::try_trait
+[MODULE] Registered impl method: Outcome::branch in module core::ops::try_trait
+[MODULE] Registered impl method: Maybe::from_output in module core::ops::try_trait
+[MODULE] Registered impl method: Maybe::from_residual in module core::ops::try_trait
+[MODULE] Registered impl method: Maybe::branch in module core::ops::try_trait
+[MODULE] Registered impl method: Outcome::from_residual in module core::ops::try_trait
+[MODULE] Registered impl method: Maybe::from_residual in module core::ops::try_trait
+[MODULE] Loaded core::ops::try_trait from lib\core\src\ops/try_trait.tml (8 functions)
+[MODULE] Registered re-export: core::ops::try_trait::*
+[MODULE] Looking for core module: core::ops::drop (fs_path: ops/drop)
+[MODULE]   Checking: "lib\\core\\src\\ops/drop.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/drop.tml (stem: "drop")
+[MODULE] Parsed 1 files for module: core::ops::drop
+[MODULE] Registered struct: ManuallyDrop in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::new in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::into_inner in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::take in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::drop in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::get in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::get_mut in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::debug_string in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::to_string in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::default in module core::ops::drop
+[MODULE] Registered impl method: ManuallyDrop::duplicate in module core::ops::drop
+[MODULE] Registered struct: ScopeGuard in module core::ops::drop
+[MODULE] Registered impl method: ScopeGuard::new in module core::ops::drop
+[MODULE] Registered impl method: ScopeGuard::defuse in module core::ops::drop
+[MODULE] Registered impl method: ScopeGuard::arm in module core::ops::drop
+[MODULE] Loaded core::ops::drop from lib\core\src\ops/drop.tml (14 functions)
+[MODULE] Registered re-export: core::ops::drop::*
+[MODULE] Looking for core module: core::ops::range (fs_path: ops/range)
+[MODULE]   Checking: "lib\\core\\src\\ops/range.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/range.tml (stem: "range")
+[MODULE] Parsed 1 files for module: core::ops::range
+[MODULE] Registered enum: Bound in module core::ops::range
+[MODULE] Registered impl method: Bound::included in module core::ops::range
+[MODULE] Registered impl method: Bound::excluded in module core::ops::range
+[MODULE] Registered impl method: Bound::unbounded in module core::ops::range
+[MODULE] Registered impl method: Bound::is_included in module core::ops::range
+[MODULE] Registered impl method: Bound::is_excluded in module core::ops::range
+[MODULE] Registered impl method: Bound::is_unbounded in module core::ops::range
+[MODULE] Registered impl method: Bound::cloned in module core::ops::range
+[MODULE] Registered impl method: Bound::debug_string in module core::ops::range
+[MODULE] Registered impl method: Bound::to_string in module core::ops::range
+[MODULE] Registered struct: Range in module core::ops::range
+[MODULE] Registered impl method: Range::new in module core::ops::range
+[MODULE] Registered impl method: Range::is_empty in module core::ops::range
+[MODULE] Registered impl method: Range::contains in module core::ops::range
+[MODULE] Registered impl method: Range::debug_string in module core::ops::range
+[MODULE] Registered impl method: Range::to_string in module core::ops::range
+[MODULE] Registered struct: RangeInclusive in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::new in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::start in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::end in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::into_inner in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::is_empty in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::contains in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::debug_string in module core::ops::range
+[MODULE] Registered impl method: RangeInclusive::to_string in module core::ops::range
+[MODULE] Registered struct: RangeFrom in module core::ops::range
+[MODULE] Registered impl method: RangeFrom::new in module core::ops::range
+[MODULE] Registered impl method: RangeFrom::contains in module core::ops::range
+[MODULE] Registered impl method: RangeFrom::debug_string in module core::ops::range
+[MODULE] Registered impl method: RangeFrom::to_string in module core::ops::range
+[MODULE] Registered struct: RangeTo in module core::ops::range
+[MODULE] Registered impl method: RangeTo::new in module core::ops::range
+[MODULE] Registered impl method: RangeTo::contains in module core::ops::range
+[MODULE] Registered impl method: RangeTo::debug_string in module core::ops::range
+[MODULE] Registered impl method: RangeTo::to_string in module core::ops::range
+[MODULE] Registered struct: RangeToInclusive in module core::ops::range
+[MODULE] Registered impl method: RangeToInclusive::new in module core::ops::range
+[MODULE] Registered impl method: RangeToInclusive::contains in module core::ops::range
+[MODULE] Registered impl method: RangeToInclusive::debug_string in module core::ops::range
+[MODULE] Registered impl method: RangeToInclusive::to_string in module core::ops::range
+[MODULE] Registered struct: RangeFull in module core::ops::range
+[MODULE] Registered impl method: RangeFull::new in module core::ops::range
+[MODULE] Registered impl method: RangeFull::contains in module core::ops::range
+[MODULE] Registered impl method: RangeFull::debug_string in module core::ops::range
+[MODULE] Registered impl method: RangeFull::to_string in module core::ops::range
+[MODULE] Loaded core::ops::range from lib\core\src\ops/range.tml (41 functions)
+[MODULE] Registered re-export: core::ops::range::*
+[MODULE] Looking for core module: core::ops::coroutine (fs_path: ops/coroutine)
+[MODULE]   Checking: "lib\\core\\src\\ops/coroutine.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/coroutine.tml (stem: "coroutine")
+[MODULE] Parsed 1 files for module: core::ops::coroutine
+[MODULE] Registered enum: CoroutineState in module core::ops::coroutine
+[MODULE] Registered impl method: CoroutineState::is_yielded in module core::ops::coroutine
+[MODULE] Registered impl method: CoroutineState::is_complete in module core::ops::coroutine
+[MODULE] Registered impl method: CoroutineState::debug_string in module core::ops::coroutine
+[MODULE] Registered impl method: CoroutineState::to_string in module core::ops::coroutine
+[MODULE] Registered enum: CoroutineResumePoint in module core::ops::coroutine
+[MODULE] Registered impl method: CoroutineResumePoint::debug_string in module core::ops::coroutine
+[MODULE] Registered struct: Ready in module core::ops::coroutine
+[MODULE] Registered impl method: Ready::new in module core::ops::coroutine
+[MODULE] Registered impl method: Ready::exhausted in module core::ops::coroutine
+[MODULE] Registered impl method: Ready::resume in module core::ops::coroutine
+[MODULE] Registered struct: FromIter in module core::ops::coroutine
+[MODULE] Registered impl method: FromIter::new in module core::ops::coroutine
+[MODULE] Loaded core::ops::coroutine from lib\core\src\ops/coroutine.tml (9 functions)
+[MODULE] Registered re-export: core::ops::coroutine::*
+[MODULE] Looking for core module: core::ops::async_function (fs_path: ops/async_function)
+[MODULE]   Checking: "lib\\core\\src\\ops/async_function.tml"
+[MODULE]   FOUND!
+[MODULE] load_module_from_file: lib\core\src\ops/async_function.tml (stem: "async_function")
+[MODULE] Parsed 1 files for module: core::ops::async_function
+[MODULE] Registered struct: ReadyFuture in module core::ops::async_function
+[MODULE] Registered impl method: ReadyFuture::new in module core::ops::async_function
+[MODULE] Registered impl method: ReadyFuture::into_future in module core::ops::async_function
+[MODULE] Registered struct: PendingFuture in module core::ops::async_function
+[MODULE] Registered impl method: PendingFuture::new in module core::ops::async_function
+[MODULE] Registered struct: LazyFuture in module core::ops::async_function
+[MODULE] Registered impl method: LazyFuture::new in module core::ops::async_function
+[MODULE] Registered enum: Poll in module core::ops::async_function
+[MODULE] Registered impl method: Poll::is_ready in module core::ops::async_function
+[MODULE] Registered impl method: Poll::is_pending in module core::ops::async_function
+[MODULE] Registered impl method: Poll::map in module core::ops::async_function
+[MODULE] Registered impl method: Poll::debug_string in module core::ops::async_function
+[MODULE] Registered impl method: Poll::to_string in module core::ops::async_function
+[MODULE] Loaded core::ops::async_function from lib\core\src\ops/async_function.tml (9 functions)
+[MODULE] Registered re-export: core::ops::async_function::*
+[MODULE] Registered enum: Bound in module core::ops
+[MODULE] Registered impl method: Bound::included in module core::ops
+[MODULE] Registered impl method: Bound::excluded in module core::ops
+[MODULE] Registered impl method: Bound::unbounded in module core::ops
+[MODULE] Registered impl method: Bound::is_included in module core::ops
+[MODULE] Registered impl method: Bound::is_excluded in module core::ops
+[MODULE] Registered impl method: Bound::is_unbounded in module core::ops
+[MODULE] Registered impl method: Bound::cloned in module core::ops
+[MODULE] Registered impl method: Bound::debug_string in module core::ops
+[MODULE] Registered impl method: Bound::to_string in module core::ops
+[MODULE] Registered struct: Range in module core::ops
+[MODULE] Registered impl method: Range::new in module core::ops
+[MODULE] Registered impl method: Range::is_empty in module core::ops
+[MODULE] Registered impl method: Range::contains in module core::ops
+[MODULE] Registered impl method: Range::debug_string in module core::ops
+[MODULE] Registered impl method: Range::to_string in module core::ops
+[MODULE] Registered struct: RangeInclusive in module core::ops
+[MODULE] Registered impl method: RangeInclusive::new in module core::ops
+[MODULE] Registered impl method: RangeInclusive::start in module core::ops
+[MODULE] Registered impl method: RangeInclusive::end in module core::ops
+[MODULE] Registered impl method: RangeInclusive::into_inner in module core::ops
+[MODULE] Registered impl method: RangeInclusive::is_empty in module core::ops
+[MODULE] Registered impl method: RangeInclusive::contains in module core::ops
+[MODULE] Registered impl method: RangeInclusive::debug_string in module core::ops
+[MODULE] Registered impl method: RangeInclusive::to_string in module core::ops
+[MODULE] Registered struct: RangeFrom in module core::ops
+[MODULE] Registered impl method: RangeFrom::new in module core::ops
+[MODULE] Registered impl method: RangeFrom::contains in module core::ops
+[MODULE] Registered impl method: RangeFrom::debug_string in module core::ops
+[MODULE] Registered impl method: RangeFrom::to_string in module core::ops
+[MODULE] Registered struct: RangeTo in module core::ops
+[MODULE] Registered impl method: RangeTo::new in module core::ops
+[MODULE] Registered impl method: RangeTo::contains in module core::ops
+[MODULE] Registered impl method: RangeTo::debug_string in module core::ops
+[MODULE] Registered impl method: RangeTo::to_string in module core::ops
+[MODULE] Registered struct: RangeToInclusive in module core::ops
+[MODULE] Registered impl method: RangeToInclusive::new in module core::ops
+[MODULE] Registered impl method: RangeToInclusive::contains in module core::ops
+[MODULE] Registered impl method: RangeToInclusive::debug_string in module core::ops
+[MODULE] Registered impl method: RangeToInclusive::to_string in module core::ops
+[MODULE] Registered struct: RangeFull in module core::ops
+[MODULE] Registered impl method: RangeFull::new in module core::ops
+[MODULE] Registered impl method: RangeFull::contains in module core::ops
+[MODULE] Registered impl method: RangeFull::debug_string in module core::ops
+[MODULE] Registered impl method: RangeFull::to_string in module core::ops
+[MODULE] Registered enum: ControlFlow in module core::ops
+[MODULE] Registered impl method: ControlFlow::is_continue in module core::ops
+[MODULE] Registered impl method: ControlFlow::is_break in module core::ops
+[MODULE] Registered impl method: Outcome::from_output in module core::ops
+[MODULE] Registered impl method: Outcome::from_residual in module core::ops
+[MODULE] Registered impl method: Outcome::branch in module core::ops
+[MODULE] Registered impl method: Maybe::from_output in module core::ops
+[MODULE] Registered impl method: Maybe::from_residual in module core::ops
+[MODULE] Registered impl method: Maybe::branch in module core::ops
+[MODULE] Registered impl method: Outcome::from_residual in module core::ops
+[MODULE] Registered impl method: Maybe::from_residual in module core::ops
+[MODULE] Loaded core::ops from lib\core\src\ops\mod.tml (176 functions)
+[MODULE] Registered struct: Pin in module core::pin
+[MODULE] Registered impl method: Pin::new_unchecked in module core::pin
+[MODULE] Registered impl method: Pin::into_inner_unchecked in module core::pin
+[MODULE] Registered impl method: Pin::new in module core::pin
+[MODULE] Registered impl method: Pin::get_ref in module core::pin
+[MODULE] Registered impl method: Pin::new in module core::pin
+[MODULE] Registered impl method: Pin::get_ref in module core::pin
+[MODULE] Registered impl method: Pin::get_mut in module core::pin
+[MODULE] Registered impl method: Pin::get_unchecked_mut in module core::pin
+[MODULE] Registered impl method: Pin::deref in module core::pin
+[MODULE] Registered impl method: Pin::deref in module core::pin
+[MODULE] Registered impl method: Pin::deref_mut in module core::pin
+[MODULE] Loaded core::pin from lib\core\src\pin.tml (8 functions)
+[MODULE] Registered re-export: core::pin::Unpin
+[MODULE] Registered struct: PhantomData in module core::marker
+[MODULE] Registered impl method: PhantomData::new in module core::marker
+[MODULE] Registered impl method: PhantomData::default in module core::marker
+[MODULE] Registered impl method: PhantomData::duplicate in module core::marker
+[MODULE] Registered struct: PhantomPinned in module core::marker
+[MODULE] Registered impl method: PhantomPinned::new in module core::marker
+[MODULE] Registered impl method: PhantomPinned::default in module core::marker
+[MODULE] Registered impl method: PhantomPinned::duplicate in module core::marker
+[MODULE] Registered impl method: PhantomPinned::to_string in module core::marker
+[MODULE] Registered impl method: PhantomPinned::debug_string in module core::marker
+[MODULE] Loaded core::marker from lib\core\src\marker.tml (8 functions)
+[DEBUG] check_func_body called for function: value
+[check_block] Entering block with 0 statements
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'value' for return statement
+[DEBUG] Has return: yes
+[DEBUG] check_func_body called for function: to_string
+[check_block] Entering block with 0 statements
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'to_string' for return statement
+[DEBUG] Has return: yes
+[DEBUG] check_func_body called for function: debug_string
+[check_block] Entering block with 1 statements
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: I64
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'debug_string' for return statement
+[DEBUG] Has return: yes
+[DEBUG] check_func_body called for function: test_phantom_pinned_basic
+[check_block] Entering block with 3 statements
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: PhantomPinned
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: PhantomPinned
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: PhantomPinned
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'test_phantom_pinned_basic' for return statement
+[DEBUG] Has return: yes
+[DEBUG] check_func_body called for function: test_phantom_pinned_in_struct
+[check_block] Entering block with 2 statements
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: SelfRefStruct
+[check_block] Checking statement at index 2
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'test_phantom_pinned_in_struct' for return statement
+[DEBUG] Has return: yes
+[DEBUG] check_func_body called for function: test_phantom_pinned_duplicate
+[check_block] Entering block with 2 statements
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: PhantomPinned
+[check_block] Checking statement at index 0
+[check_let] Processing let statement
+[check_let] Has type annotation, calling resolve_type...
+[check_let] Type annotation variant index: 0
+[check_let] resolved var_type: PhantomPinned
+[check_block] Checking trailing expression
+[check_block] Exiting block
+[DEBUG] Checking function 'test_phantom_pinned_duplicate' for return statement
+[DEBUG] Has return: yes
+[GEN_FUNC_DECL] Skipping generic function: assert_gt (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: assert_gte (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: assert_lt (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: assert_lte (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: assert_in_range (generics.size=1)
+[GEN_FUNC_DECL] Processing non-generic function: assert_false
+[GEN_FUNC_DECL] Processing non-generic function: assert_true
+[GEN_FUNC_DECL] Processing non-generic function: assert_str_len
+[GEN_FUNC_DECL] Processing non-generic function: assert_str_empty
+[GEN_FUNC_DECL] Processing non-generic function: assert_str_not_empty
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[GEN_FUNC_DECL] Skipping generic function: drop_in_place (generics.size=1)
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[GEN_FUNC_DECL] Skipping generic function: bound_included (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: bound_excluded (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: bound_unbounded (generics.size=1)
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[METHOD_CALL] receiver is FieldExpr: no
+[METHOD] receiver_type for method 'debug_string': exists
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[GEN_FUNC_DECL] Skipping generic function: drop_in_place (generics.size=1)
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[GEN_FUNC_DECL] Skipping generic function: bound_included (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: bound_excluded (generics.size=1)
+[GEN_FUNC_DECL] Skipping generic function: bound_unbounded (generics.size=1)
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 2 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[MODULE] Skipping generic impl with 1 type params
+[METHOD_CALL] receiver is FieldExpr: no
+[GEN_FUNC_DECL] Processing non-generic function: test_phantom_pinned_basic
+[GEN_FUNC_DECL] Processing non-generic function: test_phantom_pinned_in_struct
+[METHOD_CALL] receiver is FieldExpr: no
+[GEN_FUNC_DECL] Processing non-generic function: test_phantom_pinned_duplicate
+[METHOD_CALL] receiver is FieldExpr: no
+error[C001]: Unknown method: debug_string
+  --> ğÍôC…   íôC…  °äòC…  ııııİİ:345:37

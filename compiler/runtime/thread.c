@@ -1,5 +1,37 @@
-// TML Core Runtime - Threading
-// Thread, Channel, Mutex, WaitGroup
+/**
+ * @file thread.c
+ * @brief TML Runtime - Threading Primitives
+ *
+ * Implements threading and synchronization primitives for the TML language.
+ * Provides cross-platform thread creation, channels, mutexes, wait groups,
+ * and atomic operations.
+ *
+ * ## Components
+ *
+ * - **Thread primitives**: `thread_spawn`, `thread_join`, `thread_yield`, `thread_sleep`
+ * - **Channel (Go-style)**: Bounded MPMC channel with blocking operations
+ * - **Mutex**: Simple mutual exclusion lock
+ * - **WaitGroup**: Wait for multiple operations to complete
+ * - **AtomicCounter**: Thread-safe counter with atomic operations
+ *
+ * ## Platform Support
+ *
+ * - **Windows**: Uses Win32 API (CreateThread, CriticalSection, ConditionVariable)
+ * - **POSIX**: Uses pthreads (pthread_create, pthread_mutex, pthread_cond)
+ *
+ * ## Channel Semantics
+ *
+ * Channels follow Go-style semantics:
+ * - `channel_send` blocks until space is available
+ * - `channel_recv` blocks until data is available
+ * - `channel_try_send`/`channel_try_recv` are non-blocking variants
+ * - Closing a channel wakes all waiting senders/receivers
+ *
+ * ## Thread Safety
+ *
+ * All primitives in this file are designed for concurrent use from multiple
+ * threads. Internal synchronization is handled automatically.
+ */
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -14,7 +46,9 @@
 #include <unistd.h>
 #endif
 
-// ============ THREAD PRIMITIVES ============
+// ============================================================================
+// Thread Primitives
+// ============================================================================
 
 typedef void (*ThreadFunc)(void*);
 

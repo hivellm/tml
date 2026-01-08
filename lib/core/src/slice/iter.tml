@@ -36,8 +36,8 @@
 //! // Yields: [1, 2], [2, 3], [3, 4]
 //! ```
 
-use core::slice::{Slice}
-use core::iter::Iterator
+use core::slice::*
+use core::iter::*
 
 // ============================================================================
 // Chunks Iterator

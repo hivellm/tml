@@ -379,7 +379,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     // Handle glob imports: use std::math::*
     if (use_decl.is_glob) {
         // Load the module
-        env_.load_native_module(module_path);
+        env_.load_native_module(module_path, /*silent=*/true);
         auto module_opt = env_.get_module(module_path);
 
         if (!module_opt.has_value()) {
@@ -398,7 +398,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
         const auto& symbols = use_decl.symbols.value();
 
         // Load the module
-        env_.load_native_module(module_path);
+        env_.load_native_module(module_path, /*silent=*/true);
         auto module_opt = env_.get_module(module_path);
 
         if (!module_opt.has_value()) {
@@ -415,7 +415,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
     }
 
     // Try first as complete module path
-    env_.load_native_module(module_path);
+    env_.load_native_module(module_path, /*silent=*/true);
     auto module_opt = env_.get_module(module_path);
 
     // If module not found, last segment might be a symbol name
@@ -428,7 +428,7 @@ void TypeChecker::process_use_decl(const parser::UseDecl& use_decl) {
             base_module_path += use_decl.path.segments[i];
         }
 
-        env_.load_native_module(base_module_path);
+        env_.load_native_module(base_module_path, /*silent=*/true);
         module_opt = env_.get_module(base_module_path);
 
         if (module_opt.has_value()) {

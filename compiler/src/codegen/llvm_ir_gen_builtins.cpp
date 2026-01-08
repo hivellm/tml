@@ -208,6 +208,11 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
     // ============ BUILTIN HANDLERS ============
     // Try each category of builtins. If any handler returns a value, use it.
 
+    // Try intrinsics first (unreachable, assume, etc.)
+    if (auto result = try_gen_intrinsic(fn_name, call)) {
+        return *result;
+    }
+
     if (auto result = try_gen_builtin_io(fn_name, call)) {
         return *result;
     }
@@ -882,6 +887,17 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             std::string func_part = fn_name.substr(first_sep + 2);
             // Try looking up with full module path
             std::string qualified_name = module_path + "::" + func_part;
+            func_it = functions_.find(qualified_name);
+        } else {
+            // Bare function name (no ::) - try qualifying with current module
+            // This handles calls to same-module private functions
+            std::string module_path = current_module_prefix_;
+            size_t pos = 0;
+            while ((pos = module_path.find("_", pos)) != std::string::npos) {
+                module_path.replace(pos, 1, "::");
+                pos += 2;
+            }
+            std::string qualified_name = module_path + "::" + fn_name;
             func_it = functions_.find(qualified_name);
         }
     }

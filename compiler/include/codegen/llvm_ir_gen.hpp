@@ -516,6 +516,8 @@ private:
         -> std::optional<std::string>;
     auto try_gen_builtin_async(const std::string& fn_name, const parser::CallExpr& call)
         -> std::optional<std::string>;
+    auto try_gen_intrinsic(const std::string& fn_name, const parser::CallExpr& call)
+        -> std::optional<std::string>;
 
     // Utility
     void report_error(const std::string& msg, const SourceSpan& span);

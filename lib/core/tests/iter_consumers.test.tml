@@ -31,7 +31,7 @@
 // - cmp() - lexicographic comparison
 
 use test
-use core::range::RangeIterI64
+use core::range::*
 
 // ============================================================================
 // Placeholder test - verifies basic iterator functionality

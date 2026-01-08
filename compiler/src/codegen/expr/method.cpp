@@ -237,13 +237,88 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     // 3. Generate receiver and get receiver pointer
     // =========================================================================
-    std::string receiver = gen_expr(*call.receiver);
+    std::string receiver;
     std::string receiver_ptr;
-    if (call.receiver->is<parser::IdentExpr>()) {
-        const auto& ident = call.receiver->as<parser::IdentExpr>();
-        auto it = locals_.find(ident.name);
-        if (it != locals_.end()) {
-            receiver_ptr = it->second.reg;
+
+    // Special handling for FieldExpr receiver: we need the pointer to the field,
+    // not a loaded copy, so that mutations inside the method are persisted.
+    TML_DEBUG_LN("[METHOD_CALL] receiver is FieldExpr: "
+                 << (call.receiver->is<parser::FieldExpr>() ? "yes" : "no"));
+    if (call.receiver->is<parser::FieldExpr>()) {
+        const auto& field_expr = call.receiver->as<parser::FieldExpr>();
+
+        // Generate the base object expression
+        std::string base_ptr;
+        if (field_expr.object->is<parser::IdentExpr>()) {
+            const auto& ident = field_expr.object->as<parser::IdentExpr>();
+            if (ident.name == "this") {
+                base_ptr = "%this";
+            } else {
+                auto it = locals_.find(ident.name);
+                if (it != locals_.end()) {
+                    base_ptr = it->second.reg;
+                }
+            }
+        }
+
+        if (!base_ptr.empty()) {
+            // Infer the base object type
+            types::TypePtr base_type = infer_expr_type(*field_expr.object);
+            TML_DEBUG_LN("[FIELD_MUTATION] base_type exists: " << (base_type ? "yes" : "no"));
+            if (base_type) {
+                TML_DEBUG_LN("[FIELD_MUTATION] base_type is NamedType: "
+                             << (base_type->is<types::NamedType>() ? "yes" : "no"));
+            }
+            if (base_type && base_type->is<types::NamedType>()) {
+                const auto& base_named = base_type->as<types::NamedType>();
+                std::string base_type_name = base_named.name;
+
+                // Get the mangled struct type name if it has type args
+                std::string struct_type_name = base_type_name;
+                if (!base_named.type_args.empty()) {
+                    struct_type_name = mangle_struct_name(base_type_name, base_named.type_args);
+                }
+                std::string llvm_struct_type = "%struct." + struct_type_name;
+
+                // Get field index
+                int field_idx = get_field_index(struct_type_name, field_expr.field);
+                if (field_idx >= 0) {
+                    std::string field_type = get_field_type(struct_type_name, field_expr.field);
+
+                    // Generate getelementptr to get pointer to the field
+                    std::string field_ptr = fresh_reg();
+                    emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type + ", ptr " +
+                              base_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+
+                    // For primitive types, load the value; for structs, keep the pointer
+                    receiver_ptr = field_ptr;
+                    if (field_type == "i8" || field_type == "i16" || field_type == "i32" ||
+                        field_type == "i64" || field_type == "i128" || field_type == "i1" ||
+                        field_type == "float" || field_type == "double") {
+                        // Load primitive value for method calls like to_string()
+                        std::string loaded = fresh_reg();
+                        emit_line("  " + loaded + " = load " + field_type + ", ptr " + field_ptr);
+                        receiver = loaded;
+                    } else {
+                        receiver = field_ptr;
+                    }
+                    last_expr_type_ = field_type;
+                }
+            }
+        }
+
+        // Fallback if we couldn't get the field pointer
+        if (receiver.empty()) {
+            receiver = gen_expr(*call.receiver);
+        }
+    } else {
+        receiver = gen_expr(*call.receiver);
+        if (call.receiver->is<parser::IdentExpr>()) {
+            const auto& ident = call.receiver->as<parser::IdentExpr>();
+            auto it = locals_.find(ident.name);
+            if (it != locals_.end()) {
+                receiver_ptr = it->second.reg;
+            }
         }
     }
 
@@ -665,6 +740,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     } else {
                         impl_receiver_val = receiver;
                     }
+                } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
+                    // For field expressions, use the field pointer directly
+                    // This ensures mutations happen in place (section 10)
+                    impl_receiver_val = receiver_ptr;
                 } else if (last_expr_type_.starts_with("%struct.")) {
                     std::string tmp = fresh_reg();
                     emit_line("  " + tmp + " = alloca " + last_expr_type_);
@@ -724,8 +803,6 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     // 11. Try module lookup for impl methods
     // =========================================================================
-    TML_DEBUG_LN("[METHOD] receiver_type for method '"
-                 << method << "': " << (receiver_type ? "exists" : "null"));
     if (receiver_type && receiver_type->is<types::NamedType>()) {
         const auto& named2 = receiver_type->as<types::NamedType>();
         bool is_builtin_type2 =
@@ -790,6 +867,10 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     } else {
                         impl_receiver_val = receiver;
                     }
+                } else if (call.receiver->is<parser::FieldExpr>() && !receiver_ptr.empty()) {
+                    // For field expressions, use the field pointer directly
+                    // This ensures mutations happen in place (section 11)
+                    impl_receiver_val = receiver_ptr;
                 } else if (last_expr_type_.starts_with("%struct.")) {
                     std::string tmp = fresh_reg();
                     emit_line("  " + tmp + " = alloca " + last_expr_type_);

@@ -82,6 +82,32 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0.0";
     }
 
+    // ============ FLOAT NEGATION ============
+
+    // fneg_f32(x: F32) -> F32
+    if (fn_name == "fneg_f32") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = fneg float " + value);
+            last_expr_type_ = "float";
+            return result;
+        }
+        return "0.0";
+    }
+
+    // fneg_f64(x: F64) -> F64
+    if (fn_name == "fneg_f64") {
+        if (!call.args.empty()) {
+            std::string value = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = fneg double " + value);
+            last_expr_type_ = "double";
+            return result;
+        }
+        return "0.0";
+    }
+
     // ============ FLOAT FUNCTIONS ============
 
     // float_to_fixed(value: F64, decimals: I32) -> Str

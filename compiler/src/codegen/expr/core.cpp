@@ -57,6 +57,24 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
         return const_it->second;
     }
 
+    // Check imported constants (from "use module::CONSTANT")
+    auto import_path = env_.resolve_imported_symbol(ident.name);
+    if (import_path) {
+        auto pos = import_path->rfind("::");
+        if (pos != std::string::npos) {
+            std::string module_path = import_path->substr(0, pos);
+            std::string symbol_name = import_path->substr(pos + 2);
+            auto module = env_.get_module(module_path);
+            if (module) {
+                auto const_it2 = module->constants.find(symbol_name);
+                if (const_it2 != module->constants.end()) {
+                    last_expr_type_ = "i64"; // Constants are i64 for now
+                    return const_it2->second;
+                }
+            }
+        }
+    }
+
     auto it = locals_.find(ident.name);
     if (it != locals_.end()) {
         const VarInfo& var = it->second;

@@ -655,5 +655,6 @@ impl AsciiChar {
 
 /// Converts an AsciiChar to a string
 pub func to_string(ch: AsciiChar) -> Str {
-    return ch.as_str()
+    let byte: U8 = ch.value as U8
+    return lowlevel { char_to_string(byte) }
 }

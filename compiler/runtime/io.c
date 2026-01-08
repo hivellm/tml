@@ -1,11 +1,34 @@
-// TML Runtime - IO Functions
-// Matches: env_builtins_io.cpp
+/**
+ * @file io.c
+ * @brief TML Runtime - IO Functions (Standalone)
+ *
+ * Standalone I/O functions for the TML language. This file contains basic
+ * I/O operations that can be used independently of essential.c.
+ *
+ * ## Note
+ *
+ * Most projects should use essential.c which includes these functions plus
+ * panic catching support. This file is provided for minimal builds that
+ * don't need the full runtime.
+ *
+ * ## Components
+ *
+ * - **Output**: `print`, `println`
+ * - **Control flow**: `panic`, `assert_tml`
+ * - **Type-specific print**: `print_i32`, `print_i64`, `print_f32`, etc.
+ *
+ * @see essential.c for the complete runtime with panic catching
+ * @see env_builtins_io.cpp for compiler builtin registration
+ */
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-// print(message: Str) -> Unit
+/**
+ * @brief Prints a string to stdout without a newline.
+ * Maps to TML's `print(message: Str) -> Unit` builtin.
+ */
 void print(const char* message) {
     if (message)
         printf("%s", message);

@@ -95,6 +95,14 @@ void TypeEnv::import_all_from(const std::string& module_path) {
         import_symbol(module_path, name, std::nullopt);
     }
 
+    // Import all constants
+    for (const auto& [name, value] : module->constants) {
+        // Only import non-qualified constants (not Type::CONST)
+        if (name.find("::") == std::string::npos) {
+            import_symbol(module_path, name, std::nullopt);
+        }
+    }
+
     // Process re-exports (pub use declarations)
     for (const auto& re_export : module->re_exports) {
         // First, load the source module if not already loaded
@@ -232,6 +240,30 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     if (module_registry_->has_module(module_path)) {
         return true; // Already loaded
     }
+
+    // Check for circular dependency - if we're already loading this module, skip
+    if (loading_modules_.count(module_path) > 0) {
+        TML_DEBUG_LN("[MODULE] Skipping circular dependency: " << module_path);
+        return true; // Return true to allow compilation to proceed
+    }
+
+    // Mark module as being loaded
+    loading_modules_.insert(module_path);
+
+    // RAII guard to remove from loading set on any return path
+    struct LoadingGuard {
+        std::unordered_set<std::string>& set;
+        const std::string& path;
+        bool completed = false;
+        LoadingGuard(std::unordered_set<std::string>& s, const std::string& p) : set(s), path(p) {}
+        ~LoadingGuard() {
+            if (!completed)
+                set.erase(path);
+        }
+        void mark_completed() {
+            completed = true;
+        }
+    } loading_guard(loading_modules_, module_path);
 
     // Collect all declarations to process
     std::vector<std::pair<std::vector<parser::DeclPtr>, std::string>> all_parsed;
@@ -741,6 +773,63 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         }
                     }
                 }
+            } else if (decl->is<parser::ConstDecl>()) {
+                // Handle module-level constants (not inside impl blocks)
+                const auto& const_decl = decl->as<parser::ConstDecl>();
+
+                // Process all constants (public and private - needed for codegen)
+                if (const_decl.value && const_decl.value->is<parser::LiteralExpr>()) {
+                    const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        std::string value = std::to_string(lit.token.int_value().value);
+                        mod.constants[const_decl.name] = value;
+                        TML_DEBUG_LN("[MODULE] Registered module constant: "
+                                     << const_decl.name << " = " << value << " in module "
+                                     << module_path);
+                    }
+                } else if (const_decl.value && const_decl.value->is<parser::CastExpr>()) {
+                    // Handle (literal as Type)
+                    const auto& cast = const_decl.value->as<parser::CastExpr>();
+                    if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                        const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            std::string value = std::to_string(lit.token.int_value().value);
+                            mod.constants[const_decl.name] = value;
+                            TML_DEBUG_LN("[MODULE] Registered module constant: "
+                                         << const_decl.name << " = " << value << " in module "
+                                         << module_path);
+                        }
+                    }
+                } else if (const_decl.value && const_decl.value->is<parser::UnaryExpr>()) {
+                    // Handle unary expressions like -2147483648
+                    const auto& unary = const_decl.value->as<parser::UnaryExpr>();
+                    if (unary.op == parser::UnaryOp::Neg &&
+                        unary.operand->is<parser::LiteralExpr>()) {
+                        const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                            std::string value = std::to_string(-int_val);
+                            mod.constants[const_decl.name] = value;
+                            TML_DEBUG_LN("[MODULE] Registered module constant: "
+                                         << const_decl.name << " = " << value << " in module "
+                                         << module_path);
+                        }
+                    } else if (unary.operand->is<parser::CastExpr>()) {
+                        // Handle -(literal as Type)
+                        const auto& cast = unary.operand->as<parser::CastExpr>();
+                        if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                            const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                                std::string value = std::to_string(-int_val);
+                                mod.constants[const_decl.name] = value;
+                                TML_DEBUG_LN("[MODULE] Registered module constant: "
+                                             << const_decl.name << " = " << value << " in module "
+                                             << module_path);
+                            }
+                        }
+                    }
+                }
             } else if (decl->is<parser::ModDecl>()) {
                 const auto& mod_decl = decl->as<parser::ModDecl>();
 
@@ -776,10 +865,30 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
 
                 // Load the dependency module (for all use declarations, not just public)
                 // This ensures that methods from imported modules are available
-                // Note: We use a flag to avoid aborting on dependency failures
+                // Note: We use silent=true because the path might be an item import
+                // (e.g., "use core::default::Default" where Default is a symbol, not a module)
                 bool prev_abort_on_error = abort_on_module_error_;
                 abort_on_module_error_ = false;
-                load_native_module(use_path);
+
+                // Try to load as module first
+                bool loaded = load_native_module(use_path, /*silent=*/true);
+
+                // If failed and path has multiple segments, last segment might be a symbol
+                if (!loaded && use_decl.path.segments.size() > 1) {
+                    std::string base_path;
+                    for (size_t j = 0; j < use_decl.path.segments.size() - 1; ++j) {
+                        if (j > 0)
+                            base_path += "::";
+                        base_path += use_decl.path.segments[j];
+                    }
+                    // Handle relative paths
+                    if (!base_path.empty() && base_path.find("core::") != 0 &&
+                        base_path.find("std::") != 0 && base_path.find("test") != 0) {
+                        base_path = module_path + "::" + base_path;
+                    }
+                    load_native_module(base_path, /*silent=*/true);
+                }
+
                 abort_on_module_error_ = prev_abort_on_error;
 
                 // Only create re-export entry for public use declarations
@@ -837,10 +946,15 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     TML_DEBUG_LN("[MODULE] Loaded " << module_path << " from " << file_path << " ("
                                     << mod.functions.size() << " functions)");
     module_registry_->register_module(module_path, std::move(mod));
+
+    // Mark as completed so guard doesn't remove it (it's already registered)
+    loading_guard.mark_completed();
+    loading_modules_.erase(module_path);
+
     return true;
 }
 
-bool TypeEnv::load_native_module(const std::string& module_path) {
+bool TypeEnv::load_native_module(const std::string& module_path, bool silent) {
     if (!module_registry_) {
         return false;
     }
@@ -923,7 +1037,9 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         }
 
         // Module file not found
-        std::cerr << "error: core module file not found: " << module_path << "\n";
+        if (!silent) {
+            std::cerr << "error: core module file not found: " << module_path << "\n";
+        }
         return false;
     }
 
@@ -977,7 +1093,9 @@ bool TypeEnv::load_native_module(const std::string& module_path) {
         }
 
         // Module file not found
-        std::cerr << "error: std module file not found: " << module_path << "\n";
+        if (!silent) {
+            std::cerr << "error: std module file not found: " << module_path << "\n";
+        }
         return false;
     }
 

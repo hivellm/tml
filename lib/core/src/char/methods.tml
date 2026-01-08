@@ -5,8 +5,12 @@
 
 use core::option::Maybe
 use core::char::Char
-use core::char::MAX
-use core::char::REPLACEMENT_CHARACTER
+
+// Note: We can't import MAX from core::char because methods.tml is a submodule
+// of core::char and it would create a circular dependency during module loading.
+// Instead, we define the same constant here (it's the same module anyway).
+const MAX: U32 = 0x10FFFF
+const REPLACEMENT_CHARACTER: U32 = 0xFFFD
 
 // ============================================================================
 // Validation
@@ -590,9 +594,9 @@ func to_hex_string(c: Char) -> Str {
         }
         let digit: U8 = (value % 16) as U8
         let ch: Str = if digit < 10 {
-            char_to_string(digit + 0x30)  // '0'
+            char_to_string((digit + 0x30) as Char)  // '0'
         } else {
-            char_to_string(digit - 10 + 0x41)  // 'A'
+            char_to_string((digit - 10 + 0x41) as Char)  // 'A'
         }
         result = ch + result
         value = value / 16
@@ -603,8 +607,15 @@ func to_hex_string(c: Char) -> Str {
 
 /// Converts a single character to a string.
 func char_to_string(c: Char) -> Str {
-    // Uses the runtime's character-to-string conversion
-    return lowlevel { tml_char_to_string(c) }
+    // For ASCII characters, use the runtime's byte-to-string conversion
+    if c < 128 {
+        let byte: U8 = c as U8
+        return lowlevel { char_to_string(byte) }
+    }
+    // For non-ASCII, encode as UTF-8
+    // TODO: Implement proper UTF-8 encoding for non-ASCII characters
+    // For now, just return a placeholder
+    return "?"
 }
 
 // ============================================================================

@@ -61,8 +61,8 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
-use core::hash::Hash
-use core::convert::{AsRef, AsMut}
+use core::hash::*
+use core::convert::*
 
 // ============================================================================
 // ByteStr Type
@@ -809,4 +809,4 @@ func byte_to_hex(b: U8) -> Str {
 // Imports
 // ============================================================================
 
-use core::iter::Iterator
+use core::iter::*

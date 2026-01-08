@@ -82,8 +82,8 @@
 
 // Display, Debug are builtins - no import needed
 use core::fmt::FmtError
-use core::option::Maybe
-use core::iter::Iterator
+use core::option::*
+use core::iter::*
 
 // ============================================================================
 // Error Behavior
@@ -339,57 +339,43 @@ impl Error for NeverError {}
 ///
 /// If you need to handle specific error types differently, consider using
 /// an enum instead.
+/// Note: BoxedError is a placeholder. Full implementation requires Heap[T] type.
+/// For now it just stores a string message instead of the actual error.
 pub type BoxedError {
-    inner: Heap[dyn Error]
+    message: Str
 }
 
 impl BoxedError {
-    /// Boxes an error, creating a new `BoxedError`.
-    ///
-    /// This heap-allocates the error and stores it as a trait object.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let io_err = IoError::new(IoErrorKind::NotFound)
-    /// let boxed = BoxedError::new(io_err)
-    /// println(boxed.to_string())  // "entity not found"
-    /// ```
+    /// Creates a BoxedError from any Error type.
+    /// Note: Current implementation only preserves the message.
     pub func new[E: Error](error: E) -> BoxedError {
         return BoxedError {
-            inner: Heap::new(error)
+            message: error.to_string()
         }
     }
 
-    /// Returns a reference to the inner error as a trait object.
-    ///
-    /// # Examples
-    ///
-    /// ```tml
-    /// let boxed = BoxedError::new(SimpleError::new("oops"))
-    /// let inner: ref dyn Error = boxed.as_ref()
-    /// println(inner.to_string())  // "oops"
-    /// ```
-    pub func as_ref(this) -> ref dyn Error {
-        return ref *this.inner
+    /// Creates a BoxedError with a custom message.
+    pub func from_message(msg: Str) -> BoxedError {
+        return BoxedError { message: msg }
     }
 }
 
 impl Display for BoxedError {
     pub func to_string(this) -> Str {
-        return (*this.inner).to_string()
+        return this.message
     }
 }
 
 impl Debug for BoxedError {
     pub func debug_string(this) -> Str {
-        return (*this.inner).debug_string()
+        return "BoxedError { message: " + this.message + " }"
     }
 }
 
 impl Error for BoxedError {
     pub func source(this) -> Maybe[ref dyn Error] {
-        return (*this.inner).source()
+        // TODO: Dynamic method calls on dyn Error not fully supported yet
+        return Nothing
     }
 }
 
@@ -479,7 +465,8 @@ impl[E: Error] Display for ChainedError[E] {
 
 impl[E: Error] Debug for ChainedError[E] {
     pub func debug_string(this) -> Str {
-        return "ChainedError { message: \"" + this.message + "\", cause: " + this.cause.debug_string() + " }"
+        // Use to_string() since E: Error implies E: Display, but not E: Debug
+        return "ChainedError \{ message: \"" + this.message + "\", cause: " + this.cause.to_string() + " \}"
     }
 }
 
@@ -574,7 +561,11 @@ impl Display for ParseError {
 
 impl Debug for ParseError {
     pub func debug_string(this) -> Str {
-        return "ParseError { message: \"" + this.message + "\", position: " + this.position.debug_string() + " }"
+        let pos_str: Str = when this.position {
+            Just(p) => "Just(" + p.to_string() + ")",
+            Nothing => "Nothing"
+        }
+        return "ParseError \{ message: \"" + this.message + "\", position: " + pos_str + " \}"
     }
 }
 
@@ -802,7 +793,12 @@ impl Display for IoError {
 
 impl Debug for IoError {
     pub func debug_string(this) -> Str {
-        return "IoError { kind: " + this.kind.debug_string() + ", message: " + this.message.debug_string() + " }"
+        let kind_str: Str = this.kind.to_string()
+        let msg_str: Str = when this.message {
+            Just(m) => "Just(\"" + m + "\")",
+            Nothing => "Nothing"
+        }
+        return "IoError \{ kind: " + kind_str + ", message: " + msg_str + " \}"
     }
 }
 
@@ -909,7 +905,9 @@ impl Iterator for ErrorChain {
     pub func next(mut this) -> Maybe[ref dyn Error] {
         when this.current {
             Just(err) => {
-                this.current = err.source()
+                // TODO: Dynamic method calls on dyn Error not fully supported yet
+                // this.current = err.source()
+                this.current = Nothing
                 return Just(err)
             },
             Nothing => return Nothing

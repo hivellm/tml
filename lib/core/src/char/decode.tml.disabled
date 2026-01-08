@@ -192,16 +192,13 @@ impl DecodeUtf16Error {
 
 impl Display for DecodeUtf16Error {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("unpaired surrogate found: 0x")
-            .and_then(do(_) f.write_u16_hex(this.code))
+        return f.write_str("unpaired surrogate found: 0x").and_then(do(_) f.write_u16_hex(this.code))
     }
 }
 
 impl Debug for DecodeUtf16Error {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("DecodeUtf16Error { code: 0x")
-            .and_then(do(_) f.write_u16_hex(this.code))
-            .and_then(do(_) f.write_str(" }"))
+        return f.write_str("DecodeUtf16Error \{ code: 0x").and_then(do(_) f.write_u16_hex(this.code)).and_then(do(_) f.write_str(" \}"))
     }
 }
 

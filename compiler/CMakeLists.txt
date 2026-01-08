@@ -236,6 +236,7 @@ add_library(tml_codegen STATIC
     src/codegen/builtins/string.cpp
     src/codegen/builtins/assert.cpp
     src/codegen/builtins/async.cpp
+    src/codegen/builtins/intrinsics.cpp
 )
 target_link_libraries(tml_codegen PUBLIC tml_mir)
 target_include_directories(tml_codegen PUBLIC include src)

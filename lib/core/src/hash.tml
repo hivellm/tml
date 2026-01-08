@@ -103,21 +103,21 @@ pub behavior Hash {
 /// `Hash` for `I8` - extends to `I64` for the hash value.
 impl Hash for I8 {
     pub func hash(this) -> I64 {
-        return lowlevel { i8_to_i64(this) }
+        return this as I64
     }
 }
 
 /// `Hash` for `I16` - extends to `I64` for the hash value.
 impl Hash for I16 {
     pub func hash(this) -> I64 {
-        return lowlevel { i16_to_i64(this) }
+        return this as I64
     }
 }
 
 /// `Hash` for `I32` - extends to `I64` for the hash value.
 impl Hash for I32 {
     pub func hash(this) -> I64 {
-        return lowlevel { i32_to_i64(this) }
+        return this as I64
     }
 }
 
@@ -131,28 +131,28 @@ impl Hash for I64 {
 /// `Hash` for `U8` - extends to `I64` for the hash value.
 impl Hash for U8 {
     pub func hash(this) -> I64 {
-        return lowlevel { u8_to_i64(this) }
+        return this as I64
     }
 }
 
 /// `Hash` for `U16` - extends to `I64` for the hash value.
 impl Hash for U16 {
     pub func hash(this) -> I64 {
-        return lowlevel { u16_to_i64(this) }
+        return this as I64
     }
 }
 
 /// `Hash` for `U32` - extends to `I64` for the hash value.
 impl Hash for U32 {
     pub func hash(this) -> I64 {
-        return lowlevel { u32_to_i64(this) }
+        return this as I64
     }
 }
 
 /// `Hash` for `U64` - converts to `I64` for the hash value.
 impl Hash for U64 {
     pub func hash(this) -> I64 {
-        return lowlevel { u64_to_i64(this) }
+        return this as I64
     }
 }
 
@@ -434,7 +434,7 @@ impl Hasher for DefaultHasher {
 
 impl Default for DefaultHasher {
     pub func default() -> DefaultHasher {
-        return DefaultHasher::new()
+        return DefaultHasher { state: FNV_OFFSET_BASIS }
     }
 }
 
@@ -480,7 +480,9 @@ impl RandomState {
     pub func new() -> RandomState {
         // Use a simple PRNG seeded with a counter for now
         // In a real implementation, this would use OS randomness
-        let seed: U64 = get_random_seed()
+        // For now, use a fixed seed since global mutable state isn't supported yet
+        let seed: U64 = 0x9E3779B97F4A7C15
+        let seed: U64 = seed ^ (seed >> 30)
         return RandomState {
             k0: seed,
             k1: seed ^ 0x5555555555555555
@@ -515,19 +517,8 @@ impl Duplicate for RandomState {
     }
 }
 
-// Global counter for generating pseudo-random seeds
-// NOTE: Global var not supported yet - using static approach
+// TODO: Add global mutable state support for true random seeding
 // var GLOBAL_SEED_COUNTER: U64 = 0
-
-func get_random_seed() -> U64 {
-    // Simple counter-based seed - not cryptographically secure
-    // but sufficient for hash table randomization
-    // For now, just return a fixed seed since global mutable state isn't supported
-    let seed: U64 = 12345
-    // Mix the counter with a constant to spread out sequential values
-    let seed: U64 = GLOBAL_SEED_COUNTER * 0x9E3779B97F4A7C15
-    return seed ^ (seed >> 30)
-}
 
 // ============================================================================
 // Imports

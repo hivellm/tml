@@ -252,8 +252,8 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
         return tmp;
     }
 
-    // to_string() -> Str
-    if (method == "to_string") {
+    // to_string() -> Str and debug_string() -> Str (same for primitives)
+    if (method == "to_string" || method == "debug_string") {
         std::string result = fresh_reg();
         if (kind == types::PrimitiveKind::Bool) {
             std::string ext = fresh_reg();
@@ -265,12 +265,25 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             emit_line("  " + result + " = call ptr @i64_to_string(i64 " + receiver + ")");
         } else if (kind == types::PrimitiveKind::F64) {
             emit_line("  " + result + " = call ptr @float_to_string(double " + receiver + ")");
+        } else if (kind == types::PrimitiveKind::F32) {
+            // Convert F32 to F64 first
+            std::string ext = fresh_reg();
+            emit_line("  " + ext + " = fpext float " + receiver + " to double");
+            emit_line("  " + result + " = call ptr @float_to_string(double " + ext + ")");
         } else if (kind == types::PrimitiveKind::Str) {
             last_expr_type_ = "ptr";
             return receiver;
+        } else if (kind == types::PrimitiveKind::Char) {
+            // Convert Char (U32) to string
+            emit_line("  " + result + " = call ptr @char_to_string(i32 " + receiver + ")");
         } else {
+            // For other integer types, extend to i64
             std::string ext = fresh_reg();
-            emit_line("  " + ext + " = sext " + llvm_ty + " " + receiver + " to i64");
+            if (is_signed) {
+                emit_line("  " + ext + " = sext " + llvm_ty + " " + receiver + " to i64");
+            } else {
+                emit_line("  " + ext + " = zext " + llvm_ty + " " + receiver + " to i64");
+            }
             emit_line("  " + result + " = call ptr @i64_to_string(i64 " + ext + ")");
         }
         last_expr_type_ = "ptr";

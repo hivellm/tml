@@ -1,5 +1,40 @@
-// TML Runtime - Async Executor Implementation
-// Provides task scheduling and execution for async/await
+/**
+ * @file async.c
+ * @brief TML Runtime - Async Executor Implementation
+ *
+ * Implements the async runtime for TML's async/await system. This file provides
+ * task scheduling, execution, and synchronization primitives for cooperative
+ * multitasking.
+ *
+ * ## Components
+ *
+ * - **Task Queue**: FIFO queue for managing ready and pending tasks
+ * - **Poll Results**: Utilities for creating Ready/Pending poll values
+ * - **Waker**: Mechanism to re-schedule suspended tasks
+ * - **Executor**: Core scheduler that runs tasks to completion
+ * - **block_on**: Synchronous wrapper for running async code
+ * - **Async I/O**: Timer, yield, and delay primitives
+ * - **Channel**: Bounded SPSC channel for inter-task communication
+ * - **Spawn/Join/Select**: Task spawning and synchronization
+ * - **Timeout**: Wraps futures with a timeout
+ *
+ * ## Execution Model
+ *
+ * The executor uses a simple round-robin scheduler:
+ * 1. Pop a task from the ready queue
+ * 2. Poll the task
+ * 3. If Ready, task is complete
+ * 4. If Pending, move to pending queue (awaiting wake)
+ * 5. Repeat until no tasks remain
+ *
+ * ## Waker Model
+ *
+ * When a task returns Pending, it must arrange for its waker to be called
+ * when it should be polled again. The waker moves the task from the pending
+ * queue back to the ready queue.
+ *
+ * @see async.h for type definitions and function declarations
+ */
 
 #include "async.h"
 

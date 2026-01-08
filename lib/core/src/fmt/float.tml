@@ -269,7 +269,12 @@ impl Display for FloatParts {
 
 impl Debug for FloatParts {
     pub func debug_string(this) -> Str {
-        return "FloatParts \{ sign: " + this.sign.debug_string() + ", integer: " + this.integer.debug_string() + ", fraction: " + this.fraction.debug_string() + ", exponent: " + this.exponent.debug_string() + " \}"
+        // Use to_string() for nested types to avoid cross-module method resolution issues
+        let exp_str: Str = when this.exponent {
+            Just(e) => "Just(" + e.to_string() + ")",
+            Nothing => "Nothing"
+        }
+        return "FloatParts \{ sign: \"" + this.sign + "\", integer: \"" + this.integer + "\", fraction: \"" + this.fraction + "\", exponent: " + exp_str + " \}"
     }
 }
 

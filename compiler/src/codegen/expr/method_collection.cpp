@@ -63,7 +63,15 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             }
             std::string arg = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call i32 @list_get(ptr " + handle + ", i32 " + arg + ")");
+            std::string arg_type = last_expr_type_;
+            std::string arg_i64 = arg;
+            if (arg_type == "i32") {
+                arg_i64 = fresh_reg();
+                emit_line("  " + arg_i64 + " = sext i32 " + arg + " to i64");
+            }
+            emit_line("  " + result + " = call i64 @list_get(ptr " + handle + ", i64 " + arg_i64 +
+                      ")");
+            last_expr_type_ = "i64";
             return result;
         }
         if (method == "set") {

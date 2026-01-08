@@ -30,9 +30,7 @@
 //! }
 //! ```
 
-use core::range::Range
-use core::range::RangeInclusive
-use core::range::RangeFrom
+use core::range::*
 // PartialOrd is a builtin behavior - no import needed
 
 // ============================================================================

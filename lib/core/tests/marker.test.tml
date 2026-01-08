@@ -15,6 +15,19 @@ impl SelfRefStruct {
     }
 }
 
+impl Display for SelfRefStruct {
+    pub func to_string(this) -> Str {
+        return "SelfRefStruct"
+    }
+}
+
+impl Debug for SelfRefStruct {
+    pub func debug_string(this) -> Str {
+        let val: I64 = this.value
+        return "SelfRefStruct(value=" + val.to_string() + ")"
+    }
+}
+
 @test
 func test_phantom_pinned_basic() -> I32 {
     // PhantomPinned can be created and used in structs

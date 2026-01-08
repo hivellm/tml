@@ -447,5 +447,17 @@ impl Send for PhantomPinned {}
 impl Sync for PhantomPinned {}
 impl Sized for PhantomPinned {}
 
+impl Display for PhantomPinned {
+    pub func to_string(this) -> Str {
+        return "PhantomPinned"
+    }
+}
+
+impl Debug for PhantomPinned {
+    pub func debug_string(this) -> Str {
+        return "PhantomPinned"
+    }
+}
+
 // NOTE: PhantomPinned explicitly does NOT implement Unpin
 // This is intentional - it's the whole purpose of this type

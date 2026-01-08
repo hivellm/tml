@@ -1,5 +1,31 @@
-// TML Runtime - Time Functions
-// Matches: env_builtins_time.cpp
+/**
+ * @file time.c
+ * @brief TML Runtime - Time Functions
+ *
+ * Implements time-related functions for the TML language. Provides cross-platform
+ * time reading, sleeping, and duration measurement.
+ *
+ * ## Components
+ *
+ * - **Time reading**: `time_ms`, `time_us`, `time_ns`
+ * - **Sleep**: `sleep_ms`, `sleep_us`
+ * - **Elapsed time**: `elapsed_ms`, `elapsed_us`, `elapsed_ns`
+ * - **Instant API**: Rust-style `instant_now`, `instant_elapsed`
+ * - **Duration formatting**: `duration_as_millis_f64`, `duration_format_secs`
+ *
+ * ## Platform Support
+ *
+ * - **Windows**: Uses `GetTickCount64`, `QueryPerformanceCounter`, `Sleep`
+ * - **POSIX**: Uses `gettimeofday`, `clock_gettime`, `nanosleep`
+ *
+ * ## Precision
+ *
+ * - Millisecond functions: ~1ms precision on most systems
+ * - Microsecond functions: ~1us precision where available
+ * - Nanosecond functions: Best available precision (often ~100ns on modern systems)
+ *
+ * @see env_builtins_time.cpp for compiler builtin registration
+ */
 
 #include <stdint.h>
 
@@ -11,7 +37,9 @@
 #include <unistd.h>
 #endif
 
-// ============ Time Reading ============
+// ============================================================================
+// Time Reading Functions
+// ============================================================================
 
 // time_ms() -> I32
 #ifdef _WIN32

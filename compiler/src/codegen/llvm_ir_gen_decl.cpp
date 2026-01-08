@@ -856,24 +856,34 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Check if first param is 'this' or 'mut this' (instance method vs static)
     size_t param_start = 0;
     bool is_instance_method = false;
+    bool is_mut_this = false;
     if (!method.params.empty()) {
         const auto& first_param = method.params[0];
         std::string first_name = get_param_name(first_param);
         if (first_name == "this") {
             is_instance_method = true;
             param_start = 1; // Skip 'this' in param loop since we handle it specially
+            // Check if 'mut this' - need to pass by pointer for mutation
+            if (first_param.pattern && first_param.pattern->is<parser::IdentPattern>()) {
+                is_mut_this = first_param.pattern->as<parser::IdentPattern>().is_mut;
+            }
         }
     }
 
     // Add 'this' as first parameter only for instance methods
-    // For primitive types, pass by value; for structs/enums, pass by pointer
-    std::string this_type = "ptr"; // default for structs
+    // For primitive types, pass by value (even for 'mut this' - we'll use an alloca)
+    // For structs/enums, always pass by pointer
+    std::string this_type = "ptr";    // default for structs
+    std::string this_inner_type = ""; // For mut this on primitives, the actual primitive type
     if (is_instance_method) {
         // Check if implementing on a primitive type - pass by value if so
         std::string llvm_type = llvm_type_name(type_name);
         if (llvm_type[0] != '%') {
             // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
             this_type = llvm_type;
+            if (is_mut_this) {
+                this_inner_type = llvm_type; // Remember the type for alloca
+            }
         }
         // Skip 'this' parameter for Unit type (void is not valid in LLVM parameter lists)
         if (this_type != "void") {
@@ -905,7 +915,16 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 
     // Register 'this' in locals only for instance methods
     if (is_instance_method) {
-        locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
+        if (!this_inner_type.empty()) {
+            // For 'mut this' on primitive types, create an alloca to allow mutation
+            // The value is passed by value but we need an addressable location for assignment
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + this_inner_type);
+            emit_line("  store " + this_inner_type + " %this, ptr " + alloca_reg);
+            locals_["this"] = VarInfo{alloca_reg, this_inner_type, nullptr, std::nullopt};
+        } else {
+            locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
+        }
     }
 
     // Register other parameters in locals by creating allocas

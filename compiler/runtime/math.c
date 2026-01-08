@@ -1,5 +1,34 @@
-// TML Runtime - Math Functions
-// Matches: codegen/builtins/math.cpp
+/**
+ * @file math.c
+ * @brief TML Runtime - Math Functions
+ *
+ * Implements mathematical functions and utilities for the TML language.
+ * Provides float operations, SIMD-friendly array operations, and special
+ * float value handling.
+ *
+ * ## Components
+ *
+ * - **Black box**: `black_box_i32`, `black_box_i64` (prevent optimization)
+ * - **SIMD operations**: `simd_sum_i32`, `simd_sum_f64`, `simd_dot_f64`
+ * - **Float conversion**: `float_to_fixed`, `float_to_precision`, `int_to_float`
+ * - **Rounding**: `float_round`, `float_floor`, `float_ceil`
+ * - **Math functions**: `float_abs`, `float_sqrt`, `float_pow`
+ * - **Bit manipulation**: `float32_bits`, `float64_bits`, `float*_from_bits`
+ * - **Special values**: `infinity`, `nan_val`, `is_inf`, `is_nan`
+ * - **Nextafter**: `nextafter`, `nextafter32`
+ *
+ * ## Black Box Functions
+ *
+ * The `black_box` functions prevent the compiler from optimizing away
+ * computations. Useful for benchmarking to ensure code is actually executed.
+ *
+ * ## SIMD Operations
+ *
+ * SIMD array operations are written as simple loops that the compiler can
+ * auto-vectorize. This provides portable SIMD without explicit intrinsics.
+ *
+ * @see codegen/builtins/math.cpp for compiler builtin registration
+ */
 
 #include <math.h>
 #include <stdint.h>
@@ -7,7 +36,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ============ BLACK BOX (prevent optimization) ============
+// ============================================================================
+// Black Box (prevent optimization)
+// ============================================================================
 
 // Compiler barrier to prevent optimization
 #ifdef _MSC_VER

@@ -268,12 +268,18 @@ struct IntValue {
 
     /// The base used in source: 2 (binary), 8 (octal), 10 (decimal), 16 (hex).
     uint8_t base;
+
+    /// Optional type suffix: i8, i16, i32, i64, i128, u8, u16, u32, u64, u128.
+    std::string suffix;
 };
 
 /// Floating-point literal value.
 struct FloatValue {
     /// The numeric value.
     double value;
+
+    /// Optional type suffix: f32, f64.
+    std::string suffix;
 };
 
 /// String literal value with escape sequences already processed.

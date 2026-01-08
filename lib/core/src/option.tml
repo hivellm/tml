@@ -69,7 +69,7 @@
 //! }
 //! ```
 
-use core::iter::Iterator
+use core::iter::*
 // PartialEq is a builtin behavior - no import needed
 use core::default::Default
 

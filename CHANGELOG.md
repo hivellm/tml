@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Float Negation Intrinsics** (2026-01-08) - Added `fneg_f32` and `fneg_f64` builtin functions
+  - Emit LLVM `fneg` instruction directly for float negation
+  - Avoids type coercion issues with `0.0 - this` pattern
+  - Used by `impl Neg for F32/F64` in `core::ops::arith`
+  - Files modified: `compiler/src/codegen/builtins/math.cpp`, `lib/core/src/ops/arith.tml`
+
+### Fixed
+- **`debug_string` Method for Primitive Types** (2026-01-08) - Primitives now support `debug_string()` method
+  - Added `debug_string` as alias for `to_string` on all primitive types (I8-I128, U8-U128, F32, F64, Bool, Char, Str)
+  - Fixes calls like `n.debug_string()` where `n: I64` in `CoroutineResumePoint::AtYield(I64)` Debug impl
+  - Also improved F32 handling to use `fpext` and Char handling to use runtime function
+  - File modified: `compiler/src/codegen/expr/method_primitive.cpp`
+
+- **`mut this` in Methods for Primitive Types** (2026-01-08) - Fixed mutation of `this` in impl methods
+  - Methods with `mut this` on primitive types (e.g., `bitand_assign`) now create an alloca
+  - This allows assignment to `this` within the method body to work correctly
+  - Without this fix, `store` would fail because `%this` was a value, not a pointer
+  - File modified: `compiler/src/codegen/llvm_ir_gen_decl.cpp`
+
+- **F32/F64 Negation Type Safety** (2026-01-08) - Fixed return type of `impl Neg for F32`
+  - Changed from `0.0 - this` (which promoted to F64) to `lowlevel { fneg_f32(this) }`
+  - Prevents LLVM IR type mismatch: `ret float %double_value`
+  - File modified: `lib/core/src/ops/arith.tml`
+
 - **Iterator Adapter Implementations** (2026-01-07) - Implemented Iterator for closure-based adapters
   - Map[I, F]: transforms each element via closure
   - Filter[I, P]: yields elements matching predicate

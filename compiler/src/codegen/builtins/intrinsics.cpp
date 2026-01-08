@@ -4,16 +4,31 @@
 
 #include "codegen/llvm_ir_gen.hpp"
 
+#include <unordered_set>
+
 namespace tml::codegen {
 
 auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::CallExpr& call)
     -> std::optional<std::string> {
 
-    // Check if this function is marked as @intrinsic
-    auto func_sig = env_.lookup_func(fn_name);
-    if (!func_sig.has_value() || !func_sig->is_intrinsic) {
+    // Known intrinsic function names (from core::intrinsics module)
+    // These are matched by name rather than @intrinsic attribute for simplicity
+    static const std::unordered_set<std::string> intrinsics = {
+        "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
+        "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
+        "size_of", "align_of", "type_name", "ptr_offset", "ptr_read", "ptr_write", "ptr_copy",
+        "volatile_read", "volatile_write", "atomic_load", "atomic_store", "atomic_cas",
+        "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or", "atomic_xor",
+        "fence", "black_box",
+        // Math intrinsics
+        "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
+
+    if (intrinsics.find(fn_name) == intrinsics.end()) {
         return std::nullopt;
     }
+
+    // Function signature lookup (used by some intrinsics for type info)
+    auto func_sig = env_.lookup_func(fn_name);
 
     // ============================================================================
     // Arithmetic Intrinsics
@@ -443,8 +458,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             // Infer element type
             std::string elem_type = "i8";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-            if (arg_type->is<types::MutRefType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             } else if (arg_type->is<types::RefType>()) {
                 elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             }
@@ -469,8 +484,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             // Infer element type
             std::string elem_type = "i8";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-            if (arg_type->is<types::MutRefType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             } else if (arg_type->is<types::RefType>()) {
                 elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             }
@@ -501,8 +516,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
             if (arg_type->is<types::RefType>()) {
                 elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
-            } else if (arg_type->is<types::MutRefType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            } else if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             }
 
             std::string count = gen_expr(*call.args[1]);
@@ -525,8 +540,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             // Infer element type
             std::string elem_type = "i8";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-            if (arg_type->is<types::MutRefType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+            if (arg_type->is<types::RefType>()) {
+                elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             } else if (arg_type->is<types::RefType>()) {
                 elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
             }
@@ -600,8 +615,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             if (arg_type) {
                 if (arg_type->is<types::RefType>()) {
                     elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
-                } else if (arg_type->is<types::MutRefType>()) {
-                    elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
+                } else if (arg_type->is<types::RefType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
                 }
             }
 
@@ -626,10 +641,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
             std::string elem_type = "i8";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
             if (arg_type) {
-                if (arg_type->is<types::MutRefType>()) {
-                    elem_type = llvm_type_from_semantic(arg_type->as<types::MutRefType>().inner);
-                } else if (arg_type->is<types::RefType>()) {
+                if (arg_type->is<types::RefType>()) {
                     elem_type = llvm_type_from_semantic(arg_type->as<types::RefType>().inner);
+                } else if (arg_type->is<types::PtrType>()) {
+                    elem_type = llvm_type_from_semantic(arg_type->as<types::PtrType>().inner);
                 }
             }
 
@@ -833,7 +848,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // sqrt[T](val: T) -> T
-    if (fn_name == "sqrt" && func_sig->is_intrinsic) {
+    if (fn_name == "sqrt") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -847,7 +862,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // sin[T](val: T) -> T
-    if (fn_name == "sin" && func_sig->is_intrinsic) {
+    if (fn_name == "sin") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -861,7 +876,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // cos[T](val: T) -> T
-    if (fn_name == "cos" && func_sig->is_intrinsic) {
+    if (fn_name == "cos") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -875,7 +890,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // log[T](val: T) -> T
-    if (fn_name == "log" && func_sig->is_intrinsic) {
+    if (fn_name == "log") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -889,7 +904,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // exp[T](val: T) -> T
-    if (fn_name == "exp" && func_sig->is_intrinsic) {
+    if (fn_name == "exp") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -903,7 +918,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // pow[T](base: T, exp: T) -> T
-    if (fn_name == "pow" && func_sig->is_intrinsic) {
+    if (fn_name == "pow") {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
             std::string base_type = last_expr_type_;
@@ -918,7 +933,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // floor[T](val: T) -> T
-    if (fn_name == "floor" && func_sig->is_intrinsic) {
+    if (fn_name == "floor") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -932,7 +947,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ceil[T](val: T) -> T
-    if (fn_name == "ceil" && func_sig->is_intrinsic) {
+    if (fn_name == "ceil") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -946,7 +961,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // round[T](val: T) -> T
-    if (fn_name == "round" && func_sig->is_intrinsic) {
+    if (fn_name == "round") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -960,7 +975,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // trunc[T](val: T) -> T
-    if (fn_name == "trunc" && func_sig->is_intrinsic) {
+    if (fn_name == "trunc") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;

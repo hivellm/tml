@@ -7,6 +7,22 @@
 
 namespace tml::lexer {
 
+namespace {
+
+// Valid integer suffixes
+bool is_valid_int_suffix(std::string_view suffix) {
+    return suffix == "i8" || suffix == "i16" || suffix == "i32" || suffix == "i64" ||
+           suffix == "i128" || suffix == "u8" || suffix == "u16" || suffix == "u32" ||
+           suffix == "u64" || suffix == "u128";
+}
+
+// Valid float suffixes
+bool is_valid_float_suffix(std::string_view suffix) {
+    return suffix == "f32" || suffix == "f64";
+}
+
+} // namespace
+
 auto Lexer::lex_number() -> Token {
     char c = peek();
 
@@ -63,8 +79,21 @@ auto Lexer::lex_hex_number() -> Token {
         return make_error_token("Invalid hexadecimal number");
     }
 
+    // Check for type suffix
+    std::string suffix;
+    if (!is_at_end() && (peek() == 'i' || peek() == 'u')) {
+        size_t suffix_start = pos_;
+        while (!is_at_end() && (std::isalnum(peek()) || peek() == '_')) {
+            advance();
+        }
+        suffix = std::string(source_.slice(suffix_start, pos_));
+        if (!is_valid_int_suffix(suffix)) {
+            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+        }
+    }
+
     auto token = make_token(TokenKind::IntLiteral);
-    token.value = IntValue{value, 16};
+    token.value = IntValue{value, 16, suffix};
     return token;
 }
 
@@ -103,8 +132,21 @@ auto Lexer::lex_binary_number() -> Token {
         return make_error_token("Invalid binary number");
     }
 
+    // Check for type suffix
+    std::string suffix;
+    if (!is_at_end() && (peek() == 'i' || peek() == 'u')) {
+        size_t suffix_start = pos_;
+        while (!is_at_end() && (std::isalnum(peek()) || peek() == '_')) {
+            advance();
+        }
+        suffix = std::string(source_.slice(suffix_start, pos_));
+        if (!is_valid_int_suffix(suffix)) {
+            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+        }
+    }
+
     auto token = make_token(TokenKind::IntLiteral);
-    token.value = IntValue{value, 2};
+    token.value = IntValue{value, 2, suffix};
     return token;
 }
 
@@ -143,8 +185,21 @@ auto Lexer::lex_octal_number() -> Token {
         return make_error_token("Invalid octal number");
     }
 
+    // Check for type suffix
+    std::string suffix;
+    if (!is_at_end() && (peek() == 'i' || peek() == 'u')) {
+        size_t suffix_start = pos_;
+        while (!is_at_end() && (std::isalnum(peek()) || peek() == '_')) {
+            advance();
+        }
+        suffix = std::string(source_.slice(suffix_start, pos_));
+        if (!is_valid_int_suffix(suffix)) {
+            return make_error_token("Invalid integer type suffix '" + suffix + "'");
+        }
+    }
+
     auto token = make_token(TokenKind::IntLiteral);
-    token.value = IntValue{value, 8};
+    token.value = IntValue{value, 8, suffix};
     return token;
 }
 
@@ -227,10 +282,57 @@ auto Lexer::lex_decimal_number() -> Token {
             return make_error_token("Invalid floating-point number");
         }
 
+        // Check for float type suffix
+        std::string suffix;
+        if (!is_at_end() && peek() == 'f') {
+            size_t suffix_start = pos_;
+            while (!is_at_end() && (std::isalnum(peek()) || peek() == '_')) {
+                advance();
+            }
+            suffix = std::string(source_.slice(suffix_start, pos_));
+            if (!is_valid_float_suffix(suffix)) {
+                return make_error_token("Invalid float type suffix '" + suffix + "'");
+            }
+        }
+
         auto token = make_token(TokenKind::FloatLiteral);
-        token.value = FloatValue{value};
+        token.value = FloatValue{value, suffix};
         return token;
     } else {
+        // Check for type suffix - could be int (i/u) or float (f)
+        std::string suffix;
+        if (!is_at_end() && (peek() == 'i' || peek() == 'u' || peek() == 'f')) {
+            char first = peek();
+            size_t suffix_start = pos_;
+            while (!is_at_end() && (std::isalnum(peek()) || peek() == '_')) {
+                advance();
+            }
+            suffix = std::string(source_.slice(suffix_start, pos_));
+
+            if (first == 'f') {
+                // This is a float with suffix (e.g., 42f32)
+                if (!is_valid_float_suffix(suffix)) {
+                    return make_error_token("Invalid float type suffix '" + suffix + "'");
+                }
+                // Parse as integer first then convert to float
+                uint64_t int_value = 0;
+                auto result =
+                    std::from_chars(digits.data(), digits.data() + digits.size(), int_value, 10);
+                if (result.ec != std::errc{}) {
+                    return make_error_token("Invalid number");
+                }
+
+                auto token = make_token(TokenKind::FloatLiteral);
+                token.value = FloatValue{static_cast<double>(int_value), suffix};
+                return token;
+            } else {
+                // Integer suffix
+                if (!is_valid_int_suffix(suffix)) {
+                    return make_error_token("Invalid integer type suffix '" + suffix + "'");
+                }
+            }
+        }
+
         // Integer literal
         uint64_t value = 0;
         auto result = std::from_chars(digits.data(), digits.data() + digits.size(), value, 10);
@@ -239,7 +341,7 @@ auto Lexer::lex_decimal_number() -> Token {
         }
 
         auto token = make_token(TokenKind::IntLiteral);
-        token.value = IntValue{value, 10};
+        token.value = IntValue{value, 10, suffix};
         return token;
     }
 }

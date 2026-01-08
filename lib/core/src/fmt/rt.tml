@@ -18,7 +18,9 @@
 //! - [`Count`] - Width/precision specification
 //! - [`FormatSpec`] - Complete format specification
 
-// Display, Debug, Alignment, Sign - Display/Debug are builtins, Alignment/Sign are defined in traits.tml
+// Display, Debug are builtins; Alignment, Sign are defined in traits.tml
+use core::fmt::traits::Alignment
+use core::fmt::traits::Sign
 
 // ============================================================================
 // Argument Types
@@ -107,8 +109,8 @@ impl Display for Count {
 impl Debug for Count {
     pub func debug_string(this) -> Str {
         when this {
-            Count::Is(n) => return "Count::Is(" + n.debug_string() + ")",
-            Count::Param(idx) => return "Count::Param(" + idx.debug_string() + ")",
+            Count::Is(n) => return "Count::Is(" + n.to_string() + ")",
+            Count::Param(idx) => return "Count::Param(" + idx.to_string() + ")",
             Count::Implied => return "Count::Implied",
         }
     }
@@ -185,7 +187,9 @@ impl FormatSpec {
 
 impl Debug for FormatSpec {
     pub func debug_string(this) -> Str {
-        return "FormatSpec \{ fill: " + this.fill.debug_string() + ", align: " + this.align.debug_string() + ", sign: " + this.sign.debug_string() + ", alternate: " + this.alternate.debug_string() + ", zero_pad: " + this.zero_pad.debug_string() + ", width: " + this.width.debug_string() + ", precision: " + this.precision.debug_string() + " \}"
+        // Use to_string() instead of debug_string() for nested types
+        // to avoid cross-module method resolution issues
+        return "FormatSpec \{ fill: '" + this.fill.to_string() + "', align: " + this.align.to_string() + ", sign: " + this.sign.to_string() + ", alternate: " + this.alternate.to_string() + ", zero_pad: " + this.zero_pad.to_string() + ", width: " + this.width.to_string() + ", precision: " + this.precision.to_string() + " \}"
     }
 }
 
@@ -286,7 +290,8 @@ pub func format_args(pieces: ref [Str], args: ref [Argument]) -> Str {
 
         // Add the argument if there is one
         if arg_idx < arg_count {
-            result = result + args[arg_idx].as_str()
+            let arg: Argument = args[arg_idx]
+            result = result + arg.formatted
             arg_idx = arg_idx + 1
         }
     }

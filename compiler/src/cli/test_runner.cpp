@@ -1138,205 +1138,283 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
 
     SuiteCompileResult result;
 
-    if (suite.tests.empty()) {
-        result.success = true;
-        return result;
-    }
+    try {
 
-    fs::path cache_dir = get_run_cache_dir();
-    std::string clang = find_clang();
-    if (clang.empty()) {
-        result.error_message = "clang not found";
-        return result;
-    }
-
-    // Compile each test file to an object file with indexed entry point
-    std::vector<fs::path> object_files;
-    std::vector<std::string> link_libs;
-    std::string combined_hash;
-
-    for (size_t i = 0; i < suite.tests.size(); ++i) {
-        const auto& test = suite.tests[i];
-
-        // Read source
-        std::string source_code;
-        try {
-            source_code = read_file(test.file_path);
-        } catch (const std::exception&) {
-            result.error_message = "Failed to read: " + test.file_path;
-            result.failed_test = test.file_path;
+        if (suite.tests.empty()) {
+            result.success = true;
             return result;
         }
 
-        // Generate content hash for this file
-        std::string content_hash = build::generate_content_hash(source_code);
-        combined_hash += content_hash;
+        fs::path cache_dir = get_run_cache_dir();
+        std::string clang = find_clang();
+        if (clang.empty()) {
+            result.error_message = "clang not found";
+            return result;
+        }
 
-        // Check for cached object
-        std::string obj_name = content_hash + "_suite_" + std::to_string(i);
-        fs::path obj_output = cache_dir / (obj_name + get_object_extension());
+        // Create a SHARED ModuleRegistry for all tests in this suite
+        // This prevents re-parsing the same library modules for each test file
+        auto shared_registry = std::make_shared<types::ModuleRegistry>();
 
-        bool use_cached = !no_cache && fs::exists(obj_output);
+        // Compile each test file to an object file with indexed entry point
+        std::vector<fs::path> object_files;
+        std::vector<std::string> link_libs;
+        std::string combined_hash;
 
-        if (!use_cached) {
-            // Lex
-            auto source = lexer::Source::from_string(source_code, test.file_path);
-            lexer::Lexer lex(source);
-            auto tokens = lex.tokenize();
-            if (lex.has_errors()) {
-                result.error_message = "Lexer errors";
+        for (size_t i = 0; i < suite.tests.size(); ++i) {
+            const auto& test = suite.tests[i];
+
+            if (verbose) {
+                std::cerr << "[DEBUG]   Compiling test " << (i + 1) << "/" << suite.tests.size()
+                          << ": " << test.file_path << "\n"
+                          << std::flush;
+            }
+
+            try {
+                // Read source
+                std::string source_code;
+                try {
+                    source_code = read_file(test.file_path);
+                } catch (const std::exception&) {
+                    result.error_message = "Failed to read: " + test.file_path;
+                    result.failed_test = test.file_path;
+                    return result;
+                }
+
+                // Generate content hash for this file
+                std::string content_hash = build::generate_content_hash(source_code);
+                combined_hash += content_hash;
+
+                // Check for cached object
+                std::string obj_name = content_hash + "_suite_" + std::to_string(i);
+                fs::path obj_output = cache_dir / (obj_name + get_object_extension());
+
+                bool use_cached = !no_cache && fs::exists(obj_output);
+
+                if (!use_cached) {
+                    // Lex
+                    auto source = lexer::Source::from_string(source_code, test.file_path);
+                    lexer::Lexer lex(source);
+                    auto tokens = lex.tokenize();
+                    if (lex.has_errors()) {
+                        std::ostringstream oss;
+                        oss << "Lexer errors in " << test.file_path << ":\n";
+                        for (const auto& err : lex.errors()) {
+                            oss << "  " << err.span.start.line << ":" << err.span.start.column
+                                << ": " << err.message << "\n";
+                        }
+                        result.error_message = oss.str();
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+
+                    // Parse
+                    parser::Parser parser(std::move(tokens));
+                    auto module_name = fs::path(test.file_path).stem().string();
+                    auto parse_result = parser.parse_module(module_name);
+                    if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
+                        const auto& errors =
+                            std::get<std::vector<parser::ParseError>>(parse_result);
+                        std::ostringstream oss;
+                        oss << "Parser errors in " << test.file_path << ":\n";
+                        for (const auto& err : errors) {
+                            oss << "  " << err.span.start.line << ":" << err.span.start.column
+                                << ": " << err.message << "\n";
+                        }
+                        result.error_message = oss.str();
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+                    const auto& module = std::get<parser::Module>(parse_result);
+
+                    // Type check - use shared registry to avoid re-parsing modules for each test
+                    types::TypeChecker checker;
+                    checker.set_module_registry(shared_registry);
+                    auto check_result = checker.check_module(module);
+                    if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
+                        const auto& errors = std::get<std::vector<types::TypeError>>(check_result);
+                        std::ostringstream oss;
+                        oss << "Type errors in " << test.file_path << ":\n";
+                        for (const auto& err : errors) {
+                            oss << "  " << err.span.start.line << ":" << err.span.start.column
+                                << ": " << err.message << "\n";
+                        }
+                        result.error_message = oss.str();
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+                    const auto& env = std::get<types::TypeEnv>(check_result);
+
+                    // Borrow check
+                    borrow::BorrowChecker borrow_checker;
+                    auto borrow_result = borrow_checker.check_module(module);
+                    if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
+                        const auto& errors =
+                            std::get<std::vector<borrow::BorrowError>>(borrow_result);
+                        std::ostringstream oss;
+                        oss << "Borrow check errors in " << test.file_path << ":\n";
+                        for (const auto& err : errors) {
+                            oss << "  " << err.span.start.line << ":" << err.span.start.column
+                                << ": " << err.message << "\n";
+                        }
+                        result.error_message = oss.str();
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+
+                    // Codegen with indexed entry point
+                    codegen::LLVMGenOptions options;
+                    options.emit_comments = false;
+                    options.generate_dll_entry = true;
+                    options.suite_test_index = static_cast<int>(i); // tml_test_N
+                    options.dll_export = true;
+                    options.force_internal_linkage =
+                        true; // Internal linkage for all non-entry functions
+                    options.emit_debug_info = CompilerOptions::debug_info;
+                    options.debug_level = CompilerOptions::debug_level;
+                    options.source_file = test.file_path;
+                    codegen::LLVMIRGen llvm_gen(env, options);
+
+                    auto gen_result = llvm_gen.generate(module);
+                    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
+                        const auto& errors =
+                            std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+                        std::ostringstream oss;
+                        oss << "Codegen errors in " << test.file_path << ":\n";
+                        for (const auto& err : errors) {
+                            oss << "  " << err.span.start.line << ":" << err.span.start.column
+                                << ": " << err.message << "\n";
+                        }
+                        result.error_message = oss.str();
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+
+                    const auto& llvm_ir = std::get<std::string>(gen_result);
+
+                    // Collect link libraries
+                    for (const auto& lib : llvm_gen.get_link_libs()) {
+                        if (std::find(link_libs.begin(), link_libs.end(), lib) == link_libs.end()) {
+                            link_libs.push_back(lib);
+                        }
+                    }
+
+                    // Write IR and compile to object
+                    fs::path ll_output = cache_dir / (obj_name + ".ll");
+                    std::ofstream ll_file(ll_output);
+                    if (!ll_file) {
+                        result.error_message = "Cannot write LLVM IR";
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+                    ll_file << llvm_ir;
+                    ll_file.close();
+
+                    ObjectCompileOptions obj_options;
+                    obj_options.optimization_level = CompilerOptions::optimization_level;
+                    obj_options.debug_info = CompilerOptions::debug_info;
+                    obj_options.verbose = false;
+
+                    auto obj_result =
+                        compile_ll_to_object(ll_output, obj_output, clang, obj_options);
+                    fs::remove(ll_output);
+
+                    if (!obj_result.success) {
+                        result.error_message = "Compilation failed: " + obj_result.error_message;
+                        result.failed_test = test.file_path;
+                        return result;
+                    }
+                }
+
+                object_files.push_back(obj_output);
+            } catch (const std::exception& e) {
+                result.error_message =
+                    "Exception while compiling " + test.file_path + ": " + e.what();
+                result.failed_test = test.file_path;
+                return result;
+            } catch (...) {
+                result.error_message = "Unknown exception while compiling " + test.file_path;
                 result.failed_test = test.file_path;
                 return result;
             }
+        }
 
-            // Parse
-            parser::Parser parser(std::move(tokens));
-            auto module_name = fs::path(test.file_path).stem().string();
-            auto parse_result = parser.parse_module(module_name);
-            if (std::holds_alternative<std::vector<parser::ParseError>>(parse_result)) {
-                result.error_message = "Parser errors";
-                result.failed_test = test.file_path;
-                return result;
-            }
-            const auto& module = std::get<parser::Module>(parse_result);
+        // Get runtime objects (only need to do once for the suite)
+        // Reuse shared_registry which already has all loaded modules
+        // Use first module for runtime deps (they're usually the same)
+        std::string source_code = read_file(suite.tests[0].file_path);
+        auto source = lexer::Source::from_string(source_code, suite.tests[0].file_path);
+        lexer::Lexer lex(source);
+        auto tokens = lex.tokenize();
+        parser::Parser parser(std::move(tokens));
+        auto parse_result = parser.parse_module(fs::path(suite.tests[0].file_path).stem().string());
+        const auto& module = std::get<parser::Module>(parse_result);
 
-            // Type check
-            auto registry = std::make_shared<types::ModuleRegistry>();
-            types::TypeChecker checker;
-            checker.set_module_registry(registry);
-            auto check_result = checker.check_module(module);
-            if (std::holds_alternative<std::vector<types::TypeError>>(check_result)) {
-                result.error_message = "Type errors";
-                result.failed_test = test.file_path;
-                return result;
-            }
-            const auto& env = std::get<types::TypeEnv>(check_result);
+        std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
+        auto runtime_objects =
+            get_runtime_objects(shared_registry, module, deps_cache, clang, verbose);
+        object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
 
-            // Borrow check
-            borrow::BorrowChecker borrow_checker;
-            auto borrow_result = borrow_checker.check_module(module);
-            if (std::holds_alternative<std::vector<borrow::BorrowError>>(borrow_result)) {
-                result.error_message = "Borrow check errors";
-                result.failed_test = test.file_path;
-                return result;
-            }
+        // Generate suite hash for caching
+        std::string suite_hash = generate_content_hash(combined_hash);
+        std::string exe_hash = generate_exe_hash(suite_hash, object_files);
 
-            // Codegen with indexed entry point
-            codegen::LLVMGenOptions options;
-            options.emit_comments = false;
-            options.generate_dll_entry = true;
-            options.suite_test_index = static_cast<int>(i); // tml_test_N
-            options.dll_export = true;
-            options.force_internal_linkage = true; // Internal linkage for all non-entry functions
-            options.emit_debug_info = CompilerOptions::debug_info;
-            options.debug_level = CompilerOptions::debug_level;
-            options.source_file = test.file_path;
-            codegen::LLVMIRGen llvm_gen(env, options);
+        std::string lib_ext = get_shared_lib_extension();
+        fs::path cached_dll = cache_dir / (exe_hash + "_suite" + lib_ext);
+        fs::path lib_output = cache_dir / (suite.name + lib_ext);
 
-            auto gen_result = llvm_gen.generate(module);
-            if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-                result.error_message = "Codegen errors";
-                result.failed_test = test.file_path;
-                return result;
-            }
+        bool use_cached_dll = !no_cache && fs::exists(cached_dll);
 
-            const auto& llvm_ir = std::get<std::string>(gen_result);
+        if (!use_cached_dll) {
+            // Link as shared library
+            LinkOptions link_options;
+            link_options.output_type = LinkOptions::OutputType::DynamicLib;
+            link_options.verbose = false;
 
-            // Collect link libraries
-            for (const auto& lib : llvm_gen.get_link_libs()) {
-                if (std::find(link_libs.begin(), link_libs.end(), lib) == link_libs.end()) {
-                    link_libs.push_back(lib);
+            for (const auto& lib : link_libs) {
+                if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
+                    link_options.link_flags.push_back("\"" + lib + "\"");
+                } else {
+                    link_options.link_flags.push_back("-l" + lib);
                 }
             }
 
-            // Write IR and compile to object
-            fs::path ll_output = cache_dir / (obj_name + ".ll");
-            std::ofstream ll_file(ll_output);
-            if (!ll_file) {
-                result.error_message = "Cannot write LLVM IR";
-                result.failed_test = test.file_path;
-                return result;
-            }
-            ll_file << llvm_ir;
-            ll_file.close();
-
-            ObjectCompileOptions obj_options;
-            obj_options.optimization_level = CompilerOptions::optimization_level;
-            obj_options.debug_info = CompilerOptions::debug_info;
-            obj_options.verbose = false;
-
-            auto obj_result = compile_ll_to_object(ll_output, obj_output, clang, obj_options);
-            fs::remove(ll_output);
-
-            if (!obj_result.success) {
-                result.error_message = "Compilation failed: " + obj_result.error_message;
-                result.failed_test = test.file_path;
+            auto link_result = link_objects(object_files, cached_dll, clang, link_options);
+            if (!link_result.success) {
+                result.error_message = "Linking failed: " + link_result.error_message;
                 return result;
             }
         }
 
-        object_files.push_back(obj_output);
-    }
-
-    // Get runtime objects (only need to do once for the suite)
-    auto registry = std::make_shared<types::ModuleRegistry>();
-    // Use first module for runtime deps (they're usually the same)
-    std::string source_code = read_file(suite.tests[0].file_path);
-    auto source = lexer::Source::from_string(source_code, suite.tests[0].file_path);
-    lexer::Lexer lex(source);
-    auto tokens = lex.tokenize();
-    parser::Parser parser(std::move(tokens));
-    auto parse_result = parser.parse_module(fs::path(suite.tests[0].file_path).stem().string());
-    const auto& module = std::get<parser::Module>(parse_result);
-
-    std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
-    auto runtime_objects = get_runtime_objects(registry, module, deps_cache, clang, verbose);
-    object_files.insert(object_files.end(), runtime_objects.begin(), runtime_objects.end());
-
-    // Generate suite hash for caching
-    std::string suite_hash = generate_content_hash(combined_hash);
-    std::string exe_hash = generate_exe_hash(suite_hash, object_files);
-
-    std::string lib_ext = get_shared_lib_extension();
-    fs::path cached_dll = cache_dir / (exe_hash + "_suite" + lib_ext);
-    fs::path lib_output = cache_dir / (suite.name + lib_ext);
-
-    bool use_cached_dll = !no_cache && fs::exists(cached_dll);
-
-    if (!use_cached_dll) {
-        // Link as shared library
-        LinkOptions link_options;
-        link_options.output_type = LinkOptions::OutputType::DynamicLib;
-        link_options.verbose = false;
-
-        for (const auto& lib : link_libs) {
-            if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
-                link_options.link_flags.push_back("\"" + lib + "\"");
-            } else {
-                link_options.link_flags.push_back("-l" + lib);
-            }
-        }
-
-        auto link_result = link_objects(object_files, cached_dll, clang, link_options);
-        if (!link_result.success) {
-            result.error_message = "Linking failed: " + link_result.error_message;
+        // Copy to output location
+        if (!fast_copy_file(cached_dll, lib_output)) {
+            result.error_message = "Failed to copy DLL";
             return result;
         }
-    }
 
-    // Copy to output location
-    if (!fast_copy_file(cached_dll, lib_output)) {
-        result.error_message = "Failed to copy DLL";
+        auto end = Clock::now();
+        result.success = true;
+        result.dll_path = lib_output.string();
+        result.compile_time_us =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+        return result;
+
+    } catch (const std::exception& e) {
+        result.error_message = "FATAL EXCEPTION during suite compilation: " + std::string(e.what());
+        if (!suite.tests.empty()) {
+            result.failed_test = suite.tests[0].file_path;
+        }
+        std::cerr << "\n[FATAL] Exception in compile_test_suite: " << e.what() << "\n";
+        return result;
+    } catch (...) {
+        result.error_message = "FATAL UNKNOWN EXCEPTION during suite compilation";
+        if (!suite.tests.empty()) {
+            result.failed_test = suite.tests[0].file_path;
+        }
+        std::cerr << "\n[FATAL] Unknown exception in compile_test_suite\n";
         return result;
     }
-
-    auto end = Clock::now();
-    result.success = true;
-    result.dll_path = lib_output.string();
-    result.compile_time_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-
-    return result;
 }
 
 SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimings* timings,

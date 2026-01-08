@@ -145,6 +145,10 @@ public:
     auto lookup_type_alias(const std::string& module_path, const std::string& symbol_name) const
         -> std::optional<TypePtr>;
 
+    /// Looks up a constant in a module.
+    auto lookup_constant(const std::string& module_path, const std::string& symbol_name) const
+        -> std::optional<std::string>;
+
     /// Looks up any symbol in a module.
     auto lookup_symbol(const std::string& module_path, const std::string& symbol_name) const
         -> std::optional<ModuleSymbol>;

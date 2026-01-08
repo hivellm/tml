@@ -122,6 +122,20 @@ auto ModuleRegistry::lookup_type_alias(const std::string& module_path,
     return std::nullopt;
 }
 
+auto ModuleRegistry::lookup_constant(const std::string& module_path,
+                                     const std::string& symbol_name) const
+    -> std::optional<std::string> {
+    auto module = get_module(module_path);
+    if (!module)
+        return std::nullopt;
+
+    auto it = module->constants.find(symbol_name);
+    if (it != module->constants.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 auto ModuleRegistry::lookup_symbol(const std::string& module_path,
                                    const std::string& symbol_name) const
     -> std::optional<ModuleSymbol> {

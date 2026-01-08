@@ -3,7 +3,7 @@
 //! This module provides the `Flatten` iterator adapter which flattens one
 //! level of nesting from an iterator of iterators.
 
-use core::iter::IntoIterator
+use core::iter::traits::into_iterator::*
 
 // ============================================================================
 // Flatten Adapter

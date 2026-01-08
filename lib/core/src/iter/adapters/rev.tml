@@ -3,7 +3,7 @@
 //! This module provides the `Rev` iterator adapter which reverses a
 //! double-ended iterator.
 
-use core::iter::DoubleEndedIterator
+use core::iter::traits::double_ended::*
 
 // ============================================================================
 // Rev Adapter

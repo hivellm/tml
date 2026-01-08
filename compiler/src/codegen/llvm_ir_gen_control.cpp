@@ -762,6 +762,20 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                     emit_line("  " + ext_reg + " = sext " + val_type + " " + val + " to i32");
                     final_val = ext_reg;
                 }
+                // Integer truncation: larger -> smaller (for negative literals)
+                else if (current_ret_type_ == "i8" && (val_type == "i32" || val_type == "i64")) {
+                    std::string trunc_reg = fresh_reg();
+                    emit_line("  " + trunc_reg + " = trunc " + val_type + " " + val + " to i8");
+                    final_val = trunc_reg;
+                } else if (current_ret_type_ == "i16" && (val_type == "i32" || val_type == "i64")) {
+                    std::string trunc_reg = fresh_reg();
+                    emit_line("  " + trunc_reg + " = trunc " + val_type + " " + val + " to i16");
+                    final_val = trunc_reg;
+                } else if (current_ret_type_ == "i32" && val_type == "i64") {
+                    std::string trunc_reg = fresh_reg();
+                    emit_line("  " + trunc_reg + " = trunc " + val_type + " " + val + " to i32");
+                    final_val = trunc_reg;
+                }
             }
             emit_line("  ret " + current_ret_type_ + " " + final_val);
         }

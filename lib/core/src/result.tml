@@ -68,7 +68,7 @@
 //! - [`and_then`] chains fallible operations
 //! - [`or_else`] provides fallback operations
 
-use core::iter::Iterator
+use core::iter::*
 // PartialEq, Duplicate are builtin behaviors - no import needed
 use core::default::Default
 

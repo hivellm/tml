@@ -694,6 +694,6 @@ use core::marker::PhantomData
 use core::clone::{Duplicate, Copy}
 use core::cmp::{PartialEq, Eq}
 use core::default::Default
-use core::ptr::RawPtr
+use core::ptr::*
 use core::ops::Drop
 use core::marker::{Send, Sync}

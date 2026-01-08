@@ -106,6 +106,41 @@ void LLVMIRGen::generate_pending_instantiations() {
                 auto impl_it = pending_generic_impls_.find(pim.base_type_name);
                 if (impl_it != pending_generic_impls_.end()) {
                     const auto& impl = *impl_it->second;
+
+                    // Process associated type bindings from the impl block
+                    // e.g., `type Item = I::Item` becomes `Item -> I64` when I -> RangeIterI64
+                    auto saved_associated_types = current_associated_types_;
+                    current_associated_types_.clear();
+
+                    // First, we need to find the associated types from the concrete types
+                    // that the generic params were substituted to
+                    // For example: if I -> RangeIterI64, look up RangeIterI64's Item type
+                    for (const auto& [param_name, concrete_type] : pim.type_subs) {
+                        if (concrete_type && concrete_type->is<types::NamedType>()) {
+                            const auto& concrete_named = concrete_type->as<types::NamedType>();
+                            // Find the impl block for this concrete type to get its associated
+                            // types
+                            auto concrete_impl_it =
+                                pending_generic_impls_.find(concrete_named.name);
+                            if (concrete_impl_it != pending_generic_impls_.end()) {
+                                const auto& concrete_impl = *concrete_impl_it->second;
+                                for (const auto& concrete_binding : concrete_impl.type_bindings) {
+                                    auto concrete_resolved =
+                                        resolve_parser_type_with_subs(*concrete_binding.type, {});
+                                    current_associated_types_[concrete_binding.name] =
+                                        concrete_resolved;
+                                }
+                            }
+                        }
+                    }
+
+                    // Now resolve the impl's own type bindings with the substitutions
+                    for (const auto& binding : impl.type_bindings) {
+                        // Resolve the binding type with the current type substitutions
+                        auto resolved = resolve_parser_type_with_subs(*binding.type, pim.type_subs);
+                        current_associated_types_[binding.name] = resolved;
+                    }
+
                     // Find the method in the impl block
                     for (const auto& m : impl.methods) {
                         if (m.name == pim.method_name) {
@@ -114,6 +149,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                             break;
                         }
                     }
+
+                    // Restore associated types
+                    current_associated_types_ = saved_associated_types;
                 } else if (env_.module_registry()) {
                     // Check imported modules - need to re-parse to get impl AST
                     const auto& all_modules = env_.module_registry()->get_all_modules();
@@ -165,6 +203,38 @@ void LLVMIRGen::generate_pending_instantiations() {
                             if (target.path.segments.back() != pim.base_type_name)
                                 continue;
 
+                            // Process associated type bindings from the imported impl
+                            auto saved_associated_types = current_associated_types_;
+                            current_associated_types_.clear();
+
+                            // First, find associated types from concrete types in substitutions
+                            for (const auto& [param_name, concrete_type] : pim.type_subs) {
+                                if (concrete_type && concrete_type->is<types::NamedType>()) {
+                                    const auto& concrete_named =
+                                        concrete_type->as<types::NamedType>();
+                                    // Check pending_generic_impls_ for local impls
+                                    auto concrete_impl_it =
+                                        pending_generic_impls_.find(concrete_named.name);
+                                    if (concrete_impl_it != pending_generic_impls_.end()) {
+                                        const auto& concrete_impl = *concrete_impl_it->second;
+                                        for (const auto& concrete_binding :
+                                             concrete_impl.type_bindings) {
+                                            auto concrete_resolved = resolve_parser_type_with_subs(
+                                                *concrete_binding.type, {});
+                                            current_associated_types_[concrete_binding.name] =
+                                                concrete_resolved;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Then resolve the impl's own type bindings
+                            for (const auto& binding : impl_decl.type_bindings) {
+                                auto resolved =
+                                    resolve_parser_type_with_subs(*binding.type, pim.type_subs);
+                                current_associated_types_[binding.name] = resolved;
+                            }
+
                             // Find the method
                             for (size_t mi = 0; mi < impl_decl.methods.size(); ++mi) {
                                 const auto& method_decl = impl_decl.methods[mi];
@@ -176,6 +246,10 @@ void LLVMIRGen::generate_pending_instantiations() {
                                     break;
                                 }
                             }
+
+                            // Restore associated types
+                            current_associated_types_ = saved_associated_types;
+
                             if (found)
                                 break;
                         }

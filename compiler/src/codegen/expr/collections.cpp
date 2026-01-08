@@ -108,6 +108,71 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
     // First, infer the type of the object to determine if it's an array or list
     types::TypePtr obj_type = infer_expr_type(*idx.object);
 
+    // Check if it's a SliceType or RefType containing SliceType
+    // Slices are fat pointers: { ptr, len } - we need to extract the ptr and index into it
+    const types::SliceType* slice_type_ptr = nullptr;
+    bool is_ref_slice = false;
+
+    if (obj_type && obj_type->is<types::SliceType>()) {
+        slice_type_ptr = &obj_type->as<types::SliceType>();
+    } else if (obj_type && obj_type->is<types::RefType>()) {
+        const auto& ref_type = obj_type->as<types::RefType>();
+        if (ref_type.inner && ref_type.inner->is<types::SliceType>()) {
+            slice_type_ptr = &ref_type.inner->as<types::SliceType>();
+            is_ref_slice = true;
+        }
+    }
+
+    if (slice_type_ptr) {
+        std::string elem_llvm_type = llvm_type_from_semantic(slice_type_ptr->element, true);
+
+        // Generate the slice value (this gives us the fat pointer struct or a ptr to it)
+        std::string slice_val = gen_expr(*idx.object);
+
+        // For ref [T], slice_val is a ptr to the slice struct
+        // For [T], slice_val is the slice struct value itself
+        std::string slice_ptr;
+        if (is_ref_slice) {
+            // slice_val is already a ptr to { ptr, i64 }
+            slice_ptr = slice_val;
+        } else {
+            // Need to store the slice struct to get a ptr
+            slice_ptr = fresh_reg();
+            emit_line("  " + slice_ptr + " = alloca { ptr, i64 }");
+            emit_line("  store { ptr, i64 } " + slice_val + ", ptr " + slice_ptr);
+        }
+
+        // Extract the data pointer from the slice struct (field 0)
+        std::string data_ptr_ptr = fresh_reg();
+        emit_line("  " + data_ptr_ptr + " = getelementptr { ptr, i64 }, ptr " + slice_ptr +
+                  ", i32 0, i32 0");
+        std::string data_ptr = fresh_reg();
+        emit_line("  " + data_ptr + " = load ptr, ptr " + data_ptr_ptr);
+
+        // Generate the index
+        std::string index_val = gen_expr(*idx.index);
+        std::string index_type = last_expr_type_;
+
+        // Convert index to i64 for GEP if needed
+        std::string index_i64 = index_val;
+        if (index_type == "i32") {
+            index_i64 = fresh_reg();
+            emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
+        }
+
+        // GEP to get element pointer (using element array, not fixed array)
+        std::string elem_ptr = fresh_reg();
+        emit_line("  " + elem_ptr + " = getelementptr " + elem_llvm_type + ", ptr " + data_ptr +
+                  ", i64 " + index_i64);
+
+        // Load and return the element
+        std::string result = fresh_reg();
+        emit_line("  " + result + " = load " + elem_llvm_type + ", ptr " + elem_ptr);
+
+        last_expr_type_ = elem_llvm_type;
+        return result;
+    }
+
     // Check if it's an ArrayType
     if (obj_type && obj_type->is<types::ArrayType>()) {
         const auto& arr_type = obj_type->as<types::ArrayType>();
@@ -186,11 +251,19 @@ auto LLVMIRGen::gen_index(const parser::IndexExpr& idx) -> std::string {
     // Fall back to list_get for dynamic lists
     std::string arr_ptr = gen_expr(*idx.object);
     std::string index_val = gen_expr(*idx.index);
+    std::string index_type = last_expr_type_;
+
+    // Convert index to i64 if needed (list_get expects i64)
+    std::string index_i64 = index_val;
+    if (index_type == "i32") {
+        index_i64 = fresh_reg();
+        emit_line("  " + index_i64 + " = sext i32 " + index_val + " to i64");
+    }
 
     std::string result = fresh_reg();
-    emit_line("  " + result + " = call i32 @list_get(ptr " + arr_ptr + ", i32 " + index_val + ")");
+    emit_line("  " + result + " = call i64 @list_get(ptr " + arr_ptr + ", i64 " + index_i64 + ")");
 
-    last_expr_type_ = "i32";
+    last_expr_type_ = "i64";
     return result;
 }
 

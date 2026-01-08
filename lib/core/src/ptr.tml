@@ -37,7 +37,7 @@
 //! use core::ptr::{RawPtr, RawMutPtr}
 //!
 //! // Creating and checking null pointers
-//! let null_ptr: RawPtr[I64] = RawPtr::null()
+//! let null_ptr: RawPtr[I64] = RawPtr::null_ptr()
 //! assert(null_ptr.is_null())
 //!
 //! // Pointer arithmetic
@@ -66,8 +66,8 @@
 //! ```
 
 // PartialEq, Eq, PartialOrd, Ord, Ordering are builtins - no import needed
-use core::hash::Hash
-use core::option::Maybe
+use core::hash::*
+use core::option::*
 
 // ============================================================================
 // Raw Pointer Type
@@ -94,7 +94,7 @@ use core::option::Maybe
 /// use core::ptr::RawPtr
 ///
 /// // Null pointer
-/// let null: RawPtr[I64] = RawPtr::null()
+/// let null: RawPtr[I64] = RawPtr::null_ptr()
 /// assert(null.is_null())
 ///
 /// // Pointer from address
@@ -120,11 +120,11 @@ impl[T] RawPtr[T] {
     /// # Examples
     ///
     /// ```tml
-    /// let ptr: RawPtr[I64] = RawPtr::null()
+    /// let ptr: RawPtr[I64] = RawPtr::null_ptr()
     /// assert(ptr.is_null())
     /// assert(ptr.addr() == 0)
     /// ```
-    pub func null() -> RawPtr[T] {
+    pub func null_ptr() -> RawPtr[T] {
         return RawPtr { addr: 0 }
     }
 
@@ -133,7 +133,7 @@ impl[T] RawPtr[T] {
     /// # Examples
     ///
     /// ```tml
-    /// let null_ptr: RawPtr[I64] = RawPtr::null()
+    /// let null_ptr: RawPtr[I64] = RawPtr::null_ptr()
     /// let valid_ptr = RawPtr::from_addr(0x1000)
     ///
     /// assert(null_ptr.is_null())
@@ -372,10 +372,10 @@ impl[T] RawMutPtr[T] {
     /// # Examples
     ///
     /// ```tml
-    /// let ptr: RawMutPtr[I64] = RawMutPtr::null()
+    /// let ptr: RawMutPtr[I64] = RawMutPtr::null_ptr()
     /// assert(ptr.is_null())
     /// ```
-    pub func null() -> RawMutPtr[T] {
+    pub func null_ptr() -> RawMutPtr[T] {
         return RawMutPtr { addr: 0 }
     }
 
@@ -384,7 +384,7 @@ impl[T] RawMutPtr[T] {
     /// # Examples
     ///
     /// ```tml
-    /// let ptr: RawMutPtr[I64] = RawMutPtr::null()
+    /// let ptr: RawMutPtr[I64] = RawMutPtr::null_ptr()
     /// assert(ptr.is_null())
     /// ```
     pub func is_null(this) -> Bool {

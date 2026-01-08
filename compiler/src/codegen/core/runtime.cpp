@@ -482,30 +482,87 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 if (e.vis == parser::Visibility::Public) {
                     gen_enum_decl(e); // This registers generic enums in pending_generic_enums_
                 }
+            } else if (decl->is<parser::ConstDecl>()) {
+                // Register module-level constants for use in functions
+                const auto& const_decl = decl->as<parser::ConstDecl>();
+                std::string value;
+
+                // Support literal constants
+                if (const_decl.value->is<parser::LiteralExpr>()) {
+                    const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                        value = std::to_string(lit.token.int_value().value);
+                    } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                        value = (lit.token.lexeme == "true") ? "1" : "0";
+                    } else if (lit.token.kind == lexer::TokenKind::NullLiteral) {
+                        value = "null";
+                    }
+                }
+                // Support cast expressions (e.g., 14695981039346656037 as U64)
+                else if (const_decl.value->is<parser::CastExpr>()) {
+                    const auto& cast = const_decl.value->as<parser::CastExpr>();
+                    if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                        const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            value = std::to_string(lit.token.int_value().value);
+                        }
+                    } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
+                        const auto& unary = cast.expr->as<parser::UnaryExpr>();
+                        if (unary.op == parser::UnaryOp::Neg &&
+                            unary.operand->is<parser::LiteralExpr>()) {
+                            const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                                value = std::to_string(-int_val);
+                            }
+                        }
+                    }
+                }
+                // Support unary expressions (e.g., -128)
+                else if (const_decl.value->is<parser::UnaryExpr>()) {
+                    const auto& unary = const_decl.value->as<parser::UnaryExpr>();
+                    if (unary.op == parser::UnaryOp::Neg &&
+                        unary.operand->is<parser::LiteralExpr>()) {
+                        const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                            int64_t int_val = static_cast<int64_t>(lit.token.int_value().value);
+                            value = std::to_string(-int_val);
+                        }
+                    }
+                }
+
+                if (!value.empty()) {
+                    // Register both with and without module prefix
+                    global_constants_[const_decl.name] = value;
+                    // Also register with qualified name for explicit lookups
+                    std::string qualified_name = module_name + "::" + const_decl.name;
+                    global_constants_[qualified_name] = value;
+                }
             }
         }
 
         // 1.5 pass: pre-register ALL function signatures before generating any code
         // This ensures intra-module calls (like mod.tml calling unicode_data::func) resolve
-        // correctly
+        // correctly. Includes PRIVATE functions to support same-module calls.
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
-                if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
-                    func.body.has_value()) {
+                // Pre-register both public AND private functions with bodies
+                // This fixes intra-module calls to private helper functions
+                if (!func.is_unsafe && func.body.has_value()) {
                     pre_register_func(func);
                 }
             }
         }
 
-        // Second pass: generate code for each public function
+        // Second pass: generate code for each function (both public AND private)
         for (const auto& decl : parsed_module.decls) {
             if (decl->is<parser::FuncDecl>()) {
                 const auto& func = decl->as<parser::FuncDecl>();
 
-                // Only generate code for public, non-lowlevel functions with bodies
-                if (func.vis == parser::Visibility::Public && !func.is_unsafe &&
-                    func.body.has_value()) {
+                // Generate code for both public AND private functions with bodies
+                // Private functions are needed for intra-module helper functions
+                if (!func.is_unsafe && func.body.has_value()) {
                     gen_func_decl(func);
                 }
             }

@@ -26,5 +26,22 @@
 //! | [`Sum`] | Types that can be created by summing iterator elements |
 //! | [`Product`] | Types that can be created by multiplying iterator elements |
 
-// All .tml files in this directory are automatically part of this module
-// when loaded via mod.tml
+// Declare submodules
+pub mod iterator
+pub mod into_iterator
+pub mod from_iterator
+pub mod extend
+pub mod double_ended
+pub mod exact_size
+pub mod markers
+pub mod accumulators
+
+// Re-export all items for convenience
+pub use iterator::*
+pub use into_iterator::*
+pub use from_iterator::*
+pub use extend::*
+pub use double_ended::*
+pub use exact_size::*
+pub use markers::*
+pub use accumulators::*

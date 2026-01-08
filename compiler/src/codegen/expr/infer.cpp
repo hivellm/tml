@@ -247,6 +247,16 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 return result;
             }
         }
+
+        // Check global constants
+        auto const_it = global_constants_.find(ident.name);
+        if (const_it != global_constants_.end()) {
+            // Global constants are currently stored without explicit type info
+            // but the values stored are strings of numeric literals
+            // For now, assume I64 for large constants (like FNV hashes)
+            // We could store type info alongside constants in the future
+            return types::make_i64();
+        }
     }
     if (expr.is<parser::BinaryExpr>()) {
         const auto& bin = expr.as<parser::BinaryExpr>();

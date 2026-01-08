@@ -1,0 +1,75 @@
+// Test number literal type suffixes
+use test
+
+@test
+func test_int_suffixes() -> I32 {
+    // Integer suffixes
+    let a: I8 = 42i8
+    let b: I16 = 1000i16
+    let c: I32 = 100000i32
+    let d: I64 = 1000000i64
+
+    // Unsigned suffixes
+    let e: U8 = 255u8
+    let f: U16 = 65535u16
+    let g: U32 = 100000u32
+    let h: U64 = 1000000u64
+
+    // Verify values
+    assert(a == 42, "i8 value should be 42")
+    assert(b == 1000, "i16 value should be 1000")
+    assert(c == 100000, "i32 value should be 100000")
+    assert(d == 1000000, "i64 value should be 1000000")
+
+    assert(e == 255, "u8 value should be 255")
+    assert(f == 65535, "u16 value should be 65535")
+    assert(g == 100000, "u32 value should be 100000")
+    assert(h == 1000000, "u64 value should be 1000000")
+
+    return 0
+}
+
+@test
+func test_float_suffixes() -> I32 {
+    // Float suffixes
+    let a: F32 = 3.14f32
+    let b: F64 = 2.718f64
+
+    // Integer to float with suffix
+    let c: F32 = 42f32
+    let d: F64 = 100f64
+
+    // Verify values (approximate comparison for floats)
+    assert(a > 3.0, "f32 value should be > 3.0")
+    assert(a < 4.0, "f32 value should be < 4.0")
+    assert(b > 2.0, "f64 value should be > 2.0")
+    assert(b < 3.0, "f64 value should be < 3.0")
+    assert(c == 42.0, "f32 from int should be 42.0")
+    assert(d == 100.0, "f64 from int should be 100.0")
+
+    return 0
+}
+
+@test
+func test_hex_with_suffix() -> I32 {
+    let a: U8 = 0xFFu8
+    let b: U16 = 0xABCDu16
+    let c: I32 = 0x7FFFFFFFi32
+
+    assert(a == 255, "hex u8 should be 255")
+    assert(b == 43981, "hex u16 should be 43981")
+    assert(c == 2147483647, "hex i32 should be max i32")
+
+    return 0
+}
+
+@test
+func test_binary_with_suffix() -> I32 {
+    let a: U8 = 0b11111111u8
+    let b: I16 = 0b0101010101010101i16
+
+    assert(a == 255, "binary u8 should be 255")
+    assert(b == 21845, "binary i16 should be 21845")
+
+    return 0
+}

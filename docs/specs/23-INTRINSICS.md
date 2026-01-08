@@ -405,6 +405,10 @@ public func nearbyint_f64(x: F64) -> F64
 ### 6.3 Special Operations
 
 ```tml
+/// Floating-point negation (LLVM fneg instruction)
+public func fneg_f32(x: F32) -> F32
+public func fneg_f64(x: F64) -> F64
+
 /// Absolute value
 public func fabs_f32(x: F32) -> F32
 public func fabs_f64(x: F64) -> F64

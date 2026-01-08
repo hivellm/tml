@@ -616,4 +616,4 @@ pub behavior AsyncIteratorExt: AsyncIterator {
 // Imports needed for Iterator
 // ============================================================================
 
-use core::iter::Iterator
+use core::iter::*

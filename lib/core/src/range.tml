@@ -26,7 +26,7 @@
 //! due to compiler limitations with monomorphization.
 
 // PartialOrd is a builtin behavior - no import needed
-use core::iter::Iterator
+use core::iter::*
 
 // ============================================================================
 // Range Types

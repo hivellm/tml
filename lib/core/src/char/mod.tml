@@ -41,7 +41,7 @@
 //! ```
 
 pub mod convert   // from_u32, from_digit, CharTryFromError, ParseCharError
-pub mod decode    // DecodeUtf16, DecodeUtf16Error, decode_utf16
+// pub mod decode    // DecodeUtf16, DecodeUtf16Error, decode_utf16 - TODO: parser doesn't support Iterator[Item = T] constraints yet
 pub mod methods   // Character classification and manipulation methods
 
 // Re-export main types and functions
@@ -50,9 +50,9 @@ pub use convert::from_u32_unchecked
 pub use convert::from_digit
 pub use convert::CharTryFromError
 pub use convert::ParseCharError
-pub use decode::decode_utf16
-pub use decode::DecodeUtf16
-pub use decode::DecodeUtf16Error
+// pub use decode::decode_utf16  // TODO: disabled until parser supports associated type constraints
+// pub use decode::DecodeUtf16
+// pub use decode::DecodeUtf16Error
 pub use methods::*
 
 // ============================================================================

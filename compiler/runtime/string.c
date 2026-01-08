@@ -1,5 +1,36 @@
-// TML Runtime - String Functions
-// Matches: env_builtins_string.cpp
+/**
+ * @file string.c
+ * @brief TML Runtime - String Functions
+ *
+ * Implements string manipulation functions for the TML language. These functions
+ * provide the runtime support for TML's Str type operations.
+ *
+ * ## Components
+ *
+ * - **Basic operations**: length, equality, hashing
+ * - **Manipulation**: concat, substring, slice, trim
+ * - **Search**: contains, starts_with, ends_with
+ * - **Case conversion**: to_upper, to_lower
+ * - **Character operations**: char_at, char classification, conversion
+ * - **StringBuilder**: Dynamic string building
+ * - **Type conversion**: integer/float to string
+ *
+ * ## Thread Safety Warning
+ *
+ * Most string functions use a shared static buffer (`str_buffer`) for their
+ * return values. This means:
+ * - Functions are NOT thread-safe
+ * - Return values are invalidated by subsequent calls
+ * - Callers should copy results if needed beyond the next call
+ *
+ * ## Memory Model
+ *
+ * - Functions returning `const char*` use either static buffers or malloc
+ * - StringBuilder uses heap allocation with automatic growth
+ * - Callers are responsible for freeing StringBuilder instances
+ *
+ * @see env_builtins_string.cpp for compiler builtin registration
+ */
 
 #include <ctype.h>
 #include <stdint.h>
@@ -7,7 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Static buffer for string operations
+/** @brief Static buffer for string operations. NOT THREAD SAFE. */
 static char str_buffer[4096];
 
 // str_len(s: Str) -> I32
