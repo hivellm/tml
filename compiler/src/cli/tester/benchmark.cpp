@@ -1,4 +1,30 @@
-// Test command - benchmark functionality
+//! # Benchmark Framework
+//!
+//! This file implements the benchmark runner for `tml test --bench`.
+//!
+//! ## Benchmark Files
+//!
+//! Benchmarks are defined in `*.bench.tml` files using the `@bench` decorator:
+//!
+//! ```tml
+//! @bench
+//! func bench_sorting() {
+//!     let data = generate_data(1000)
+//!     data.sort()
+//! }
+//! ```
+//!
+//! ## Output Format
+//!
+//! ```text
+//!  + bench bubble_sort ... 45,230 ns/iter
+//!  + bench quick_sort  ...  1,234 ns/iter (+3645.9% vs baseline)
+//! ```
+//!
+//! ## Baseline Comparison
+//!
+//! - `--save-baseline=<name>`: Save results to baseline file
+//! - `--compare=<name>`: Compare against saved baseline
 
 #include "tester_internal.hpp"
 
@@ -8,6 +34,7 @@ namespace tml::cli::tester {
 // Parse Benchmark Output
 // ============================================================================
 
+/// Parses benchmark output from the test runner format.
 std::vector<BenchmarkResult> parse_bench_output(const std::string& output,
                                                 const std::string& file_path) {
     std::vector<BenchmarkResult> results;

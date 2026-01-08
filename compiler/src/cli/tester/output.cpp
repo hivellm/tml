@@ -1,4 +1,26 @@
-// Test command - output formatting
+//! # Test Output Formatting
+//!
+//! This file implements test result formatting in Vitest/Jest style.
+//!
+//! ## Output Format
+//!
+//! ```text
+//!  + compiler_tests (542 tests) 201ms
+//!  + lib/core (272 tests) 0ms
+//!  x lib/broken (1 test) 5ms
+//!    └─ broken.test.tml: assertion failed
+//!
+//!  Tests       906 passed (906 tests, 102 files)
+//!  Duration    292ms
+//!
+//!  All tests passed!
+//! ```
+//!
+//! ## Profile Stats Output
+//!
+//! When `--profile` is used, shows timing breakdown by phase:
+//! - Lexing, Parsing, Type Checking, Borrow Checking
+//! - MIR Generation, LLVM Codegen, Object Compilation
 
 #include "tester_internal.hpp"
 
@@ -8,6 +30,7 @@ namespace tml::cli::tester {
 // Print Results in Vitest Style
 // ============================================================================
 
+/// Prints test results in Vitest/Jest style with colored output.
 void print_results_vitest_style(const std::vector<TestResult>& results, const TestOptions& opts,
                                 int64_t total_duration_ms) {
     ColorOutput c(!opts.no_color);

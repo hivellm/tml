@@ -1,4 +1,20 @@
-// Test command - test execution
+//! # Test Execution Engine
+//!
+//! This file implements test compilation and execution for `tml test`.
+//!
+//! ## Execution Modes
+//!
+//! - **In-process**: Compile and run tests within the same process (faster)
+//! - **Process-based**: Spawn separate processes for isolation
+//! - **Profiled**: Track timing for each compilation phase
+//!
+//! ## Worker Threads
+//!
+//! Parallel execution uses `test_worker()` threads that:
+//! 1. Atomically grab the next test file index
+//! 2. Compile and run the test
+//! 3. Add results to the thread-safe collector
+//! 4. Stop on first compilation error (fail-fast)
 
 #include "tester_internal.hpp"
 
@@ -8,6 +24,7 @@ namespace tml::cli::tester {
 // In-Process Test Execution
 // ============================================================================
 
+/// Compiles and runs a test file in-process (faster, less isolation).
 TestResult compile_and_run_test_inprocess(const std::string& test_file, const TestOptions& opts) {
     TestResult result;
     result.file_path = test_file;

@@ -1,4 +1,26 @@
-// Test command - main run_test function
+//! # Test Runner Implementation
+//!
+//! This file contains the main `run_test()` function that orchestrates
+//! test discovery, execution, and reporting.
+//!
+//! ## Test Flow
+//!
+//! ```text
+//! run_test()
+//!   ├─ parse_test_args()     → TestOptions
+//!   ├─ discover_test_files() → List of *.test.tml files
+//!   ├─ Filter by pattern(s)
+//!   ├─ Execution:
+//!   │     ├─ Suite mode:   run_tests_suite_mode() (parallel DLL compilation)
+//!   │     ├─ Profile mode: Sequential with timing collection
+//!   │     └─ Normal mode:  Parallel worker threads
+//!   └─ print_results_vitest_style()
+//! ```
+//!
+//! ## Threading Model
+//!
+//! By default, tests run in parallel using N/2 threads where N is the
+//! hardware thread count. This can be overridden with `--test-threads=N`.
 
 #include "tester_internal.hpp"
 
@@ -11,6 +33,7 @@ using namespace tester;
 // Parse Test Arguments
 // ============================================================================
 
+/// Parses test command-line arguments into a TestOptions struct.
 TestOptions parse_test_args(int argc, char* argv[], int start_index) {
     TestOptions opts;
 

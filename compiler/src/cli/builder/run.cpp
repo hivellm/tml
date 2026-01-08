@@ -1,3 +1,26 @@
+//! # Run Command Implementation
+//!
+//! This file implements the `tml run` command that compiles and immediately
+//! executes TML programs. It uses aggressive caching to minimize recompilation.
+//!
+//! ## Execution Flow
+//!
+//! ```text
+//! run_run()
+//!   ├─ Compile (same as run_build)
+//!   ├─ Cache executable by content hash
+//!   ├─ Execute with provided arguments
+//!   └─ Clean up temporary files
+//! ```
+//!
+//! ## Caching Strategy
+//!
+//! Executables are cached in `build/debug/.run-cache/`:
+//! - Object files: `<content_hash>.obj`
+//! - Executables: `<exe_hash>.exe` (hash includes all linked objects)
+//!
+//! This allows instant re-execution when source hasn't changed.
+
 #include "builder_internal.hpp"
 
 namespace tml::cli {
@@ -5,6 +28,14 @@ namespace tml::cli {
 // Using helpers from builder namespace
 using namespace build;
 
+/// Compiles and runs a TML program.
+///
+/// This is the implementation of `tml run <file>`. It compiles the source
+/// file (using caching when possible) and executes the resulting binary.
+///
+/// ## Return Value
+///
+/// Returns the exit code of the executed program.
 int run_run(const std::string& path, const std::vector<std::string>& args, bool verbose,
             bool coverage, bool no_cache) {
     // Initialize diagnostic emitter for Rust-style error output

@@ -1,3 +1,30 @@
+//! # Build Command Implementation
+//!
+//! This file implements the main `tml build` command that compiles TML source
+//! files into executables, libraries, or other output formats.
+//!
+//! ## Compilation Pipeline
+//!
+//! ```text
+//! run_build()
+//!   ├─ Read source file
+//!   ├─ Lexer::tokenize()        → Tokens
+//!   ├─ Parser::parse_module()   → AST (Module)
+//!   ├─ TypeChecker::check()     → TypeEnv
+//!   ├─ BorrowChecker::check()   → Ownership validation
+//!   ├─ LLVMIRGen::generate()    → LLVM IR (.ll)
+//!   ├─ compile_ll_to_object()   → Object file (.obj/.o)
+//!   └─ link_objects()           → Final output (.exe/.dll/.rlib)
+//! ```
+//!
+//! ## Caching
+//!
+//! Object files are cached in `build/debug/.cache/` based on:
+//! - Source file modification time
+//! - Compiler options (optimization level, debug info)
+//!
+//! Use `--no-cache` to force recompilation.
+
 #include "builder_internal.hpp"
 
 namespace tml::cli {
@@ -5,6 +32,21 @@ namespace tml::cli {
 // Using helpers from builder namespace
 using namespace build;
 
+/// Main build command implementation.
+///
+/// Compiles a TML source file through the full pipeline and produces
+/// the specified output type (executable, library, etc.).
+///
+/// ## Parameters
+///
+/// - `path`: Path to the source file
+/// - `verbose`: Print detailed output
+/// - `emit_ir_only`: Stop after generating LLVM IR
+/// - `emit_mir`: Emit MIR (Mid-level IR) instead of final output
+/// - `no_cache`: Disable object file caching
+/// - `output_type`: Type of output to produce
+/// - `emit_header`: Generate C header for FFI
+/// - `output_dir`: Custom output directory
 int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emit_mir,
               bool no_cache, BuildOutputType output_type, bool emit_header,
               const std::string& output_dir) {

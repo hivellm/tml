@@ -1,3 +1,17 @@
+//! # Builder Helper Functions
+//!
+//! This file contains shared utility functions used across the build system.
+//! Includes type serialization, cache key generation, file operations, and
+//! diagnostic helpers.
+//!
+//! ## Contents
+//!
+//! - **Type Utilities**: `type_to_string()` for RLIB type signatures
+//! - **Cache Key Generation**: Content hashing for incremental builds
+//! - **File Utilities**: Project root detection, directory management
+//! - **Diagnostic Helpers**: Error emission for all compiler phases
+//! - **Module Helpers**: Runtime object collection for linking
+
 #include "builder_internal.hpp"
 
 namespace tml::cli::build {
@@ -6,6 +20,10 @@ namespace tml::cli::build {
 // Type Utilities
 // ============================================================================
 
+/// Converts a parser Type to its string representation.
+///
+/// Used for generating type signatures in RLIB metadata.
+/// Handles all TML type variants: named, ref, ptr, array, tuple, func, etc.
 std::string type_to_string(const parser::Type& type) {
     return std::visit(
         [](const auto& t) -> std::string {

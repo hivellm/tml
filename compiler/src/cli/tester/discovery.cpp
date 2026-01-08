@@ -1,4 +1,24 @@
-// Test command - file discovery
+//! # Test File Discovery
+//!
+//! This file implements test and benchmark file discovery for `tml test`.
+//!
+//! ## Discovery Rules
+//!
+//! | File Pattern     | Included By       | Description           |
+//! |------------------|-------------------|-----------------------|
+//! | `*.test.tml`     | `tml test`        | Unit test files       |
+//! | `tests/*.tml`    | `tml test`        | Test directory files  |
+//! | `*.bench.tml`    | `tml test --bench`| Benchmark files       |
+//!
+//! ## Excluded Directories
+//!
+//! - `errors/`: Expected compilation error tests
+//! - `pending/`: Tests for unimplemented features
+//!
+//! ## Caching
+//!
+//! Test file discovery is cached for 1 hour in `build/debug/.test-cache`
+//! to speed up repeated test runs.
 
 #include "tester_internal.hpp"
 
@@ -8,6 +28,7 @@ namespace tml::cli::tester {
 // Discover Benchmark Files
 // ============================================================================
 
+/// Discovers benchmark files (`*.bench.tml`) in the project.
 std::vector<std::string> discover_bench_files(const std::string& root_dir) {
     std::vector<std::string> bench_files;
 
