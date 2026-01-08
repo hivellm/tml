@@ -1,3 +1,18 @@
+//! # IR Builder - Type Conversion
+//!
+//! This file converts AST type annotations to IR form.
+//!
+//! ## Type Kinds
+//!
+//! | AST Type      | IR Type        | Example              |
+//! |---------------|----------------|----------------------|
+//! | `NamedType`   | `IRTypeRef`    | `I32`, `Vec[T]`      |
+//! | `RefType`     | `IRRefType`    | `ref T`, `mut ref T` |
+//! | `ArrayType`   | `IRArrayType`  | `[I32; 10]`          |
+//! | `SliceType`   | `IRSliceType`  | `[I32]`              |
+//! | `TupleType`   | `IRTupleType`  | `(I32, String)`      |
+//! | `FuncType`    | `IRFuncType`   | `func(I32) -> Bool`  |
+
 #include "ir/ir.hpp"
 
 namespace tml::ir {

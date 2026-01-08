@@ -1,3 +1,23 @@
+//! # IR Builder - Declarations
+//!
+//! This file converts AST declarations to IR form.
+//!
+//! ## Declaration Types
+//!
+//! | AST Decl        | IR Type       | Description                |
+//! |-----------------|---------------|----------------------------|
+//! | `FuncDecl`      | `IRFunc`      | Function with body         |
+//! | `StructDecl`    | `IRType`      | Struct type definition     |
+//! | `EnumDecl`      | `IRType`      | Enum type definition       |
+//! | `TraitDecl`     | `IRBehavior`  | Behavior (trait) definition|
+//! | `ImplDecl`      | `IRImpl`      | Implementation block       |
+//! | `ConstDecl`     | `IRConst`     | Compile-time constant      |
+//!
+//! ## Field and Variant Ordering
+//!
+//! All fields, variants, and methods are sorted alphabetically
+//! to ensure canonical output for stable diffs.
+
 #include "ir/ir.hpp"
 
 #include <algorithm>

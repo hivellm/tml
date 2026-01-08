@@ -1,3 +1,19 @@
+//! # IR Emitter - Expressions
+//!
+//! This file emits IR expressions in S-expression format.
+//!
+//! ## Output Format
+//!
+//! | Expression  | S-expression                           |
+//! |-------------|----------------------------------------|
+//! | Literal     | `(lit 42 I32)`                         |
+//! | Variable    | `(var x)`                              |
+//! | Binary op   | `(+ (var x) (lit 1 I32))`              |
+//! | Call        | `(call foo (var a) (var b))`           |
+//! | Field       | `(field (var p) x)`                    |
+//! | If          | `(if (cond) (then) (else))`            |
+//! | Block       | `(block (stmt1) (stmt2) (expr))`       |
+
 #include "ir/ir.hpp"
 
 #include <sstream>

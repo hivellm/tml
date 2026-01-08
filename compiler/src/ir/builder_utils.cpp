@@ -1,3 +1,21 @@
+//! # IR Builder - Utilities
+//!
+//! This file implements utility functions for IR building.
+//!
+//! ## Stable ID Generation
+//!
+//! `generate_id()` creates deterministic 8-character hex IDs:
+//! - Uses FNV-1a hash of name + signature + module
+//! - Same input always produces same ID
+//! - Enables stable diffs and patch application
+//!
+//! ## Conversion Helpers
+//!
+//! - `visibility_from_ast()`: Convert AST visibility to IR
+//! - `binary_op_to_string()`: Convert binary operators
+//! - `unary_op_to_string()`: Convert unary operators
+//! - `build_pattern()`: Convert pattern matching patterns
+
 #include "ir/ir.hpp"
 
 #include <algorithm>

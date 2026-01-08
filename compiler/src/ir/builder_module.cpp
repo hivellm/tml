@@ -1,3 +1,22 @@
+//! # IR Builder - Module Construction
+//!
+//! This file builds an IR module from an AST module.
+//!
+//! ## Canonical Ordering
+//!
+//! Items are emitted in a deterministic order for stable diffs:
+//!
+//! 1. **Constants** - sorted alphabetically by name
+//! 2. **Types** - structs and enums, sorted alphabetically
+//! 3. **Behaviors** - trait definitions, sorted alphabetically
+//! 4. **Implementations** - sorted by target type
+//! 5. **Functions** - sorted alphabetically by name
+//!
+//! ## Stable Module IDs
+//!
+//! Each module gets a unique stable ID generated from its name,
+//! enabling consistent references across compilation sessions.
+
 #include "ir/ir.hpp"
 
 #include <algorithm>

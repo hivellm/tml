@@ -1,3 +1,36 @@
+//! # IR Emitter - Core
+//!
+//! This file implements the core IR emitter that outputs S-expressions.
+//!
+//! ## S-Expression Format
+//!
+//! The IR uses a Lisp-like S-expression format for several reasons:
+//!
+//! - **Unambiguous parsing**: No operator precedence issues
+//! - **Diff-friendly**: Each item on its own line
+//! - **LLM-friendly**: Simple, regular structure
+//! - **Tool-friendly**: Easy to parse and generate
+//!
+//! ## Module Structure
+//!
+//! ```text
+//! (module <name> <id>
+//!   (caps [cap1 cap2])
+//!   (imports
+//!     (import path :as alias))
+//!   (items
+//!     (const ...)
+//!     (type ...)
+//!     (behavior ...)
+//!     (extend ...)
+//!     (func ...)))
+//! ```
+//!
+//! ## Formatting Options
+//!
+//! - `compact`: Single-line output (no newlines)
+//! - `indent_size`: Spaces per indentation level
+
 #include "ir/ir.hpp"
 
 #include <sstream>

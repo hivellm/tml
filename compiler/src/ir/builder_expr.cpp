@@ -1,3 +1,25 @@
+//! # IR Builder - Expressions
+//!
+//! This file converts AST expressions to IR form.
+//!
+//! ## Expression Categories
+//!
+//! | Category       | IR Types                                    |
+//! |----------------|---------------------------------------------|
+//! | Literals       | `IRLiteral` (int, float, string, char, bool)|
+//! | Variables      | `IRVar`, `IRFieldGet`, `IRIndex`            |
+//! | Operators      | `IRBinaryOp`, `IRUnaryOp`                   |
+//! | Calls          | `IRCall`, `IRMethodCall`                    |
+//! | Constructors   | `IRStructExpr`, `IRVariantExpr`, `IRTupleExpr` |
+//! | Control flow   | `IRIf`, `IRWhen`, `IRLoop`, `IRLoopIn`      |
+//! | Closures       | `IRClosure`                                 |
+//! | Control        | `IRReturn`, `IRBreak`, `IRContinue`         |
+//!
+//! ## Compound Assignment Desugaring
+//!
+//! Compound assignments like `x += 1` are desugared to binary ops
+//! during IR construction for simpler downstream processing.
+
 #include "ir/ir.hpp"
 
 #include <algorithm>

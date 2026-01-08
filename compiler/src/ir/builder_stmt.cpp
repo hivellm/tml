@@ -1,3 +1,27 @@
+//! # IR Builder - Statements and Patterns
+//!
+//! This file converts AST statements, blocks, and patterns to IR.
+//!
+//! ## Statement Types
+//!
+//! | AST Statement | IR Type       | Description                |
+//! |---------------|---------------|----------------------------|
+//! | `LetStmt`     | `IRLet`       | Immutable binding          |
+//! | `VarStmt`     | `IRVarMut`    | Mutable variable           |
+//! | `ExprStmt`    | `IRExprStmt`  | Expression as statement    |
+//! | Assignment    | `IRAssign`    | Variable assignment        |
+//!
+//! ## Pattern Types
+//!
+//! | AST Pattern       | IR Type            | Example          |
+//! |-------------------|--------------------|------------------|
+//! | `LiteralPattern`  | `IRPatternLit`     | `42`, `"hello"`  |
+//! | `IdentPattern`    | `IRPatternBind`    | `x`, `mut y`     |
+//! | `WildcardPattern` | `IRPatternWild`    | `_`              |
+//! | `TuplePattern`    | `IRPatternTuple`   | `(a, b)`         |
+//! | `StructPattern`   | `IRPatternStruct`  | `Point { x, y }` |
+//! | `EnumPattern`     | `IRPatternVariant` | `Just(v)`        |
+
 #include "ir/ir.hpp"
 
 namespace tml::ir {

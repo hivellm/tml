@@ -1,3 +1,25 @@
+//! # IR Emitter - Declarations
+//!
+//! This file emits IR declarations in S-expression format.
+//!
+//! ## Declaration Formats
+//!
+//! | Declaration | S-expression                                   |
+//! |-------------|------------------------------------------------|
+//! | Function    | `(func name @id (vis ...) (params ...) ...)`   |
+//! | Type        | `(type name @id (kind struct/enum) ...)`       |
+//! | Behavior    | `(behavior name @id (methods ...))`            |
+//! | Impl        | `(extend @id (target T) (behavior B) ...)`     |
+//! | Const       | `(const name @id (type T) (value ...))`        |
+//!
+//! ## Nested Structure
+//!
+//! Each declaration contains nested S-expressions for:
+//! - Visibility: `(vis public)` or `(vis private)`
+//! - Generics: `(generics (param T (bounds [B1 B2])))`
+//! - Parameters: `(params (param name Type))`
+//! - Body: `(body (block ...))`
+
 #include "ir/ir.hpp"
 
 #include <sstream>

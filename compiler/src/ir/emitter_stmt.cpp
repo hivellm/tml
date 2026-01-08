@@ -1,3 +1,24 @@
+//! # IR Emitter - Statements
+//!
+//! This file emits IR statements in S-expression format.
+//!
+//! ## Output Format
+//!
+//! | Statement   | S-expression                           |
+//! |-------------|----------------------------------------|
+//! | Let         | `(let (bind x) (type I32) (init ...))`|
+//! | Var         | `(var x (type I32) (init ...))`        |
+//! | Assign      | `(assign (var x) (lit 42 I32))`        |
+//! | Expr stmt   | `(expr (call foo))`                    |
+//!
+//! ## Patterns
+//!
+//! | Pattern     | S-expression                           |
+//! |-------------|----------------------------------------|
+//! | Wildcard    | `_`                                    |
+//! | Binding     | `(bind x)` or `(bind mut x)`           |
+//! | Tuple       | `(tuple (bind a) (bind b))`            |
+
 #include "ir/ir.hpp"
 
 #include <sstream>
