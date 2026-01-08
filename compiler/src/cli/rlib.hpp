@@ -1,3 +1,29 @@
+//! # RLIB Library Format Interface
+//!
+//! This header defines the TML library (.rlib) format API.
+//!
+//! ## RLIB Structure
+//!
+//! ```text
+//! library.rlib (llvm-ar archive)
+//!   ├─ metadata.json     # RlibMetadata serialized
+//!   └─ <module>.obj      # Compiled object files
+//! ```
+//!
+//! ## Metadata Types
+//!
+//! | Type            | Description                              |
+//! |-----------------|------------------------------------------|
+//! | `RlibExport`    | Public symbol from module                |
+//! | `RlibModule`    | Compiled module with exports             |
+//! | `RlibMetadata`  | Complete library metadata                |
+//!
+//! ## Key Functions
+//!
+//! - `create_rlib()`: Create .rlib from objects + metadata
+//! - `read_rlib_metadata()`: Read metadata from .rlib
+//! - `extract_rlib_objects()`: Extract objects for linking
+
 #ifndef TML_CLI_RLIB_HPP
 #define TML_CLI_RLIB_HPP
 

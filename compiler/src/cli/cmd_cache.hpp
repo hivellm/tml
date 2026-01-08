@@ -1,3 +1,15 @@
+//! # Cache Command Interface
+//!
+//! This header defines the cache management command API.
+//!
+//! ## Subcommands
+//!
+//! | Function           | Description                          |
+//! |--------------------|--------------------------------------|
+//! | `run_cache_info()` | Display cache statistics             |
+//! | `run_cache_clean()`| Remove old or all cache files        |
+//! | `enforce_cache_limit()` | LRU eviction when over size limit |
+
 #ifndef TML_CLI_CMD_CACHE_HPP
 #define TML_CLI_CMD_CACHE_HPP
 

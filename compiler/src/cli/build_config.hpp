@@ -1,3 +1,22 @@
+//! # Build Configuration Interface
+//!
+//! This header defines tml.toml manifest parsing and project configuration.
+//!
+//! ## Manifest Sections
+//!
+//! | Section          | Type          | Description                   |
+//! |------------------|---------------|-------------------------------|
+//! | `[package]`      | `PackageInfo` | Name, version, authors        |
+//! | `[lib]`          | `LibConfig`   | Library output configuration  |
+//! | `[[bin]]`        | `BinConfig`   | Binary targets                |
+//! | `[dependencies]` | `Dependency`  | Package dependencies          |
+//! | `[build]`        | `BuildSettings` | Build options               |
+//! | `[profile.*]`    | `ProfileConfig` | Profile-specific settings   |
+//!
+//! ## TOML Parser
+//!
+//! `SimpleTomlParser` handles a subset of TOML for manifest parsing.
+
 #ifndef TML_CLI_BUILD_CONFIG_HPP
 #define TML_CLI_BUILD_CONFIG_HPP
 

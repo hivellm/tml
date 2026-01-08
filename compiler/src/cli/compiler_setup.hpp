@@ -1,3 +1,20 @@
+//! # Compiler Setup Interface
+//!
+//! This header defines toolchain discovery and C runtime compilation.
+//!
+//! ## Toolchain Discovery
+//!
+//! | Function      | Platform | Description                        |
+//! |---------------|----------|-------------------------------------|
+//! | `find_clang()`| All      | Locate clang in PATH or known dirs |
+//! | `find_msvc()` | Windows  | Find Visual Studio and Windows SDK |
+//! | `find_runtime()` | All   | Locate essential.c runtime         |
+//!
+//! ## C Runtime Compilation
+//!
+//! - `ensure_runtime_compiled()`: Pre-compile essential.c with caching
+//! - `ensure_c_compiled()`: Compile any C file with caching
+
 #pragma once
 #include <string>
 #include <vector>

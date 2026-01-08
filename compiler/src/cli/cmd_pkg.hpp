@@ -1,3 +1,20 @@
+//! # Package Commands Interface
+//!
+//! This header defines package management command APIs.
+//!
+//! ## Implemented Commands
+//!
+//! | Function       | Command       | Description                   |
+//! |----------------|---------------|-------------------------------|
+//! | `run_deps()`   | `tml deps`    | List project dependencies     |
+//! | `run_remove()` | `tml remove`  | Remove dependency from tml.toml|
+//!
+//! ## Pending Commands (no registry yet)
+//!
+//! - `run_add()`: Add package from registry
+//! - `run_update()`: Update dependencies
+//! - `run_publish()`: Publish to registry
+
 #ifndef TML_CLI_CMD_PKG_HPP
 #define TML_CLI_CMD_PKG_HPP
 

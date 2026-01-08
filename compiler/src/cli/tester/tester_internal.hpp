@@ -1,3 +1,20 @@
+//! # Tester Internal Interface
+//!
+//! This header defines internal types and utilities for the test framework.
+//!
+//! ## Components
+//!
+//! | Type                  | Description                          |
+//! |-----------------------|--------------------------------------|
+//! | `TestResultCollector` | Thread-safe result aggregation       |
+//! | `ColorOutput`         | ANSI color output wrapper            |
+//!
+//! ## Test Execution Pipeline
+//!
+//! ```text
+//! discover tests → group into suites → compile DLLs → run → report
+//! ```
+
 #pragma once
 
 // Internal header for test command implementation

@@ -1,3 +1,27 @@
+//! # Dependency Resolver Interface
+//!
+//! This header defines the package dependency resolution system.
+//!
+//! ## Dependency Types
+//!
+//! | Type    | Source                  | Example                        |
+//! |---------|-------------------------|--------------------------------|
+//! | Path    | Local filesystem        | `{ path = "../mylib" }`        |
+//! | Version | Package registry        | `"^1.2.0"` (future)            |
+//! | Git     | Git repository          | `{ git = "..." }` (future)     |
+//!
+//! ## Resolution Process
+//!
+//! 1. Parse tml.toml manifest
+//! 2. Resolve direct dependencies
+//! 3. Resolve transitive dependencies
+//! 4. Detect cycles
+//! 5. Topological sort for build order
+//!
+//! ## Lockfile
+//!
+//! `tml.lock` records exact versions for reproducible builds.
+
 #ifndef TML_CLI_DEPENDENCY_RESOLVER_HPP
 #define TML_CLI_DEPENDENCY_RESOLVER_HPP
 

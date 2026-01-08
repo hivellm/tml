@@ -1,3 +1,25 @@
+//! # Diagnostic System Interface
+//!
+//! This header defines the compiler error/warning formatting system.
+//!
+//! ## Error Code Categories
+//!
+//! | Prefix | Category    | Example                         |
+//! |--------|-------------|----------------------------------|
+//! | L      | Lexer       | L001 - Invalid character         |
+//! | P      | Parser      | P001 - Unexpected token          |
+//! | T      | Type check  | T001 - Type mismatch             |
+//! | B      | Borrow      | B001 - Use after move            |
+//! | C      | Codegen     | C001 - Codegen error             |
+//!
+//! ## Features
+//!
+//! - Multi-line source snippets with line numbers
+//! - Primary and secondary labels (^^^ vs ---)
+//! - Fix-it hints for automatic correction
+//! - "Did you mean?" suggestions via Levenshtein distance
+//! - JSON output for IDE integration
+
 #pragma once
 
 #include "common.hpp"

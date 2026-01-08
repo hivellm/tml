@@ -1,3 +1,22 @@
+//! # Linter Internal Interface
+//!
+//! This header defines internal types and utilities for the linter.
+//!
+//! ## Components
+//!
+//! | Type            | Description                              |
+//! |-----------------|------------------------------------------|
+//! | `LintConfig`    | Style rules configuration                |
+//! | `LintResult`    | Collected warnings and errors            |
+//! | `LintIssue`     | Single lint issue with location          |
+//! | `SemanticLinter`| AST visitor for naming/unused checks     |
+//!
+//! ## Rule Categories
+//!
+//! - **S (Style)**: Tabs, trailing whitespace, line length, naming
+//! - **W (Warning)**: Unused variables/imports/parameters
+//! - **C (Complexity)**: Function length, cyclomatic, nesting
+
 #pragma once
 
 // Internal header for lint command implementation

@@ -1,3 +1,28 @@
+//! # Parallel Build System
+//!
+//! This header defines the multi-threaded build infrastructure.
+//!
+//! ## Components
+//!
+//! | Class             | Description                              |
+//! |-------------------|------------------------------------------|
+//! | `BuildJob`        | Single file compilation task             |
+//! | `BuildQueue`      | Thread-safe work queue                   |
+//! | `BuildStats`      | Compilation statistics                   |
+//! | `DependencyGraph` | Module dependency ordering               |
+//! | `ParallelBuilder` | Orchestrates parallel compilation        |
+//!
+//! ## Build Pipeline
+//!
+//! ```text
+//! source files → dependency analysis → topological sort → parallel compile → link
+//! ```
+//!
+//! ## Caching
+//!
+//! Each `BuildJob` includes a content hash for cache lookup.
+//! Cached object files are reused when source hasn't changed.
+
 #ifndef TML_CLI_PARALLEL_BUILD_HPP
 #define TML_CLI_PARALLEL_BUILD_HPP
 

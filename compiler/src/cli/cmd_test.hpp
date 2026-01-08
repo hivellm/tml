@@ -1,3 +1,26 @@
+//! # Test Command Interface
+//!
+//! This header defines the test framework API and data structures.
+//!
+//! ## Test Types
+//!
+//! | Type              | Description                              |
+//! |-------------------|------------------------------------------|
+//! | `TestResult`      | Result of a single test file             |
+//! | `TestGroup`       | Group of tests with statistics           |
+//! | `BenchmarkResult` | Benchmark timing results                 |
+//! | `FuzzResult`      | Fuzz testing results                     |
+//! | `TestOptions`     | Command-line options for `tml test`      |
+//!
+//! ## Test Options
+//!
+//! Key options include:
+//! - `--nocapture`: Show stdout/stderr during tests
+//! - `--bench`: Run benchmarks instead of tests
+//! - `--fuzz`: Run fuzz tests
+//! - `--profile`: Show detailed phase timings
+//! - `--suite-mode`: Bundle tests into DLLs (default: true)
+
 #pragma once
 
 #include <chrono>

@@ -1,3 +1,21 @@
+//! # Builder Internal Interface
+//!
+//! This header defines internal utilities for the build command.
+//!
+//! ## Build Pipeline Helpers
+//!
+//! The `build` namespace contains helper functions for:
+//! - Cache directory management
+//! - Content hashing for caching
+//! - Runtime object collection
+//! - File copy utilities
+//!
+//! ## Compilation Flow
+//!
+//! ```text
+//! source → lexer → parser → types → borrow → codegen → object → link
+//! ```
+
 #pragma once
 
 // Internal header for build command implementation

@@ -1,3 +1,24 @@
+//! # Object Compiler Interface
+//!
+//! This header defines the LLVM IR to object file compilation API.
+//!
+//! ## Key Functions
+//!
+//! | Function                | Description                              |
+//! |-------------------------|------------------------------------------|
+//! | `compile_ll_to_object()`| Compile single .ll to .obj               |
+//! | `compile_ll_batch()`    | Parallel batch compilation               |
+//! | `link_objects()`        | Link objects to exe/lib                  |
+//!
+//! ## Optimization Levels
+//!
+//! - `0`: No optimization (-O0)
+//! - `1`: Basic optimization (-O1)
+//! - `2`: Moderate optimization (-O2)
+//! - `3`: Aggressive optimization (-O3)
+//! - `4`: Size optimization (-Os)
+//! - `5`: Aggressive size (-Oz)
+
 #ifndef TML_CLI_OBJECT_COMPILER_HPP
 #define TML_CLI_OBJECT_COMPILER_HPP
 

@@ -1,3 +1,13 @@
+//! # Init Command Interface
+//!
+//! This header defines the project initialization command API.
+//!
+//! ## Usage
+//!
+//! - `tml init`: Create binary project
+//! - `tml init --lib`: Create library project
+//! - `tml init --name foo`: Custom project name
+
 #ifndef TML_CLI_CMD_INIT_HPP
 #define TML_CLI_CMD_INIT_HPP
 

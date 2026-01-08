@@ -1,3 +1,15 @@
+//! # Debug Commands Interface
+//!
+//! This header defines debug/inspection commands for compiler stages.
+//!
+//! ## Commands
+//!
+//! | Function       | Command       | Output                       |
+//! |----------------|---------------|------------------------------|
+//! | `run_lex()`    | `tml lex`     | Token stream                 |
+//! | `run_parse()`  | `tml parse`   | AST structure                |
+//! | `run_check()`  | `tml check`   | Type checking without codegen|
+
 #pragma once
 #include <string>
 

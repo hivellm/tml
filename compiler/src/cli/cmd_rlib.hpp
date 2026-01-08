@@ -1,3 +1,15 @@
+//! # RLIB Command Interface
+//!
+//! This header defines the RLIB inspection command API.
+//!
+//! ## Subcommands
+//!
+//! | Function             | Command             | Description              |
+//! |----------------------|---------------------|--------------------------|
+//! | `run_rlib_info()`    | `tml rlib info`     | Show library metadata    |
+//! | `run_rlib_exports()` | `tml rlib exports`  | List public symbols      |
+//! | `run_rlib_validate()`| `tml rlib validate` | Check format integrity   |
+
 #ifndef TML_CLI_CMD_RLIB_HPP
 #define TML_CLI_CMD_RLIB_HPP
 

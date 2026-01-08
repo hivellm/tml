@@ -1,3 +1,23 @@
+//! # Build Command Interface
+//!
+//! This header defines the build command API and related types.
+//!
+//! ## Build Functions
+//!
+//! | Function          | Description                              |
+//! |-------------------|------------------------------------------|
+//! | `run_build()`     | Compile source to executable/library     |
+//! | `run_build_ex()`  | Extended build with all options          |
+//! | `run_run()`       | Build and execute program                |
+//! | `run_run_quiet()` | Run with output capture                  |
+//! | `run_run_profiled()` | Run with phase timing breakdown       |
+//!
+//! ## Exit Codes
+//!
+//! - `EXIT_SUCCESS_CODE (0)`: Success
+//! - `EXIT_RUNTIME_ERROR (1)`: Test/program failed
+//! - `EXIT_COMPILATION_ERROR (2)`: Compilation failed
+
 #pragma once
 #include <map>
 #include <string>

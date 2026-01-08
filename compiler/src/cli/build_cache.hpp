@@ -1,3 +1,26 @@
+//! # Build Cache Interface
+//!
+//! This header defines the incremental compilation cache.
+//!
+//! ## Cache Levels
+//!
+//! | Level      | Stores                    | Invalidated By          |
+//! |------------|---------------------------|-------------------------|
+//! | Module     | MIR binary, object file   | Source change, options  |
+//! | Function   | Per-function MIR          | Function body change    |
+//!
+//! ## Cache Keys
+//!
+//! - **Source hash**: SHA256 of source content
+//! - **Signature hash**: Hash of function parameters and return type
+//! - **Body hash**: Hash of function instructions
+//! - **Deps hash**: Hash of used types/constants
+//!
+//! ## Phase Timing
+//!
+//! `PhaseTimer` and `ScopedPhaseTimer` measure compilation phases
+//! for profiling with `--time` flag.
+
 #pragma once
 
 #include "mir/mir.hpp"

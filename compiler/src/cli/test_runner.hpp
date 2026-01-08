@@ -1,3 +1,25 @@
+//! # Test Runner Interface
+//!
+//! This header defines the in-process test execution system.
+//!
+//! ## Test Execution Modes
+//!
+//! | Mode       | Description                                 |
+//! |------------|---------------------------------------------|
+//! | Individual | Each test compiled to separate DLL          |
+//! | Suite      | Tests grouped by directory into single DLL  |
+//!
+//! ## Key Types
+//!
+//! - `DynamicLibrary`: Cross-platform DLL/SO loader
+//! - `TestSuite`: Group of tests compiled together
+//! - `InProcessTestResult`: Test result with captured output
+//!
+//! ## Function Signatures
+//!
+//! - `TestMainFunc`: `int tml_test_entry(void)` - Test entry point
+//! - `FuzzTargetFunc`: `int tml_fuzz_target(data, len)` - Fuzz target
+
 #pragma once
 
 #include <cstdint>

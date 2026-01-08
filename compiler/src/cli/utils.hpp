@@ -1,3 +1,16 @@
+//! # CLI Utilities Interface
+//!
+//! This header defines shared utility functions for the CLI.
+//!
+//! ## Functions
+//!
+//! | Function              | Description                        |
+//! |-----------------------|------------------------------------|
+//! | `to_forward_slashes()`| Convert backslashes to forward     |
+//! | `read_file()`         | Read entire file to string         |
+//! | `print_usage()`       | Print CLI help text                |
+//! | `print_version()`     | Print compiler version             |
+
 #pragma once
 #include <string>
 
