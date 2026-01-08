@@ -1,14 +1,30 @@
-// TML Mid-level IR (MIR) - SSA Form Intermediate Representation
-//
-// MIR sits between the type-checked AST and LLVM IR generation.
-// It provides a clean, optimizable representation in SSA form.
-//
-// Design goals:
-// 1. SSA form - each variable defined exactly once
-// 2. Explicit control flow with basic blocks
-// 3. Type-annotated for easy optimization
-// 4. Close enough to LLVM IR for easy lowering
-// 5. High-level enough for TML-specific optimizations
+//! # TML Mid-level IR (MIR)
+//!
+//! MIR is a Static Single Assignment (SSA) form intermediate representation
+//! that sits between the type-checked AST and LLVM IR generation. It provides
+//! a clean, optimizable representation for TML programs.
+//!
+//! ## Design Goals
+//!
+//! 1. **SSA Form** - Each variable is defined exactly once
+//! 2. **Explicit Control Flow** - Basic blocks with explicit terminators
+//! 3. **Type Annotations** - All values have known types
+//! 4. **LLVM Compatible** - Easy lowering to LLVM IR
+//! 5. **TML Aware** - High-level enough for TML-specific optimizations
+//!
+//! ## Structure
+//!
+//! - **Module**: Top-level container with structs, enums, and functions
+//! - **Function**: Contains basic blocks in CFG form
+//! - **BasicBlock**: Sequence of instructions ending in a terminator
+//! - **Instruction**: SSA operations (binary, call, load, store, etc.)
+//! - **Terminator**: Control flow (return, branch, switch)
+//!
+//! ## Value System
+//!
+//! Every value has a unique `ValueId` and associated `MirTypePtr`. Values are
+//! immutable once created (SSA property). Phi nodes are used at control flow
+//! merge points.
 
 #pragma once
 
@@ -33,93 +49,108 @@ struct Module;
 // MIR Types - Simplified type representation for codegen
 // ============================================================================
 
-// Primitive types known at MIR level
+/// Primitive types known at MIR level.
 enum class PrimitiveType {
-    Unit,
-    Bool,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F32,
-    F64,
-    Ptr, // Raw pointer (void*)
-    Str, // String pointer
+    Unit, ///< Unit type (void).
+    Bool, ///< Boolean.
+    I8,   ///< 8-bit signed integer.
+    I16,  ///< 16-bit signed integer.
+    I32,  ///< 32-bit signed integer.
+    I64,  ///< 64-bit signed integer.
+    I128, ///< 128-bit signed integer.
+    U8,   ///< 8-bit unsigned integer.
+    U16,  ///< 16-bit unsigned integer.
+    U32,  ///< 32-bit unsigned integer.
+    U64,  ///< 64-bit unsigned integer.
+    U128, ///< 128-bit unsigned integer.
+    F32,  ///< 32-bit floating point.
+    F64,  ///< 64-bit floating point.
+    Ptr,  ///< Raw pointer (void*).
+    Str,  ///< String pointer.
 };
 
-// MIR type representation
+/// MIR type representation.
 struct MirType;
+/// Shared pointer to MIR type.
 using MirTypePtr = std::shared_ptr<MirType>;
 
+/// Primitive type variant.
 struct MirPrimitiveType {
-    PrimitiveType kind;
+    PrimitiveType kind; ///< The primitive type kind.
 };
 
+/// Pointer type variant.
 struct MirPointerType {
-    MirTypePtr pointee;
-    bool is_mut;
+    MirTypePtr pointee; ///< Type being pointed to.
+    bool is_mut;        ///< True for mutable pointers.
 };
 
+/// Fixed-size array type variant.
 struct MirArrayType {
-    MirTypePtr element;
-    size_t size;
+    MirTypePtr element; ///< Element type.
+    size_t size;        ///< Number of elements.
 };
 
+/// Slice type variant (fat pointer).
 struct MirSliceType {
-    MirTypePtr element;
+    MirTypePtr element; ///< Element type.
 };
 
+/// Tuple type variant.
 struct MirTupleType {
-    std::vector<MirTypePtr> elements;
+    std::vector<MirTypePtr> elements; ///< Element types.
 };
 
+/// Struct type variant.
 struct MirStructType {
-    std::string name;
-    std::vector<MirTypePtr> type_args; // For generic instantiations
+    std::string name;                  ///< Struct name.
+    std::vector<MirTypePtr> type_args; ///< Generic type arguments.
 };
 
+/// Enum type variant.
 struct MirEnumType {
-    std::string name;
-    std::vector<MirTypePtr> type_args;
+    std::string name;                  ///< Enum name.
+    std::vector<MirTypePtr> type_args; ///< Generic type arguments.
 };
 
+/// Function type variant.
 struct MirFunctionType {
-    std::vector<MirTypePtr> params;
-    MirTypePtr return_type;
+    std::vector<MirTypePtr> params; ///< Parameter types.
+    MirTypePtr return_type;         ///< Return type.
 };
 
+/// MIR type - a tagged union of all type variants.
 struct MirType {
+    /// The type variant data.
     std::variant<MirPrimitiveType, MirPointerType, MirArrayType, MirSliceType, MirTupleType,
                  MirStructType, MirEnumType, MirFunctionType>
         kind;
 
-    // Helper methods
+    /// Returns true if this is a primitive type.
     [[nodiscard]] auto is_primitive() const -> bool {
         return std::holds_alternative<MirPrimitiveType>(kind);
     }
+    /// Returns true if this is the unit type.
     [[nodiscard]] auto is_unit() const -> bool {
         if (auto* p = std::get_if<MirPrimitiveType>(&kind)) {
             return p->kind == PrimitiveType::Unit;
         }
         return false;
     }
+    /// Returns true if this is the bool type.
     [[nodiscard]] auto is_bool() const -> bool {
         if (auto* p = std::get_if<MirPrimitiveType>(&kind)) {
             return p->kind == PrimitiveType::Bool;
         }
         return false;
     }
+    /// Returns true if this is an integer type.
     [[nodiscard]] auto is_integer() const -> bool;
+    /// Returns true if this is a float type.
     [[nodiscard]] auto is_float() const -> bool;
+    /// Returns true if this is a signed integer type.
     [[nodiscard]] auto is_signed() const -> bool;
-
-    // Get size in bits (for integers)
+    /// Returns the bit width for integer types.
     [[nodiscard]] auto bit_width() const -> int;
 };
 

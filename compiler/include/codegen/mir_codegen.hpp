@@ -1,15 +1,24 @@
-#pragma once
+//! # MIR-based LLVM IR Code Generator
+//!
+//! This module generates LLVM IR from MIR (Mid-level IR). Unlike the
+//! AST-based generator, this works with SSA form which enables:
+//!
+//! - Easier optimization passes
+//! - More precise register allocation
+//! - Cleaner control flow handling
+//!
+//! ## MIR Advantages
+//!
+//! The MIR is already in SSA form with explicit phi nodes, so we can
+//! generate LLVM IR more directly without tracking variable assignments.
+//!
+//! ## Pipeline
+//!
+//! ```
+//! TML Source -> AST -> MIR -> LLVM IR -> Object Code
+//! ```
 
-// MIR-based LLVM IR Code Generator
-//
-// This code generator takes MIR (Mid-level IR) as input and produces LLVM IR.
-// Unlike the AST-based generator, this works with SSA form which enables:
-// - Easier optimization
-// - More precise register allocation
-// - Cleaner control flow handling
-//
-// The MIR is already in SSA form with explicit phi nodes, so we can generate
-// LLVM IR more directly without needing to track variable assignments.
+#pragma once
 
 #include "common.hpp"
 #include "mir/mir.hpp"
@@ -22,19 +31,24 @@
 
 namespace tml::codegen {
 
-// Code generation options for MIR codegen
+/// Options for MIR-to-LLVM code generation.
 struct MirCodegenOptions {
-    bool emit_comments = true;
-    bool dll_export = false;
-    std::string target_triple = "x86_64-pc-windows-msvc";
+    bool emit_comments = true;                            ///< Include source comments in IR.
+    bool dll_export = false;                              ///< Add dllexport for Windows DLLs.
+    std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
 };
 
-// MIR-to-LLVM-IR code generator
+/// MIR-to-LLVM IR code generator.
+///
+/// Translates MIR (already in SSA form) to LLVM IR text format.
+/// This is an alternative to the AST-based LLVMIRGen that may produce
+/// better optimized code for certain patterns.
 class MirCodegen {
 public:
+    /// Creates a MIR code generator with the given options.
     explicit MirCodegen(MirCodegenOptions options = {});
 
-    // Generate LLVM IR from MIR module
+    /// Generates LLVM IR from a MIR module.
     auto generate(const mir::Module& module) -> std::string;
 
 private:

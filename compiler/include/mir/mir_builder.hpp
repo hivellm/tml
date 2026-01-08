@@ -1,11 +1,22 @@
-// MIR Builder - Converts type-checked AST to MIR
-//
-// The builder performs lowering from the high-level AST to MIR in SSA form.
-// This includes:
-// - Converting expressions to SSA values
-// - Generating basic blocks for control flow
-// - Resolving variable references to SSA values
-// - Inserting phi nodes at control flow merge points
+//! # MIR Builder
+//!
+//! Converts type-checked AST to MIR in SSA form. The builder performs
+//! lowering from the high-level AST to the MIR intermediate representation.
+//!
+//! ## Responsibilities
+//!
+//! - Converting expressions to SSA values
+//! - Generating basic blocks for control flow
+//! - Resolving variable references to SSA values
+//! - Inserting phi nodes at control flow merge points
+//! - Tracking drop scopes for RAII
+//!
+//! ## Usage
+//!
+//! ```cpp
+//! MirBuilder builder(type_env);
+//! mir::Module mir_module = builder.build(ast_module);
+//! ```
 
 #pragma once
 
@@ -18,17 +29,15 @@
 
 namespace tml::mir {
 
-// Build context for tracking state during MIR construction
+/// Build context for tracking state during MIR construction.
+///
+/// Maintains all mutable state needed while building a function's MIR,
+/// including the current block, variable bindings, loop context, and
+/// drop scopes for RAII.
 struct BuildContext {
-    // Current function being built
-    Function* current_func = nullptr;
-
-    // Current basic block
-    uint32_t current_block = 0;
-
-    // Variable name to current SSA value mapping
-    // This is updated when variables are assigned (for mutable vars)
-    std::unordered_map<std::string, Value> variables;
+    Function* current_func = nullptr;                 ///< Function being built.
+    uint32_t current_block = 0;                       ///< Current basic block ID.
+    std::unordered_map<std::string, Value> variables; ///< Variable -> SSA value.
 
     // Loop context for break/continue
     struct LoopContext {
@@ -45,16 +54,18 @@ struct BuildContext {
     // Drop scope tracking for RAII
     // Each scope tracks variables that need drop calls when exiting
     struct DropInfo {
-        std::string var_name;     // Variable name
-        Value value;              // SSA value to drop
-        std::string type_name;    // Type name for drop call resolution
-        MirTypePtr type;          // Full type for codegen
-        bool is_moved = false;    // True if value was moved (don't drop)
+        std::string var_name;  // Variable name
+        Value value;           // SSA value to drop
+        std::string type_name; // Type name for drop call resolution
+        MirTypePtr type;       // Full type for codegen
+        bool is_moved = false; // True if value was moved (don't drop)
     };
     std::vector<std::vector<DropInfo>> drop_scopes;
 
     // Push/pop drop scope
-    void push_drop_scope() { drop_scopes.push_back({}); }
+    void push_drop_scope() {
+        drop_scopes.push_back({});
+    }
     void pop_drop_scope() {
         if (!drop_scopes.empty()) {
             drop_scopes.pop_back();
@@ -62,8 +73,8 @@ struct BuildContext {
     }
 
     // Register a variable for drop when leaving scope
-    void register_for_drop(const std::string& var_name, Value value,
-                           const std::string& type_name, MirTypePtr type) {
+    void register_for_drop(const std::string& var_name, Value value, const std::string& type_name,
+                           MirTypePtr type) {
         if (!drop_scopes.empty()) {
             drop_scopes.back().push_back({var_name, value, type_name, type, false});
         }
@@ -216,8 +227,8 @@ private:
     // Drop helpers for RAII
     void emit_drop_calls(const std::vector<BuildContext::DropInfo>& drops);
     void emit_drop_for_value(Value value, const MirTypePtr& type, const std::string& type_name);
-    void emit_scope_drops();    // Emit drops for current scope
-    void emit_all_drops();      // Emit drops for all scopes (for return)
+    void emit_scope_drops(); // Emit drops for current scope
+    void emit_all_drops();   // Emit drops for all scopes (for return)
     [[nodiscard]] auto get_type_name(const MirTypePtr& type) const -> std::string;
     [[nodiscard]] auto get_type_name_from_semantic(const types::TypePtr& type) const -> std::string;
 };

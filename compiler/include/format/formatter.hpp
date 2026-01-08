@@ -1,3 +1,33 @@
+//! # TML Source Code Formatter
+//!
+//! This module provides source code formatting for TML files. The formatter
+//! takes a parsed AST and produces consistently formatted TML source code.
+//!
+//! ## Features
+//!
+//! - Consistent indentation (spaces or tabs)
+//! - Configurable line width
+//! - Optional trailing commas
+//! - Field alignment in structs
+//!
+//! ## Usage
+//!
+//! ```cpp
+//! FormatOptions opts;
+//! opts.indent_width = 4;
+//! opts.trailing_commas = true;
+//!
+//! Formatter fmt(opts);
+//! std::string formatted = fmt.format(module);
+//! ```
+//!
+//! ## CLI Integration
+//!
+//! ```bash
+//! tml fmt file.tml          # Format and print
+//! tml fmt file.tml --write  # Format in place
+//! ```
+
 #pragma once
 
 #include "common.hpp"
@@ -8,23 +38,26 @@
 
 namespace tml::format {
 
-// Formatter options
+/// Formatting options.
 struct FormatOptions {
-    int indent_width = 4;          // Spaces per indent level
-    bool use_tabs = false;         // Use tabs instead of spaces
-    int max_line_width = 100;      // Preferred max line width
-    bool trailing_commas = true;   // Add trailing commas in lists
-    bool space_after_colon = true; // "x: T" vs "x:T"
-    bool align_fields = false;     // Align struct field types
+    int indent_width = 4;          ///< Spaces per indent level.
+    bool use_tabs = false;         ///< Use tabs instead of spaces.
+    int max_line_width = 100;      ///< Preferred max line width.
+    bool trailing_commas = true;   ///< Add trailing commas in lists.
+    bool space_after_colon = true; ///< Use "x: T" (true) vs "x:T" (false).
+    bool align_fields = false;     ///< Align struct field types vertically.
 };
 
-// TML source code formatter
-// Takes an AST and produces formatted TML source code
+/// TML source code formatter.
+///
+/// Formats TML source code from a parsed AST. Produces consistent,
+/// readable output following TML style conventions.
 class Formatter {
 public:
+    /// Creates a formatter with the given options.
     explicit Formatter(FormatOptions options = {});
 
-    // Format a complete module
+    /// Formats a complete module and returns the formatted source.
     auto format(const parser::Module& module) -> std::string;
 
 private:

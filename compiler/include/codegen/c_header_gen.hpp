@@ -1,3 +1,20 @@
+//! # C Header Generator
+//!
+//! This module generates C header files (`.h`) from TML modules for FFI.
+//! The generated headers allow C/C++ code to call TML functions.
+//!
+//! ## Features
+//!
+//! - Automatic `extern "C"` wrapper for C++ compatibility
+//! - Include guard generation
+//! - Type mapping from TML to C types
+//!
+//! ## Usage
+//!
+//! ```bash
+//! tml build module.tml --emit-header
+//! ```
+
 #pragma once
 
 #include <parser/ast.hpp>
@@ -7,28 +24,30 @@
 
 namespace tml::codegen {
 
-// C header generation options
+/// Options for C header generation.
 struct CHeaderGenOptions {
-    bool add_extern_c = true;       // Add extern "C" wrapper for C++ compatibility
-    bool add_include_guards = true; // Add #ifndef header guards
-    std::string guard_prefix = "";  // Prefix for include guards (empty = auto from module name)
+    bool add_extern_c = true;       ///< Add `extern "C"` wrapper for C++.
+    bool add_include_guards = true; ///< Add `#ifndef` header guards.
+    std::string guard_prefix = "";  ///< Guard prefix (empty = auto from module name).
 };
 
-// Result of C header generation
+/// Result of C header generation.
 struct CHeaderGenResult {
-    bool success = false;
-    std::string header_content;
-    std::string error_message;
+    bool success = false;       ///< True if generation succeeded.
+    std::string header_content; ///< Generated header content.
+    std::string error_message;  ///< Error message if failed.
 };
 
-// C Header Generator
-// Generates C header files (.h) from TML modules for FFI
+/// C header file generator for FFI.
+///
+/// Generates C header files from TML modules, enabling C/C++ code
+/// to call TML functions. Only public functions are exported.
 class CHeaderGen {
 public:
+    /// Creates a header generator with the given type environment.
     explicit CHeaderGen(const types::TypeEnv& env, CHeaderGenOptions options = {});
 
-    // Generate C header from a module
-    // Only exports public functions
+    /// Generates a C header from a module (public functions only).
     CHeaderGenResult generate(const parser::Module& module);
 
 private:

@@ -1,3 +1,35 @@
+//! # TML Canonical IR
+//!
+//! This module defines the canonical intermediate representation for TML.
+//! The IR provides a normalized, sortable representation suitable for:
+//!
+//! - Stable diffs between versions
+//! - LLM code generation and analysis
+//! - Patch application
+//! - Semantic comparison
+//!
+//! ## Design Principles
+//!
+//! - **Deterministic**: Same input always produces same IR
+//! - **Sorted**: Items sorted by kind, then alphabetically
+//! - **Stable IDs**: 8-character hex hashes for identity
+//! - **S-expression output**: Machine-readable, version-controllable
+//!
+//! ## Structure
+//!
+//! - `IRModule`: Top-level module with imports and items
+//! - `IRFunc`, `IRType`, `IRBehavior`, `IRImpl`: Declaration types
+//! - `IRExpr`, `IRStmt`, `IRPattern`: Expression/statement AST
+//!
+//! ## Usage
+//!
+//! ```cpp
+//! IRBuilder builder;
+//! auto ir = builder.build_module(ast_module, "my_module");
+//! IREmitter emitter;
+//! std::string output = emitter.emit_module(ir);
+//! ```
+
 #ifndef TML_IR_IR_HPP
 #define TML_IR_IR_HPP
 
@@ -23,17 +55,20 @@ struct IRExpr;
 struct IRStmt;
 struct IRPattern;
 
+/// Owning pointer to an IR expression.
 using IRExprPtr = Box<IRExpr>;
+/// Owning pointer to an IR statement.
 using IRStmtPtr = Box<IRStmt>;
+/// Owning pointer to an IR pattern.
 using IRPatternPtr = Box<IRPattern>;
 
-// Stable ID (8-character hex hash)
+/// Stable ID - 8-character hex hash for deterministic identity.
 using StableId = std::string;
 
-// Visibility
+/// Visibility level for declarations.
 enum class Visibility {
-    Private,
-    Public,
+    Private, ///< Module-private.
+    Public,  ///< Publicly visible.
 };
 
 // ============================================================================
@@ -408,11 +443,17 @@ struct IRModule {
 // IR Builder
 // ============================================================================
 
+/// Builds canonical IR from the parsed AST.
+///
+/// The builder converts TML AST to a normalized IR form with stable IDs,
+/// sorted items, and deterministic output. Used for generating the
+/// canonical representation for diffs and LLM integration.
 class IRBuilder {
 public:
+    /// Creates an IR builder.
     IRBuilder();
 
-    // Convert AST to IR
+    /// Builds an IR module from an AST module.
     auto build_module(const parser::Module& module, const std::string& module_name) -> IRModule;
 
 private:
@@ -453,15 +494,23 @@ private:
 // IR Emitter (S-expression format)
 // ============================================================================
 
+/// Emits IR in S-expression text format.
+///
+/// Produces a deterministic, human-readable, and machine-parseable
+/// representation of the IR. Used for diffs, version control, and
+/// LLM code patches.
 class IREmitter {
 public:
+    /// Emitter options.
     struct Options {
-        int indent_size = 2;
-        bool compact = false;
+        int indent_size = 2;  ///< Spaces per indent level.
+        bool compact = false; ///< Minimize whitespace.
     };
 
+    /// Creates an emitter with the given options.
     explicit IREmitter(Options opts = {2, false});
 
+    /// Emits an IR module as an S-expression string.
     auto emit_module(const IRModule& module) -> std::string;
 
 private:

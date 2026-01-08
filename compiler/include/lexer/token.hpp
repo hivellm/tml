@@ -1,3 +1,33 @@
+//! # Token Definitions
+//!
+//! This module defines the token types produced by the TML lexer.
+//!
+//! ## Overview
+//!
+//! TML tokens are categorized into:
+//!
+//! - **Literals**: Numbers, strings, characters, booleans, null
+//! - **Keywords**: Reserved words like `func`, `let`, `if`, `when`
+//! - **Operators**: Arithmetic, comparison, bitwise, logical, assignment
+//! - **Delimiters**: Parentheses, brackets, braces, punctuation
+//! - **Special**: End-of-file, newlines, error tokens
+//!
+//! ## TML-Specific Design
+//!
+//! TML uses word-based logical operators for clarity:
+//! - `and`, `or`, `not` instead of `&&`, `||`, `!`
+//! - `xor`, `shl`, `shr` for bitwise operations
+//!
+//! TML also uses `when` instead of `match` and `behavior` instead of `trait`.
+//!
+//! ## String Interpolation
+//!
+//! TML supports string interpolation with `{expr}` syntax:
+//! ```tml
+//! let greeting = "Hello {name}!"
+//! ```
+//! This produces `InterpStringStart`, expression tokens, then `InterpStringEnd`.
+
 #ifndef TML_LEXER_TOKEN_HPP
 #define TML_LEXER_TOKEN_HPP
 
@@ -10,213 +40,300 @@
 
 namespace tml::lexer {
 
-// Token kinds - all TML tokens
+/// All possible token kinds in TML.
+///
+/// Each variant represents a distinct lexical element that can appear
+/// in TML source code.
 enum class TokenKind : uint8_t {
-    // End of file
-    Eof,
+    // ========================================================================
+    // End of File
+    // ========================================================================
+    Eof, ///< End of input stream
 
+    // ========================================================================
     // Literals
-    IntLiteral,    // 42, 0xFF, 0b1010, 0o755, 1_000_000
-    FloatLiteral,  // 3.14, 1e10, 2.5e-3
-    StringLiteral, // "hello", "line\nbreak"
-    CharLiteral,   // 'a', '\n', '\u{1F600}'
-    BoolLiteral,   // true, false
-    NullLiteral,   // null
+    // ========================================================================
+    IntLiteral,    ///< Integer: `42`, `0xFF`, `0b1010`, `0o755`, `1_000_000`
+    FloatLiteral,  ///< Float: `3.14`, `1e10`, `2.5e-3`
+    StringLiteral, ///< String: `"hello"`, `"line\nbreak"`
+    CharLiteral,   ///< Character: `'a'`, `'\n'`, `'\u{1F600}'`
+    BoolLiteral,   ///< Boolean: `true`, `false`
+    NullLiteral,   ///< Null: `null`
 
-    // Interpolated string tokens: "Hello {name}!"
-    InterpStringStart,  // "Hello { - string start up to first interpolation
-    InterpStringMiddle, // } text { - text between interpolations
-    InterpStringEnd,    // } world" - text after last interpolation to closing quote
+    // ========================================================================
+    // Interpolated Strings
+    // ========================================================================
+    InterpStringStart,  ///< Start of interpolated string: `"Hello {`
+    InterpStringMiddle, ///< Middle of interpolated string: `} text {`
+    InterpStringEnd,    ///< End of interpolated string: `} world"`
 
+    // ========================================================================
     // Identifiers
-    Identifier, // foo, _bar, cafe
+    // ========================================================================
+    Identifier, ///< User identifier: `foo`, `_bar`, `café`
 
-    // Keywords - declarations
-    KwFunc,      // func
-    KwType,      // type
-    KwBehavior,  // behavior (trait in Rust)
-    KwImpl,      // impl
-    KwMod,       // mod
-    KwUse,       // use
-    KwPub,       // pub
-    KwDecorator, // decorator
-    KwCrate,     // crate
-    KwSuper,     // super
+    // ========================================================================
+    // Keywords - Declarations
+    // ========================================================================
+    KwFunc,      ///< `func` - function declaration
+    KwType,      ///< `type` - type/struct declaration
+    KwBehavior,  ///< `behavior` - trait declaration (like Rust's `trait`)
+    KwImpl,      ///< `impl` - implementation block
+    KwMod,       ///< `mod` - module declaration
+    KwUse,       ///< `use` - import statement
+    KwPub,       ///< `pub` - public visibility
+    KwDecorator, ///< `decorator` - decorator definition
+    KwCrate,     ///< `crate` - crate root reference
+    KwSuper,     ///< `super` - parent module reference
 
-    // Keywords - variables
-    KwLet,   // let
-    KwVar,   // var (alias for let mut)
-    KwConst, // const
+    // ========================================================================
+    // Keywords - Variables
+    // ========================================================================
+    KwLet,   ///< `let` - immutable binding
+    KwVar,   ///< `var` - mutable binding (alias for `let mut`)
+    KwConst, ///< `const` - compile-time constant
 
-    // Keywords - control flow
-    KwIf,       // if
-    KwThen,     // then
-    KwElse,     // else
-    KwWhen,     // when (match)
-    KwLoop,     // loop
-    KwWhile,    // while
-    KwFor,      // for
-    KwIn,       // in
-    KwTo,       // to (range exclusive)
-    KwThrough,  // through (range inclusive)
-    KwBreak,    // break
-    KwContinue, // continue
-    KwReturn,   // return
+    // ========================================================================
+    // Keywords - Control Flow
+    // ========================================================================
+    KwIf,       ///< `if` - conditional expression
+    KwThen,     ///< `then` - optional if-then syntax
+    KwElse,     ///< `else` - else branch
+    KwWhen,     ///< `when` - pattern matching (like Rust's `match`)
+    KwLoop,     ///< `loop` - infinite loop
+    KwWhile,    ///< `while` - conditional loop
+    KwFor,      ///< `for` - iterator loop
+    KwIn,       ///< `in` - iterator binding
+    KwTo,       ///< `to` - exclusive range (`1 to 5` = `1..5`)
+    KwThrough,  ///< `through` - inclusive range (`1 through 5` = `1..=5`)
+    KwBreak,    ///< `break` - exit loop
+    KwContinue, ///< `continue` - next iteration
+    KwReturn,   ///< `return` - return from function
 
-    // Keywords - logical operators (TML uses words)
-    KwAnd, // and (alias for &&)
-    KwOr,  // or (alias for ||)
-    KwNot, // not (alias for !)
+    // ========================================================================
+    // Keywords - Logical Operators
+    // ========================================================================
+    KwAnd, ///< `and` - logical AND (preferred over `&&`)
+    KwOr,  ///< `or` - logical OR (preferred over `||`)
+    KwNot, ///< `not` - logical NOT (preferred over `!`)
 
-    // Keywords - bitwise operators (word aliases)
-    KwXor, // xor (alias for ^)
-    KwShl, // shl (alias for <<)
-    KwShr, // shr (alias for >>)
+    // ========================================================================
+    // Keywords - Bitwise Operators
+    // ========================================================================
+    KwXor, ///< `xor` - bitwise XOR (alias for `^`)
+    KwShl, ///< `shl` - shift left (alias for `<<`)
+    KwShr, ///< `shr` - shift right (alias for `>>`)
 
-    // Keywords - types
-    KwThis,     // this (self value)
-    KwThisType, // This (Self type)
-    KwAs,       // as
+    // ========================================================================
+    // Keywords - Types
+    // ========================================================================
+    KwThis,     ///< `this` - self value in methods
+    KwThisType, ///< `This` - self type (like Rust's `Self`)
+    KwAs,       ///< `as` - type cast
 
-    // Keywords - memory
-    KwMut, // mut
-    KwRef, // ref
+    // ========================================================================
+    // Keywords - Memory
+    // ========================================================================
+    KwMut, ///< `mut` - mutable modifier
+    KwRef, ///< `ref` - reference/borrow
 
-    // Keywords - closures
-    KwDo, // do (closure)
+    // ========================================================================
+    // Keywords - Closures
+    // ========================================================================
+    KwDo, ///< `do` - closure syntax: `do(x) x + 1`
 
-    // Keywords - other
-    KwAsync,    // async
-    KwAwait,    // await
-    KwWith,     // with (effects)
-    KwWhere,    // where (generic constraints)
-    KwDyn,      // dyn (trait objects)
-    KwLowlevel, // lowlevel (unsafe in Rust)
-    KwQuote,    // quote (metaprogramming)
+    // ========================================================================
+    // Keywords - Other
+    // ========================================================================
+    KwAsync,    ///< `async` - async function/block
+    KwAwait,    ///< `await` - await expression
+    KwWith,     ///< `with` - effect handlers
+    KwWhere,    ///< `where` - generic constraints
+    KwDyn,      ///< `dyn` - trait objects
+    KwLowlevel, ///< `lowlevel` - unsafe block (clearer than `unsafe`)
+    KwQuote,    ///< `quote` - metaprogramming/macros
 
-    // Operators - arithmetic
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
-    Percent,    // %
-    StarStar,   // ** (power)
-    PlusPlus,   // ++ (increment)
-    MinusMinus, // -- (decrement)
+    // ========================================================================
+    // Operators - Arithmetic
+    // ========================================================================
+    Plus,       ///< `+` addition
+    Minus,      ///< `-` subtraction
+    Star,       ///< `*` multiplication
+    Slash,      ///< `/` division
+    Percent,    ///< `%` remainder
+    StarStar,   ///< `**` exponentiation
+    PlusPlus,   ///< `++` increment
+    MinusMinus, ///< `--` decrement
 
-    // Operators - comparison
-    Eq, // ==
-    Ne, // !=
-    Lt, // <
-    Gt, // >
-    Le, // <=
-    Ge, // >=
+    // ========================================================================
+    // Operators - Comparison
+    // ========================================================================
+    Eq, ///< `==` equality
+    Ne, ///< `!=` inequality
+    Lt, ///< `<` less than
+    Gt, ///< `>` greater than
+    Le, ///< `<=` less than or equal
+    Ge, ///< `>=` greater than or equal
 
-    // Operators - bitwise
-    BitAnd, // &
-    BitOr,  // |
-    BitXor, // ^
-    BitNot, // ~
-    Shl,    // <<
-    Shr,    // >>
+    // ========================================================================
+    // Operators - Bitwise
+    // ========================================================================
+    BitAnd, ///< `&` bitwise AND
+    BitOr,  ///< `|` bitwise OR
+    BitXor, ///< `^` bitwise XOR
+    BitNot, ///< `~` bitwise NOT
+    Shl,    ///< `<<` shift left
+    Shr,    ///< `>>` shift right
 
-    // Operators - logical symbols
-    AndAnd, // && (logical AND)
-    OrOr,   // || (logical OR)
+    // ========================================================================
+    // Operators - Logical Symbols
+    // ========================================================================
+    AndAnd, ///< `&&` logical AND (prefer `and` keyword)
+    OrOr,   ///< `||` logical OR (prefer `or` keyword)
 
-    // Operators - assignment
-    Assign,        // =
-    PlusAssign,    // +=
-    MinusAssign,   // -=
-    StarAssign,    // *=
-    SlashAssign,   // /=
-    PercentAssign, // %=
-    BitAndAssign,  // &=
-    BitOrAssign,   // |=
-    BitXorAssign,  // ^=
-    ShlAssign,     // <<=
-    ShrAssign,     // >>=
+    // ========================================================================
+    // Operators - Assignment
+    // ========================================================================
+    Assign,        ///< `=` assignment
+    PlusAssign,    ///< `+=` add-assign
+    MinusAssign,   ///< `-=` subtract-assign
+    StarAssign,    ///< `*=` multiply-assign
+    SlashAssign,   ///< `/=` divide-assign
+    PercentAssign, ///< `%=` remainder-assign
+    BitAndAssign,  ///< `&=` bitwise AND-assign
+    BitOrAssign,   ///< `|=` bitwise OR-assign
+    BitXorAssign,  ///< `^=` bitwise XOR-assign
+    ShlAssign,     ///< `<<=` shift left-assign
+    ShrAssign,     ///< `>>=` shift right-assign
 
-    // Operators - other
-    Arrow,       // ->
-    FatArrow,    // =>
-    Dot,         // .
-    DotDot,      // .. (also via 'to' keyword)
-    Colon,       // :
-    ColonColon,  // ::
-    Question,    // ? (ternary operator)
-    Bang,        // ! (logical NOT / error propagation)
-    At,          // @
-    Pipe,        // | (in patterns)
-    Dollar,      // $ (splice in quote)
-    DollarBrace, // ${ (splice block)
+    // ========================================================================
+    // Operators - Other
+    // ========================================================================
+    Arrow,       ///< `->` return type annotation
+    FatArrow,    ///< `=>` pattern arm / closure body
+    Dot,         ///< `.` member access
+    DotDot,      ///< `..` range (prefer `to` keyword)
+    Colon,       ///< `:` type annotation
+    ColonColon,  ///< `::` path separator
+    Question,    ///< `?` error propagation / ternary
+    Bang,        ///< `!` logical NOT / unwrap
+    At,          ///< `@` attributes/decorators
+    Pipe,        ///< `|` pattern alternation
+    Dollar,      ///< `$` metaprogramming splice
+    DollarBrace, ///< `${` splice block start
 
+    // ========================================================================
     // Delimiters
-    LParen,   // (
-    RParen,   // )
-    LBracket, // [
-    RBracket, // ]
-    LBrace,   // {
-    RBrace,   // }
-    Comma,    // ,
-    Semi,     // ;
+    // ========================================================================
+    LParen,   ///< `(` left parenthesis
+    RParen,   ///< `)` right parenthesis
+    LBracket, ///< `[` left bracket (generics, arrays)
+    RBracket, ///< `]` right bracket
+    LBrace,   ///< `{` left brace (blocks)
+    RBrace,   ///< `}` right brace
+    Comma,    ///< `,` comma separator
+    Semi,     ///< `;` semicolon
 
+    // ========================================================================
     // Special
-    Newline, // significant newlines (for statement separation)
-    Error,   // lexer error token
+    // ========================================================================
+    Newline, ///< Significant newline (statement separator)
+    Error,   ///< Lexer error token
 };
 
-// Convert token kind to string for display
+// ============================================================================
+// Token Utilities
+// ============================================================================
+
+/// Converts a token kind to its string representation for display.
 [[nodiscard]] auto token_kind_to_string(TokenKind kind) -> std::string_view;
 
-// Check if token kind is a keyword
+/// Checks if a token kind is a keyword.
 [[nodiscard]] auto is_keyword(TokenKind kind) -> bool;
 
-// Check if token kind is a literal
+/// Checks if a token kind is a literal.
 [[nodiscard]] auto is_literal(TokenKind kind) -> bool;
 
-// Check if token kind is an operator
+/// Checks if a token kind is an operator.
 [[nodiscard]] auto is_operator(TokenKind kind) -> bool;
 
-// Integer literal value with original base
+// ============================================================================
+// Literal Value Types
+// ============================================================================
+
+/// Integer literal with its original base for error messages.
 struct IntValue {
+    /// The numeric value.
     uint64_t value;
-    uint8_t base; // 2, 8, 10, or 16
+
+    /// The base used in source: 2 (binary), 8 (octal), 10 (decimal), 16 (hex).
+    uint8_t base;
 };
 
-// Float literal value
+/// Floating-point literal value.
 struct FloatValue {
+    /// The numeric value.
     double value;
 };
 
-// String literal value (already unescaped)
+/// String literal value with escape sequences already processed.
 struct StringValue {
+    /// The string content (unescaped).
     std::string value;
-    bool is_raw; // r"..." raw string
+
+    /// Whether this was a raw string (`r"..."`).
+    bool is_raw;
 };
 
-// Char literal value
+/// Character literal value (supports full Unicode).
 struct CharValue {
+    /// The Unicode code point.
     char32_t value;
 };
 
-// Token - a lexical unit from source code
+// ============================================================================
+// Token
+// ============================================================================
+
+/// A lexical token from TML source code.
+///
+/// A token represents a single lexical unit produced by the lexer. It
+/// contains the token kind, source location, and any associated value
+/// (for literals).
+///
+/// # Example
+///
+/// For the source `let x = 42`, the lexer produces:
+/// - `Token { kind: KwLet, lexeme: "let", ... }`
+/// - `Token { kind: Identifier, lexeme: "x", ... }`
+/// - `Token { kind: Assign, lexeme: "=", ... }`
+/// - `Token { kind: IntLiteral, lexeme: "42", value: IntValue{42, 10} }`
 struct Token {
+    /// The kind of token.
     TokenKind kind;
+
+    /// Source location of this token.
     SourceSpan span;
-    std::string_view lexeme; // Raw text from source
 
-    // Literal value (if applicable)
-    std::variant<std::monostate, // No value (keywords, operators, etc.)
-                 IntValue, FloatValue, StringValue, CharValue,
-                 bool // BoolLiteral
-                 >
-        value;
+    /// Raw text from source code.
+    std::string_view lexeme;
 
+    /// Literal value (if applicable).
+    ///
+    /// - `std::monostate` for non-literals (keywords, operators, etc.)
+    /// - `IntValue` for `IntLiteral`
+    /// - `FloatValue` for `FloatLiteral`
+    /// - `StringValue` for `StringLiteral`
+    /// - `CharValue` for `CharLiteral`
+    /// - `bool` for `BoolLiteral`
+    std::variant<std::monostate, IntValue, FloatValue, StringValue, CharValue, bool> value;
+
+    /// Checks if this token is of the given kind.
     [[nodiscard]] auto is(TokenKind k) const -> bool {
         return kind == k;
     }
 
+    /// Checks if this token is one of the given kinds.
     [[nodiscard]] auto is_one_of(std::initializer_list<TokenKind> kinds) const -> bool {
         for (auto k : kinds) {
             if (kind == k)
@@ -225,18 +342,29 @@ struct Token {
         return false;
     }
 
+    /// Checks if this is an end-of-file token.
     [[nodiscard]] auto is_eof() const -> bool {
         return kind == TokenKind::Eof;
     }
+
+    /// Checks if this is an error token.
     [[nodiscard]] auto is_error() const -> bool {
         return kind == TokenKind::Error;
     }
 
-    // Get typed value (asserts correct type)
+    /// Gets the integer value. Asserts this is an `IntLiteral`.
     [[nodiscard]] auto int_value() const -> const IntValue&;
+
+    /// Gets the float value. Asserts this is a `FloatLiteral`.
     [[nodiscard]] auto float_value() const -> const FloatValue&;
+
+    /// Gets the string value. Asserts this is a `StringLiteral`.
     [[nodiscard]] auto string_value() const -> const StringValue&;
+
+    /// Gets the character value. Asserts this is a `CharLiteral`.
     [[nodiscard]] auto char_value() const -> const CharValue&;
+
+    /// Gets the boolean value. Asserts this is a `BoolLiteral`.
     [[nodiscard]] auto bool_value() const -> bool;
 };
 

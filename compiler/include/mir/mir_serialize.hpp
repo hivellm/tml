@@ -1,7 +1,27 @@
-// MIR Serialization
-//
-// Provides serialization and deserialization of MIR modules.
-// Supports both binary and text formats.
+//! # MIR Serialization
+//!
+//! Provides serialization and deserialization of MIR modules.
+//! Supports both binary and text formats.
+//!
+//! ## Binary Format
+//!
+//! Compact binary format for fast I/O. Used for incremental compilation
+//! caching. Format includes magic number and version for compatibility.
+//!
+//! ## Text Format
+//!
+//! Human-readable format for debugging. Uses the MIR pretty printer
+//! for output and a parser for input.
+//!
+//! ## Usage
+//!
+//! ```cpp
+//! // Write to file
+//! write_mir_file(module, "output.mir", /*binary=*/true);
+//!
+//! // Read from file
+//! auto module = read_mir_file("output.mir");
+//! ```
 
 #pragma once
 
@@ -19,25 +39,30 @@ namespace tml::mir {
 // Serialization Options
 // ============================================================================
 
+/// Options for MIR serialization.
 struct SerializeOptions {
-    bool include_comments = false; // Include debug comments
-    bool compact = false;          // Minimize whitespace in text format
+    bool include_comments = false; ///< Include debug comments.
+    bool compact = false;          ///< Minimize whitespace in text format.
 };
 
 // ============================================================================
 // Binary Format
 // ============================================================================
 
-// Magic number for MIR binary format: "TMLMIR" + version
+/// Magic number for MIR binary format header.
 constexpr uint32_t MIR_MAGIC = 0x544D4952; // "TMIR" in little-endian
+/// MIR binary format major version.
 constexpr uint16_t MIR_VERSION_MAJOR = 1;
+/// MIR binary format minor version.
 constexpr uint16_t MIR_VERSION_MINOR = 0;
 
-// Binary serialization
+/// Writes MIR modules to binary format.
 class MirBinaryWriter {
 public:
+    /// Creates a writer to the given output stream.
     explicit MirBinaryWriter(std::ostream& out);
 
+    /// Writes a module to the output stream.
     void write_module(const Module& module);
 
 private:

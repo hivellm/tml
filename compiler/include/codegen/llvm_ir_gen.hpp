@@ -1,3 +1,39 @@
+//! # LLVM IR Code Generator
+//!
+//! This module is the primary code generator for TML, producing LLVM IR
+//! text format (`.ll` files) from the typed AST. The IR is then compiled
+//! to native code using LLVM's toolchain.
+//!
+//! ## Features
+//!
+//! - Full AST-to-LLVM IR translation
+//! - Generic instantiation and monomorphization
+//! - Trait object vtable generation
+//! - Closure capture and environment management
+//! - DWARF debug information generation
+//! - Code coverage instrumentation
+//! - FFI support with `@extern` and `@link`
+//!
+//! ## Architecture
+//!
+//! The generator maintains several internal registries:
+//!
+//! - **locals_**: Variable bindings in current scope
+//! - **struct_types_**: Registered struct LLVM types
+//! - **functions_**: Function signatures for call resolution
+//! - **vtables_**: Behavior implementation vtables
+//! - **pending_generic_***: Deferred generic instantiations
+//!
+//! ## Usage
+//!
+//! ```cpp
+//! LLVMIRGen gen(type_env, options);
+//! auto result = gen.generate(module);
+//! if (result.is_ok()) {
+//!     std::string llvm_ir = result.value();
+//! }
+//! ```
+
 #pragma once
 
 #include "common.hpp"
@@ -14,40 +50,45 @@
 
 namespace tml::codegen {
 
-// LLVM IR generation error
+/// Error during LLVM IR generation.
 struct LLVMGenError {
-    std::string message;
-    SourceSpan span;
-    std::vector<std::string> notes;
+    std::string message;            ///< Error description.
+    SourceSpan span;                ///< Source location.
+    std::vector<std::string> notes; ///< Additional context.
 };
 
-// LLVM IR generator options
+/// Options for LLVM IR generation.
 struct LLVMGenOptions {
-    bool emit_comments = true;
-    bool coverage_enabled = false;    // Inject coverage instrumentation
-    bool dll_export = false;          // Add dllexport for public functions (Windows DLL)
-    bool emit_debug_info = false;     // Generate DWARF debug information
-    bool generate_dll_entry = false;  // Generate tml_test_entry for DLL loading (no main)
-    bool generate_fuzz_entry = false; // Generate tml_fuzz_target for fuzz testing (no main)
-    bool force_internal_linkage =
-        false;                 // Force internal linkage for all non-entry functions (suite mode)
-    int debug_level = 2;       // Debug level: 1=minimal, 2=standard, 3=full
-    int suite_test_index = -1; // Suite test index: -1 = tml_test_entry, >= 0 = tml_test_N
-    std::string target_triple = "x86_64-pc-windows-msvc";
-    std::string source_file;          // Source file path for coverage/debug tracking
-    std::string coverage_output_file; // Path for HTML coverage output (empty = print only)
+    bool emit_comments = true;           ///< Include source comments in IR.
+    bool coverage_enabled = false;       ///< Inject coverage instrumentation.
+    bool dll_export = false;             ///< Add dllexport for Windows DLLs.
+    bool emit_debug_info = false;        ///< Generate DWARF debug information.
+    bool generate_dll_entry = false;     ///< Generate tml_test_entry (no main).
+    bool generate_fuzz_entry = false;    ///< Generate tml_fuzz_target (no main).
+    bool force_internal_linkage = false; ///< Force internal linkage (suite mode).
+    int debug_level = 2;                 ///< Debug level: 1=minimal, 2=standard, 3=full.
+    int suite_test_index = -1;           ///< Suite test index (-1 = tml_test_entry).
+    std::string target_triple = "x86_64-pc-windows-msvc"; ///< LLVM target triple.
+    std::string source_file;                              ///< Source file path for debug info.
+    std::string coverage_output_file;                     ///< Coverage output path.
 };
 
-// LLVM IR text generator
-// Generates LLVM IR as text (.ll format)
+/// LLVM IR text generator.
+///
+/// The primary code generator for TML. Produces LLVM IR in text format
+/// (`.ll` files) that can be compiled to native code with `llc` or `clang`.
+///
+/// Supports full TML feature set including generics, closures, trait objects,
+/// async/await, and FFI.
 class LLVMIRGen {
 public:
+    /// Creates an LLVM IR generator with the given type environment.
     explicit LLVMIRGen(const types::TypeEnv& env, LLVMGenOptions options = {});
 
-    // Generate LLVM IR for a module
+    /// Generates LLVM IR for a complete module.
     auto generate(const parser::Module& module) -> Result<std::string, std::vector<LLVMGenError>>;
 
-    // Get external libraries to link (from @link decorators)
+    /// Returns external libraries to link (from `@link` decorators).
     auto get_link_libs() const -> const std::set<std::string>& {
         return extern_link_libs_;
     }
@@ -103,27 +144,32 @@ private:
     std::string expected_enum_type_; // e.g., "%struct.Outcome__I32__I32"
 
 public:
-    // Closure capture info for closures with captured variables
+    /// Information about captured variables in a closure.
     struct ClosureCaptureInfo {
-        std::vector<std::string> captured_names; // Names of captured variables
-        std::vector<std::string> captured_types; // LLVM types of captured variables
+        std::vector<std::string> captured_names; ///< Names of captured variables.
+        std::vector<std::string> captured_types; ///< LLVM types of captured variables.
     };
 
-    // Variable name to LLVM register/type mapping (public for is_bool_expr helper)
+    /// Variable binding information.
+    ///
+    /// Tracks the LLVM register, type, and semantic type for each variable
+    /// in scope. Used for variable lookup during code generation.
     struct VarInfo {
-        std::string reg;
-        std::string type;
-        types::TypePtr semantic_type; // Full semantic type for complex types like Ptr[T]
-        std::optional<ClosureCaptureInfo>
-            closure_captures; // Present if this is a closure with captures
+        std::string reg;              ///< LLVM register holding the value.
+        std::string type;             ///< LLVM type string.
+        types::TypePtr semantic_type; ///< Full semantic type (for complex types).
+        std::optional<ClosureCaptureInfo> closure_captures; ///< Capture info if closure.
     };
 
-    // Drop tracking for RAII - tracks variables that need drop() called at scope exit
+    /// Drop tracking information for RAII.
+    ///
+    /// Tracks variables that need `drop()` called when their scope exits.
+    /// Used to implement automatic resource cleanup.
     struct DropInfo {
-        std::string var_name;  // Variable name
-        std::string var_reg;   // LLVM register for the variable value
-        std::string type_name; // Type name (e.g., "DroppableResource")
-        std::string llvm_type; // LLVM type (e.g., "%struct.DroppableResource")
+        std::string var_name;  ///< Variable name.
+        std::string var_reg;   ///< LLVM register for the value.
+        std::string type_name; ///< TML type name (e.g., "DroppableResource").
+        std::string llvm_type; ///< LLVM type (e.g., "%struct.DroppableResource").
     };
 
 private:
@@ -487,8 +533,17 @@ private:
     auto add_string_literal(const std::string& value) -> std::string;
 
 public:
-    // Print argument type inference (used by gen_call and gen_format_print)
-    enum class PrintArgType { Int, I64, Float, Bool, Str, Unknown };
+    /// Inferred type for print format specifier selection.
+    enum class PrintArgType {
+        Int,    ///< 32-bit integer (%d).
+        I64,    ///< 64-bit integer (%lld).
+        Float,  ///< Floating point (%f).
+        Bool,   ///< Boolean (prints "true"/"false").
+        Str,    ///< String (%s).
+        Unknown ///< Unknown type.
+    };
+
+    /// Infers the print type for an expression.
     static PrintArgType infer_print_type(const parser::Expr& expr);
 };
 

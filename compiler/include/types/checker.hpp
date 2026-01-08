@@ -1,3 +1,28 @@
+//! # Type Checker
+//!
+//! This module implements semantic analysis and type checking for TML. The
+//! type checker validates that programs are well-typed and resolves all type
+//! information needed for code generation.
+//!
+//! ## Phases
+//!
+//! Type checking proceeds in multiple passes:
+//!
+//! 1. **Declaration registration**: Collect all type, function, and behavior definitions
+//! 2. **Use declaration processing**: Resolve imports
+//! 3. **Impl block registration**: Register behavior implementations
+//! 4. **Body checking**: Type check function bodies and expressions
+//!
+//! ## Type Inference
+//!
+//! The type checker uses Hindley-Milner style inference with unification. Type
+//! variables are created for unknown types and resolved as constraints accumulate.
+//!
+//! ## Error Recovery
+//!
+//! The checker continues after errors to report multiple issues in a single pass.
+//! Errors include suggestions based on Levenshtein distance for typos.
+
 #ifndef TML_TYPES_CHECKER_HPP
 #define TML_TYPES_CHECKER_HPP
 
@@ -10,31 +35,55 @@
 
 namespace tml::types {
 
+/// A type error with location and optional notes.
 struct TypeError {
-    std::string message;
-    SourceSpan span;
-    std::vector<std::string> notes;
+    std::string message;            ///< Error message.
+    SourceSpan span;                ///< Error location.
+    std::vector<std::string> notes; ///< Additional notes and suggestions.
 };
 
+/// Type checker for TML modules.
+///
+/// Performs semantic analysis including type inference, behavior checking,
+/// and const evaluation. Reports all errors found in the module.
+///
+/// # Usage
+///
+/// ```cpp
+/// TypeChecker checker;
+/// checker.set_module_registry(registry);
+/// auto result = checker.check_module(module);
+/// if (result.is_err()) {
+///     for (const auto& err : result.error()) {
+///         report(err);
+///     }
+/// }
+/// ```
 class TypeChecker {
 public:
+    /// Constructs a type checker with default builtins.
     TypeChecker();
 
+    /// Type checks a module, returning the populated type environment.
     [[nodiscard]] auto check_module(const parser::Module& module)
         -> Result<TypeEnv, std::vector<TypeError>>;
 
+    /// Returns all accumulated errors.
     [[nodiscard]] auto errors() const -> const std::vector<TypeError>& {
         return errors_;
     }
+
+    /// Returns true if any errors occurred.
     [[nodiscard]] auto has_errors() const -> bool {
         return !errors_.empty();
     }
 
-    // Module system integration
+    /// Sets the module registry for import resolution.
     void set_module_registry(std::shared_ptr<ModuleRegistry> registry) {
         env_.set_module_registry(std::move(registry));
     }
 
+    /// Sets the source directory for local module resolution.
     void set_source_directory(const std::string& dir_path) {
         env_.set_source_directory(dir_path);
     }

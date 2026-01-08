@@ -1,15 +1,35 @@
-#pragma once
+//! # Function Inlining Optimization Pass
+//!
+//! Inlines function calls based on cost-benefit analysis and heuristics.
+//! Inlining eliminates call overhead and enables further optimizations
+//! by exposing the callee's code to the caller's context.
+//!
+//! ## Decision Factors
+//!
+//! - **Instruction count**: Larger functions have higher cost
+//! - **Call site context**: Hot paths get higher threshold
+//! - **Attributes**: `@inline` forces inlining, `@noinline` prevents it
+//! - **Recursion**: Limits depth to prevent infinite expansion
+//! - **Optimization level**: `-O3` is more aggressive than `-O1`
+//!
+//! ## Cost Model
+//!
+//! ```
+//! net_cost = instruction_cost - call_overhead_saved
+//! should_inline = net_cost <= threshold
+//! ```
+//!
+//! ## Passes
+//!
+//! - **InliningPass**: Cost-based inlining with configurable thresholds
+//! - **AlwaysInlinePass**: Handles `@inline` attributed functions
+//!
+//! ## When to Run
+//!
+//! Run early in the optimization pipeline. Inlining exposes opportunities
+//! for constant propagation, DCE, and other optimizations.
 
-// Function Inlining Optimization Pass
-//
-// Inlines function calls based on cost analysis and heuristics.
-//
-// The pass considers:
-// - Instruction count in callee
-// - Call site context
-// - @inline and @noinline attributes
-// - Recursive inlining limits
-// - Optimization level
+#pragma once
 
 #include "mir/mir_pass.hpp"
 
@@ -18,96 +38,91 @@
 
 namespace tml::mir {
 
-/**
- * Inlining decision
- */
+/// Inlining decision for a call site.
 enum class InlineDecision {
-    Inline,         // Should inline
-    NoInline,       // Should not inline (cost too high)
-    AlwaysInline,   // Must inline (@inline attribute)
-    NeverInline,    // Must not inline (@noinline attribute)
-    RecursiveLimit, // Hit recursive inlining limit
-    TooLarge,       // Callee is too large
-    NoDefinition    // No function definition available
+    Inline,         ///< Should inline (cost analysis passed).
+    NoInline,       ///< Should not inline (cost too high).
+    AlwaysInline,   ///< Must inline (`@inline` attribute).
+    NeverInline,    ///< Must not inline (`@noinline` attribute).
+    RecursiveLimit, ///< Hit recursive inlining depth limit.
+    TooLarge,       ///< Callee exceeds maximum size.
+    NoDefinition    ///< No function definition available.
 };
 
-/**
- * Inlining cost analysis result
- */
+/// Cost analysis result for an inlining decision.
 struct InlineCost {
-    int instruction_cost = 0;    // Cost of instructions
-    int call_overhead_saved = 0; // Overhead saved by inlining
-    int size_increase = 0;       // Code size increase
-    int threshold = 0;           // Threshold for this call site
+    int instruction_cost = 0;    ///< Weighted cost of callee instructions.
+    int call_overhead_saved = 0; ///< Overhead eliminated by inlining.
+    int size_increase = 0;       ///< Code size increase in bytes.
+    int threshold = 0;           ///< Threshold for this call site.
 
+    /// Returns true if inlining is beneficial based on cost analysis.
     [[nodiscard]] auto should_inline() const -> bool {
         return instruction_cost - call_overhead_saved <= threshold;
     }
 
+    /// Returns the net cost (positive = expensive, negative = beneficial).
     [[nodiscard]] auto net_cost() const -> int {
         return instruction_cost - call_overhead_saved;
     }
 };
 
-/**
- * Inlining statistics
- */
+/// Statistics collected during inlining.
 struct InliningStats {
-    size_t calls_analyzed = 0;
-    size_t calls_inlined = 0;
-    size_t calls_not_inlined = 0;
-    size_t always_inline = 0;
-    size_t never_inline = 0;
-    size_t recursive_limit_hit = 0;
-    size_t too_large = 0;
-    size_t no_definition = 0;
-    size_t total_instructions_inlined = 0;
+    size_t calls_analyzed = 0;             ///< Total call sites examined.
+    size_t calls_inlined = 0;              ///< Calls that were inlined.
+    size_t calls_not_inlined = 0;          ///< Calls rejected by cost analysis.
+    size_t always_inline = 0;              ///< Calls inlined due to `@inline`.
+    size_t never_inline = 0;               ///< Calls blocked by `@noinline`.
+    size_t recursive_limit_hit = 0;        ///< Calls blocked by recursion limit.
+    size_t too_large = 0;                  ///< Calls blocked by size limit.
+    size_t no_definition = 0;              ///< Calls with no available definition.
+    size_t total_instructions_inlined = 0; ///< Total instructions copied.
 };
 
-/**
- * Inlining options
- */
+/// Configuration options for the inlining pass.
 struct InliningOptions {
-    int base_threshold = 250;   // Base cost threshold
-    int recursive_limit = 3;    // Max recursive inlines
-    int max_callee_size = 500;  // Max instructions in callee
-    int call_penalty = 20;      // Cost of a call instruction
-    int alloca_bonus = 10;      // Bonus for eliminating alloca
-    bool inline_cold = false;   // Inline cold functions
-    bool inline_hot = true;     // Prioritize hot functions
-    int optimization_level = 2; // -O level affects thresholds
+    int base_threshold = 250;   ///< Base cost threshold for inlining.
+    int recursive_limit = 3;    ///< Maximum recursive inlining depth.
+    int max_callee_size = 500;  ///< Maximum instructions in callee.
+    int call_penalty = 20;      ///< Cost assigned to call instructions.
+    int alloca_bonus = 10;      ///< Bonus for eliminating stack allocations.
+    bool inline_cold = false;   ///< Whether to inline cold (rarely executed) code.
+    bool inline_hot = true;     ///< Whether to prioritize hot (frequently executed) code.
+    int optimization_level = 2; ///< Optimization level (affects thresholds).
 };
 
-/**
- * Function inlining pass
- *
- * Inlines function calls based on cost analysis and heuristics.
- * Works at the module level to access all function definitions.
- */
+/// Function inlining pass.
+///
+/// Inlines function calls based on cost analysis. Works at module level
+/// to access all function definitions for cross-function inlining.
 class InliningPass : public MirPass {
 public:
+    /// Creates an inlining pass with the given options.
     explicit InliningPass(InliningOptions opts = {}) : options_(opts) {}
 
+    /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
         return "Inlining";
     }
 
+    /// Runs inlining on the entire module.
     auto run(Module& module) -> bool override;
 
-    // Query inlining decision for a call site
+    /// Queries the inlining decision for a specific call site.
     [[nodiscard]] auto get_decision(const std::string& caller, const std::string& callee) const
         -> InlineDecision;
 
-    // Get cost analysis for a call site
+    /// Analyzes the cost of inlining a specific call.
     [[nodiscard]] auto analyze_cost(const CallInst& call, const Function& callee) const
         -> InlineCost;
 
-    // Get statistics
+    /// Returns inlining statistics.
     [[nodiscard]] auto get_stats() const -> InliningStats {
         return stats_;
     }
 
-    // Set options
+    /// Updates inlining options.
     void set_options(const InliningOptions& opts) {
         options_ = opts;
     }
@@ -117,45 +132,35 @@ private:
     InliningStats stats_;
     std::unordered_map<std::string, const Function*> function_map_;
     std::unordered_map<std::string, std::unordered_set<std::string>> call_graph_;
-    std::unordered_map<std::string, int> inline_depth_; // Track recursive depth
+    std::unordered_map<std::string, int> inline_depth_;
 
-    // Build function map and call graph
     void build_call_graph(Module& module);
-
-    // Calculate cost threshold based on context
     [[nodiscard]] auto calculate_threshold(const Function& caller, const CallInst& call) const
         -> int;
-
-    // Count instructions in a function
     [[nodiscard]] auto count_instructions(const Function& func) const -> int;
-
-    // Perform the actual inlining
     auto inline_call(Function& caller, BasicBlock& block, size_t call_index, const Function& callee)
         -> bool;
-
-    // Clone a function's body for inlining
     auto clone_function_body(const Function& callee, ValueId first_new_id,
                              const std::vector<Value>& args) -> std::vector<BasicBlock>;
-
-    // Remap value IDs in cloned blocks
     void remap_values(std::vector<BasicBlock>& blocks,
                       const std::unordered_map<ValueId, ValueId>& value_map);
 };
 
-/**
- * Always-inline pass
- *
- * Handles functions marked with @inline attribute.
- * These are inlined regardless of cost analysis.
- */
+/// Always-inline pass.
+///
+/// Handles functions marked with `@inline` attribute. These are inlined
+/// unconditionally, regardless of cost analysis.
 class AlwaysInlinePass : public MirPass {
 public:
+    /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
         return "AlwaysInline";
     }
 
+    /// Runs always-inline on the entire module.
     auto run(Module& module) -> bool override;
 
+    /// Returns inlining statistics.
     [[nodiscard]] auto get_stats() const -> InliningStats {
         return stats_;
     }

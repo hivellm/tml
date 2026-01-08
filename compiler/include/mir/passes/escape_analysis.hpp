@@ -1,17 +1,38 @@
-#pragma once
+//! # Escape Analysis Optimization Pass
+//!
+//! Determines whether allocated objects escape the current function scope.
+//! Objects that don't escape can be stack-allocated instead of heap-allocated,
+//! avoiding allocation overhead and enabling further optimizations.
+//!
+//! ## Escape Categories
+//!
+//! - **NoEscape**: Never leaves the function - candidate for stack promotion
+//! - **ArgEscape**: Passed to a called function
+//! - **ReturnEscape**: Returned from the function
+//! - **GlobalEscape**: Stored in a global variable
+//!
+//! ## Analysis Tracks
+//!
+//! - Heap allocations (`alloc` calls)
+//! - Reference/pointer creation and propagation
+//! - Function arguments and return values
+//! - Stores to global variables and escaped locations
+//!
+//! ## Stack Promotion
+//!
+//! After analysis, the `StackPromotionPass` converts non-escaping heap
+//! allocations to stack allocations (`alloca`), eliminating heap overhead.
+//!
+//! ## Example
+//!
+//! ```mir
+//! %1 = call alloc(16)    ; Heap allocation
+//! store 42, %1           ; Only local use
+//! %2 = load %1
+//! return %2              ; Value returned, not pointer - NoEscape!
+//! ```
 
-// Escape Analysis Optimization Pass
-//
-// Determines whether allocated objects escape the current function.
-// Objects that don't escape can be:
-// - Stack allocated instead of heap allocated
-// - Eligible for more aggressive optimizations
-//
-// The analysis tracks:
-// - Heap allocations (alloc calls)
-// - References and pointers
-// - Function arguments and returns
-// - Stores to global variables
+#pragma once
 
 #include "mir/mir_pass.hpp"
 
@@ -20,128 +41,120 @@
 
 namespace tml::mir {
 
-/**
- * Escape state for a value
- */
+/// Escape state categories for a value.
 enum class EscapeState {
-    NoEscape,     // Value never escapes the current function
-    ArgEscape,    // Value escapes via function argument
-    ReturnEscape, // Value escapes via return
-    GlobalEscape, // Value escapes to global state
-    Unknown       // Cannot determine escape state
+    NoEscape,     ///< Value never escapes the current function.
+    ArgEscape,    ///< Value escapes via function argument.
+    ReturnEscape, ///< Value escapes via return statement.
+    GlobalEscape, ///< Value escapes to global state.
+    Unknown       ///< Cannot determine escape state.
 };
 
-/**
- * Escape information for a value
- */
+/// Escape information for a single value.
 struct EscapeInfo {
-    EscapeState state = EscapeState::Unknown;
-    bool may_alias_heap = false;      // May alias heap-allocated memory
-    bool may_alias_global = false;    // May alias global variables
-    bool is_stack_promotable = false; // Can be promoted to stack allocation
+    EscapeState state = EscapeState::Unknown; ///< Escape state.
+    bool may_alias_heap = false;              ///< May alias heap-allocated memory.
+    bool may_alias_global = false;            ///< May alias global variables.
+    bool is_stack_promotable = false;         ///< Can be promoted to stack allocation.
 
+    /// Returns true if the value escapes the function.
     [[nodiscard]] auto escapes() const -> bool {
         return state != EscapeState::NoEscape;
     }
 };
 
-/**
- * Escape analysis pass
- *
- * Determines whether allocated objects escape the current function.
- * Objects that don't escape can be:
- * - Stack allocated instead of heap allocated
- * - Eligible for more aggressive optimizations
- */
+/// Escape analysis pass.
+///
+/// Analyzes heap allocations to determine which can be safely
+/// converted to stack allocations. Results are queried by the
+/// `StackPromotionPass`.
 class EscapeAnalysisPass : public FunctionPass {
 public:
+    /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
         return "EscapeAnalysis";
     }
 
-    // Query escape state for a value ID
+    /// Queries escape information for a specific value.
     [[nodiscard]] auto get_escape_info(ValueId value) const -> EscapeInfo;
 
-    // Check if a value can be stack promoted
+    /// Checks if a value can be safely promoted to stack allocation.
     [[nodiscard]] auto can_stack_promote(ValueId value) const -> bool;
 
-    // Get all stack-promotable allocation value IDs
+    /// Returns all value IDs that are candidates for stack promotion.
     [[nodiscard]] auto get_stack_promotable() const -> std::vector<ValueId>;
 
-    // Statistics
+    /// Statistics from the escape analysis.
     struct Stats {
-        size_t total_allocations = 0;
-        size_t no_escape = 0;
-        size_t arg_escape = 0;
-        size_t return_escape = 0;
-        size_t global_escape = 0;
-        size_t stack_promotable = 0;
+        size_t total_allocations = 0; ///< Total allocations analyzed.
+        size_t no_escape = 0;         ///< Allocations that don't escape.
+        size_t arg_escape = 0;        ///< Allocations escaping via arguments.
+        size_t return_escape = 0;     ///< Allocations escaping via return.
+        size_t global_escape = 0;     ///< Allocations escaping to globals.
+        size_t stack_promotable = 0;  ///< Allocations eligible for stack promotion.
     };
 
+    /// Returns analysis statistics.
     [[nodiscard]] auto get_stats() const -> Stats {
         return stats_;
     }
 
 protected:
+    /// Runs escape analysis on a single function.
     auto run_on_function(Function& func) -> bool override;
 
 private:
     std::unordered_map<ValueId, EscapeInfo> escape_info_;
     Stats stats_;
 
-    // Analysis helpers
     void analyze_function(Function& func);
     void analyze_instruction(const InstructionData& inst, Function& func);
     void analyze_call(const CallInst& call, ValueId result_id);
     void analyze_store(const StoreInst& store);
     void analyze_return(const ReturnTerm& ret);
-
-    // Mark a value as escaping
     void mark_escape(ValueId value, EscapeState state);
-
-    // Propagate escape information through the function
     void propagate_escapes(Function& func);
-
-    // Check if an instruction is an allocation
     [[nodiscard]] auto is_allocation(const Instruction& inst) const -> bool;
 };
 
-/**
- * Stack promotion pass
- *
- * Converts heap allocations that don't escape to stack allocations.
- * This runs after escape analysis and uses its results.
- */
+/// Stack promotion pass.
+///
+/// Converts heap allocations that don't escape to stack allocations.
+/// Runs after `EscapeAnalysisPass` and uses its results.
 class StackPromotionPass : public FunctionPass {
 public:
+    /// Creates a stack promotion pass using results from escape analysis.
     explicit StackPromotionPass(const EscapeAnalysisPass& escape_analysis)
         : escape_analysis_(escape_analysis) {}
 
+    /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
         return "StackPromotion";
     }
 
-    // Statistics
+    /// Statistics from stack promotion.
     struct Stats {
-        size_t allocations_promoted = 0;
-        size_t bytes_saved = 0;
+        size_t allocations_promoted = 0; ///< Number of allocations converted.
+        size_t bytes_saved = 0;          ///< Estimated bytes saved from heap.
     };
 
+    /// Returns promotion statistics.
     [[nodiscard]] auto get_stats() const -> Stats {
         return stats_;
     }
 
 protected:
+    /// Runs stack promotion on a single function.
     auto run_on_function(Function& func) -> bool override;
 
 private:
     const EscapeAnalysisPass& escape_analysis_;
     Stats stats_;
 
-    // Convert a heap allocation to stack allocation
+    /// Converts a heap allocation to a stack allocation.
     auto promote_allocation(BasicBlock& block, size_t inst_index, Function& func) -> bool;
 
-    // Estimate the size of an allocation
+    /// Estimates the byte size of an allocation.
     [[nodiscard]] auto estimate_allocation_size(const Instruction& inst) const -> size_t;
 };
 

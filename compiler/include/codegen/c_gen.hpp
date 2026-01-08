@@ -1,3 +1,20 @@
+//! # C Code Generator
+//!
+//! This module generates C source code from TML AST. The generated C code
+//! can be compiled with any C11-compatible compiler.
+//!
+//! ## Features
+//!
+//! - Direct AST-to-C translation
+//! - Runtime function prefixing for namespace isolation
+//! - Optional source location comments
+//! - Debug printf injection for debugging
+//!
+//! ## Note
+//!
+//! This is an alternative backend to the LLVM IR generator. The LLVM backend
+//! is preferred for production builds due to better optimization.
+
 #pragma once
 
 #include "common.hpp"
@@ -11,27 +28,30 @@
 
 namespace tml::codegen {
 
-// C code generation error
+/// Error during C code generation.
 struct CodegenError {
-    std::string message;
-    SourceSpan span;
-    std::vector<std::string> notes;
+    std::string message;            ///< Error description.
+    SourceSpan span;                ///< Source location.
+    std::vector<std::string> notes; ///< Additional context.
 };
 
-// C code generator options
+/// Options for C code generation.
 struct CGenOptions {
-    bool emit_comments = true;           // Include source location comments
-    bool emit_debug_info = false;        // Emit debug printf statements
-    std::string runtime_prefix = "tml_"; // Prefix for runtime functions
+    bool emit_comments = true;           ///< Include source location comments.
+    bool emit_debug_info = false;        ///< Emit debug printf statements.
+    std::string runtime_prefix = "tml_"; ///< Prefix for runtime functions.
 };
 
-// C code generator
-// Translates TML AST to C code
+/// C code generator.
+///
+/// Translates TML AST directly to C source code. The generated code
+/// includes a minimal runtime header and can be compiled standalone.
 class CCodeGen {
 public:
+    /// Creates a C code generator with the given type environment and options.
     explicit CCodeGen(const types::TypeEnv& env, CGenOptions options = {});
 
-    // Generate C code for a module
+    /// Generates C code for a complete module.
     auto generate(const parser::Module& module) -> Result<std::string, std::vector<CodegenError>>;
 
 private:
