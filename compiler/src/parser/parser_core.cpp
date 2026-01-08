@@ -1,3 +1,42 @@
+//! # Parser Core
+//!
+//! This file implements the core parser infrastructure.
+//!
+//! ## Token Navigation
+//!
+//! | Method        | Description                        |
+//! |---------------|------------------------------------|
+//! | `peek()`      | Look at current token              |
+//! | `peek_next()` | Look at next token                 |
+//! | `advance()`   | Consume and return current token   |
+//! | `previous()`  | Get last consumed token            |
+//! | `match()`     | Consume token if it matches        |
+//! | `check()`     | Check current token without consuming |
+//! | `expect()`    | Require specific token or error    |
+//!
+//! ## Error Recovery
+//!
+//! | Method              | Strategy                         |
+//! |---------------------|----------------------------------|
+//! | `synchronize()`     | Skip to statement boundary       |
+//! | `synchronize_to_stmt()` | Skip to next statement       |
+//! | `synchronize_to_decl()` | Skip to next declaration     |
+//! | `synchronize_to_brace()` | Match brace nesting         |
+//!
+//! ## Operator Handling
+//!
+//! Precedence levels from lowest to highest:
+//! - Assignment (=, +=, etc.)
+//! - Ternary (?)
+//! - Or (or, ||)
+//! - And (and, &&)
+//! - Comparison (==, !=, <, etc.)
+//! - Bit operations (&, |, ^, <<, >>)
+//! - Term (+, -)
+//! - Factor (*, /, %)
+//! - Cast (as)
+//! - Call (., [], ())
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {

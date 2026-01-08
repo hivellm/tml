@@ -1,3 +1,35 @@
+//! # Parser - Types
+//!
+//! This file implements type expression parsing.
+//!
+//! ## Type Syntax
+//!
+//! | Type               | Syntax                      |
+//! |--------------------|-----------------------------|
+//! | Named              | `I32`, `Point`, `Vec[T]`    |
+//! | Reference          | `ref T`, `mut ref T`        |
+//! | Pointer            | `*T`, `*mut T`, `*const T`  |
+//! | Array              | `[T; N]`                    |
+//! | Slice              | `[T]`                       |
+//! | Tuple              | `(A, B, C)`                 |
+//! | Function           | `func(A, B) -> C`           |
+//! | Dynamic trait      | `dyn Behavior`              |
+//! | Impl trait         | `impl Behavior`             |
+//! | Infer              | `_`                         |
+//!
+//! ## Generic Arguments
+//!
+//! Uses `[T]` syntax instead of `<T>` (less ambiguous for LLMs):
+//! ```tml
+//! Vec[I32]
+//! HashMap[Str, I32]
+//! Iterator[Item=I32]    // Associated type binding
+//! ```
+//!
+//! ## Type Paths
+//!
+//! Multi-segment paths: `std::collections::HashMap`
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {

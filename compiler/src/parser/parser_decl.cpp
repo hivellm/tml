@@ -1,3 +1,41 @@
+//! # Parser - Declarations
+//!
+//! This file implements declaration parsing.
+//!
+//! ## Declaration Types
+//!
+//! | Keyword    | Declaration        | Example                      |
+//! |------------|--------------------|------------------------------|
+//! | `func`     | Function           | `func add(a: I32) -> I32`    |
+//! | `type`     | Struct or Enum     | `type Point { x: I32 }`      |
+//! | `type =`   | Type Alias         | `type Int = I32`             |
+//! | `behavior` | Trait              | `behavior Display { ... }`   |
+//! | `impl`     | Implementation     | `impl Display for Point`     |
+//! | `const`    | Constant           | `const PI: F64 = 3.14159`    |
+//! | `use`      | Import             | `use std::io::print`         |
+//! | `mod`      | Module             | `mod utils`                  |
+//!
+//! ## Visibility
+//!
+//! - `pub` - Public (visible outside module)
+//! - `pub(crate)` - Crate-visible only
+//! - (none) - Private (default)
+//!
+//! ## Decorators
+//!
+//! ```tml
+//! @inline
+//! @extern("C")
+//! @link("mylib")
+//! func foo() { ... }
+//! ```
+//!
+//! ## Struct vs Enum Detection
+//!
+//! Both use `type Name { }` syntax. Detection heuristic:
+//! - `{ field: Type }` → Struct
+//! - `{ Variant | Variant(...) }` → Enum
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {

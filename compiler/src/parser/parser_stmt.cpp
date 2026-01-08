@@ -1,3 +1,30 @@
+//! # Parser - Statements
+//!
+//! This file implements statement parsing.
+//!
+//! ## Statement Types
+//!
+//! | Statement | Syntax                        | Notes                    |
+//! |-----------|-------------------------------|--------------------------|
+//! | Let       | `let x: T = expr`             | Immutable binding        |
+//! | Var       | `var x: T = expr`             | Mutable (= `let mut`)    |
+//! | Expr      | `expr`                        | Expression statement     |
+//! | Decl      | `func`, `type`, etc.          | Nested declarations      |
+//!
+//! ## TML Explicit Typing
+//!
+//! TML requires explicit type annotations for all variables:
+//! ```tml
+//! let count: I32 = 0       // Required
+//! var total: F64 = 0.0     // Required
+//! ```
+//!
+//! This is by design for LLM clarity - no type inference on declarations.
+//!
+//! ## Var Desugaring
+//!
+//! `var x: T = expr` is internally converted to `let mut x: T = expr`.
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {

@@ -1,3 +1,26 @@
+//! # AST Factory Functions
+//!
+//! This file provides factory functions for creating AST nodes.
+//!
+//! ## Factory Functions
+//!
+//! | Function              | Creates                    |
+//! |-----------------------|----------------------------|
+//! | `make_literal_expr`   | Literal from token         |
+//! | `make_ident_expr`     | Identifier expression      |
+//! | `make_binary_expr`    | Binary operation           |
+//! | `make_unary_expr`     | Unary operation            |
+//! | `make_call_expr`      | Function call              |
+//! | `make_block_expr`     | Block with statements      |
+//! | `make_named_type`     | Named type (e.g., `I32`)   |
+//! | `make_ref_type`       | Reference type             |
+//! | `make_ident_pattern`  | Identifier pattern binding |
+//! | `make_wildcard_pattern` | Wildcard `_` pattern     |
+//!
+//! ## Usage
+//!
+//! These functions wrap node construction in `Box<T>` for proper ownership.
+
 #include "parser/ast.hpp"
 
 namespace tml::parser {

@@ -1,3 +1,36 @@
+//! # Parser - Expressions
+//!
+//! This file implements expression parsing using a Pratt parser.
+//!
+//! ## Pratt Parser Algorithm
+//!
+//! 1. Parse prefix expression (unary, literal, primary)
+//! 2. While next token has higher precedence than minimum:
+//!    a. Handle postfix operators (call, index, field)
+//!    b. Handle infix operators (binary operations)
+//! 3. Return combined expression tree
+//!
+//! ## Expression Categories
+//!
+//! | Category      | Examples                               |
+//! |---------------|----------------------------------------|
+//! | Literals      | `42`, `3.14`, `"hello"`, `true`        |
+//! | Identifiers   | `x`, `Point::new`                      |
+//! | Unary         | `-x`, `not y`, `ref z`, `*ptr`         |
+//! | Binary        | `a + b`, `x and y`, `n == 0`           |
+//! | Postfix       | `f()`, `arr[i]`, `obj.field`           |
+//! | Control       | `if`, `when`, `loop`, `while`, `for`   |
+//! | Special       | `return`, `break`, `continue`, `await` |
+//!
+//! ## Multi-line Expressions
+//!
+//! Infix operators can continue across newlines:
+//! ```tml
+//! let result: Bool = a
+//!     or b
+//!     or c
+//! ```
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {

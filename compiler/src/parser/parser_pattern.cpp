@@ -1,3 +1,37 @@
+//! # Parser - Patterns
+//!
+//! This file implements pattern parsing for matching and destructuring.
+//!
+//! ## Pattern Types
+//!
+//! | Pattern     | Syntax               | Description                 |
+//! |-------------|----------------------|-----------------------------|
+//! | Identifier  | `x`, `mut x`         | Bind value to name          |
+//! | Wildcard    | `_`                  | Match anything, ignore      |
+//! | Literal     | `42`, `"hello"`      | Match exact value           |
+//! | Tuple       | `(a, b, c)`          | Destructure tuple           |
+//! | Array       | `[a, b, ..rest]`     | Destructure array           |
+//! | Struct      | `Point { x, y }`     | Destructure struct          |
+//! | Enum        | `Just(v)`, `Nothing` | Match enum variant          |
+//! | Or          | `A \| B`             | Match either pattern        |
+//!
+//! ## Struct Pattern Shorthand
+//!
+//! ```tml
+//! Point { x, y }      // Binds x and y to fields of same name
+//! Point { x: a, .. }  // Binds x to a, ignores rest
+//! ```
+//!
+//! ## Or Patterns
+//!
+//! Or patterns allow matching multiple alternatives:
+//! ```tml
+//! when value {
+//!     1 | 2 | 3 => "small"
+//!     _ => "other"
+//! }
+//! ```
+
 #include "parser/parser.hpp"
 
 namespace tml::parser {
