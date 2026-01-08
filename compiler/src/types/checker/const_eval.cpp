@@ -1,5 +1,29 @@
-// Type checker - const expression evaluation
-// Handles compile-time evaluation of constant expressions for const generics
+//! # Type Checker - Const Expression Evaluation
+//!
+//! This file implements compile-time evaluation of constant expressions.
+//!
+//! ## Const Evaluation
+//!
+//! `evaluate_const_expr()` evaluates expressions at compile time for:
+//! - Array size specifications: `[T; N]`
+//! - Const generic arguments: `Buffer[N]`
+//! - Const declarations: `const SIZE: I32 = 100`
+//!
+//! ## Supported Expressions
+//!
+//! | Expression     | Example           | Result Type      |
+//! |----------------|-------------------|------------------|
+//! | Integer literal| `42`, `100i32`    | ConstValue::I64/U64 |
+//! | Bool literal   | `true`, `false`   | ConstValue::Bool |
+//! | Char literal   | `'a'`             | ConstValue::Char |
+//! | Unary ops      | `-10`, `not true` | Same as operand  |
+//! | Binary ops     | `2 + 3`, `a and b`| Computed value   |
+//! | Const reference| `SIZE`            | Stored value     |
+//!
+//! ## Const Generic Parameters
+//!
+//! `extract_const_params()` extracts const generic parameters from
+//! declarations like `type Buffer[const N: I64]`.
 
 #include "types/checker.hpp"
 #include "types/type.hpp"

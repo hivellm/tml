@@ -1,3 +1,28 @@
+//! # Module Metadata
+//!
+//! This file implements serialization of module metadata for incremental builds.
+//!
+//! ## Metadata Format
+//!
+//! Metadata is stored as JSON containing:
+//! - Module name and path
+//! - Exported structs with field types
+//! - Exported enums with variants
+//! - Exported functions with signatures
+//! - Behavior definitions and implementations
+//!
+//! ## Functions
+//!
+//! | Function           | Description                       |
+//! |--------------------|-----------------------------------|
+//! | `save_metadata()`  | Write module metadata to file     |
+//! | `load_metadata()`  | Read module metadata from file    |
+//!
+//! ## Use Case
+//!
+//! Enables separate compilation and incremental builds by caching
+//! type information without re-parsing source files.
+
 #include "types/module_metadata.hpp"
 
 #include "types/env.hpp"

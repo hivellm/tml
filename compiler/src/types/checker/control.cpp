@@ -1,6 +1,30 @@
-// Type checker control flow expressions
-// Handles: check_if, check_ternary, check_if_let, check_when, check_loop, check_for, check_range,
-// check_return, check_break
+//! # Type Checker - Control Flow
+//!
+//! This file implements type checking for control flow expressions.
+//!
+//! ## Conditional Expressions
+//!
+//! | Expression   | Handler          | Condition Type | Result Type       |
+//! |--------------|------------------|----------------|-------------------|
+//! | `if`         | `check_if`       | Bool           | then_type or Unit |
+//! | `if cond ? a : b` | `check_ternary` | Bool      | unified branches  |
+//! | `if let`     | `check_if_let`   | Pattern match  | then_type or Unit |
+//! | `when`       | `check_when`     | Pattern match  | unified arms      |
+//!
+//! ## Loop Expressions
+//!
+//! | Expression | Handler       | Return Type |
+//! |------------|---------------|-------------|
+//! | `loop`     | `check_loop`  | Unit        |
+//! | `for in`   | `check_for`   | Unit        |
+//!
+//! ## Control Flow
+//!
+//! | Expression | Handler         | Return Type |
+//! |------------|-----------------|-------------|
+//! | `return`   | `check_return`  | Never       |
+//! | `break`    | `check_break`   | Never       |
+//! | `to/through` | `check_range` | Slice[I64]  |
 
 #include "types/checker.hpp"
 

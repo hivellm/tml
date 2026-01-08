@@ -1,4 +1,27 @@
-// Builtin memory functions
+//! # Builtin Memory Functions
+//!
+//! This file registers low-level memory management intrinsics.
+//!
+//! ## Allocation
+//!
+//! | Function           | Signature                   | Description          |
+//! |--------------------|-----------------------------|----------------------|
+//! | `mem_alloc`        | `(I64) -> *Unit`            | Allocate bytes       |
+//! | `mem_alloc_zeroed` | `(I64) -> *Unit`            | Allocate zeroed      |
+//! | `mem_realloc`      | `(*Unit, I64) -> *Unit`     | Reallocate memory    |
+//! | `mem_free`         | `(*Unit) -> Unit`           | Free memory          |
+//!
+//! ## Memory Operations
+//!
+//! | Function    | Signature                       | Description          |
+//! |-------------|---------------------------------|----------------------|
+//! | `mem_copy`  | `(*Unit, *Unit, I64) -> Unit`   | Copy (non-overlapping)|
+//! | `mem_move`  | `(*Unit, *Unit, I64) -> Unit`   | Copy (overlapping OK)|
+//! | `mem_set`   | `(*Unit, I32, I64) -> Unit`     | Fill with byte       |
+//! | `mem_cmp`   | `(*Unit, *Unit, I64) -> I32`    | Compare memory       |
+//!
+//! These are `lowlevel` functions used by the allocator and collections.
+
 #include "types/env.hpp"
 
 namespace tml::types {

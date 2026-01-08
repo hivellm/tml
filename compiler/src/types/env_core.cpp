@@ -1,3 +1,28 @@
+//! # Type Environment - Core
+//!
+//! This file implements core TypeEnv functionality.
+//!
+//! ## Scope Management
+//!
+//! | Method         | Description                      |
+//! |----------------|----------------------------------|
+//! | `push_scope()` | Enter new local scope            |
+//! | `pop_scope()`  | Exit current scope               |
+//! | `define()`     | Add variable to current scope    |
+//!
+//! ## Type Inference
+//!
+//! | Method            | Description                     |
+//! |-------------------|---------------------------------|
+//! | `fresh_type_var()`| Create new unknown type         |
+//! | `unify()`         | Add type constraint             |
+//! | `resolve()`       | Get final type after inference  |
+//!
+//! ## Initialization
+//!
+//! Constructor calls `init_builtins()` to register primitive types,
+//! behaviors, and standard library functions.
+
 #include "types/env.hpp"
 
 namespace tml::types {

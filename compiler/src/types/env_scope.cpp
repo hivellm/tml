@@ -1,3 +1,26 @@
+//! # Type Environment - Scopes
+//!
+//! This file implements the Scope class for variable tracking.
+//!
+//! ## Scope Structure
+//!
+//! Scopes form a linked list (child → parent) for lexical scoping.
+//! Variable lookup walks up the chain until found or reaching root.
+//!
+//! ## Symbol Information
+//!
+//! Each symbol tracks:
+//! - `name`: Variable identifier
+//! - `type`: Resolved type
+//! - `is_mutable`: Whether `var` or `let mut`
+//! - `span`: Source location for error messages
+//!
+//! ## Methods
+//!
+//! - `define()`: Add symbol to current scope
+//! - `lookup()`: Find symbol in current or parent scopes
+//! - `lookup_local()`: Find symbol only in current scope
+
 #include "types/env.hpp"
 
 namespace tml::types {

@@ -1,4 +1,28 @@
-// Builtin math functions
+//! # Builtin Math Functions
+//!
+//! This file registers mathematical intrinsics.
+//!
+//! ## Math Operations
+//!
+//! | Function | Signature            | Description     |
+//! |----------|----------------------|-----------------|
+//! | `sqrt`   | `(I32) -> I32`       | Square root     |
+//! | `pow`    | `(I32, I32) -> I32`  | Exponentiation  |
+//! | `abs`    | `(I32) -> I32`       | Absolute value  |
+//! | `floor`  | `(I32) -> I32`       | Floor           |
+//! | `ceil`   | `(I32) -> I32`       | Ceiling         |
+//! | `round`  | `(I32) -> I32`       | Round           |
+//!
+//! ## Optimization Barriers
+//!
+//! | Function       | Signature        | Description                |
+//! |----------------|------------------|----------------------------|
+//! | `black_box`    | `(I32) -> I32`   | Prevent optimization (I32) |
+//! | `black_box_i64`| `(I64) -> I64`   | Prevent optimization (I64) |
+//!
+//! Black box functions are used in benchmarks to prevent the compiler
+//! from optimizing away computations.
+
 #include "types/env.hpp"
 
 namespace tml::types {

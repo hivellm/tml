@@ -1,3 +1,30 @@
+//! # Type Environment - Module Support
+//!
+//! This file implements module loading and import resolution.
+//!
+//! ## Module Loading
+//!
+//! `load_module()` performs:
+//! 1. Read source file from disk
+//! 2. Lex and parse the module
+//! 3. Register types and functions in module registry
+//! 4. Process nested imports recursively
+//!
+//! ## Import Resolution
+//!
+//! | Import Syntax               | Resolution                    |
+//! |-----------------------------|-------------------------------|
+//! | `use std::io::print`        | Single symbol import          |
+//! | `use std::io::{print, read}`| Multiple symbol import        |
+//! | `use std::io::*`            | Glob import                   |
+//! | `use std::io as io`         | Aliased import                |
+//!
+//! ## Path Resolution
+//!
+//! Module paths are resolved relative to:
+//! - Current file directory
+//! - Library search paths (lib/core, lib/std)
+
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"

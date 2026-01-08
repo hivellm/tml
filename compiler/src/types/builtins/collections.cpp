@@ -1,4 +1,38 @@
-// Builtin collection functions: List, HashMap, Buffer
+//! # Builtin Collection Functions
+//!
+//! This file registers intrinsics for standard collections.
+//!
+//! ## List (Dynamic Array)
+//!
+//! | Function        | Signature                     | Description        |
+//! |-----------------|-------------------------------|--------------------|
+//! | `list_create`   | `() -> *Unit`                 | Create empty list  |
+//! | `list_destroy`  | `(*Unit) -> Unit`             | Free list memory   |
+//! | `list_push`     | `(*Unit, I32) -> Unit`        | Append element     |
+//! | `list_pop`      | `(*Unit) -> I32`              | Remove last        |
+//! | `list_get`      | `(*Unit, I32) -> I32`         | Get at index       |
+//! | `list_set`      | `(*Unit, I32, I32) -> Unit`   | Set at index       |
+//! | `list_len`      | `(*Unit) -> I32`              | Get length         |
+//! | `list_capacity` | `(*Unit) -> I32`              | Get capacity       |
+//! | `list_clear`    | `(*Unit) -> Unit`             | Remove all         |
+//!
+//! ## HashMap
+//!
+//! | Function          | Signature                     | Description       |
+//! |-------------------|-------------------------------|-------------------|
+//! | `hashmap_create`  | `() -> *Unit`                 | Create empty map  |
+//! | `hashmap_insert`  | `(*Unit, I32, I32) -> Unit`   | Insert key-value  |
+//! | `hashmap_get`     | `(*Unit, I32) -> I32`         | Get by key        |
+//! | `hashmap_remove`  | `(*Unit, I32) -> Bool`        | Remove by key     |
+//! | `hashmap_contains`| `(*Unit, I32) -> Bool`        | Check key exists  |
+//!
+//! ## Buffer (Fixed-size)
+//!
+//! | Function        | Signature                     | Description        |
+//! |-----------------|-------------------------------|--------------------|
+//! | `buffer_create` | `(I32) -> *Unit`              | Create with size   |
+//! | `buffer_*`      | `...`                         | Same as list ops   |
+
 #include "types/env.hpp"
 
 namespace tml::types {

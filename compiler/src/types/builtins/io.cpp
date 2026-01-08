@@ -1,4 +1,23 @@
-// Builtin IO functions: print, println, panic
+//! # Builtin I/O Functions
+//!
+//! This file registers basic I/O and assertion functions.
+//!
+//! ## Output Functions
+//!
+//! | Function   | Signature                    | Description            |
+//! |------------|------------------------------|------------------------|
+//! | `print`    | `(Str) -> Unit`              | Print without newline  |
+//! | `println`  | `(Str) -> Unit`              | Print with newline     |
+//!
+//! ## Error Handling
+//!
+//! | Function   | Signature                    | Description            |
+//! |------------|------------------------------|------------------------|
+//! | `panic`    | `(Str) -> Never`             | Abort with message     |
+//! | `assert`   | `(Bool, Str) -> Unit`        | Conditional panic      |
+//!
+//! All functions are marked as `Stable` since version 1.0.
+
 #include "types/env.hpp"
 
 namespace tml::types {

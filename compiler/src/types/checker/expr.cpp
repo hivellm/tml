@@ -1,5 +1,29 @@
-// Type checker expression checking
-// Handles: check_expr, check_literal, check_ident, check_binary, check_unary, etc.
+//! # Type Checker - Expressions
+//!
+//! This file implements type checking for all expression kinds.
+//!
+//! ## Expression Dispatch
+//!
+//! `check_expr()` dispatches to specialized handlers based on expression type.
+//!
+//! ## Literal Type Inference
+//!
+//! | Literal Type   | Default Type | Suffix Support           |
+//! |----------------|--------------|--------------------------|
+//! | Integer        | I64          | i8, i16, i32, u8, etc.   |
+//! | Float          | F64          | f32, f64                 |
+//! | String         | Str          | -                        |
+//! | Char           | Char         | -                        |
+//! | Bool           | Bool         | -                        |
+//!
+//! ## Method Call Resolution
+//!
+//! Method calls are resolved in this order:
+//! 1. Check for static methods on primitive type names
+//! 2. Look up qualified method in current module
+//! 3. Check behavior implementations (for dyn types)
+//! 4. Check primitive type builtin methods (core::ops)
+//! 5. Check named type methods (Maybe, Outcome, Array, Slice)
 
 #include "common.hpp"
 #include "lexer/token.hpp"

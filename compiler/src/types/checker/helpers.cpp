@@ -1,5 +1,31 @@
-// Type checker helper functions
-// Shared utilities used by other checker modules
+//! # Type Checker - Helper Functions
+//!
+//! This file implements shared utilities used by other checker modules.
+//!
+//! ## Type Classification
+//!
+//! | Function          | Checks For                        |
+//! |-------------------|-----------------------------------|
+//! | `is_integer_type` | I8-I128, U8-U128                  |
+//! | `is_float_type`   | F32, F64                          |
+//! | `types_compatible`| Structural type compatibility     |
+//!
+//! ## Type Compatibility Rules
+//!
+//! `types_compatible()` handles:
+//! - Exact type equality
+//! - Type variable unification
+//! - Integer/float literal coercion
+//! - Null pointer compatibility
+//! - Array to slice coercion
+//! - Closure to function type compatibility
+//! - `impl Behavior` type compatibility
+//!
+//! ## Error Suggestions
+//!
+//! - `levenshtein_distance()`: Edit distance for typo detection
+//! - `get_all_known_names()`: Collects all symbols in scope
+//! - `find_similar_names()`: Suggests corrections for unknown identifiers
 
 #include "types/checker.hpp"
 

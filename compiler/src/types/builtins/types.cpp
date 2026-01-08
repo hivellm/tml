@@ -1,4 +1,34 @@
-// Builtin primitive types and behavior implementations
+//! # Builtin Types
+//!
+//! This file registers primitive types, core enums, and behavior implementations.
+//!
+//! ## Primitive Types
+//!
+//! | Type     | Description                    |
+//! |----------|--------------------------------|
+//! | I8-I128  | Signed integers                |
+//! | U8-U128  | Unsigned integers              |
+//! | F32, F64 | Floating point                 |
+//! | Bool     | Boolean                        |
+//! | Char     | Unicode scalar                 |
+//! | Str      | String slice                   |
+//! | Unit     | Empty type `()`                |
+//!
+//! ## Core Enums
+//!
+//! | Enum        | Variants                  | Purpose           |
+//! |-------------|---------------------------|-------------------|
+//! | `Ordering`  | Less, Equal, Greater      | Comparison result |
+//! | `Maybe[T]`  | Just(T), Nothing          | Optional value    |
+//! | `Outcome[T,E]` | Ok(T), Err(E)          | Error handling    |
+//! | `Poll[T]`   | Ready(T), Pending         | Async polling     |
+//!
+//! ## Behavior Implementations
+//!
+//! Registers that primitive types implement standard behaviors:
+//! - All primitives implement `Duplicate`, `Display`, `Hash`, etc.
+//! - Numeric types implement `Default`, `Eq`, `Ord`, `Numeric`
+
 #include "types/env.hpp"
 
 namespace tml::types {

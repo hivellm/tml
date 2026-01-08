@@ -1,3 +1,29 @@
+//! # Type Implementation
+//!
+//! This file implements type creation and manipulation functions.
+//!
+//! ## Type Factory Functions
+//!
+//! | Function           | Creates                          |
+//! |--------------------|----------------------------------|
+//! | `make_primitive`   | I8-I128, U8-U128, F32, F64, etc. |
+//! | `make_i32`, etc.   | Convenience for common types     |
+//! | `make_named`       | User-defined struct/enum types   |
+//! | `make_ref`         | Reference types (`ref T`)        |
+//! | `make_ptr`         | Pointer types (`*T`)             |
+//! | `make_array`       | Fixed-size arrays `[T; N]`       |
+//! | `make_tuple`       | Tuple types `(A, B, C)`          |
+//! | `make_func`        | Function types                   |
+//!
+//! ## Type Comparison
+//!
+//! `types_equal()` performs structural equality checking,
+//! handling type variables via resolution.
+//!
+//! ## Type Display
+//!
+//! `type_to_string()` produces human-readable type names for errors.
+
 #include "types/type.hpp"
 
 #include <sstream>

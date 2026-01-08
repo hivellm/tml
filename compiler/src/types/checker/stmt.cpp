@@ -1,5 +1,27 @@
-// Type checker statement handling
-// Handles: check_stmt, check_let, check_var, bind_pattern
+//! # Type Checker - Statements
+//!
+//! This file implements type checking for statements.
+//!
+//! ## Statement Types
+//!
+//! | Statement | Handler       | Description                        |
+//! |-----------|---------------|------------------------------------|
+//! | `let`     | `check_let`   | Immutable binding with type check  |
+//! | `var`     | `check_var`   | Mutable binding with type check    |
+//! | `expr`    | `check_expr`  | Expression statement               |
+//!
+//! ## Type Annotations
+//!
+//! TML requires explicit type annotations on `let` and `var` statements.
+//! Unlike Rust, type inference is limited to the initializer expression.
+//!
+//! ## Pattern Binding
+//!
+//! `bind_pattern()` handles destructuring patterns:
+//! - `IdentPattern`: Binds name to type in current scope
+//! - `TuplePattern`: Destructures tuple types
+//! - `EnumPattern`: Matches enum variants with payloads
+//! - `WildcardPattern`: Matches any type, binds nothing
 
 #include "common.hpp"
 #include "types/checker.hpp"

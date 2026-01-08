@@ -1,4 +1,36 @@
-// Builtin atomic functions for thread-safe operations
+//! # Builtin Atomic Functions
+//!
+//! This file registers atomic operations for thread-safe programming.
+//!
+//! ## Atomic Load/Store
+//!
+//! | Function       | Signature                 | Description          |
+//! |----------------|---------------------------|----------------------|
+//! | `atomic_load`  | `(*Unit) -> I32`          | Thread-safe read     |
+//! | `atomic_store` | `(*Unit, I32) -> Unit`    | Thread-safe write    |
+//!
+//! ## Atomic Arithmetic
+//!
+//! | Function     | Signature                  | Description          |
+//! |--------------|----------------------------|----------------------|
+//! | `atomic_add` | `(*Unit, I32) -> I32`      | Fetch-and-add        |
+//! | `atomic_sub` | `(*Unit, I32) -> I32`      | Fetch-and-subtract   |
+//!
+//! ## Atomic Exchange
+//!
+//! | Function          | Signature                     | Description          |
+//! |-------------------|-------------------------------|----------------------|
+//! | `atomic_exchange` | `(*Unit, I32) -> I32`         | Swap, return old     |
+//! | `atomic_cas`      | `(*Unit, I32, I32) -> Bool`   | Compare-and-swap     |
+//!
+//! ## Memory Fences
+//!
+//! | Function        | Signature    | Description             |
+//! |-----------------|--------------|-------------------------|
+//! | `fence_acquire` | `() -> Unit` | Acquire memory barrier  |
+//! | `fence_release` | `() -> Unit` | Release memory barrier  |
+//! | `fence_seqcst`  | `() -> Unit` | Sequentially consistent |
+
 #include "types/env.hpp"
 
 namespace tml::types {

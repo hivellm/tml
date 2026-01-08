@@ -1,4 +1,28 @@
-// Builtin async functions: block_on
+//! # Builtin Async Functions
+//!
+//! This file registers async runtime intrinsics.
+//!
+//! ## block_on
+//!
+//! `block_on(future: Poll[T]) -> T`
+//!
+//! Executes an async function synchronously and extracts the result.
+//! In the current synchronous execution model, this simply unwraps `Poll.Ready`.
+//!
+//! ## Overloads
+//!
+//! | Signature                    | Description         |
+//! |------------------------------|---------------------|
+//! | `(Poll[I32]) -> I32`         | Block on I32 future |
+//! | `(Poll[I64]) -> I64`         | Block on I64 future |
+//! | `(Poll[F64]) -> F64`         | Block on F64 future |
+//! | `(Poll[Bool]) -> Bool`       | Block on Bool future|
+//! | `(Poll[Unit]) -> Unit`       | Block on Unit future|
+//! | `(Poll[Str]) -> Str`         | Block on Str future |
+//!
+//! The type system doesn't yet fully support generic builtins, so we
+//! register overloads for common return types.
+
 #include "types/env.hpp"
 
 namespace tml::types {

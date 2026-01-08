@@ -1,5 +1,26 @@
-// Main builtin initialization
-// Delegates to specialized files for organization
+//! # Builtin Registration
+//!
+//! This file is the entry point for registering all builtin functions.
+//!
+//! ## Initialization Order
+//!
+//! `init_builtins()` calls specialized initializers in this order:
+//!
+//! | Initializer               | Registers                          |
+//! |---------------------------|------------------------------------|
+//! | `init_builtin_types`      | Primitive types, behavior impls    |
+//! | `init_builtin_io`         | print, println, panic, assert      |
+//! | `init_builtin_string`     | str_len, str_eq, str_hash, etc.    |
+//! | `init_builtin_time`       | time_ms, sleep, elapsed, etc.      |
+//! | `init_builtin_mem`        | mem_alloc, mem_free, mem_copy      |
+//! | `init_builtin_atomic`     | atomic_load, atomic_store, fence   |
+//! | `init_builtin_sync`       | spin_lock, thread_*, mutex_*, etc. |
+//! | `init_builtin_math`       | sqrt, pow, abs, floor, ceil, round |
+//! | `init_builtin_collections`| list_*, hashmap_*, buffer_*        |
+//! | `init_builtin_async`      | block_on                           |
+//!
+//! Each initializer is implemented in its own file for organization.
+
 #include "types/env.hpp"
 
 namespace tml::types {

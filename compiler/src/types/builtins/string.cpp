@@ -1,4 +1,24 @@
-// Builtin string functions
+//! # Builtin String Functions
+//!
+//! This file registers string manipulation functions.
+//!
+//! ## String Operations
+//!
+//! | Function        | Signature                       | Description          |
+//! |-----------------|---------------------------------|----------------------|
+//! | `str_len`       | `(Str) -> I32`                  | String length        |
+//! | `str_eq`        | `(Str, Str) -> Bool`            | String equality      |
+//! | `str_hash`      | `(Str) -> I32`                  | Hash value           |
+//! | `str_concat`    | `(Str, Str) -> Str`             | Concatenation        |
+//! | `str_substring` | `(Str, I32, I32) -> Str`        | Extract substring    |
+//! | `str_char_at`   | `(Str, I32) -> Char`            | Character at index   |
+//! | `str_contains`  | `(Str, Str) -> Bool`            | Substring check      |
+//! | `str_from_char` | `(Char) -> Str`                 | Char to string       |
+//! | `str_to_i32`    | `(Str) -> I32`                  | Parse integer        |
+//! | `i32_to_str`    | `(I32) -> Str`                  | Format integer       |
+//!
+//! These are low-level intrinsics used by higher-level Str methods.
+
 #include "types/env.hpp"
 
 namespace tml::types {

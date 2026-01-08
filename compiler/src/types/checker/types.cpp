@@ -1,6 +1,28 @@
-// Type checker type expressions
-// Handles: check_tuple, check_array, check_struct_expr, check_closure, check_try, check_path,
-// collect_captures_from_expr
+//! # Type Checker - Type Expressions
+//!
+//! This file implements type checking for composite type expressions.
+//!
+//! ## Type Constructors
+//!
+//! | Expression   | Handler              | Result Type               |
+//! |--------------|----------------------|---------------------------|
+//! | `(a, b, c)`  | `check_tuple`        | `TupleType`               |
+//! | `[1, 2, 3]`  | `check_array`        | `ArrayType`               |
+//! | `Foo { .. }` | `check_struct_expr`  | `NamedType`               |
+//! | `do(x) expr` | `check_closure`      | `ClosureType`             |
+//! | `expr!`      | `check_try`          | Unwrapped `Maybe/Outcome` |
+//!
+//! ## Closure Capture Analysis
+//!
+//! `collect_captures_from_expr()` identifies variables captured by closures:
+//! - Variables not defined in closure scope but in parent scope are captured
+//! - Captured variables are stored in `closure.captured_vars` for codegen
+//!
+//! ## Path Resolution
+//!
+//! `check_path()` resolves multi-segment paths:
+//! - Single segment: variable, function, or type name
+//! - Two segments: `Type::method` or `Enum::Variant`
 
 #include "types/checker.hpp"
 

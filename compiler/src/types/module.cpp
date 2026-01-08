@@ -1,3 +1,27 @@
+//! # Module Registry
+//!
+//! This file implements the module registry for managing compiled modules.
+//!
+//! ## Module Registration
+//!
+//! | Method              | Description                      |
+//! |---------------------|----------------------------------|
+//! | `register_module()` | Add compiled module to registry  |
+//! | `get_module()`      | Retrieve module by path          |
+//! | `has_module()`      | Check if module is registered    |
+//!
+//! ## Symbol Lookup
+//!
+//! | Method           | Looks Up                          |
+//! |------------------|-----------------------------------|
+//! | `lookup_struct()`| Struct in specific module         |
+//! | `lookup_enum()`  | Enum in specific module           |
+//! | `lookup_func()`  | Function in specific module       |
+//!
+//! ## Module Paths
+//!
+//! Modules are identified by their qualified path (e.g., `std::io`).
+
 #include "types/module.hpp"
 
 #include "types/env.hpp"

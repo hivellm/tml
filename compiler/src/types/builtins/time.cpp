@@ -1,4 +1,30 @@
-// Builtin time functions
+//! # Builtin Time Functions
+//!
+//! This file registers time measurement and sleep intrinsics.
+//!
+//! ## Time Reading
+//!
+//! | Function  | Signature     | Description                   |
+//! |-----------|---------------|-------------------------------|
+//! | `time_ms` | `() -> I32`   | Current time (milliseconds)   |
+//! | `time_us` | `() -> I64`   | Current time (microseconds)   |
+//! | `time_ns` | `() -> I64`   | Current time (nanoseconds)    |
+//!
+//! ## Sleep
+//!
+//! | Function   | Signature       | Description                |
+//! |------------|-----------------|----------------------------|
+//! | `sleep_ms` | `(I32) -> Unit` | Sleep for milliseconds     |
+//! | `sleep_us` | `(I64) -> Unit` | Sleep for microseconds     |
+//!
+//! ## Elapsed Time
+//!
+//! | Function     | Signature       | Description                  |
+//! |--------------|-----------------|------------------------------|
+//! | `elapsed_ms` | `(I32) -> I32`  | Elapsed since start (ms)     |
+//! | `elapsed_us` | `(I64) -> I64`  | Elapsed since start (us)     |
+//! | `elapsed_ns` | `(I64) -> I64`  | Elapsed since start (ns)     |
+
 #include "types/env.hpp"
 
 namespace tml::types {

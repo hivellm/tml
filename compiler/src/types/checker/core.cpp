@@ -1,5 +1,30 @@
-// Type checker core - module checking and declarations
-// Handles: check_module, register_*, check_func_decl, check_impl_decl
+//! # Type Checker - Core
+//!
+//! This file implements the core type checking logic for modules.
+//!
+//! ## Module Checking Phases
+//!
+//! | Phase | Method              | Description                      |
+//! |-------|---------------------|----------------------------------|
+//! | 0     | `process_use_decl`  | Process import statements        |
+//! | 1     | `register_*_decl`   | Register type declarations       |
+//! | 2     | `check_func_decl`   | Register function signatures     |
+//! | 3     | `check_func_body`   | Type-check function bodies       |
+//!
+//! ## Declaration Registration
+//!
+//! | Method                  | Registers                        |
+//! |-------------------------|----------------------------------|
+//! | `register_struct_decl`  | Struct with fields and generics  |
+//! | `register_enum_decl`    | Enum with variants and payloads  |
+//! | `register_trait_decl`   | Behavior with methods            |
+//! | `register_type_alias`   | Type alias definitions           |
+//!
+//! ## Reserved Names
+//!
+//! The checker enforces reserved type and behavior names to prevent
+//! user code from redefining builtin types like `Maybe`, `Outcome`,
+//! `List`, `Eq`, `Ord`, etc.
 
 #include "lexer/token.hpp"
 #include "types/checker.hpp"

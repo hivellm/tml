@@ -184,3 +184,19 @@ When working on the build system, these are the relevant files:
 - `compiler/src/cli/parallel_build.cpp` - Multi-threaded compilation
 - `compiler/src/cli/object_compiler.cpp` - LLVM IR to object file compilation
 - `compiler/src/cli/build_cache.cpp` - MIR cache for incremental compilation
+
+## File Editing Best Practices
+
+**IMPORTANT**: When editing multiple files, follow this pattern:
+
+1. **Read and edit sequentially** - Do NOT read multiple files in parallel and then try to edit them all. The "file read" context is lost between tool calls.
+2. **One file at a time** - Read a file, edit it immediately, then move to the next file.
+3. **Never batch reads before edits** - This causes "File has not been read yet" errors.
+
+```
+# CORRECT pattern:
+Read file1 -> Edit file1 -> Read file2 -> Edit file2
+
+# WRONG pattern (causes errors):
+Read file1, file2, file3 (parallel) -> Edit file1 (works) -> Edit file2 (FAILS)
+```

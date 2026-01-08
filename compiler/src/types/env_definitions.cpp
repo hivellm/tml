@@ -1,3 +1,23 @@
+//! # Type Environment - Definitions
+//!
+//! This file implements type definition registration.
+//!
+//! ## Definition Methods
+//!
+//! | Method              | Registers                        |
+//! |---------------------|----------------------------------|
+//! | `define_struct()`   | Struct type definition           |
+//! | `define_enum()`     | Enum type definition             |
+//! | `define_behavior()` | Behavior (trait) definition      |
+//! | `define_function()` | Function signature               |
+//! | `register_impl()`   | Behavior implementation          |
+//!
+//! ## Drop and Copy Traits
+//!
+//! Special handling for ownership semantics:
+//! - `type_needs_drop()`: Check if type requires destructor
+//! - `type_implements()`: Check behavior implementation
+
 #include "types/env.hpp"
 
 namespace tml::types {

@@ -1,6 +1,34 @@
-// Type checker type resolution
-// Handles: resolve_type, resolve_type_path, error, block_has_return, stmt_has_return,
-// expr_has_return
+//! # Type Checker - Type Resolution
+//!
+//! This file implements type resolution from parser AST to semantic types.
+//!
+//! ## Type Resolution
+//!
+//! | Parser Type         | Semantic Type        | Handler              |
+//! |---------------------|----------------------|----------------------|
+//! | `NamedType`         | `NamedType`          | `resolve_type_path`  |
+//! | `RefType`           | `RefType`            | `make_ref`           |
+//! | `PtrType`           | `PtrType`            | Direct               |
+//! | `ArrayType`         | `ArrayType`          | `make_array`         |
+//! | `SliceType`         | `SliceType`          | `make_slice`         |
+//! | `DynType`           | `DynBehaviorType`    | Object safety check  |
+//! | `ImplBehaviorType`  | `ImplBehaviorType`   | Behavior validation  |
+//! | `FuncType`          | `FuncType`           | Param/return resolve |
+//! | `TupleType`         | `TupleType`          | `make_tuple`         |
+//!
+//! ## Path Resolution
+//!
+//! `resolve_type_path()` handles:
+//! - Builtin types (I32, Str, Bool, etc.)
+//! - Type aliases
+//! - User-defined structs and enums
+//! - Associated types (This::Owned, T::Item)
+//! - Imported types from modules
+//!
+//! ## Return Statement Analysis
+//!
+//! `block_has_return()`, `stmt_has_return()`, `expr_has_return()` verify
+//! that functions with non-Unit return types have explicit return statements.
 
 #include "common.hpp"
 #include "types/checker.hpp"

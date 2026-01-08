@@ -1,3 +1,28 @@
+//! # Type Environment - Lookups
+//!
+//! This file implements type and definition lookups.
+//!
+//! ## Lookup Methods
+//!
+//! | Method             | Looks Up                         |
+//! |--------------------|----------------------------------|
+//! | `lookup_struct()`  | Struct definition by name        |
+//! | `lookup_enum()`    | Enum definition by name          |
+//! | `lookup_behavior()`| Behavior definition by name      |
+//! | `lookup_function()`| Function signatures (overloaded) |
+//! | `lookup_method()`  | Method on type                   |
+//!
+//! ## Import Resolution
+//!
+//! Lookups check local definitions first, then imported modules
+//! via `resolve_imported_symbol()` and the module registry.
+//!
+//! ## Method Resolution
+//!
+//! `lookup_method()` searches:
+//! 1. Inherent methods (impl blocks on the type)
+//! 2. Behavior methods (impl Behavior for Type)
+
 #include "types/env.hpp"
 #include "types/module.hpp"
 
