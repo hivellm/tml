@@ -1,9 +1,31 @@
-// Common Subexpression Elimination Implementation
-//
-// This pass performs local (within basic block) CSE by:
-// 1. Computing a hash key for each eligible expression
-// 2. If we've seen this expression before, replace uses with the previous result
-// 3. Otherwise, record this expression for future reference
+//! # Common Subexpression Elimination (CSE) Pass
+//!
+//! This pass eliminates redundant computations within basic blocks.
+//!
+//! ## Algorithm
+//!
+//! For each block:
+//! 1. Hash each eligible expression to a key
+//! 2. If key seen before, replace uses with previous result
+//! 3. Otherwise, record expression for future matches
+//!
+//! ## Expression Key Format
+//!
+//! | Instruction   | Key Format                        |
+//! |---------------|-----------------------------------|
+//! | Binary        | `binary:<op>:<left>:<right>`      |
+//! | Unary         | `unary:<op>:<operand>`            |
+//! | Cast          | `cast:<kind>:<operand>`           |
+//! | GEP           | `gep:<base>:<idx1>:<idx2>:...`    |
+//! | ExtractValue  | `extract:<agg>:<idx1>:<idx2>:...` |
+//!
+//! ## Not Eligible for CSE
+//!
+//! - Load: may read different values
+//! - Store: has side effects
+//! - Alloca: creates unique memory
+//! - Call/MethodCall: may have side effects
+//! - Phi: block-specific semantics
 
 #include "mir/passes/common_subexpression_elimination.hpp"
 

@@ -1,4 +1,29 @@
-// Constant Folding Optimization Pass Implementation
+//! # Constant Folding Optimization Pass
+//!
+//! This pass evaluates constant expressions at compile time.
+//!
+//! ## Supported Operations
+//!
+//! | Category    | Operations                              |
+//! |-------------|-----------------------------------------|
+//! | Integer     | +, -, *, /, %, ==, !=, <, <=, >, >=     |
+//! | Float       | +, -, *, /, %, ==, !=, <, <=, >, >=     |
+//! | Boolean     | and, or, ==, !=                         |
+//! | Bitwise     | &, |, ^, <<, >>                         |
+//! | Unary       | -, not, ~                               |
+//!
+//! ## Algorithm
+//!
+//! For each binary/unary instruction:
+//! 1. Look up operand definitions
+//! 2. If all operands are constants, evaluate result
+//! 3. Replace instruction with constant
+//!
+//! ## Special Cases
+//!
+//! - Division by zero returns nullopt (no fold)
+//! - Signed vs unsigned comparison handled correctly
+//! - Select with constant condition marked for optimization
 
 #include "mir/passes/constant_folding.hpp"
 

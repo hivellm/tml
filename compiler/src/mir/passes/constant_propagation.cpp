@@ -1,4 +1,25 @@
-// Constant Propagation Optimization Pass Implementation
+//! # Constant Propagation Pass
+//!
+//! This pass tracks constant values through the program and propagates
+//! them to uses.
+//!
+//! ## Algorithm
+//!
+//! 1. Build constant map: ValueId → Constant
+//! 2. For each instruction, check if operands are known constants
+//! 3. Mark instructions for optimization (enables folding)
+//!
+//! ## Interaction with Other Passes
+//!
+//! Works with constant folding:
+//! - Propagation identifies which values are constant
+//! - Folding evaluates expressions with constant operands
+//!
+//! ## Select Optimization
+//!
+//! When a select instruction has a constant condition:
+//! - `select true, a, b` → `a`
+//! - `select false, a, b` → `b`
 
 #include "mir/passes/constant_propagation.hpp"
 

@@ -1,4 +1,36 @@
-// MIR Binary Writer Implementation
+//! # MIR Binary Writer
+//!
+//! This file writes MIR modules to a compact binary format.
+//!
+//! ## Binary Format Structure
+//!
+//! ```text
+//! Header:
+//!   magic: u32 (0x4D495220 = "MIR ")
+//!   version_major: u16
+//!   version_minor: u16
+//!
+//! Module:
+//!   name: string
+//!   structs: [StructDef...]
+//!   enums: [EnumDef...]
+//!   functions: [Function...]
+//!   constants: [(name, Constant)...]
+//! ```
+//!
+//! ## String Encoding
+//!
+//! Strings are length-prefixed: `u32 length` + `bytes[length]`
+//!
+//! ## Type Encoding
+//!
+//! Types are tagged with a TypeTag byte followed by type-specific data.
+//!
+//! ## Advantages
+//!
+//! - Compact representation (smaller than text)
+//! - Fast to read/write (no parsing)
+//! - Stable format for incremental compilation cache
 
 #include "serializer_internal.hpp"
 

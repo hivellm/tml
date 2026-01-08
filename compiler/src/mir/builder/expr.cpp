@@ -1,6 +1,24 @@
-// MIR Builder - Expression Building Implementation
-//
-// This file contains functions for building MIR from expression AST nodes.
+//! # MIR Builder - Expressions
+//!
+//! This file converts AST expressions to MIR SSA form.
+//!
+//! ## Expression Categories
+//!
+//! | Category     | Expressions                              |
+//! |--------------|------------------------------------------|
+//! | Literals     | int, float, string, char, bool           |
+//! | Variables    | identifier, path                         |
+//! | Operations   | binary, unary, cast                      |
+//! | Calls        | function call, method call               |
+//! | Access       | field, index                             |
+//! | Control      | if, block, loop, return, break, continue |
+//! | Constructors | struct, tuple, array                     |
+//! | Async        | closure, await                           |
+//!
+//! ## Assignment Handling
+//!
+//! Assignment `x = val` is desugared to store instruction.
+//! Field and index assignments generate GEP + store.
 
 #include "mir/mir_builder.hpp"
 

@@ -1,7 +1,23 @@
-// MIR Builder - Type Conversion Implementation
-//
-// This file contains type conversion functions for converting parser types
-// and semantic types to MIR types.
+//! # MIR Builder - Types
+//!
+//! This file converts parser and semantic types to MIR types.
+//!
+//! ## Type Mapping
+//!
+//! | Parser Type   | MIR Type                |
+//! |---------------|-------------------------|
+//! | `I32`         | `MirPrimitiveType::I32` |
+//! | `[T; N]`      | `MirArrayType`          |
+//! | `(A, B)`      | `MirTupleType`          |
+//! | `ref T`       | `MirPointerType`        |
+//! | `func(...)`   | `MirFunctionType`       |
+//! | `Point`       | `MirStructType`         |
+//! | `Maybe[T]`    | `MirEnumType`           |
+//!
+//! ## Two Converters
+//!
+//! - `convert_type()`: Parser types → MIR types
+//! - `convert_semantic_type()`: Semantic types → MIR types
 
 #include "mir/mir_builder.hpp"
 

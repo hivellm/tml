@@ -1,4 +1,29 @@
-// MIR Optimization Pass Infrastructure Implementation
+//! # MIR Optimization Pass Infrastructure
+//!
+//! This file implements the pass infrastructure and pass manager.
+//!
+//! ## Pass Types
+//!
+//! - `FunctionPass::run()`: Iterates over functions
+//! - `BlockPass::run()`: Iterates over all blocks
+//!
+//! ## PassManager
+//!
+//! Coordinates optimization passes with standard pipelines:
+//!
+//! | Level | Passes                                   |
+//! |-------|------------------------------------------|
+//! | O0    | (none)                                   |
+//! | O1    | Constant folding/propagation             |
+//! | O2    | O1 + CSE, copy prop, DCE, UCE            |
+//! | O3    | O2 + second optimization round           |
+//!
+//! ## Analysis Utilities
+//!
+//! - `is_value_used()`: Check if value is referenced
+//! - `has_side_effects()`: Check if instruction is pure
+//! - `is_constant()`: Check for constant instructions
+//! - `get_constant_int/bool()`: Extract constant values
 
 #include "mir/mir_pass.hpp"
 

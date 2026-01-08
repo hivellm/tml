@@ -1,7 +1,29 @@
-// MIR Builder - Helper Methods Implementation
-//
-// This file contains helper functions for block management, emitting
-// instructions, creating constants, and operator conversion.
+//! # MIR Builder - Helpers
+//!
+//! This file implements helper functions used throughout the builder.
+//!
+//! ## Block Management
+//!
+//! - `create_block()`: Add new basic block to function
+//! - `switch_to_block()`: Change emission target
+//! - `is_terminated()`: Check if block has terminator
+//!
+//! ## Instruction Emission
+//!
+//! - `emit()`: Emit instruction with result value
+//! - `emit_void()`: Emit instruction without result
+//! - `emit_return/branch/cond_branch()`: Terminators
+//!
+//! ## Constants
+//!
+//! - `const_int()`, `const_float()`, `const_bool()`
+//! - `const_string()`, `const_unit()`
+//!
+//! ## Drop Handling (RAII)
+//!
+//! - `emit_drop_for_value()`: Emit drop call for value
+//! - `emit_scope_drops()`: Drop current scope variables
+//! - `emit_all_drops()`: Drop all variables (for return)
 
 #include "mir/mir_builder.hpp"
 

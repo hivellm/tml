@@ -1,4 +1,16 @@
-// MIR Function Implementation
+//! # MIR Function Implementation
+//!
+//! This file implements MIR function-level operations.
+//!
+//! ## Functions
+//!
+//! - `create_block()`: Create a new basic block with label
+//! - `get_block()`: Get block by ID (const and non-const)
+//!
+//! ## Basic Block Management
+//!
+//! Each function maintains a list of basic blocks forming a CFG.
+//! Blocks are created with unique IDs and optional labels.
 
 #include "mir/mir.hpp"
 

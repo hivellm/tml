@@ -1,7 +1,26 @@
-// MIR Builder - Statement Building Implementation
-//
-// This file contains functions for building MIR from statement and
-// declaration AST nodes.
+//! # MIR Builder - Statements
+//!
+//! This file converts AST statements and declarations to MIR.
+//!
+//! ## Declaration Building
+//!
+//! | Declaration | Handler              | Description              |
+//! |-------------|----------------------|--------------------------|
+//! | `func`      | `build_func_decl()`  | Create function + blocks |
+//! | `type`      | `build_struct_decl()`| Add struct definition    |
+//! | `enum`      | `build_enum_decl()`  | Add enum definition      |
+//!
+//! ## Statement Building
+//!
+//! | Statement   | Handler              | Description              |
+//! |-------------|----------------------|--------------------------|
+//! | `let`       | `build_let_stmt()`   | Pattern binding          |
+//! | `var`       | `build_var_stmt()`   | Mutable variable (alloca)|
+//! | expression  | `build_expr_stmt()`  | Evaluate and discard     |
+//!
+//! ## Drop Registration
+//!
+//! Variables are registered for drop when they go out of scope.
 
 #include "mir/mir_builder.hpp"
 

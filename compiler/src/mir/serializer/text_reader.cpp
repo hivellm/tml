@@ -1,4 +1,28 @@
-// MIR Text Reader Implementation
+//! # MIR Text Reader
+//!
+//! This file parses MIR modules from text format.
+//!
+//! ## Parsing Features
+//!
+//! | Element     | Syntax                          |
+//! |-------------|---------------------------------|
+//! | Function    | `func @name(params) -> ret`     |
+//! | Block       | `bb0:` or `entry:`              |
+//! | Value       | `%0`, `%name`                   |
+//! | Instruction | `%0 = add %1, %2`               |
+//! | Return      | `ret %0` or `return`            |
+//! | Branch      | `br bb1` or `br %cond, bb1, bb2`|
+//!
+//! ## Type Parsing
+//!
+//! - Primitives: i8, i16, i32, i64, f32, f64, bool, str
+//! - Pointers: `*T`, `*mut T`
+//! - Arrays: `[T; N]`
+//! - Named: struct/enum names
+//!
+//! ## Error Reporting
+//!
+//! Errors include line number for debugging.
 
 #include "serializer_internal.hpp"
 

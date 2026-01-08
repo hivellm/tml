@@ -1,7 +1,28 @@
-// Unreachable Code Elimination Implementation
-//
-// This pass removes basic blocks that are not reachable from the entry block.
-// It uses a simple DFS traversal from the entry block to compute reachability.
+//! # Unreachable Code Elimination (UCE) Pass
+//!
+//! This pass removes basic blocks not reachable from the entry block.
+//!
+//! ## Algorithm
+//!
+//! 1. Simplify constant conditional branches
+//! 2. BFS/DFS from entry block to find reachable blocks
+//! 3. Remove unreachable blocks
+//! 4. Update predecessor lists and phi nodes
+//!
+//! ## Constant Branch Simplification
+//!
+//! ```text
+//! br %const_true, bb1, bb2   →   br bb1
+//! br %const_false, bb1, bb2  →   br bb2
+//! ```
+//!
+//! This may make additional blocks unreachable.
+//!
+//! ## Cleanup Steps
+//!
+//! After removing blocks:
+//! - Remove unreachable predecessors from remaining blocks
+//! - Remove phi incoming edges from deleted blocks
 
 #include "mir/passes/unreachable_code_elimination.hpp"
 

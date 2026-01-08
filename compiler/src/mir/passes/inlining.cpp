@@ -1,4 +1,33 @@
-// Function Inlining Optimization Pass Implementation
+//! # Function Inlining Pass
+//!
+//! This pass replaces function calls with the callee's body.
+//!
+//! ## Inlining Decisions
+//!
+//! | Attribute       | Behavior                           |
+//! |-----------------|------------------------------------|
+//! | @inline         | Always inline (up to recursion)    |
+//! | @always_inline  | Always inline                      |
+//! | @noinline       | Never inline                       |
+//! | @never_inline   | Never inline                       |
+//! | (none)          | Heuristic-based decision           |
+//!
+//! ## Optimization Levels
+//!
+//! | Level | Threshold Multiplier |
+//! |-------|---------------------|
+//! | -O0   | No inlining         |
+//! | -O1   | 1x (conservative)   |
+//! | -O2   | 2x (moderate)       |
+//! | -O3   | 4x (aggressive)     |
+//!
+//! ## Inlining Process
+//!
+//! 1. Build call graph and function map
+//! 2. Analyze each call site for cost/benefit
+//! 3. Clone callee body with value remapping
+//! 4. Replace call with inlined code
+//! 5. Iterate until no more inlining possible
 
 #include "mir/passes/inlining.hpp"
 

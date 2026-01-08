@@ -1,7 +1,28 @@
-// MIR Builder - Control Flow Implementation
-//
-// This file contains functions for building control flow constructs:
-// if/else, loops, when (pattern matching), break/continue/return.
+//! # MIR Builder - Control Flow
+//!
+//! This file implements control flow to MIR conversion.
+//!
+//! ## Control Flow Constructs
+//!
+//! | Construct  | Blocks Created                     |
+//! |------------|------------------------------------|
+//! | `if/else`  | then_block, else_block, merge      |
+//! | `loop`     | header, body, exit                 |
+//! | `while`    | header (cond), body, exit          |
+//! | `for`      | header, body, exit (+ index alloc) |
+//! | `when`     | test_N, body_N per arm, merge      |
+//!
+//! ## Loop Context Stack
+//!
+//! The `loop_stack` tracks active loops for break/continue:
+//! - `header_block`: Jump target for continue
+//! - `exit_block`: Jump target for break
+//! - `break_value`: Optional value for break expressions
+//!
+//! ## Drop Handling
+//!
+//! Control flow exits (return, break, continue) emit drops
+//! for variables in scope before branching.
 
 #include "mir/mir_builder.hpp"
 

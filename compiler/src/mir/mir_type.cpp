@@ -1,4 +1,22 @@
-// MIR Type Implementation
+//! # MIR Type Implementation
+//!
+//! This file implements MIR type queries and constructors.
+//!
+//! ## Type Queries
+//!
+//! - `is_integer()`: Check if type is signed/unsigned integer
+//! - `is_signed()`: Check if integer type is signed
+//! - `is_float()`: Check if type is F32 or F64
+//! - `bit_width()`: Get bit width of numeric types
+//!
+//! ## Type Constructors
+//!
+//! Factory functions for creating MIR types:
+//! - `make_unit_type()`, `make_bool_type()`
+//! - `make_i8_type()` through `make_i64_type()`
+//! - `make_f32_type()`, `make_f64_type()`
+//! - `make_pointer_type()`, `make_array_type()`
+//! - `make_struct_type()`, `make_enum_type()`
 
 #include "mir/mir.hpp"
 

@@ -1,4 +1,28 @@
-// MIR Pretty Printer Implementation
+//! # MIR Pretty Printer
+//!
+//! This file implements human-readable MIR output for debugging.
+//!
+//! ## Output Format
+//!
+//! ```text
+//! ; MIR Module: main
+//!
+//! struct Point { x: I32, y: I32 }
+//!
+//! func add(a: I32, b: I32) -> I32 {
+//! bb0:
+//!     %0 = add %a, %b
+//!     return %0
+//! }
+//! ```
+//!
+//! ## Features
+//!
+//! - Struct and enum definitions with type parameters
+//! - Function signatures with parameter types
+//! - Basic blocks with predecessor comments
+//! - All instruction types and terminators
+//! - SSA values and type annotations
 
 #include "mir/mir.hpp"
 

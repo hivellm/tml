@@ -1,7 +1,23 @@
-// MIR Builder - Pattern Building Implementation
-//
-// This file contains functions for building pattern bindings and
-// destructuring patterns.
+//! # MIR Builder - Patterns
+//!
+//! This file implements pattern binding and destructuring.
+//!
+//! ## Supported Patterns
+//!
+//! | Pattern     | Example          | MIR Result                 |
+//! |-------------|------------------|----------------------------|
+//! | Identifier  | `x`              | Bind value to variable     |
+//! | Tuple       | `(a, b)`         | ExtractValue for each elem |
+//! | Struct      | `Point { x, y }` | ExtractValue for fields    |
+//! | Enum        | `Just(v)`        | ExtractValue for payload   |
+//! | Wildcard    | `_`              | Ignore value               |
+//! | Literal     | `42`             | No binding                 |
+//! | Or          | `A \| B`         | Use first alternative      |
+//!
+//! ## Nested Patterns
+//!
+//! Patterns are handled recursively, allowing arbitrary nesting
+//! like `(a, Point { x, y: (b, c) })`.
 
 #include "mir/mir_builder.hpp"
 

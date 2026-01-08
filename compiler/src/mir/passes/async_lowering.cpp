@@ -1,7 +1,41 @@
-// Async Lowering Pass Implementation
-//
-// Transforms async functions into state machines that can be suspended
-// and resumed at each await point.
+//! # Async Lowering Pass
+//!
+//! Transforms async functions into state machines for suspension/resume.
+//!
+//! ## State Machine Structure
+//!
+//! ```text
+//! struct FuncName_state {
+//!     _state: I32,        // Current state index
+//!     saved_local_1: T1,  // Locals live across await
+//!     saved_local_2: T2,
+//!     ...
+//! }
+//! ```
+//!
+//! ## Await Point Analysis
+//!
+//! For each `await` instruction:
+//! 1. Record block before/after suspension
+//! 2. Identify values live across the await
+//! 3. Add those values to saved locals
+//!
+//! ## Generated Poll Function
+//!
+//! ```text
+//! func poll(state: *FuncName_state) -> Poll[T] {
+//!     switch state._state {
+//!         0 => { /* initial code */ }
+//!         1 => { /* after first await */ }
+//!         ...
+//!     }
+//! }
+//! ```
+//!
+//! ## Return Types
+//!
+//! - `Poll::Ready(value)` - computation complete
+//! - `Poll::Pending` - needs to be polled again
 
 #include "mir/passes/async_lowering.hpp"
 

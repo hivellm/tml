@@ -1,8 +1,28 @@
-// Copy Propagation Implementation
-//
-// This pass identifies and propagates copies to eliminate unnecessary
-// value transfers. It's particularly useful after other optimizations
-// that may introduce trivial copies.
+//! # Copy Propagation Pass
+//!
+//! This pass replaces uses of copied values with the original value.
+//!
+//! ## Copy Detection
+//!
+//! | Pattern                    | Copy From |
+//! |----------------------------|-----------|
+//! | Single-incoming phi        | That value|
+//! | Phi with identical values  | That value|
+//! | Select with same branches  | That value|
+//!
+//! ## Algorithm
+//!
+//! 1. Find all copies in the function
+//! 2. Resolve transitive copies: if %2=%1 and %3=%2, then %3=%1
+//! 3. Replace all uses of copies with originals
+//! 4. Repeat until no changes (handles chains)
+//!
+//! ## Updated Locations
+//!
+//! Propagation updates:
+//! - Instruction operands (binary, unary, load, store, etc.)
+//! - Call arguments
+//! - Terminator operands (return value, condition, discriminant)
 
 #include "mir/passes/copy_propagation.hpp"
 

@@ -1,4 +1,28 @@
-// MIR Binary Reader Implementation
+//! # MIR Binary Reader
+//!
+//! This file reads MIR modules from the binary format.
+//!
+//! ## Reading Process
+//!
+//! 1. Verify magic number and version
+//! 2. Read module name
+//! 3. Read structs, enums, functions, constants
+//! 4. Reconstruct in-memory Module structure
+//!
+//! ## Error Handling
+//!
+//! - `has_error()`: Check if reading failed
+//! - `error()`: Get error message with context
+//!
+//! ## Version Compatibility
+//!
+//! - Major version mismatch: Error (incompatible format)
+//! - Minor version mismatch: OK (forward compatible)
+//!
+//! ## Type Reconstruction
+//!
+//! Types are rebuilt from their tag and data using factory functions
+//! like `make_struct_type()`, `make_enum_type()`, etc.
 
 #include "serializer_internal.hpp"
 

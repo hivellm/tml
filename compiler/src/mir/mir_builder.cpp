@@ -1,13 +1,22 @@
-// MIR Builder Implementation
-//
-// This is the main entry point for the MIR builder. The actual implementation
-// is split across multiple files in the builder/ subdirectory:
-//   - builder/types.cpp    - Type conversion functions
-//   - builder/expr.cpp     - Expression building functions
-//   - builder/stmt.cpp     - Statement and declaration building
-//   - builder/pattern.cpp  - Pattern matching and destructuring
-//   - builder/control.cpp  - Control flow (if, loops, when)
-//   - builder/helpers.cpp  - Helper methods (emit, constants, etc.)
+//! # MIR Builder - Main Entry Point
+//!
+//! This is the main entry point for the MIR builder. The actual implementation
+//! is split across multiple files in the builder/ subdirectory:
+//!
+//! | File              | Contents                             |
+//! |-------------------|--------------------------------------|
+//! | `builder/types.cpp`   | Type conversion functions        |
+//! | `builder/expr.cpp`    | Expression building functions    |
+//! | `builder/stmt.cpp`    | Statement and declaration building|
+//! | `builder/pattern.cpp` | Pattern matching and destructuring|
+//! | `builder/control.cpp` | Control flow (if, loops, when)   |
+//! | `builder/helpers.cpp` | Helper methods (emit, constants) |
+//!
+//! ## Build Process
+//!
+//! 1. Create `MirBuilder` with type environment
+//! 2. Call `build(ast_module)` to convert AST to MIR
+//! 3. Result is a fully-formed `mir::Module`
 
 #include "mir/mir_builder.hpp"
 

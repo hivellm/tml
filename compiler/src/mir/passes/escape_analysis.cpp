@@ -1,4 +1,29 @@
-// Escape Analysis Optimization Pass Implementation
+//! # Escape Analysis Pass
+//!
+//! This pass determines which allocations can be stack-promoted.
+//!
+//! ## Escape States
+//!
+//! | State        | Meaning                              |
+//! |--------------|--------------------------------------|
+//! | NoEscape     | Value stays within function          |
+//! | ArgEscape    | Value passed to called function      |
+//! | ReturnEscape | Value returned from function         |
+//! | GlobalEscape | Value stored to global/escaped ptr   |
+//!
+//! ## Stack Promotion
+//!
+//! Allocations with NoEscape can be converted from heap to stack:
+//! - `alloc(size)` → `alloca`
+//! - Eliminates heap allocation overhead
+//! - Automatic deallocation on function return
+//!
+//! ## Analysis Process
+//!
+//! 1. Initialize all values as NoEscape
+//! 2. Analyze stores, calls, returns for escapes
+//! 3. Propagate escape info through data flow
+//! 4. Mark non-escaping allocations as stack-promotable
 
 #include "mir/passes/escape_analysis.hpp"
 

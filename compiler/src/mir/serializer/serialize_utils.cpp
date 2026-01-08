@@ -1,4 +1,31 @@
-// MIR Serialization Convenience Functions
+//! # MIR Serialization Utilities
+//!
+//! Convenience functions for serializing/deserializing MIR modules.
+//!
+//! ## In-Memory Serialization
+//!
+//! ```cpp
+//! auto bytes = serialize_binary(module);
+//! auto module = deserialize_binary(bytes);
+//!
+//! auto text = serialize_text(module);
+//! auto module = deserialize_text(text);
+//! ```
+//!
+//! ## File I/O
+//!
+//! ```cpp
+//! write_mir_file(module, "output.mir", binary=false);
+//! write_mir_file(module, "output.mirb", binary=true);
+//!
+//! auto module = read_mir_file("input.mir");  // auto-detects format
+//! ```
+//!
+//! ## Format Detection
+//!
+//! `read_mir_file()` checks for magic number to determine format:
+//! - Magic present → Binary format
+//! - No magic → Text format
 
 #include "serializer_internal.hpp"
 

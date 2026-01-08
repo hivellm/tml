@@ -1,4 +1,31 @@
-// Dead Code Elimination Optimization Pass Implementation
+//! # Dead Code Elimination (DCE) Pass
+//!
+//! This pass removes instructions whose results are never used.
+//!
+//! ## Algorithm
+//!
+//! 1. Find instructions with unused results
+//! 2. Check if instruction has side effects
+//! 3. Remove dead instructions
+//! 4. Repeat until no changes (fixed-point)
+//!
+//! ## Pure Functions
+//!
+//! Calls to known pure functions can be eliminated if unused:
+//! - Math: abs, sqrt, sin, cos, floor, ceil, etc.
+//! - String: len, contains, trim, parse_int, etc.
+//! - Collection: get, first, last, capacity
+//! - Conversion: to_string, to_i32, to_f64, etc.
+//!
+//! ## Non-Removable Instructions
+//!
+//! | Instruction  | Reason                      |
+//! |--------------|-----------------------------|
+//! | Store        | Memory side effect          |
+//! | Call         | Unknown side effects        |
+//! | MethodCall   | Unknown side effects        |
+//!
+//! Pure calls can still be removed if their result is unused.
 
 #include "mir/passes/dead_code_elimination.hpp"
 
