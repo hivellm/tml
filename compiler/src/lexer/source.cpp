@@ -1,3 +1,25 @@
+//! # Source File Implementation
+//!
+//! This file implements source file loading and location tracking.
+//!
+//! ## Line Index
+//!
+//! On construction, `build_line_index()` scans the content and records
+//! the byte offset of each line start. This enables O(log n) lookup
+//! of line numbers from byte offsets using binary search.
+//!
+//! ## Location Lookup
+//!
+//! `location(offset)` converts a byte offset to line/column:
+//! 1. Binary search `line_offsets_` to find line number
+//! 2. Calculate column as `offset - line_start`
+//! 3. Return 1-indexed line and column
+//!
+//! ## File Loading
+//!
+//! `from_file()` reads the entire file into memory. This is efficient
+//! for typical source files and simplifies the lexer implementation.
+
 #include "lexer/source.hpp"
 
 #include <algorithm>

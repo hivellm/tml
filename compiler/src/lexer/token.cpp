@@ -1,3 +1,23 @@
+//! # Token Utilities
+//!
+//! This file implements token utility functions.
+//!
+//! ## Functions
+//!
+//! - `token_kind_to_string()`: Convert token kind to display string
+//! - `is_keyword()`: Check if token is a keyword
+//! - `is_literal()`: Check if token is a literal
+//! - `is_operator()`: Check if token is an operator
+//!
+//! ## Token Value Accessors
+//!
+//! Type-safe accessors for literal values:
+//! - `int_value()`: Get `IntValue` from `IntLiteral`
+//! - `float_value()`: Get `FloatValue` from `FloatLiteral`
+//! - `string_value()`: Get `StringValue` from `StringLiteral`
+//! - `char_value()`: Get `CharValue` from `CharLiteral`
+//! - `bool_value()`: Get `bool` from `BoolLiteral`
+
 #include "lexer/token.hpp"
 
 #include <cassert>

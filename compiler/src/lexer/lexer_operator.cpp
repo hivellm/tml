@@ -1,3 +1,36 @@
+//! # Lexer - Operators
+//!
+//! This file implements operator and punctuation lexing.
+//!
+//! ## Single-Character Tokens
+//!
+//! `( ) [ ] { } , ; ~ @`
+//!
+//! ## Multi-Character Operators
+//!
+//! | Operator | Variants                |
+//! |----------|-------------------------|
+//! | `+`      | `++`, `+=`              |
+//! | `-`      | `--`, `-=`, `->`        |
+//! | `*`      | `**`, `*=`              |
+//! | `/`      | `/=`                    |
+//! | `%`      | `%=`                    |
+//! | `=`      | `==`, `=>`              |
+//! | `!`      | `!=`                    |
+//! | `<`      | `<=`, `<<`, `<<=`       |
+//! | `>`      | `>=`, `>>`, `>>=`       |
+//! | `&`      | `&&`, `&=`              |
+//! | `\|`     | `\|\|`, `\|=`           |
+//! | `^`      | `^=`                    |
+//! | `.`      | `..`                    |
+//! | `:`      | `::`                    |
+//!
+//! ## Interpolation Support
+//!
+//! When `}` is encountered inside an interpolated string (tracked by
+//! `interp_depth_`), the lexer continues lexing the string instead of
+//! returning a `RBrace` token.
+
 #include "lexer/lexer.hpp"
 
 namespace tml::lexer {

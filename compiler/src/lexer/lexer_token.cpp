@@ -1,3 +1,25 @@
+//! # Lexer - Token Dispatch
+//!
+//! This file implements the main `next_token()` entry point.
+//!
+//! ## Token Dispatch Order
+//!
+//! 1. Skip whitespace (spaces, tabs, carriage returns)
+//! 2. Return `Eof` if at end of input
+//! 3. Return `Newline` for significant newlines
+//! 4. Check for raw strings (`r"..."`)
+//! 5. Lex identifiers and keywords
+//! 6. Lex numbers
+//! 7. Lex strings
+//! 8. Lex characters
+//! 9. Lex operators and delimiters
+//!
+//! ## Significant Newlines
+//!
+//! Unlike many languages, TML preserves newlines as tokens for
+//! statement separation (similar to Go or Python without explicit
+//! semicolons in most cases).
+
 #include "lexer/lexer.hpp"
 
 namespace tml::lexer {

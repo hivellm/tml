@@ -1,3 +1,19 @@
+//! # Lexer - Identifiers
+//!
+//! This file implements identifier and keyword lexing.
+//!
+//! ## Identifier Rules
+//!
+//! - Start with letter (a-z, A-Z) or underscore
+//! - Continue with letters, digits, or underscores
+//! - Unicode letters supported for internationalization
+//!
+//! ## Keyword Lookup
+//!
+//! After lexing an identifier, it's checked against the keyword table.
+//! If found, the token kind is set to the keyword. Boolean literals
+//! (`true`, `false`) are special-cased to set their value.
+
 #include "lexer/lexer.hpp"
 
 #include <unordered_map>

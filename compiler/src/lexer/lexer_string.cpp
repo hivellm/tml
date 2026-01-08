@@ -1,3 +1,36 @@
+//! # Lexer - Strings
+//!
+//! This file implements string and character literal lexing.
+//!
+//! ## String Types
+//!
+//! | Type         | Syntax        | Description                |
+//! |--------------|---------------|----------------------------|
+//! | Regular      | `"hello"`     | Escape sequences processed |
+//! | Raw          | `r"hello"`    | No escape processing       |
+//! | Interpolated | `"Hi {name}"` | Embedded expressions       |
+//!
+//! ## Escape Sequences
+//!
+//! | Escape | Character              |
+//! |--------|------------------------|
+//! | `\n`   | Newline                |
+//! | `\t`   | Tab                    |
+//! | `\r`   | Carriage return        |
+//! | `\\`   | Backslash              |
+//! | `\"`   | Double quote           |
+//! | `\'`   | Single quote           |
+//! | `\0`   | Null                   |
+//! | `\xNN` | Hex byte               |
+//! | `\u{N}`| Unicode codepoint      |
+//!
+//! ## Interpolation
+//!
+//! `"Hello {name}!"` produces:
+//! 1. `InterpStringStart` ("Hello ")
+//! 2. Expression tokens (name)
+//! 3. `InterpStringEnd` ("!")
+
 #include "lexer/lexer.hpp"
 
 #include <charconv>

@@ -1,3 +1,22 @@
+//! # Lexer - Utilities
+//!
+//! This file implements lexer utility functions.
+//!
+//! ## Functions
+//!
+//! - `tokenize()`: Batch tokenize entire source
+//! - `is_identifier_start()`: Check if char can start identifier
+//! - `is_identifier_continue()`: Check if char can continue identifier
+//! - `decode_utf8()`: Decode UTF-8 codepoint from source
+//! - `utf8_char_length()`: Get byte length of UTF-8 character
+//!
+//! ## Unicode Support
+//!
+//! TML identifiers support Unicode letters beyond ASCII:
+//! - Latin-1 Supplement (à, é, ñ, etc.)
+//! - Extended Unicode for international identifiers
+//! - Combining diacritical marks
+
 #include "lexer/lexer.hpp"
 
 #include <algorithm>

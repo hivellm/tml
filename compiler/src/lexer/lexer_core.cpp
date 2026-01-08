@@ -1,3 +1,22 @@
+//! # Lexer Core
+//!
+//! This file implements core lexer functionality including:
+//!
+//! - **Keyword table**: Maps identifier text to token kinds
+//! - **Character access**: `peek()`, `advance()`, `is_at_end()`
+//! - **Token creation**: `make_token()`, `make_error_token()`
+//! - **Comment handling**: Line (`//`) and block (`/* */`) comments
+//!
+//! ## Keyword Categories
+//!
+//! | Category     | Keywords                                    |
+//! |--------------|---------------------------------------------|
+//! | Declarations | `func`, `type`, `behavior`, `impl`, `mod`   |
+//! | Variables    | `let`, `var`, `const`                       |
+//! | Control flow | `if`, `else`, `when`, `loop`, `for`, `while`|
+//! | Logical      | `and`, `or`, `not`                          |
+//! | Memory       | `mut`, `ref`                                |
+
 #include "lexer/lexer.hpp"
 
 #include <algorithm>

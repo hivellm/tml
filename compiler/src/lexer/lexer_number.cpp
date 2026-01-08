@@ -1,3 +1,27 @@
+//! # Lexer - Numbers
+//!
+//! This file implements numeric literal lexing.
+//!
+//! ## Number Formats
+//!
+//! | Format     | Prefix | Example      | Base |
+//! |------------|--------|--------------|------|
+//! | Decimal    | (none) | `42`, `3.14` | 10   |
+//! | Hexadecimal| `0x`   | `0xFF`       | 16   |
+//! | Binary     | `0b`   | `0b1010`     | 2    |
+//! | Octal      | `0o`   | `0o755`      | 8    |
+//!
+//! ## Features
+//!
+//! - **Numeric separators**: `1_000_000` for readability
+//! - **Float literals**: `3.14`, `1e10`, `2.5e-3`
+//! - **Type suffixes**: `42i32`, `3.14f64`
+//!
+//! ## Valid Suffixes
+//!
+//! - Integers: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`..`u128`
+//! - Floats: `f32`, `f64`
+
 #include "lexer/lexer.hpp"
 
 #include <cerrno>
