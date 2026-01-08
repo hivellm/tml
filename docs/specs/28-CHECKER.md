@@ -1,4 +1,4 @@
-# 28. Type and Effect Checker
+# TML v1.0 — Type Checker
 
 The type checker validates types and effects. Borrow checking is a separate pass.
 
@@ -20,7 +20,7 @@ Source → Parser → AST
               IR Generation
 ```
 
-## 1.1 Implementation Structure
+### 1.1 Implementation Structure
 
 The type checker is organized into modular files for maintainability:
 
@@ -95,7 +95,7 @@ packages/compiler/src/types/
 └── module.cpp                  # Module handling
 ```
 
-### Key Features
+### 1.2 Key Features
 
 - **Similar Name Suggestions**: Uses Levenshtein distance to suggest corrections for typos
 - **Where Clause Enforcement**: Validates type constraints at call sites

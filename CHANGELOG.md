@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **High-level Intermediate Representation (HIR)** (2026-01-08) - New compiler IR layer between type-checked AST and MIR
+  - Type-resolved AST representation using semantic `types::TypePtr`
+  - Modular architecture with 9 header files and 9 source files
+  - HIR patterns: wildcard, binding, literal, tuple, struct, enum, or, range, array
+  - HIR expressions: 30+ expression types including calls, closures, control flow
+  - HIR statements: let declarations and expression statements
+  - HIR declarations: functions, structs, enums, impls, behaviors, constants
+  - `HirBuilder` class for AST to HIR lowering
+  - `HirPrinter` for debug output with color support
+  - `MonomorphizationCache` for tracking generic instantiations
+  - Closure capture analysis framework
+  - Factory functions for clean HIR node construction
+  - New RFC: [RFC-0013-HIR.md](docs/rfcs/RFC-0013-HIR.md)
+  - Files added: `compiler/include/hir/*.hpp`, `compiler/src/hir/*.cpp`
+  - CMakeLists.txt updated with `tml_hir` library
+
 - **Float Negation Intrinsics** (2026-01-08) - Added `fneg_f32` and `fneg_f64` builtin functions
   - Emit LLVM `fneg` instruction directly for float negation
   - Avoids type coercion issues with `0.0 - this` pattern

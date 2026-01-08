@@ -1,4 +1,4 @@
-# 26. Canonical Formatter
+# TML v1.0 — Canonical Formatter
 
 The TML formatter produces deterministic, canonical output. Every valid TML program has exactly one formatted form.
 

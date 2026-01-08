@@ -1,4 +1,4 @@
-# 25. Custom Decorators
+# TML v1.0 — Decorators
 
 TML provides native support for user-defined decorators as first-class language constructs.
 

@@ -1,6 +1,6 @@
-# 19. Package Manifest (tml.toml)
+# TML v1.0 — Package Manifest
 
-## Overview
+## 1. Overview
 
 The `tml.toml` file is the package manifest for TML projects. It defines:
 - Package metadata (name, version, authors)
@@ -10,7 +10,7 @@ The `tml.toml` file is the package manifest for TML projects. It defines:
 
 Similar to `Cargo.toml` for Rust or `package.json` for Node.js, `tml.toml` provides a declarative way to configure TML projects without command-line flags.
 
-## File Location
+## 2. File Location
 
 The `tml.toml` file must be in the project root:
 
@@ -23,7 +23,7 @@ my_project/
     └── debug/
 ```
 
-## Basic Structure
+## 3. Basic Structure
 
 ```toml
 [package]
@@ -50,9 +50,9 @@ emit-ir = false
 emit-header = false
 ```
 
-## Section Reference
+## 4. Section Reference
 
-### `[package]` - Required
+### 4.1 `[package]` - Required
 
 Defines package metadata.
 
@@ -74,7 +74,7 @@ repository = "https://github.com/user/repo"  # Optional
 - `version`: Must follow Semantic Versioning (MAJOR.MINOR.PATCH)
 - `edition`: Currently only "2024" is supported
 
-### `[lib]` - Optional
+### 4.2 `[lib]` - Optional
 
 Configures library output.
 
@@ -102,7 +102,7 @@ crate-type = ["rlib", "lib", "dylib"]  # Build all three formats
 emit-header = true  # Also generate mylib.h for C FFI
 ```
 
-### `[[bin]]` - Optional (Multiple Allowed)
+### 4.3 `[[bin]]` - Optional (Multiple Allowed)
 
 Configures binary executables. You can have multiple `[[bin]]` sections for different executables.
 
@@ -120,7 +120,7 @@ path = "src/tools/helper.tml"
 
 **Note:** Double brackets `[[bin]]` indicate an array - you can have multiple binaries.
 
-### `[dependencies]` - Optional
+### 4.4 `[dependencies]` - Optional
 
 Declares dependencies on other TML packages.
 
@@ -155,7 +155,7 @@ remote_lib = { git = "https://github.com/user/lib", tag = "v1.0.0" }
 - `">=1.0.0"`: Greater than or equal to
 - `"<2.0.0"`: Less than
 
-### `[build]` - Optional
+### 4.5 `[build]` - Optional
 
 Build configuration settings.
 
@@ -175,7 +175,7 @@ parallel = true                # Parallel compilation, default: true
 - `2`: Moderate optimizations (-O2) **recommended for release**
 - `3`: Aggressive optimizations (-O3)
 
-### `[profile.release]` and `[profile.debug]` - Optional
+### 4.6 `[profile.release]` and `[profile.debug]` - Optional
 
 Profile-specific build settings. These override `[build]` settings for specific profiles.
 
@@ -195,7 +195,7 @@ tml build              # Uses debug profile
 tml build --release    # Uses release profile
 ```
 
-## Complete Example
+## 5. Complete Example
 
 ```toml
 # tml.toml - Complete example
@@ -236,9 +236,9 @@ verbose = false
 optimization-level = 2
 ```
 
-## CLI Integration
+## 6. CLI Integration
 
-### Reading Manifest
+### 6.1 Reading Manifest
 
 When running `tml build`, the compiler automatically reads `tml.toml` from the current directory.
 
@@ -248,7 +248,7 @@ When running `tml build`, the compiler automatically reads `tml.toml` from the c
 3. Apply settings to build
 4. Command-line flags override manifest settings
 
-### Overriding Manifest
+### 6.2 Overriding Manifest
 
 Command-line flags always override manifest settings:
 
@@ -258,7 +258,7 @@ Command-line flags always override manifest settings:
 tml build --release
 ```
 
-### `tml init` Command
+### 6.3 `tml init` Command
 
 Generate a new `tml.toml` manifest:
 
@@ -285,9 +285,9 @@ tml init --name my_lib         # Specify name
 tml init --bin src/main.tml    # Create binary project
 ```
 
-## Dependency Resolution
+## 7. Dependency Resolution
 
-### Resolution Algorithm
+### 7.1 Resolution Algorithm
 
 1. **Read manifest**: Parse `tml.toml` and extract dependencies
 2. **Locate dependencies**:
@@ -297,7 +297,7 @@ tml init --bin src/main.tml    # Create binary project
 4. **Build order**: Topologically sort dependencies
 5. **Build**: Compile dependencies first, then current package
 
-### Example Dependency Tree
+### 7.2 Example Dependency Tree
 
 ```
 web_server (current package)
@@ -312,7 +312,7 @@ web_server (current package)
 - Resolve to single version: `string_utils 1.0.2` (latest compatible)
 - Build order: `string_utils` → `http_parser`, `json` → `web_server`
 
-### Lock File (Future)
+### 7.3 Lock File (Future)
 
 For reproducible builds, TML will generate a `tml.lock` file:
 
@@ -343,7 +343,7 @@ The lock file ensures that:
 - CI builds are reproducible
 - Version upgrades are explicit (`tml update`)
 
-## Workspace Support (Future)
+## 8. Workspace Support (Future)
 
 For multi-package projects:
 
@@ -376,7 +376,7 @@ project/
     └── src/
 ```
 
-## Manifest Validation
+## 9. Manifest Validation
 
 The compiler validates `tml.toml` on every build:
 
@@ -405,16 +405,16 @@ error: invalid version `1.x.0` in tml.toml
   │           ^^^^^^^ expected semver format (MAJOR.MINOR.PATCH)
 ```
 
-## Implementation Files
+## 10. Implementation Files
 
-### Core Implementation
+### 10.1 Core Implementation
 
 - **`src/cli/build_config.hpp`**: Manifest data structures
 - **`src/cli/build_config.cpp`**: TOML parsing and validation
 - **`src/cli/cmd_init.cpp`**: `tml init` command
 - **`src/cli/dependency_resolver.hpp`**: Dependency resolution (future)
 
-### Data Structures
+### 10.2 Data Structures
 
 ```cpp
 namespace tml::cli {
@@ -481,9 +481,9 @@ struct Manifest {
 } // namespace tml::cli
 ```
 
-## Migration Guide
+## 11. Migration Guide
 
-### From Command-Line Flags to Manifest
+### 11.1 From Command-Line Flags to Manifest
 
 **Before (all command-line):**
 
@@ -508,15 +508,15 @@ emit-header = true
 tml build  # Much simpler!
 ```
 
-### Gradual Adoption
+### 11.2 Gradual Adoption
 
 - `tml.toml` is **optional** - TML still works without it
 - Command-line flags always override manifest
 - Start with minimal manifest, add sections as needed
 
-## Future Extensions
+## 12. Future Extensions
 
-### Package Registry
+### 12.1 Package Registry
 
 Future support for a centralized package registry:
 
@@ -532,7 +532,7 @@ tml publish        # Publish package to registry
 tml search http    # Search for packages
 ```
 
-### Build Scripts
+### 12.2 Build Scripts
 
 Custom build steps:
 
@@ -541,7 +541,7 @@ Custom build steps:
 script = "scripts/build.tml"
 ```
 
-### Feature Flags
+### 12.3 Feature Flags
 
 Conditional compilation:
 
@@ -558,7 +558,7 @@ Usage:
 tml build --features networking
 ```
 
-## References
+## 13. References
 
 - TOML specification: https://toml.io
 - Cargo manifest format: https://doc.rust-lang.org/cargo/reference/manifest.html

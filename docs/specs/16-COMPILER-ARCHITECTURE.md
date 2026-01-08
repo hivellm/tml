@@ -93,12 +93,12 @@ Source (.tml)
     │
     ▼
 ┌─────────────┐
-│  Lowering   │  → TML-IR (canonical IR)
+│     HIR     │  → High-level IR (type-resolved, desugared)
 └─────────────┘
     │
     ▼
 ┌─────────────┐
-│    MIR      │  → Mid-level IR (control flow)
+│    MIR      │  → Mid-level IR (SSA form, control flow)
 └─────────────┘
     │
     ▼
@@ -220,21 +220,53 @@ src/types/
 // 4. Verify capabilities match effects
 ```
 
-#### Lowering to IR
+#### HIR Generation
 ```cpp
-// Input: TAST
-// Output: TML-IR (S-expression or JSON)
+// Input: TAST (typed AST)
+// Output: HIR (High-level IR)
 
-// Transformations:
-// 1. Desugar syntax (method calls, operators)
-// 2. Normalize (field ordering, expression forms)
-// 3. Assign stable IDs
-// 4. Emit canonical representation
+// Purpose:
+// 1. Type-resolved representation using semantic types::TypePtr
+// 2. Desugar syntax (var -> let mut, method desugaring)
+// 3. Monomorphization of generic types/functions
+// 4. Closure capture analysis
+
+// Structure:
+// - HirModule: Top-level container
+// - HirFunction, HirStruct, HirEnum, HirImpl, HirBehavior
+// - HirExpr: 30+ expression types (calls, closures, control flow)
+// - HirStmt: let declarations, expression statements
+// - HirPattern: wildcard, binding, literal, tuple, struct, enum, or, range, array
+```
+
+**Implementation Structure** (modular design for maintainability):
+```
+include/hir/                 # Headers
+├── hir.hpp                  # Main header (includes all)
+├── hir_id.hpp               # ID types and generator
+├── hir_pattern.hpp          # Pattern definitions
+├── hir_expr.hpp             # Expression definitions
+├── hir_stmt.hpp             # Statement definitions
+├── hir_decl.hpp             # Declaration definitions
+├── hir_module.hpp           # Module container
+├── hir_printer.hpp          # Pretty printer
+└── hir_builder.hpp          # Builder class
+
+src/hir/                     # Implementation
+├── hir_pattern.cpp          # Pattern factory functions
+├── hir_expr.cpp             # Expression factory functions
+├── hir_stmt.cpp             # Statement factory functions
+├── hir_module.cpp           # Module lookup methods
+├── hir_printer.cpp          # Debug output
+├── hir_builder.cpp          # Core builder
+├── hir_builder_expr.cpp     # Expression lowering
+├── hir_builder_stmt.cpp     # Statement lowering
+└── hir_builder_pattern.cpp  # Pattern lowering
 ```
 
 #### MIR Generation
 ```cpp
-// Input: TML-IR
+// Input: HIR (High-level IR)
 // Output: MIR (control flow graph)
 
 // Structure:

@@ -150,6 +150,21 @@ add_library(tml_ir STATIC
 target_link_libraries(tml_ir PUBLIC tml_borrow)
 target_include_directories(tml_ir PUBLIC include src)
 
+# HIR library (High-level IR for type-resolved, desugared AST)
+add_library(tml_hir STATIC
+    src/hir/hir_pattern.cpp
+    src/hir/hir_expr.cpp
+    src/hir/hir_stmt.cpp
+    src/hir/hir_module.cpp
+    src/hir/hir_printer.cpp
+    src/hir/hir_builder.cpp
+    src/hir/hir_builder_expr.cpp
+    src/hir/hir_builder_stmt.cpp
+    src/hir/hir_builder_pattern.cpp
+)
+target_link_libraries(tml_hir PUBLIC tml_borrow)
+target_include_directories(tml_hir PUBLIC include src)
+
 # MIR library (Mid-level IR in SSA form for optimization)
 add_library(tml_mir STATIC
     src/mir/mir_type.cpp
@@ -182,7 +197,7 @@ add_library(tml_mir STATIC
     src/mir/passes/inlining.cpp
     src/mir/passes/async_lowering.cpp
 )
-target_link_libraries(tml_mir PUBLIC tml_ir)
+target_link_libraries(tml_mir PUBLIC tml_hir)
 target_include_directories(tml_mir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)
@@ -332,6 +347,7 @@ if(TML_BUILD_TESTS)
         tests/types_test.cpp
         tests/borrow_test.cpp
         tests/ir_test.cpp
+        tests/hir_test.cpp
         tests/mir_test.cpp
         tests/mir_optimization_bench.cpp
         tests/format_test.cpp

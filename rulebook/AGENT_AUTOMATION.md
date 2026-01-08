@@ -65,33 +65,6 @@ If `openspec/` directory exists:
 # Update README.md (if public API changed)
 ```
 
-**⚠️ CRITICAL FOR TML COMPILER WORK:**
-
-If working on the TML compiler (packages/compiler, parser, type checker, codegen, etc.):
-
-**YOU MUST follow [rulebook/DOCUMENTATION.md](./DOCUMENTATION.md) STRICTLY**
-
-This is **NON-NEGOTIABLE**. Every compiler change requires documentation updates:
-
-✅ **MANDATORY Documentation Updates:**
-- `docs/03-GRAMMAR.md` - if syntax changed
-- `docs/02-LEXICAL.md` - if tokens/keywords added
-- `docs/rfcs/` - mark RFCs as implemented
-- `docs/user/appendix-03-builtins.md` - if builtins added
-- `docs/specs/` - if semantics/types/IR changed
-
-**Checklist before committing compiler changes:**
-- [ ] Grammar updated with new syntax?
-- [ ] Tokens/keywords added to LEXICAL.md?
-- [ ] RFC (if exists) marked as implemented?
-- [ ] User docs have examples?
-- [ ] Builtins documented?
-- [ ] Specs reflect semantic changes?
-
-**Rule of Gold:** If not documented, it's not implemented.
-
-See [DOCUMENTATION.md](./DOCUMENTATION.md) for complete guidelines.
-
 ### Step 5: Git Commit
 
 **ONLY after ALL above steps pass:**

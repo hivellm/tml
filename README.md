@@ -400,9 +400,13 @@ scripts\build.bat --clean      # Clean build
 tml/
 ├── compiler/           # C++ compiler implementation
 │   ├── src/           # Source files
-│   │   ├── codegen/   # LLVM IR generation
+│   │   ├── lexer/     # Tokenizer
 │   │   ├── parser/    # LL(1) parser
 │   │   ├── types/     # Type checker
+│   │   ├── borrow/    # Borrow checker
+│   │   ├── hir/       # High-level IR (type-resolved, desugared)
+│   │   ├── mir/       # Mid-level IR (SSA form)
+│   │   ├── codegen/   # LLVM IR generation
 │   │   └── cli/       # Command-line interface
 │   └── include/       # Headers
 ├── lib/               # TML standard libraries
@@ -411,6 +415,22 @@ tml/
 ├── docs/              # Language specification
 └── scripts/           # Build scripts
 ```
+
+## Compiler Pipeline
+
+```
+Source (.tml) → Lexer → Parser → Type Check → Borrow Check → HIR → MIR → LLVM IR → Executable
+```
+
+| Stage | Description |
+|-------|-------------|
+| Lexer | Tokenizes source into token stream |
+| Parser | Builds AST using LL(1) grammar |
+| Type Check | Type inference and generic resolution |
+| Borrow Check | Ownership and lifetime verification |
+| **HIR** | High-level IR: type-resolved, desugared AST |
+| **MIR** | Mid-level IR: SSA form for optimization |
+| LLVM IR | Target-independent code generation |
 
 ## Current Status
 
@@ -422,6 +442,8 @@ tml/
 | Parser (LL(1)) | Complete |
 | Type Checker | Complete (generics, closures, where clauses) |
 | Borrow Checker | Complete (integrated with Rust-style diagnostics) |
+| HIR | Complete (type-resolved, desugared AST) |
+| MIR | Complete (SSA form, optimization passes) |
 | LLVM Backend | Complete (via text IR) |
 | Arrays | Complete (fixed-size with full method suite) |
 | Slices | Complete (Slice[T], MutSlice[T] fat pointers) |
@@ -436,6 +458,7 @@ tml/
 
 ### Recent Features (Jan 2026)
 
+- **HIR (High-level IR)** - New compiler IR layer between type-checked AST and MIR for type-resolved desugaring and monomorphization
 - **Core Library Tests** - Comprehensive tests for iter, slice, num, range, async_iter, marker modules
 - **Numeric Properties** - Zero, One, Bounded behaviors with full test coverage
 - **Range Types** - Range, RangeFrom, RangeTo, RangeFull types with iterator support

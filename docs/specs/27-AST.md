@@ -1,4 +1,4 @@
-# 27. AST Structure
+# TML v1.0 — AST Structure
 
 The parser produces an Abstract Syntax Tree with source spans for every node.
 
