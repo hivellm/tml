@@ -1,3 +1,39 @@
+//! # Build Configuration and Manifest Parsing
+//!
+//! This file implements tml.toml manifest parsing and validation.
+//!
+//! ## Manifest Structure
+//!
+//! ```toml
+//! [package]
+//! name = "myproject"
+//! version = "1.0.0"
+//! edition = "2024"
+//!
+//! [lib]
+//! path = "src/lib.tml"
+//! crate-type = ["rlib"]
+//!
+//! [[bin]]
+//! name = "myapp"
+//! path = "src/main.tml"
+//!
+//! [dependencies]
+//! mylib = { path = "../mylib" }
+//!
+//! [build]
+//! optimization-level = 3
+//! ```
+//!
+//! ## TOML Parser
+//!
+//! `SimpleTomlParser` is a lightweight TOML parser supporting:
+//! - Section headers: `[package]`, `[[bin]]`
+//! - Key-value pairs: `name = "value"`
+//! - String arrays: `["item1", "item2"]`
+//! - Inline tables: `{ key = "value" }`
+//! - Comments: `# comment`
+
 #include "build_config.hpp"
 
 #include <algorithm>

@@ -1,3 +1,32 @@
+//! # Package Management Commands
+//!
+//! This file implements package management CLI commands.
+//!
+//! ## Commands
+//!
+//! | Command       | Status     | Description                    |
+//! |---------------|------------|--------------------------------|
+//! | `tml deps`    | Implemented| List project dependencies      |
+//! | `tml remove`  | Implemented| Remove dependency from tml.toml|
+//! | `tml add`     | Pending    | Add package (no registry yet)  |
+//! | `tml update`  | Pending    | Update packages                |
+//! | `tml publish` | Pending    | Publish to registry            |
+//!
+//! ## Dependency Display
+//!
+//! ```text
+//! $ tml deps
+//! myproject v1.0.0
+//!   core ^0.1.0
+//!   utils (path: ../utils)
+//!
+//! $ tml deps --tree
+//! myproject v1.0.0
+//!   |-- core v0.1.0
+//!   |   |-- alloc v0.1.0
+//!   |-- utils v1.0.0
+//! ```
+
 #include "cmd_pkg.hpp"
 
 #include "build_config.hpp"

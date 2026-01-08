@@ -1,3 +1,30 @@
+//! # Profiled Build and Run
+//!
+//! This file implements the profiled version of `tml run` with phase timing.
+//!
+//! ## Compilation Phases
+//!
+//! | Phase          | Description                           |
+//! |----------------|---------------------------------------|
+//! | read_file      | Read source file from disk            |
+//! | lexer          | Tokenize source code                  |
+//! | parser         | Parse tokens to AST                   |
+//! | type_check     | Type checking and inference           |
+//! | borrow_check   | Ownership and lifetime analysis       |
+//! | codegen        | Generate LLVM IR                      |
+//! | setup          | Prepare cache paths and find clang    |
+//! | clang_compile  | Compile IR to object file             |
+//! | link           | Link object files to executable       |
+//! | exe_copy       | Copy cached exe to output location    |
+//! | exec           | Execute the program                   |
+//! | cleanup        | Remove temporary files                |
+//!
+//! ## Caching
+//!
+//! Both object files and final executables are cached:
+//! - Object cache key: content hash of source
+//! - Exe cache key: hash of content + all linked objects
+
 #include "builder_internal.hpp"
 
 namespace tml::cli {

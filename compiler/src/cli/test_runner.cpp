@@ -1,3 +1,42 @@
+//! # Test Runner Infrastructure
+//!
+//! This file provides the core infrastructure for running TML tests in-process.
+//!
+//! ## In-Process Testing
+//!
+//! Tests are compiled to shared libraries (DLLs) and loaded into the test process:
+//!
+//! ```text
+//! test.tml → LLVM IR → .obj → .dll → dlopen() → tml_test_entry()
+//! ```
+//!
+//! This avoids subprocess overhead and enables faster test execution.
+//!
+//! ## Suite Mode
+//!
+//! Multiple tests can be compiled into a single DLL per suite:
+//!
+//! ```text
+//! suite.dll
+//!   ├─ tml_test_0() → test_foo.tml
+//!   ├─ tml_test_1() → test_bar.tml
+//!   └─ tml_test_2() → test_baz.tml
+//! ```
+//!
+//! ## Key Functions
+//!
+//! | Function                          | Purpose                              |
+//! |-----------------------------------|--------------------------------------|
+//! | `compile_test_to_shared_lib()`    | Compile single test to DLL           |
+//! | `run_test_in_process()`           | Execute DLL's tml_test_entry()       |
+//! | `compile_test_suite()`            | Compile multiple tests to one DLL    |
+//! | `run_suite_test()`                | Execute indexed test from suite DLL  |
+//!
+//! ## Output Capture
+//!
+//! `OutputCapture` redirects stdout/stderr to a temp file during test execution,
+//! then restores original file descriptors and reads captured output.
+
 #include "test_runner.hpp"
 
 #include "builder/builder_internal.hpp"

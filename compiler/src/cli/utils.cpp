@@ -1,3 +1,15 @@
+//! # CLI Utility Functions
+//!
+//! This file contains shared utility functions used across the CLI.
+//!
+//! ## Contents
+//!
+//! - **Path Utilities**: `to_forward_slashes()` for cross-platform paths
+//! - **File I/O**: `read_file()` for loading source files
+//! - **Help Text**: `print_usage()`, `print_version()`
+//! - **Clang Discovery**: `find_clang()` to locate the LLVM toolchain
+//! - **Runtime Discovery**: `find_runtime()` for linking C runtime
+
 #include "utils.hpp"
 
 #include "common.hpp"
@@ -8,6 +20,7 @@
 
 namespace tml::cli {
 
+/// Converts backslashes to forward slashes for cross-platform paths.
 std::string to_forward_slashes(const std::string& path) {
     std::string result = path;
     for (char& c : result) {

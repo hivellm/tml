@@ -1,5 +1,31 @@
-// Test command - suite-based test execution
-// Compiles multiple test files into single DLLs per suite for faster loading
+//! # Suite-Based Test Execution
+//!
+//! This file implements the optimized suite mode for running tests.
+//!
+//! ## How Suite Mode Works
+//!
+//! 1. Group test files by directory (compiler/tests/runtime → runtime suite)
+//! 2. Compile all tests in a suite to a single DLL
+//! 3. Load DLL once, run each test function in sequence
+//! 4. Clean up and report results
+//!
+//! ## Performance Benefits
+//!
+//! ```text
+//! Individual mode: 100 tests × (compile + load DLL) = slow
+//! Suite mode:      5 suites × compile + 100 × run = fast
+//! ```
+//!
+//! DLL loading is expensive (~20ms), so bundling tests reduces overhead.
+//!
+//! ## Suite Structure
+//!
+//! ```text
+//! compiler_tests_runtime.dll
+//!   ├─ tml_test_0()  // first test file
+//!   ├─ tml_test_1()  // second test file
+//!   └─ ...
+//! ```
 
 #include "tester_internal.hpp"
 

@@ -1,3 +1,31 @@
+//! # RLIB Library Format
+//!
+//! This file implements creation and reading of TML library files (.rlib).
+//!
+//! ## RLIB Archive Structure
+//!
+//! ```text
+//! library.rlib (llvm-ar archive)
+//!   ├─ metadata.json     # Library metadata
+//!   │     ├─ format_version
+//!   │     ├─ library { name, version, tml_version }
+//!   │     ├─ modules[] { name, file, hash, exports[] }
+//!   │     └─ dependencies[] { name, version, hash }
+//!   └─ <module>.obj      # Compiled object files
+//! ```
+//!
+//! ## Key Operations
+//!
+//! - `create_rlib()`: Package object files + metadata into archive
+//! - `read_rlib_metadata()`: Extract and parse metadata.json
+//! - `list_rlib_members()`: List archive contents
+//! - `calculate_file_hash()`: SHA256 hash for integrity
+//!
+//! ## Tools Used
+//!
+//! - `llvm-ar`: Create/read archives (preferred)
+//! - `ar`: Fallback on Unix systems
+
 #include "rlib.hpp"
 
 #include "utils.hpp"
@@ -24,9 +52,7 @@ namespace tml::cli {
 
 namespace {
 
-/**
- * Escape JSON string
- */
+/// Escapes special characters in a JSON string.
 std::string json_escape(const std::string& str) {
     std::string result;
     result.reserve(str.size());

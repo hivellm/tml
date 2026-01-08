@@ -1,4 +1,14 @@
-// Test command helpers - utilities and color output
+//! # Test Command Helpers
+//!
+//! This file contains shared utilities for the test framework.
+//!
+//! ## Contents
+//!
+//! - **ANSI Colors**: `enable_ansi_colors()` for Windows terminal support
+//! - **Duration Formatting**: `format_duration()` for human-readable times
+//! - **Test Counting**: `count_tests_in_file()` scans for `@test` directives
+//! - **Group Extraction**: `extract_group_name()` for test categorization
+//! - **Result Collection**: Thread-safe `TestResultCollector`
 
 #include "tester_internal.hpp"
 

@@ -1,3 +1,28 @@
+//! # Compiler Setup and Toolchain Discovery
+//!
+//! This file handles discovery and configuration of external build tools.
+//!
+//! ## Toolchain Components
+//!
+//! | Tool        | Purpose                         | Search Locations           |
+//! |-------------|--------------------------------|----------------------------|
+//! | Clang       | LLVM IR to object compilation  | PATH, LLVM install dirs    |
+//! | MSVC        | Windows SDK and linker         | Visual Studio paths        |
+//! | LLD         | LLVM linker (optional)         | With clang installation    |
+//!
+//! ## C Runtime Compilation
+//!
+//! `ensure_c_compiled()` compiles C runtime files with caching:
+//! - Checks if .obj exists and is newer than .c source
+//! - Uses clang to compile with appropriate flags
+//! - Thread-safe to avoid duplicate compilation
+//!
+//! ## Windows-Specific
+//!
+//! - `find_msvc()`: Locates Visual Studio installation
+//! - Detects VS 2019/2022, Community/Professional/Enterprise editions
+//! - Handles x64 vs x86 library paths
+
 #include "compiler_setup.hpp"
 
 #include "common.hpp"
@@ -19,7 +44,7 @@ namespace tml::cli {
 static std::mutex compilation_mutex;
 static std::map<std::string, bool> compilation_in_progress;
 
-// Helper to quote a command path only if it contains spaces
+/// Quotes a command path if it contains spaces.
 static std::string quote_command(const std::string& cmd) {
     if (cmd.find(' ') != std::string::npos) {
         return "\"" + cmd + "\"";
