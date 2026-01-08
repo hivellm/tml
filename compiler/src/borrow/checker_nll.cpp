@@ -1,3 +1,58 @@
+//! # Non-Lexical Lifetimes (NLL) and Advanced Borrow Checking
+//!
+//! This file implements Non-Lexical Lifetimes (NLL), partial move tracking,
+//! projection-aware borrowing, and dangling reference detection.
+//!
+//! ## Non-Lexical Lifetimes
+//!
+//! Traditional (lexical) borrow checking ties borrow lifetimes to lexical scopes:
+//!
+//! ```tml
+//! // Lexical lifetimes (restrictive)
+//! let mut x = 5
+//! let r = ref x       // borrow starts
+//! println(r)          // last use of r
+//! x = 10              // ERROR: r is still "live" until scope ends
+//! }                   // borrow ends here
+//! ```
+//!
+//! NLL instead ends borrows at their last use:
+//!
+//! ```tml
+//! // Non-lexical lifetimes (permissive)
+//! let mut x = 5
+//! let r = ref x       // borrow starts
+//! println(r)          // last use of r - borrow ENDS here
+//! x = 10              // OK! borrow has ended
+//! ```
+//!
+//! ## Projection-Aware Borrowing
+//!
+//! Places can have projections that access sub-parts:
+//! - `x.field` - Field projection
+//! - `x[i]` - Index projection
+//! - `*x` - Deref projection
+//!
+//! Different fields can be borrowed independently:
+//!
+//! ```tml
+//! let mut s = Struct { a: 1, b: 2 }
+//! let ra = ref s.a    // borrows only s.a
+//! let rb = ref s.b    // OK! s.b is separate from s.a
+//! ```
+//!
+//! ## Partial Moves
+//!
+//! Structs can be partially moved, leaving some fields invalid:
+//!
+//! ```tml
+//! let p = Pair { first: String::from("a"), second: String::from("b") }
+//! let f = p.first     // moves p.first
+//! println(p.second)   // OK: p.second not moved
+//! println(p.first)    // ERROR: p.first was moved
+//! drop(p)             // ERROR: p is partially moved
+//! ```
+
 #include "borrow/checker.hpp"
 
 namespace tml::borrow {
@@ -6,6 +61,18 @@ namespace tml::borrow {
 // Place Implementation
 // ============================================================================
 
+/// Checks if this place is a prefix of another place.
+///
+/// A place P1 is a prefix of P2 if accessing P2 requires first accessing P1.
+/// For example:
+/// - `x` is a prefix of `x.field` (must access x to get x.field)
+/// - `x.a` is NOT a prefix of `x.b` (different fields)
+///
+/// ## Algorithm
+///
+/// 1. Check base variables match
+/// 2. Check this place's projections are a prefix of other's projections
+/// 3. For Field projections, field names must match
 auto Place::is_prefix_of(const Place& other) const -> bool {
     // A place is a prefix if it has the same base and its projections
     // are a prefix of the other's projections
@@ -25,6 +92,20 @@ auto Place::is_prefix_of(const Place& other) const -> bool {
     return true;
 }
 
+/// Checks if two places overlap (could conflict in borrowing).
+///
+/// Two places overlap if borrowing one would affect the other. This happens
+/// when one is a prefix of the other:
+///
+/// | Place 1   | Place 2   | Overlap? | Why                           |
+/// |-----------|-----------|----------|-------------------------------|
+/// | `x`       | `x.field` | Yes      | x contains x.field            |
+/// | `x.a`     | `x.b`     | No       | Different fields              |
+/// | `x[0]`    | `x[1]`    | Yes*     | Can't distinguish at compile time |
+/// | `x.a.b`   | `x.a`     | Yes      | x.a contains x.a.b            |
+///
+/// *Array indices are conservatively treated as overlapping because the
+/// borrow checker doesn't track concrete index values.
 auto Place::overlaps_with(const Place& other) const -> bool {
     // Two places overlap if one is a prefix of the other
     // Examples:
@@ -34,6 +115,15 @@ auto Place::overlaps_with(const Place& other) const -> bool {
     return is_prefix_of(other) || other.is_prefix_of(*this);
 }
 
+/// Converts a place to a human-readable string for error messages.
+///
+/// ## Examples
+///
+/// - `x` → "x"
+/// - `x.field` → "x.field"
+/// - `x[...]` → "x[...]" (index shown as [...])
+/// - `*x` → "*x"
+/// - `*x.field` → "*x.field"
 auto Place::to_string(const std::string& base_name) const -> std::string {
     std::string result = base_name;
     for (const auto& proj : projections) {
@@ -56,6 +146,18 @@ auto Place::to_string(const std::string& base_name) const -> std::string {
 // BorrowEnv NLL Methods
 // ============================================================================
 
+/// Updates `last_use` for borrows associated with a reference variable.
+///
+/// When a reference variable is used, we need to update the `last_use` of
+/// the underlying borrow. This enables NLL to end the borrow at the right time.
+///
+/// ## Example
+///
+/// ```tml
+/// let r = ref x       // Creates borrow, ref_place = r's PlaceId
+/// println(r)          // mark_ref_used updates borrow's last_use
+/// // ... later, NLL can end the borrow at this point
+/// ```
 void BorrowEnv::mark_ref_used(PlaceId ref_place, Location loc) {
     // Find all borrows that were created with this ref_place and update their last_use
     for (auto& [id, state] : places_) {
@@ -67,6 +169,27 @@ void BorrowEnv::mark_ref_used(PlaceId ref_place, Location loc) {
     }
 }
 
+/// Releases borrows that are no longer needed (NLL core algorithm).
+///
+/// For each active borrow, if we have recorded a `last_use` and the current
+/// location is past that use, the borrow is ended.
+///
+/// ## Algorithm
+///
+/// ```text
+/// for each place:
+///     for each active borrow:
+///         if borrow.last_use < current_location:
+///             borrow.end = borrow.last_use
+///     recompute ownership state based on remaining borrows
+/// ```
+///
+/// ## State Recomputation
+///
+/// After releasing borrows, ownership state is updated:
+/// - Has active mutable borrow → `MutBorrowed`
+/// - Has active shared borrows → `Borrowed`
+/// - No active borrows → `Owned` (if was previously borrowed)
 void BorrowEnv::release_dead_borrows(Location loc) {
     // NLL: Release borrows whose last_use is before the current location
     for (auto& [id, state] : places_) {
@@ -103,6 +226,13 @@ void BorrowEnv::release_dead_borrows(Location loc) {
     }
 }
 
+/// Checks if a borrow is still live at a given location.
+///
+/// A borrow is live if:
+/// 1. It hasn't been explicitly ended (borrow.end is nullopt)
+/// 2. AND (no last_use recorded OR current_location <= last_use)
+///
+/// If no last_use is recorded, we conservatively assume the borrow is live.
 auto BorrowEnv::is_borrow_live(const Borrow& borrow, Location loc) const -> bool {
     // A borrow is live if:
     // 1. It hasn't ended (end is nullopt)
@@ -122,6 +252,22 @@ auto BorrowEnv::is_borrow_live(const Borrow& borrow, Location loc) const -> bool
 // Partial Move Tracking
 // ============================================================================
 
+/// Marks a field as moved out of a struct.
+///
+/// After moving a field, the struct is in a "partially moved" state:
+/// - The moved field cannot be used
+/// - Other fields can still be used
+/// - The whole struct cannot be moved or borrowed
+///
+/// ## Example
+///
+/// ```tml
+/// let p = Pair { a: String::from("x"), b: String::from("y") }
+/// let s = p.a         // mark_field_moved(p, "a")
+/// println(p.b)        // OK
+/// println(p.a)        // ERROR
+/// drop(p)             // ERROR: partially moved
+/// ```
 void BorrowEnv::mark_field_moved(PlaceId id, const std::string& field) {
     auto& state = get_state_mut(id);
     state.moved_fields.insert(field);
@@ -130,6 +276,13 @@ void BorrowEnv::mark_field_moved(PlaceId id, const std::string& field) {
     // We don't change to FullyMoved because other fields are still valid
 }
 
+/// Returns the move state of a place.
+///
+/// | State           | Description                              |
+/// |-----------------|------------------------------------------|
+/// | `FullyOwned`    | All parts owned, can use/move/borrow     |
+/// | `PartiallyMoved`| Some fields moved, limited usage         |
+/// | `FullyMoved`    | Entire value moved, cannot use           |
 auto BorrowEnv::get_move_state(PlaceId id) const -> MoveState {
     const auto& state = get_state(id);
 
@@ -144,6 +297,7 @@ auto BorrowEnv::get_move_state(PlaceId id) const -> MoveState {
     return MoveState::FullyOwned;
 }
 
+/// Checks if a specific field has been moved out.
 auto BorrowEnv::is_field_moved(PlaceId id, const std::string& field) const -> bool {
     const auto& state = get_state(id);
     return state.moved_fields.count(field) > 0;
@@ -153,11 +307,36 @@ auto BorrowEnv::is_field_moved(PlaceId id, const std::string& field) const -> bo
 // BorrowChecker NLL Methods
 // ============================================================================
 
+/// Applies NLL by releasing dead borrows at the current location.
+///
+/// This should be called before checking operations that might conflict
+/// with borrows, giving NLL a chance to release borrows that are no longer
+/// needed.
 void BorrowChecker::apply_nll(Location loc) {
     // Release borrows that are no longer needed at this location
     env_.release_dead_borrows(loc);
 }
 
+/// Creates a borrow with full projection information.
+///
+/// This method handles sophisticated borrowing scenarios including:
+/// - Field-level borrows (`ref x.field`)
+/// - Index borrows (`ref x[i]`)
+/// - Nested borrows (`ref x.field.subfield`)
+///
+/// ## Parameters
+///
+/// - `place`: The base PlaceId being borrowed
+/// - `full_place`: The complete place with all projections
+/// - `kind`: Shared or Mutable borrow
+/// - `loc`: Location for lifetime tracking
+/// - `ref_place`: The PlaceId of the reference variable that will hold this borrow
+///
+/// ## State Updates
+///
+/// - Creates a new `Borrow` record with projection info
+/// - Updates ownership state to `Borrowed` or `MutBorrowed`
+/// - Records the `ref_place → borrowed_place` mapping for NLL
 void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& full_place,
                                                   BorrowKind kind, Location loc,
                                                   PlaceId ref_place) {
@@ -189,6 +368,29 @@ void BorrowChecker::create_borrow_with_projection(PlaceId place, const Place& fu
     }
 }
 
+/// Checks if a place with projections can be borrowed.
+///
+/// This performs sophisticated conflict checking:
+/// 1. Check if the value has been moved (fully or partially)
+/// 2. Check for conflicts with existing borrows (projection-aware)
+/// 3. Check mutability requirements
+///
+/// ## Projection-Aware Conflict Detection
+///
+/// Two borrows conflict only if their places overlap. Non-overlapping
+/// fields can be borrowed independently:
+///
+/// ```tml
+/// let mut s = S { a: 1, b: 2 }
+/// let ra = mut ref s.a   // OK
+/// let rb = mut ref s.b   // OK: s.a and s.b don't overlap
+/// let rs = ref s         // ERROR: s overlaps with s.a and s.b
+/// ```
+///
+/// ## Two-Phase Borrow Handling
+///
+/// During two-phase borrow (method call evaluation), some conflicts are
+/// temporarily allowed to support patterns like `v.push(v.len())`.
 void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place& full_place,
                                                      BorrowKind kind, Location loc) {
     const auto& state = env_.get_state(place);
@@ -275,6 +477,18 @@ void BorrowChecker::check_can_borrow_with_projection(PlaceId place, const Place&
     }
 }
 
+/// Moves a single field out of a struct (partial move).
+///
+/// This checks all the conditions that must hold for a partial move:
+/// 1. The struct itself hasn't been fully moved
+/// 2. This specific field hasn't already been moved
+/// 3. No active borrows prevent the move
+///
+/// ## Borrow Interaction
+///
+/// - Borrow of whole struct → cannot move any field
+/// - Borrow of this field → cannot move this field
+/// - Borrow of other field → CAN move this field
 void BorrowChecker::move_field(PlaceId place, const std::string& field, Location loc) {
     auto& state = env_.get_state_mut(place);
 
@@ -321,6 +535,7 @@ void BorrowChecker::move_field(PlaceId place, const std::string& field, Location
     env_.mark_field_moved(place, field);
 }
 
+/// Checks if a specific field can be used (not moved or dropped).
 void BorrowChecker::check_can_use_field(PlaceId place, const std::string& field, Location loc) {
     const auto& state = env_.get_state(place);
 
@@ -339,6 +554,22 @@ void BorrowChecker::check_can_use_field(PlaceId place, const std::string& field,
     }
 }
 
+/// Checks for dangling references in return expressions.
+///
+/// A function cannot return a reference to a local variable because the
+/// local will be dropped when the function returns, leaving a dangling
+/// reference.
+///
+/// ## Cases Detected
+///
+/// 1. **Direct reference to local**: `return ref x`
+/// 2. **Reference variable borrowing local**: `let r = ref x; return r`
+///
+/// ## Safe Returns
+///
+/// - Returning a reference from a parameter is allowed (caller owns the value)
+/// - Returning owned values is always allowed
+/// - Returning 'static references is allowed
 void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
     if (!ret.value)
         return;
@@ -401,6 +632,20 @@ void BorrowChecker::check_return_borrows(const parser::ReturnExpr& ret) {
     }
 }
 
+/// Extracts a Place from an expression, if the expression represents a place.
+///
+/// A "place" is a memory location that can be borrowed or moved. Not all
+/// expressions are places - for example, `1 + 2` is not a place.
+///
+/// ## Supported Expressions
+///
+/// | Expression Type | Place                          |
+/// |-----------------|--------------------------------|
+/// | `x`             | `Place { base: x_id, [] }`     |
+/// | `x.field`       | `Place { base: x_id, [Field("field")] }` |
+/// | `x[i]`          | `Place { base: x_id, [Index] }` |
+/// | `*x`            | `Place { base: x_id, [Deref] }` |
+/// | `1 + 2`         | None (not a place)             |
 auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Place> {
     if (expr.is<parser::IdentExpr>()) {
         const auto& ident = expr.as<parser::IdentExpr>();
@@ -446,6 +691,7 @@ auto BorrowChecker::extract_place(const parser::Expr& expr) -> std::optional<Pla
     return std::nullopt;
 }
 
+/// Gets a human-readable name for a place (used in error messages).
 auto BorrowChecker::get_place_name(const Place& place) const -> std::string {
     auto it = env_.all_places().find(place.base);
     if (it == env_.all_places().end()) {
