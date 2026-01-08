@@ -1,4 +1,27 @@
-// Lint command - main run_lint function
+//! # Lint Runner Implementation
+//!
+//! This file implements the main `run_lint()` function that orchestrates
+//! style and semantic linting of TML source files.
+//!
+//! ## Lint Flow
+//!
+//! ```text
+//! run_lint()
+//!   ├─ Parse arguments (--fix, --semantic, --quiet)
+//!   ├─ Load config from tml.toml
+//!   ├─ discover_and_lint_files() or discover_and_lint_semantic()
+//!   │     └─ For each file:
+//!   │           ├─ lint_style_issues() - Whitespace, formatting
+//!   │           └─ lint_semantic()     - AST analysis (if --semantic)
+//!   └─ Report totals and exit code
+//! ```
+//!
+//! ## Fix Mode
+//!
+//! When `--fix` is used, auto-fixable issues are corrected in-place:
+//! - Trailing whitespace removal
+//! - Tab-to-space conversion
+//! - Missing final newline
 
 #include "linter_internal.hpp"
 
@@ -11,6 +34,7 @@ using namespace linter;
 // Main Entry Point
 // ============================================================================
 
+/// Main entry point for the `tml lint` command.
 int run_lint(int argc, char* argv[]) {
     bool fix_mode = false;
     bool quiet = false;

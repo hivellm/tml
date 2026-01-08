@@ -1,3 +1,29 @@
+//! # Cache Management Command
+//!
+//! This file implements the `tml cache` command for managing the build cache.
+//!
+//! ## Subcommands
+//!
+//! | Command          | Description                           |
+//! |------------------|---------------------------------------|
+//! | `cache info`     | Show cache statistics and location    |
+//! | `cache clean`    | Remove old cache files (7+ days)      |
+//! | `cache clean --all` | Remove all cache files             |
+//! | `cache clean --days N` | Remove files older than N days   |
+//!
+//! ## Cache Statistics
+//!
+//! The `info` subcommand shows:
+//! - Total cache size and file count
+//! - Breakdown by file type (.obj, .exe, etc.)
+//! - Detailed file listing with `--verbose`
+//!
+//! ## LRU Eviction
+//!
+//! `enforce_cache_limit()` implements LRU eviction when the cache
+//! exceeds a size limit. Files are sorted by last access time and
+//! the oldest are removed until under the limit.
+
 #include "cmd_cache.hpp"
 
 #include "utils.hpp"
@@ -15,9 +41,7 @@ namespace tml::cli {
 
 namespace {
 
-/**
- * Get the cache directory path
- */
+/// Returns the cache directory path (build/debug/.run-cache/).
 fs::path get_cache_dir() {
     fs::path cwd = fs::current_path();
     return cwd / "build" / "debug" / ".run-cache";

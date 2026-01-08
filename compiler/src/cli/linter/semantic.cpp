@@ -1,4 +1,23 @@
-// Lint command - semantic linting (AST-based)
+//! # Semantic Linting
+//!
+//! This file implements AST-based semantic linting for TML source files.
+//! Semantic analysis requires parsing and understanding the code structure.
+//!
+//! ## Semantic Rules
+//!
+//! | Category         | Checks                                |
+//! |------------------|---------------------------------------|
+//! | Naming           | snake_case funcs, PascalCase types    |
+//! | Unused           | Variables, functions, imports         |
+//! | Complexity       | Function length, nesting depth        |
+//! | Shadowing        | Variable shadowing warnings           |
+//!
+//! ## Analysis Passes
+//!
+//! 1. **Collection**: Gather all declarations and usages
+//! 2. **Naming**: Check identifier naming conventions
+//! 3. **Unused**: Find items that are declared but never used
+//! 4. **Complexity**: Analyze code complexity metrics
 
 #include "linter_internal.hpp"
 
@@ -8,6 +27,7 @@ namespace tml::cli::linter {
 // Semantic Linter
 // ============================================================================
 
+/// Constructs a SemanticLinter for a given file.
 SemanticLinter::SemanticLinter(const fs::path& filepath, LintResult& result,
                                const LintConfig& config)
     : filepath_(filepath), result_(result), config_(config) {}

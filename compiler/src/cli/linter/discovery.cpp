@@ -1,4 +1,21 @@
-// Lint command - file discovery and linting
+//! # Lint File Discovery
+//!
+//! This file implements file discovery and orchestrates linting of individual files.
+//!
+//! ## Discovery Rules
+//!
+//! - All `*.tml` files in specified paths
+//! - Excludes `build/`, `errors/`, `pending/` directories
+//!
+//! ## Linting Pipeline
+//!
+//! ```text
+//! lint_file()
+//!   ├─ Read file content
+//!   ├─ lint_style() - Text-based checks
+//!   ├─ lint_semantic() - AST-based checks (if --semantic)
+//!   └─ Write fixes (if --fix and modified)
+//! ```
 
 #include "linter_internal.hpp"
 
@@ -8,6 +25,7 @@ namespace tml::cli::linter {
 // File Linting
 // ============================================================================
 
+/// Lints a single file for style and optionally semantic issues.
 void lint_file(const fs::path& filepath, LintResult& result, const LintConfig& config,
                bool fix_mode, bool semantic) {
     std::ifstream file(filepath);

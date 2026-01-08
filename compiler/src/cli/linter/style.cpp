@@ -1,4 +1,23 @@
-// Lint command - style linting (text-based)
+//! # Style Linting
+//!
+//! This file implements text-based style linting for TML source files.
+//! Style rules operate on raw text, not the AST.
+//!
+//! ## Style Rules
+//!
+//! | Rule                | Description                    | Fix    |
+//! |---------------------|--------------------------------|--------|
+//! | `tab`               | Tabs instead of spaces         | Yes    |
+//! | `trailing-space`    | Trailing whitespace on lines   | Yes    |
+//! | `no-final-newline`  | Missing newline at end of file | Yes    |
+//! | `line-too-long`     | Lines exceeding max length     | No     |
+//!
+//! ## Auto-Fix
+//!
+//! When `fix_mode` is true:
+//! - Tabs are replaced with 4 spaces
+//! - Trailing whitespace is trimmed
+//! - A final newline is added if missing
 
 #include "linter_internal.hpp"
 
@@ -8,6 +27,7 @@ namespace tml::cli::linter {
 // Style Linting (text-based)
 // ============================================================================
 
+/// Lints a file for style issues and optionally fixes them.
 void lint_style(const fs::path& filepath, const std::string& content, LintResult& result,
                 const LintConfig& config, bool fix_mode, std::string& fixed_content) {
     std::istringstream stream(content);

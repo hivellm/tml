@@ -1,3 +1,32 @@
+//! # RLIB Inspection Command
+//!
+//! This file implements the `tml rlib` command for inspecting TML library files.
+//!
+//! ## RLIB Format
+//!
+//! RLIB files are archives containing:
+//! - `metadata.json`: Library metadata (name, version, exports)
+//! - `*.obj`: Compiled object files for each module
+//!
+//! ## Subcommands
+//!
+//! | Command               | Description                      |
+//! |-----------------------|----------------------------------|
+//! | `rlib info <file>`    | Show library info and structure  |
+//! | `rlib exports <file>` | List public function/type exports|
+//! | `rlib validate <file>`| Check RLIB format integrity      |
+//!
+//! ## Example Output
+//!
+//! ```text
+//! Library: my_lib v1.0.0
+//! Modules: 1
+//!   - my_lib (my_lib.obj)
+//! Exports:
+//!   func add(a: I32, b: I32) -> I32
+//!   struct Point { x: I32, y: I32 }
+//! ```
+
 #include "cmd_rlib.hpp"
 
 #include "rlib.hpp"
@@ -11,6 +40,7 @@ namespace fs = std::filesystem;
 
 namespace tml::cli {
 
+/// Shows detailed information about an RLIB file.
 int run_rlib_info(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: tml rlib info <rlib-file>\n";

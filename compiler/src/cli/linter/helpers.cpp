@@ -1,4 +1,13 @@
-// Lint command - helper functions and constants
+//! # Lint Helper Functions
+//!
+//! This file contains shared constants and utilities for the linter.
+//!
+//! ## Contents
+//!
+//! - **ANSI Colors**: Terminal color codes for output
+//! - **Rule Codes**: Lint rule identifiers (S001, S002, etc.)
+//! - **Naming Checks**: snake_case/PascalCase validation
+//! - **Help Text**: `--help` output for `tml lint`
 
 #include "linter_internal.hpp"
 

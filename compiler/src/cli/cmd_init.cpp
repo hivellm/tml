@@ -1,3 +1,34 @@
+//! # Project Initialization Command
+//!
+//! This file implements the `tml init` command for creating new TML projects.
+//!
+//! ## Usage
+//!
+//! ```bash
+//! tml init                    # Create binary project
+//! tml init --lib              # Create library project
+//! tml init --name my_project  # Custom project name
+//! ```
+//!
+//! ## Generated Structure
+//!
+//! ```text
+//! project/
+//!   ├─ tml.toml              # Project manifest
+//!   ├─ src/
+//!   │    └─ main.tml         # (binary) Entry point
+//!   │    └─ lib.tml          # (library) Library root
+//!   └─ build/                # Output directory
+//! ```
+//!
+//! ## Manifest Format
+//!
+//! The generated `tml.toml` includes:
+//! - `[package]`: name, version, authors, edition
+//! - `[[bin]]` or `[lib]`: target configuration
+//! - `[dependencies]`: empty, ready for deps
+//! - `[build]`: default build options
+
 #include "cmd_init.hpp"
 
 #include "utils.hpp"
@@ -14,9 +45,7 @@ namespace tml::cli {
 
 namespace {
 
-/**
- * Get project name from current directory
- */
+/// Derives a project name from the current directory name.
 std::string get_default_project_name() {
     fs::path current = fs::current_path();
     std::string name = current.filename().string();

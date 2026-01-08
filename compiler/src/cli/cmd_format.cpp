@@ -1,3 +1,29 @@
+//! # Code Formatting Command
+//!
+//! This file implements the `tml fmt` command for formatting TML source files.
+//!
+//! ## Usage
+//!
+//! ```bash
+//! tml fmt                     # Format all .tml files in current dir
+//! tml fmt src/*.tml           # Format specific files
+//! tml fmt --check             # Check formatting without changing files
+//! ```
+//!
+//! ## Formatting Rules
+//!
+//! The formatter ensures consistent code style:
+//! - 4-space indentation
+//! - Consistent spacing around operators
+//! - Proper brace placement
+//! - Sorted imports
+//!
+//! ## Process
+//!
+//! 1. Lex and parse the source file
+//! 2. Run the AST through the formatter
+//! 3. Write formatted output (or check for differences)
+
 #include "cmd_format.hpp"
 
 #include "common.hpp"
@@ -17,7 +43,7 @@ using namespace tml;
 
 namespace tml::cli {
 
-// Emit all lexer errors using the diagnostic emitter
+/// Emits all lexer errors using the diagnostic emitter.
 static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
     for (const auto& error : lex.errors()) {
         emitter.error("L001", error.message, error.span);

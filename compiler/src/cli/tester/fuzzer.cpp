@@ -1,4 +1,31 @@
-// Test command - fuzzer functionality
+//! # Fuzz Testing Framework
+//!
+//! This file implements the fuzz testing runner for `tml test --fuzz`.
+//!
+//! ## Fuzz Test Files
+//!
+//! Fuzz tests are defined in `*.fuzz.tml` files using the `@fuzz` decorator:
+//!
+//! ```tml
+//! @fuzz
+//! func fuzz_parser(data: [U8]) {
+//!     let input = String::from_bytes(data)
+//!     parse_expression(input)  // Should not crash
+//! }
+//! ```
+//!
+//! ## Fuzzing Process
+//!
+//! 1. Generate random input bytes
+//! 2. Call the fuzz function with the input
+//! 3. Catch crashes and save crashing inputs
+//! 4. Repeat for `--fuzz-duration` seconds
+//!
+//! ## Corpus Management
+//!
+//! - `--corpus=<dir>`: Use existing corpus as seed inputs
+//! - `--crashes=<dir>`: Save crash-inducing inputs
+//! - `--fuzz-max-len=<n>`: Maximum input size in bytes
 
 #include "tester_internal.hpp"
 
@@ -12,6 +39,7 @@ namespace tml::cli::tester {
 // Discover Fuzz Files
 // ============================================================================
 
+/// Discovers fuzz test files (`*.fuzz.tml`) in the project.
 std::vector<std::string> discover_fuzz_files(const std::string& root_dir) {
     std::vector<std::string> fuzz_files;
 

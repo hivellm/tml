@@ -1,3 +1,27 @@
+//! # Debug Commands
+//!
+//! This file implements the `tml lex`, `tml parse`, and `tml check` commands
+//! for debugging compilation phases.
+//!
+//! ## Debug Subcommands
+//!
+//! | Command           | Output                              |
+//! |-------------------|-------------------------------------|
+//! | `tml lex <file>`  | Token stream from lexer             |
+//! | `tml parse <file>`| AST from parser                     |
+//! | `tml check <file>`| Type checking results               |
+//!
+//! ## Usage
+//!
+//! ```bash
+//! tml lex main.tml          # Show tokens
+//! tml parse main.tml        # Show AST structure
+//! tml check main.tml        # Run type checker
+//! ```
+//!
+//! These commands are useful for debugging parser issues, understanding
+//! how code is tokenized, and verifying type inference results.
+
 #include "cmd_debug.hpp"
 
 #include "common.hpp"
@@ -17,7 +41,7 @@ using namespace tml;
 
 namespace tml::cli {
 
-// Emit all lexer errors using the diagnostic emitter
+/// Emits all lexer errors using the diagnostic emitter.
 static void emit_all_lexer_errors(DiagnosticEmitter& emitter, const lexer::Lexer& lex) {
     for (const auto& error : lex.errors()) {
         emitter.error("L001", error.message, error.span);

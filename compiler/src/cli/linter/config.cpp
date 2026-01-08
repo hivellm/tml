@@ -1,4 +1,25 @@
-// Lint command - configuration loading
+//! # Lint Configuration
+//!
+//! This file implements lint configuration loading from `tml.toml`.
+//!
+//! ## Configuration Section
+//!
+//! ```toml
+//! [lint]
+//! max_line_length = 100
+//! check_tabs = true
+//! check_trailing_whitespace = true
+//! check_naming = true
+//! check_unused = true
+//!
+//! [lint.rules]
+//! S001 = false   # Disable tab checking
+//! S003 = "warn"  # Line length as warning
+//! ```
+//!
+//! ## Default Settings
+//!
+//! All checks are enabled by default with sensible thresholds.
 
 #include "linter_internal.hpp"
 
@@ -8,6 +29,7 @@ namespace tml::cli::linter {
 // Config File Parsing
 // ============================================================================
 
+/// Loads lint configuration from tml.toml in the project root.
 LintConfig load_lint_config(const fs::path& project_root) {
     LintConfig config;
 
