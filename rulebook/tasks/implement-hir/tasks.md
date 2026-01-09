@@ -121,10 +121,15 @@ The following MIR optimization passes have been implemented and work with the HI
 - [x] LoadStoreOptPass - Redundant load/store elimination
 - [x] LoopRotatePass - Loop rotation for better optimization
 
+### Phase 4 (2026-01-09)
+- [x] ConstantHoistPass - Move expensive constants out of loops
+- [x] SimplifySelectPass - Optimize select/conditional instructions
+- [x] MergeReturnsPass - Combine multiple returns into single exit
+
 **Benchmark Results** (algorithms.tml):
 - O0: 1042 MIR lines (baseline)
 - O2: 516 lines (50.5% reduction)
-- O3: 447 lines (57.1% reduction)
+- O3: 463 lines (55.6% reduction)
 
 ## Validation
 

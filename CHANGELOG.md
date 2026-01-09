@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MIR Optimization Passes - Phase 4** (2026-01-09) - Additional optimization passes for O2/O3 pipelines
+  - **ConstantHoistPass**: Moves expensive constant materialization out of loops
+  - **SimplifySelectPass**: Optimizes select/conditional instructions (constant conditions, same values, boolean patterns)
+  - **MergeReturnsPass**: Combines multiple return statements into single unified exit block
+  - All 906 tests passing
+  - Files added:
+    - `compiler/include/mir/passes/const_hoist.hpp`, `compiler/src/mir/passes/const_hoist.cpp`
+    - `compiler/include/mir/passes/simplify_select.hpp`, `compiler/src/mir/passes/simplify_select.cpp`
+    - `compiler/include/mir/passes/merge_returns.hpp`, `compiler/src/mir/passes/merge_returns.cpp`
+  - Files modified: `compiler/CMakeLists.txt`, `compiler/src/mir/mir_pass.cpp`
+
 - **MIR Optimization Passes - Phase 3** (2026-01-09) - Additional optimization passes for O1/O2/O3 pipelines
   - **PeepholePass**: Algebraic simplifications (x+0→x, x*1→x, x*0→0, double negation, etc.)
   - **BlockMergePass**: Merges consecutive basic blocks with single predecessor/successor

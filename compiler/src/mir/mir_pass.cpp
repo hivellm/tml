@@ -56,6 +56,9 @@
 #include "mir/passes/load_store_opt.hpp"
 #include "mir/passes/loop_rotate.hpp"
 #include "mir/passes/early_cse.hpp"
+#include "mir/passes/const_hoist.hpp"
+#include "mir/passes/simplify_select.hpp"
+#include "mir/passes/merge_returns.hpp"
 
 namespace tml::mir {
 
@@ -151,6 +154,9 @@ void PassManager::configure_standard_pipeline() {
         // Peephole optimizations (algebraic simplifications)
         add_pass(std::make_unique<PeepholePass>());
 
+        // Simplify select instructions
+        add_pass(std::make_unique<SimplifySelectPass>());
+
         // Strength reduction (mul by power of 2 -> shift, etc.)
         add_pass(std::make_unique<StrengthReductionPass>());
 
@@ -245,6 +251,9 @@ void PassManager::configure_standard_pipeline() {
         // Narrowing: Use smaller types when safe
         add_pass(std::make_unique<NarrowingPass>());
 
+        // Constant hoisting: move expensive constants out of loops
+        add_pass(std::make_unique<ConstantHoistPass>());
+
         // Loop optimization
         add_pass(std::make_unique<LICMPass>());
 
@@ -278,6 +287,9 @@ void PassManager::configure_standard_pipeline() {
 
         // Dead argument elimination (inter-procedural)
         add_pass(std::make_unique<DeadArgEliminationPass>());
+
+        // Merge multiple returns into single exit
+        add_pass(std::make_unique<MergeReturnsPass>());
     }
 }
 

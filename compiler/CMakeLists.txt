@@ -224,6 +224,9 @@ add_library(tml_mir STATIC
     src/mir/passes/load_store_opt.cpp
     src/mir/passes/loop_rotate.cpp
     src/mir/passes/early_cse.cpp
+    src/mir/passes/const_hoist.cpp
+    src/mir/passes/simplify_select.cpp
+    src/mir/passes/merge_returns.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir)
 target_include_directories(tml_mir PUBLIC include src)
