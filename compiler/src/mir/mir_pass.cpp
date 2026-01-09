@@ -50,6 +50,12 @@
 #include "mir/passes/loop_unroll.hpp"
 #include "mir/passes/sinking.hpp"
 #include "mir/passes/adce.hpp"
+#include "mir/passes/peephole.hpp"
+#include "mir/passes/block_merge.hpp"
+#include "mir/passes/dead_arg_elim.hpp"
+#include "mir/passes/load_store_opt.hpp"
+#include "mir/passes/loop_rotate.hpp"
+#include "mir/passes/early_cse.hpp"
 
 namespace tml::mir {
 
@@ -112,6 +118,9 @@ void PassManager::configure_standard_pipeline() {
     // O1 and above: basic optimizations
     // ==========================================================================
 
+    // Early CSE: catch simple redundancies before other passes
+    add_pass(std::make_unique<EarlyCSEPass>());
+
     // Early instruction simplification (peephole)
     add_pass(std::make_unique<InstSimplifyPass>());
 
@@ -139,6 +148,9 @@ void PassManager::configure_standard_pipeline() {
         // More instruction simplification after initial optimizations
         add_pass(std::make_unique<InstSimplifyPass>());
 
+        // Peephole optimizations (algebraic simplifications)
+        add_pass(std::make_unique<PeepholePass>());
+
         // Strength reduction (mul by power of 2 -> shift, etc.)
         add_pass(std::make_unique<StrengthReductionPass>());
 
@@ -152,6 +164,9 @@ void PassManager::configure_standard_pipeline() {
         // Cleanup after GVN/CopyProp
         add_pass(std::make_unique<DeadCodeEliminationPass>());
         add_pass(std::make_unique<SimplifyCfgPass>());
+
+        // Merge basic blocks after CFG simplification
+        add_pass(std::make_unique<BlockMergePass>());
 
         // Match/switch simplification
         add_pass(std::make_unique<MatchSimplifyPass>());
@@ -171,6 +186,9 @@ void PassManager::configure_standard_pipeline() {
         add_pass(std::make_unique<ConstantPropagationPass>());
         add_pass(std::make_unique<GVNPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // Load-store optimization: eliminate redundant memory operations
+        add_pass(std::make_unique<LoadStoreOptPass>());
 
         // LICM: Move loop-invariant code out of loops
         add_pass(std::make_unique<LICMPass>());
@@ -230,6 +248,9 @@ void PassManager::configure_standard_pipeline() {
         // Loop optimization
         add_pass(std::make_unique<LICMPass>());
 
+        // Loop rotation: transform loops for better optimization
+        add_pass(std::make_unique<LoopRotatePass>());
+
         // Loop unrolling (small constant-bound loops)
         add_pass(std::make_unique<LoopUnrollPass>());
 
@@ -249,8 +270,14 @@ void PassManager::configure_standard_pipeline() {
         // Aggressive dead code elimination (final cleanup)
         add_pass(std::make_unique<ADCEPass>());
 
+        // Final block merging
+        add_pass(std::make_unique<BlockMergePass>());
+
         // Final dead function elimination
         add_pass(std::make_unique<DeadFunctionEliminationPass>());
+
+        // Dead argument elimination (inter-procedural)
+        add_pass(std::make_unique<DeadArgEliminationPass>());
     }
 }
 

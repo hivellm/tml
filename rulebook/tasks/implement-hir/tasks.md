@@ -113,10 +113,18 @@ The following MIR optimization passes have been implemented and work with the HI
 - [x] SinkingPass - Move computations closer to uses
 - [x] ADCEPass - Aggressive Dead Code Elimination
 
+### Phase 3 (2026-01-09)
+- [x] PeepholePass - Algebraic simplifications (x+0→x, x*1→x, etc.)
+- [x] BlockMergePass - Merge consecutive basic blocks
+- [x] DeadArgEliminationPass - Remove unused function parameters
+- [x] EarlyCSEPass - Local common subexpression elimination
+- [x] LoadStoreOptPass - Redundant load/store elimination
+- [x] LoopRotatePass - Loop rotation for better optimization
+
 **Benchmark Results** (algorithms.tml):
 - O0: 1042 MIR lines (baseline)
 - O2: 516 lines (50.5% reduction)
-- O3: 474 lines (54.5% reduction)
+- O3: 447 lines (57.1% reduction)
 
 ## Validation
 

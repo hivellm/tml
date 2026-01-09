@@ -218,6 +218,12 @@ add_library(tml_mir STATIC
     src/mir/passes/loop_unroll.cpp
     src/mir/passes/sinking.cpp
     src/mir/passes/adce.cpp
+    src/mir/passes/peephole.cpp
+    src/mir/passes/block_merge.cpp
+    src/mir/passes/dead_arg_elim.cpp
+    src/mir/passes/load_store_opt.cpp
+    src/mir/passes/loop_rotate.cpp
+    src/mir/passes/early_cse.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir)
 target_include_directories(tml_mir PUBLIC include src)

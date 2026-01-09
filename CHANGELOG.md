@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MIR Optimization Passes - Phase 3** (2026-01-09) - Additional optimization passes for O1/O2/O3 pipelines
+  - **PeepholePass**: Algebraic simplifications (x+0→x, x*1→x, x*0→0, double negation, etc.)
+  - **BlockMergePass**: Merges consecutive basic blocks with single predecessor/successor
+  - **DeadArgEliminationPass**: Removes unused function parameters (inter-procedural)
+  - **EarlyCSEPass**: Local common subexpression elimination early in the pipeline
+  - **LoadStoreOptPass**: Eliminates redundant loads/stores, store-to-load forwarding
+  - **LoopRotatePass**: Loop rotation infrastructure for better optimization exposure
+  - Benchmark: O3 achieves 57.1% MIR size reduction (447 lines from 1042)
+  - All 906 tests passing
+  - Files added:
+    - `compiler/include/mir/passes/peephole.hpp`, `compiler/src/mir/passes/peephole.cpp`
+    - `compiler/include/mir/passes/block_merge.hpp`, `compiler/src/mir/passes/block_merge.cpp`
+    - `compiler/include/mir/passes/dead_arg_elim.hpp`, `compiler/src/mir/passes/dead_arg_elim.cpp`
+    - `compiler/include/mir/passes/early_cse.hpp`, `compiler/src/mir/passes/early_cse.cpp`
+    - `compiler/include/mir/passes/load_store_opt.hpp`, `compiler/src/mir/passes/load_store_opt.cpp`
+    - `compiler/include/mir/passes/loop_rotate.hpp`, `compiler/src/mir/passes/loop_rotate.cpp`
+  - Files modified: `compiler/CMakeLists.txt`, `compiler/src/mir/mir_pass.cpp`
+
 - **MIR Optimization Passes - Phase 2** (2026-01-09) - Additional optimization passes for O2/O3 pipelines
   - **ReassociatePass**: Reorders associative operations (add, mul, and, or, xor) for better constant folding
   - **TailCallPass**: Identifies and marks tail calls for backend optimization
