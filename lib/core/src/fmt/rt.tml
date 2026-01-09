@@ -189,7 +189,7 @@ impl Debug for FormatSpec {
     pub func debug_string(this) -> Str {
         // Use to_string() instead of debug_string() for nested types
         // to avoid cross-module method resolution issues
-        return "FormatSpec \{ fill: '" + this.fill.to_string() + "', align: " + this.align.to_string() + ", sign: " + this.sign.to_string() + ", alternate: " + this.alternate.to_string() + ", zero_pad: " + this.zero_pad.to_string() + ", width: " + this.width.to_string() + ", precision: " + this.precision.to_string() + " \}"
+        return "FormatSpec { fill: '" + this.fill.to_string() + "', align: " + this.align.to_string() + ", sign: " + this.sign.to_string() + ", alternate: " + this.alternate.to_string() + ", zero_pad: " + this.zero_pad.to_string() + ", width: " + this.width.to_string() + ", precision: " + this.precision.to_string() + " }"
     }
 }
 

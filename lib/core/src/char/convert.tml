@@ -170,7 +170,7 @@ impl Display for CharTryFromError {
 
 impl Debug for CharTryFromError {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("CharTryFromError \{ value: ").and_then(do(_) f.write_u32(this.value)).and_then(do(_) f.write_str(" \}"))
+        return f.write_str("CharTryFromError { value: ").and_then(do(_) f.write_u32(this.value)).and_then(do(_) f.write_str(" }"))
     }
 }
 
@@ -219,7 +219,7 @@ impl Debug for ParseCharError {
             EmptyString => "EmptyString",
             TooManyChars => "TooManyChars"
         }
-        return f.write_str("ParseCharError \{ kind: ").and_then(do(_) f.write_str(kind_str)).and_then(do(_) f.write_str(" \}"))
+        return f.write_str("ParseCharError { kind: ").and_then(do(_) f.write_str(kind_str)).and_then(do(_) f.write_str(" }"))
     }
 }
 
@@ -260,7 +260,7 @@ impl Display for TryFromCharError {
 
 impl Debug for TryFromCharError {
     func fmt(this, f: mut ref Formatter) -> FormatResult {
-        return f.write_str("TryFromCharError \{ value: U+").and_then(do(_) f.write_u32_hex(this.value)).and_then(do(_) f.write_str(" \}"))
+        return f.write_str("TryFromCharError { value: U+").and_then(do(_) f.write_u32_hex(this.value)).and_then(do(_) f.write_str(" }"))
     }
 }
 

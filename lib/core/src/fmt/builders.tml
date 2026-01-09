@@ -147,7 +147,7 @@ impl DebugStruct {
     /// ```
     pub func finish(this) -> Str {
         if this.has_fields {
-            return this.name + " \{ " + this.fields + " \}"
+            return this.name + " { " + this.fields + " }"
         }
         return this.name
     }
@@ -163,9 +163,9 @@ impl DebugStruct {
     /// ```
     pub func finish_non_exhaustive(this) -> Str {
         if this.has_fields {
-            return this.name + " \{ " + this.fields + ", .. \}"
+            return this.name + " { " + this.fields + ", .. }"
         }
-        return this.name + " \{ .. \}"
+        return this.name + " { .. }"
     }
 }
 
@@ -386,7 +386,7 @@ impl DebugSet {
 
     /// Finishes building and returns the formatted string.
     pub func finish(this) -> Str {
-        return "\{" + this.entries + "\}"
+        return "{" + this.entries + "}"
     }
 }
 
@@ -461,7 +461,7 @@ impl DebugMap {
 
     /// Finishes building and returns the formatted string.
     pub func finish(this) -> Str {
-        return "\{" + this.entries + "\}"
+        return "{" + this.entries + "}"
     }
 }
 

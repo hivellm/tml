@@ -368,7 +368,7 @@ impl Display for BoxedError {
 
 impl Debug for BoxedError {
     pub func debug_string(this) -> Str {
-        return "BoxedError \{ message: " + this.message + " \}"
+        return "BoxedError { message: " + this.message + " }"
     }
 }
 
@@ -466,7 +466,7 @@ impl[E: Error] Display for ChainedError[E] {
 impl[E: Error] Debug for ChainedError[E] {
     pub func debug_string(this) -> Str {
         // Use to_string() since E: Error implies E: Display, but not E: Debug
-        return "ChainedError \{ message: \"" + this.message + "\", cause: " + this.cause.to_string() + " \}"
+        return "ChainedError { message: \"" + this.message + "\", cause: " + this.cause.to_string() + " }"
     }
 }
 
@@ -565,7 +565,7 @@ impl Debug for ParseError {
             Just(p) => "Just(" + p.to_string() + ")",
             Nothing => "Nothing"
         }
-        return "ParseError \{ message: \"" + this.message + "\", position: " + pos_str + " \}"
+        return "ParseError { message: \"" + this.message + "\", position: " + pos_str + " }"
     }
 }
 
@@ -798,7 +798,7 @@ impl Debug for IoError {
             Just(m) => "Just(\"" + m + "\")",
             Nothing => "Nothing"
         }
-        return "IoError \{ kind: " + kind_str + ", message: " + msg_str + " \}"
+        return "IoError { kind: " + kind_str + ", message: " + msg_str + " }"
     }
 }
 

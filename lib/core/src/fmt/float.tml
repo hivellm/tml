@@ -274,7 +274,7 @@ impl Debug for FloatParts {
             Just(e) => "Just(" + e.to_string() + ")",
             Nothing => "Nothing"
         }
-        return "FloatParts \{ sign: \"" + this.sign + "\", integer: \"" + this.integer + "\", fraction: \"" + this.fraction + "\", exponent: " + exp_str + " \}"
+        return "FloatParts { sign: \"" + this.sign + "\", integer: \"" + this.integer + "\", fraction: \"" + this.fraction + "\", exponent: " + exp_str + " }"
     }
 }
 

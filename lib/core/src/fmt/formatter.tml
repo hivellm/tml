@@ -464,7 +464,7 @@ impl Display for Arguments {
 
 impl Debug for Arguments {
     pub func debug_string(this) -> Str {
-        return "Arguments \{ pieces: " + this.pieces.debug_string() + " \}"
+        return "Arguments { pieces: " + this.pieces.debug_string() + " }"
     }
 }
 

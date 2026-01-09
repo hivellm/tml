@@ -30,12 +30,23 @@
 //! 1. `InterpStringStart` ("Hello ")
 //! 2. Expression tokens (name)
 //! 3. `InterpStringEnd` ("!")
+//!
+//! Interpolation only starts when `{` is followed by a valid identifier start
+//! character (letter or underscore). Otherwise `{` is treated as a literal:
+//! - `"{ key: value }"` → literal string (no interpolation)
+//! - `"{name}"` → interpolation (identifier follows `{`)
+//! - `"\{"` → literal `{` (escaped, always works)
 
 #include "lexer/lexer.hpp"
 
 #include <charconv>
 #include <system_error>
 namespace tml::lexer {
+
+// Helper to check if a character can start an identifier (for interpolation detection)
+static bool is_ident_start(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
 
 // Helper to encode a Unicode codepoint as UTF-8
 static void encode_utf8(std::string& out, char32_t cp) {
@@ -69,21 +80,35 @@ auto Lexer::lex_string() -> Token {
         }
 
         // Check for interpolation: { starts an interpolated expression
+        // Only if followed by an identifier start character (letter or underscore)
         if (peek() == '{') {
-            // This is an interpolated string!
-            // Return InterpStringStart with the text we've collected so far
-            advance(); // consume the '{'
-            interp_depth_++;
-            in_interpolation_ = true;
+            // Look ahead to see if this is interpolation or literal brace
+            size_t next_pos = pos_ + 1;
+            if (next_pos < source_.length() && is_ident_start(source_.content()[next_pos])) {
+                // This is an interpolated string!
+                // Return InterpStringStart with the text we've collected so far
+                advance(); // consume the '{'
+                interp_depth_++;
+                in_interpolation_ = true;
 
-            auto token = make_token(TokenKind::InterpStringStart);
-            token.value = StringValue{std::move(value), false};
-            return token;
+                auto token = make_token(TokenKind::InterpStringStart);
+                token.value = StringValue{std::move(value), false};
+                return token;
+            }
+            // Not followed by identifier - treat as literal brace
+            value += advance();
+            continue;
+        }
+
+        // Allow literal } in strings (not inside interpolation)
+        if (peek() == '}') {
+            value += advance();
+            continue;
         }
 
         if (peek() == '\\') {
             advance(); // consume backslash
-            // Check for escaped brace
+            // Check for escaped brace (still supported for backwards compatibility)
             if (peek() == '{' || peek() == '}') {
                 value += advance();
                 continue;
@@ -130,17 +155,30 @@ auto Lexer::lex_interp_string_continue() -> Token {
         }
 
         // Check for another interpolation
+        // Only if followed by an identifier start character (letter or underscore)
         if (peek() == '{') {
-            advance(); // consume the '{'
-            // Return middle segment
-            auto token = make_token(TokenKind::InterpStringMiddle);
-            token.value = StringValue{std::move(value), false};
-            return token;
+            size_t next_pos = pos_ + 1;
+            if (next_pos < source_.length() && is_ident_start(source_.content()[next_pos])) {
+                advance(); // consume the '{'
+                // Return middle segment
+                auto token = make_token(TokenKind::InterpStringMiddle);
+                token.value = StringValue{std::move(value), false};
+                return token;
+            }
+            // Not followed by identifier - treat as literal brace
+            value += advance();
+            continue;
+        }
+
+        // Allow literal } in string continuation (outside of interpolation expression)
+        if (peek() == '}') {
+            value += advance();
+            continue;
         }
 
         if (peek() == '\\') {
             advance(); // consume backslash
-            // Check for escaped brace
+            // Check for escaped brace (still supported for backwards compatibility)
             if (peek() == '{' || peek() == '}') {
                 value += advance();
                 continue;
@@ -177,6 +215,7 @@ auto Lexer::lex_interp_string_continue() -> Token {
 
 auto Lexer::check_string_has_interpolation() const -> bool {
     // Check if the current string (starting with ") contains an unescaped {
+    // followed by an identifier start character
     size_t i = pos_ + 1; // Skip opening quote
     while (i < source_.length()) {
         char c = source_.content()[i];
@@ -184,8 +223,15 @@ auto Lexer::check_string_has_interpolation() const -> bool {
             return false; // End of string, no interpolation
         if (c == '\n')
             return false; // Unterminated
-        if (c == '{')
-            return true; // Found interpolation
+        if (c == '{') {
+            // Only count as interpolation if followed by identifier start
+            if (i + 1 < source_.length() && is_ident_start(source_.content()[i + 1])) {
+                return true; // Found interpolation
+            }
+            // Literal brace, continue searching
+            i++;
+            continue;
+        }
         if (c == '\\' && i + 1 < source_.length()) {
             i += 2; // Skip escape sequence
         } else {
