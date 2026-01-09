@@ -380,9 +380,61 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (field_llvm_type == "ptr")
                 return types::make_str();
             if (field_llvm_type.starts_with("%struct.")) {
-                std::string struct_name = field_llvm_type.substr(8);
+                std::string mangled = field_llvm_type.substr(8);
+
+                // Check if this is a generic type (contains __ separator)
+                auto sep_pos = mangled.find("__");
+                if (sep_pos != std::string::npos) {
+                    // Parse mangled name: Maybe__Str -> Maybe[Str]
+                    std::string base_name = mangled.substr(0, sep_pos);
+                    std::string type_args_str = mangled.substr(sep_pos + 2);
+
+                    // Split type args by __ and create nested types
+                    std::vector<types::TypePtr> type_args;
+                    size_t pos = 0;
+                    while (pos < type_args_str.size()) {
+                        auto next_sep = type_args_str.find("__", pos);
+                        std::string arg = (next_sep == std::string::npos)
+                                              ? type_args_str.substr(pos)
+                                              : type_args_str.substr(pos, next_sep - pos);
+
+                        // Create type for this arg
+                        types::TypePtr arg_type;
+                        if (arg == "I32")
+                            arg_type = types::make_i32();
+                        else if (arg == "I64")
+                            arg_type = types::make_i64();
+                        else if (arg == "Bool")
+                            arg_type = types::make_bool();
+                        else if (arg == "Str")
+                            arg_type = types::make_str();
+                        else if (arg == "F32")
+                            arg_type = types::make_primitive(types::PrimitiveKind::F32);
+                        else if (arg == "F64")
+                            arg_type = types::make_f64();
+                        else if (arg == "Unit")
+                            arg_type = types::make_unit();
+                        else {
+                            // Named type without generics
+                            auto t = std::make_shared<types::Type>();
+                            t->kind = types::NamedType{arg, "", {}};
+                            arg_type = t;
+                        }
+                        type_args.push_back(arg_type);
+
+                        if (next_sep == std::string::npos)
+                            break;
+                        pos = next_sep + 2;
+                    }
+
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::NamedType{base_name, "", std::move(type_args)};
+                    return result;
+                }
+
+                // Non-generic struct type
                 auto result = std::make_shared<types::Type>();
-                result->kind = types::NamedType{struct_name, "", {}};
+                result->kind = types::NamedType{mangled, "", {}};
                 return result;
             }
             // Handle slice type: { ptr, i64 }

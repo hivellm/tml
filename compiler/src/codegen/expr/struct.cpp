@@ -147,9 +147,18 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             emit_line("  " + nested_val + " = load " + field_type + ", ptr " + nested_ptr);
             field_val = nested_val;
         } else {
-            field_val = gen_expr(*s.fields[i].second);
             // Get the actual field type from the struct definition
             std::string target_field_type = get_field_type(struct_name_for_lookup, field_name);
+
+            // Set expected type context for enum variants like Nothing
+            // This allows proper type inference for generic enums
+            if (target_field_type.find("%struct.Maybe__") == 0 ||
+                target_field_type.find("%struct.Outcome__") == 0) {
+                expected_enum_type_ = target_field_type;
+            }
+
+            field_val = gen_expr(*s.fields[i].second);
+            expected_enum_type_.clear(); // Clear after expression
             // Infer expression type for proper casting
             types::TypePtr expr_type = infer_expr_type(*s.fields[i].second);
             std::string expr_llvm_type = llvm_type_from_semantic(expr_type);
