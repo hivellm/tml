@@ -1,6 +1,21 @@
 # Tasks: Implement HIR
 
-**Status**: In progress (Phase 4 complete - HIR Optimizations)
+**Status**: In progress (Phase 6 complete - Pipeline Integration)
+
+## Progress Summary
+
+| Phase | Status | Completion |
+|-------|--------|------------|
+| 1. HIR Data Structures | ✅ Complete | 100% |
+| 2. AST to HIR Lowering | ✅ Complete | 100% |
+| 3. HIR to MIR Lowering | ✅ Complete | 100% |
+| 4. HIR Optimizations | ✅ Complete | 100% |
+| 5. HIR Caching | ⏳ Pending | 0% |
+| 6. Pipeline Integration | ✅ Complete | 100% |
+| 7. Testing | 🔄 In Progress | 60% |
+| 8. Documentation | ✅ Complete | 100% |
+
+**Overall**: ~85% complete (40/47 tasks done)
 
 ## 1. HIR Data Structures
 
@@ -67,6 +82,41 @@
 - [x] 8.1 Document HIR architecture in docs/specs/31-HIR.md
 - [x] 8.2 Add inline documentation to HIR headers (Rust-style)
 - [x] 8.3 Update CHANGELOG.md with HIR implementation
+
+## 9. MIR Optimization Passes (HIR-enabled)
+
+The following MIR optimization passes have been implemented and work with the HIR→MIR pipeline:
+
+### Phase 1 (Existing)
+- [x] ConstantFolding - Evaluate constant expressions at compile time
+- [x] ConstantPropagation - Replace uses of constants with their values
+- [x] DeadCodeElimination - Remove unused instructions
+- [x] CommonSubexpressionElimination - Reuse computed values
+- [x] CopyPropagation - Replace copies with original values
+- [x] UnreachableCodeElimination - Remove unreachable blocks
+- [x] Inlining - Function inlining with cost analysis
+
+### Phase 2 (2026-01-09)
+- [x] SimplifyCfg - Simplify control flow graph
+- [x] InstSimplify - Peephole instruction simplifications
+- [x] JumpThreading - Thread jumps through single-predecessor blocks
+- [x] SROA - Scalar Replacement of Aggregates
+- [x] GVN - Global Value Numbering
+- [x] MatchSimplify - Simplify match/switch statements
+- [x] Mem2Reg - Promote allocas to SSA registers
+- [x] LICM - Loop Invariant Code Motion
+- [x] StrengthReduction - Replace expensive ops with cheaper equivalents
+- [x] ReassociatePass - Reorder associative operations
+- [x] TailCallPass - Identify and mark tail calls
+- [x] NarrowingPass - Replace zext→op→trunc with narrower ops
+- [x] LoopUnrollPass - Loop analysis for unrolling
+- [x] SinkingPass - Move computations closer to uses
+- [x] ADCEPass - Aggressive Dead Code Elimination
+
+**Benchmark Results** (algorithms.tml):
+- O0: 1042 MIR lines (baseline)
+- O2: 516 lines (50.5% reduction)
+- O3: 474 lines (54.5% reduction)
 
 ## Validation
 
