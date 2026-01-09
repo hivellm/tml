@@ -414,7 +414,36 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                             arg_type = types::make_f64();
                         else if (arg == "Unit")
                             arg_type = types::make_unit();
-                        else {
+                        else if (arg.starts_with("ref_") || arg.starts_with("mutref_")) {
+                            // Reference type: ref_X or mutref_X -> RefType
+                            bool is_mut = arg.starts_with("mutref_");
+                            std::string inner_name = is_mut ? arg.substr(7) : arg.substr(4);
+
+                            // Check if inner is a dyn type
+                            types::TypePtr inner_type;
+                            if (inner_name.starts_with("dyn_")) {
+                                // dyn_Error -> DynBehaviorType
+                                std::string behavior = inner_name.substr(4);
+                                auto dyn_t = std::make_shared<types::Type>();
+                                dyn_t->kind = types::DynBehaviorType{behavior, {}};
+                                inner_type = dyn_t;
+                            } else {
+                                // Regular named type
+                                auto inner_t = std::make_shared<types::Type>();
+                                inner_t->kind = types::NamedType{inner_name, "", {}};
+                                inner_type = inner_t;
+                            }
+
+                            auto ref_t = std::make_shared<types::Type>();
+                            ref_t->kind = types::RefType{is_mut, inner_type};
+                            arg_type = ref_t;
+                        } else if (arg.starts_with("dyn_")) {
+                            // Dynamic trait type: dyn_Error -> DynBehaviorType
+                            std::string behavior = arg.substr(4);
+                            auto dyn_t = std::make_shared<types::Type>();
+                            dyn_t->kind = types::DynBehaviorType{behavior, {}};
+                            arg_type = dyn_t;
+                        } else {
                             // Named type without generics
                             auto t = std::make_shared<types::Type>();
                             t->kind = types::NamedType{arg, "", {}};

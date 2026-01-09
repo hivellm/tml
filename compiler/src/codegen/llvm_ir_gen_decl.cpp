@@ -71,6 +71,9 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     std::vector<FieldInfo> fields;
     for (size_t i = 0; i < s.fields.size(); ++i) {
         std::string ft = llvm_type_ptr(s.fields[i].type);
+        // Unit type as struct field must be {} not void (LLVM doesn't allow void in structs)
+        if (ft == "void")
+            ft = "{}";
         field_types.push_back(ft);
         fields.push_back({s.fields[i].name, static_cast<int>(i), ft});
     }
@@ -109,7 +112,8 @@ void LLVMIRGen::gen_struct_instantiation(const parser::StructDecl& decl,
     for (size_t i = 0; i < decl.fields.size(); ++i) {
         // Resolve field type and apply substitution
         types::TypePtr field_type = resolve_parser_type_with_subs(*decl.fields[i].type, subs);
-        std::string ft = llvm_type_from_semantic(field_type);
+        // Use for_data=true since struct fields need concrete types (Unit -> {} not void)
+        std::string ft = llvm_type_from_semantic(field_type, true);
         field_types.push_back(ft);
         fields.push_back({decl.fields[i].name, static_cast<int>(i), ft});
     }
@@ -164,7 +168,8 @@ auto LLVMIRGen::require_struct_instantiation(const std::string& base_name,
         std::vector<FieldInfo> fields;
         for (size_t i = 0; i < decl->fields.size(); ++i) {
             types::TypePtr field_type = resolve_parser_type_with_subs(*decl->fields[i].type, subs);
-            std::string ft = llvm_type_from_semantic(field_type);
+            // Use for_data=true since struct fields need concrete types (Unit -> {} not void)
+            std::string ft = llvm_type_from_semantic(field_type, true);
             fields.push_back({decl->fields[i].name, static_cast<int>(i), ft});
         }
         struct_fields_[mangled] = fields;
