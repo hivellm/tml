@@ -1,6 +1,45 @@
 //! # HIR Builder - Pattern Lowering
 //!
 //! This file implements pattern lowering from AST to HIR.
+//!
+//! ## Overview
+//!
+//! Pattern lowering transforms parser AST patterns into HIR patterns. Patterns
+//! are used in `let` bindings, `when` expressions, function parameters, and
+//! destructuring assignments.
+//!
+//! ## Pattern Types
+//!
+//! | AST Pattern       | HIR Pattern          | Example                    |
+//! |-------------------|----------------------|----------------------------|
+//! | `WildcardPattern` | `HirWildcardPattern` | `_`                        |
+//! | `IdentPattern`    | `HirBindingPattern`  | `x`, `mut y`               |
+//! | `LiteralPattern`  | `HirLiteralPattern`  | `42`, `"hello"`, `true`    |
+//! | `TuplePattern`    | `HirTuplePattern`    | `(a, b, c)`                |
+//! | `StructPattern`   | `HirStructPattern`   | `Point { x, y }`           |
+//! | `EnumPattern`     | `HirEnumPattern`     | `Maybe::Just(v)`           |
+//! | `OrPattern`       | `HirOrPattern`       | `1 \| 2 \| 3`               |
+//! | `ArrayPattern`    | `HirArrayPattern`    | `[a, b, ..rest]`           |
+//!
+//! ## Type Propagation
+//!
+//! Patterns receive an "expected type" from context which flows downward:
+//! - In `let x: T = ...`, the pattern gets type T
+//! - In `when` expressions, patterns get the scrutinee type
+//! - Nested patterns receive element/field types from their parent
+//!
+//! ## Binding Extraction
+//!
+//! Patterns introduce variable bindings. The `HirBindingPattern` records:
+//! - Variable name
+//! - Mutability (`mut` keyword)
+//! - Inferred or annotated type
+//!
+//! ## See Also
+//!
+//! - `hir_builder_stmt.cpp` - Uses patterns in let statements
+//! - `hir_builder_expr.cpp` - Uses patterns in when/for expressions
+//! - `hir_pattern.cpp` - Pattern node implementations
 
 #include "hir/hir_builder.hpp"
 #include "lexer/token.hpp"
@@ -10,6 +49,11 @@ namespace tml::hir {
 // ============================================================================
 // Pattern Lowering Dispatch
 // ============================================================================
+//
+// Main entry point for pattern lowering. The expected_type parameter carries
+// type information from the surrounding context (e.g., from type annotations
+// or scrutinee types). This enables type inference to flow from outer context
+// into nested pattern elements.
 
 auto HirBuilder::lower_pattern(const parser::Pattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -44,6 +88,9 @@ auto HirBuilder::lower_pattern(const parser::Pattern& pattern, HirType expected_
 // ============================================================================
 // Wildcard Pattern
 // ============================================================================
+//
+// The `_` pattern matches anything but binds no variables.
+// Commonly used for ignored elements or catch-all cases in `when`.
 
 auto HirBuilder::lower_wildcard_pattern(const parser::WildcardPattern& pattern) -> HirPatternPtr {
     return make_hir_wildcard_pattern(fresh_id(), pattern.span);
@@ -52,6 +99,11 @@ auto HirBuilder::lower_wildcard_pattern(const parser::WildcardPattern& pattern) 
 // ============================================================================
 // Identifier Pattern
 // ============================================================================
+//
+// Identifier patterns bind values to names. Supports:
+// - Simple binding: `x` (immutable)
+// - Mutable binding: `mut x`
+// - Typed binding: `x: I32` (explicit annotation overrides expected type)
 
 auto HirBuilder::lower_ident_pattern(const parser::IdentPattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -68,6 +120,14 @@ auto HirBuilder::lower_ident_pattern(const parser::IdentPattern& pattern, HirTyp
 // ============================================================================
 // Literal Pattern
 // ============================================================================
+//
+// Literal patterns match exact values: integers, booleans, strings, chars.
+// Used in `when` arms for value-based dispatch:
+//   when x {
+//       0 => "zero",
+//       1 => "one",
+//       _ => "other"
+//   }
 
 auto HirBuilder::lower_literal_pattern(const parser::LiteralPattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -118,6 +178,10 @@ auto HirBuilder::lower_literal_pattern(const parser::LiteralPattern& pattern, Hi
 // ============================================================================
 // Tuple Pattern
 // ============================================================================
+//
+// Tuple patterns destructure tuple values: `(a, b, c)`.
+// Element types are extracted from the expected TupleType and propagated
+// to nested patterns. Missing types default to null (inferred later).
 
 auto HirBuilder::lower_tuple_pattern(const parser::TuplePattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -140,6 +204,10 @@ auto HirBuilder::lower_tuple_pattern(const parser::TuplePattern& pattern, HirTyp
 // ============================================================================
 // Struct Pattern
 // ============================================================================
+//
+// Struct patterns destructure named fields: `Point { x, y }`.
+// Field types are looked up from the struct definition in the type environment.
+// The `has_rest` flag (`..`) allows ignoring unmatched fields.
 
 auto HirBuilder::lower_struct_pattern(const parser::StructPattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -172,6 +240,10 @@ auto HirBuilder::lower_struct_pattern(const parser::StructPattern& pattern, HirT
 // ============================================================================
 // Enum Pattern
 // ============================================================================
+//
+// Enum patterns match enum variants: `Maybe::Just(v)`, `Outcome::Err(e)`.
+// The variant index is resolved from the type environment's enum definition.
+// Payload patterns receive types from the variant's associated data types.
 
 auto HirBuilder::lower_enum_pattern(const parser::EnumPattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -227,6 +299,10 @@ auto HirBuilder::lower_enum_pattern(const parser::EnumPattern& pattern, HirType 
 // ============================================================================
 // Or Pattern
 // ============================================================================
+//
+// Or patterns match any of several alternatives: `1 | 2 | 3`.
+// All alternatives must bind the same set of variables with compatible types.
+// The expected type is propagated to all alternatives.
 
 auto HirBuilder::lower_or_pattern(const parser::OrPattern& pattern, HirType expected_type)
     -> HirPatternPtr {
@@ -243,6 +319,10 @@ auto HirBuilder::lower_or_pattern(const parser::OrPattern& pattern, HirType expe
 // ============================================================================
 // Array Pattern
 // ============================================================================
+//
+// Array patterns match arrays or slices: `[a, b, c]`, `[head, ..tail]`.
+// Element type is extracted from the expected ArrayType or SliceType.
+// The rest pattern (`..rest`) captures remaining elements as a slice.
 
 auto HirBuilder::lower_array_pattern(const parser::ArrayPattern& pattern, HirType expected_type)
     -> HirPatternPtr {

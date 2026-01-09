@@ -162,6 +162,13 @@ add_library(tml_hir STATIC
     src/hir/hir_builder_stmt.cpp
     src/hir/hir_builder_pattern.cpp
     src/hir/hir_pass.cpp
+    src/hir/hir_serialize.cpp
+    # Serializer modules (split from hir_serialize.cpp for maintainability)
+    src/hir/serializer/binary_writer.cpp
+    src/hir/serializer/binary_reader.cpp
+    src/hir/serializer/text_writer.cpp
+    src/hir/serializer/text_reader.cpp
+    src/hir/serializer/serialize_utils.cpp
 )
 target_link_libraries(tml_hir PUBLIC tml_borrow)
 target_include_directories(tml_hir PUBLIC include src)

@@ -1,6 +1,53 @@
 //! # HIR Builder - Core Implementation
 //!
-//! This file implements the main HirBuilder class for lowering AST to HIR.
+//! This file implements the main `HirBuilder` class responsible for lowering
+//! the Abstract Syntax Tree (AST) to High-level Intermediate Representation (HIR).
+//!
+//! ## Overview
+//!
+//! The HIR builder performs "lowering" - transforming parser AST nodes into
+//! a simpler, more explicit representation suitable for type checking and
+//! code generation. Key transformations include:
+//!
+//! - **Desugaring**: `for` loops → iterator protocol, `?` → explicit match
+//! - **Name resolution**: Identifiers linked to declarations
+//! - **Type resolution**: Type annotations resolved to concrete types
+//! - **Generic instantiation**: Monomorphization of generic types/functions
+//!
+//! ## Architecture
+//!
+//! ```text
+//! ┌─────────────┐    ┌────────────┐    ┌─────────────┐
+//! │  Parser AST │ -> │ HirBuilder │ -> │ HIR Module  │
+//! └─────────────┘    └────────────┘    └─────────────┘
+//!                          │
+//!                          ├── lower_expr()  (hir_builder_expr.cpp)
+//!                          ├── lower_stmt()  (hir_builder_stmt.cpp)
+//!                          └── lower_pattern() (hir_builder_pattern.cpp)
+//! ```
+//!
+//! ## Monomorphization
+//!
+//! Generic types and functions are instantiated at each call site with
+//! concrete type arguments. The `MonomorphizationCache` ensures each
+//! unique instantiation is created only once.
+//!
+//! Example: `Vec[I32]` and `Vec[String]` become separate types with
+//! mangled names like `Vec_I32` and `Vec_String`.
+//!
+//! ## Scope Management
+//!
+//! The builder maintains a scope stack to track variable bindings:
+//! - `push_scope()` / `pop_scope()` for block boundaries
+//! - Variables are added to the current scope during let/var lowering
+//! - Name resolution walks the scope stack from innermost to outermost
+//!
+//! ## See Also
+//!
+//! - `hir_builder.hpp` - Class declarations and interface
+//! - `hir_builder_expr.cpp` - Expression lowering
+//! - `hir_builder_stmt.cpp` - Statement lowering
+//! - `hir_builder_pattern.cpp` - Pattern lowering
 
 #include "hir/hir_builder.hpp"
 
@@ -11,6 +58,15 @@ namespace tml::hir {
 // ============================================================================
 // MonomorphizationCache
 // ============================================================================
+//
+// The monomorphization cache tracks instantiations of generic types and
+// functions with concrete type arguments. Each unique combination of
+// base name + type args produces a unique mangled name.
+//
+// Example:
+//   Vec[I32]    -> "Vec_I32"
+//   Vec[String] -> "Vec_String"
+//   map[I32, String] -> "map_I32_String"
 
 auto MonomorphizationCache::has_type(const std::string& key) const -> bool {
     return type_instances.find(key) != type_instances.end();
@@ -77,6 +133,19 @@ HirBuilder::HirBuilder(types::TypeEnv& type_env) : type_env_(type_env) {}
 // ============================================================================
 // Module Lowering
 // ============================================================================
+//
+// Entry point for lowering an entire AST module to HIR. Processes all
+// top-level declarations in order:
+// 1. Functions -> HirFunction
+// 2. Structs -> HirStruct
+// 3. Enums -> HirEnum
+// 4. Traits -> HirBehavior
+// 5. Impls -> HirImpl
+// 6. Constants -> HirConst
+// 7. Use statements -> imports list
+//
+// After processing all declarations, pending monomorphization requests
+// are resolved to ensure all generic instantiations are available.
 
 auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
     HirModule module;
@@ -130,6 +199,15 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
 // ============================================================================
 // Function Lowering
 // ============================================================================
+//
+// Lowers a function declaration to HIR. Key steps:
+// 1. Create HirFunction with metadata (name, visibility, async, extern)
+// 2. Lower parameters (pattern -> HirParam with name, type, mutability)
+// 3. Lower return type annotation
+// 4. Lower function body in a new scope with parameters bound
+//
+// For generic functions, the mangled_name is updated based on type arguments
+// during monomorphization.
 
 auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
     HirFunction hir_func;
@@ -355,6 +433,13 @@ auto HirBuilder::lower_const(const parser::ConstDecl& const_decl) -> HirConst {
 // ============================================================================
 // Helper Methods
 // ============================================================================
+//
+// Utility functions used throughout the lowering process:
+// - fresh_id(): Generate unique HIR node identifiers
+// - resolve_type(): Convert parser::Type to HirType (types::TypePtr)
+// - get_expr_type(): Infer type from expression structure
+// - convert_*_op(): Map parser operators to HIR operators
+// - is_captured() / collect_captures(): Closure capture analysis
 
 auto HirBuilder::fresh_id() -> HirId {
     return id_gen_.next();

@@ -34,6 +34,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace tml::hir {
@@ -184,6 +185,8 @@ private:
 
     auto should_inline(const HirFunction& func) -> bool;
     auto inline_call(HirCallExpr& call, const HirFunction& func) -> std::optional<HirExprPtr>;
+    void inline_calls_in_expr(HirExprPtr& expr,
+                              const std::unordered_map<std::string, const HirFunction*>& inlinable);
 };
 
 // ============================================================================
@@ -214,9 +217,13 @@ public:
 private:
     bool changed_ = false;
 
+    void optimize_function(HirFunction& func);
+    void optimize_in_expr(HirExprPtr& expr);
     void optimize_closure(HirClosureExpr& closure);
     auto is_capture_used(const HirClosureExpr& closure, const std::string& name) -> bool;
     auto capture_escapes(const HirClosureExpr& closure, const std::string& name) -> bool;
+    auto check_var_usage(const HirExpr& expr, const std::string& name) -> bool;
+    auto check_var_escapes(const HirExpr& expr, const std::string& name) -> bool;
 };
 
 // ============================================================================

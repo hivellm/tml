@@ -1,6 +1,37 @@
 //! # HIR Builder - Statement Lowering
 //!
 //! This file implements statement lowering from AST to HIR.
+//!
+//! ## Overview
+//!
+//! Statement lowering transforms parser AST statements into HIR statements.
+//! TML has a small set of statement types since most constructs are expressions.
+//!
+//! ## Statement Types
+//!
+//! | AST Statement | HIR Statement | Description                           |
+//! |---------------|---------------|---------------------------------------|
+//! | `LetStmt`     | `HirLetStmt`  | Immutable binding: `let x = 1`        |
+//! | `VarStmt`     | `HirLetStmt`  | Mutable binding: `var x = 1` (sugar)  |
+//! | `ExprStmt`    | `HirExprStmt` | Expression evaluated for side-effects |
+//! | `DeclPtr`     | (placeholder) | Nested declarations in blocks         |
+//!
+//! ## Key Transformations
+//!
+//! - `var x = value` desugars to `let mut x = value`
+//! - Pattern bindings add variables to the current scope
+//! - Type inference from initializers when no annotation provided
+//!
+//! ## Scope Management
+//!
+//! Each `let`/`var` binding adds names to the current scope for variable
+//! resolution. Block expressions create new scopes (handled in hir_builder_expr.cpp).
+//!
+//! ## See Also
+//!
+//! - `hir_builder.cpp` - Main builder and scope infrastructure
+//! - `hir_builder_expr.cpp` - Expression lowering
+//! - `hir_builder_pattern.cpp` - Pattern lowering for let bindings
 
 #include "hir/hir_builder.hpp"
 
@@ -9,6 +40,11 @@ namespace tml::hir {
 // ============================================================================
 // Statement Lowering Dispatch
 // ============================================================================
+//
+// Main entry point for statement lowering. Uses std::visit to dispatch
+// to type-specific lowering functions based on the statement variant.
+// Nested declarations (const, type aliases) become placeholder statements
+// since they're already registered in the module's symbol tables.
 
 auto HirBuilder::lower_stmt(const parser::Stmt& stmt) -> HirStmtPtr {
     return std::visit(
@@ -40,6 +76,14 @@ auto HirBuilder::lower_stmt(const parser::Stmt& stmt) -> HirStmtPtr {
 // ============================================================================
 // Let Statement
 // ============================================================================
+//
+// `let` creates an immutable binding. The type is determined by:
+// 1. Explicit type annotation: `let x: I32 = ...`
+// 2. Initializer expression type: `let x = 42` infers I32
+// 3. Default to unit if neither present (rare edge case)
+//
+// Pattern bindings extract names and register them in the current scope
+// for later variable resolution in expressions.
 
 auto HirBuilder::lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr {
     // Resolve type
@@ -75,6 +119,12 @@ auto HirBuilder::lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr {
 // ============================================================================
 // Var Statement (desugars to let mut)
 // ============================================================================
+//
+// TML's `var x = value` is syntactic sugar for `let mut x = value`.
+// This provides a familiar, more concise syntax for mutable variables.
+//
+// Unlike `let`, `var` always requires an initializer and uses simple
+// identifier binding (not full pattern syntax).
 
 auto HirBuilder::lower_var(const parser::VarStmt& var_stmt) -> HirStmtPtr {
     // Resolve type
@@ -102,6 +152,12 @@ auto HirBuilder::lower_var(const parser::VarStmt& var_stmt) -> HirStmtPtr {
 // ============================================================================
 // Expression Statement
 // ============================================================================
+//
+// Expression statements evaluate an expression for its side effects,
+// discarding the result. Common examples:
+// - Function calls: `print("hello")`
+// - Assignments: `x = 42`
+// - Method calls: `list.push(item)`
 
 auto HirBuilder::lower_expr_stmt(const parser::ExprStmt& expr_stmt) -> HirStmtPtr {
     auto expr = lower_expr(*expr_stmt.expr);

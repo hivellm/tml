@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **HIR Optimization Passes - Inlining & Closure** (2026-01-09) - Full implementation of HIR Inlining and ClosureOptimization passes
+  - **Inlining Pass**: Replaces calls to small, non-recursive functions with their bodies
+    - Configurable statement threshold (default: 5)
+    - Respects `@inline` and `@noinline` attributes
+    - Detects and skips recursive functions
+    - Deep cloning of expressions, statements, and patterns
+    - Parameter substitution with let bindings
+  - **ClosureOptimization Pass**: Optimizes closure captures and representations
+    - Removes unused captures from closures
+    - Performs escape analysis on captured variables
+    - Converts escaping captures to immutable when safe
+    - Traverses nested closures recursively
+  - All 113 HIR tests passing including 23 new optimization tests
+  - Files modified: `compiler/src/hir/hir_pass.cpp`, `compiler/include/hir/hir_pass.hpp`
+  - Files modified: `compiler/tests/hir_test.cpp`
+
 - **MIR Optimization Passes - Phase 4** (2026-01-09) - Additional optimization passes for O2/O3 pipelines
   - **ConstantHoistPass**: Moves expensive constant materialization out of loops
   - **SimplifySelectPass**: Optimizes select/conditional instructions (constant conditions, same values, boolean patterns)

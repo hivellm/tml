@@ -1,6 +1,41 @@
 //! # HIR Pretty Printer Implementation
 //!
 //! This file implements the HIR pretty printer for debugging output.
+//!
+//! ## Overview
+//!
+//! The HirPrinter converts HIR structures back into human-readable text.
+//! This is primarily used for:
+//! - Debugging compiler internals (`--emit-hir` flag)
+//! - Test output verification
+//! - Error message generation with context
+//!
+//! ## Output Format
+//!
+//! The printer produces TML-like syntax with added annotations:
+//! - Mangled names shown as `/* comments */`
+//! - Type annotations on all bindings
+//! - Full parenthesization of expressions
+//!
+//! ## Color Support
+//!
+//! When `use_colors` is enabled, ANSI escape codes colorize:
+//! - Keywords (magenta bold): `func`, `let`, `if`, etc.
+//! - Type names (yellow bold): `I32`, `Bool`, etc.
+//! - Literals (cyan): numbers, strings, booleans
+//! - Comments (gray): mangled names, annotations
+//!
+//! ## Usage Example
+//!
+//! ```cpp
+//! HirPrinter printer(/*use_colors=*/true);
+//! std::cout << printer.print_module(module);
+//! ```
+//!
+//! ## See Also
+//!
+//! - `hir_printer.hpp` - Printer class declaration
+//! - `hir_module.hpp` - Module structure definitions
 
 #include "hir/hir_printer.hpp"
 
@@ -21,6 +56,15 @@ HirPrinter::HirPrinter(bool use_colors) : use_colors_(use_colors) {}
 // ============================================================================
 // Color Helpers
 // ============================================================================
+//
+// ANSI escape codes for terminal colorization. Each helper wraps text in
+// the appropriate escape sequence when colors are enabled.
+//
+// Color scheme:
+// - Magenta bold (\033[1;35m): Keywords (func, let, if, etc.)
+// - Yellow bold (\033[1;33m): Type names
+// - Cyan (\033[0;36m): Literals (strings, numbers)
+// - Gray (\033[0;90m): Comments and annotations
 
 auto HirPrinter::keyword(const std::string& s) -> std::string {
     if (use_colors_) {
@@ -53,6 +97,9 @@ auto HirPrinter::comment(const std::string& s) -> std::string {
 // ============================================================================
 // Indentation
 // ============================================================================
+//
+// Indentation management for nested structures. Uses 2-space indentation.
+// push_indent/pop_indent adjust the current level for block contents.
 
 auto HirPrinter::indent() -> std::string {
     return std::string(indent_ * 2, ' ');
@@ -71,6 +118,9 @@ void HirPrinter::pop_indent() {
 // ============================================================================
 // Module Printing
 // ============================================================================
+//
+// Prints the complete module with header comment, then sections for:
+// structs, enums, and functions. Each section is prefixed with a comment.
 
 auto HirPrinter::print_module(const HirModule& module) -> std::string {
     std::ostringstream out;
@@ -110,6 +160,14 @@ auto HirPrinter::print_module(const HirModule& module) -> std::string {
 // ============================================================================
 // Function Printing
 // ============================================================================
+//
+// Prints function signatures with:
+// - Attributes (@inline, @extern, etc.)
+// - Visibility (pub)
+// - Modifiers (async, extern)
+// - Parameters with types
+// - Return type
+// - Body expression (or semicolon for declarations)
 
 auto HirPrinter::print_function(const HirFunction& func) -> std::string {
     std::ostringstream out;
@@ -174,6 +232,9 @@ auto HirPrinter::print_function(const HirFunction& func) -> std::string {
 // ============================================================================
 // Struct Printing
 // ============================================================================
+//
+// Prints struct definitions with visibility, name, mangled name comment,
+// and field list with types.
 
 auto HirPrinter::print_struct(const HirStruct& s) -> std::string {
     std::ostringstream out;
@@ -208,6 +269,9 @@ auto HirPrinter::print_struct(const HirStruct& s) -> std::string {
 // ============================================================================
 // Enum Printing
 // ============================================================================
+//
+// Prints enum definitions with visibility, name, and variants.
+// Variants with payloads show their associated types in parentheses.
 
 auto HirPrinter::print_enum(const HirEnum& e) -> std::string {
     std::ostringstream out;
@@ -249,6 +313,10 @@ auto HirPrinter::print_enum(const HirEnum& e) -> std::string {
 // ============================================================================
 // Expression Printing
 // ============================================================================
+//
+// Recursively prints expressions using std::visit dispatch. Each expression
+// kind has its own formatting logic. Binary expressions are parenthesized
+// for clarity. Block expressions use indentation for nested content.
 
 auto HirPrinter::print_expr(const HirExpr& expr) -> std::string {
     std::ostringstream out;
@@ -426,6 +494,9 @@ auto HirPrinter::print_expr(const HirExpr& expr) -> std::string {
 // ============================================================================
 // Statement Printing
 // ============================================================================
+//
+// Prints let statements with pattern, type, and optional initializer.
+// Expression statements print their expression followed by semicolon.
 
 auto HirPrinter::print_stmt(const HirStmt& stmt) -> std::string {
     std::ostringstream out;
@@ -453,6 +524,9 @@ auto HirPrinter::print_stmt(const HirStmt& stmt) -> std::string {
 // ============================================================================
 // Pattern Printing
 // ============================================================================
+//
+// Prints patterns for destructuring: wildcards, bindings, literals,
+// tuples, structs, and enums. Recursive for nested patterns.
 
 auto HirPrinter::print_pattern(const HirPattern& pattern) -> std::string {
     std::ostringstream out;
@@ -529,6 +603,9 @@ auto HirPrinter::print_pattern(const HirPattern& pattern) -> std::string {
 // ============================================================================
 // Type Printing
 // ============================================================================
+//
+// Delegates to types::type_to_string for the actual formatting.
+// Null types display as underscore (_) for inference placeholders.
 
 auto HirPrinter::print_type(const HirType& type) -> std::string {
     if (!type) {

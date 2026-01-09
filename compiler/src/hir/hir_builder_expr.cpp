@@ -1,6 +1,41 @@
 //! # HIR Builder - Expression Lowering
 //!
 //! This file implements expression lowering from AST to HIR.
+//!
+//! ## Overview
+//!
+//! Expression lowering transforms parser AST expressions into HIR expressions.
+//! This process involves:
+//!
+//! - **Type inference**: Determining expression types from context
+//! - **Desugaring**: Converting syntactic sugar to explicit forms
+//! - **Name resolution**: Linking identifiers to their declarations
+//!
+//! ## Expression Categories
+//!
+//! | Category     | AST Types                  | HIR Types             |
+//! |--------------|----------------------------|-----------------------|
+//! | Atoms        | Literal, Ident, Path       | Literal, Var, Enum    |
+//! | Operations   | Binary, Unary, Cast        | Binary, Unary, Cast   |
+//! | Access       | Call, Method, Field, Index | Call, Method, Field   |
+//! | Constructors | Tuple, Array, Struct       | Tuple, Array, Struct  |
+//! | Control      | If, When, Loop, For, While | If, When, Loop, For   |
+//! | Jumps        | Return, Break, Continue    | Return, Break, Continue|
+//! | Special      | Closure, Try, Await, Range | Closure, Try, Await   |
+//!
+//! ## Key Transformations
+//!
+//! - `for` loops are desugared to iterator protocol calls
+//! - Ternary `a ? b : c` becomes `if a { b } else { c }`
+//! - `if let` becomes `when` with two arms
+//! - Range `a..b` becomes `Range { start: a, end: b }`
+//! - `?` operator becomes explicit error propagation
+//!
+//! ## See Also
+//!
+//! - `hir_builder.cpp` - Main builder implementation
+//! - `hir_builder_stmt.cpp` - Statement lowering
+//! - `hir_builder_pattern.cpp` - Pattern lowering
 
 #include "hir/hir_builder.hpp"
 #include "lexer/token.hpp"
@@ -10,6 +45,10 @@ namespace tml::hir {
 // ============================================================================
 // Expression Lowering Dispatch
 // ============================================================================
+//
+// Main entry point for expression lowering. Uses std::visit to dispatch
+// to type-specific lowering functions based on the expression variant.
+// Each expression type has its own lower_* function below.
 
 auto HirBuilder::lower_expr(const parser::Expr& expr) -> HirExprPtr {
     return std::visit(
@@ -85,6 +124,11 @@ auto HirBuilder::lower_expr(const parser::Expr& expr) -> HirExprPtr {
 // ============================================================================
 // Literal Expressions
 // ============================================================================
+//
+// Literals are compile-time constants. The type is determined by:
+// - Explicit suffix: `42i64`, `3.14f32`
+// - Default inference: integers default to I32, floats to F64
+// - Context: string literals are Str, bool literals are Bool
 
 auto HirBuilder::lower_literal(const parser::LiteralExpr& lit) -> HirExprPtr {
     HirId id = fresh_id();
@@ -178,6 +222,16 @@ auto HirBuilder::lower_ident(const parser::IdentExpr& ident) -> HirExprPtr {
 // ============================================================================
 // Binary Expressions
 // ============================================================================
+//
+// Binary expressions include:
+// - Arithmetic: +, -, *, /, %
+// - Comparison: ==, !=, <, <=, >, >=
+// - Logical: and, or
+// - Bitwise: &, |, ^, <<, >>
+// - Assignment: =, +=, -=, etc.
+//
+// Assignment and compound assignment are handled separately since they
+// don't produce a value like other binary operations.
 
 auto HirBuilder::lower_binary(const parser::BinaryExpr& binary) -> HirExprPtr {
     // Handle assignment separately

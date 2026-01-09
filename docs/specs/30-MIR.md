@@ -204,23 +204,69 @@ class BlockPass : public MirPass {
 
 ### 5.2 Available Passes
 
+The TML compiler implements 33 optimization passes organized by optimization level:
+
+#### Core Passes (O1+)
+
 | Pass | Level | Description |
 |------|-------|-------------|
+| `EarlyCSE` | Block | Fast local common subexpression elimination |
+| `InstSimplify` | Function | Instruction simplification and canonicalization |
 | `ConstantFolding` | Block | Evaluate constant expressions at compile time |
 | `ConstantPropagation` | Function | Replace uses of constants with their values |
-| `CopyPropagation` | Function | Replace copies with original values |
+| `SimplifyCfg` | Function | Simplify control flow graph |
 | `DeadCodeElimination` | Function | Remove unused instructions |
-| `CommonSubexpressionElimination` | Function | Reuse computed values |
+
+#### Standard Passes (O2+)
+
+| Pass | Level | Description |
+|------|-------|-------------|
+| `SROA` | Function | Scalar Replacement of Aggregates - break up struct allocas |
+| `Mem2Reg` | Function | Promote stack allocations to SSA registers |
+| `Peephole` | Block | Algebraic simplifications (x+0→x, x*1→x, etc.) |
+| `SimplifySelect` | Function | Simplify select/conditional instructions |
+| `StrengthReduction` | Function | Replace expensive ops with cheaper ones (mul→shift) |
+| `Reassociate` | Function | Reorder associative operations for optimization |
+| `GVN` | Function | Global Value Numbering - cross-block CSE |
+| `CopyPropagation` | Function | Replace copies with original values |
+| `BlockMerge` | Function | Merge sequential basic blocks |
+| `MatchSimplify` | Function | Simplify match/switch statements |
+| `Inlining` | Function | Inline small function calls |
+| `LoadStoreOpt` | Function | Eliminate redundant loads and stores |
+| `LICM` | Function | Loop-Invariant Code Motion |
+| `JumpThreading` | Function | Thread jumps through conditional blocks |
+| `TailCall` | Function | Optimize tail-recursive calls |
 | `UnreachableCodeElimination` | Function | Remove unreachable blocks |
+| `DeadFunctionElimination` | Module | Remove unused functions |
+
+#### Aggressive Passes (O3)
+
+| Pass | Level | Description |
+|------|-------|-------------|
+| `Narrowing` | Function | Use smaller integer types when safe |
+| `ConstantHoist` | Function | Hoist expensive constants out of loops |
+| `LoopRotate` | Function | Transform loops for better optimization |
+| `LoopUnroll` | Function | Unroll small constant-bound loops |
+| `Sinking` | Function | Move computations closer to their uses |
+| `ADCE` | Function | Aggressive Dead Code Elimination |
+| `DeadArgElimination` | Module | Remove unused function arguments |
+| `MergeReturns` | Function | Combine multiple returns into single exit |
+
+#### Specialized Passes
+
+| Pass | Level | Description |
+|------|-------|-------------|
+| `EscapeAnalysis` | Function | Track pointer escape for stack allocation |
+| `AsyncLowering` | Function | Lower async/await to state machines |
 
 ### 5.3 Optimization Levels
 
 ```cpp
 enum class OptLevel {
     O0,  // No optimization - just type checking
-    O1,  // Basic optimizations (constant folding, DCE)
-    O2,  // Standard optimizations (all above + CSE, copy prop)
-    O3,  // Aggressive optimizations (all above + inlining)
+    O1,  // Basic optimizations (constant folding, DCE, early CSE)
+    O2,  // Standard optimizations (O1 + SROA, mem2reg, GVN, inlining, LICM)
+    O3,  // Aggressive optimizations (O2 + loop opts, narrowing, ADCE)
 };
 ```
 
@@ -285,6 +331,119 @@ After:
 %1 = add %0, const.i32 1
 %4 = add %1, %1       ; Reuse %1
 ret %4
+```
+
+### 6.4 Peephole Optimization
+
+Before:
+```mir
+%0 = mul %x, const.i32 0   ; Multiply by 0
+%1 = add %y, const.i32 0   ; Add 0
+%2 = mul %z, const.i32 1   ; Multiply by 1
+ret %2
+```
+
+After:
+```mir
+%0 = const.i32 0          ; x * 0 → 0
+                          ; y + 0 → y (eliminated)
+ret %z                    ; z * 1 → z
+```
+
+### 6.5 SimplifySelect
+
+Before:
+```mir
+%0 = const.bool true
+%1 = select %0, %a, %b    ; Select with constant true
+%2 = select %cond, %x, %x ; Select with same values
+ret %1
+```
+
+After:
+```mir
+ret %a                    ; select(true, a, b) → a
+                          ; select(cond, x, x) → x
+```
+
+### 6.6 MergeReturns
+
+Before:
+```mir
+func @example(x: I32) -> I32 {
+bb_entry:
+    br_cond %cond, bb_true, bb_false
+
+bb_true:
+    %1 = const.i32 1
+    ret %1
+
+bb_false:
+    %2 = const.i32 0
+    ret %2
+}
+```
+
+After:
+```mir
+func @example(x: I32) -> I32 {
+bb_entry:
+    br_cond %cond, bb_true, bb_false
+
+bb_true:
+    %1 = const.i32 1
+    br unified_exit
+
+bb_false:
+    %2 = const.i32 0
+    br unified_exit
+
+unified_exit:
+    %ret = phi [%1, bb_true], [%2, bb_false]
+    ret %ret
+}
+```
+
+### 6.7 ConstantHoist
+
+Before (constant inside loop):
+```mir
+bb_loop:
+    %c = const.f64 3.14159   ; Expensive constant materialized each iteration
+    %r = mul %x, %c
+    br_cond %cond, bb_loop, bb_exit
+```
+
+After (constant hoisted to preheader):
+```mir
+bb_preheader:
+    %c = const.f64 3.14159   ; Hoisted outside loop
+    br bb_loop
+
+bb_loop:
+    %r = mul %x, %c          ; Uses hoisted value
+    br_cond %cond, bb_loop, bb_exit
+```
+
+### 6.8 BlockMerge
+
+Before:
+```mir
+bb0:
+    %0 = const.i32 1
+    br bb1
+
+bb1:                         ; Single predecessor, no phi nodes
+    %1 = add %0, %0
+    ret %1
+```
+
+After:
+```mir
+bb0:
+    %0 = const.i32 1
+    %1 = add %0, %0          ; Merged into single block
+    ret %1
 ```
 
 ## 7. Serialization
@@ -372,9 +531,11 @@ auto llvm_ir = llvm_gen.generate_from_mir(mir_module);
 
 ## 10. Source Files
 
+### Core Infrastructure
+
 | File | Description |
 |------|-------------|
-| `include/mir/mir.hpp` | Core data structures |
+| `include/mir/mir.hpp` | Core data structures (Value, Instruction, BasicBlock, Function) |
 | `include/mir/mir_builder.hpp` | MIR construction API |
 | `include/mir/mir_pass.hpp` | Optimization pass infrastructure |
 | `include/mir/mir_serialize.hpp` | Serialization interface |
@@ -383,8 +544,46 @@ auto llvm_ir = llvm_gen.generate_from_mir(mir_module);
 | `src/mir/mir_printer.cpp` | Human-readable output |
 | `src/mir/mir_builder.cpp` | AST to MIR conversion |
 | `src/mir/mir_serialize.cpp` | Serialization implementation |
-| `src/mir/mir_pass.cpp` | Pass manager |
-| `src/mir/passes/*.cpp` | Individual optimization passes |
+| `src/mir/mir_pass.cpp` | Pass manager and analysis utilities |
+
+### Optimization Passes
+
+| File | Description |
+|------|-------------|
+| `passes/constant_folding.cpp` | Evaluate constant expressions |
+| `passes/constant_propagation.cpp` | Propagate constant values |
+| `passes/copy_propagation.cpp` | Eliminate redundant copies |
+| `passes/dead_code_elimination.cpp` | Remove unused instructions |
+| `passes/unreachable_code_elimination.cpp` | Remove unreachable blocks |
+| `passes/common_subexpression_elimination.cpp` | Local CSE |
+| `passes/early_cse.cpp` | Fast early CSE |
+| `passes/gvn.cpp` | Global Value Numbering |
+| `passes/simplify_cfg.cpp` | CFG simplification |
+| `passes/inst_simplify.cpp` | Instruction canonicalization |
+| `passes/peephole.cpp` | Algebraic simplifications |
+| `passes/simplify_select.cpp` | Select instruction simplification |
+| `passes/strength_reduction.cpp` | Expensive op replacement |
+| `passes/reassociate.cpp` | Operation reordering |
+| `passes/sroa.cpp` | Scalar Replacement of Aggregates |
+| `passes/mem2reg.cpp` | Alloca promotion to SSA |
+| `passes/inlining.cpp` | Function inlining |
+| `passes/dead_function_elimination.cpp` | Remove unused functions |
+| `passes/dead_arg_elim.cpp` | Remove unused arguments |
+| `passes/licm.cpp` | Loop-Invariant Code Motion |
+| `passes/loop_rotate.cpp` | Loop rotation |
+| `passes/loop_unroll.cpp` | Loop unrolling |
+| `passes/const_hoist.cpp` | Constant hoisting from loops |
+| `passes/jump_threading.cpp` | Jump threading |
+| `passes/tail_call.cpp` | Tail call optimization |
+| `passes/match_simplify.cpp` | Match/switch simplification |
+| `passes/narrowing.cpp` | Integer type narrowing |
+| `passes/sinking.cpp` | Code sinking |
+| `passes/adce.cpp` | Aggressive DCE |
+| `passes/block_merge.cpp` | Basic block merging |
+| `passes/load_store_opt.cpp` | Memory operation optimization |
+| `passes/merge_returns.cpp` | Return statement merging |
+| `passes/escape_analysis.cpp` | Pointer escape analysis |
+| `passes/async_lowering.cpp` | Async/await lowering |
 
 ---
 
