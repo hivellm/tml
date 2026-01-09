@@ -368,7 +368,7 @@ impl Display for BoxedError {
 
 impl Debug for BoxedError {
     pub func debug_string(this) -> Str {
-        return "BoxedError { message: " + this.message + " }"
+        return "BoxedError \{ message: " + this.message + " \}"
     }
 }
 
