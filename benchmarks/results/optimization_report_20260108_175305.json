@@ -1,0 +1,158 @@
+[
+  {
+    "file": "optimization_bench.tml",
+    "levels": {
+      "O0": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O0",
+        "success": true,
+        "mir_stats": {
+          "functions": 27,
+          "blocks": 85,
+          "instructions": 650,
+          "assignments": 436,
+          "calls": 157,
+          "branches": 48,
+          "returns": 37,
+          "consts": 264,
+          "phis": 11
+        },
+        "error": null,
+        "mir_size": 17561
+      },
+      "O1": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O1",
+        "success": true,
+        "mir_stats": {
+          "functions": 27,
+          "blocks": 85,
+          "instructions": 650,
+          "assignments": 436,
+          "calls": 157,
+          "branches": 48,
+          "returns": 37,
+          "consts": 335,
+          "phis": 11
+        },
+        "error": null,
+        "mir_size": 17681
+      },
+      "O2": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O2",
+        "success": true,
+        "mir_stats": {
+          "functions": 27,
+          "blocks": 69,
+          "instructions": 373,
+          "assignments": 183,
+          "calls": 147,
+          "branches": 43,
+          "returns": 26,
+          "consts": 97,
+          "phis": 11
+        },
+        "error": null,
+        "mir_size": 11275
+      },
+      "O3": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O3",
+        "success": true,
+        "mir_stats": {
+          "functions": 27,
+          "blocks": 69,
+          "instructions": 358,
+          "assignments": 168,
+          "calls": 147,
+          "branches": 43,
+          "returns": 26,
+          "consts": 82,
+          "phis": 11
+        },
+        "error": null,
+        "mir_size": 10905
+      }
+    },
+    "instruction_reduction_O0_O2": 42.61538461538461
+  },
+  {
+    "file": "algorithms.tml",
+    "levels": {
+      "O0": {
+        "file": "algorithms.tml",
+        "opt_level": "O0",
+        "success": true,
+        "mir_stats": {
+          "functions": 21,
+          "blocks": 166,
+          "instructions": 666,
+          "assignments": 425,
+          "calls": 112,
+          "branches": 136,
+          "returns": 30,
+          "consts": 305,
+          "phis": 2
+        },
+        "error": null,
+        "mir_size": 18582
+      },
+      "O1": {
+        "file": "algorithms.tml",
+        "opt_level": "O1",
+        "success": true,
+        "mir_stats": {
+          "functions": 21,
+          "blocks": 166,
+          "instructions": 666,
+          "assignments": 425,
+          "calls": 112,
+          "branches": 136,
+          "returns": 30,
+          "consts": 325,
+          "phis": 2
+        },
+        "error": null,
+        "mir_size": 18582
+      },
+      "O2": {
+        "file": "algorithms.tml",
+        "opt_level": "O2",
+        "success": true,
+        "mir_stats": {
+          "functions": 21,
+          "blocks": 166,
+          "instructions": 407,
+          "assignments": 166,
+          "calls": 112,
+          "branches": 136,
+          "returns": 30,
+          "consts": 71,
+          "phis": 2
+        },
+        "error": null,
+        "mir_size": 13220
+      },
+      "O3": {
+        "file": "algorithms.tml",
+        "opt_level": "O3",
+        "success": true,
+        "mir_stats": {
+          "functions": 21,
+          "blocks": 166,
+          "instructions": 407,
+          "assignments": 166,
+          "calls": 112,
+          "branches": 136,
+          "returns": 30,
+          "consts": 71,
+          "phis": 2
+        },
+        "error": null,
+        "mir_size": 13220
+      }
+    },
+    "instruction_reduction_O0_O2": 38.888888888888886
+  }
+]

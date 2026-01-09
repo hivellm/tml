@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **MIR Optimization Passes - Phase 2** (2026-01-09) - Additional optimization passes for O2/O3 pipelines
+  - **ReassociatePass**: Reorders associative operations (add, mul, and, or, xor) for better constant folding
+  - **TailCallPass**: Identifies and marks tail calls for backend optimization
+  - **NarrowingPass**: Replaces zext→op→trunc patterns with narrower operations when safe
+  - **LoopUnrollPass**: Loop analysis infrastructure for unrolling small constant-bound loops
+  - **SinkingPass**: Moves computations closer to their uses to reduce register pressure
+  - **ADCEPass**: Aggressive Dead Code Elimination using reverse dataflow analysis
+  - Benchmark improvement: O3 now achieves 54.5% MIR size reduction (up from baseline)
+  - All 40 MIR unit tests passing
+  - Files added:
+    - `compiler/include/mir/passes/reassociate.hpp`, `compiler/src/mir/passes/reassociate.cpp`
+    - `compiler/include/mir/passes/tail_call.hpp`, `compiler/src/mir/passes/tail_call.cpp`
+    - `compiler/include/mir/passes/narrowing.hpp`, `compiler/src/mir/passes/narrowing.cpp`
+    - `compiler/include/mir/passes/loop_unroll.hpp`, `compiler/src/mir/passes/loop_unroll.cpp`
+    - `compiler/include/mir/passes/sinking.hpp`, `compiler/src/mir/passes/sinking.cpp`
+    - `compiler/include/mir/passes/adce.hpp`, `compiler/src/mir/passes/adce.cpp`
+  - Files modified: `compiler/CMakeLists.txt`, `compiler/src/mir/mir_pass.cpp`
+
 - **High-level Intermediate Representation (HIR)** (2026-01-08) - New compiler IR layer between type-checked AST and MIR
   - Type-resolved AST representation using semantic `types::TypePtr`
   - Modular architecture with 9 header files and 9 source files

@@ -46,6 +46,8 @@ enum class InstTag : uint8_t {
     EnumInit = 15,
     TupleInit = 16,
     ArrayInit = 17,
+    Await = 18,
+    ClosureInit = 19,
 };
 
 enum class TermTag : uint8_t {

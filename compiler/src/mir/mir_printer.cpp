@@ -287,6 +287,14 @@ auto MirPrinter::print_instruction(const InstructionData& inst) -> std::string {
             } else if constexpr (std::is_same_v<T, AwaitInst>) {
                 out << "await " << print_value(i.poll_value);
                 out << " (suspension " << i.suspension_id << ")";
+            } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                out << "closure " << i.func_name << " [";
+                for (size_t j = 0; j < i.captures.size(); ++j) {
+                    if (j > 0)
+                        out << ", ";
+                    out << i.captures[j].first << " = " << print_value(i.captures[j].second);
+                }
+                out << "]";
             }
         },
         inst.inst);

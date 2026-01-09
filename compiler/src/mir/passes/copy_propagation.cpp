@@ -198,6 +198,12 @@ auto CopyPropagationPass::propagate_copies(Function& func,
                         for (auto& elem : i.elements) {
                             replace(elem.id);
                         }
+                    } else if constexpr (std::is_same_v<T, AwaitInst>) {
+                        replace(i.poll_value.id);
+                    } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                        for (auto& cap : i.captures) {
+                            replace(cap.second.id);
+                        }
                     }
                     // ConstantInst and AllocaInst have no value operands
                 },

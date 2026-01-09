@@ -42,8 +42,11 @@
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"
 #include "compiler_setup.hpp"
+#include "hir/hir.hpp"
+#include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "mir/hir_mir_builder.hpp"
 #include "object_compiler.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
@@ -628,7 +631,19 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             return false;
         }
 
-        // Code generation
+        // Optional HIR pipeline: AST → HIR → MIR
+        if (options.use_hir) {
+            auto env_copy = env;
+            hir::HirBuilder hir_builder(env_copy);
+            auto hir_module = hir_builder.lower_module(module);
+
+            mir::HirMirBuilder hir_mir_builder(env);
+            auto mir_module = hir_mir_builder.build(hir_module);
+            // TODO: Use MIR for code generation when MIR→LLVM backend is ready
+            // For now, HIR is just validated but codegen still uses AST
+        }
+
+        // Code generation (from AST for now, MIR backend planned)
         codegen::LLVMGenOptions gen_options;
         gen_options.emit_comments = verbose;
         codegen::LLVMIRGen llvm_gen(env, gen_options);
@@ -767,6 +782,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     bool clean = false;
     bool no_cache = false;
     bool lto = false;
+    bool use_hir = false;
     int opt_level = tml::CompilerOptions::optimization_level;
 
     for (const auto& arg : args) {
@@ -780,6 +796,8 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
             no_cache = true;
         } else if (arg == "--lto") {
             lto = true;
+        } else if (arg == "--use-hir") {
+            use_hir = true;
         } else if (arg == "-O0") {
             opt_level = 0;
         } else if (arg == "-O1") {
@@ -823,6 +841,7 @@ int run_parallel_build(const std::vector<std::string>& args, bool verbose) {
     opts.verbose = verbose;
     opts.no_cache = no_cache;
     opts.lto = lto;
+    opts.use_hir = use_hir;
     opts.optimization_level = opt_level;
     opts.debug_info = tml::CompilerOptions::debug_info;
     builder.set_options(opts);

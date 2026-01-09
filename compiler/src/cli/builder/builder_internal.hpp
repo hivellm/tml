@@ -34,11 +34,15 @@
 #include "borrow/checker.hpp"
 #include "codegen/c_header_gen.hpp"
 #include "codegen/llvm_ir_gen.hpp"
+#include "codegen/mir_codegen.hpp"
 #include "common.hpp"
+#include "hir/hir.hpp"
+#include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_builder.hpp"
+#include "mir/hir_mir_builder.hpp"
 #include "mir/mir_pass.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
@@ -50,6 +54,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <thread>
 #ifndef _WIN32

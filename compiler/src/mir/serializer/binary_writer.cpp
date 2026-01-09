@@ -274,6 +274,26 @@ void MirBinaryWriter::write_instruction(const InstructionData& inst) {
                 for (const auto& elem : i.elements) {
                     write_value(elem);
                 }
+            } else if constexpr (std::is_same_v<T, AwaitInst>) {
+                write_u8(static_cast<uint8_t>(InstTag::Await));
+                write_value(i.poll_value);
+                write_type(i.poll_type);
+                write_type(i.result_type);
+                write_u32(i.suspension_id);
+            } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                write_u8(static_cast<uint8_t>(InstTag::ClosureInit));
+                write_string(i.func_name);
+                write_u32(static_cast<uint32_t>(i.captures.size()));
+                for (const auto& cap : i.captures) {
+                    write_string(cap.first);
+                    write_value(cap.second);
+                }
+                for (const auto& cap_type : i.cap_types) {
+                    write_string(cap_type.first);
+                    write_type(cap_type.second);
+                }
+                write_type(i.func_type);
+                write_type(i.result_type);
             }
         },
         inst.inst);

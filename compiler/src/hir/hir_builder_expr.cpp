@@ -93,8 +93,8 @@ auto HirBuilder::lower_literal(const parser::LiteralExpr& lit) -> HirExprPtr {
     case lexer::TokenKind::IntLiteral: {
         if (std::holds_alternative<lexer::IntValue>(lit.token.value)) {
             auto int_val = std::get<lexer::IntValue>(lit.token.value);
-            // Determine type from suffix or default to I64
-            HirType type = types::make_i64();
+            // Determine type from suffix or default to I32 (like most languages)
+            HirType type = types::make_i32();
             if (!int_val.suffix.empty()) {
                 const auto& suffix = int_val.suffix;
                 if (suffix == "i8")

@@ -132,8 +132,23 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
 
     // Emit MIR if requested (early exit before LLVM codegen)
     if (emit_mir) {
-        mir::MirBuilder mir_builder(env);
-        auto mir_module = mir_builder.build(module);
+        mir::Module mir_module;
+
+        // Use new HIR pipeline: AST -> HIR -> MIR
+        // This provides better type information and enables more optimizations
+        // Make a mutable copy of env for HirBuilder (which needs non-const access)
+        auto env_copy = env;
+        hir::HirBuilder hir_builder(env_copy);
+        auto hir_module = hir_builder.lower_module(module);
+
+        if (verbose) {
+            std::cout << "  HIR: Built " << hir_module.functions.size() << " functions, "
+                      << hir_module.structs.size() << " structs, " << hir_module.enums.size()
+                      << " enums\n";
+        }
+
+        mir::HirMirBuilder hir_mir_builder(env);
+        mir_module = hir_mir_builder.build(hir_module);
 
         // Apply MIR optimizations based on optimization level
         int opt_level = tml::CompilerOptions::optimization_level;
@@ -172,30 +187,96 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         return 0;
     }
 
-    codegen::LLVMGenOptions options;
-    options.emit_comments = verbose;
-    options.emit_debug_info = CompilerOptions::debug_info;
-    options.debug_level = CompilerOptions::debug_level;
-    options.coverage_enabled = CompilerOptions::coverage;
-    options.coverage_output_file = CompilerOptions::coverage_output;
-    options.source_file = path;
-    if (!CompilerOptions::target_triple.empty()) {
-        options.target_triple = CompilerOptions::target_triple;
-    }
+    std::string llvm_ir;
+    std::set<std::string> link_libs;  // FFI libraries to link
+
+    // Use MIR-based codegen for O1+ optimizations, AST-based for O0
+    int opt_level = tml::CompilerOptions::optimization_level;
+    if (opt_level > 0) {  // Use MIR codegen for optimized builds
+        // Build MIR from HIR for optimized codegen
+        auto env_copy = env;
+        hir::HirBuilder hir_builder(env_copy);
+        auto hir_module = hir_builder.lower_module(module);
+
+        if (verbose) {
+            std::cout << "  HIR: Built " << hir_module.functions.size() << " functions, "
+                      << hir_module.structs.size() << " structs, " << hir_module.enums.size()
+                      << " enums\n";
+        }
+
+        mir::HirMirBuilder hir_mir_builder(env);
+        auto mir_module = hir_mir_builder.build(hir_module);
+
+        // Apply MIR optimizations
+        mir::OptLevel mir_opt = mir::OptLevel::O0;
+        if (opt_level == 1)
+            mir_opt = mir::OptLevel::O1;
+        else if (opt_level == 2)
+            mir_opt = mir::OptLevel::O2;
+        else if (opt_level >= 3)
+            mir_opt = mir::OptLevel::O3;
+
+        mir::PassManager pm(mir_opt);
+        pm.configure_standard_pipeline();
+        int passes_changed = pm.run(mir_module);
+        if (verbose && passes_changed > 0) {
+            std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
+        }
+
+        // Generate LLVM IR from optimized MIR
+        codegen::MirCodegenOptions mir_opts;
+        mir_opts.emit_comments = verbose;
 #ifdef _WIN32
-    // Enable DLL export for dynamic libraries on Windows
-    options.dll_export = (output_type == BuildOutputType::DynamicLib);
+        mir_opts.dll_export = (output_type == BuildOutputType::DynamicLib);
+        mir_opts.target_triple = "x86_64-pc-windows-msvc";
+#else
+        mir_opts.target_triple = "x86_64-unknown-linux-gnu";
 #endif
-    codegen::LLVMIRGen llvm_gen(env, options);
+        if (!CompilerOptions::target_triple.empty()) {
+            mir_opts.target_triple = CompilerOptions::target_triple;
+        }
 
-    auto gen_result = llvm_gen.generate(module);
-    if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
-        const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
-        emit_all_codegen_errors(diag, errors);
-        return 1;
+        codegen::MirCodegen mir_codegen(mir_opts);
+        llvm_ir = mir_codegen.generate(mir_module);
+
+        if (verbose) {
+            std::cout << "  Generated LLVM IR from optimized MIR (" << mir_module.functions.size()
+                      << " functions)\n";
+        }
+
+        // Note: MIR codegen doesn't currently track @link libraries
+        // For FFI support with optimizations, we still need to parse them from AST
+        // TODO: Extract link_libs from AST decorators for MIR codegen path
+    } else {
+        // Use AST-based codegen for O0 (no optimizations)
+        codegen::LLVMGenOptions options;
+        options.emit_comments = verbose;
+        options.emit_debug_info = CompilerOptions::debug_info;
+        options.debug_level = CompilerOptions::debug_level;
+        options.coverage_enabled = CompilerOptions::coverage;
+        options.coverage_output_file = CompilerOptions::coverage_output;
+        options.source_file = path;
+        if (!CompilerOptions::target_triple.empty()) {
+            options.target_triple = CompilerOptions::target_triple;
+        }
+#ifdef _WIN32
+        // Enable DLL export for dynamic libraries on Windows
+        options.dll_export = (output_type == BuildOutputType::DynamicLib);
+#endif
+        codegen::LLVMIRGen llvm_gen(env, options);
+
+        auto gen_result = llvm_gen.generate(module);
+        if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
+            const auto& errors = std::get<std::vector<codegen::LLVMGenError>>(gen_result);
+            emit_all_codegen_errors(diag, errors);
+            return 1;
+        }
+
+        llvm_ir = std::get<std::string>(gen_result);
+
+        // Get FFI link libraries from AST codegen
+        link_libs = llvm_gen.get_link_libs();
     }
-
-    const auto& llvm_ir = std::get<std::string>(gen_result);
 
     // Use build directory structure (like Rust's target/)
     // If output_dir is specified, use it; otherwise use default build directory
@@ -424,7 +505,7 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         link_options.sysroot = tml::CompilerOptions::sysroot;
 
         // Add @link libraries from FFI decorators
-        for (const auto& lib : llvm_gen.get_link_libs()) {
+        for (const auto& lib : link_libs) {
             // Check if it's a path (contains / or \) or a library name
             if (lib.find('/') != std::string::npos || lib.find('\\') != std::string::npos) {
                 // Full path to library file

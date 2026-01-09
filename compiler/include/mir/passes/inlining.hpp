@@ -133,6 +133,7 @@ private:
     std::unordered_map<std::string, const Function*> function_map_;
     std::unordered_map<std::string, std::unordered_set<std::string>> call_graph_;
     std::unordered_map<std::string, int> inline_depth_;
+    int inline_counter_ = 0; ///< Counter for generating unique block names.
 
     void build_call_graph(Module& module);
     [[nodiscard]] auto calculate_threshold(const Function& caller, const CallInst& call) const
@@ -141,7 +142,8 @@ private:
     auto inline_call(Function& caller, BasicBlock& block, size_t call_index, const Function& callee)
         -> bool;
     auto clone_function_body(const Function& callee, ValueId first_new_id,
-                             const std::vector<Value>& args) -> std::vector<BasicBlock>;
+                             const std::vector<Value>& args, int inline_id)
+        -> std::vector<BasicBlock>;
     void remap_values(std::vector<BasicBlock>& blocks,
                       const std::unordered_map<ValueId, ValueId>& value_map);
 };

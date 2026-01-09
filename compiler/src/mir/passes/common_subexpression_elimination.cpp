@@ -241,6 +241,14 @@ auto CommonSubexpressionEliminationPass::replace_uses(Function& func, ValueId ol
                             if (elem.id == old_value)
                                 elem.id = new_value;
                         }
+                    } else if constexpr (std::is_same_v<T, AwaitInst>) {
+                        if (i.poll_value.id == old_value)
+                            i.poll_value.id = new_value;
+                    } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                        for (auto& cap : i.captures) {
+                            if (cap.second.id == old_value)
+                                cap.second.id = new_value;
+                        }
                     }
                     // ConstantInst and AllocaInst have no value operands
                 },

@@ -59,6 +59,20 @@ static auto has_noinline_attr(const Function& func) -> bool {
     return false;
 }
 
+// Check if function is directly recursive (calls itself)
+static auto is_directly_recursive(const Function& func) -> bool {
+    for (const auto& block : func.blocks) {
+        for (const auto& inst : block.instructions) {
+            if (auto* call = std::get_if<CallInst>(&inst.inst)) {
+                if (call->func_name == func.name) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // ============================================================================
 // InliningPass Implementation
 // ============================================================================
@@ -66,6 +80,7 @@ static auto has_noinline_attr(const Function& func) -> bool {
 auto InliningPass::run(Module& module) -> bool {
     bool changed = false;
     stats_ = InliningStats{};
+    inline_counter_ = 0; // Reset inline counter for this run
 
     // Build call graph and function map
     build_call_graph(module);
@@ -103,8 +118,13 @@ auto InliningPass::run(Module& module) -> bool {
         iteration++;
 
         for (auto& func : module.functions) {
-            // Process each block
-            for (auto& block : func.blocks) {
+            // Process each block by index (blocks may be added during inlining)
+            // Only process original blocks in this iteration
+            size_t original_block_count = func.blocks.size();
+            for (size_t block_idx = 0; block_idx < original_block_count; ++block_idx) {
+                // Re-fetch block reference since vector may have been modified
+                auto& block = func.blocks[block_idx];
+
                 for (size_t i = 0; i < block.instructions.size(); ++i) {
                     auto& inst = block.instructions[i];
 
@@ -130,6 +150,12 @@ auto InliningPass::run(Module& module) -> bool {
                         continue;
                     }
 
+                    // Skip directly recursive functions (causes code explosion)
+                    if (is_directly_recursive(*callee)) {
+                        stats_.recursive_limit_hit++;
+                        continue;
+                    }
+
                     // Check for @inline attribute - always inline regardless of cost
                     if (has_inline_attr(*callee)) {
                         // Check recursive limit even for @inline
@@ -142,7 +168,7 @@ auto InliningPass::run(Module& module) -> bool {
                         inline_depth_[call_key]++;
                         int callee_size = count_instructions(*callee);
 
-                        if (inline_call(func, block, i, *callee)) {
+                        if (inline_call(func, func.blocks[block_idx], i, *callee)) {
                             changed = true;
                             made_progress = true;
                             stats_.calls_inlined++;
@@ -174,7 +200,7 @@ auto InliningPass::run(Module& module) -> bool {
                     if (cost.should_inline()) {
                         inline_depth_[call_key]++;
 
-                        if (inline_call(func, block, i, *callee)) {
+                        if (inline_call(func, func.blocks[block_idx], i, *callee)) {
                             changed = true;
                             made_progress = true;
                             stats_.calls_inlined++;
@@ -271,43 +297,150 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
     if (!call)
         return false;
 
-    // Clone callee's body
-    auto inlined_blocks = clone_function_body(callee, caller.next_value_id, call->args);
+    // Don't inline empty functions or extern functions
+    if (callee.blocks.empty())
+        return false;
+
+    // Clone callee's body with unique inline ID
+    int inline_id = inline_counter_++;
+    auto inlined_blocks = clone_function_body(callee, caller.next_value_id, call->args, inline_id);
 
     if (inlined_blocks.empty())
         return false;
 
-    // Update caller's next_value_id
+    // Update caller's next_value_id based on cloned instructions
+    ValueId max_value_id = caller.next_value_id;
     for (const auto& cloned_block : inlined_blocks) {
         for (const auto& cloned_inst : cloned_block.instructions) {
-            if (cloned_inst.result != INVALID_VALUE && cloned_inst.result >= caller.next_value_id) {
-                caller.next_value_id = cloned_inst.result + 1;
+            if (cloned_inst.result != INVALID_VALUE && cloned_inst.result >= max_value_id) {
+                max_value_id = cloned_inst.result + 1;
             }
         }
     }
+    caller.next_value_id = max_value_id;
 
-    // Split the call block and insert inlined code
-    // This is a simplified version - full implementation would:
-    // 1. Split the block at the call site
-    // 2. Connect entry of inlined code to first half
-    // 3. Connect return points to second half
-    // 4. Handle return value properly
-
-    // For now, just add the blocks and remove the call
-    // (Simplified implementation)
-    block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(call_index));
-
-    // Add inlined blocks to the function
-    for (auto& cloned_block : inlined_blocks) {
-        cloned_block.id = caller.next_block_id++;
-        caller.blocks.push_back(std::move(cloned_block));
+    // Find the block index in caller
+    size_t block_index = 0;
+    for (size_t i = 0; i < caller.blocks.size(); ++i) {
+        if (&caller.blocks[i] == &block) {
+            block_index = i;
+            break;
+        }
     }
+
+    // Create a continuation block for instructions after the call
+    BasicBlock continuation_block;
+    continuation_block.id = caller.next_block_id++;
+    continuation_block.name = block.name + "_cont";
+
+    // Move instructions after the call to the continuation block
+    for (size_t i = call_index + 1; i < block.instructions.size(); ++i) {
+        continuation_block.instructions.push_back(std::move(block.instructions[i]));
+    }
+    block.instructions.resize(call_index); // Remove call and everything after
+
+    // Move the original terminator to the continuation block
+    continuation_block.terminator = block.terminator;
+    block.terminator = std::nullopt;
+
+    // Assign IDs to inlined blocks and build block ID remapping
+    std::unordered_map<uint32_t, uint32_t> block_id_map;
+    uint32_t inline_entry_id = caller.next_block_id;
+    for (size_t i = 0; i < inlined_blocks.size(); ++i) {
+        uint32_t old_id = inlined_blocks[i].id;
+        uint32_t new_id = caller.next_block_id++;
+        block_id_map[old_id] = new_id;
+        inlined_blocks[i].id = new_id;
+    }
+
+    // Remap block references in terminators of inlined blocks
+    // and convert returns to branches to continuation
+    ValueId call_result_id = inst.result;
+    MirTypePtr return_type = callee.return_type;
+    std::vector<std::pair<Value, uint32_t>> phi_inputs; // For return value collection
+
+    for (auto& inlined_block : inlined_blocks) {
+        if (!inlined_block.terminator)
+            continue;
+
+        std::visit(
+            [&](auto& term) {
+                using T = std::decay_t<decltype(term)>;
+
+                if constexpr (std::is_same_v<T, BranchTerm>) {
+                    auto it = block_id_map.find(term.target);
+                    if (it != block_id_map.end()) {
+                        term.target = it->second;
+                    }
+                } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                    auto it_true = block_id_map.find(term.true_block);
+                    if (it_true != block_id_map.end()) {
+                        term.true_block = it_true->second;
+                    }
+                    auto it_false = block_id_map.find(term.false_block);
+                    if (it_false != block_id_map.end()) {
+                        term.false_block = it_false->second;
+                    }
+                } else if constexpr (std::is_same_v<T, SwitchTerm>) {
+                    auto it_default = block_id_map.find(term.default_block);
+                    if (it_default != block_id_map.end()) {
+                        term.default_block = it_default->second;
+                    }
+                    for (auto& case_block : term.cases) {
+                        auto it_case = block_id_map.find(case_block.second);
+                        if (it_case != block_id_map.end()) {
+                            case_block.second = it_case->second;
+                        }
+                    }
+                } else if constexpr (std::is_same_v<T, ReturnTerm>) {
+                    // Convert return to branch to continuation
+                    // Collect return value for phi node
+                    if (term.value && call_result_id != INVALID_VALUE) {
+                        phi_inputs.push_back({*term.value, inlined_block.id});
+                    }
+                    // Replace return with branch to continuation
+                    inlined_block.terminator = BranchTerm{continuation_block.id};
+                }
+            },
+            *inlined_block.terminator);
+    }
+
+    // Connect the original block to the inlined entry block
+    block.terminator = BranchTerm{inline_entry_id};
+
+    // If the call had a result, create a phi node at the start of continuation
+    if (call_result_id != INVALID_VALUE && !phi_inputs.empty()) {
+        PhiInst phi;
+        phi.incoming = phi_inputs;
+        phi.result_type = return_type;
+
+        InstructionData phi_inst;
+        phi_inst.result = call_result_id;
+        phi_inst.type = return_type;
+        phi_inst.inst = phi;
+
+        // Insert phi at the beginning of continuation block
+        continuation_block.instructions.insert(continuation_block.instructions.begin(), phi_inst);
+    }
+
+    // Add all inlined blocks to the function
+    for (auto& inlined_block : inlined_blocks) {
+        caller.blocks.push_back(std::move(inlined_block));
+    }
+
+    // Add the continuation block
+    caller.blocks.push_back(std::move(continuation_block));
+
+    // Mark the original block reference as potentially invalid
+    // since we modified the blocks vector
+    (void)block_index;
 
     return true;
 }
 
 auto InliningPass::clone_function_body(const Function& callee, ValueId first_new_id,
-                                       const std::vector<Value>& args) -> std::vector<BasicBlock> {
+                                       const std::vector<Value>& args, int inline_id)
+    -> std::vector<BasicBlock> {
     std::vector<BasicBlock> cloned;
 
     // Build value remapping from callee parameters to call arguments
@@ -326,11 +459,11 @@ auto InliningPass::clone_function_body(const Function& callee, ValueId first_new
         }
     }
 
-    // Clone each block
+    // Clone each block with unique names using inline_id
     for (const auto& block : callee.blocks) {
         BasicBlock new_block;
         new_block.id = block.id; // Will be remapped by caller
-        new_block.name = "inline_" + block.name;
+        new_block.name = "inline" + std::to_string(inline_id) + "_" + block.name;
 
         // Clone instructions
         for (const auto& inst : block.instructions) {

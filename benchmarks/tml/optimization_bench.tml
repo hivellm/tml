@@ -1,0 +1,352 @@
+// Optimization Benchmarks - TML
+//
+// Tests to measure the effectiveness of HIR and MIR optimization passes.
+// Each function is designed to exercise specific optimization opportunities:
+//   - Constant folding
+//   - Dead code elimination
+//   - Common subexpression elimination
+//   - Copy propagation
+//   - Unreachable code elimination
+//
+// Run with different optimization levels to see the difference:
+//   tml build optimization_bench.tml -O0  # No optimizations
+//   tml build optimization_bench.tml -O1  # Basic optimizations
+//   tml build optimization_bench.tml -O2  # Standard optimizations
+//   tml build optimization_bench.tml -O3  # Aggressive optimizations
+//
+// Use --emit-mir to see the MIR output and verify optimizations.
+
+// ============================================================================
+// 1. Constant Folding Benchmarks
+// ============================================================================
+
+// HIR and MIR should fold all these to a single constant
+pub func constant_fold_integers() -> I32 {
+    let a: I32 = 10 + 20 + 30 + 40 + 50
+    let b: I32 = 100 - 25 - 25 - 25 - 25
+    let c: I32 = 2 * 3 * 4 * 5
+    let d: I32 = 1000 / 10 / 10
+    let e: I32 = 17 % 5 + 10 % 3
+    return a + b + c + d + e
+}
+
+pub func constant_fold_nested() -> I32 {
+    // Deeply nested expressions - should all fold
+    let result: I32 = ((1 + 2) * (3 + 4)) + ((5 - 1) * (6 - 2))
+    return result
+}
+
+pub func constant_fold_floats() -> F64 {
+    let a: F64 = 1.5 + 2.5 + 3.0
+    let b: F64 = 10.0 * 0.5 * 2.0
+    let c: F64 = 100.0 / 4.0 / 5.0
+    return a + b + c
+}
+
+pub func constant_fold_booleans() -> Bool {
+    let a: Bool = true and true and true
+    let b: Bool = false or false or true
+    let c: Bool = not false
+    let d: Bool = 5 > 3 and 10 == 10 and 7 < 8
+    return a and b and c and d
+}
+
+pub func constant_fold_bitwise() -> I32 {
+    let a: I32 = 0xFF & 0x0F          // 15
+    let b: I32 = 0xF0 | 0x0F          // 255
+    let c: I32 = 0xFF xor 0xAA        // 85
+    let d: I32 = 1 shl 4              // 16
+    let e: I32 = 256 shr 4            // 16
+    return a + b + c + d + e
+}
+
+// ============================================================================
+// 2. Dead Code Elimination Benchmarks
+// ============================================================================
+
+// All unused variables should be eliminated
+pub func dce_unused_variables() -> I32 {
+    let used: I32 = 42
+    let unused1: I32 = 100 * 200 * 300
+    let unused2: I32 = 400 + 500 + 600
+    let unused3: I32 = unused1 + unused2
+    let unused4: I32 = unused3 * 2
+    let unused5: I32 = unused4 - unused1
+    return used
+}
+
+// Chained unused computations
+pub func dce_chained_dead_code() -> I32 {
+    let live: I32 = 1
+    let dead_a: I32 = 10
+    let dead_b: I32 = dead_a + 20
+    let dead_c: I32 = dead_b * 2
+    let dead_d: I32 = dead_c - dead_a
+    let dead_e: I32 = dead_d + dead_b + dead_c
+    return live
+}
+
+// Dead code after early return (MIR unreachable code elimination)
+pub func dce_unreachable_code() -> I32 {
+    return 42
+    // Everything below should be eliminated
+    let a: I32 = 100
+    let b: I32 = 200
+    return a + b
+}
+
+// ============================================================================
+// 3. Constant If Condition (HIR DCE)
+// ============================================================================
+
+// The 'if true' branch should be the only one kept
+pub func hir_dce_if_true() -> I32 {
+    if true {
+        return 1
+    } else {
+        return 2
+    }
+}
+
+// The 'else' branch should be the only one kept
+pub func hir_dce_if_false() -> I32 {
+    if false {
+        return 1
+    } else {
+        return 2
+    }
+}
+
+// Nested constant ifs - should simplify to just 'return 3'
+pub func hir_dce_nested_ifs() -> I32 {
+    if true {
+        if false {
+            return 1
+        } else {
+            if true {
+                return 3
+            } else {
+                return 4
+            }
+        }
+    } else {
+        return 5
+    }
+}
+
+// ============================================================================
+// 4. Short-Circuit Evaluation (HIR optimization)
+// ============================================================================
+
+// false and X => false (X not evaluated)
+pub func short_circuit_and_false() -> Bool {
+    return false and expensive_bool_computation()
+}
+
+// true or X => true (X not evaluated)
+pub func short_circuit_or_true() -> Bool {
+    return true or expensive_bool_computation()
+}
+
+// Helper that would be expensive if called
+func expensive_bool_computation() -> Bool {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= 1000 { break }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum > 0
+}
+
+// ============================================================================
+// 5. Common Subexpression Elimination (CSE)
+// ============================================================================
+
+// Same expression computed multiple times
+pub func cse_simple_duplicates(x: I32, y: I32) -> I32 {
+    let a: I32 = x + y
+    let b: I32 = x + y
+    let c: I32 = x + y
+    return a + b + c
+}
+
+// More complex CSE opportunity
+pub func cse_complex(a: I32, b: I32, c: I32) -> I32 {
+    let expr1: I32 = a * b + c
+    let expr2: I32 = a * b + c
+    let expr3: I32 = (a * b) + c
+    return expr1 + expr2 + expr3
+}
+
+// Struct field access CSE
+type Point { x: I32, y: I32 }
+
+pub func cse_field_access(p: Point) -> I32 {
+    // p.x and p.y accessed multiple times - CSE opportunity
+    return p.x * p.x + p.y * p.y
+}
+
+// ============================================================================
+// 6. Copy Propagation
+// ============================================================================
+
+pub func copy_propagation_simple(input: I32) -> I32 {
+    let a: I32 = input
+    let b: I32 = a
+    let c: I32 = b
+    let d: I32 = c
+    return d + d
+}
+
+// ============================================================================
+// 7. Combined Optimizations
+// ============================================================================
+
+// Tests multiple optimizations working together
+pub func combined_optimizations(x: I32) -> I32 {
+    // Constant folding
+    let const_expr: I32 = 10 + 20 + 30
+
+    // Dead code
+    let unused: I32 = 999
+
+    // Constant if (HIR DCE)
+    if true {
+        // CSE opportunity
+        let a: I32 = x + const_expr
+        let b: I32 = x + const_expr
+        return a + b
+    } else {
+        // Dead branch
+        return unused
+    }
+}
+
+// Real-world pattern: calculate with many intermediate values
+pub func real_world_calculation(width: I32, height: I32) -> I32 {
+    let w: I32 = width        // Copy propagation candidate
+    let h: I32 = height       // Copy propagation candidate
+    let perimeter: I32 = 2 * (w + h)  // May be unused
+    let area: I32 = w * h
+    return area               // perimeter is dead code
+}
+
+// ============================================================================
+// 8. Loop Optimizations
+// ============================================================================
+
+// Loop invariant code motion - constant should be hoisted
+pub func loop_invariant(n: I32) -> I32 {
+    let constant: I32 = 10 * 20  // Should be computed once before loop
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= n { break }
+        sum = sum + constant
+        i = i + 1
+    }
+    return sum
+}
+
+// Dead code in loop
+pub func loop_with_dead_code(n: I32) -> I32 {
+    let mut sum: I32 = 0
+    let mut i: I32 = 0
+    loop {
+        if i >= n { break }
+        let unused: I32 = i * 1000  // Dead code in loop body
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+// ============================================================================
+// 9. Function-level Optimizations (future inlining targets)
+// ============================================================================
+
+// Simple function that could be inlined
+func add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+// Uses the simple function - inlining opportunity
+pub func inline_candidate(x: I32, y: I32) -> I32 {
+    let sum1: I32 = add(x, y)
+    let sum2: I32 = add(sum1, x)
+    let sum3: I32 = add(sum2, y)
+    return sum3
+}
+
+// ============================================================================
+// 10. Struct Optimizations
+// ============================================================================
+
+type Rectangle {
+    width: I32,
+    height: I32,
+}
+
+pub func struct_optimization() -> I32 {
+    let r: Rectangle = Rectangle { width: 10, height: 20 }
+    let unused_rect: Rectangle = Rectangle { width: 100, height: 200 }  // Dead
+    return r.width * r.height
+}
+
+// ============================================================================
+// Benchmark Runner
+// ============================================================================
+
+pub func run_all_benchmarks() -> I32 {
+    // Run each benchmark to ensure they're not DCE'd
+    let mut total: I32 = 0
+
+    total = total + constant_fold_integers()
+    total = total + constant_fold_nested()
+    total = total + constant_fold_booleans() as I32
+    total = total + constant_fold_bitwise()
+
+    total = total + dce_unused_variables()
+    total = total + dce_chained_dead_code()
+    total = total + dce_unreachable_code()
+
+    total = total + hir_dce_if_true()
+    total = total + hir_dce_if_false()
+    total = total + hir_dce_nested_ifs()
+
+    total = total + short_circuit_and_false() as I32
+    total = total + short_circuit_or_true() as I32
+
+    total = total + cse_simple_duplicates(5, 10)
+    total = total + cse_complex(2, 3, 4)
+
+    let p: Point = Point { x: 3, y: 4 }
+    total = total + cse_field_access(p)
+
+    total = total + copy_propagation_simple(7)
+    total = total + combined_optimizations(100)
+    total = total + real_world_calculation(50, 30)
+
+    total = total + loop_invariant(10)
+    total = total + loop_with_dead_code(10)
+
+    total = total + inline_candidate(1, 2)
+    total = total + struct_optimization()
+
+    return total
+}
+
+// ============================================================================
+// Main entry point for standalone benchmark
+// ============================================================================
+
+pub func main() -> I32 {
+    // Run all benchmarks and return the total
+    // Use --emit-mir to see optimization effects:
+    //   tml build optimization_bench.tml -O0 --emit-mir
+    //   tml build optimization_bench.tml -O2 --emit-mir
+    let result: I32 = run_all_benchmarks()
+    return result
+}

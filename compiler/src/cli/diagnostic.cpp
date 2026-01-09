@@ -815,4 +815,224 @@ std::vector<std::string> find_similar_candidates(const std::string& input,
     return result;
 }
 
+// ============================================================================
+// HIR Type Formatting for Error Messages
+// ============================================================================
+
+std::string format_hir_type(const types::TypePtr& type) {
+    if (!type) {
+        return "<unknown>";
+    }
+
+    return std::visit(
+        [](const auto& t) -> std::string {
+            using T = std::decay_t<decltype(t)>;
+            if constexpr (std::is_same_v<T, types::PrimitiveType>) {
+                switch (t.kind) {
+                case types::PrimitiveKind::I8:
+                    return "I8";
+                case types::PrimitiveKind::I16:
+                    return "I16";
+                case types::PrimitiveKind::I32:
+                    return "I32";
+                case types::PrimitiveKind::I64:
+                    return "I64";
+                case types::PrimitiveKind::I128:
+                    return "I128";
+                case types::PrimitiveKind::U8:
+                    return "U8";
+                case types::PrimitiveKind::U16:
+                    return "U16";
+                case types::PrimitiveKind::U32:
+                    return "U32";
+                case types::PrimitiveKind::U64:
+                    return "U64";
+                case types::PrimitiveKind::U128:
+                    return "U128";
+                case types::PrimitiveKind::F32:
+                    return "F32";
+                case types::PrimitiveKind::F64:
+                    return "F64";
+                case types::PrimitiveKind::Bool:
+                    return "Bool";
+                case types::PrimitiveKind::Char:
+                    return "Char";
+                case types::PrimitiveKind::Str:
+                    return "Str";
+                case types::PrimitiveKind::Unit:
+                    return "()";
+                case types::PrimitiveKind::Never:
+                    return "!";
+                default:
+                    return "<primitive>";
+                }
+            } else if constexpr (std::is_same_v<T, types::NamedType>) {
+                std::string result = t.name;
+                if (!t.type_args.empty()) {
+                    result += "[";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            result += ", ";
+                        result += format_hir_type(t.type_args[i]);
+                    }
+                    result += "]";
+                }
+                return result;
+            } else if constexpr (std::is_same_v<T, types::RefType>) {
+                std::string result = t.is_mut ? "mut ref " : "ref ";
+                result += format_hir_type(t.inner);
+                return result;
+            } else if constexpr (std::is_same_v<T, types::PtrType>) {
+                std::string result = t.is_mut ? "*mut " : "*";
+                result += format_hir_type(t.inner);
+                return result;
+            } else if constexpr (std::is_same_v<T, types::ArrayType>) {
+                return "[" + format_hir_type(t.element) + "; " + std::to_string(t.size) + "]";
+            } else if constexpr (std::is_same_v<T, types::SliceType>) {
+                return "[" + format_hir_type(t.element) + "]";
+            } else if constexpr (std::is_same_v<T, types::TupleType>) {
+                std::string result = "(";
+                for (size_t i = 0; i < t.elements.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += format_hir_type(t.elements[i]);
+                }
+                result += ")";
+                return result;
+            } else if constexpr (std::is_same_v<T, types::FuncType>) {
+                std::string result = "func(";
+                for (size_t i = 0; i < t.params.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += format_hir_type(t.params[i]);
+                }
+                result += ") -> ";
+                result += format_hir_type(t.return_type);
+                return result;
+            } else if constexpr (std::is_same_v<T, types::ClosureType>) {
+                std::string result = "closure(";
+                for (size_t i = 0; i < t.params.size(); ++i) {
+                    if (i > 0)
+                        result += ", ";
+                    result += format_hir_type(t.params[i]);
+                }
+                result += ") -> ";
+                result += format_hir_type(t.return_type);
+                return result;
+            } else if constexpr (std::is_same_v<T, types::TypeVar>) {
+                return "?" + std::to_string(t.id);
+            } else if constexpr (std::is_same_v<T, types::GenericType>) {
+                return t.name;
+            } else if constexpr (std::is_same_v<T, types::ConstGenericType>) {
+                return "const " + t.name;
+            } else if constexpr (std::is_same_v<T, types::DynBehaviorType>) {
+                return "dyn " + t.behavior_name;
+            } else if constexpr (std::is_same_v<T, types::ImplBehaviorType>) {
+                return "impl " + t.behavior_name;
+            } else {
+                return "<type>";
+            }
+        },
+        type->kind);
+}
+
+Diagnostic make_type_mismatch_diagnostic(const SourceSpan& span, const std::string& expected_type,
+                                         const std::string& found_type,
+                                         const std::string& context) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = ErrorCodes::TYPE_MISMATCH;
+    diag.message = "type mismatch";
+    diag.primary_span = span;
+
+    DiagnosticLabel label;
+    label.span = span;
+    label.message = "expected `" + expected_type + "`, found `" + found_type + "`";
+    label.is_primary = true;
+    diag.labels.push_back(label);
+
+    if (!context.empty()) {
+        diag.notes.push_back(context);
+    }
+
+    return diag;
+}
+
+Diagnostic make_not_callable_diagnostic(const SourceSpan& span, const std::string& type_name) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = ErrorCodes::NOT_CALLABLE;
+    diag.message = "cannot call value of type `" + type_name + "`";
+    diag.primary_span = span;
+
+    DiagnosticLabel label;
+    label.span = span;
+    label.message = "not a function";
+    label.is_primary = true;
+    diag.labels.push_back(label);
+
+    diag.notes.push_back("only function types can be called");
+
+    return diag;
+}
+
+Diagnostic make_unknown_field_diagnostic(const SourceSpan& span, const std::string& field_name,
+                                         const std::string& type_name,
+                                         const std::vector<std::string>& available_fields) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = ErrorCodes::FIELD_UNKNOWN;
+    diag.message = "no field `" + field_name + "` on type `" + type_name + "`";
+    diag.primary_span = span;
+
+    DiagnosticLabel label;
+    label.span = span;
+    label.message = "unknown field";
+    label.is_primary = true;
+    diag.labels.push_back(label);
+
+    // Find similar field names
+    std::string suggestion = find_similar(field_name, available_fields);
+    if (!suggestion.empty()) {
+        diag.help.push_back("did you mean `" + suggestion + "`?");
+    }
+
+    // List available fields if few enough
+    if (available_fields.size() <= 5 && !available_fields.empty()) {
+        std::string fields_str;
+        for (size_t i = 0; i < available_fields.size(); ++i) {
+            if (i > 0)
+                fields_str += ", ";
+            fields_str += "`" + available_fields[i] + "`";
+        }
+        diag.notes.push_back("available fields: " + fields_str);
+    }
+
+    return diag;
+}
+
+Diagnostic make_unknown_method_diagnostic(const SourceSpan& span, const std::string& method_name,
+                                          const std::string& type_name,
+                                          const std::vector<std::string>& available_methods) {
+    Diagnostic diag;
+    diag.severity = DiagnosticSeverity::Error;
+    diag.code = ErrorCodes::METHOD_UNKNOWN;
+    diag.message = "no method `" + method_name + "` found for type `" + type_name + "`";
+    diag.primary_span = span;
+
+    DiagnosticLabel label;
+    label.span = span;
+    label.message = "unknown method";
+    label.is_primary = true;
+    diag.labels.push_back(label);
+
+    // Find similar method names
+    std::string suggestion = find_similar(method_name, available_methods);
+    if (!suggestion.empty()) {
+        diag.help.push_back("did you mean `" + suggestion + "`?");
+    }
+
+    return diag;
+}
+
 } // namespace tml::cli

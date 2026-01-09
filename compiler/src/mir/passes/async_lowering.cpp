@@ -232,6 +232,10 @@ void AsyncAnalysis::analyze_saved_locals() {
                         }
                     } else if constexpr (std::is_same_v<T, AwaitInst>) {
                         record_use(inst.poll_value.id, block.id);
+                    } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                        for (const auto& cap : inst.captures) {
+                            record_use(cap.second.id, block.id);
+                        }
                     }
                 },
                 inst_data.inst);

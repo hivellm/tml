@@ -1,6 +1,6 @@
 # TML Language Benchmarks
 
-Benchmark comparisons between TML, Rust, C++, and Go.
+Benchmark comparisons between TML, Rust, C++, and Go. Includes optimization effectiveness benchmarks.
 
 ## Structure
 
@@ -12,7 +12,8 @@ benchmarks/
 │   ├── fibonacci.tml          # Fibonacci sequences
 │   ├── algorithms.tml         # Classic algorithms (factorial, GCD, etc.)
 │   ├── data_structures.tml    # Data structure operations
-│   └── math.tml               # Mathematical computations
+│   ├── math.tml               # Mathematical computations
+│   └── optimization_bench.tml # HIR/MIR optimization benchmarks
 ├── rust/                      # Rust benchmark implementations
 │   ├── Cargo.toml
 │   └── benches/
@@ -24,6 +25,9 @@ benchmarks/
 │   ├── go.mod
 │   ├── main.go                # Standalone program
 │   └── algorithms_test.go     # Go testing benchmarks
+├── scripts/                   # Benchmark runner scripts
+│   ├── run_benchmarks.py      # Cross-language benchmark runner
+│   └── run_optimization_bench.py  # Optimization effectiveness benchmark
 └── results/                   # Benchmark results and comparisons
     └── comparison.md          # Cross-language comparison
 ```
@@ -161,3 +165,54 @@ func factorial(n int32) int32 {
 1. **TML vs Rust**: TML uses more explicit keywords (`func` vs `fn`, `and`/`or` vs `&&`/`||`)
 2. **TML vs C++**: Similar control flow, but TML has no header files and cleaner type syntax
 3. **TML vs Go**: Very similar syntax, but TML has explicit return types and no GC
+
+## Optimization Benchmarks
+
+The `optimization_bench.tml` file contains code patterns designed to test specific optimization passes:
+
+### HIR Optimizations
+- Constant folding (integers, floats, booleans, bitwise)
+- Dead code elimination (constant if conditions)
+- Short-circuit evaluation
+
+### MIR Optimizations
+- Constant folding
+- Constant propagation
+- Copy propagation
+- Common subexpression elimination (CSE)
+- Dead code elimination
+- Unreachable code elimination
+
+### Running Optimization Benchmarks
+
+```bash
+# Run the optimization benchmark script
+python benchmarks/scripts/run_optimization_bench.py
+
+# With verbose output
+python benchmarks/scripts/run_optimization_bench.py --verbose
+
+# Custom output file
+python benchmarks/scripts/run_optimization_bench.py --output my_report.md
+```
+
+### Expected Results
+
+| Benchmark | O0 | O2 | Reduction |
+|-----------|-----|-----|-----------|
+| optimization_bench.tml | ~650 instrs | ~373 instrs | ~43% |
+| algorithms.tml | ~666 instrs | ~407 instrs | ~39% |
+
+### Manual MIR Inspection
+
+```bash
+# Compare MIR output at different optimization levels
+tml build benchmarks/tml/optimization_bench.tml -O0 --emit-mir
+cat build/debug/optimization_bench.mir > mir_O0.txt
+
+tml build benchmarks/tml/optimization_bench.tml -O2 --emit-mir
+cat build/debug/optimization_bench.mir > mir_O2.txt
+
+# Compare the files to see optimizations applied
+diff mir_O0.txt mir_O2.txt
+```

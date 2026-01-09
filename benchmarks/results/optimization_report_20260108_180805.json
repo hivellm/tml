@@ -1,0 +1,244 @@
+{
+  "tml": [
+    {
+      "file": "optimization_bench.tml",
+      "levels": {
+        "O0": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O0",
+          "success": true,
+          "mir_stats": {
+            "functions": 27,
+            "blocks": 85,
+            "instructions": 650,
+            "assignments": 436,
+            "calls": 157,
+            "branches": 48,
+            "returns": 37,
+            "consts": 264,
+            "phis": 11
+          },
+          "error": null,
+          "mir_size": 17561
+        },
+        "O1": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O1",
+          "success": true,
+          "mir_stats": {
+            "functions": 27,
+            "blocks": 85,
+            "instructions": 650,
+            "assignments": 436,
+            "calls": 157,
+            "branches": 48,
+            "returns": 37,
+            "consts": 335,
+            "phis": 11
+          },
+          "error": null,
+          "mir_size": 17681
+        },
+        "O2": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O2",
+          "success": true,
+          "mir_stats": {
+            "functions": 8,
+            "blocks": 109,
+            "instructions": 538,
+            "assignments": 230,
+            "calls": 210,
+            "branches": 64,
+            "returns": 45,
+            "consts": 107,
+            "phis": 22
+          },
+          "error": null,
+          "mir_size": 14632
+        },
+        "O3": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O3",
+          "success": true,
+          "mir_stats": {
+            "functions": 2,
+            "blocks": 129,
+            "instructions": 564,
+            "assignments": 207,
+            "calls": 228,
+            "branches": 76,
+            "returns": 53,
+            "consts": 120,
+            "phis": 18
+          },
+          "error": null,
+          "mir_size": 15030
+        }
+      },
+      "instruction_reduction_O0_O2": 17.230769230769226
+    },
+    {
+      "file": "algorithms.tml",
+      "levels": {
+        "O0": {
+          "file": "algorithms.tml",
+          "opt_level": "O0",
+          "success": true,
+          "mir_stats": {
+            "functions": 21,
+            "blocks": 166,
+            "instructions": 666,
+            "assignments": 425,
+            "calls": 112,
+            "branches": 136,
+            "returns": 30,
+            "consts": 305,
+            "phis": 2
+          },
+          "error": null,
+          "mir_size": 18582
+        },
+        "O1": {
+          "file": "algorithms.tml",
+          "opt_level": "O1",
+          "success": true,
+          "mir_stats": {
+            "functions": 21,
+            "blocks": 166,
+            "instructions": 666,
+            "assignments": 425,
+            "calls": 112,
+            "branches": 136,
+            "returns": 30,
+            "consts": 325,
+            "phis": 2
+          },
+          "error": null,
+          "mir_size": 18582
+        },
+        "O2": {
+          "file": "algorithms.tml",
+          "opt_level": "O2",
+          "success": true,
+          "mir_stats": {
+            "functions": 21,
+            "blocks": 678,
+            "instructions": 1597,
+            "assignments": 739,
+            "calls": 208,
+            "branches": 457,
+            "returns": 221,
+            "consts": 339,
+            "phis": 8
+          },
+          "error": null,
+          "mir_size": 47978
+        },
+        "O3": {
+          "file": "algorithms.tml",
+          "opt_level": "O3",
+          "success": true,
+          "mir_stats": {
+            "functions": 21,
+            "blocks": 3062,
+            "instructions": 6531,
+            "assignments": 2977,
+            "calls": 520,
+            "branches": 1753,
+            "returns": 1309,
+            "consts": 1517,
+            "phis": 8
+          },
+          "error": null,
+          "mir_size": 227339
+        }
+      },
+      "instruction_reduction_O0_O2": -139.78978978978978
+    }
+  ],
+  "rust": {
+    "optimization_bench.tml": {
+      "file": "optimization_bench.rs",
+      "levels": {
+        "O0": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O0",
+          "success": true,
+          "llvm_stats": {
+            "functions": 42,
+            "blocks": 42,
+            "instructions": 1008,
+            "allocas": 33,
+            "loads": 48,
+            "stores": 67,
+            "calls": 249,
+            "branches": 120,
+            "rets": 41
+          },
+          "binary_size": 146432,
+          "error": null,
+          "llvm_size": 103699
+        },
+        "O1": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O1",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 24619
+        },
+        "O2": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O2",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 18627
+        },
+        "O3": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O3",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 18627
+        }
+      },
+      "instruction_reduction_O0_O2": 82.2420634920635
+    }
+  }
+}

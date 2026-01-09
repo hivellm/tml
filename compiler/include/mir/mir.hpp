@@ -416,12 +416,22 @@ struct AwaitInst {
     uint32_t suspension_id; // ID of this suspension point (for state machine)
 };
 
+// Closure construction: result = closure { func_ptr, captures... }
+// A closure is represented as a struct containing a function pointer and captured values.
+struct ClosureInitInst {
+    std::string func_name;                                    // Generated closure function name
+    std::vector<std::pair<std::string, Value>> captures;      // Captured variables (name, value)
+    std::vector<std::pair<std::string, MirTypePtr>> cap_types; // Types of captures
+    MirTypePtr func_type;                                      // Function type of the closure
+    MirTypePtr result_type;                                    // Closure struct type
+};
+
 // All instruction types
 using Instruction =
     std::variant<BinaryInst, UnaryInst, LoadInst, StoreInst, AllocaInst, GetElementPtrInst,
                  ExtractValueInst, InsertValueInst, CallInst, MethodCallInst, CastInst, PhiInst,
                  ConstantInst, SelectInst, StructInitInst, EnumInitInst, TupleInitInst,
-                 ArrayInitInst, AwaitInst>;
+                 ArrayInitInst, AwaitInst, ClosureInitInst>;
 
 // Instruction with result
 struct InstructionData {

@@ -1,0 +1,280 @@
+{
+  "tml": [
+    {
+      "file": "optimization_bench.tml",
+      "levels": {
+        "O0": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O0",
+          "success": true,
+          "llvm_stats": {
+            "functions": 28,
+            "blocks": 52,
+            "instructions": 550,
+            "allocas": 80,
+            "loads": 131,
+            "stores": 111,
+            "calls": 29,
+            "branches": 18,
+            "rets": 34,
+            "arithmetic": 123,
+            "comparisons": 7,
+            "phis": 0
+          },
+          "error": null,
+          "llvm_size": 26744
+        },
+        "O1": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O1",
+          "success": true,
+          "llvm_stats": {
+            "functions": 27,
+            "blocks": 85,
+            "instructions": 529,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 157,
+            "branches": 48,
+            "rets": 37,
+            "arithmetic": 258,
+            "comparisons": 3,
+            "phis": 11
+          },
+          "error": null,
+          "llvm_size": 18861
+        },
+        "O2": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O2",
+          "success": true,
+          "llvm_stats": {
+            "functions": 25,
+            "blocks": 63,
+            "instructions": 356,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 141,
+            "branches": 38,
+            "rets": 25,
+            "arithmetic": 128,
+            "comparisons": 2,
+            "phis": 11
+          },
+          "error": null,
+          "llvm_size": 13275
+        },
+        "O3": {
+          "file": "optimization_bench.tml",
+          "opt_level": "O3",
+          "success": true,
+          "llvm_stats": {
+            "functions": 25,
+            "blocks": 63,
+            "instructions": 343,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 141,
+            "branches": 38,
+            "rets": 25,
+            "arithmetic": 117,
+            "comparisons": 2,
+            "phis": 9
+          },
+          "error": null,
+          "llvm_size": 12966
+        }
+      },
+      "instruction_reduction_O0_O2": 35.27272727272728
+    },
+    {
+      "file": "algorithms.tml",
+      "levels": {
+        "O0": {
+          "file": "algorithms.tml",
+          "opt_level": "O0",
+          "success": true,
+          "llvm_stats": {
+            "functions": 21,
+            "blocks": 116,
+            "instructions": 525,
+            "allocas": 74,
+            "loads": 115,
+            "stores": 99,
+            "calls": 37,
+            "branches": 86,
+            "rets": 30,
+            "arithmetic": 45,
+            "comparisons": 30,
+            "phis": 1
+          },
+          "error": null,
+          "llvm_size": 26056
+        },
+        "O1": {
+          "file": "algorithms.tml",
+          "opt_level": "O1",
+          "success": true,
+          "llvm_stats": {
+            "functions": 21,
+            "blocks": 166,
+            "instructions": 449,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 112,
+            "branches": 136,
+            "rets": 30,
+            "arithmetic": 131,
+            "comparisons": 30,
+            "phis": 2
+          },
+          "error": null,
+          "llvm_size": 16143
+        },
+        "O2": {
+          "file": "algorithms.tml",
+          "opt_level": "O2",
+          "success": true,
+          "llvm_stats": {
+            "functions": 21,
+            "blocks": 166,
+            "instructions": 407,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 112,
+            "branches": 136,
+            "rets": 30,
+            "arithmetic": 90,
+            "comparisons": 30,
+            "phis": 2
+          },
+          "error": null,
+          "llvm_size": 15106
+        },
+        "O3": {
+          "file": "algorithms.tml",
+          "opt_level": "O3",
+          "success": true,
+          "llvm_stats": {
+            "functions": 21,
+            "blocks": 166,
+            "instructions": 407,
+            "allocas": 0,
+            "loads": 0,
+            "stores": 0,
+            "calls": 112,
+            "branches": 136,
+            "rets": 30,
+            "arithmetic": 90,
+            "comparisons": 30,
+            "phis": 2
+          },
+          "error": null,
+          "llvm_size": 15106
+        }
+      },
+      "instruction_reduction_O0_O2": 22.47619047619047
+    }
+  ],
+  "rust": {
+    "optimization_bench.tml": {
+      "file": "optimization_bench.rs",
+      "levels": {
+        "O0": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O0",
+          "success": true,
+          "llvm_stats": {
+            "functions": 42,
+            "blocks": 42,
+            "instructions": 1103,
+            "allocas": 33,
+            "loads": 48,
+            "stores": 67,
+            "calls": 249,
+            "branches": 120,
+            "rets": 41,
+            "arithmetic": 1,
+            "comparisons": 2,
+            "phis": 0
+          },
+          "binary_size": 146432,
+          "error": null,
+          "llvm_size": 103699
+        },
+        "O1": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O1",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7,
+            "arithmetic": 2,
+            "comparisons": 0,
+            "phis": 0
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 24619
+        },
+        "O2": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O2",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7,
+            "arithmetic": 2,
+            "comparisons": 0,
+            "phis": 0
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 18627
+        },
+        "O3": {
+          "file": "optimization_bench.rs",
+          "opt_level": "O3",
+          "success": true,
+          "llvm_stats": {
+            "functions": 7,
+            "blocks": 7,
+            "instructions": 179,
+            "allocas": 15,
+            "loads": 2,
+            "stores": 60,
+            "calls": 43,
+            "branches": 0,
+            "rets": 7,
+            "arithmetic": 2,
+            "comparisons": 0,
+            "phis": 0
+          },
+          "binary_size": 135168,
+          "error": null,
+          "llvm_size": 18627
+        }
+      },
+      "instruction_reduction_O0_O2": 83.77153218495013
+    }
+  }
+}

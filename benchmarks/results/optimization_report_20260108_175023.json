@@ -1,0 +1,142 @@
+[
+  {
+    "file": "optimization_bench.tml",
+    "levels": {
+      "O0": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O0",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 65
+      },
+      "O1": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O1",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 65
+      },
+      "O2": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O2",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 65
+      },
+      "O3": {
+        "file": "optimization_bench.tml",
+        "opt_level": "O3",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 65
+      }
+    },
+    "instruction_reduction_O0_O2": 0.0
+  },
+  {
+    "file": "algorithms.tml",
+    "levels": {
+      "O0": {
+        "file": "algorithms.tml",
+        "opt_level": "O0",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 57
+      },
+      "O1": {
+        "file": "algorithms.tml",
+        "opt_level": "O1",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 57
+      },
+      "O2": {
+        "file": "algorithms.tml",
+        "opt_level": "O2",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 57
+      },
+      "O3": {
+        "file": "algorithms.tml",
+        "opt_level": "O3",
+        "success": true,
+        "mir_stats": {
+          "functions": 0,
+          "blocks": 0,
+          "instructions": 0,
+          "assignments": 0,
+          "calls": 0,
+          "branches": 0,
+          "returns": 0
+        },
+        "error": null,
+        "mir_size": 57
+      }
+    },
+    "instruction_reduction_O0_O2": 0.0
+  }
+]

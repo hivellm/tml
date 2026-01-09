@@ -79,8 +79,9 @@ void MirCodegen::emit_preamble() {
     emitln();
 
     // String format constants
+    // %d\n\0 = 4 chars, %lld\n\0 = 6 chars, %f\n\0 = 4 chars, %s\n\0 = 4 chars
     emitln("@.str.int = private constant [4 x i8] c\"%d\\0A\\00\"");
-    emitln("@.str.long = private constant [5 x i8] c\"%lld\\0A\\00\"");
+    emitln("@.str.long = private constant [6 x i8] c\"%lld\\0A\\00\"");
     emitln("@.str.float = private constant [4 x i8] c\"%f\\0A\\00\"");
     emitln("@.str.str = private constant [4 x i8] c\"%s\\0A\\00\"");
     emitln("@.str.bool.true = private constant [5 x i8] c\"true\\00\"");
@@ -167,9 +168,9 @@ void MirCodegen::emit_function(const mir::Function& func) {
     value_regs_.clear();
     block_labels_.clear();
 
-    // Setup block labels
-    for (size_t i = 0; i < func.blocks.size(); ++i) {
-        block_labels_[static_cast<uint32_t>(i)] = func.blocks[i].name;
+    // Setup block labels - use block ID, not index
+    for (const auto& blk : func.blocks) {
+        block_labels_[blk.id] = blk.name;
     }
 
     // Setup parameter registers
@@ -232,10 +233,17 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             if constexpr (std::is_same_v<T, mir::BinaryInst>) {
                 std::string left = get_value_reg(i.left);
                 std::string right = get_value_reg(i.right);
-                std::string type_str = mir_type_to_llvm(i.result_type);
 
-                bool is_float = i.result_type->is_float();
-                bool is_signed = i.result_type->is_signed();
+                // Use result_type if available, otherwise use left operand's type
+                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.left.type;
+                if (!type_ptr) {
+                    // Fallback to i32 if no type info
+                    type_ptr = mir::make_i32_type();
+                }
+                std::string type_str = mir_type_to_llvm(type_ptr);
+
+                bool is_float = type_ptr->is_float();
+                bool is_signed = type_ptr->is_signed();
 
                 // Check if it's a comparison
                 if (i.op >= mir::BinOp::Eq && i.op <= mir::BinOp::Ge) {
@@ -255,11 +263,17 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::UnaryInst>) {
                 std::string operand = get_value_reg(i.operand);
-                std::string type_str = mir_type_to_llvm(i.result_type);
+
+                // Use result_type if available, otherwise use operand's type
+                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.operand.type;
+                if (!type_ptr) {
+                    type_ptr = mir::make_i32_type();
+                }
+                std::string type_str = mir_type_to_llvm(type_ptr);
 
                 switch (i.op) {
                 case mir::UnaryOp::Neg:
-                    if (i.result_type->is_float()) {
+                    if (type_ptr->is_float()) {
                         emitln("    " + result_reg + " = fneg " + type_str + " " + operand);
                     } else {
                         emitln("    " + result_reg + " = sub " + type_str + " 0, " + operand);
@@ -275,22 +289,29 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::LoadInst>) {
                 std::string ptr = get_value_reg(i.ptr);
-                std::string type_str = mir_type_to_llvm(i.result_type);
+                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    " + result_reg + " = load " + type_str + ", ptr " + ptr);
 
             } else if constexpr (std::is_same_v<T, mir::StoreInst>) {
                 std::string value = get_value_reg(i.value);
                 std::string ptr = get_value_reg(i.ptr);
-                std::string type_str = mir_type_to_llvm(i.value_type);
+                mir::MirTypePtr type_ptr = i.value_type ? i.value_type : i.value.type;
+                if (!type_ptr) {
+                    type_ptr = mir::make_i32_type();
+                }
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    store " + type_str + " " + value + ", ptr " + ptr);
 
             } else if constexpr (std::is_same_v<T, mir::AllocaInst>) {
-                std::string type_str = mir_type_to_llvm(i.alloc_type);
+                mir::MirTypePtr type_ptr = i.alloc_type ? i.alloc_type : mir::make_i32_type();
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    " + result_reg + " = alloca " + type_str);
 
             } else if constexpr (std::is_same_v<T, mir::GetElementPtrInst>) {
                 std::string base = get_value_reg(i.base);
-                std::string type_str = mir_type_to_llvm(i.base_type);
+                mir::MirTypePtr type_ptr = i.base_type ? i.base_type : mir::make_i32_type();
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emit("    " + result_reg + " = getelementptr " + type_str + ", ptr " + base);
                 for (const auto& idx : i.indices) {
                     emit(", i32 " + get_value_reg(idx));
@@ -299,7 +320,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::ExtractValueInst>) {
                 std::string agg = get_value_reg(i.aggregate);
-                std::string agg_type = mir_type_to_llvm(i.aggregate_type);
+                mir::MirTypePtr type_ptr = i.aggregate_type ? i.aggregate_type : i.aggregate.type;
+                std::string agg_type = mir_type_to_llvm(type_ptr);
                 emit("    " + result_reg + " = extractvalue " + agg_type + " " + agg);
                 for (auto idx : i.indices) {
                     emit(", " + std::to_string(idx));
@@ -309,8 +331,10 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             } else if constexpr (std::is_same_v<T, mir::InsertValueInst>) {
                 std::string agg = get_value_reg(i.aggregate);
                 std::string val = get_value_reg(i.value);
-                std::string agg_type = mir_type_to_llvm(i.aggregate_type);
-                std::string val_type = mir_type_to_llvm(i.value_type);
+                mir::MirTypePtr agg_ptr = i.aggregate_type ? i.aggregate_type : i.aggregate.type;
+                mir::MirTypePtr val_ptr = i.value_type ? i.value_type : i.value.type;
+                std::string agg_type = mir_type_to_llvm(agg_ptr);
+                std::string val_type = mir_type_to_llvm(val_ptr);
                 emit("    " + result_reg + " = insertvalue " + agg_type + " " + agg + ", " +
                      val_type + " " + val);
                 for (auto idx : i.indices) {
@@ -319,7 +343,21 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emitln();
 
             } else if constexpr (std::is_same_v<T, mir::CallInst>) {
-                std::string ret_type = mir_type_to_llvm(i.return_type);
+                // Skip drop_ calls for primitive types (they don't need runtime cleanup)
+                // These are generated by the MIR builder for RAII but primitives don't need them
+                if (i.func_name.rfind("drop_", 0) == 0) {
+                    // Check if it's a primitive type drop (drop_I32, drop_Bool, etc.)
+                    std::string suffix = i.func_name.substr(5);
+                    if (suffix == "I8" || suffix == "I16" || suffix == "I32" || suffix == "I64" ||
+                        suffix == "U8" || suffix == "U16" || suffix == "U32" || suffix == "U64" ||
+                        suffix == "F32" || suffix == "F64" || suffix == "Bool" || suffix == "Unit" ||
+                        suffix == "Char") {
+                        return; // Skip primitive drops
+                    }
+                }
+
+                mir::MirTypePtr ret_ptr = i.return_type ? i.return_type : mir::make_unit_type();
+                std::string ret_type = mir_type_to_llvm(ret_ptr);
                 if (ret_type != "void" && !result_reg.empty()) {
                     emit("    " + result_reg + " = ");
                 } else {
@@ -330,7 +368,13 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     if (j > 0) {
                         emit(", ");
                     }
-                    std::string arg_type = mir_type_to_llvm(i.arg_types[j]);
+                    mir::MirTypePtr arg_ptr = (j < i.arg_types.size() && i.arg_types[j])
+                                                  ? i.arg_types[j]
+                                                  : i.args[j].type;
+                    if (!arg_ptr) {
+                        arg_ptr = mir::make_i32_type();
+                    }
+                    std::string arg_type = mir_type_to_llvm(arg_ptr);
                     std::string arg = get_value_reg(i.args[j]);
                     emit(arg_type + " " + arg);
                 }
@@ -338,7 +382,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::MethodCallInst>) {
                 // Method calls are similar to regular calls
-                std::string ret_type = mir_type_to_llvm(i.return_type);
+                mir::MirTypePtr ret_ptr = i.return_type ? i.return_type : mir::make_unit_type();
+                std::string ret_type = mir_type_to_llvm(ret_ptr);
                 if (ret_type != "void" && !result_reg.empty()) {
                     emit("    " + result_reg + " = ");
                 } else {
@@ -351,7 +396,13 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emit("ptr " + receiver);
                 for (size_t j = 0; j < i.args.size(); ++j) {
                     emit(", ");
-                    std::string arg_type = mir_type_to_llvm(i.arg_types[j]);
+                    mir::MirTypePtr arg_ptr = (j < i.arg_types.size() && i.arg_types[j])
+                                                  ? i.arg_types[j]
+                                                  : i.args[j].type;
+                    if (!arg_ptr) {
+                        arg_ptr = mir::make_i32_type();
+                    }
+                    std::string arg_type = mir_type_to_llvm(arg_ptr);
                     std::string arg = get_value_reg(i.args[j]);
                     emit(arg_type + " " + arg);
                 }
@@ -359,8 +410,13 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
 
             } else if constexpr (std::is_same_v<T, mir::CastInst>) {
                 std::string operand = get_value_reg(i.operand);
-                std::string src_type = mir_type_to_llvm(i.source_type);
-                std::string tgt_type = mir_type_to_llvm(i.target_type);
+                mir::MirTypePtr src_ptr = i.source_type ? i.source_type : i.operand.type;
+                if (!src_ptr) {
+                    src_ptr = mir::make_i32_type();
+                }
+                mir::MirTypePtr tgt_ptr = i.target_type ? i.target_type : mir::make_i32_type();
+                std::string src_type = mir_type_to_llvm(src_ptr);
+                std::string tgt_type = mir_type_to_llvm(tgt_ptr);
 
                 static const char* cast_names[] = {"bitcast", "trunc",  "zext",     "sext",
                                                    "fptrunc", "fpext",  "fptosi",   "fptoui",
@@ -371,7 +427,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                        " to " + tgt_type);
 
             } else if constexpr (std::is_same_v<T, mir::PhiInst>) {
-                std::string type_str = mir_type_to_llvm(i.result_type);
+                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emit("    " + result_reg + " = phi " + type_str + " ");
                 for (size_t j = 0; j < i.incoming.size(); ++j) {
                     if (j > 0) {
@@ -415,7 +472,11 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string cond = get_value_reg(i.condition);
                 std::string true_val = get_value_reg(i.true_val);
                 std::string false_val = get_value_reg(i.false_val);
-                std::string type_str = mir_type_to_llvm(i.result_type);
+                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.true_val.type;
+                if (!type_ptr) {
+                    type_ptr = mir::make_i32_type();
+                }
+                std::string type_str = mir_type_to_llvm(type_ptr);
                 emitln("    " + result_reg + " = select i1 " + cond + ", " + type_str + " " +
                        true_val + ", " + type_str + " " + false_val);
 
@@ -425,7 +486,13 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string current = "undef";
                 for (size_t j = 0; j < i.fields.size(); ++j) {
                     std::string field_val = get_value_reg(i.fields[j]);
-                    std::string field_type = mir_type_to_llvm(i.field_types[j]);
+                    mir::MirTypePtr field_ptr = (j < i.field_types.size() && i.field_types[j])
+                                                    ? i.field_types[j]
+                                                    : i.fields[j].type;
+                    if (!field_ptr) {
+                        field_ptr = mir::make_i32_type();
+                    }
+                    std::string field_type = mir_type_to_llvm(field_ptr);
                     std::string next = (j == i.fields.size() - 1)
                                            ? result_reg
                                            : "%tmp" + std::to_string(temp_counter_++);
@@ -447,10 +514,17 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             } else if constexpr (std::is_same_v<T, mir::TupleInitInst>) {
                 // Similar to struct init
                 std::string current = "undef";
-                std::string tuple_type = mir_type_to_llvm(i.result_type);
+                mir::MirTypePtr tuple_ptr = i.result_type ? i.result_type : mir::make_i32_type();
+                std::string tuple_type = mir_type_to_llvm(tuple_ptr);
                 for (size_t j = 0; j < i.elements.size(); ++j) {
                     std::string elem_val = get_value_reg(i.elements[j]);
-                    std::string elem_type = mir_type_to_llvm(i.element_types[j]);
+                    mir::MirTypePtr elem_ptr = (j < i.element_types.size() && i.element_types[j])
+                                                   ? i.element_types[j]
+                                                   : i.elements[j].type;
+                    if (!elem_ptr) {
+                        elem_ptr = mir::make_i32_type();
+                    }
+                    std::string elem_type = mir_type_to_llvm(elem_ptr);
                     std::string next = (j == i.elements.size() - 1)
                                            ? result_reg
                                            : "%tmp" + std::to_string(temp_counter_++);
@@ -462,10 +536,12 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             } else if constexpr (std::is_same_v<T, mir::ArrayInitInst>) {
                 // Array initialization
                 std::string current = "undef";
-                std::string array_type = mir_type_to_llvm(i.result_type);
+                mir::MirTypePtr array_ptr = i.result_type ? i.result_type : mir::make_i32_type();
+                std::string array_type = mir_type_to_llvm(array_ptr);
+                mir::MirTypePtr elem_ptr = i.element_type ? i.element_type : mir::make_i32_type();
+                std::string elem_type = mir_type_to_llvm(elem_ptr);
                 for (size_t j = 0; j < i.elements.size(); ++j) {
                     std::string elem_val = get_value_reg(i.elements[j]);
-                    std::string elem_type = mir_type_to_llvm(i.element_type);
                     std::string next = (j == i.elements.size() - 1)
                                            ? result_reg
                                            : "%tmp" + std::to_string(temp_counter_++);

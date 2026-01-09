@@ -1,0 +1,68 @@
+//! # HIR Statement Lowering to MIR
+//!
+//! This file implements statement lowering from HIR to MIR.
+//! Statements include let bindings and expression statements.
+
+#include "mir/hir_mir_builder.hpp"
+
+namespace tml::mir {
+
+// ============================================================================
+// Statement Building
+// ============================================================================
+
+auto HirMirBuilder::build_stmt(const hir::HirStmt& stmt) -> bool {
+    return std::visit(
+        [this](const auto& s) -> bool {
+            using T = std::decay_t<decltype(s)>;
+
+            if constexpr (std::is_same_v<T, hir::HirLetStmt>) {
+                build_let_stmt(s);
+                return false; // Not terminated
+            } else if constexpr (std::is_same_v<T, hir::HirExprStmt>) {
+                build_expr_stmt(s);
+                return is_terminated(); // May terminate if contains return/break
+            } else {
+                return false;
+            }
+        },
+        stmt.kind);
+}
+
+// ============================================================================
+// Let Statement
+// ============================================================================
+
+void HirMirBuilder::build_let_stmt(const hir::HirLetStmt& let) {
+    // Build initializer if present
+    Value init_value;
+    if (let.init) {
+        init_value = build_expr(*let.init);
+    } else {
+        // Uninitialized variable - use unit as placeholder
+        init_value = const_unit();
+    }
+
+    // Bind pattern to value
+    build_pattern_binding(let.pattern, init_value);
+
+    // Register for drop if the type needs dropping
+    MirTypePtr var_type = init_value.type;
+    std::string type_name = get_type_name(var_type);
+
+    // For simple binding patterns, register the variable for drop
+    if (auto* binding = std::get_if<hir::HirBindingPattern>(&let.pattern->kind)) {
+        ctx_.register_for_drop(binding->name, init_value, type_name, var_type);
+    }
+}
+
+// ============================================================================
+// Expression Statement
+// ============================================================================
+
+void HirMirBuilder::build_expr_stmt(const hir::HirExprStmt& expr) {
+    // Build expression, discard result
+    (void)build_expr(expr.expr);
+}
+
+} // namespace tml::mir

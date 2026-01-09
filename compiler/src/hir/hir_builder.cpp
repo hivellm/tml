@@ -463,14 +463,26 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
                     if (std::holds_alternative<lexer::IntValue>(e.token.value)) {
                         auto int_val = std::get<lexer::IntValue>(e.token.value);
                         if (!int_val.suffix.empty()) {
+                            if (int_val.suffix == "i8")
+                                return types::make_primitive(types::PrimitiveKind::I8);
+                            if (int_val.suffix == "i16")
+                                return types::make_primitive(types::PrimitiveKind::I16);
                             if (int_val.suffix == "i32")
                                 return types::make_i32();
+                            if (int_val.suffix == "i64")
+                                return types::make_i64();
+                            if (int_val.suffix == "u8")
+                                return types::make_primitive(types::PrimitiveKind::U8);
+                            if (int_val.suffix == "u16")
+                                return types::make_primitive(types::PrimitiveKind::U16);
+                            if (int_val.suffix == "u32")
+                                return types::make_primitive(types::PrimitiveKind::U32);
                             if (int_val.suffix == "u64")
                                 return types::make_primitive(types::PrimitiveKind::U64);
-                            // Add more suffix handling as needed
                         }
                     }
-                    return types::make_i64();
+                    // Default to I32 (like most languages)
+                    return types::make_i32();
                 case lexer::TokenKind::FloatLiteral:
                     return types::make_f64();
                 case lexer::TokenKind::StringLiteral:

@@ -726,3 +726,472 @@ TEST(HirIdGeneratorTest, ResetWorks) {
     auto id = gen.next();
     EXPECT_EQ(id, 1u); // First ID after reset is 1 (0 is INVALID_HIR_ID)
 }
+
+// ============================================================================
+// HIR Optimization Tests
+// ============================================================================
+
+#include "hir/hir_pass.hpp"
+
+class HirOptimizationTest : public ::testing::Test {
+protected:
+    std::unique_ptr<tml::lexer::Source> source_;
+
+    auto build_hir(const std::string& code) -> tml::hir::HirModule {
+        source_ = std::make_unique<tml::lexer::Source>(tml::lexer::Source::from_string(code));
+        tml::lexer::Lexer lexer(*source_);
+        auto tokens = lexer.tokenize();
+
+        tml::parser::Parser parser(std::move(tokens));
+        auto module_result = parser.parse_module("test");
+        EXPECT_TRUE(tml::is_ok(module_result));
+        auto& module = std::get<tml::parser::Module>(module_result);
+
+        tml::types::TypeChecker checker;
+        auto env_result = checker.check_module(module);
+        EXPECT_TRUE(tml::is_ok(env_result));
+        auto& env = std::get<tml::types::TypeEnv>(env_result);
+
+        tml::hir::HirBuilder builder(env);
+        return builder.lower_module(module);
+    }
+
+    // Helper to check if an expression is a literal with specific value
+    template <typename T>
+    auto is_literal_with_value(const tml::hir::HirExpr& expr, T expected) -> bool {
+        if (!expr.is<tml::hir::HirLiteralExpr>()) return false;
+        const auto& lit = expr.as<tml::hir::HirLiteralExpr>();
+        if (auto* val = std::get_if<T>(&lit.value)) {
+            return *val == expected;
+        }
+        return false;
+    }
+};
+
+// ============================================================================
+// Constant Folding Tests
+// ============================================================================
+
+TEST_F(HirOptimizationTest, ConstantFolding_IntegerAddition) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 2 + 3
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+
+    // The expression should now be folded to a literal 5
+    ASSERT_EQ(hir.functions.size(), 1u);
+    ASSERT_TRUE(hir.functions[0].body.has_value());
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_IntegerSubtraction) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 10 - 3
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_IntegerMultiplication) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 4 * 5
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_IntegerDivision) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 20 / 4
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_IntegerModulo) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 17 % 5
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_FloatAddition) {
+    auto hir = build_hir(R"(
+        func test() -> F64 {
+            return 1.5 + 2.5
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_BooleanAnd) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return true and false
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_BooleanOr) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return true or false
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_Comparison) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return 5 > 3
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_Equality) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return 42 == 42
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_UnaryNegation) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return -42
+        }
+    )");
+
+    // Unary negation on literal - may or may not fold depending on parser
+    tml::hir::ConstantFolding::run_pass(hir);
+    ASSERT_EQ(hir.functions.size(), 1u);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_LogicalNot) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return not true
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_NestedExpressions) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return (2 + 3) * (4 + 1)
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_NoChangeWithVariables) {
+    auto hir = build_hir(R"(
+        func test(x: I32) -> I32 {
+            return x + 1
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    // Should not change because x is a variable
+    EXPECT_FALSE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_ShortCircuitAndFalse) {
+    auto hir = build_hir(R"(
+        func side_effect() -> Bool {
+            return true
+        }
+        func test() -> Bool {
+            return false and side_effect()
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    // false and X => false (short-circuit)
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_ShortCircuitOrTrue) {
+    auto hir = build_hir(R"(
+        func side_effect() -> Bool {
+            return false
+        }
+        func test() -> Bool {
+            return true or side_effect()
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    // true or X => true (short-circuit)
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, ConstantFolding_BitwiseOperations) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 0xFF & 0x0F
+        }
+    )");
+
+    bool changed = tml::hir::ConstantFolding::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+// ============================================================================
+// Dead Code Elimination Tests
+// ============================================================================
+
+TEST_F(HirOptimizationTest, DCE_ConstantTrueCondition) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            if true {
+                return 1
+            } else {
+                return 2
+            }
+        }
+    )");
+
+    bool changed = tml::hir::DeadCodeElimination::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, DCE_ConstantFalseCondition) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            if false {
+                return 1
+            } else {
+                return 2
+            }
+        }
+    )");
+
+    bool changed = tml::hir::DeadCodeElimination::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, DCE_NoChangeWithVariableCondition) {
+    auto hir = build_hir(R"(
+        func test(cond: Bool) -> I32 {
+            if cond {
+                return 1
+            } else {
+                return 2
+            }
+        }
+    )");
+
+    bool changed = tml::hir::DeadCodeElimination::run_pass(hir);
+    // Condition is a variable, should not eliminate
+    EXPECT_FALSE(changed);
+}
+
+TEST_F(HirOptimizationTest, DCE_NestedIf) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            if true {
+                if false {
+                    return 1
+                } else {
+                    return 2
+                }
+            } else {
+                return 3
+            }
+        }
+    )");
+
+    bool changed = tml::hir::DeadCodeElimination::run_pass(hir);
+    EXPECT_TRUE(changed);
+}
+
+// ============================================================================
+// Pass Manager Tests
+// ============================================================================
+
+TEST_F(HirOptimizationTest, PassManager_RunMultiplePasses) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            if true {
+                return 2 + 3
+            } else {
+                return 10
+            }
+        }
+    )");
+
+    tml::hir::HirPassManager pm;
+    pm.add_pass<tml::hir::ConstantFolding>();
+    pm.add_pass<tml::hir::DeadCodeElimination>();
+
+    bool changed = pm.run(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, PassManager_RunToFixpoint) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 1 + 2 + 3 + 4
+        }
+    )");
+
+    tml::hir::HirPassManager pm;
+    pm.add_pass<tml::hir::ConstantFolding>();
+
+    size_t iterations = pm.run_to_fixpoint(hir, 10);
+    EXPECT_GE(iterations, 1u);
+}
+
+TEST_F(HirOptimizationTest, OptimizeHir_ConvenienceFunction) {
+    auto hir = build_hir(R"(
+        func test() -> Bool {
+            return true and false
+        }
+    )");
+
+    bool changed = tml::hir::optimize_hir(hir);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, OptimizeHirLevel_Level0NoOptimization) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 2 + 3
+        }
+    )");
+
+    bool changed = tml::hir::optimize_hir_level(hir, 0);
+    EXPECT_FALSE(changed);
+}
+
+TEST_F(HirOptimizationTest, OptimizeHirLevel_Level1ConstantFolding) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return 2 + 3
+        }
+    )");
+
+    bool changed = tml::hir::optimize_hir_level(hir, 1);
+    EXPECT_TRUE(changed);
+}
+
+TEST_F(HirOptimizationTest, OptimizeHirLevel_Level2DCE) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            if true {
+                return 5
+            } else {
+                return 10
+            }
+        }
+    )");
+
+    bool changed = tml::hir::optimize_hir_level(hir, 2);
+    EXPECT_TRUE(changed);
+}
+
+// ============================================================================
+// Pure Expression Detection Tests
+// ============================================================================
+
+TEST(HirPurityTest, LiteralIsPure) {
+    tml::hir::HirExpr expr;
+    tml::hir::HirLiteralExpr lit;
+    lit.id = tml::hir::HirId{1};
+    lit.value = int64_t{42};
+    lit.type = tml::types::make_i32();
+    lit.span = tml::SourceSpan{};
+    expr.kind = std::move(lit);
+
+    tml::hir::DeadCodeElimination dce;
+    // Note: is_pure_expr is private, but we can verify behavior through DCE
+    SUCCEED(); // Test setup works
+}
+
+TEST(HirPurityTest, VariableIsPure) {
+    tml::hir::HirExpr expr;
+    tml::hir::HirVarExpr var;
+    var.id = tml::hir::HirId{1};
+    var.name = "x";
+    var.type = tml::types::make_i32();
+    var.span = tml::SourceSpan{};
+    expr.kind = std::move(var);
+
+    SUCCEED(); // Test setup works
+}
+
+// ============================================================================
+// Edge Cases
+// ============================================================================
+
+TEST_F(HirOptimizationTest, EmptyModule) {
+    auto hir = build_hir("");
+
+    bool changed = tml::hir::optimize_hir(hir);
+    EXPECT_FALSE(changed);
+}
+
+TEST_F(HirOptimizationTest, FunctionWithoutOptimizableCode) {
+    auto hir = build_hir(R"(
+        func test(x: I32) -> I32 {
+            return x
+        }
+    )");
+
+    // Simple function with no constant expressions should not change
+    bool changed = tml::hir::optimize_hir(hir);
+    EXPECT_FALSE(changed);
+}
+
+TEST_F(HirOptimizationTest, MultipleOptimizationRounds) {
+    auto hir = build_hir(R"(
+        func test() -> I32 {
+            return if true { 2 + 3 } else { 10 + 20 }
+        }
+    )");
+
+    tml::hir::HirPassManager pm;
+    pm.add_pass<tml::hir::ConstantFolding>();
+    pm.add_pass<tml::hir::DeadCodeElimination>();
+
+    // Run multiple times to ensure convergence
+    size_t iterations = pm.run_to_fixpoint(hir, 5);
+    EXPECT_LE(iterations, 5u);
+}

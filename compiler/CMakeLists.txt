@@ -161,6 +161,7 @@ add_library(tml_hir STATIC
     src/hir/hir_builder_expr.cpp
     src/hir/hir_builder_stmt.cpp
     src/hir/hir_builder_pattern.cpp
+    src/hir/hir_pass.cpp
 )
 target_link_libraries(tml_hir PUBLIC tml_borrow)
 target_include_directories(tml_hir PUBLIC include src)
@@ -180,6 +181,11 @@ add_library(tml_mir STATIC
     src/mir/builder/pattern.cpp
     src/mir/builder/control.cpp
     src/mir/builder/helpers.cpp
+    # HIR to MIR builder (uses HIR instead of AST)
+    src/mir/hir_mir_builder.cpp
+    src/mir/builder/hir_expr.cpp
+    src/mir/builder/hir_stmt.cpp
+    src/mir/builder/hir_pattern.cpp
     # Serializer modules (split from mir_serialize.cpp for maintainability)
     src/mir/serializer/binary_writer.cpp
     src/mir/serializer/binary_reader.cpp
@@ -190,12 +196,28 @@ add_library(tml_mir STATIC
     src/mir/passes/constant_folding.cpp
     src/mir/passes/constant_propagation.cpp
     src/mir/passes/dead_code_elimination.cpp
+    src/mir/passes/dead_function_elimination.cpp
     src/mir/passes/unreachable_code_elimination.cpp
     src/mir/passes/common_subexpression_elimination.cpp
     src/mir/passes/copy_propagation.cpp
     src/mir/passes/escape_analysis.cpp
     src/mir/passes/inlining.cpp
     src/mir/passes/async_lowering.cpp
+    src/mir/passes/simplify_cfg.cpp
+    src/mir/passes/inst_simplify.cpp
+    src/mir/passes/jump_threading.cpp
+    src/mir/passes/sroa.cpp
+    src/mir/passes/gvn.cpp
+    src/mir/passes/match_simplify.cpp
+    src/mir/passes/mem2reg.cpp
+    src/mir/passes/licm.cpp
+    src/mir/passes/strength_reduction.cpp
+    src/mir/passes/reassociate.cpp
+    src/mir/passes/tail_call.cpp
+    src/mir/passes/narrowing.cpp
+    src/mir/passes/loop_unroll.cpp
+    src/mir/passes/sinking.cpp
+    src/mir/passes/adce.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir)
 target_include_directories(tml_mir PUBLIC include src)
@@ -349,7 +371,6 @@ if(TML_BUILD_TESTS)
         tests/ir_test.cpp
         tests/hir_test.cpp
         tests/mir_test.cpp
-        tests/mir_optimization_bench.cpp
         tests/format_test.cpp
         tests/codegen_test.cpp
         tests/codegen_builtins_test.cpp

@@ -110,7 +110,8 @@ private:
 struct ParallelBuildOptions {
     bool verbose = false;
     bool no_cache = false;
-    bool lto = false; // Enable Link-Time Optimization
+    bool lto = false;           // Enable Link-Time Optimization
+    bool use_hir = false;       // Use HIR pipeline (AST→HIR→MIR→Codegen)
     int optimization_level = 0;
     bool debug_info = false;
     std::string output_dir; // Output directory for build artifacts

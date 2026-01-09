@@ -374,6 +374,34 @@ auto MirBinaryReader::read_instruction() -> InstructionData {
         data.inst = inst;
         break;
     }
+    case InstTag::Await: {
+        AwaitInst inst;
+        inst.poll_value = read_value();
+        inst.poll_type = read_type();
+        inst.result_type = read_type();
+        inst.suspension_id = read_u32();
+        data.inst = inst;
+        break;
+    }
+    case InstTag::ClosureInit: {
+        ClosureInitInst inst;
+        inst.func_name = read_string();
+        uint32_t count = read_u32();
+        for (uint32_t i = 0; i < count; ++i) {
+            std::string name = read_string();
+            Value value = read_value();
+            inst.captures.push_back({name, value});
+        }
+        for (uint32_t i = 0; i < count; ++i) {
+            std::string name = read_string();
+            MirTypePtr type = read_type();
+            inst.cap_types.push_back({name, type});
+        }
+        inst.func_type = read_type();
+        inst.result_type = read_type();
+        data.inst = inst;
+        break;
+    }
     }
 
     return data;

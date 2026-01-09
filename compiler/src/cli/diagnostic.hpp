@@ -23,6 +23,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "types/type.hpp"
 
 #include <iostream>
 #include <optional>
@@ -297,5 +298,42 @@ std::string find_similar(const std::string& input, const std::vector<std::string
 std::vector<std::string> find_similar_candidates(const std::string& input,
                                                  const std::vector<std::string>& candidates,
                                                  size_t max_results = 3, size_t max_distance = 3);
+
+// ============================================================================
+// HIR Type Formatting for Error Messages
+// ============================================================================
+
+/**
+ * Format a HIR type for display in error messages.
+ * Returns a human-readable string representation of the type.
+ */
+std::string format_hir_type(const types::TypePtr& type);
+
+/**
+ * Create a type mismatch diagnostic with expected/found types.
+ * Provides rich context about the type mismatch.
+ */
+Diagnostic make_type_mismatch_diagnostic(const SourceSpan& span, const std::string& expected_type,
+                                         const std::string& found_type,
+                                         const std::string& context = "");
+
+/**
+ * Create a "cannot call non-function" diagnostic.
+ */
+Diagnostic make_not_callable_diagnostic(const SourceSpan& span, const std::string& type_name);
+
+/**
+ * Create an "unknown field" diagnostic with suggestions.
+ */
+Diagnostic make_unknown_field_diagnostic(const SourceSpan& span, const std::string& field_name,
+                                         const std::string& type_name,
+                                         const std::vector<std::string>& available_fields);
+
+/**
+ * Create an "unknown method" diagnostic with suggestions.
+ */
+Diagnostic make_unknown_method_diagnostic(const SourceSpan& span, const std::string& method_name,
+                                          const std::string& type_name,
+                                          const std::vector<std::string>& available_methods);
 
 } // namespace tml::cli

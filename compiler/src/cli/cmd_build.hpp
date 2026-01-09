@@ -48,11 +48,13 @@ enum class BuildOutputType {
 struct BuildOptions {
     bool verbose = false;
     bool emit_ir_only = false;
+    bool emit_hir = false;     // Emit HIR (High-level IR)
     bool emit_mir = false;
     bool no_cache = false;
     bool emit_header = false;
     bool show_timings = false; // Show detailed phase timings
     bool lto = false;          // Link-Time Optimization
+    bool use_hir = false;      // Use HIR pipeline (AST -> HIR -> MIR)
     BuildOutputType output_type = BuildOutputType::Executable;
     std::string output_dir;
 };
