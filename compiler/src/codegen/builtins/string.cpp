@@ -623,6 +623,193 @@ auto LLVMIRGen::try_gen_builtin_string(const std::string& fn_name, const parser:
         return "null";
     }
 
+    // f32_to_string_precision(n, precision) -> Str
+    if (fn_name == "f32_to_string_precision") {
+        if (call.args.size() >= 2) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            // Extend float to double for the runtime
+            std::string n_f64 = n;
+            if (n_type == "float") {
+                n_f64 = fresh_reg();
+                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
+            }
+            std::string prec = gen_expr(*call.args[1]);
+            std::string prec_type = last_expr_type_;
+            // Truncate precision to i32 if needed
+            std::string prec_i32 = prec;
+            if (prec_type == "i64") {
+                prec_i32 = fresh_reg();
+                emit_line("  " + prec_i32 + " = trunc i64 " + prec + " to i32");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @float_to_precision(double " + n_f64 + ", i32 " +
+                      prec_i32 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f64_to_string_precision(n, precision) -> Str
+    if (fn_name == "f64_to_string_precision") {
+        if (call.args.size() >= 2) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string prec = gen_expr(*call.args[1]);
+            std::string prec_type = last_expr_type_;
+            // Truncate precision to i32 if needed
+            std::string prec_i32 = prec;
+            if (prec_type == "i64") {
+                prec_i32 = fresh_reg();
+                emit_line("  " + prec_i32 + " = trunc i64 " + prec + " to i32");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @float_to_precision(double " + n + ", i32 " +
+                      prec_i32 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f32_to_exp_string(n, uppercase) -> Str
+    if (fn_name == "f32_to_exp_string") {
+        if (call.args.size() >= 2) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            // Extend float to double for the runtime
+            std::string n_f64 = n;
+            if (n_type == "float") {
+                n_f64 = fresh_reg();
+                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
+            }
+            std::string upper = gen_expr(*call.args[1]);
+            std::string upper_type = last_expr_type_;
+            // Convert bool to i32 if needed
+            std::string upper_i32 = upper;
+            if (upper_type == "i1") {
+                upper_i32 = fresh_reg();
+                emit_line("  " + upper_i32 + " = zext i1 " + upper + " to i32");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @float_to_exp(double " + n_f64 + ", i32 " +
+                      upper_i32 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f64_to_exp_string(n, uppercase) -> Str
+    if (fn_name == "f64_to_exp_string") {
+        if (call.args.size() >= 2) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string upper = gen_expr(*call.args[1]);
+            std::string upper_type = last_expr_type_;
+            // Convert bool to i32 if needed
+            std::string upper_i32 = upper;
+            if (upper_type == "i1") {
+                upper_i32 = fresh_reg();
+                emit_line("  " + upper_i32 + " = zext i1 " + upper + " to i32");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @float_to_exp(double " + n + ", i32 " +
+                      upper_i32 + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+        last_expr_type_ = "ptr";
+        return "null";
+    }
+
+    // f32_is_nan(n) -> Bool
+    if (fn_name == "f32_is_nan") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_f64 = n;
+            if (n_type == "float") {
+                n_f64 = fresh_reg();
+                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @f64_is_nan(double " + n_f64 + ")");
+            std::string result_bool = fresh_reg();
+            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
+            return result_bool;
+        }
+        last_expr_type_ = "i1";
+        return "0";
+    }
+
+    // f64_is_nan(n) -> Bool
+    if (fn_name == "f64_is_nan") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @f64_is_nan(double " + n + ")");
+            std::string result_bool = fresh_reg();
+            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
+            return result_bool;
+        }
+        last_expr_type_ = "i1";
+        return "0";
+    }
+
+    // f32_is_infinite(n) -> Bool
+    if (fn_name == "f32_is_infinite") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string n_type = last_expr_type_;
+            std::string n_f64 = n;
+            if (n_type == "float") {
+                n_f64 = fresh_reg();
+                emit_line("  " + n_f64 + " = fpext float " + n + " to double");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @f64_is_infinite(double " + n_f64 + ")");
+            std::string result_bool = fresh_reg();
+            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
+            return result_bool;
+        }
+        last_expr_type_ = "i1";
+        return "0";
+    }
+
+    // f64_is_infinite(n) -> Bool
+    if (fn_name == "f64_is_infinite") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @f64_is_infinite(double " + n + ")");
+            std::string result_bool = fresh_reg();
+            emit_line("  " + result_bool + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
+            return result_bool;
+        }
+        last_expr_type_ = "i1";
+        return "0";
+    }
+
+    // f64_round(n) -> F64
+    if (fn_name == "f64_round") {
+        if (!call.args.empty()) {
+            std::string n = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call double @llvm.round.f64(double " + n + ")");
+            last_expr_type_ = "double";
+            return result;
+        }
+        last_expr_type_ = "double";
+        return "0.0";
+    }
+
     // ========================================================================
     // StringBuilder Operations (Mutable String)
     // ========================================================================

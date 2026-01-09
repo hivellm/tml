@@ -158,13 +158,23 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
 
             field_val = gen_expr(*s.fields[i].second);
+            std::string actual_llvm_type =
+                last_expr_type_;         // Capture actual LLVM type from gen_expr
             expected_enum_type_.clear(); // Clear after expression
             // Infer expression type for proper casting
             types::TypePtr expr_type = infer_expr_type(*s.fields[i].second);
             std::string expr_llvm_type = llvm_type_from_semantic(expr_type);
 
+            // If the expression is a pointer (like 'this') but the field expects a struct value,
+            // we need to load the struct value from the pointer
+            if (actual_llvm_type == "ptr" && target_field_type.starts_with("%struct.")) {
+                std::string loaded = fresh_reg();
+                emit_line("  " + loaded + " = load " + target_field_type + ", ptr " + field_val);
+                field_val = loaded;
+                field_type = target_field_type;
+            }
             // If target field type is different from expression type, cast as needed
-            if (target_field_type != expr_llvm_type && target_field_type != "i32") {
+            else if (target_field_type != expr_llvm_type && target_field_type != "i32") {
                 // Cast integer literals to the correct field type
                 if ((expr_llvm_type == "i32" || expr_llvm_type == "i64") &&
                     (target_field_type == "i64" || target_field_type == "i32")) {

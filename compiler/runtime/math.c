@@ -120,6 +120,26 @@ const char* float_to_string(double value) {
     return float_buffer;
 }
 
+// float_to_exp(value: F64, uppercase: I32) -> Str
+const char* float_to_exp(double value, int32_t uppercase) {
+    if (uppercase) {
+        snprintf(float_buffer, sizeof(float_buffer), "%E", value);
+    } else {
+        snprintf(float_buffer, sizeof(float_buffer), "%e", value);
+    }
+    return float_buffer;
+}
+
+// f64_is_nan(value: F64) -> I32 (bool)
+int32_t f64_is_nan(double value) {
+    return isnan(value) ? 1 : 0;
+}
+
+// f64_is_infinite(value: F64) -> I32 (bool)
+int32_t f64_is_infinite(double value) {
+    return isinf(value) ? 1 : 0;
+}
+
 // int_to_float(value: I32) -> F64
 double int_to_float(int32_t value) {
     return (double)value;
