@@ -899,21 +899,21 @@ func from_digit(num: U32, radix: U32) -> Maybe[U32] {
     return Just(digit)
 }
 
-type CharTryFromError {
+type LocalCharTryFromError {
     value: U32
 }
 
-impl CharTryFromError {
+impl LocalCharTryFromError {
     func invalid_value(this) -> U32 {
         return this.value
     }
 }
 
-func try_from_u32(value: U32) -> Outcome[U32, CharTryFromError] {
+func try_from_u32(value: U32) -> Outcome[U32, LocalCharTryFromError] {
     if is_valid_char(value) {
         return Ok(value)
     }
-    return Err(CharTryFromError { value: value })
+    return Err(LocalCharTryFromError { value: value })
 }
 
 func to_u32(c: U32) -> U32 {
@@ -924,22 +924,22 @@ func from_u8(value: U8) -> U32 {
     return value as U32
 }
 
-type TryFromCharError {
+type LocalTryFromCharError {
     value: U32
 }
 
-func try_to_u8(c: U32) -> Outcome[U8, TryFromCharError] {
+func try_to_u8(c: U32) -> Outcome[U8, LocalTryFromCharError] {
     if c <= 0xFF {
         return Ok(c as U8)
     }
-    return Err(TryFromCharError { value: c })
+    return Err(LocalTryFromCharError { value: c })
 }
 
-func try_to_u16(c: U32) -> Outcome[U16, TryFromCharError] {
+func try_to_u16(c: U32) -> Outcome[U16, LocalTryFromCharError] {
     if c <= 0xFFFF {
         return Ok(c as U16)
     }
-    return Err(TryFromCharError { value: c })
+    return Err(LocalTryFromCharError { value: c })
 }
 
 // Classification functions

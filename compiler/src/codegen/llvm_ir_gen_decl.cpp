@@ -202,6 +202,16 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
 
     // Check if already emitted (can happen with re-exports across modules)
     if (struct_types_.find(e.name) != struct_types_.end()) {
+        // Type already emitted, but still need to register variants if not done
+        // This handles re-exports across modules
+        std::string first_variant_key = e.name + "::" + e.variants[0].name;
+        if (enum_variants_.find(first_variant_key) == enum_variants_.end()) {
+            int tag = 0;
+            for (const auto& variant : e.variants) {
+                std::string key = e.name + "::" + variant.name;
+                enum_variants_[key] = tag++;
+            }
+        }
         return;
     }
 

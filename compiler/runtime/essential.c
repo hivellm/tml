@@ -25,6 +25,7 @@
  * @see essential.h for function declarations
  */
 
+#include <math.h>
 #include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -219,4 +220,63 @@ int32_t tml_panic_message_contains(const char* expected) {
         return 1;
     }
     return strstr(tml_panic_msg, expected) != NULL;
+}
+
+// ============================================================================
+// Float Formatting Functions
+// ============================================================================
+
+/** @brief Buffer for float formatting output. */
+static char float_format_buffer[256];
+
+/**
+ * @brief Formats a float with specified precision.
+ *
+ * @param value The floating point value to format.
+ * @param precision Number of decimal places.
+ * @return A static buffer containing the formatted string.
+ */
+const char* float_to_precision(double value, int32_t precision) {
+    if (precision < 0)
+        precision = 0;
+    if (precision > 20)
+        precision = 20;
+    snprintf(float_format_buffer, sizeof(float_format_buffer), "%.*f", precision, value);
+    return float_format_buffer;
+}
+
+/**
+ * @brief Formats a float in scientific notation.
+ *
+ * @param value The floating point value to format.
+ * @param uppercase If non-zero, uses 'E' instead of 'e'.
+ * @return A static buffer containing the formatted string.
+ */
+const char* float_to_exp(double value, int32_t uppercase) {
+    if (uppercase) {
+        snprintf(float_format_buffer, sizeof(float_format_buffer), "%E", value);
+    } else {
+        snprintf(float_format_buffer, sizeof(float_format_buffer), "%e", value);
+    }
+    return float_format_buffer;
+}
+
+/**
+ * @brief Checks if a float is NaN.
+ *
+ * @param value The floating point value to check.
+ * @return 1 if NaN, 0 otherwise.
+ */
+int32_t f64_is_nan(double value) {
+    return isnan(value) ? 1 : 0;
+}
+
+/**
+ * @brief Checks if a float is infinite.
+ *
+ * @param value The floating point value to check.
+ * @return 1 if infinite, 0 otherwise.
+ */
+int32_t f64_is_infinite(double value) {
+    return isinf(value) ? 1 : 0;
 }

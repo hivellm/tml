@@ -356,10 +356,11 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                 }
             }
 
-            // Then check non-generic enums
-            auto enum_it = env_.all_enums().find(enum_name);
-            if (enum_it != env_.all_enums().end()) {
-                const auto& enum_def = enum_it->second;
+            // Then check non-generic enums (including from imported modules)
+            // Helper lambda to generate path-based enum constructor
+            auto gen_path_enum_constructor =
+                [&](const std::string& enum_name,
+                    const types::EnumDef& enum_def) -> std::optional<std::string> {
                 for (size_t variant_idx = 0; variant_idx < enum_def.variants.size();
                      ++variant_idx) {
                     const auto& [vname, payload_types] = enum_def.variants[variant_idx];
@@ -393,6 +394,27 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
                         last_expr_type_ = enum_type;
                         return result;
+                    }
+                }
+                return std::nullopt;
+            };
+
+            // First try lookup_enum (handles local and imported enums)
+            auto enum_opt = env_.lookup_enum(enum_name);
+            if (enum_opt) {
+                if (auto result = gen_path_enum_constructor(enum_name, *enum_opt)) {
+                    return *result;
+                }
+            }
+
+            // If not found via lookup_enum, search all modules
+            // This handles cases where we're generating code for a module's functions
+            // but the enum is defined in that module (not imported to main file)
+            for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+                auto enum_it = mod.enums.find(enum_name);
+                if (enum_it != mod.enums.end()) {
+                    if (auto result = gen_path_enum_constructor(enum_name, enum_it->second)) {
+                        return *result;
                     }
                 }
             }
@@ -477,8 +499,11 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             }
         }
 
-        // Then check non-generic enums
-        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+        // Then check non-generic enums (including from imported modules)
+        // Helper lambda to generate enum constructor
+        auto gen_enum_constructor =
+            [&](const std::string& enum_name,
+                const types::EnumDef& enum_def) -> std::optional<std::string> {
             for (size_t variant_idx = 0; variant_idx < enum_def.variants.size(); ++variant_idx) {
                 const auto& [variant_name, payload_types] = enum_def.variants[variant_idx];
 
@@ -519,6 +544,23 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     emit_line("  " + result + " = load " + enum_type + ", ptr " + enum_val);
                     last_expr_type_ = enum_type;
                     return result;
+                }
+            }
+            return std::nullopt;
+        };
+
+        // Check local enums first
+        for (const auto& [enum_name, enum_def] : env_.all_enums()) {
+            if (auto result = gen_enum_constructor(enum_name, enum_def)) {
+                return *result;
+            }
+        }
+
+        // Check enums from imported modules
+        for (const auto& [mod_path, mod] : env_.get_all_modules()) {
+            for (const auto& [enum_name, enum_def] : mod.enums) {
+                if (auto result = gen_enum_constructor(enum_name, enum_def)) {
+                    return *result;
                 }
             }
         }

@@ -69,6 +69,8 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "ptr"; // String is a pointer to struct
     if (name == "Unit")
         return "void";
+    if (name == "Never")
+        return "void"; // Never type (bottom type) - represents no value
 
     // Ptr[T] syntax in TML uses NamedType "Ptr" - it should be a pointer type
     if (name == "Ptr")
@@ -263,6 +265,12 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         }
     } else if (type->is<types::NamedType>()) {
         const auto& named = type->as<types::NamedType>();
+
+        // Never type (bottom type) - use void as it represents no value
+        // Sometimes Never appears as NamedType instead of PrimitiveType
+        if (named.name == "Never") {
+            return "void";
+        }
 
         // Ptr[T] in TML syntax is represented as NamedType with name "Ptr"
         // It should be lowered to "ptr" in LLVM IR
