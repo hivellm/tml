@@ -77,6 +77,19 @@ TML has its own identity, optimized for LLM comprehension with self-documenting 
 tml/
 ├── compiler/           # C++ compiler implementation
 │   ├── src/           # Source files
+│   │   ├── cli/       # CLI implementation
+│   │   │   ├── commands/   # Command handlers (cmd_*.cpp)
+│   │   │   ├── builder/    # Build system (compile, link, cache)
+│   │   │   ├── tester/     # Test runner (suite execution)
+│   │   │   └── linter/     # Linting system
+│   │   ├── lexer/     # Tokenizer
+│   │   ├── parser/    # AST parser
+│   │   ├── types/     # Type checker
+│   │   ├── borrow/    # Borrow checker
+│   │   ├── hir/       # High-level IR
+│   │   ├── mir/       # Mid-level IR (SSA)
+│   │   ├── codegen/   # LLVM IR generation
+│   │   └── format/    # Code formatter
 │   ├── include/       # Header files
 │   ├── runtime/       # Essential runtime (essential.c)
 │   └── tests/         # Compiler unit tests (C++)
@@ -176,14 +189,41 @@ Tests represent the specification of what the code should do. Simplifying tests 
 
 ## Key CLI Files
 
-When working on the build system, these are the relevant files:
+The CLI is organized into subfolders:
 
+### Commands (`compiler/src/cli/commands/`)
+- `cmd_build.cpp/.hpp` - Main build command implementation
+- `cmd_test.cpp/.hpp` - Test command (TestOptions struct)
+- `cmd_cache.cpp/.hpp` - Cache management
+- `cmd_debug.cpp/.hpp` - Debug commands (lex, parse, check)
+- `cmd_format.cpp/.hpp` - Code formatting
+- `cmd_init.cpp/.hpp` - Project initialization
+- `cmd_lint.cpp/.hpp` - Linting
+- `cmd_pkg.cpp/.hpp` - Package management
+- `cmd_rlib.cpp/.hpp` - Library format handling
+
+### Builder (`compiler/src/cli/builder/`)
+- `build.cpp` - Main build orchestration
+- `parallel_build.cpp/.hpp` - Multi-threaded compilation
+- `object_compiler.cpp/.hpp` - LLVM IR to object file compilation
+- `build_cache.cpp/.hpp` - MIR cache for incremental compilation
+- `build_config.cpp/.hpp` - Build configuration
+- `compiler_setup.cpp/.hpp` - Toolchain discovery (clang, MSVC)
+- `dependency_resolver.cpp/.hpp` - Module dependency resolution
+- `rlib.cpp/.hpp` - TML library format (.rlib)
+
+### Tester (`compiler/src/cli/tester/`)
+- `test_runner.cpp/.hpp` - DLL-based test execution
+- `suite_execution.cpp` - Suite mode (multiple tests per DLL)
+- `run.cpp` - Test orchestration
+- `discovery.cpp` - Test file discovery
+- `benchmark.cpp` - Benchmark execution
+- `fuzzer.cpp` - Fuzz testing
+
+### Core
 - `compiler/src/cli/dispatcher.cpp` - CLI argument parsing
-- `compiler/src/cli/cmd_build.cpp` - Main build command implementation
-- `compiler/src/cli/cmd_build.hpp` - BuildOptions struct
-- `compiler/src/cli/parallel_build.cpp` - Multi-threaded compilation
-- `compiler/src/cli/object_compiler.cpp` - LLVM IR to object file compilation
-- `compiler/src/cli/build_cache.cpp` - MIR cache for incremental compilation
+- `compiler/src/cli/utils.cpp/.hpp` - Shared utilities
+- `compiler/src/cli/diagnostic.cpp/.hpp` - Error formatting
 
 ## File Editing Best Practices
 
