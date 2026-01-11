@@ -418,7 +418,13 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
     resolve_simple_type = [&resolve_simple_type](const parser::Type& type) -> types::TypePtr {
         if (type.is<parser::NamedType>()) {
             const auto& named = type.as<parser::NamedType>();
-            const std::string& name = named.path.segments.empty() ? "" : named.path.segments[0];
+            // Build full path name (e.g., "I::Item" for associated types)
+            std::string name;
+            for (size_t i = 0; i < named.path.segments.size(); ++i) {
+                if (i > 0)
+                    name += "::";
+                name += named.path.segments[i];
+            }
 
             // Primitive types
             if (name == "I8")

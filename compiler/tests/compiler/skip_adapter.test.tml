@@ -1,0 +1,17 @@
+// Test for Skip adapter - isolating the return Nothing bug
+use test
+use core::range::*
+use core::iter::adapters::skip::*
+
+@test
+func test_skip_basic() -> I32 {
+    var range: RangeIterI64 = RangeIterI64 { current: 0, end: 10 }
+    var skipped: Skip[RangeIterI64] = skip(range, 5)
+
+    when skipped.next() {
+        Just(v) => assert_eq(v, 5, "first after skip is 5"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}

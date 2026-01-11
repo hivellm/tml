@@ -1,0 +1,122 @@
+// Tests for iterator adapters with associated type resolution
+use test
+use core::range::*
+use core::iter::adapters::take::*
+use core::iter::sources::legacy::*
+
+// ============================================================================
+// Test 1: Take adapter
+// ============================================================================
+
+@test
+func test_take_adapter() -> I32 {
+    var range: RangeIterI64 = RangeIterI64 { current: 0, end: 100 }
+    var taken: Take[RangeIterI64] = take(range, 3)
+
+    when taken.next() {
+        Just(v) => assert_eq(v, 0, "first is 0"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when taken.next() {
+        Just(v) => assert_eq(v, 1, "second is 1"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when taken.next() {
+        Just(v) => assert_eq(v, 2, "third is 2"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when taken.next() {
+        Just(_) => assert(false, "take(3) should stop after 3"),
+        Nothing => assert(true, "correctly limited")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 2: Empty iterator source
+// ============================================================================
+
+@test
+func test_empty_source() -> I32 {
+    var e: EmptyI64 = empty_i64()
+
+    when e.next() {
+        Just(_) => assert(false, "empty should not yield"),
+        Nothing => assert(true, "empty yields Nothing")
+    }
+
+    when e.next() {
+        Just(_) => assert(false, "empty should not yield"),
+        Nothing => assert(true, "still Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 3: Once iterator source
+// ============================================================================
+
+@test
+func test_once_source() -> I32 {
+    var o: OnceI64 = once_i64(42)
+
+    when o.next() {
+        Just(v) => assert_eq(v, 42, "once yields 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when o.next() {
+        Just(_) => assert(false, "once should only yield once"),
+        Nothing => assert(true, "second call is Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 4: RepeatN iterator source
+// ============================================================================
+
+@test
+func test_repeat_n_source() -> I32 {
+    var r: RepeatNI64 = repeat_n_i64(7, 3)
+
+    when r.next() {
+        Just(v) => assert_eq(v, 7, "first is 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(v) => assert_eq(v, 7, "second is 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(v) => assert_eq(v, 7, "third is 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when r.next() {
+        Just(_) => assert(false, "repeat_n(3) should stop after 3"),
+        Nothing => assert(true, "correctly limited")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Disabled tests - require additional fixes
+// ============================================================================
+
+// Skip adapter: Blocked by "return Nothing" codegen bug in generic impl methods
+// The Skip adapter's next() method returns `Maybe[I::Item]` and has `return Nothing`
+// which generates incorrect LLVM IR (`ret %struct.Maybe__I64 0` instead of proper struct)
+
+// Chained adapters: Blocked by recursive associated type resolution
+// Take[Skip[RangeIterI64]] needs to resolve:
+//   - Take::Item = Skip[RangeIterI64]::Item = RangeIterI64::Item = I64

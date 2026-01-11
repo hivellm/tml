@@ -736,6 +736,23 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                      i < imported_type_params.size() && i < named.type_args.size();
                                      ++i) {
                                     type_subs[imported_type_params[i]] = named.type_args[i];
+                                    // Also add associated type mappings (e.g., I::Item -> I64)
+                                    // Look up associated types for the concrete type argument
+                                    if (named.type_args[i] &&
+                                        named.type_args[i]->is<types::NamedType>()) {
+                                        const auto& arg_named =
+                                            named.type_args[i]->as<types::NamedType>();
+                                        auto item_type =
+                                            lookup_associated_type(arg_named.name, "Item");
+                                        if (item_type) {
+                                            // Add T::Item -> ConcreteType mapping
+                                            std::string assoc_key =
+                                                imported_type_params[i] + "::Item";
+                                            type_subs[assoc_key] = item_type;
+                                            // Also just "Item" for simpler lookups
+                                            type_subs["Item"] = item_type;
+                                        }
+                                    }
                                 }
                                 break;
                             }

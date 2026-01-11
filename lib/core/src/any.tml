@@ -1,0 +1,245 @@
+//! Type reflection primitives.
+//!
+//! This module provides runtime type identification through the `TypeId` type
+//! and the `Any` behavior, enabling type-erased programming with the ability
+//! to recover concrete types.
+//!
+//! # Overview
+//!
+//! The key types and behaviors in this module are:
+//!
+//! - `TypeId`: A unique identifier for a type, comparable at runtime
+//! - `Any`: A behavior for types that can be type-erased and recovered
+//!
+//! # Usage
+//!
+//! TypeId allows comparing types at runtime:
+//!
+//! ```tml
+//! use core::any::*
+//!
+//! // Get type IDs (requires compiler support for TypeId::of[T])
+//! let id1: TypeId = TypeId::of[I32]()
+//! let id2: TypeId = TypeId::of[I64]()
+//!
+//! if id1 != id2 {
+//!     print("Different types!\n")
+//! }
+//! ```
+//!
+//! # Limitations
+//!
+//! The `TypeId::of[T]()` function requires compiler support to generate
+//! unique type identifiers. Currently, a placeholder implementation is
+//! provided that uses type name hashing.
+
+// ============================================================================
+// TypeId
+// ============================================================================
+
+/// A `TypeId` represents a globally unique identifier for a type.
+///
+/// Each type has a single, consistent `TypeId` that can be compared with
+/// other `TypeId`s to check if two types are the same.
+///
+/// # Compiler Support Required
+///
+/// The `of[T]()` function requires compiler intrinsics to generate a
+/// unique ID for each monomorphized type. Without compiler support,
+/// type IDs will not be reliable.
+pub type TypeId {
+    /// Internal unique identifier for the type.
+    /// This should be a hash or unique number assigned by the compiler.
+    id: U64
+}
+
+impl TypeId {
+    /// Returns the `TypeId` of the type this method is called on.
+    ///
+    /// # Compiler Support Required
+    ///
+    /// This function requires the compiler to generate a unique ID for
+    /// each distinct type T. Without compiler support, this returns a
+    /// placeholder value.
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let int_id: TypeId = TypeId::of[I32]()
+    /// let str_id: TypeId = TypeId::of[Str]()
+    /// assert(int_id != str_id)
+    /// ```
+    // NOTE: This requires compiler intrinsic support.
+    // The compiler should replace calls to TypeId::of[T]() with
+    // TypeId { id: <unique_hash_for_T> }
+    //
+    // For now, we cannot implement this without compiler support.
+    // Placeholder: pub func of[T]() -> TypeId { ... }
+}
+
+impl PartialEq for TypeId {
+    pub func eq(this, other: ref TypeId) -> Bool {
+        return this.id == other.id
+    }
+
+    pub func ne(this, other: ref TypeId) -> Bool {
+        return this.id != other.id
+    }
+}
+
+impl Eq for TypeId {}
+
+impl PartialOrd for TypeId {
+    pub func lt(this, other: ref TypeId) -> Bool {
+        return this.id < other.id
+    }
+
+    pub func le(this, other: ref TypeId) -> Bool {
+        return this.id <= other.id
+    }
+
+    pub func gt(this, other: ref TypeId) -> Bool {
+        return this.id > other.id
+    }
+
+    pub func ge(this, other: ref TypeId) -> Bool {
+        return this.id >= other.id
+    }
+
+    pub func partial_cmp(this, other: ref TypeId) -> Maybe[Ordering] {
+        if this.id < other.id {
+            return Just(Ordering::Less)
+        } else if this.id > other.id {
+            return Just(Ordering::Greater)
+        } else {
+            return Just(Ordering::Equal)
+        }
+    }
+}
+
+impl Ord for TypeId {
+    pub func cmp(this, other: ref TypeId) -> Ordering {
+        if this.id < other.id {
+            return Ordering::Less
+        } else if this.id > other.id {
+            return Ordering::Greater
+        } else {
+            return Ordering::Equal
+        }
+    }
+}
+
+impl Hash for TypeId {
+    pub func hash[H: Hasher](this, state: mut ref H) {
+        state.write_u64(this.id)
+    }
+}
+
+impl Debug for TypeId {
+    pub func fmt_debug(this, f: mut ref Formatter) -> FmtResult {
+        // Simple debug output showing the internal ID
+        f.write_str("TypeId(")
+        f.write_str(this.id.to_string())
+        f.write_str(")")
+        return FmtResult::Ok
+    }
+}
+
+impl Duplicate for TypeId {
+    pub func duplicate(this) -> TypeId {
+        return TypeId { id: this.id }
+    }
+}
+
+impl Copy for TypeId {}
+
+// ============================================================================
+// Any Behavior
+// ============================================================================
+
+/// A behavior for emulating dynamic typing.
+///
+/// Types implementing `Any` can be type-erased and stored generically,
+/// with the ability to recover the concrete type later using `TypeId`.
+///
+/// # Safety
+///
+/// Downcasting relies on `TypeId` comparisons. The `type_id()` method
+/// must return the correct `TypeId` for the implementing type.
+///
+/// # Example
+///
+/// ```tml
+/// use core::any::*
+///
+/// type MyType { value: I32 }
+///
+/// impl Any for MyType {
+///     pub func type_id(this) -> TypeId {
+///         return TypeId::of[MyType]()
+///     }
+/// }
+/// ```
+pub behavior Any {
+    /// Returns the `TypeId` of the concrete type.
+    ///
+    /// This is used for runtime type checking before downcasting.
+    func type_id(this) -> TypeId
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Returns the name of a type as a string.
+///
+/// # Compiler Support Required
+///
+/// This function requires compiler intrinsics to return the type name.
+/// The returned string is intended for debugging purposes only.
+///
+/// # Example
+///
+/// ```tml
+/// let name: Str = type_name[I32]()
+/// // name == "I32"
+/// ```
+// NOTE: Requires compiler support to implement.
+// pub func type_name[T]() -> Str { ... }
+
+/// Returns the name of the type of a value.
+///
+/// This is equivalent to `type_name[T]()` where `T` is the type of `val`.
+///
+/// # Compiler Support Required
+///
+/// This function requires compiler intrinsics.
+///
+/// # Example
+///
+/// ```tml
+/// let x: I32 = 42
+/// let name: Str = type_name_of_val(ref x)
+/// // name == "I32"
+/// ```
+// NOTE: Requires compiler support to implement.
+// pub func type_name_of_val[T](val: ref T) -> Str { ... }
+
+// ============================================================================
+// Downcast Support (Future)
+// ============================================================================
+
+// The following functionality requires more advanced compiler support:
+//
+// 1. `dyn Any` - trait objects / type erasure
+// 2. `downcast_ref[T](self: ref dyn Any) -> Maybe[ref T]`
+// 3. `downcast_mut[T](self: mut ref dyn Any) -> Maybe[mut ref T]`
+// 4. `downcast[T](self: Heap[dyn Any]) -> Outcome[Heap[T], Heap[dyn Any]]`
+//
+// These require:
+// - Trait object representation (vtable + data pointer)
+// - Runtime type checking via TypeId
+// - Safe casting between trait object and concrete type
+//
+// For now, Any can be implemented manually by user types, but the full
+// downcast API is not available without compiler support.

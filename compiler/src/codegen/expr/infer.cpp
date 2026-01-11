@@ -365,7 +365,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         if (obj_type && obj_type->is<types::NamedType>()) {
             const auto& named = obj_type->as<types::NamedType>();
             // Look up field type in struct definition
-            std::string field_llvm_type = get_field_type(named.name, field.field);
+            // For generic types, use the mangled name (e.g., Take__RangeIterI64)
+            std::string lookup_name = named.name;
+            if (!named.type_args.empty()) {
+                lookup_name = mangle_struct_name(named.name, named.type_args);
+            }
+            std::string field_llvm_type = get_field_type(lookup_name, field.field);
             // Convert LLVM type back to semantic type
             if (field_llvm_type == "i32")
                 return types::make_i32();
@@ -821,6 +826,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
             // Build type substitution map from receiver's type args
             std::unordered_map<std::string, types::TypePtr> type_subs;
+            std::vector<std::string> type_param_names;
             if (!named.type_args.empty()) {
                 // Look up the struct/impl to get generic parameter names
                 auto impl_it = pending_generic_impls_.find(named.name);
@@ -828,6 +834,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     for (size_t i = 0;
                          i < impl_it->second->generics.size() && i < named.type_args.size(); ++i) {
                         type_subs[impl_it->second->generics[i].name] = named.type_args[i];
+                        type_param_names.push_back(impl_it->second->generics[i].name);
                     }
                 } else if (env_.module_registry()) {
                     // Check imported structs for type params
@@ -840,8 +847,25 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                                                i < named.type_args.size();
                                  ++i) {
                                 type_subs[struct_it->second.type_params[i]] = named.type_args[i];
+                                type_param_names.push_back(struct_it->second.type_params[i]);
                             }
                             break;
+                        }
+                    }
+                }
+
+                // Also add associated type mappings (e.g., I::Item -> I64)
+                for (size_t i = 0; i < type_param_names.size() && i < named.type_args.size(); ++i) {
+                    const auto& arg = named.type_args[i];
+                    if (arg && arg->is<types::NamedType>()) {
+                        const auto& arg_named = arg->as<types::NamedType>();
+                        // Look up Item associated type for this concrete type
+                        auto item_type = lookup_associated_type(arg_named.name, "Item");
+                        if (item_type) {
+                            // Map both "I::Item" and "Item" to the concrete type
+                            std::string assoc_key = type_param_names[i] + "::Item";
+                            type_subs[assoc_key] = item_type;
+                            type_subs["Item"] = item_type;
                         }
                     }
                 }

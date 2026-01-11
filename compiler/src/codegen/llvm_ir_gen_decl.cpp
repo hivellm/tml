@@ -820,6 +820,10 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
                     // Fix: if returning ptr type with "0" placeholder (from loops), use null
                     if (ret_type == "ptr" && result == "0") {
                         emit_line("  ret ptr null");
+                    } else if (result == "0" && ret_type.find("%struct.") == 0) {
+                        // Fix: if returning struct type with "0" placeholder (from loops), use
+                        // zeroinitializer
+                        emit_line("  ret " + ret_type + " zeroinitializer");
                     } else {
                         // Handle integer type extension when actual differs from expected
                         std::string final_result = result;
@@ -1020,6 +1024,10 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
                 // Fix: if returning ptr type with "0" placeholder (from loops), use null
                 if (ret_type == "ptr" && result == "0") {
                     emit_line("  ret ptr null");
+                } else if (result == "0" && ret_type.find("%struct.") == 0) {
+                    // Fix: if returning struct type with "0" placeholder (from loops), use
+                    // zeroinitializer
+                    emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected
                     std::string final_result = result;
@@ -1139,8 +1147,9 @@ void LLVMIRGen::gen_impl_method_instantiation(
         param_types += param_type;
     }
 
-    // Function signature
-    std::string func_llvm_name = "tml_" + mangled_type_name + "_" + method.name;
+    // Function signature - include suite prefix for test suite mode
+    std::string func_llvm_name =
+        "tml_" + get_suite_prefix() + mangled_type_name + "_" + method.name;
     emit_line("");
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
@@ -1172,6 +1181,10 @@ void LLVMIRGen::gen_impl_method_instantiation(
                 // Fix: if returning ptr type with "0" placeholder (from loops), use null
                 if (ret_type == "ptr" && result == "0") {
                     emit_line("  ret ptr null");
+                } else if (result == "0" && ret_type.find("%struct.") == 0) {
+                    // Fix: if returning struct type with "0" placeholder (from loops), use
+                    // zeroinitializer
+                    emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected
                     std::string final_result = result;
@@ -1377,6 +1390,10 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
                 // Fix: if returning ptr type with "0" placeholder (from loops), use null
                 if (ret_type == "ptr" && result == "0") {
                     emit_line("  ret ptr null");
+                } else if (result == "0" && ret_type.find("%struct.") == 0) {
+                    // Fix: if returning struct type with "0" placeholder (from loops), use
+                    // zeroinitializer
+                    emit_line("  ret " + ret_type + " zeroinitializer");
                 } else {
                     // Handle integer type extension when actual differs from expected
                     std::string final_result = result;

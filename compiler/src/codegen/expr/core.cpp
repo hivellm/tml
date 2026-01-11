@@ -36,7 +36,41 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
     switch (lit.token.kind) {
     case lexer::TokenKind::IntLiteral: {
         // Use the actual numeric value, not the lexeme (handles 0x, 0b, etc.)
-        uint64_t val = lit.token.int_value().value;
+        const auto& int_val = lit.token.int_value();
+        uint64_t val = int_val.value;
+
+        // Check for type suffix to determine LLVM type
+        if (!int_val.suffix.empty()) {
+            const auto& suffix = int_val.suffix;
+            if (suffix == "i8") {
+                last_expr_type_ = "i8";
+                last_expr_is_unsigned_ = false;
+            } else if (suffix == "i16") {
+                last_expr_type_ = "i16";
+                last_expr_is_unsigned_ = false;
+            } else if (suffix == "i32") {
+                last_expr_type_ = "i32";
+                last_expr_is_unsigned_ = false;
+            } else if (suffix == "i64" || suffix == "i128") {
+                last_expr_type_ = "i64";
+                last_expr_is_unsigned_ = false;
+            } else if (suffix == "u8") {
+                last_expr_type_ = "i8";
+                last_expr_is_unsigned_ = true;
+            } else if (suffix == "u16") {
+                last_expr_type_ = "i16";
+                last_expr_is_unsigned_ = true;
+            } else if (suffix == "u32") {
+                last_expr_type_ = "i32";
+                last_expr_is_unsigned_ = true;
+            } else if (suffix == "u64" || suffix == "u128") {
+                last_expr_type_ = "i64";
+                last_expr_is_unsigned_ = true;
+            }
+            return std::to_string(val);
+        }
+
+        // No suffix - infer type from value magnitude
         // Check if value fits in signed i32 range (-2^31 to 2^31-1)
         // For unsigned values, check if it fits in 0 to 2^31-1 (positive i32)
         constexpr uint64_t MAX_I32 = 2147483647ULL; // 2^31 - 1
@@ -48,9 +82,16 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
         }
         return std::to_string(val);
     }
-    case lexer::TokenKind::FloatLiteral:
+    case lexer::TokenKind::FloatLiteral: {
+        const auto& float_val = lit.token.float_value();
+        // LLVM requires float literals to be in double format.
+        // The suffix is handled by the type checker which determines the variable type.
+        // The store code in llvm_ir_gen_stmt.cpp handles fptrunc conversion when
+        // storing a double value to a float variable (var_type == "float" && last_expr_type_ ==
+        // "double").
         last_expr_type_ = "double";
-        return std::to_string(lit.token.float_value().value);
+        return std::to_string(float_val.value);
+    }
     case lexer::TokenKind::BoolLiteral:
         last_expr_type_ = "i1";
         return lit.token.bool_value() ? "1" : "0";
