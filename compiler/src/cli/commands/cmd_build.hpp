@@ -52,11 +52,16 @@ struct BuildOptions {
     bool emit_mir = false;
     bool no_cache = false;
     bool emit_header = false;
-    bool show_timings = false; // Show detailed phase timings
-    bool lto = false;          // Link-Time Optimization
-    bool use_hir = false;      // Use HIR pipeline (AST -> HIR -> MIR)
+    bool show_timings = false;  // Show detailed phase timings
+    bool lto = false;           // Link-Time Optimization
+    bool use_hir = false;       // Use HIR pipeline (AST -> HIR -> MIR)
+    bool debug = false;         // Debug build (sets DEBUG symbol)
+    bool release = false;       // Release build (sets RELEASE symbol)
+    int optimization_level = 0; // -O0 to -O3
     BuildOutputType output_type = BuildOutputType::Executable;
     std::string output_dir;
+    std::string target;               // Target triple (e.g., x86_64-unknown-linux-gnu)
+    std::vector<std::string> defines; // -D defines for preprocessor
 };
 
 // Build commands

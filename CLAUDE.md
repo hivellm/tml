@@ -176,7 +176,46 @@ tml build file.tml --emit-ir      # Emit LLVM IR (.ll files)
 tml build file.tml --emit-mir     # Emit MIR for debugging
 tml build file.tml --emit-header  # Generate C header for FFI
 tml build file.tml --time         # Show compiler phase timings
+
+# Preprocessor / Conditional Compilation
+tml build file.tml -DDEBUG        # Define preprocessor symbol
+tml build file.tml -DVERSION=1.0  # Define symbol with value
+tml build file.tml --define=FEAT  # Alternative syntax
+tml build file.tml --target=x86_64-unknown-linux-gnu  # Cross-compile
 ```
+
+## Conditional Compilation
+
+TML supports C-style preprocessor directives for platform-specific code:
+
+```tml
+#if WINDOWS
+func get_home() -> Str { return env::var("USERPROFILE") }
+#elif UNIX
+func get_home() -> Str { return env::var("HOME") }
+#endif
+
+#ifdef DEBUG
+func log(msg: Str) { print("[DEBUG] {msg}\n") }
+#endif
+
+#if defined(FEATURE_A) && !defined(FEATURE_B)
+func feature_a_only() { ... }
+#endif
+```
+
+**Predefined Symbols:**
+- OS: `WINDOWS`, `LINUX`, `MACOS`, `ANDROID`, `IOS`, `FREEBSD`, `UNIX`, `POSIX`
+- Architecture: `X86_64`, `X86`, `ARM64`, `ARM`, `WASM32`, `RISCV64`
+- Pointer width: `PTR_32`, `PTR_64`
+- Endianness: `LITTLE_ENDIAN`, `BIG_ENDIAN`
+- Environment: `MSVC`, `GNU`, `MUSL`
+- Build mode: `DEBUG`, `RELEASE`, `TEST`
+
+**Key Files:**
+- `compiler/include/preprocessor/preprocessor.hpp` - Preprocessor interface
+- `compiler/src/preprocessor/preprocessor.cpp` - Full implementation
+- `compiler/src/cli/builder/helpers.cpp` - CLI integration helpers
 
 ## Important Development Rules
 

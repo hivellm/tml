@@ -24,14 +24,14 @@
 
 #include "cmd_debug.hpp"
 
-#include "common.hpp"
 #include "cli/diagnostic.hpp"
+#include "cli/utils.hpp"
+#include "common.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
-#include "cli/utils.hpp"
 
 #include <filesystem>
 #include <iostream>

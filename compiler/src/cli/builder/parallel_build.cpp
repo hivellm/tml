@@ -38,20 +38,20 @@
 #include "parallel_build.hpp"
 
 #include "borrow/checker.hpp"
+#include "cli/builder/compiler_setup.hpp"
+#include "cli/builder/object_compiler.hpp"
 #include "cli/commands/cmd_build.hpp"
+#include "cli/utils.hpp"
 #include "codegen/llvm_ir_gen.hpp"
 #include "common.hpp"
-#include "cli/builder/compiler_setup.hpp"
 #include "hir/hir.hpp"
 #include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "mir/hir_mir_builder.hpp"
-#include "cli/builder/object_compiler.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"
 #include "types/module.hpp"
-#include "cli/utils.hpp"
 
 #include <algorithm>
 #include <fstream>

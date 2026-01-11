@@ -538,4 +538,76 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     return objects;
 }
 
+// ============================================================================
+// Preprocessor Helpers
+// ============================================================================
+
+void emit_preprocessor_diagnostic(DiagnosticEmitter& emitter,
+                                  const preprocessor::PreprocessorDiagnostic& diag,
+                                  const std::string& filename) {
+    Diagnostic d;
+    d.code = diag.severity == preprocessor::DiagnosticSeverity::Error ? "P001" : "P002";
+    d.severity = diag.severity == preprocessor::DiagnosticSeverity::Error
+                     ? DiagnosticSeverity::Error
+                     : DiagnosticSeverity::Warning;
+    d.message = diag.message;
+    // Create a span for the error location
+    SourceLocation loc;
+    loc.file = filename;
+    loc.line = static_cast<uint32_t>(diag.line);
+    loc.column = static_cast<uint32_t>(diag.column);
+    loc.offset = 0;
+    loc.length = 1;
+    d.primary_span = SourceSpan{.start = loc, .end = loc};
+    emitter.emit(d);
+}
+
+void emit_all_preprocessor_diagnostics(DiagnosticEmitter& emitter,
+                                       const preprocessor::PreprocessorResult& result,
+                                       const std::string& filename) {
+    for (const auto& diag : result.diagnostics) {
+        emit_preprocessor_diagnostic(emitter, diag, filename);
+    }
+}
+
+preprocessor::Preprocessor get_configured_preprocessor(const BuildOptions& options) {
+    preprocessor::PreprocessorConfig config = preprocessor::Preprocessor::host_config();
+
+    // Set build mode
+    if (options.release || options.optimization_level >= 2) {
+        config.build_mode = preprocessor::BuildMode::Release;
+    } else if (options.debug) {
+        config.build_mode = preprocessor::BuildMode::Debug;
+    }
+
+    // Parse target if specified
+    if (!options.target.empty()) {
+        config = preprocessor::Preprocessor::parse_target_triple(options.target);
+        // Preserve build mode from options
+        if (options.release || options.optimization_level >= 2) {
+            config.build_mode = preprocessor::BuildMode::Release;
+        }
+    }
+
+    // Add user defines
+    for (const auto& def : options.defines) {
+        // Parse SYMBOL or SYMBOL=VALUE
+        auto eq_pos = def.find('=');
+        if (eq_pos != std::string::npos) {
+            config.defines[def.substr(0, eq_pos)] = def.substr(eq_pos + 1);
+        } else {
+            config.defines[def] = "";
+        }
+    }
+
+    return preprocessor::Preprocessor(config);
+}
+
+preprocessor::PreprocessorResult preprocess_source(const std::string& source,
+                                                   const std::string& filename,
+                                                   const BuildOptions& options) {
+    auto pp = get_configured_preprocessor(options);
+    return pp.process(source, filename);
+}
+
 } // namespace tml::cli::build

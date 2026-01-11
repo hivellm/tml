@@ -45,6 +45,7 @@
 #include "mir/mir_builder.hpp"
 #include "mir/mir_pass.hpp"
 #include "parser/parser.hpp"
+#include "preprocessor/preprocessor.hpp"
 #include "types/checker.hpp"
 
 #include <chrono>
@@ -143,6 +144,28 @@ void emit_borrow_error(DiagnosticEmitter& emitter, const borrow::BorrowError& er
 // Emit all borrow errors
 void emit_all_borrow_errors(DiagnosticEmitter& emitter,
                             const std::vector<borrow::BorrowError>& errors);
+
+// Emit a preprocessor diagnostic
+void emit_preprocessor_diagnostic(DiagnosticEmitter& emitter,
+                                  const preprocessor::PreprocessorDiagnostic& diag,
+                                  const std::string& filename);
+
+// Emit all preprocessor diagnostics
+void emit_all_preprocessor_diagnostics(DiagnosticEmitter& emitter,
+                                       const preprocessor::PreprocessorResult& result,
+                                       const std::string& filename);
+
+// ============================================================================
+// Preprocessor Helpers
+// ============================================================================
+
+// Get a preprocessor configured for the current build
+preprocessor::Preprocessor get_configured_preprocessor(const BuildOptions& options);
+
+// Preprocess source code
+preprocessor::PreprocessorResult preprocess_source(const std::string& source,
+                                                   const std::string& filename,
+                                                   const BuildOptions& options);
 
 // ============================================================================
 // Module Helpers

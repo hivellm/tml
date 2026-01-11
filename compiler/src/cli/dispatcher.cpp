@@ -198,6 +198,7 @@ int tml_main(int argc, char* argv[]) {
         // Additional options for extended build
         bool show_timings = false;
         bool lto = false;
+        std::vector<std::string> defines; // Preprocessor defines (-D)
 
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
@@ -281,6 +282,14 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--coverage-output=")) {
                 tml::CompilerOptions::coverage_output = arg.substr(18);
                 tml::CompilerOptions::coverage = true; // Implicitly enable coverage
+            } else if (arg.starts_with("-D")) {
+                // Preprocessor define: -DSYMBOL or -DSYMBOL=VALUE
+                if (arg.length() > 2) {
+                    defines.push_back(arg.substr(2));
+                }
+            } else if (arg.starts_with("--define=")) {
+                // Preprocessor define: --define=SYMBOL or --define=SYMBOL=VALUE
+                defines.push_back(arg.substr(9));
             }
         }
 
@@ -296,8 +305,8 @@ int tml_main(int argc, char* argv[]) {
         tml::CompilerOptions::target_triple = target_triple;
         tml::CompilerOptions::sysroot = sysroot;
 
-        // Use extended build if new features are requested
-        if (show_timings || lto) {
+        // Use extended build if new features are requested or if defines are present
+        if (show_timings || lto || !defines.empty()) {
             BuildOptions opts;
             opts.verbose = verbose;
             opts.emit_ir_only = emit_ir_only;
@@ -308,6 +317,11 @@ int tml_main(int argc, char* argv[]) {
             opts.lto = lto;
             opts.output_type = output_type;
             opts.output_dir = output_dir;
+            opts.debug = debug_info;
+            opts.release = (opt_level >= 2);
+            opts.optimization_level = opt_level;
+            opts.target = target_triple;
+            opts.defines = std::move(defines);
             return run_build_ex(argv[2], opts);
         }
 

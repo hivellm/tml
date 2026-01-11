@@ -25,8 +25,8 @@
 
 #include "compiler_setup.hpp"
 
-#include "common.hpp"
 #include "cli/utils.hpp"
+#include "common.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -196,15 +196,16 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
         }
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
-        std::string compile_cmd =
-            quote_command(clang) +
+        std::string compile_cmd = quote_command(clang) +
 #ifdef _WIN32
-            " -c -O3 -fms-extensions -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+                                  " -c -O3 -fms-extensions -march=native -mtune=native "
+                                  "-fomit-frame-pointer -funroll-loops -o \"" +
 #else
-            " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+                                  " -c -O3 -march=native -mtune=native -fomit-frame-pointer "
+                                  "-funroll-loops -o \"" +
 #endif
-            to_forward_slashes(obj_path.string()) + "\" \"" + to_forward_slashes(c_path.string()) +
-            "\"";
+                                  to_forward_slashes(obj_path.string()) + "\" \"" +
+                                  to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
         if (ret != 0) {
             return runtime_c_path;
@@ -259,14 +260,16 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
         }
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
-        std::string compile_cmd =
-            quote_command(clang) +
+        std::string compile_cmd = quote_command(clang) +
 #ifdef _WIN32
-            " -c -O3 -fms-extensions -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+                                  " -c -O3 -fms-extensions -march=native -mtune=native "
+                                  "-fomit-frame-pointer -funroll-loops -o \"" +
 #else
-            " -c -O3 -march=native -mtune=native -fomit-frame-pointer -funroll-loops -o \"" +
+                                  " -c -O3 -march=native -mtune=native -fomit-frame-pointer "
+                                  "-funroll-loops -o \"" +
 #endif
-            obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) + "\"";
+                                  obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) +
+                                  "\"";
         int ret = std::system(compile_cmd.c_str());
 
         // Mark compilation as done

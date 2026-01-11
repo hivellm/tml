@@ -30,8 +30,8 @@
 #include "cmd_pkg.hpp"
 
 #include "cli/builder/build_config.hpp"
-#include "cli/commands/cmd_test.hpp" // For colors namespace
 #include "cli/builder/dependency_resolver.hpp"
+#include "cli/commands/cmd_test.hpp" // For colors namespace
 #include "cli/utils.hpp"
 
 #include <filesystem>

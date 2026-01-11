@@ -582,7 +582,118 @@ type Point { x: F64, y: F64 }
 @hint(hot)                // Hot code path
 ```
 
-## 10. Comments
+## 10. Preprocessor Directives
+
+TML supports C-style preprocessor directives for conditional compilation.
+
+### 10.1 Conditional Directives
+
+```ebnf
+Directive   = '#' DirectiveName DirectiveArgs?
+DirectiveName = 'if' | 'ifdef' | 'ifndef' | 'elif' | 'else' | 'endif'
+              | 'define' | 'undef' | 'error' | 'warning'
+DirectiveExpr = Symbol | '!' DirectiveExpr | DirectiveExpr ('&&' | '||') DirectiveExpr
+              | '(' DirectiveExpr ')' | 'defined' '(' Symbol ')'
+```
+
+**Examples:**
+```tml
+// Platform-specific code
+#if WINDOWS
+func get_platform() -> Str {
+    return "Windows"
+}
+#elif LINUX
+func get_platform() -> Str {
+    return "Linux"
+}
+#else
+func get_platform() -> Str {
+    return "Unknown"
+}
+#endif
+
+// Feature detection
+#ifdef DEBUG
+func log(msg: Str) {
+    print(msg)
+}
+#endif
+
+// Negated conditions
+#ifndef RELEASE
+func debug_assert(cond: Bool) {
+    if not cond { panic("Assertion failed") }
+}
+#endif
+
+// Logical expressions
+#if WINDOWS && X86_64
+func optimized_impl() { ... }
+#endif
+
+#if DEBUG || TEST
+func verbose_logging() { ... }
+#endif
+
+// defined() function
+#if defined(FEATURE_A) && !defined(FEATURE_B)
+func feature_a_only() { ... }
+#endif
+```
+
+### 10.2 Define/Undef Directives
+
+```tml
+// Define a symbol
+#define MY_FEATURE
+
+// Define with value
+#define VERSION "1.0.0"
+
+// Undefine a symbol
+#undef MY_FEATURE
+```
+
+### 10.3 Error/Warning Directives
+
+```tml
+// Emit compilation error
+#if !defined(REQUIRED_FEATURE)
+#error "REQUIRED_FEATURE must be defined"
+#endif
+
+// Emit warning (compilation continues)
+#ifdef DEPRECATED_API
+#warning "This API is deprecated"
+#endif
+```
+
+### 10.4 Predefined Symbols
+
+| Category | Symbols | Description |
+|----------|---------|-------------|
+| **OS** | `WINDOWS`, `LINUX`, `MACOS`, `ANDROID`, `IOS`, `FREEBSD` | Target operating system |
+| **OS Family** | `UNIX`, `POSIX` | OS family (Linux, macOS, BSD are UNIX/POSIX) |
+| **Architecture** | `X86_64`, `X86`, `ARM64`, `ARM`, `WASM32`, `RISCV64` | Target CPU architecture |
+| **Pointer Size** | `PTR_32`, `PTR_64` | Pointer width in bits |
+| **Endianness** | `LITTLE_ENDIAN`, `BIG_ENDIAN` | Byte order |
+| **Environment** | `MSVC`, `GNU`, `MUSL` | Target environment/ABI |
+| **Build Mode** | `DEBUG`, `RELEASE`, `TEST` | Compilation mode |
+
+### 10.5 Expression Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `&&` or `and` | Logical AND | `#if A && B` |
+| `\|\|` or `or` | Logical OR | `#if A \|\| B` |
+| `!` or `not` | Logical NOT | `#if !A` |
+| `defined()` | Check if symbol exists | `#if defined(X)` |
+| `()` | Grouping | `#if (A && B) \|\| C` |
+
+**Note:** Both C-style operators (`&&`, `||`, `!`) and TML keywords (`and`, `or`, `not`) are supported in preprocessor expressions.
+
+## 11. Comments
 
 ```ebnf
 LineComment  = '//' [^\n]* '\n'
@@ -646,13 +757,13 @@ func binary_search[T: Ordered](items: ref List[T], target: T) -> Maybe[U64] {
 }
 ```
 
-## 11. Whitespace
+## 12. Whitespace
 
 - Spaces and newlines ignored between tokens
 - No indentation significance (unlike Python)
 - Newlines significant only in strings
 
-## 12. Precedence Table
+## 13. Precedence Table
 
 | Precedence | Operators | Associativity |
 |------------|-----------|---------------|
@@ -670,7 +781,7 @@ func binary_search[T: Ordered](items: ref List[T], target: T) -> Maybe[U64] {
 | 12 | Unary `-` `~` | Unary |
 | 13 (highest) | `.` `()` `[]` | Left |
 
-## 13. Tokenization Example
+## 14. Tokenization Example
 
 **Source:**
 ```tml

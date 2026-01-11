@@ -61,6 +61,12 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# Preprocessor library (C-style conditional compilation)
+add_library(tml_preprocessor STATIC
+    src/preprocessor/preprocessor.cpp
+)
+target_include_directories(tml_preprocessor PUBLIC include src)
+
 # Lexer library
 add_library(tml_lexer STATIC
     src/lexer/token.cpp
@@ -85,7 +91,7 @@ add_library(tml_parser STATIC
     src/parser/parser_type.cpp
     src/parser/parser_pattern.cpp
 )
-target_link_libraries(tml_parser PUBLIC tml_lexer)
+target_link_libraries(tml_parser PUBLIC tml_lexer tml_preprocessor)
 target_include_directories(tml_parser PUBLIC include src)
 
 # Type checker library

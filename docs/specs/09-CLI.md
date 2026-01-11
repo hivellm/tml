@@ -85,6 +85,12 @@ tml build --verbose              # Show detailed build output
 tml build --time                 # Show detailed compiler phase timings
 tml build --lto                  # Enable Link-Time Optimization
 
+# Preprocessor options
+tml build -DDEBUG                # Define preprocessor symbol
+tml build -DVERSION=1.0          # Define symbol with value
+tml build --define=FEATURE       # Alternative syntax
+tml build --target=x86_64-linux  # Cross-compile to target triple
+
 # Custom output directory
 tml build --out-dir=path/to/dir  # Save build artifacts to custom directory
 
@@ -845,10 +851,69 @@ tml build --emit-mir
 - Optimization level changed
 - Debug info setting changed
 - Compiler version changed
+- Preprocessor defines changed
 
 **Cache location:**
 - `build/debug/.cache/` - MIR and object file cache
 - Index file tracks: source hash, optimization level, debug info
+
+### 8.10 Conditional Compilation
+
+TML supports C-style preprocessor directives for conditional compilation:
+
+```bash
+# Define symbols via CLI
+tml build file.tml -DDEBUG              # Define DEBUG symbol
+tml build file.tml -DVERSION=1.0        # Define with value
+tml build file.tml --define=FEATURE     # Alternative syntax
+
+# Multiple defines
+tml build file.tml -DDEBUG -DFEATURE_X -DLOG_LEVEL=3
+
+# Cross-compilation
+tml build file.tml --target=x86_64-unknown-linux-gnu
+tml build file.tml --target=aarch64-apple-darwin
+tml build file.tml --target=x86_64-pc-windows-msvc
+```
+
+**Build mode symbols:**
+- `--debug` / `-g` → Defines `DEBUG` symbol
+- `--release` → Defines `RELEASE` symbol
+- Test mode → Defines `TEST` symbol
+
+**Predefined symbols:**
+The compiler automatically defines symbols based on the host or target:
+
+| Category | Symbols |
+|----------|---------|
+| OS | `WINDOWS`, `LINUX`, `MACOS`, `ANDROID`, `IOS`, `FREEBSD`, `UNIX`, `POSIX` |
+| Arch | `X86_64`, `X86`, `ARM64`, `ARM`, `WASM32`, `RISCV64` |
+| Pointer | `PTR_32`, `PTR_64` |
+| Endian | `LITTLE_ENDIAN`, `BIG_ENDIAN` |
+| Env | `MSVC`, `GNU`, `MUSL` |
+
+**Example TML code:**
+```tml
+#if WINDOWS
+func get_home() -> Str {
+    return env::var("USERPROFILE")
+}
+#elif UNIX
+func get_home() -> Str {
+    return env::var("HOME")
+}
+#endif
+
+#ifdef DEBUG
+func log(msg: Str) {
+    print("[DEBUG] {msg}\n")
+}
+#else
+func log(msg: Str) { }
+#endif
+```
+
+See [02-LEXICAL.md](./02-LEXICAL.md#10-preprocessor-directives) for full preprocessor documentation.
 
 ---
 

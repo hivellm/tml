@@ -1045,6 +1045,295 @@ func process(content: String) -> String {
 }
 ```
 
+## 11. Conditional Compilation
+
+This section demonstrates TML's preprocessor directives for platform-specific code.
+
+### 11.1 Platform-Specific Implementation
+
+```tml
+module platform
+
+// Platform detection
+#if WINDOWS
+func get_path_separator() -> Str {
+    return "\\"
+}
+
+func get_home_dir() -> Str {
+    return env::var("USERPROFILE").unwrap_or("C:\\Users\\Default")
+}
+#elif UNIX
+func get_path_separator() -> Str {
+    return "/"
+}
+
+func get_home_dir() -> Str {
+    return env::var("HOME").unwrap_or("/home")
+}
+#endif
+
+// Architecture-specific optimizations
+#if X86_64
+func fast_hash(data: ref [U8]) -> U64 {
+    // Use x86-64 specific optimizations
+    lowlevel {
+        // SIMD-optimized implementation
+        return hash_simd_x64(data)
+    }
+}
+#elif ARM64
+func fast_hash(data: ref [U8]) -> U64 {
+    // Use ARM64 NEON instructions
+    lowlevel {
+        return hash_neon(data)
+    }
+}
+#else
+func fast_hash(data: ref [U8]) -> U64 {
+    // Generic fallback implementation
+    var hash: U64 = 0
+    loop byte in data {
+        hash = hash * 31 + byte as U64
+    }
+    return hash
+}
+#endif
+
+public func main() {
+    print("Path separator: {get_path_separator()}\n")
+    print("Home directory: {get_home_dir()}\n")
+}
+```
+
+### 11.2 Debug/Release Builds
+
+```tml
+module logging
+
+// Debug-only logging
+#ifdef DEBUG
+func log_debug(msg: Str) {
+    print("[DEBUG] {msg}\n")
+}
+
+func assert_debug(condition: Bool, msg: Str) {
+    if not condition {
+        panic("Assertion failed: {msg}")
+    }
+}
+#else
+// Empty implementations in release mode
+func log_debug(msg: Str) { }
+func assert_debug(condition: Bool, msg: Str) { }
+#endif
+
+// Release-only optimizations
+#ifdef RELEASE
+const BUFFER_SIZE: I32 = 65536  // Larger buffers in release
+#else
+const BUFFER_SIZE: I32 = 4096   // Smaller buffers for debugging
+#endif
+
+// Conditional feature inclusion
+#if DEBUG && !RELEASE
+func dump_state(state: ref AppState) {
+    print("=== State Dump ===\n")
+    print("Users: {state.users.len()}\n")
+    print("Sessions: {state.sessions.len()}\n")
+    print("Memory: {state.memory_usage()} bytes\n")
+}
+#endif
+
+public func main() {
+    log_debug("Application starting...")
+
+    #ifdef DEBUG
+    print("Running in DEBUG mode\n")
+    #else
+    print("Running in RELEASE mode\n")
+    #endif
+}
+```
+
+### 11.3 Feature Flags
+
+```tml
+module features
+
+// Custom feature flags (passed via -D)
+#ifdef FEATURE_ASYNC
+use std::async::{spawn, join}
+
+pub func process_async(items: List[Item]) -> List[Result] {
+    let tasks: List[Task[Result]] = items
+        .iter()
+        .map(do(item: Item) spawn(do() process_item(item)))
+        .collect()
+
+    return join(tasks)
+}
+#else
+pub func process_async(items: List[Item]) -> List[Result] {
+    // Synchronous fallback
+    return items.iter().map(do(item: Item) process_item(item)).collect()
+}
+#endif
+
+#ifdef FEATURE_LOGGING
+use std::log::{Logger, Level}
+
+pub func init_logging() {
+    Logger::init(Level::Info)
+}
+#else
+pub func init_logging() { }
+#endif
+
+// Compile-time error for required features
+#if !defined(DATABASE_URL)
+#error "DATABASE_URL must be defined. Use -DDATABASE_URL=... when building."
+#endif
+
+// Warnings for deprecated features
+#ifdef USE_LEGACY_API
+#warning "USE_LEGACY_API is deprecated. Migrate to the new API."
+#endif
+```
+
+### 11.4 Cross-Platform Library
+
+```tml
+module network
+
+// Platform-specific socket implementation
+#if WINDOWS
+type Socket {
+    handle: SOCKET,  // Windows SOCKET type
+}
+
+impl Socket {
+    pub func new() -> Outcome[This, Error] {
+        lowlevel {
+            let h: SOCKET = socket(AF_INET, SOCK_STREAM, 0)
+            if h == INVALID_SOCKET {
+                return Err(Error::new("Failed to create socket"))
+            }
+            return Ok(This { handle: h })
+        }
+    }
+
+    pub func close(this) {
+        lowlevel {
+            closesocket(this.handle)
+        }
+    }
+}
+#elif UNIX
+type Socket {
+    fd: I32,  // File descriptor on Unix
+}
+
+impl Socket {
+    pub func new() -> Outcome[This, Error] {
+        lowlevel {
+            let fd: I32 = socket(AF_INET, SOCK_STREAM, 0)
+            if fd < 0 {
+                return Err(Error::new("Failed to create socket"))
+            }
+            return Ok(This { fd: fd })
+        }
+    }
+
+    pub func close(this) {
+        lowlevel {
+            close(this.fd)
+        }
+    }
+}
+#endif
+
+// Portable public API
+pub func connect(host: Str, port: U16) -> Outcome[Socket, Error] {
+    let sock: Socket = Socket::new()!
+    // ... connection logic (platform-independent)
+    return Ok(sock)
+}
+```
+
+### 11.5 Nested Conditionals
+
+```tml
+module nested
+
+// Nested platform and architecture detection
+#if WINDOWS
+    #ifdef X86_64
+    func get_arch_info() -> Str {
+        return "Windows x64"
+    }
+    #elif X86
+    func get_arch_info() -> Str {
+        return "Windows x86"
+    }
+    #elif ARM64
+    func get_arch_info() -> Str {
+        return "Windows ARM64"
+    }
+    #endif
+#elif MACOS
+    #ifdef ARM64
+    func get_arch_info() -> Str {
+        return "macOS Apple Silicon"
+    }
+    #else
+    func get_arch_info() -> Str {
+        return "macOS Intel"
+    }
+    #endif
+#elif LINUX
+    #ifdef ARM64
+    func get_arch_info() -> Str {
+        return "Linux ARM64"
+    }
+    #else
+    func get_arch_info() -> Str {
+        return "Linux x64"
+    }
+    #endif
+#endif
+
+// Complex conditional expressions
+#if (WINDOWS || LINUX) && X86_64 && !defined(NO_SIMD)
+func use_simd_optimizations() -> Bool {
+    return true
+}
+#else
+func use_simd_optimizations() -> Bool {
+    return false
+}
+#endif
+
+public func main() {
+    print("Platform: {get_arch_info()}\n")
+    print("SIMD enabled: {use_simd_optimizations()}\n")
+}
+```
+
+**Building with different configurations:**
+```bash
+# Debug build on Windows
+tml build platform.tml --debug
+# Defines: WINDOWS, X86_64, DEBUG, PTR_64, LITTLE_ENDIAN, MSVC
+
+# Release build with features
+tml build features.tml --release -DFEATURE_ASYNC -DFEATURE_LOGGING -DDATABASE_URL=postgres://localhost
+
+# Cross-compile for Linux ARM64
+tml build platform.tml --target=aarch64-unknown-linux-gnu
+# Defines: LINUX, ARM64, UNIX, POSIX, PTR_64, LITTLE_ENDIAN, GNU
+```
+
 ---
 
 *Previous: [13-BUILTINS.md](./13-BUILTINS.md)*

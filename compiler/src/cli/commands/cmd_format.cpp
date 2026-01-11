@@ -26,13 +26,13 @@
 
 #include "cmd_format.hpp"
 
-#include "common.hpp"
 #include "cli/diagnostic.hpp"
+#include "cli/utils.hpp"
+#include "common.hpp"
 #include "format/formatter.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
-#include "cli/utils.hpp"
 
 #include <filesystem>
 #include <fstream>

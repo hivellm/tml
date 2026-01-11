@@ -40,8 +40,8 @@
 #include "test_runner.hpp"
 
 #include "cli/builder/builder_internal.hpp"
-#include "cli/commands/cmd_build.hpp"
 #include "cli/builder/object_compiler.hpp"
+#include "cli/commands/cmd_build.hpp"
 #include "cli/tester/tester_internal.hpp"
 
 #include <chrono>
@@ -82,14 +82,22 @@ static thread_local bool g_crash_occurred = false;
 
 static const char* get_exception_name(DWORD code) {
     switch (code) {
-        case EXCEPTION_ACCESS_VIOLATION: return "ACCESS_VIOLATION (Segmentation fault)";
-        case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
-        case EXCEPTION_INT_DIVIDE_BY_ZERO: return "INTEGER_DIVIDE_BY_ZERO";
-        case EXCEPTION_INT_OVERFLOW: return "INTEGER_OVERFLOW";
-        case EXCEPTION_STACK_OVERFLOW: return "STACK_OVERFLOW";
-        case EXCEPTION_FLT_DIVIDE_BY_ZERO: return "FLOAT_DIVIDE_BY_ZERO";
-        case EXCEPTION_FLT_INVALID_OPERATION: return "FLOAT_INVALID_OPERATION";
-        default: return "UNKNOWN_EXCEPTION";
+    case EXCEPTION_ACCESS_VIOLATION:
+        return "ACCESS_VIOLATION (Segmentation fault)";
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        return "ILLEGAL_INSTRUCTION";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+        return "INTEGER_DIVIDE_BY_ZERO";
+    case EXCEPTION_INT_OVERFLOW:
+        return "INTEGER_OVERFLOW";
+    case EXCEPTION_STACK_OVERFLOW:
+        return "STACK_OVERFLOW";
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        return "FLOAT_DIVIDE_BY_ZERO";
+    case EXCEPTION_FLT_INVALID_OPERATION:
+        return "FLOAT_INVALID_OPERATION";
+    default:
+        return "UNKNOWN_EXCEPTION";
     }
 }
 
@@ -97,8 +105,8 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS* info) {
     DWORD code = info->ExceptionRecord->ExceptionCode;
 
     // Format crash message
-    snprintf(g_crash_msg, sizeof(g_crash_msg), "CRASH: %s (0x%08lX)",
-             get_exception_name(code), (unsigned long)code);
+    snprintf(g_crash_msg, sizeof(g_crash_msg), "CRASH: %s (0x%08lX)", get_exception_name(code),
+             (unsigned long)code);
     g_crash_occurred = true;
 
     // Print to stderr immediately using low-level API for reliability
@@ -121,8 +129,7 @@ static int call_test_with_seh(TestMainFunc func) {
     int result = 0;
     __try {
         result = func();
-    }
-    __except(crash_filter(GetExceptionInformation())) {
+    } __except (crash_filter(GetExceptionInformation())) {
         return -2;
     }
     return result;
@@ -134,13 +141,13 @@ static int call_test_wrapper_with_seh(TmlRunTestWithCatch wrapper, TestMainFunc 
     g_crash_msg[0] = '\0';
 
     // Disable Windows Error Reporting to allow SEH to work
-    UINT oldMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    UINT oldMode =
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 
     int result = 0;
     __try {
         result = wrapper(func);
-    }
-    __except(crash_filter(GetExceptionInformation())) {
+    } __except (crash_filter(GetExceptionInformation())) {
         SetErrorMode(oldMode);
         return -2;
     }
@@ -1601,8 +1608,9 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
     if (verbose) {
-        std::cerr << "[DEBUG]   tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND")
-                  << "\n" << std::flush;
+        std::cerr << "[DEBUG]   tml_run_test_with_catch: "
+                  << (run_with_catch ? "found" : "NOT FOUND") << "\n"
+                  << std::flush;
     }
 
     // Set up output capture (skip in verbose mode to see crash output directly)
@@ -1640,7 +1648,7 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
 #else
         result.exit_code = run_with_catch(test_func);
 #endif
-        if (result.exit_code == -1) {
+            if (result.exit_code == -1) {
             // Panic was caught - the message was printed to stderr
             result.success = false;
             result.error = "Test panicked";
@@ -1652,7 +1660,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
             result.success = (result.exit_code == 0);
         }
         if (verbose) {
-            std::cerr << "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n" << std::flush;
+            std::cerr << "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n"
+                      << std::flush;
         }
     } else {
 #ifdef _WIN32
@@ -1672,7 +1681,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     }
 
     if (verbose) {
-        std::cerr << "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n" << std::flush;
+        std::cerr << "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n"
+                  << std::flush;
     }
 
     auto end = Clock::now();
@@ -1685,8 +1695,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     return result;
 }
 
-SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index,
-                                        PhaseTimings* timings, bool /*verbose*/) {
+SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings,
+                                        bool /*verbose*/) {
     // Note: verbose is unused here - profiled version just times, no debug output
     using Clock = std::chrono::high_resolution_clock;
     auto record_phase = [&](const std::string& phase, Clock::time_point start) {
