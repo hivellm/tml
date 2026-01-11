@@ -7,6 +7,9 @@
       "include": "#comments"
     },
     {
+      "include": "#preprocessor"
+    },
+    {
       "include": "#directives"
     },
     {
@@ -35,6 +38,90 @@
     }
   ],
   "repository": {
+    "preprocessor": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.conditional.tml",
+          "match": "^\\s*(#)(if|ifdef|ifndef|elif|else|endif)\\b(.*)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.directive.tml"
+            },
+            "2": {
+              "name": "keyword.control.preprocessor.tml"
+            },
+            "3": {
+              "patterns": [
+                {
+                  "include": "#preprocessor-expression"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "meta.preprocessor.define.tml",
+          "match": "^\\s*(#)(define|undef)\\s+([A-Za-z_][A-Za-z0-9_]*)(.*)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.directive.tml"
+            },
+            "2": {
+              "name": "keyword.control.preprocessor.tml"
+            },
+            "3": {
+              "name": "entity.name.constant.preprocessor.tml"
+            },
+            "4": {
+              "name": "string.unquoted.preprocessor.value.tml"
+            }
+          }
+        },
+        {
+          "name": "meta.preprocessor.diagnostic.tml",
+          "match": "^\\s*(#)(error|warning)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.directive.tml"
+            },
+            "2": {
+              "name": "keyword.control.preprocessor.diagnostic.tml"
+            },
+            "3": {
+              "name": "string.unquoted.preprocessor.message.tml"
+            }
+          }
+        }
+      ]
+    },
+    "preprocessor-expression": {
+      "patterns": [
+        {
+          "name": "keyword.operator.preprocessor.tml",
+          "match": "\\b(and|or|not)\\b|&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.other.preprocessor.defined.tml",
+          "match": "\\b(defined)\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.preprocessor.defined.tml"
+            },
+            "2": {
+              "name": "entity.name.constant.preprocessor.tml"
+            }
+          }
+        },
+        {
+          "name": "constant.other.preprocessor.symbol.tml",
+          "match": "\\b(WINDOWS|LINUX|MACOS|X86_64|ARM64|AARCH64|X86|ARM|DEBUG|RELEASE|TML_VERSION)\\b"
+        },
+        {
+          "name": "entity.name.constant.preprocessor.tml",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {
