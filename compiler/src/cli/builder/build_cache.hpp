@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "hir/hir_module.hpp"
+#include "hir/hir_serialize.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_serialize.hpp"
 
@@ -107,6 +109,67 @@ public:
 
 private:
     PhaseTimer& timer_;
+};
+
+// ============================================================================
+// HIR Cache
+// ============================================================================
+
+/**
+ * HIR cache for incremental compilation
+ *
+ * The HIR cache stores compiled HIR modules to avoid re-parsing and type
+ * checking when source files haven't changed. This is the first level of
+ * caching in the compilation pipeline:
+ *
+ * ```text
+ * Source → [HIR Cache] → HIR → [MIR Cache] → MIR → Object
+ * ```
+ *
+ * Benefits:
+ * - Skip lexing, parsing, type checking for unchanged files
+ * - Faster incremental builds
+ * - Dependency tracking for proper invalidation
+ */
+class HirCache {
+public:
+    explicit HirCache(const fs::path& cache_dir);
+
+    // Check if a valid cache entry exists for this source
+    bool has_valid_cache(const std::string& source_path) const;
+
+    // Load cached HIR module (returns nullopt if not cached or invalid)
+    std::optional<hir::HirModule> load_hir(const std::string& source_path) const;
+
+    // Save HIR module to cache with dependencies
+    bool save_hir(const std::string& source_path, const hir::HirModule& module,
+                  const std::vector<std::string>& dependencies = {});
+
+    // Clear all cached entries
+    void clear();
+
+    // Clear cache for a specific source file
+    void invalidate(const std::string& source_path);
+
+    // Get cache statistics
+    struct CacheStats {
+        size_t total_entries;
+        size_t valid_entries;
+        size_t total_size_bytes;
+    };
+    CacheStats get_stats() const;
+
+private:
+    fs::path cache_dir_;
+    fs::path index_file_;
+    mutable std::unordered_map<std::string, hir::HirCacheInfo> entries_;
+    mutable bool loaded_ = false;
+
+    void load_index() const;
+    void save_index() const;
+    std::string compute_cache_key(const std::string& source_path) const;
+    fs::path get_hir_path(const std::string& cache_key) const;
+    fs::path get_info_path(const std::string& cache_key) const;
 };
 
 // ============================================================================

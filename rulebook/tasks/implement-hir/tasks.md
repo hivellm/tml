@@ -1,6 +1,6 @@
 # Tasks: Implement HIR
 
-**Status**: In progress (Phase 6 complete - Pipeline Integration)
+**Status**: In progress (Phase 7 - Testing)
 
 ## Progress Summary
 
@@ -10,12 +10,12 @@
 | 2. AST to HIR Lowering | ✅ Complete | 100% |
 | 3. HIR to MIR Lowering | ✅ Complete | 100% |
 | 4. HIR Optimizations | ✅ Complete | 100% |
-| 5. HIR Caching | ⏳ Pending | 0% |
+| 5. HIR Caching | ✅ Complete | 100% |
 | 6. Pipeline Integration | ✅ Complete | 100% |
 | 7. Testing | 🔄 In Progress | 60% |
 | 8. Documentation | ✅ Complete | 100% |
 
-**Overall**: ~85% complete (40/47 tasks done)
+**Overall**: ~93% complete (44/47 tasks done)
 
 ## 1. HIR Data Structures
 
@@ -57,10 +57,23 @@
 
 ## 5. HIR Caching
 
-- [ ] 5.1 Define HIR serialization format
-- [ ] 5.2 Implement HIR serialization/deserialization
-- [ ] 5.3 Add content hash for change detection
-- [ ] 5.4 Implement dependency tracking for incremental compilation
+- [x] 5.1 Define HIR serialization format
+  - Binary format with 16-byte header (magic, version, content hash)
+  - Text format for debugging
+  - Defined in `compiler/include/hir/hir_serialize.hpp`
+- [x] 5.2 Implement HIR serialization/deserialization
+  - Binary writer/reader in `compiler/src/hir/serializer/`
+  - Text writer/reader for debugging
+  - Convenience functions: `serialize_hir_binary()`, `write_hir_file()`, `read_hir_file()`
+- [x] 5.3 Add content hash for change detection
+  - FNV-1a hash algorithm in `serialize_utils.cpp`
+  - `compute_source_hash()` - hash source file content + mtime
+  - `compute_hir_hash()` - hash module structure
+- [x] 5.4 Implement dependency tracking for incremental compilation
+  - `HirDependency` struct tracks module dependencies
+  - `HirCacheInfo` stores all cache metadata
+  - `are_dependencies_valid()` validates dependency hashes
+  - `HirCache` class in `compiler/src/cli/builder/build_cache.cpp` integrates with build system
 
 ## 6. Pipeline Integration
 

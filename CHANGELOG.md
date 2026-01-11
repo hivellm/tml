@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed `"BoxedError { ... }"` to `"BoxedError \{ ... \}"` format
 
 ### Added
+- **HIR Caching System** (2026-01-10) - Complete HIR serialization and caching for incremental compilation
+  - **Binary Serialization**: Compact binary format with 16-byte header (magic "THIR", version, content hash)
+  - **Text Serialization**: Human-readable format for debugging
+  - **Content Hashing**: FNV-1a algorithm for change detection
+    - `compute_source_hash()` - hash source file content + modification time
+    - `compute_hir_hash()` - hash module structure (functions, structs, enums)
+  - **Dependency Tracking**: `HirDependency` and `HirCacheInfo` structs track module dependencies
+  - **Cache Validation**: `are_dependencies_valid()` checks if cached HIR is still valid
+  - **Build Integration**: `HirCache` class in `build_cache.cpp` integrates with the build system
+  - Files: `compiler/src/hir/serializer/`, `compiler/include/hir/hir_serialize.hpp`, `compiler/src/cli/builder/build_cache.cpp`
+
 - **HIR Optimization Passes - Inlining & Closure** (2026-01-09) - Full implementation of HIR Inlining and ClosureOptimization passes
   - **Inlining Pass**: Replaces calls to small, non-recursive functions with their bodies
     - Configurable statement threshold (default: 5)

@@ -674,4 +674,264 @@ MirCache::FunctionCacheStats MirCache::get_function_stats() const {
     return func_stats_;
 }
 
+// ============================================================================
+// HirCache Implementation
+// ============================================================================
+
+/// Constructs a HirCache with the specified cache directory.
+///
+/// Creates the cache directory if it doesn't exist.
+HirCache::HirCache(const fs::path& cache_dir) : cache_dir_(cache_dir) {
+    fs::create_directories(cache_dir_);
+    index_file_ = cache_dir_ / "hir_cache.idx";
+}
+
+/// Lazily loads the HIR cache index from disk.
+void HirCache::load_index() const {
+    if (loaded_)
+        return;
+    loaded_ = true;
+
+    if (!fs::exists(index_file_))
+        return;
+
+    std::ifstream file(index_file_);
+    if (!file)
+        return;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // Format: source_path|hir_file|source_hash|hir_hash|timestamp|dep_count|deps...
+        std::istringstream iss(line);
+        std::string source_path, hir_file;
+        hir::ContentHash source_hash, hir_hash;
+        uint64_t timestamp;
+        size_t dep_count;
+
+        if (std::getline(iss, source_path, '|') && std::getline(iss, hir_file, '|')) {
+            iss >> source_hash;
+            iss.ignore(1, '|');
+            iss >> hir_hash;
+            iss.ignore(1, '|');
+            iss >> timestamp;
+            iss.ignore(1, '|');
+            iss >> dep_count;
+
+            hir::HirCacheInfo info;
+            info.module_name = fs::path(source_path).stem().string();
+            info.source_path = source_path;
+            info.source_hash = source_hash;
+            info.hir_hash = hir_hash;
+            info.compile_timestamp = timestamp;
+
+            // Read dependencies
+            for (size_t i = 0; i < dep_count; ++i) {
+                std::string dep_name, dep_path;
+                hir::ContentHash dep_hash;
+                iss.ignore(1, '|');
+                std::getline(iss, dep_name, ':');
+                std::getline(iss, dep_path, ':');
+                iss >> dep_hash;
+
+                hir::HirDependency dep;
+                dep.module_name = dep_name;
+                dep.source_path = dep_path;
+                dep.content_hash = dep_hash;
+                info.deps.push_back(dep);
+            }
+
+            entries_[source_path] = info;
+        }
+    }
+}
+
+/// Saves the HIR cache index to disk.
+void HirCache::save_index() const {
+    std::ofstream file(index_file_);
+    if (!file)
+        return;
+
+    for (const auto& [source_path, info] : entries_) {
+        std::string cache_key = compute_cache_key(source_path);
+        fs::path hir_path = get_hir_path(cache_key);
+
+        file << source_path << "|" << hir_path.string() << "|" << info.source_hash << "|"
+             << info.hir_hash << "|" << info.compile_timestamp << "|" << info.deps.size();
+
+        for (const auto& dep : info.deps) {
+            file << "|" << dep.module_name << ":" << dep.source_path << ":" << dep.content_hash;
+        }
+        file << "\n";
+    }
+}
+
+/// Computes a cache key from a source file path.
+std::string HirCache::compute_cache_key(const std::string& source_path) const {
+    std::hash<std::string> hasher;
+    size_t hash = hasher(source_path);
+    std::ostringstream oss;
+    oss << std::hex << std::setw(16) << std::setfill('0') << hash;
+    return oss.str();
+}
+
+/// Gets the HIR binary file path for a cache key.
+fs::path HirCache::get_hir_path(const std::string& cache_key) const {
+    return cache_dir_ / (cache_key + ".hir");
+}
+
+/// Gets the HIR cache info file path for a cache key.
+fs::path HirCache::get_info_path(const std::string& cache_key) const {
+    return cache_dir_ / (cache_key + ".hir.info");
+}
+
+/// Checks if a valid HIR cache entry exists for the given source file.
+bool HirCache::has_valid_cache(const std::string& source_path) const {
+    load_index();
+
+    auto it = entries_.find(source_path);
+    if (it == entries_.end())
+        return false;
+
+    const auto& info = it->second;
+
+    // Check if source file has changed
+    hir::ContentHash current_hash = hir::compute_source_hash(source_path);
+    if (current_hash != info.source_hash)
+        return false;
+
+    // Check if HIR file exists
+    std::string cache_key = compute_cache_key(source_path);
+    fs::path hir_path = get_hir_path(cache_key);
+    if (!fs::exists(hir_path))
+        return false;
+
+    // Check dependencies
+    return hir::are_dependencies_valid(info);
+}
+
+/// Loads a cached HIR module from disk.
+std::optional<hir::HirModule> HirCache::load_hir(const std::string& source_path) const {
+    load_index();
+
+    auto it = entries_.find(source_path);
+    if (it == entries_.end())
+        return std::nullopt;
+
+    std::string cache_key = compute_cache_key(source_path);
+    fs::path hir_path = get_hir_path(cache_key);
+
+    if (!fs::exists(hir_path))
+        return std::nullopt;
+
+    hir::HirModule module = hir::read_hir_file(hir_path.string());
+    if (module.name.empty())
+        return std::nullopt;
+
+    return module;
+}
+
+/// Saves an HIR module to the cache.
+bool HirCache::save_hir(const std::string& source_path, const hir::HirModule& module,
+                        const std::vector<std::string>& dependencies) {
+    load_index();
+
+    std::string cache_key = compute_cache_key(source_path);
+    fs::path hir_path = get_hir_path(cache_key);
+
+    // Write HIR binary
+    if (!hir::write_hir_file(module, hir_path.string(), true))
+        return false;
+
+    // Build cache info
+    hir::HirCacheInfo info;
+    info.module_name = module.name;
+    info.source_path = source_path;
+    info.source_hash = hir::compute_source_hash(source_path);
+    info.hir_hash = hir::compute_hir_hash(module);
+    info.compile_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count();
+
+    // Track dependencies
+    for (const auto& dep_path : dependencies) {
+        hir::HirDependency dep;
+        dep.module_name = fs::path(dep_path).stem().string();
+        dep.source_path = dep_path;
+        dep.content_hash = hir::compute_source_hash(dep_path);
+        info.deps.push_back(dep);
+    }
+
+    // Write cache info file
+    fs::path info_path = get_info_path(cache_key);
+    hir::write_hir_cache_info(info, info_path.string());
+
+    // Update index
+    entries_[source_path] = info;
+    save_index();
+
+    return true;
+}
+
+/// Clears all HIR cache entries.
+void HirCache::clear() {
+    load_index();
+
+    // Remove all HIR files
+    for (const auto& [source_path, info] : entries_) {
+        std::string cache_key = compute_cache_key(source_path);
+        fs::path hir_path = get_hir_path(cache_key);
+        fs::path info_path = get_info_path(cache_key);
+
+        try {
+            fs::remove(hir_path);
+            fs::remove(info_path);
+        } catch (...) {}
+    }
+
+    entries_.clear();
+    save_index();
+}
+
+/// Invalidates the HIR cache for a specific source file.
+void HirCache::invalidate(const std::string& source_path) {
+    load_index();
+
+    auto it = entries_.find(source_path);
+    if (it != entries_.end()) {
+        std::string cache_key = compute_cache_key(source_path);
+        fs::path hir_path = get_hir_path(cache_key);
+        fs::path info_path = get_info_path(cache_key);
+
+        try {
+            fs::remove(hir_path);
+            fs::remove(info_path);
+        } catch (...) {}
+
+        entries_.erase(it);
+        save_index();
+    }
+}
+
+/// Returns HIR cache statistics.
+HirCache::CacheStats HirCache::get_stats() const {
+    load_index();
+
+    CacheStats stats{0, 0, 0};
+    stats.total_entries = entries_.size();
+
+    for (const auto& [source_path, info] : entries_) {
+        std::string cache_key = compute_cache_key(source_path);
+        fs::path hir_path = get_hir_path(cache_key);
+
+        if (fs::exists(hir_path)) {
+            stats.valid_entries++;
+            try {
+                stats.total_size_bytes += fs::file_size(hir_path);
+            } catch (...) {}
+        }
+    }
+
+    return stats;
+}
+
 } // namespace tml::cli
