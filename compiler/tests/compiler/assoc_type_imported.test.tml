@@ -1,0 +1,242 @@
+// Tests for associated type resolution from imported modules
+// Verifies that lookup_associated_type can find type bindings in imported impl blocks
+use test
+use core::iter::*
+use core::range::*
+
+// ============================================================================
+// Test 1: RangeIterI64 - impl Iterator is in core::range module
+// The associated type Item = I64 is defined in the imported module
+// ============================================================================
+
+@test
+func test_imported_range_iter() -> I32 {
+    // RangeIterI64 and its Iterator impl are imported from core::range
+    var iter: RangeIterI64 = RangeIterI64 { current: 0, end: 3 }
+
+    // The next() method returns Maybe[I64] where I64 comes from:
+    // impl Iterator for RangeIterI64 { type Item = I64; ... }
+    when iter.next() {
+        Just(v) => assert_eq(v, 0, "first should be 0"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 1, "second should be 1"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 2, "third should be 2"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 2: RangeInclusiveIterI64 - another imported impl
+// ============================================================================
+
+@test
+func test_imported_range_inclusive_iter() -> I32 {
+    var iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 5,
+        end: 7,
+        exhausted: false
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 5, "first should be 5"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 6, "second should be 6"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 7, "third should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 3: Iterator sources from core::iter::sources
+// These have impls defined in the sources submodule
+// ============================================================================
+
+@test
+func test_imported_sources_once_i32() -> I32 {
+    // OnceI32 and impl are in core::iter::sources
+    var iter: OnceI32 = once_i32(42)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 42, "should be 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+@test
+func test_imported_sources_once_i64() -> I32 {
+    var iter: OnceI64 = once_i64(9999)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 9999, "should be 9999"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_imported_sources_empty_i32() -> I32 {
+    var iter: EmptyI32 = empty_i32()
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "empty returns Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_imported_sources_repeat_n() -> I32 {
+    var iter: RepeatNI32 = repeat_n_i32(7, 2)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 7, "first should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 7, "second should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 4: Multiple imported iterators used together
+// ============================================================================
+
+@test
+func test_multiple_imported_types() -> I32 {
+    var range: RangeIterI64 = RangeIterI64 { current: 0, end: 2 }
+    var once: OnceI32 = once_i32(100)
+    var repeat: RepeatNI64 = repeat_n_i64(50, 2)
+
+    // Interleave usage
+    when range.next() {
+        Just(v) => assert_eq(v, 0, "range first = 0"),
+        Nothing => assert(false, "range should have values")
+    }
+
+    when once.next() {
+        Just(v) => assert_eq(v, 100, "once = 100"),
+        Nothing => assert(false, "once should have value")
+    }
+
+    when repeat.next() {
+        Just(v) => assert_eq(v, 50, "repeat first = 50"),
+        Nothing => assert(false, "repeat should have values")
+    }
+
+    when range.next() {
+        Just(v) => assert_eq(v, 1, "range second = 1"),
+        Nothing => assert(false, "range should have more")
+    }
+
+    when repeat.next() {
+        Just(v) => assert_eq(v, 50, "repeat second = 50"),
+        Nothing => assert(false, "repeat should have more")
+    }
+
+    // Now all should be exhausted
+    when range.next() {
+        Just(_) => assert(false, "range should be exhausted"),
+        Nothing => assert(true, "range exhausted")
+    }
+
+    when once.next() {
+        Just(_) => assert(false, "once should be exhausted"),
+        Nothing => assert(true, "once exhausted")
+    }
+
+    when repeat.next() {
+        Just(_) => assert(false, "repeat should be exhausted"),
+        Nothing => assert(true, "repeat exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 5: Edge cases with imported types
+// ============================================================================
+
+@test
+func test_imported_edge_empty_range() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 5, end: 5 }
+
+    when iter.next() {
+        Just(_) => assert(false, "empty range should be Nothing"),
+        Nothing => assert(true, "correctly empty")
+    }
+
+    return 0
+}
+
+@test
+func test_imported_edge_negative_range() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: -2, end: 1 }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -2, "first = -2"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -1, "second = -1"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 0, "third = 0"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}

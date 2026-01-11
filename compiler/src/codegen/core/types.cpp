@@ -32,6 +32,8 @@
 //! Example: `List[I32]` becomes `List_I32`
 
 #include "codegen/llvm_ir_gen.hpp"
+#include "lexer/lexer.hpp"
+#include "parser/parser.hpp"
 
 namespace tml::codegen {
 
@@ -439,10 +441,21 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                             return assoc_it->second;
                         }
                     }
-                    // Also check if it's T::AssociatedType where T is a generic param
+                    // Handle T::AssociatedType where T is a generic param
+                    // Example: I::Item where I -> RangeIterI64 should resolve to I64
                     auto param_it = subs.find(first);
-                    if (param_it != subs.end()) {
-                        // For now, look up the associated type directly
+                    if (param_it != subs.end() && param_it->second) {
+                        // Get the concrete type that T was substituted to
+                        const auto& concrete_type = param_it->second;
+                        if (concrete_type->is<types::NamedType>()) {
+                            const auto& named = concrete_type->as<types::NamedType>();
+                            // Look up the associated type of this concrete type
+                            auto assoc_type = lookup_associated_type(named.name, second);
+                            if (assoc_type) {
+                                return assoc_type;
+                            }
+                        }
+                        // Fallback: check current_associated_types_
                         auto assoc_it = current_associated_types_.find(second);
                         if (assoc_it != current_associated_types_.end()) {
                             return assoc_it->second;
@@ -708,6 +721,94 @@ auto LLVMIRGen::semantic_type_from_llvm(const std::string& llvm_type) -> types::
 
     // Default: return I32
     return types::make_primitive(types::PrimitiveKind::I32);
+}
+
+// ============ Associated Type Lookup ============
+// Finds an associated type for a concrete type by searching impl blocks.
+// For example: lookup_associated_type("RangeIterI64", "Item") -> I64
+//
+// This searches:
+// 1. Local pending_generic_impls_ (for impls in current module)
+// 2. Imported modules via module_registry
+
+auto LLVMIRGen::lookup_associated_type(const std::string& type_name, const std::string& assoc_name)
+    -> types::TypePtr {
+    // First check current_associated_types_ (might already be resolved)
+    auto current_it = current_associated_types_.find(assoc_name);
+    if (current_it != current_associated_types_.end()) {
+        return current_it->second;
+    }
+
+    // Check local impl blocks
+    auto impl_it = pending_generic_impls_.find(type_name);
+    if (impl_it != pending_generic_impls_.end()) {
+        const auto& impl = *impl_it->second;
+        for (const auto& binding : impl.type_bindings) {
+            if (binding.name == assoc_name && binding.type) {
+                return resolve_parser_type_with_subs(*binding.type, {});
+            }
+        }
+    }
+
+    // Check imported modules
+    if (env_.module_registry()) {
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            // Check if this module has the struct
+            auto struct_it = mod.structs.find(type_name);
+            if (struct_it == mod.structs.end())
+                continue;
+
+            // Re-parse the module source to get impl AST
+            if (mod.source_code.empty())
+                continue;
+
+            auto source = lexer::Source::from_string(mod.source_code, mod.file_path);
+            lexer::Lexer lex(source);
+            auto tokens = lex.tokenize();
+            if (lex.has_errors())
+                continue;
+
+            parser::Parser mod_parser(std::move(tokens));
+            auto module_name_stem = mod.name;
+            if (auto pos = module_name_stem.rfind("::"); pos != std::string::npos) {
+                module_name_stem = module_name_stem.substr(pos + 2);
+            }
+            auto parse_result = mod_parser.parse_module(module_name_stem);
+            if (!std::holds_alternative<parser::Module>(parse_result))
+                continue;
+
+            const auto& parsed_mod = std::get<parser::Module>(parse_result);
+
+            // Find the impl block for this type that has the associated type
+            for (const auto& decl : parsed_mod.decls) {
+                if (!decl->is<parser::ImplDecl>())
+                    continue;
+                const auto& impl_decl = decl->as<parser::ImplDecl>();
+
+                // Check if this impl is for our type
+                if (!impl_decl.self_type)
+                    continue;
+                if (!impl_decl.self_type->is<parser::NamedType>())
+                    continue;
+                const auto& target = impl_decl.self_type->as<parser::NamedType>();
+                if (target.path.segments.empty())
+                    continue;
+                if (target.path.segments.back() != type_name)
+                    continue;
+
+                // Look for the associated type binding
+                for (const auto& binding : impl_decl.type_bindings) {
+                    if (binding.name == assoc_name && binding.type) {
+                        return resolve_parser_type_with_subs(*binding.type, {});
+                    }
+                }
+            }
+        }
+    }
+
+    // Not found
+    return nullptr;
 }
 
 } // namespace tml::codegen

@@ -1,0 +1,324 @@
+// Comprehensive tests for associated type lookup and substitution
+// Tests the fix for I::Item not being substituted correctly in generic impl codegen
+use test
+use core::iter::*
+use core::range::*
+
+// ============================================================================
+// Test 1: Basic RangeIterI64 - verifies Iterator::Item = I64 is resolved
+// ============================================================================
+
+@test
+func test_range_iter_basic() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 0, end: 3 }
+
+    // Verify next() returns Maybe[I64] correctly
+    when iter.next() {
+        Just(v) => assert_eq(v, 0, "first should be 0"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 1, "second should be 1"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 2, "third should be 2"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing after exhausted"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 2: RangeInclusiveIterI64 - another concrete Iterator implementation
+// ============================================================================
+
+@test
+func test_range_inclusive_iter() -> I32 {
+    var iter: RangeInclusiveIterI64 = RangeInclusiveIterI64 {
+        current: 5,
+        end: 7,
+        exhausted: false
+    }
+
+    // Inclusive [5, 7] should yield 5, 6, 7
+    when iter.next() {
+        Just(v) => assert_eq(v, 5, "first should be 5"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 6, "second should be 6"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 7, "third should be 7"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing after 7"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 3: OnceI32 and OnceI64 - test different Item types
+// ============================================================================
+
+@test
+func test_once_i32_item_type() -> I32 {
+    var iter: OnceI32 = once_i32(42)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 42, "once_i32 should return 42"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "second call should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+@test
+func test_once_i64_item_type() -> I32 {
+    var iter: OnceI64 = once_i64(123456789)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 123456789, "once_i64 should return correct value"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 4: EmptyI32 and EmptyI64 - empty iterators with different Item types
+// ============================================================================
+
+@test
+func test_empty_i32() -> I32 {
+    var iter: EmptyI32 = empty_i32()
+
+    when iter.next() {
+        Just(_) => assert(false, "empty should return Nothing"),
+        Nothing => assert(true, "correctly returns Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_empty_i64() -> I32 {
+    var iter: EmptyI64 = empty_i64()
+
+    when iter.next() {
+        Just(_) => assert(false, "empty should return Nothing"),
+        Nothing => assert(true, "correctly returns Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 5: RepeatN iterators - finite repetition
+// ============================================================================
+
+@test
+func test_repeat_n_i32() -> I32 {
+    var iter: RepeatNI32 = repeat_n_i32(7, 3)
+
+    var count: I32 = 0
+    loop {
+        when iter.next() {
+            Just(v) => {
+                assert_eq(v, 7, "repeat should always return 7")
+                count = count + 1
+            },
+            Nothing => {
+                assert_eq(count, 3, "should have repeated exactly 3 times")
+                return 0
+            }
+        }
+    }
+
+    return 0
+}
+
+@test
+func test_repeat_n_i64() -> I32 {
+    var iter: RepeatNI64 = repeat_n_i64(999, 2)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 999, "first should be 999"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 999, "second should be 999"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "third should be Nothing"),
+        Nothing => assert(true, "correctly exhausted")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 6: Multiple iterators with different Item types in same test
+// ============================================================================
+
+@test
+func test_multiple_iterator_types() -> I32 {
+    var range: RangeIterI64 = RangeIterI64 { current: 0, end: 2 }
+    var once: OnceI32 = once_i32(100)
+    var repeat: RepeatNI64 = repeat_n_i64(50, 1)
+
+    // Test range (Item = I64)
+    when range.next() {
+        Just(v) => assert_eq(v, 0, "range should return 0"),
+        Nothing => assert(false, "range should not be Nothing")
+    }
+
+    // Test once (Item = I32)
+    when once.next() {
+        Just(v) => assert_eq(v, 100, "once should return 100"),
+        Nothing => assert(false, "once should not be Nothing")
+    }
+
+    // Test repeat (Item = I64)
+    when repeat.next() {
+        Just(v) => assert_eq(v, 50, "repeat should return 50"),
+        Nothing => assert(false, "repeat should not be Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 7: Iterator chaining - consuming multiple elements
+// ============================================================================
+
+@test
+func test_iterator_consumption() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 10, end: 15 }
+
+    var sum: I64 = 0
+    loop {
+        when iter.next() {
+            Just(v) => {
+                sum = sum + v
+            },
+            Nothing => {
+                // 10 + 11 + 12 + 13 + 14 = 60
+                assert_eq(sum, 60, "sum should be 60")
+                return 0
+            }
+        }
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 8: Edge cases - zero-length iterators
+// ============================================================================
+
+@test
+func test_zero_length_range() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: 5, end: 5 }
+
+    when iter.next() {
+        Just(_) => assert(false, "zero-length range should return Nothing"),
+        Nothing => assert(true, "correctly returns Nothing")
+    }
+
+    return 0
+}
+
+@test
+func test_repeat_zero_times() -> I32 {
+    var iter: RepeatNI32 = repeat_n_i32(42, 0)
+
+    when iter.next() {
+        Just(_) => assert(false, "repeat_n(0) should return Nothing"),
+        Nothing => assert(true, "correctly returns Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 9: Negative values in iterators
+// ============================================================================
+
+@test
+func test_negative_range() -> I32 {
+    var iter: RangeIterI64 = RangeIterI64 { current: -3, end: 0 }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -3, "should be -3"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -2, "should be -2"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -1, "should be -1"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    when iter.next() {
+        Just(_) => assert(false, "should be Nothing at 0"),
+        Nothing => assert(true, "correctly stops at 0")
+    }
+
+    return 0
+}
+
+@test
+func test_negative_once() -> I32 {
+    var iter: OnceI32 = once_i32(-999)
+
+    when iter.next() {
+        Just(v) => assert_eq(v, -999, "should be -999"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}
+
+// ============================================================================
+// Test 10: Large values
+// ============================================================================
+
+@test
+func test_large_values() -> I32 {
+    var iter: OnceI64 = once_i64(9223372036854775807)  // I64::MAX
+
+    when iter.next() {
+        Just(v) => assert_eq(v, 9223372036854775807, "should be I64::MAX"),
+        Nothing => assert(false, "should not be Nothing")
+    }
+
+    return 0
+}

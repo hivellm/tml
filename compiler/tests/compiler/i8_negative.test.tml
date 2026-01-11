@@ -1,0 +1,50 @@
+// Test for I8 negative value return
+use test
+
+func return_neg_128_cast() -> I8 {
+    return -128 as I8
+}
+
+func return_neg_1_cast() -> I8 {
+    return -1 as I8
+}
+
+func return_min_i8_var() -> I8 {
+    let v: I8 = -128 as I8
+    return v
+}
+
+// This is the problematic case - no explicit cast
+func return_neg_128_nocast() -> I8 {
+    return -128
+}
+
+func return_neg_1_nocast() -> I8 {
+    return -1
+}
+
+@test
+func test_i8_negative_with_cast() -> I32 {
+    let a: I8 = return_neg_128_cast()
+    assert_eq(a as I32, -128, "return_neg_128_cast should be -128")
+
+    let b: I8 = return_neg_1_cast()
+    assert_eq(b as I32, -1, "return_neg_1_cast should be -1")
+
+    let c: I8 = return_min_i8_var()
+    assert_eq(c as I32, -128, "return_min_i8_var should be -128")
+
+    return 0
+}
+
+@test
+func test_i8_negative_without_cast() -> I32 {
+    // These tests may fail if the bug exists
+    let a: I8 = return_neg_128_nocast()
+    assert_eq(a as I32, -128, "return_neg_128_nocast should be -128")
+
+    let b: I8 = return_neg_1_nocast()
+    assert_eq(b as I32, -1, "return_neg_1_nocast should be -1")
+
+    return 0
+}

@@ -392,6 +392,11 @@ private:
                      const std::unordered_set<std::string>& generics,
                      std::unordered_map<std::string, types::TypePtr>& bindings);
 
+    // Helper: find an associated type for a concrete type
+    // Example: lookup_associated_type("RangeIterI64", "Item") -> I64
+    auto lookup_associated_type(const std::string& type_name, const std::string& assoc_name)
+        -> types::TypePtr;
+
     // Module structure
     void emit_header();
     void emit_runtime_decls();
