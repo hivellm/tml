@@ -1,0 +1,140 @@
+use test
+
+// Test predefined platform symbols
+// These tests verify that the host platform is correctly detected
+
+// Platform detection - at least one should be defined
+#if WINDOWS
+func get_os_name() -> I32 {
+    return 1
+}
+#elif LINUX
+func get_os_name() -> I32 {
+    return 2
+}
+#elif MACOS
+func get_os_name() -> I32 {
+    return 3
+}
+#elif FREEBSD
+func get_os_name() -> I32 {
+    return 4
+}
+#else
+func get_os_name() -> I32 {
+    return 0
+}
+#endif
+
+// Architecture detection
+#if X86_64
+func get_arch() -> I32 {
+    return 64
+}
+#elif X86
+func get_arch() -> I32 {
+    return 32
+}
+#elif ARM64
+func get_arch() -> I32 {
+    return 64
+}
+#elif ARM
+func get_arch() -> I32 {
+    return 32
+}
+#else
+func get_arch() -> I32 {
+    return 0
+}
+#endif
+
+// Pointer size
+#if PTR_64
+func get_ptr_size() -> I32 {
+    return 64
+}
+#elif PTR_32
+func get_ptr_size() -> I32 {
+    return 32
+}
+#else
+func get_ptr_size() -> I32 {
+    return 0
+}
+#endif
+
+// Endianness
+#if LITTLE_ENDIAN
+func is_little_endian() -> Bool {
+    return true
+}
+#elif BIG_ENDIAN
+func is_little_endian() -> Bool {
+    return false
+}
+#else
+func is_little_endian() -> Bool {
+    return false
+}
+#endif
+
+// UNIX family (should be true on Linux, macOS, FreeBSD)
+#if UNIX
+func is_unix() -> Bool {
+    return true
+}
+#else
+func is_unix() -> Bool {
+    return false
+}
+#endif
+
+@test
+func test_os_detected() -> I32 {
+    let os: I32 = get_os_name()
+    // At least one OS should be detected (1=Windows, 2=Linux, 3=macOS, 4=FreeBSD)
+    assert(os >= 1, "Host OS should be detected")
+    return 0
+}
+
+@test
+func test_arch_detected() -> I32 {
+    let arch: I32 = get_arch()
+    // Architecture should be detected (32 or 64 bit)
+    assert(arch == 32 or arch == 64, "Host architecture should be detected")
+    return 0
+}
+
+@test
+func test_ptr_size_detected() -> I32 {
+    let ptr: I32 = get_ptr_size()
+    // Pointer size should be detected
+    assert(ptr == 32 or ptr == 64, "Pointer size should be detected")
+    return 0
+}
+
+@test
+func test_endianness_consistent() -> I32 {
+    // This test just verifies the symbol exists and compiles
+    // Most modern systems are little-endian
+    let le: Bool = is_little_endian()
+    // We don't assert a specific value since it depends on the platform
+    return 0
+}
+
+@test
+func test_unix_consistency() -> I32 {
+    let os: I32 = get_os_name()
+    let unix: Bool = is_unix()
+
+    // If Linux, macOS, or FreeBSD, UNIX should be true
+    if os == 2 or os == 3 or os == 4 {
+        assert(unix, "UNIX should be true for Linux/macOS/FreeBSD")
+    }
+    // If Windows, UNIX should be false
+    if os == 1 {
+        assert(not unix, "UNIX should be false for Windows")
+    }
+    return 0
+}

@@ -1,0 +1,159 @@
+use test
+
+// Test logical operators in preprocessor expressions
+
+#define A
+#define B
+// C is NOT defined
+
+// Test AND (&&)
+#if A && B
+func test_and_both() -> Bool {
+    return true
+}
+#else
+func test_and_both() -> Bool {
+    return false
+}
+#endif
+
+#if A && C
+func test_and_one_missing() -> Bool {
+    return true
+}
+#else
+func test_and_one_missing() -> Bool {
+    return false
+}
+#endif
+
+// Test OR (||)
+#if A || C
+func test_or_one_defined() -> Bool {
+    return true
+}
+#else
+func test_or_one_defined() -> Bool {
+    return false
+}
+#endif
+
+#if C || D
+func test_or_none_defined() -> Bool {
+    return true
+}
+#else
+func test_or_none_defined() -> Bool {
+    return false
+}
+#endif
+
+// Test NOT (!)
+#if !C
+func test_not_undefined() -> Bool {
+    return true
+}
+#else
+func test_not_undefined() -> Bool {
+    return false
+}
+#endif
+
+#if !A
+func test_not_defined() -> Bool {
+    return true
+}
+#else
+func test_not_defined() -> Bool {
+    return false
+}
+#endif
+
+// Test combined: (A && B) || C
+#if (A && B) || C
+func test_combined_true() -> Bool {
+    return true
+}
+#else
+func test_combined_true() -> Bool {
+    return false
+}
+#endif
+
+// Test: A && !C
+#if A && !C
+func test_and_not() -> Bool {
+    return true
+}
+#else
+func test_and_not() -> Bool {
+    return false
+}
+#endif
+
+// Test TML-style keywords: and, or, not
+#if A and B
+func test_keyword_and() -> Bool {
+    return true
+}
+#else
+func test_keyword_and() -> Bool {
+    return false
+}
+#endif
+
+#if A or C
+func test_keyword_or() -> Bool {
+    return true
+}
+#else
+func test_keyword_or() -> Bool {
+    return false
+}
+#endif
+
+#if not C
+func test_keyword_not() -> Bool {
+    return true
+}
+#else
+func test_keyword_not() -> Bool {
+    return false
+}
+#endif
+
+@test
+func test_logical_and() -> I32 {
+    assert(test_and_both(), "A && B should be true")
+    assert(not test_and_one_missing(), "A && C should be false (C undefined)")
+    return 0
+}
+
+@test
+func test_logical_or() -> I32 {
+    assert(test_or_one_defined(), "A || C should be true (A defined)")
+    assert(not test_or_none_defined(), "C || D should be false (both undefined)")
+    return 0
+}
+
+@test
+func test_logical_not() -> I32 {
+    assert(test_not_undefined(), "!C should be true (C undefined)")
+    assert(not test_not_defined(), "!A should be false (A defined)")
+    return 0
+}
+
+@test
+func test_combined_expressions() -> I32 {
+    assert(test_combined_true(), "(A && B) || C should be true")
+    assert(test_and_not(), "A && !C should be true")
+    return 0
+}
+
+@test
+func test_tml_keywords() -> I32 {
+    assert(test_keyword_and(), "A and B should be true")
+    assert(test_keyword_or(), "A or C should be true")
+    assert(test_keyword_not(), "not C should be true")
+    return 0
+}

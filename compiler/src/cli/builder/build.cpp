@@ -32,25 +32,15 @@ namespace tml::cli {
 // Using helpers from builder namespace
 using namespace build;
 
-/// Main build command implementation.
-///
-/// Compiles a TML source file through the full pipeline and produces
-/// the specified output type (executable, library, etc.).
-///
-/// ## Parameters
-///
-/// - `path`: Path to the source file
-/// - `verbose`: Print detailed output
-/// - `emit_ir_only`: Stop after generating LLVM IR
-/// - `emit_mir`: Emit MIR (Mid-level IR) instead of final output
-/// - `no_cache`: Disable object file caching
-/// - `output_type`: Type of output to produce
-/// - `emit_header`: Generate C header for FFI
-/// - `output_dir`: Custom output directory
-int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emit_mir,
-              bool no_cache, BuildOutputType output_type, bool emit_header,
-              const std::string& output_dir) {
-    // no_cache is now used to skip object file caching during compilation
+// Internal implementation that takes BuildOptions
+static int run_build_impl(const std::string& path, const BuildOptions& options) {
+    bool verbose = options.verbose;
+    bool emit_ir_only = options.emit_ir_only;
+    bool emit_mir = options.emit_mir;
+    bool no_cache = options.no_cache;
+    BuildOutputType output_type = options.output_type;
+    bool emit_header = options.emit_header;
+    const std::string& output_dir = options.output_dir;
 
     // Try to load tml.toml manifest
     auto manifest_opt = Manifest::load_from_current_dir();
@@ -75,10 +65,23 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         return 1;
     }
 
-    // Register source content with diagnostic emitter for source snippets
-    diag.set_source_content(path, source_code);
+    // Run preprocessor to handle #if/#define/#ifdef etc.
+    auto preproc_result = preprocess_source(source_code, path, options);
 
-    auto source = lexer::Source::from_string(source_code, path);
+    // Emit preprocessor diagnostics (errors and warnings)
+    emit_all_preprocessor_diagnostics(diag, preproc_result, path);
+
+    if (!preproc_result.success()) {
+        return 1;
+    }
+
+    // Use preprocessed source for compilation
+    std::string preprocessed_source = preproc_result.output;
+
+    // Register source content with diagnostic emitter for source snippets
+    diag.set_source_content(path, preprocessed_source);
+
+    auto source = lexer::Source::from_string(preprocessed_source, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
@@ -249,21 +252,21 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
         // TODO: Extract link_libs from AST decorators for MIR codegen path
     } else {
         // Use AST-based codegen for O0 (no optimizations)
-        codegen::LLVMGenOptions options;
-        options.emit_comments = verbose;
-        options.emit_debug_info = CompilerOptions::debug_info;
-        options.debug_level = CompilerOptions::debug_level;
-        options.coverage_enabled = CompilerOptions::coverage;
-        options.coverage_output_file = CompilerOptions::coverage_output;
-        options.source_file = path;
+        codegen::LLVMGenOptions llvm_gen_options;
+        llvm_gen_options.emit_comments = verbose;
+        llvm_gen_options.emit_debug_info = CompilerOptions::debug_info;
+        llvm_gen_options.debug_level = CompilerOptions::debug_level;
+        llvm_gen_options.coverage_enabled = CompilerOptions::coverage;
+        llvm_gen_options.coverage_output_file = CompilerOptions::coverage_output;
+        llvm_gen_options.source_file = path;
         if (!CompilerOptions::target_triple.empty()) {
-            options.target_triple = CompilerOptions::target_triple;
+            llvm_gen_options.target_triple = CompilerOptions::target_triple;
         }
 #ifdef _WIN32
         // Enable DLL export for dynamic libraries on Windows
-        options.dll_export = (output_type == BuildOutputType::DynamicLib);
+        llvm_gen_options.dll_export = (output_type == BuildOutputType::DynamicLib);
 #endif
-        codegen::LLVMIRGen llvm_gen(env, options);
+        codegen::LLVMIRGen llvm_gen(env, llvm_gen_options);
 
         auto gen_result = llvm_gen.generate(module);
         if (std::holds_alternative<std::vector<codegen::LLVMGenError>>(gen_result)) {
@@ -556,12 +559,27 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
     return 0;
 }
 
+/// Main build command implementation.
+///
+/// Compiles a TML source file through the full pipeline and produces
+/// the specified output type (executable, library, etc.).
+int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emit_mir,
+              bool no_cache, BuildOutputType output_type, bool emit_header,
+              const std::string& output_dir) {
+    // Build options struct and delegate to implementation
+    BuildOptions opts;
+    opts.verbose = verbose;
+    opts.emit_ir_only = emit_ir_only;
+    opts.emit_mir = emit_mir;
+    opts.no_cache = no_cache;
+    opts.output_type = output_type;
+    opts.emit_header = emit_header;
+    opts.output_dir = output_dir;
+    return run_build_impl(path, opts);
+}
+
 int run_build_ex(const std::string& path, const BuildOptions& options) {
-    // For now, delegate to the standard build function
-    // Full timing integration requires refactoring the build pipeline
-    return run_build(path, options.verbose, options.emit_ir_only, options.emit_mir,
-                     options.no_cache, options.output_type, options.emit_header,
-                     options.output_dir);
+    return run_build_impl(path, options);
 }
 
 } // namespace tml::cli

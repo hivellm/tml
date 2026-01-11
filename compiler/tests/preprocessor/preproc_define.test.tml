@@ -1,0 +1,73 @@
+use test
+
+// Test #define and #undef directives
+
+// Define a symbol in source
+#define MY_CONSTANT
+
+#ifdef MY_CONSTANT
+func has_my_constant() -> Bool {
+    return true
+}
+#else
+func has_my_constant() -> Bool {
+    return false
+}
+#endif
+
+// Define and then undef
+#define TEMP_SYMBOL
+
+#ifdef TEMP_SYMBOL
+func temp_before_undef() -> Bool {
+    return true
+}
+#else
+func temp_before_undef() -> Bool {
+    return false
+}
+#endif
+
+#undef TEMP_SYMBOL
+
+#ifdef TEMP_SYMBOL
+func temp_after_undef() -> Bool {
+    return true
+}
+#else
+func temp_after_undef() -> Bool {
+    return false
+}
+#endif
+
+// Define with value (value not used in conditions, but stored)
+#define VERSION "1.0.0"
+
+#ifdef VERSION
+func has_version() -> Bool {
+    return true
+}
+#else
+func has_version() -> Bool {
+    return false
+}
+#endif
+
+@test
+func test_define_symbol() -> I32 {
+    assert(has_my_constant(), "MY_CONSTANT should be defined")
+    return 0
+}
+
+@test
+func test_undef_removes_symbol() -> I32 {
+    assert(temp_before_undef(), "TEMP_SYMBOL should be defined before #undef")
+    assert(not temp_after_undef(), "TEMP_SYMBOL should be undefined after #undef")
+    return 0
+}
+
+@test
+func test_define_with_value() -> I32 {
+    assert(has_version(), "VERSION should be defined")
+    return 0
+}

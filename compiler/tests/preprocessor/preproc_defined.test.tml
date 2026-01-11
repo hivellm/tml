@@ -1,0 +1,108 @@
+use test
+
+// Test defined() function in preprocessor expressions
+
+#define FEATURE_X
+#define FEATURE_Y
+// FEATURE_Z is NOT defined
+
+// Basic defined() usage
+#if defined(FEATURE_X)
+func has_x() -> Bool {
+    return true
+}
+#else
+func has_x() -> Bool {
+    return false
+}
+#endif
+
+#if defined(FEATURE_Z)
+func has_z() -> Bool {
+    return true
+}
+#else
+func has_z() -> Bool {
+    return false
+}
+#endif
+
+// defined() with logical operators
+#if defined(FEATURE_X) && defined(FEATURE_Y)
+func has_x_and_y() -> Bool {
+    return true
+}
+#else
+func has_x_and_y() -> Bool {
+    return false
+}
+#endif
+
+#if defined(FEATURE_X) && !defined(FEATURE_Z)
+func has_x_not_z() -> Bool {
+    return true
+}
+#else
+func has_x_not_z() -> Bool {
+    return false
+}
+#endif
+
+#if defined(FEATURE_X) || defined(FEATURE_Z)
+func has_x_or_z() -> Bool {
+    return true
+}
+#else
+func has_x_or_z() -> Bool {
+    return false
+}
+#endif
+
+// Complex expression with defined()
+#if (defined(FEATURE_X) && defined(FEATURE_Y)) || defined(FEATURE_Z)
+func complex_defined() -> Bool {
+    return true
+}
+#else
+func complex_defined() -> Bool {
+    return false
+}
+#endif
+
+// Nested defined with negation
+#if !defined(FEATURE_Z) && (defined(FEATURE_X) || defined(FEATURE_Y))
+func nested_defined() -> Bool {
+    return true
+}
+#else
+func nested_defined() -> Bool {
+    return false
+}
+#endif
+
+@test
+func test_defined_basic() -> I32 {
+    assert(has_x(), "defined(FEATURE_X) should be true")
+    assert(not has_z(), "defined(FEATURE_Z) should be false")
+    return 0
+}
+
+@test
+func test_defined_with_and() -> I32 {
+    assert(has_x_and_y(), "defined(X) && defined(Y) should be true")
+    assert(has_x_not_z(), "defined(X) && !defined(Z) should be true")
+    return 0
+}
+
+@test
+func test_defined_with_or() -> I32 {
+    assert(has_x_or_z(), "defined(X) || defined(Z) should be true")
+    return 0
+}
+
+@test
+func test_defined_complex() -> I32 {
+    assert(complex_defined(), "(defined(X) && defined(Y)) || defined(Z) should be true")
+    assert(nested_defined(), "!defined(Z) && (defined(X) || defined(Y)) should be true")
+    return 0
+}

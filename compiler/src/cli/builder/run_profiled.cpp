@@ -59,9 +59,31 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     }
     record_phase("read_file", phase_start);
 
+    // Phase 1.5: Preprocessor
+    phase_start = Clock::now();
+    BuildOptions preproc_opts; // Default options for run
+    auto preproc_result = preprocess_source(source_code, path, preproc_opts);
+
+    if (!preproc_result.success()) {
+        std::string err_output = "compilation error:\n";
+        for (const auto& diag : preproc_result.diagnostics) {
+            if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                err_output += path + ":" + std::to_string(diag.line) + ":" +
+                              std::to_string(diag.column) + ": error: " + diag.message + "\n";
+            }
+        }
+        if (output)
+            *output = err_output;
+        return EXIT_COMPILATION_ERROR;
+    }
+
+    // Use preprocessed source for compilation
+    std::string preprocessed_source = preproc_result.output;
+    record_phase("preprocessor", phase_start);
+
     // Phase 2: Lexer
     phase_start = Clock::now();
-    auto source = lexer::Source::from_string(source_code, path);
+    auto source = lexer::Source::from_string(preprocessed_source, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
     record_phase("lexer", phase_start);

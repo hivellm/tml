@@ -1,0 +1,139 @@
+use test
+
+// Test nested conditional compilation
+
+#define OUTER_A
+#define INNER_X
+// OUTER_B and INNER_Y are NOT defined
+
+// Simple nesting
+#if OUTER_A
+    #if INNER_X
+    func nested_both() -> I32 {
+        return 1
+    }
+    #else
+    func nested_both() -> I32 {
+        return 2
+    }
+    #endif
+#else
+func nested_both() -> I32 {
+    return 0
+}
+#endif
+
+// Nesting with inner condition false
+#if OUTER_A
+    #if INNER_Y
+    func nested_inner_false() -> I32 {
+        return 1
+    }
+    #else
+    func nested_inner_false() -> I32 {
+        return 2
+    }
+    #endif
+#endif
+
+// Nesting with outer condition false - inner should be skipped entirely
+#if OUTER_B
+    #if INNER_X
+    func outer_false_case() -> I32 {
+        return 1
+    }
+    #else
+    func outer_false_case() -> I32 {
+        return 2
+    }
+    #endif
+#else
+func outer_false_case() -> I32 {
+    return 0
+}
+#endif
+
+// Deep nesting (3 levels)
+#define LEVEL1
+#define LEVEL2
+#define LEVEL3
+
+#if LEVEL1
+    #if LEVEL2
+        #if LEVEL3
+        func deep_nested() -> I32 {
+            return 3
+        }
+        #else
+        func deep_nested() -> I32 {
+            return 2
+        }
+        #endif
+    #else
+    func deep_nested() -> I32 {
+        return 1
+    }
+    #endif
+#else
+func deep_nested() -> I32 {
+    return 0
+}
+#endif
+
+// Nesting with elif
+#define BRANCH_A
+#define SUB_BRANCH_2
+
+#if BRANCH_A
+    #if SUB_BRANCH_1
+    func elif_nested() -> I32 {
+        return 11
+    }
+    #elif SUB_BRANCH_2
+    func elif_nested() -> I32 {
+        return 12
+    }
+    #else
+    func elif_nested() -> I32 {
+        return 10
+    }
+    #endif
+#elif BRANCH_B
+func elif_nested() -> I32 {
+    return 2
+}
+#else
+func elif_nested() -> I32 {
+    return 0
+}
+#endif
+
+@test
+func test_nested_both_true() -> I32 {
+    assert_eq(nested_both(), 1, "OUTER_A and INNER_X both true, should return 1")
+    return 0
+}
+
+@test
+func test_nested_inner_false() -> I32 {
+    assert_eq(nested_inner_false(), 2, "OUTER_A true but INNER_Y false, should return 2 (else)")
+    return 0
+}
+
+@test
+func test_outer_false() -> I32 {
+    assert_eq(outer_false_case(), 0, "OUTER_B false, should return 0 (outer else)")
+    return 0
+}
+
+@test
+func test_deep_nesting() -> I32 {
+    assert_eq(deep_nested(), 3, "All 3 levels true, should return 3")
+    return 0
+}
+
+@test
+func test_nested_elif() -> I32 {
+    assert_eq(elif_nested(), 12, "BRANCH_A true, SUB_BRANCH_2 true, should return 12")
+    return 0
+}

@@ -49,10 +49,24 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
         return 1;
     }
 
-    // Register source content with diagnostic emitter for source snippets
-    diag.set_source_content(path, source_code);
+    // Run preprocessor to handle #if/#define/#ifdef etc.
+    BuildOptions preproc_opts; // Default options for run
+    auto preproc_result = preprocess_source(source_code, path, preproc_opts);
 
-    auto source = lexer::Source::from_string(source_code, path);
+    // Emit preprocessor diagnostics (errors and warnings)
+    emit_all_preprocessor_diagnostics(diag, preproc_result, path);
+
+    if (!preproc_result.success()) {
+        return 1;
+    }
+
+    // Use preprocessed source for compilation
+    std::string preprocessed_source = preproc_result.output;
+
+    // Register source content with diagnostic emitter for source snippets
+    diag.set_source_content(path, preprocessed_source);
+
+    auto source = lexer::Source::from_string(preprocessed_source, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
@@ -308,7 +322,27 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
         return EXIT_COMPILATION_ERROR;
     }
 
-    auto source = lexer::Source::from_string(source_code, path);
+    // Run preprocessor to handle #if/#define/#ifdef etc.
+    BuildOptions preproc_opts; // Default options for run
+    auto preproc_result = preprocess_source(source_code, path, preproc_opts);
+
+    if (!preproc_result.success()) {
+        std::string err_output = "compilation error:\n";
+        for (const auto& diag : preproc_result.diagnostics) {
+            if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                err_output += path + ":" + std::to_string(diag.line) + ":" +
+                              std::to_string(diag.column) + ": error: " + diag.message + "\n";
+            }
+        }
+        if (output)
+            *output = err_output;
+        return EXIT_COMPILATION_ERROR;
+    }
+
+    // Use preprocessed source for compilation
+    std::string preprocessed_source = preproc_result.output;
+
+    auto source = lexer::Source::from_string(preprocessed_source, path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 

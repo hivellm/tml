@@ -1,0 +1,113 @@
+use test
+
+// Test #if/#elif/#else/#endif chains
+
+#define MODE_A
+// MODE_B and MODE_C are NOT defined
+
+// Basic if/elif/else chain
+#if MODE_A
+func get_mode() -> I32 {
+    return 1
+}
+#elif MODE_B
+func get_mode() -> I32 {
+    return 2
+}
+#elif MODE_C
+func get_mode() -> I32 {
+    return 3
+}
+#else
+func get_mode() -> I32 {
+    return 0
+}
+#endif
+
+// Test where first condition is false
+#define SECOND_TEST
+
+#if FIRST_TEST
+func get_second_test() -> I32 {
+    return 1
+}
+#elif SECOND_TEST
+func get_second_test() -> I32 {
+    return 2
+}
+#else
+func get_second_test() -> I32 {
+    return 0
+}
+#endif
+
+// Test where all conditions are false (goes to else)
+#if UNDEFINED_A
+func get_else_case() -> I32 {
+    return 1
+}
+#elif UNDEFINED_B
+func get_else_case() -> I32 {
+    return 2
+}
+#else
+func get_else_case() -> I32 {
+    return 0
+}
+#endif
+
+// Test without else
+#define HAS_FEATURE
+
+#if HAS_FEATURE
+func feature_value() -> I32 {
+    return 42
+}
+#endif
+
+// Test elif with expressions
+#define VALUE_HIGH
+
+#if VALUE_LOW
+func get_level() -> I32 {
+    return 1
+}
+#elif VALUE_MEDIUM
+func get_level() -> I32 {
+    return 2
+}
+#elif VALUE_HIGH
+func get_level() -> I32 {
+    return 3
+}
+#endif
+
+@test
+func test_if_branch_taken() -> I32 {
+    assert_eq(get_mode(), 1, "MODE_A is defined, should return 1")
+    return 0
+}
+
+@test
+func test_elif_branch_taken() -> I32 {
+    assert_eq(get_second_test(), 2, "SECOND_TEST is defined, should return 2")
+    return 0
+}
+
+@test
+func test_else_branch_taken() -> I32 {
+    assert_eq(get_else_case(), 0, "No conditions true, should return 0 (else)")
+    return 0
+}
+
+@test
+func test_if_without_else() -> I32 {
+    assert_eq(feature_value(), 42, "HAS_FEATURE is defined, should return 42")
+    return 0
+}
+
+@test
+func test_multiple_elif() -> I32 {
+    assert_eq(get_level(), 3, "VALUE_HIGH is defined, should return 3")
+    return 0
+}

@@ -1,0 +1,70 @@
+use test
+
+// Test #ifdef and #ifndef directives
+
+#define FEATURE_A
+// FEATURE_B is NOT defined
+
+#ifdef FEATURE_A
+func has_feature_a() -> Bool {
+    return true
+}
+#else
+func has_feature_a() -> Bool {
+    return false
+}
+#endif
+
+#ifdef FEATURE_B
+func has_feature_b() -> Bool {
+    return true
+}
+#else
+func has_feature_b() -> Bool {
+    return false
+}
+#endif
+
+#ifndef FEATURE_B
+func missing_feature_b() -> Bool {
+    return true
+}
+#else
+func missing_feature_b() -> Bool {
+    return false
+}
+#endif
+
+#ifndef FEATURE_A
+func missing_feature_a() -> Bool {
+    return true
+}
+#else
+func missing_feature_a() -> Bool {
+    return false
+}
+#endif
+
+@test
+func test_ifdef_defined() -> I32 {
+    assert(has_feature_a(), "#ifdef FEATURE_A should be true when defined")
+    return 0
+}
+
+@test
+func test_ifdef_undefined() -> I32 {
+    assert(not has_feature_b(), "#ifdef FEATURE_B should be false when undefined")
+    return 0
+}
+
+@test
+func test_ifndef_undefined() -> I32 {
+    assert(missing_feature_b(), "#ifndef FEATURE_B should be true when undefined")
+    return 0
+}
+
+@test
+func test_ifndef_defined() -> I32 {
+    assert(not missing_feature_a(), "#ifndef FEATURE_A should be false when defined")
+    return 0
+}
