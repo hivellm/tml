@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CLI Folder Reorganization** (2026-01-10) - Split monolithic CLI into focused subfolders
+  - New folder structure under `compiler/src/cli/`:
+    - `commands/` - All cmd_*.cpp/.hpp files (build, cache, debug, format, init, lint, pkg, rlib, test)
+    - `builder/` - Build system modules (build, build_cache, build_config, compiler_setup, dependency_resolver, helpers, object_compiler, parallel_build, rlib, run, run_profiled)
+    - `tester/` - Test framework modules (test_runner, suite_execution, run, discovery, benchmark, fuzzer, helpers, output, tester_internal.hpp)
+    - `linter/` - Linting modules (config, discovery, helpers, run, semantic, style)
+  - Core CLI files remain in `cli/`: cli.cpp, utils.cpp, diagnostic.cpp, dispatcher.cpp
+  - All header includes updated to use `cli/` prefix
+  - CMakeLists.txt updated with new source file paths
+  - All 906 tests passing after reorganization
+
+### Fixed
+- **Suite Mode Test Hanging** (2026-01-10) - Fixed tests hanging when running many test files in suite mode
+  - Tests were hanging at test 7/20 when running lib/core tests in suite mode
+  - Root cause: Large DLLs with many test files (>5) can hang on Windows
+  - Solution: Split large test suites into smaller chunks (max 5 tests per suite)
+  - Added `MAX_TESTS_PER_SUITE = 5` constant in `group_tests_into_suites()` function
+  - Large suites now split into numbered chunks (e.g., `lib_core_tests_1`, `lib_core_tests_2`, etc.)
+  - All 906 tests now run to completion in suite mode (23.30s)
+  - Files modified: `compiler/src/cli/tester/test_runner.cpp`
+
+- **BoxedError Debug String Escaping** (2026-01-10) - Fixed string interpolation parsing error
+  - Escaped curly braces in BoxedError debug_string format to avoid interpolation conflicts
+  - Changed `"BoxedError { ... }"` to `"BoxedError \{ ... \}"` format
+
 ### Added
 - **HIR Optimization Passes - Inlining & Closure** (2026-01-09) - Full implementation of HIR Inlining and ClosureOptimization passes
   - **Inlining Pass**: Replaces calls to small, non-recursive functions with their bodies
