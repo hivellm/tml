@@ -145,10 +145,10 @@
 ## Phase 11: Documentation
 
 ### 11.1 Update Docs
-- [ ] 11.1.1 Update docs/02-LEXICAL.md with preprocessor directives
-- [ ] 11.1.2 Update docs/09-CLI.md with -D flag
-- [ ] 11.1.3 Add examples to docs/14-EXAMPLES.md
-- [ ] 11.1.4 Update CLAUDE.md with preprocessor information
+- [x] 11.1.1 Update docs/02-LEXICAL.md with preprocessor directives
+- [x] 11.1.2 Update docs/09-CLI.md with -D flag
+- [x] 11.1.3 Add examples to docs/14-EXAMPLES.md
+- [x] 11.1.4 Update CLAUDE.md with preprocessor information
 
 ## Validation
 
