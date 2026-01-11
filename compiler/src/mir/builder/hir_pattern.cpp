@@ -166,7 +166,8 @@ void HirMirBuilder::build_pattern_binding(const hir::HirPatternPtr& pattern, Val
 // Pattern Matching (for when arms)
 // ============================================================================
 
-auto HirMirBuilder::build_pattern_match(const hir::HirPatternPtr& pattern, Value scrutinee) -> Value {
+auto HirMirBuilder::build_pattern_match(const hir::HirPatternPtr& pattern, Value scrutinee)
+    -> Value {
     if (!pattern) {
         return const_bool(true);
     }

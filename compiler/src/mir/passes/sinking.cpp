@@ -96,10 +96,8 @@ auto SinkingPass::can_sink(const InstructionData& inst) -> bool {
             (void)i;
 
             // Only sink pure, side-effect-free instructions
-            if constexpr (std::is_same_v<T, BinaryInst> ||
-                          std::is_same_v<T, UnaryInst> ||
-                          std::is_same_v<T, CastInst> ||
-                          std::is_same_v<T, SelectInst>) {
+            if constexpr (std::is_same_v<T, BinaryInst> || std::is_same_v<T, UnaryInst> ||
+                          std::is_same_v<T, CastInst> || std::is_same_v<T, SelectInst>) {
                 return true;
             } else {
                 // Don't sink loads, stores, calls, phis, constants, etc.
@@ -109,8 +107,8 @@ auto SinkingPass::can_sink(const InstructionData& inst) -> bool {
         inst.inst);
 }
 
-auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
-                                         uint32_t def_block) -> std::optional<uint32_t> {
+auto SinkingPass::find_single_use_block(const Function& func, ValueId value, uint32_t def_block)
+    -> std::optional<uint32_t> {
     std::unordered_set<uint32_t> use_blocks;
 
     for (const auto& block : func.blocks) {
@@ -130,8 +128,7 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
                         } else if constexpr (std::is_same_v<T, CastInst>) {
                             return i.operand.id == value;
                         } else if constexpr (std::is_same_v<T, SelectInst>) {
-                            return i.condition.id == value ||
-                                   i.true_val.id == value ||
+                            return i.condition.id == value || i.true_val.id == value ||
                                    i.false_val.id == value;
                         } else if constexpr (std::is_same_v<T, LoadInst>) {
                             return i.ptr.id == value;
@@ -139,7 +136,8 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
                             return i.ptr.id == value || i.value.id == value;
                         } else if constexpr (std::is_same_v<T, CallInst>) {
                             for (const auto& arg : i.args) {
-                                if (arg.id == value) return true;
+                                if (arg.id == value)
+                                    return true;
                             }
                             return false;
                         } else {
@@ -174,7 +172,7 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
                     *block.terminator);
 
                 if (term_uses) {
-                    return std::nullopt;  // Used in same block's terminator
+                    return std::nullopt; // Used in same block's terminator
                 }
             }
 
@@ -197,12 +195,12 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
                     } else if constexpr (std::is_same_v<T, CastInst>) {
                         return i.operand.id == value;
                     } else if constexpr (std::is_same_v<T, SelectInst>) {
-                        return i.condition.id == value ||
-                               i.true_val.id == value ||
+                        return i.condition.id == value || i.true_val.id == value ||
                                i.false_val.id == value;
                     } else if constexpr (std::is_same_v<T, PhiInst>) {
                         for (const auto& [val, _] : i.incoming) {
-                            if (val.id == value) return true;
+                            if (val.id == value)
+                                return true;
                         }
                         return false;
                     } else if constexpr (std::is_same_v<T, LoadInst>) {
@@ -211,7 +209,8 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
                         return i.ptr.id == value || i.value.id == value;
                     } else if constexpr (std::is_same_v<T, CallInst>) {
                         for (const auto& arg : i.args) {
-                            if (arg.id == value) return true;
+                            if (arg.id == value)
+                                return true;
                         }
                         return false;
                     } else {
@@ -258,7 +257,7 @@ auto SinkingPass::find_single_use_block(const Function& func, ValueId value,
 }
 
 auto SinkingPass::operands_available_in(const Function& func, const InstructionData& inst,
-                                         uint32_t target_block, uint32_t source_block) -> bool {
+                                        uint32_t target_block, uint32_t source_block) -> bool {
     // Get operand value IDs
     std::vector<ValueId> operands;
 
@@ -294,7 +293,8 @@ auto SinkingPass::operands_available_in(const Function& func, const InstructionD
             bool defined_in_source = false;
             int source_idx = get_block_index(func, source_block);
             if (source_idx >= 0) {
-                for (const auto& src_inst : func.blocks[static_cast<size_t>(source_idx)].instructions) {
+                for (const auto& src_inst :
+                     func.blocks[static_cast<size_t>(source_idx)].instructions) {
                     if (src_inst.result == op) {
                         defined_in_source = true;
                         break;
@@ -311,8 +311,8 @@ auto SinkingPass::operands_available_in(const Function& func, const InstructionD
     return true;
 }
 
-auto SinkingPass::value_dominates_block(const Function& func, ValueId value,
-                                         uint32_t target_block) -> bool {
+auto SinkingPass::value_dominates_block(const Function& func, ValueId value, uint32_t target_block)
+    -> bool {
     // Simple domination check - value is available if:
     // 1. It's a function parameter
     // 2. It's defined in a block that comes before the target in the CFG
@@ -333,11 +333,12 @@ auto SinkingPass::value_dominates_block(const Function& func, ValueId value,
                 break;
             }
         }
-        if (def_block_idx >= 0) break;
+        if (def_block_idx >= 0)
+            break;
     }
 
     if (def_block_idx < 0) {
-        return false;  // Value not found
+        return false; // Value not found
     }
 
     int target_idx = get_block_index(func, target_block);

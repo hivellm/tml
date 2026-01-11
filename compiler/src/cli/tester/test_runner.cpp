@@ -39,10 +39,10 @@
 
 #include "test_runner.hpp"
 
-#include "builder/builder_internal.hpp"
-#include "cmd_build.hpp"
-#include "object_compiler.hpp"
-#include "tester/tester_internal.hpp"
+#include "cli/builder/builder_internal.hpp"
+#include "cli/commands/cmd_build.hpp"
+#include "cli/builder/object_compiler.hpp"
+#include "cli/tester/tester_internal.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -57,6 +57,8 @@
 #include <io.h>
 #include <share.h>
 #include <sys/stat.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -65,6 +67,88 @@
 namespace fs = std::filesystem;
 
 namespace tml::cli {
+
+// ============================================================================
+// Windows Crash Handler (at test runner level)
+// ============================================================================
+
+#ifdef _WIN32
+// Forward declaration for use in SEH wrappers
+using TmlRunTestWithCatch = int32_t (*)(TestMainFunc);
+
+// Thread-local storage for crash info
+static thread_local char g_crash_msg[256] = {0};
+static thread_local bool g_crash_occurred = false;
+
+static const char* get_exception_name(DWORD code) {
+    switch (code) {
+        case EXCEPTION_ACCESS_VIOLATION: return "ACCESS_VIOLATION (Segmentation fault)";
+        case EXCEPTION_ILLEGAL_INSTRUCTION: return "ILLEGAL_INSTRUCTION";
+        case EXCEPTION_INT_DIVIDE_BY_ZERO: return "INTEGER_DIVIDE_BY_ZERO";
+        case EXCEPTION_INT_OVERFLOW: return "INTEGER_OVERFLOW";
+        case EXCEPTION_STACK_OVERFLOW: return "STACK_OVERFLOW";
+        case EXCEPTION_FLT_DIVIDE_BY_ZERO: return "FLOAT_DIVIDE_BY_ZERO";
+        case EXCEPTION_FLT_INVALID_OPERATION: return "FLOAT_INVALID_OPERATION";
+        default: return "UNKNOWN_EXCEPTION";
+    }
+}
+
+static LONG WINAPI crash_filter(EXCEPTION_POINTERS* info) {
+    DWORD code = info->ExceptionRecord->ExceptionCode;
+
+    // Format crash message
+    snprintf(g_crash_msg, sizeof(g_crash_msg), "CRASH: %s (0x%08lX)",
+             get_exception_name(code), (unsigned long)code);
+    g_crash_occurred = true;
+
+    // Print to stderr immediately using low-level API for reliability
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD written;
+    WriteFile(hErr, g_crash_msg, (DWORD)strlen(g_crash_msg), &written, NULL);
+    WriteFile(hErr, "\n", 1, &written, NULL);
+    FlushFileBuffers(hErr);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// SEH wrapper for calling test functions
+// Can't be in same function as C++ try/catch, so it's a separate function
+// Returns: function result, or -2 on crash
+static int call_test_with_seh(TestMainFunc func) {
+    g_crash_occurred = false;
+    g_crash_msg[0] = '\0';
+
+    int result = 0;
+    __try {
+        result = func();
+    }
+    __except(crash_filter(GetExceptionInformation())) {
+        return -2;
+    }
+    return result;
+}
+
+// SEH wrapper for calling test via runtime wrapper
+static int call_test_wrapper_with_seh(TmlRunTestWithCatch wrapper, TestMainFunc func) {
+    g_crash_occurred = false;
+    g_crash_msg[0] = '\0';
+
+    // Disable Windows Error Reporting to allow SEH to work
+    UINT oldMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+    int result = 0;
+    __try {
+        result = wrapper(func);
+    }
+    __except(crash_filter(GetExceptionInformation())) {
+        SetErrorMode(oldMode);
+        return -2;
+    }
+
+    SetErrorMode(oldMode);
+    return result;
+}
+#endif
 
 // Using build helpers
 using namespace build;
@@ -1134,6 +1218,10 @@ static std::string suite_key_to_group(const std::string& key) {
 }
 
 std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& test_files) {
+    // Maximum tests per suite to avoid DLL conflicts/hangs
+    // Empirically determined: suites with many tests can hang on Windows
+    constexpr size_t MAX_TESTS_PER_SUITE = 5;
+
     // Group files by suite key
     std::map<std::string, std::vector<std::string>> groups;
     for (const auto& file : test_files) {
@@ -1141,27 +1229,39 @@ std::vector<TestSuite> group_tests_into_suites(const std::vector<std::string>& t
         groups[key].push_back(file);
     }
 
-    // Convert to TestSuite structures
+    // Convert to TestSuite structures, splitting large groups into chunks
     std::vector<TestSuite> suites;
     for (auto& [key, files] : groups) {
-        TestSuite suite;
-        suite.name = key;
-        suite.group = suite_key_to_group(key);
-
         // Sort files for deterministic ordering
         std::sort(files.begin(), files.end());
 
-        for (size_t i = 0; i < files.size(); ++i) {
-            SuiteTestInfo info;
-            info.file_path = files[i];
-            info.test_name = fs::path(files[i]).stem().string();
-            // Entry function will be: tml_test_0, tml_test_1, etc.
-            info.entry_func_name = "tml_test_" + std::to_string(i);
-            info.test_count = tester::count_tests_in_file(files[i]);
-            suite.tests.push_back(std::move(info));
-        }
+        // Split into chunks of MAX_TESTS_PER_SUITE
+        size_t chunk_count = (files.size() + MAX_TESTS_PER_SUITE - 1) / MAX_TESTS_PER_SUITE;
 
-        suites.push_back(std::move(suite));
+        for (size_t chunk = 0; chunk < chunk_count; ++chunk) {
+            TestSuite suite;
+            if (chunk_count > 1) {
+                suite.name = key + "_" + std::to_string(chunk + 1);
+            } else {
+                suite.name = key;
+            }
+            suite.group = suite_key_to_group(key);
+
+            size_t start_idx = chunk * MAX_TESTS_PER_SUITE;
+            size_t end_idx = std::min(start_idx + MAX_TESTS_PER_SUITE, files.size());
+
+            for (size_t i = start_idx; i < end_idx; ++i) {
+                SuiteTestInfo info;
+                info.file_path = files[i];
+                info.test_name = fs::path(files[i]).stem().string();
+                // Entry function will be: tml_test_0, tml_test_1, etc. (within this chunk)
+                info.entry_func_name = "tml_test_" + std::to_string(i - start_idx);
+                info.test_count = tester::count_tests_in_file(files[i]);
+                suite.tests.push_back(std::move(info));
+            }
+
+            suites.push_back(std::move(suite));
+        }
     }
 
     // Sort suites by name for consistent ordering
@@ -1474,31 +1574,105 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
     return result;
 }
 
-SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index) {
+// Function pointer type for tml_run_test_with_catch from runtime
+using TmlRunTestWithCatch = int32_t (*)(TestMainFunc);
+
+SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose) {
     SuiteTestResult result;
+
+    // Flush output to help debug crashes
+    std::cout << std::flush;
+    std::cerr << std::flush;
+    std::fflush(stdout);
+    std::fflush(stderr);
 
     // Get the indexed test function
     std::string func_name = "tml_test_" + std::to_string(test_index);
+    if (verbose) {
+        std::cerr << "[DEBUG]   Looking up symbol: " << func_name << "\n" << std::flush;
+    }
     auto test_func = lib.get_function<TestMainFunc>(func_name.c_str());
     if (!test_func) {
         result.error = "Failed to find " + func_name + " in suite DLL";
+        std::cerr << "[ERROR] " << result.error << "\n" << std::flush;
         return result;
     }
 
-    // Set up output capture
+    // Try to get the panic-catching wrapper from the runtime
+    auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
+    if (verbose) {
+        std::cerr << "[DEBUG]   tml_run_test_with_catch: " << (run_with_catch ? "found" : "NOT FOUND")
+                  << "\n" << std::flush;
+    }
+
+    // Set up output capture (skip in verbose mode to see crash output directly)
     OutputCapture capture;
-    bool capture_started = capture.start();
+    bool capture_started = verbose ? false : capture.start();
 
     // Execute the test
     using Clock = std::chrono::high_resolution_clock;
     auto start = Clock::now();
 
-    try {
+    if (verbose) {
+        std::cerr << "[DEBUG]   Executing test function...\n" << std::flush;
+    }
+
+    // Ensure output is flushed before test execution in case of crash
+    std::cout << std::flush;
+    std::cerr << std::flush;
+    std::fflush(stdout);
+    std::fflush(stderr);
+
+    // Execute test with crash protection
+    // On Windows, use SEH to catch access violations etc.
+    // On other platforms, rely on the runtime's signal handlers
+    if (run_with_catch) {
+        if (verbose) {
+            std::cerr << "[DEBUG]   Calling tml_run_test_with_catch wrapper...\n" << std::flush;
+        }
+#ifdef _WIN32
+        // Use SEH wrapper which catches access violations at the C++ level
+        result.exit_code = call_test_wrapper_with_seh(run_with_catch, test_func);
+        if (g_crash_occurred) {
+            result.success = false;
+            result.error = std::string("Test crashed: ") + g_crash_msg;
+        } else
+#else
+        result.exit_code = run_with_catch(test_func);
+#endif
+        if (result.exit_code == -1) {
+            // Panic was caught - the message was printed to stderr
+            result.success = false;
+            result.error = "Test panicked";
+        } else if (result.exit_code == -2) {
+            // Crash was caught - the message was printed to stderr
+            result.success = false;
+            result.error = "Test crashed (SIGSEGV/SIGFPE/etc)";
+        } else {
+            result.success = (result.exit_code == 0);
+        }
+        if (verbose) {
+            std::cerr << "[DEBUG]   tml_run_test_with_catch returned: " << result.exit_code << "\n" << std::flush;
+        }
+    } else {
+#ifdef _WIN32
+        // Use SEH wrapper for direct call
+        result.exit_code = call_test_with_seh(test_func);
+        if (g_crash_occurred) {
+            result.success = false;
+            result.error = std::string("Test crashed: ") + g_crash_msg;
+        } else {
+            result.success = (result.exit_code == 0);
+        }
+#else
+        // Fallback to direct call (may exit on panic)
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
-    } catch (...) {
-        result.error = "Exception during test execution";
-        result.exit_code = 1;
+#endif
+    }
+
+    if (verbose) {
+        std::cerr << "[DEBUG]   Test execution complete, exit_code=" << result.exit_code << "\n" << std::flush;
     }
 
     auto end = Clock::now();
@@ -1512,7 +1686,8 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index) {
 }
 
 SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index,
-                                        PhaseTimings* timings) {
+                                        PhaseTimings* timings, bool /*verbose*/) {
+    // Note: verbose is unused here - profiled version just times, no debug output
     using Clock = std::chrono::high_resolution_clock;
     auto record_phase = [&](const std::string& phase, Clock::time_point start) {
         if (timings) {
@@ -1533,6 +1708,9 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index,
         record_phase("exec.get_symbol", phase_start);
         return result;
     }
+
+    // Try to get the panic-catching wrapper from the runtime
+    auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
     record_phase("exec.get_symbol", phase_start);
 
     // Phase: Set up output capture
@@ -1544,8 +1722,21 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index,
     // Phase: Execute the test
     phase_start = Clock::now();
     try {
-        result.exit_code = test_func();
-        result.success = (result.exit_code == 0);
+        if (run_with_catch) {
+            // Use the panic-catching wrapper for better error reporting
+            result.exit_code = run_with_catch(test_func);
+            if (result.exit_code == -1) {
+                // Panic was caught - the message was printed to stderr
+                result.success = false;
+                result.error = "Test panicked";
+            } else {
+                result.success = (result.exit_code == 0);
+            }
+        } else {
+            // Fallback to direct call (may exit on panic)
+            result.exit_code = test_func();
+            result.success = (result.exit_code == 0);
+        }
     } catch (...) {
         result.error = "Exception during test execution";
         result.exit_code = 1;

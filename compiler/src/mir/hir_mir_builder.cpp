@@ -195,23 +195,17 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
         case types::PrimitiveKind::I64:
             return make_i64_type();
         case types::PrimitiveKind::I128:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::I128}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::I128}});
         case types::PrimitiveKind::U8:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::U8}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::U8}});
         case types::PrimitiveKind::U16:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::U16}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::U16}});
         case types::PrimitiveKind::U32:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::U32}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::U32}});
         case types::PrimitiveKind::U64:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::U64}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::U64}});
         case types::PrimitiveKind::U128:
-            return std::make_shared<MirType>(
-                MirType{MirPrimitiveType{PrimitiveType::U128}});
+            return std::make_shared<MirType>(MirType{MirPrimitiveType{PrimitiveType::U128}});
         case types::PrimitiveKind::F32:
             return make_f32_type();
         case types::PrimitiveKind::F64:
@@ -270,8 +264,7 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
             params.push_back(convert_type_impl(param));
         }
         auto ret = convert_type_impl(func_type->return_type);
-        return std::make_shared<MirType>(
-            MirType{MirFunctionType{std::move(params), ret}});
+        return std::make_shared<MirType>(MirType{MirFunctionType{std::move(params), ret}});
     }
 
     // Default fallback

@@ -49,7 +49,7 @@ auto SROAPass::run_on_function(Function& func) -> bool {
 }
 
 auto SROAPass::analyze_alloca(Function& func, ValueId alloca_id, const AllocaInst& alloca,
-                               size_t block_idx, size_t inst_idx) -> AllocaInfo {
+                              size_t block_idx, size_t inst_idx) -> AllocaInfo {
     AllocaInfo info;
     info.alloca_id = alloca_id;
     info.alloc_type = alloca.alloc_type;
@@ -79,7 +79,8 @@ auto SROAPass::is_simple_access(const Function& func, ValueId alloca_id, AllocaI
                                 // First index should be 0 (accessing the aggregate itself)
                                 // Second index is the field
                                 // For now, we need to check if indices are constants
-                                // This is a simplified check - in practice we'd look at the constant value
+                                // This is a simplified check - in practice we'd look at the
+                                // constant value
                                 info.accessed_fields.insert(0); // Mark as accessed
                             } else if (i.indices.size() == 1) {
                                 // Single index access (e.g., array element or first-level field)
@@ -126,7 +127,8 @@ auto SROAPass::is_simple_access(const Function& func, ValueId alloca_id, AllocaI
 }
 
 auto SROAPass::can_split_type(const MirTypePtr& type) -> bool {
-    if (!type) return false;
+    if (!type)
+        return false;
 
     if (auto* st = std::get_if<MirStructType>(&type->kind)) {
         // Can split structs
@@ -160,8 +162,8 @@ auto SROAPass::get_field_count(const MirTypePtr& type, const Function& /*func*/)
     return 0;
 }
 
-auto SROAPass::get_field_type(const MirTypePtr& type, uint32_t index,
-                               const Function& /*func*/) -> MirTypePtr {
+auto SROAPass::get_field_type(const MirTypePtr& type, uint32_t index, const Function& /*func*/)
+    -> MirTypePtr {
     if (auto* tt = std::get_if<MirTupleType>(&type->kind)) {
         if (index < tt->elements.size()) {
             return tt->elements[index];
@@ -279,11 +281,11 @@ auto SROAPass::rewrite_uses(Function& func, const AllocaInfo& info,
     }
 
     // Remove dead GEPs (in reverse order)
-    std::sort(to_remove.begin(), to_remove.end(),
-              [](const auto& a, const auto& b) {
-                  if (a.first != b.first) return a.first > b.first;
-                  return a.second > b.second;
-              });
+    std::sort(to_remove.begin(), to_remove.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first)
+            return a.first > b.first;
+        return a.second > b.second;
+    });
 
     for (const auto& [block_idx, inst_idx] : to_remove) {
         auto& block = func.blocks[block_idx];

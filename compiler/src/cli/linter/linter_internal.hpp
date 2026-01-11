@@ -22,8 +22,8 @@
 // Internal header for lint command implementation
 // Contains shared types, utilities, and declarations
 
-#include "cli/cmd_format.hpp"
-#include "cli/cmd_lint.hpp"
+#include "cli/commands/cmd_format.hpp"
+#include "cli/commands/cmd_lint.hpp"
 #include "cli/utils.hpp"
 #include "common.hpp"
 #include "lexer/lexer.hpp"

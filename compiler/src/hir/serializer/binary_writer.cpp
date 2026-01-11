@@ -168,10 +168,10 @@ void HirBinaryWriter::write_module(const HirModule& module) {
 /// - [6..8)   minor version (compatible additions)
 /// - [8..16)  content hash (cache validation)
 void HirBinaryWriter::write_header(ContentHash hash) {
-    write_u32(HIR_MAGIC);           // "THIR" in ASCII
-    write_u16(HIR_VERSION_MAJOR);   // Breaking changes increment this
-    write_u16(HIR_VERSION_MINOR);   // Compatible additions increment this
-    write_u64(hash);                // For cache invalidation
+    write_u32(HIR_MAGIC);         // "THIR" in ASCII
+    write_u16(HIR_VERSION_MAJOR); // Breaking changes increment this
+    write_u16(HIR_VERSION_MINOR); // Compatible additions increment this
+    write_u64(hash);              // For cache invalidation
 }
 
 // ============================================================================
@@ -240,7 +240,7 @@ void HirBinaryWriter::write_string(const std::string& str) {
 /// Disabling spans reduces file size by ~20% but loses source mapping.
 void HirBinaryWriter::write_span(const SourceSpan& span) {
     if (!options_.include_spans) {
-        return;  // Skip to reduce file size
+        return; // Skip to reduce file size
     }
     // Start location (6 bytes each = 12 bytes total)
     write_u32(span.start.line);
@@ -353,8 +353,8 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                 write_u8(static_cast<uint8_t>(detail::ExprTag::Binary));
                 write_u64(e.id);
                 write_u8(static_cast<uint8_t>(detail::binop_to_tag(e.op)));
-                write_expr_ptr(e.left);   // Recursive
-                write_expr_ptr(e.right);  // Recursive
+                write_expr_ptr(e.left);  // Recursive
+                write_expr_ptr(e.right); // Recursive
                 write_type(e.type);
                 write_span(e.span);
             }
@@ -405,7 +405,7 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                 for (const auto& arg : e.args) {
                     write_expr_ptr(arg);
                 }
-                write_type(e.receiver_type);  // Type of receiver for dispatch
+                write_type(e.receiver_type); // Type of receiver for dispatch
                 write_type(e.type);
                 write_span(e.span);
             }
@@ -417,7 +417,7 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                 write_u64(e.id);
                 write_expr_ptr(e.object);
                 write_string(e.field_name);
-                write_u32(static_cast<uint32_t>(e.field_index));  // Pre-computed index
+                write_u32(static_cast<uint32_t>(e.field_index)); // Pre-computed index
                 write_type(e.type);
                 write_span(e.span);
             }
@@ -488,7 +488,7 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                     write_string(name);
                     write_expr_ptr(val);
                 }
-                write_optional_expr(e.base);  // Functional update base
+                write_optional_expr(e.base); // Functional update base
                 write_type(e.type);
                 write_span(e.span);
             }
@@ -523,7 +523,7 @@ void HirBinaryWriter::write_expr(const HirExpr& expr) {
                 for (const auto& s : e.stmts) {
                     write_stmt_ptr(s);
                 }
-                write_optional_expr(e.expr);  // Final expression (block value)
+                write_optional_expr(e.expr); // Final expression (block value)
                 write_type(e.type);
                 write_span(e.span);
             }
@@ -806,7 +806,7 @@ void HirBinaryWriter::write_pattern(const HirPattern& pattern) {
                     write_string(name);
                     write_pattern_ptr(pat);
                 }
-                write_bool(p.has_rest);  // Point { x, .. }
+                write_bool(p.has_rest); // Point { x, .. }
                 write_type(p.type);
                 write_span(p.span);
             } else if constexpr (std::is_same_v<T, HirEnumPattern>) {
@@ -963,7 +963,7 @@ void HirBinaryWriter::write_function(const HirFunction& func) {
     }
 
     write_type(func.return_type);
-    write_optional_expr(func.body);  // Body is optional (extern functions)
+    write_optional_expr(func.body); // Body is optional (extern functions)
 
     // Function attributes
     write_bool(func.is_public);

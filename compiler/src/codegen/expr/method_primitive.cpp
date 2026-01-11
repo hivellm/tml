@@ -459,7 +459,15 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
     }
 
     if (func_sig) {
-        std::string fn_name = "@tml_" + type_name + "_" + method;
+        // Look up in functions_ to get the correct LLVM name
+        std::string method_lookup_key = type_name + "_" + method;
+        auto method_it = functions_.find(method_lookup_key);
+        std::string fn_name;
+        if (method_it != functions_.end()) {
+            fn_name = method_it->second.llvm_name;
+        } else {
+            fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+        }
 
         // Build arguments - 'this' is passed by value for primitives
         std::vector<std::pair<std::string, std::string>> typed_args;

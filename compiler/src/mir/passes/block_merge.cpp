@@ -19,14 +19,17 @@ auto BlockMergePass::run_on_function(Function& func) -> bool {
             auto& block = func.blocks[i];
 
             // Check if this block has exactly one successor via unconditional branch
-            if (!block.terminator) continue;
+            if (!block.terminator)
+                continue;
 
             auto* branch = std::get_if<BranchTerm>(&*block.terminator);
-            if (!branch) continue;
+            if (!branch)
+                continue;
 
             // Find the successor block
             int succ_idx = get_block_index(func, branch->target);
-            if (succ_idx < 0) continue;
+            if (succ_idx < 0)
+                continue;
 
             auto& succ = func.blocks[static_cast<size_t>(succ_idx)];
 
@@ -42,8 +45,8 @@ auto BlockMergePass::run_on_function(Function& func) -> bool {
     return changed;
 }
 
-auto BlockMergePass::can_merge(const Function& func, const BasicBlock& pred,
-                                const BasicBlock& succ) -> bool {
+auto BlockMergePass::can_merge(const Function& func, const BasicBlock& pred, const BasicBlock& succ)
+    -> bool {
     // Pred must have exactly one successor
     if (pred.successors.size() != 1) {
         return false;
@@ -95,8 +98,7 @@ auto BlockMergePass::merge_blocks(Function& func, size_t pred_idx, size_t succ_i
     auto& succ = func.blocks[succ_idx];
 
     // Append succ's instructions to pred
-    pred.instructions.insert(pred.instructions.end(),
-                             succ.instructions.begin(),
+    pred.instructions.insert(pred.instructions.end(), succ.instructions.begin(),
                              succ.instructions.end());
 
     // Take succ's terminator
@@ -125,8 +127,8 @@ auto BlockMergePass::merge_blocks(Function& func, size_t pred_idx, size_t succ_i
     func.blocks.erase(func.blocks.begin() + static_cast<std::ptrdiff_t>(succ_idx));
 }
 
-auto BlockMergePass::update_phi_nodes(Function& func, uint32_t old_block,
-                                       uint32_t new_block) -> void {
+auto BlockMergePass::update_phi_nodes(Function& func, uint32_t old_block, uint32_t new_block)
+    -> void {
     for (auto& block : func.blocks) {
         for (auto& inst : block.instructions) {
             if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {

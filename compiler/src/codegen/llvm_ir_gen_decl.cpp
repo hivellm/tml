@@ -636,16 +636,29 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         full_func_name = current_module_prefix_ + "_" + func.name;
     }
 
+    // In suite mode, add unique prefix to avoid symbol collisions when linking multiple
+    // test files into a single DLL. Each test file gets a unique suite_test_index.
+    // IMPORTANT: Only add prefix to test-local functions (not library/imported module functions)
+    // Library functions (those with current_module_prefix_) should NOT have suite prefix
+    // because they're shared across all tests in the suite.
+    std::string suite_prefix = "";
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+
     // Skip if this function was already generated (handles duplicates in directory modules)
-    std::string llvm_name = "@tml_" + full_func_name;
+    std::string llvm_name = "@tml_" + suite_prefix + full_func_name;
     if (generated_functions_.count(llvm_name)) {
         return;
     }
     generated_functions_.insert(llvm_name);
 
     // Register function for first-class function support
+    // The registration key uses the original name for lookups within this test file
     std::string func_type = ret_type + " (" + param_types + ")";
-    FuncInfo func_info{"@tml_" + full_func_name, func_type, ret_type, param_types_vec};
+    FuncInfo func_info{"@tml_" + suite_prefix + full_func_name, func_type, ret_type,
+                       param_types_vec};
     functions_[func.name] = func_info;
 
     // Also register with module-qualified name for cross-module calls
@@ -688,7 +701,8 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
 
     // Function signature with optimization attributes
     // All user-defined functions get tml_ prefix (main becomes tml_main, wrapper @main calls it)
-    std::string func_llvm_name = "tml_" + full_func_name;
+    // In suite mode, add unique prefix to avoid symbol collisions
+    std::string func_llvm_name = "tml_" + suite_prefix + full_func_name;
     // Public functions, main, and @should_panic tests get external linkage
     // @should_panic tests need external linkage because they're called via function pointer
     bool has_should_panic = false;
@@ -895,6 +909,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     // Build parameter list
     std::string params;
     std::string param_types;
+    std::vector<std::string> param_types_vec;
 
     // Check if first param is 'this' or 'mut this' (instance method vs static)
     size_t param_start = 0;
@@ -932,6 +947,7 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         if (this_type != "void") {
             params = this_type + " %this";
             param_types = this_type;
+            param_types_vec.push_back(this_type);
         } else {
             // For Unit, treat as no-arg method
             is_instance_method = false;
@@ -948,10 +964,17 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         std::string param_name = get_param_name(method.params[i]);
         params += param_type + " %" + param_name;
         param_types += param_type;
+        param_types_vec.push_back(param_type);
     }
 
     // Function signature
     std::string func_llvm_name = "tml_" + type_name + "_" + method.name;
+
+    // Register function in functions_ map for lookup
+    // This is critical for suite mode where method calls look up functions by name
+    std::string func_type = ret_type + " (" + param_types + ")";
+    functions_[method_name] = FuncInfo{"@" + func_llvm_name, func_type, ret_type, param_types_vec};
+
     emit_line("");
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
@@ -1211,6 +1234,10 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     }
 
     // 2. Generate mangled function name: identity[I32] -> identity__I32
+    // NOTE: Do NOT add suite prefix for generic function instantiations.
+    // Generic functions are typically from libraries (take, map, filter, etc.) and should
+    // be shared across all test files in a suite. The instantiation is keyed by mangled_name
+    // in func_instantiations_, so we need consistency between call and definition.
     std::string mangled = mangle_func_name(func.name, type_args);
 
     // Save current context

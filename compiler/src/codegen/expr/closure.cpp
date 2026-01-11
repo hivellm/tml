@@ -36,7 +36,15 @@ auto LLVMIRGen::gen_closure(const parser::ClosureExpr& closure) -> std::string {
     last_closure_captures_ = std::nullopt;
 
     // Generate a unique function name
-    std::string closure_name = "tml_closure_" + std::to_string(closure_counter_++);
+    // In suite mode, add prefix to avoid symbol collisions when linking multiple test files
+    // Only for test-local closures (not library closures)
+    std::string suite_prefix = "";
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+    std::string closure_name =
+        "tml_" + suite_prefix + "closure_" + std::to_string(closure_counter_++);
 
     // Collect capture info if there are captured variables
     if (!closure.captured_vars.empty()) {

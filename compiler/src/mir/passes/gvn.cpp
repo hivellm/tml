@@ -23,7 +23,8 @@ auto GVNPass::run_on_function(Function& func) -> bool {
             auto& inst = block.instructions[i];
 
             // Assign value numbers to all results
-            if (inst.result != INVALID_VALUE && value_numbers_.find(inst.result) == value_numbers_.end()) {
+            if (inst.result != INVALID_VALUE &&
+                value_numbers_.find(inst.result) == value_numbers_.end()) {
                 value_numbers_[inst.result] = next_vn_++;
             }
 
@@ -54,8 +55,7 @@ auto GVNPass::run_on_function(Function& func) -> bool {
 
         // Remove redundant instructions (in reverse order)
         for (auto it = to_remove.rbegin(); it != to_remove.rend(); ++it) {
-            block.instructions.erase(block.instructions.begin() +
-                                     static_cast<std::ptrdiff_t>(*it));
+            block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(*it));
         }
     }
 
@@ -99,10 +99,10 @@ auto GVNPass::make_expression(const Instruction& inst) -> std::optional<Expressi
                 oss << "binary:" << static_cast<int>(i.op) << ":";
 
                 // For commutative operations, canonicalize operand order
-                bool commutative = (i.op == BinOp::Add || i.op == BinOp::Mul ||
-                                    i.op == BinOp::BitAnd || i.op == BinOp::BitOr ||
-                                    i.op == BinOp::BitXor || i.op == BinOp::Eq ||
-                                    i.op == BinOp::Ne);
+                bool commutative =
+                    (i.op == BinOp::Add || i.op == BinOp::Mul || i.op == BinOp::BitAnd ||
+                     i.op == BinOp::BitOr || i.op == BinOp::BitXor || i.op == BinOp::Eq ||
+                     i.op == BinOp::Ne);
 
                 if (commutative && left_vn > right_vn) {
                     oss << right_vn << ":" << left_vn;
@@ -154,12 +154,9 @@ auto GVNPass::can_gvn(const Instruction& inst) -> bool {
             (void)i; // Silence unused parameter warning
 
             // Pure expressions that can be GVN'd
-            if constexpr (std::is_same_v<T, BinaryInst> ||
-                          std::is_same_v<T, UnaryInst> ||
-                          std::is_same_v<T, CastInst> ||
-                          std::is_same_v<T, GetElementPtrInst> ||
-                          std::is_same_v<T, ExtractValueInst> ||
-                          std::is_same_v<T, SelectInst>) {
+            if constexpr (std::is_same_v<T, BinaryInst> || std::is_same_v<T, UnaryInst> ||
+                          std::is_same_v<T, CastInst> || std::is_same_v<T, GetElementPtrInst> ||
+                          std::is_same_v<T, ExtractValueInst> || std::is_same_v<T, SelectInst>) {
                 return true;
             } else {
                 return false;

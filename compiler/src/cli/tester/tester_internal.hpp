@@ -20,9 +20,9 @@
 // Internal header for test command implementation
 // Contains shared utilities, types, and helpers
 
-#include "cli/cmd_build.hpp"
-#include "cli/cmd_test.hpp"
-#include "cli/test_runner.hpp"
+#include "cli/commands/cmd_build.hpp"
+#include "cli/commands/cmd_test.hpp"
+#include "cli/tester/test_runner.hpp"
 #include "cli/utils.hpp"
 #include "common.hpp"
 

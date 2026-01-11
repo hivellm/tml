@@ -39,8 +39,8 @@
 
 #include "dependency_resolver.hpp"
 
-#include "cmd_build.hpp"
-#include "rlib.hpp"
+#include "cli/commands/cmd_build.hpp"
+#include "cli/builder/rlib.hpp"
 
 #include <algorithm>
 #include <fstream>

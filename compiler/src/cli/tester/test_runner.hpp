@@ -207,9 +207,11 @@ SuiteCompileResult compile_test_suite_profiled(const TestSuite& suite, PhaseTimi
 
 // Run a specific test within a loaded suite DLL
 // Uses the test index to call the correct entry function
-SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index);
+// verbose: Enable debug logging for test execution
+SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose = false);
 
 // Run a specific test with profiling
-SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings);
+SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, PhaseTimings* timings,
+                                        bool verbose = false);
 
 } // namespace tml::cli

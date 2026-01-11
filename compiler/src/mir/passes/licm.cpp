@@ -35,8 +35,7 @@ auto LICMPass::find_loops(const Function& func) -> std::vector<Loop> {
     return loops;
 }
 
-auto LICMPass::find_back_edges(const Function& func)
-    -> std::vector<std::pair<uint32_t, uint32_t>> {
+auto LICMPass::find_back_edges(const Function& func) -> std::vector<std::pair<uint32_t, uint32_t>> {
     std::vector<std::pair<uint32_t, uint32_t>> back_edges;
 
     // Simple heuristic: a back edge is when a branch goes to an earlier block
@@ -122,8 +121,8 @@ auto LICMPass::build_loop(const Function& func, uint32_t header, uint32_t latch)
 }
 
 auto LICMPass::is_loop_invariant(const Function& func, const InstructionData& inst,
-                                  const Loop& loop,
-                                  const std::unordered_set<ValueId>& invariant_values) -> bool {
+                                 const Loop& loop,
+                                 const std::unordered_set<ValueId>& invariant_values) -> bool {
     // Check if all operands are either:
     // 1. Constants
     // 2. Defined outside the loop
@@ -275,8 +274,7 @@ auto LICMPass::get_or_create_preheader(Function& func, Loop& loop) -> uint32_t {
     return UINT32_MAX;
 }
 
-auto LICMPass::is_defined_in_loop(const Function& func, ValueId value,
-                                   const Loop& loop) -> bool {
+auto LICMPass::is_defined_in_loop(const Function& func, ValueId value, const Loop& loop) -> bool {
     // Check if value is defined by an instruction in the loop
     for (uint32_t block_id : loop.blocks) {
         int idx = get_block_index(func, block_id);

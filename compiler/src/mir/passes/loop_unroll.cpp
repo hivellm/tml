@@ -115,8 +115,8 @@ auto LoopUnrollPass::analyze_loop(const Function& func, uint32_t header, uint32_
         for (const auto& inst : header_block->instructions) {
             if (inst.result == cond_br->condition.id) {
                 if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
-                    if (bin->op == BinOp::Lt || bin->op == BinOp::Le ||
-                        bin->op == BinOp::Gt || bin->op == BinOp::Ge) {
+                    if (bin->op == BinOp::Lt || bin->op == BinOp::Le || bin->op == BinOp::Gt ||
+                        bin->op == BinOp::Ge) {
                         // Check if comparing against induction var
                         bool left_is_iv = bin->left.id == induction_var;
                         bool right_is_iv = bin->right.id == induction_var;
@@ -154,8 +154,7 @@ auto LoopUnrollPass::analyze_loop(const Function& func, uint32_t header, uint32_
 
     for (const auto& inst : latch_block->instructions) {
         if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
-            if ((bin->op == BinOp::Add || bin->op == BinOp::Sub) &&
-                bin->left.id == induction_var) {
+            if ((bin->op == BinOp::Add || bin->op == BinOp::Sub) && bin->left.id == induction_var) {
                 // Find the step constant
                 for (const auto& blk : func.blocks) {
                     for (const auto& def_inst : blk.instructions) {

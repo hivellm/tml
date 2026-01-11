@@ -29,10 +29,10 @@
 
 #include "cmd_pkg.hpp"
 
-#include "build_config.hpp"
-#include "cmd_test.hpp" // For colors namespace
-#include "dependency_resolver.hpp"
-#include "utils.hpp"
+#include "cli/builder/build_config.hpp"
+#include "cli/commands/cmd_test.hpp" // For colors namespace
+#include "cli/builder/dependency_resolver.hpp"
+#include "cli/utils.hpp"
 
 #include <filesystem>
 #include <fstream>

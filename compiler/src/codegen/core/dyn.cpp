@@ -143,7 +143,14 @@ void LLVMIRGen::emit_vtables() {
             if (i > 0)
                 vtable_value += ", ";
             const auto& method = behavior_def->methods[i];
-            vtable_value += "ptr @tml_" + type_name + "_" + method.name;
+            // Look up in functions_ to get the correct LLVM name
+            std::string method_lookup_key = type_name + "_" + method.name;
+            auto method_it = functions_.find(method_lookup_key);
+            if (method_it != functions_.end()) {
+                vtable_value += "ptr " + method_it->second.llvm_name;
+            } else {
+                vtable_value += "ptr @tml_" + get_suite_prefix() + type_name + "_" + method.name;
+            }
         }
         vtable_value += " }";
 

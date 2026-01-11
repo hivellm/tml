@@ -27,7 +27,8 @@ auto EarlyCSEPass::process_block(BasicBlock& block) -> bool {
         auto& inst = block.instructions[i];
 
         auto key = get_expr_key(inst.inst);
-        if (!key) continue;
+        if (!key)
+            continue;
 
         auto it = expr_map.find(*key);
         if (it != expr_map.end()) {
@@ -64,9 +65,8 @@ auto EarlyCSEPass::get_expr_key(const Instruction& inst) -> std::optional<ExprKe
                 key.operands = {i.left.id, i.right.id};
 
                 // For commutative operations, sort operands for canonical form
-                if (i.op == BinOp::Add || i.op == BinOp::Mul ||
-                    i.op == BinOp::BitAnd || i.op == BinOp::BitOr ||
-                    i.op == BinOp::BitXor || i.op == BinOp::Eq ||
+                if (i.op == BinOp::Add || i.op == BinOp::Mul || i.op == BinOp::BitAnd ||
+                    i.op == BinOp::BitOr || i.op == BinOp::BitXor || i.op == BinOp::Eq ||
                     i.op == BinOp::Ne) {
                     if (key.operands[0] > key.operands[1]) {
                         std::swap(key.operands[0], key.operands[1]);
@@ -110,47 +110,65 @@ auto EarlyCSEPass::get_expr_key(const Instruction& inst) -> std::optional<ExprKe
 }
 
 auto EarlyCSEPass::replace_uses_in_block(BasicBlock& block, size_t start_idx, ValueId old_val,
-                                          ValueId new_val) -> void {
+                                         ValueId new_val) -> void {
     for (size_t i = start_idx; i < block.instructions.size(); ++i) {
         std::visit(
             [old_val, new_val](auto& inst) {
                 using T = std::decay_t<decltype(inst)>;
 
                 if constexpr (std::is_same_v<T, BinaryInst>) {
-                    if (inst.left.id == old_val) inst.left.id = new_val;
-                    if (inst.right.id == old_val) inst.right.id = new_val;
+                    if (inst.left.id == old_val)
+                        inst.left.id = new_val;
+                    if (inst.right.id == old_val)
+                        inst.right.id = new_val;
                 } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                    if (inst.operand.id == old_val) inst.operand.id = new_val;
+                    if (inst.operand.id == old_val)
+                        inst.operand.id = new_val;
                 } else if constexpr (std::is_same_v<T, CastInst>) {
-                    if (inst.operand.id == old_val) inst.operand.id = new_val;
+                    if (inst.operand.id == old_val)
+                        inst.operand.id = new_val;
                 } else if constexpr (std::is_same_v<T, LoadInst>) {
-                    if (inst.ptr.id == old_val) inst.ptr.id = new_val;
+                    if (inst.ptr.id == old_val)
+                        inst.ptr.id = new_val;
                 } else if constexpr (std::is_same_v<T, StoreInst>) {
-                    if (inst.ptr.id == old_val) inst.ptr.id = new_val;
-                    if (inst.value.id == old_val) inst.value.id = new_val;
+                    if (inst.ptr.id == old_val)
+                        inst.ptr.id = new_val;
+                    if (inst.value.id == old_val)
+                        inst.value.id = new_val;
                 } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
-                    if (inst.base.id == old_val) inst.base.id = new_val;
+                    if (inst.base.id == old_val)
+                        inst.base.id = new_val;
                     for (auto& idx : inst.indices) {
-                        if (idx.id == old_val) idx.id = new_val;
+                        if (idx.id == old_val)
+                            idx.id = new_val;
                     }
                 } else if constexpr (std::is_same_v<T, CallInst>) {
                     for (auto& arg : inst.args) {
-                        if (arg.id == old_val) arg.id = new_val;
+                        if (arg.id == old_val)
+                            arg.id = new_val;
                     }
                 } else if constexpr (std::is_same_v<T, MethodCallInst>) {
-                    if (inst.receiver.id == old_val) inst.receiver.id = new_val;
+                    if (inst.receiver.id == old_val)
+                        inst.receiver.id = new_val;
                     for (auto& arg : inst.args) {
-                        if (arg.id == old_val) arg.id = new_val;
+                        if (arg.id == old_val)
+                            arg.id = new_val;
                     }
                 } else if constexpr (std::is_same_v<T, SelectInst>) {
-                    if (inst.condition.id == old_val) inst.condition.id = new_val;
-                    if (inst.true_val.id == old_val) inst.true_val.id = new_val;
-                    if (inst.false_val.id == old_val) inst.false_val.id = new_val;
+                    if (inst.condition.id == old_val)
+                        inst.condition.id = new_val;
+                    if (inst.true_val.id == old_val)
+                        inst.true_val.id = new_val;
+                    if (inst.false_val.id == old_val)
+                        inst.false_val.id = new_val;
                 } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
-                    if (inst.aggregate.id == old_val) inst.aggregate.id = new_val;
+                    if (inst.aggregate.id == old_val)
+                        inst.aggregate.id = new_val;
                 } else if constexpr (std::is_same_v<T, InsertValueInst>) {
-                    if (inst.aggregate.id == old_val) inst.aggregate.id = new_val;
-                    if (inst.value.id == old_val) inst.value.id = new_val;
+                    if (inst.aggregate.id == old_val)
+                        inst.aggregate.id = new_val;
+                    if (inst.value.id == old_val)
+                        inst.value.id = new_val;
                 }
             },
             block.instructions[i].inst);

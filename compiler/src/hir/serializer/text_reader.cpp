@@ -165,8 +165,7 @@ auto HirTextReader::expect(char c) -> bool {
 
 auto HirTextReader::expect(const std::string& s) -> bool {
     skip_whitespace();
-    if (pos_ + s.size() <= current_line_.size() &&
-        current_line_.substr(pos_, s.size()) == s) {
+    if (pos_ + s.size() <= current_line_.size() && current_line_.substr(pos_, s.size()) == s) {
         pos_ += s.size();
         return true;
     }

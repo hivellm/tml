@@ -727,6 +727,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
 
         // Call the instantiated function
+        // Generic function instantiations don't use suite prefix - they're typically library
+        // functions and should be shared across all test files in a suite
         std::string func_name = "@tml_" + mangled_name;
         std::string dbg_suffix = get_debug_loc_suffix();
         if (ret_type == "void") {
@@ -891,7 +893,16 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
 
                         auto return_type = types::substitute_type(func_sig->return_type, type_subs);
                         std::string ret_type = llvm_type_from_semantic(return_type);
-                        std::string fn_name_call = "@tml_" + mangled_type_name + "_" + method;
+                        // Look up in functions_ to get the correct LLVM name
+                        std::string method_lookup_key = mangled_type_name + "_" + method;
+                        auto method_it = functions_.find(method_lookup_key);
+                        std::string fn_name_call;
+                        if (method_it != functions_.end()) {
+                            fn_name_call = method_it->second.llvm_name;
+                        } else {
+                            fn_name_call =
+                                "@tml_" + get_suite_prefix() + mangled_type_name + "_" + method;
+                        }
 
                         std::string args_str;
                         for (size_t i = 0; i < typed_args.size(); ++i) {
@@ -965,20 +976,29 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
     }
 
-    std::string mangled;
-    if (func_it != functions_.end()) {
-        // Use the registered LLVM name (handles @extern functions correctly)
-        mangled = func_it->second.llvm_name;
-    } else {
-        // Default: user-defined TML function with tml_ prefix
-        // Replace :: with _ for valid LLVM IR identifiers (matches impl method naming convention)
-        std::string sanitized_name = fn_name;
+    // Sanitize function name (replace :: with _) to match how impl methods are registered
+    std::string sanitized_name = fn_name;
+    {
         size_t pos = 0;
         while ((pos = sanitized_name.find("::", pos)) != std::string::npos) {
             sanitized_name.replace(pos, 2, "_");
             pos += 1;
         }
-        mangled = "@tml_" + sanitized_name;
+    }
+
+    // If not found with original name, try sanitized name (handles Type::method -> Type_method)
+    if (func_it == functions_.end()) {
+        func_it = functions_.find(sanitized_name);
+    }
+
+    std::string mangled;
+    if (func_it != functions_.end()) {
+        // Use the registered LLVM name (handles @extern functions correctly)
+        mangled = func_it->second.llvm_name;
+    } else {
+        // In suite mode, add suite prefix for test-local functions (forward references)
+        // This handles mutual recursion where called function isn't yet in functions_ map
+        mangled = "@tml_" + get_suite_prefix() + sanitized_name;
     }
 
     // Determine return type

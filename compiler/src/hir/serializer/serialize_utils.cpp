@@ -74,7 +74,9 @@ constexpr uint64_t FNV_PRIME = 1099511628211ULL;
 
 class Hasher {
 public:
-    void update(uint8_t byte) { hash_ = (hash_ ^ byte) * FNV_PRIME; }
+    void update(uint8_t byte) {
+        hash_ = (hash_ ^ byte) * FNV_PRIME;
+    }
 
     void update(const void* data, size_t size) {
         const auto* bytes = static_cast<const uint8_t*>(data);
@@ -88,17 +90,29 @@ public:
         update(str.data(), str.size());
     }
 
-    void update(uint32_t value) { update(&value, sizeof(value)); }
+    void update(uint32_t value) {
+        update(&value, sizeof(value));
+    }
 
-    void update(uint64_t value) { update(&value, sizeof(value)); }
+    void update(uint64_t value) {
+        update(&value, sizeof(value));
+    }
 
-    void update(int64_t value) { update(&value, sizeof(value)); }
+    void update(int64_t value) {
+        update(&value, sizeof(value));
+    }
 
-    void update(double value) { update(&value, sizeof(value)); }
+    void update(double value) {
+        update(&value, sizeof(value));
+    }
 
-    void update(bool value) { update(static_cast<uint8_t>(value ? 1 : 0)); }
+    void update(bool value) {
+        update(static_cast<uint8_t>(value ? 1 : 0));
+    }
 
-    [[nodiscard]] auto finish() const -> ContentHash { return hash_; }
+    [[nodiscard]] auto finish() const -> ContentHash {
+        return hash_;
+    }
 
 private:
     uint64_t hash_ = FNV_OFFSET;

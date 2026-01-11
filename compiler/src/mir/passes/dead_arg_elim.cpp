@@ -69,28 +69,33 @@ auto DeadArgEliminationPass::is_param_used(const Function& func, size_t param_id
                         return i.ptr.id == param_value || i.value.id == param_value;
                     } else if constexpr (std::is_same_v<T, CallInst>) {
                         for (const auto& arg : i.args) {
-                            if (arg.id == param_value) return true;
+                            if (arg.id == param_value)
+                                return true;
                         }
                         return false;
                     } else if constexpr (std::is_same_v<T, MethodCallInst>) {
-                        if (i.receiver.id == param_value) return true;
+                        if (i.receiver.id == param_value)
+                            return true;
                         for (const auto& arg : i.args) {
-                            if (arg.id == param_value) return true;
+                            if (arg.id == param_value)
+                                return true;
                         }
                         return false;
                     } else if constexpr (std::is_same_v<T, SelectInst>) {
-                        return i.condition.id == param_value ||
-                               i.true_val.id == param_value ||
+                        return i.condition.id == param_value || i.true_val.id == param_value ||
                                i.false_val.id == param_value;
                     } else if constexpr (std::is_same_v<T, PhiInst>) {
                         for (const auto& [val, _] : i.incoming) {
-                            if (val.id == param_value) return true;
+                            if (val.id == param_value)
+                                return true;
                         }
                         return false;
                     } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
-                        if (i.base.id == param_value) return true;
+                        if (i.base.id == param_value)
+                            return true;
                         for (const auto& idx : i.indices) {
-                            if (idx.id == param_value) return true;
+                            if (idx.id == param_value)
+                                return true;
                         }
                         return false;
                     } else {
@@ -131,13 +136,12 @@ auto DeadArgEliminationPass::is_param_used(const Function& func, size_t param_id
     return false;
 }
 
-auto DeadArgEliminationPass::is_internal_function(const Module& module,
-                                                   const std::string& name) -> bool {
+auto DeadArgEliminationPass::is_internal_function(const Module& module, const std::string& name)
+    -> bool {
     // For now, consider all non-main functions as internal
     // A more sophisticated check would look at linkage/visibility attributes
     (void)module;
-    return name != "main" && name != "tml_main" &&
-           name.find("extern") == std::string::npos;
+    return name != "main" && name != "tml_main" && name.find("extern") == std::string::npos;
 }
 
 auto DeadArgEliminationPass::find_call_sites(Module& module, const std::string& func_name)
@@ -159,8 +163,8 @@ auto DeadArgEliminationPass::find_call_sites(Module& module, const std::string& 
     return sites;
 }
 
-auto DeadArgEliminationPass::eliminate_param(Module& module, Function& func,
-                                              size_t param_idx) -> void {
+auto DeadArgEliminationPass::eliminate_param(Module& module, Function& func, size_t param_idx)
+    -> void {
     // Remove parameter from function
     func.params.erase(func.params.begin() + static_cast<std::ptrdiff_t>(param_idx));
 

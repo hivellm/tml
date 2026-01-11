@@ -35,8 +35,8 @@ auto PeepholePass::run_on_function(Function& func) -> bool {
     return changed;
 }
 
-auto PeepholePass::simplify_binary(Function& func, BasicBlock& block, size_t idx,
-                                    BinaryInst& bin) -> bool {
+auto PeepholePass::simplify_binary(Function& func, BasicBlock& block, size_t idx, BinaryInst& bin)
+    -> bool {
     auto left_const = get_const_int(func, bin.left.id);
     auto right_const = get_const_int(func, bin.right.id);
 
@@ -177,8 +177,8 @@ auto PeepholePass::simplify_binary(Function& func, BasicBlock& block, size_t idx
     return false;
 }
 
-auto PeepholePass::simplify_unary(Function& func, BasicBlock& block, size_t idx,
-                                   UnaryInst& unary) -> bool {
+auto PeepholePass::simplify_unary(Function& func, BasicBlock& block, size_t idx, UnaryInst& unary)
+    -> bool {
     // Look for double negation or double not
     // Find the definition of the operand
     for (const auto& blk : func.blocks) {
@@ -229,28 +229,40 @@ auto PeepholePass::replace_uses(Function& func, ValueId old_value, ValueId new_v
                     using T = std::decay_t<decltype(i)>;
 
                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                        if (i.left.id == old_value) i.left.id = new_value;
-                        if (i.right.id == old_value) i.right.id = new_value;
+                        if (i.left.id == old_value)
+                            i.left.id = new_value;
+                        if (i.right.id == old_value)
+                            i.right.id = new_value;
                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                        if (i.operand.id == old_value) i.operand.id = new_value;
+                        if (i.operand.id == old_value)
+                            i.operand.id = new_value;
                     } else if constexpr (std::is_same_v<T, CastInst>) {
-                        if (i.operand.id == old_value) i.operand.id = new_value;
+                        if (i.operand.id == old_value)
+                            i.operand.id = new_value;
                     } else if constexpr (std::is_same_v<T, SelectInst>) {
-                        if (i.condition.id == old_value) i.condition.id = new_value;
-                        if (i.true_val.id == old_value) i.true_val.id = new_value;
-                        if (i.false_val.id == old_value) i.false_val.id = new_value;
+                        if (i.condition.id == old_value)
+                            i.condition.id = new_value;
+                        if (i.true_val.id == old_value)
+                            i.true_val.id = new_value;
+                        if (i.false_val.id == old_value)
+                            i.false_val.id = new_value;
                     } else if constexpr (std::is_same_v<T, LoadInst>) {
-                        if (i.ptr.id == old_value) i.ptr.id = new_value;
+                        if (i.ptr.id == old_value)
+                            i.ptr.id = new_value;
                     } else if constexpr (std::is_same_v<T, StoreInst>) {
-                        if (i.ptr.id == old_value) i.ptr.id = new_value;
-                        if (i.value.id == old_value) i.value.id = new_value;
+                        if (i.ptr.id == old_value)
+                            i.ptr.id = new_value;
+                        if (i.value.id == old_value)
+                            i.value.id = new_value;
                     } else if constexpr (std::is_same_v<T, CallInst>) {
                         for (auto& arg : i.args) {
-                            if (arg.id == old_value) arg.id = new_value;
+                            if (arg.id == old_value)
+                                arg.id = new_value;
                         }
                     } else if constexpr (std::is_same_v<T, PhiInst>) {
                         for (auto& [val, _] : i.incoming) {
-                            if (val.id == old_value) val.id = new_value;
+                            if (val.id == old_value)
+                                val.id = new_value;
                         }
                     }
                 },
@@ -282,7 +294,8 @@ auto PeepholePass::replace_uses(Function& func, ValueId old_value, ValueId new_v
     }
 }
 
-auto PeepholePass::create_constant(Function& func, int64_t value, const MirTypePtr& type) -> ValueId {
+auto PeepholePass::create_constant(Function& func, int64_t value, const MirTypePtr& type)
+    -> ValueId {
     // Find entry block
     if (func.blocks.empty()) {
         return INVALID_VALUE;

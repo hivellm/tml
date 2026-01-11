@@ -27,8 +27,8 @@ auto NarrowingPass::run_on_function(Function& func) -> bool {
     return changed;
 }
 
-auto NarrowingPass::try_narrow_zext_pattern(Function& func, BasicBlock& block,
-                                             size_t inst_idx) -> bool {
+auto NarrowingPass::try_narrow_zext_pattern(Function& func, BasicBlock& block, size_t inst_idx)
+    -> bool {
     auto& trunc_inst = block.instructions[inst_idx];
     auto* trunc = std::get_if<CastInst>(&trunc_inst.inst);
     if (!trunc || trunc->kind != CastKind::Trunc) {
@@ -116,14 +116,14 @@ auto NarrowingPass::try_narrow_zext_pattern(Function& func, BasicBlock& block,
 }
 
 auto NarrowingPass::try_narrow_sext_pattern(Function& /*func*/, BasicBlock& /*block*/,
-                                             size_t /*inst_idx*/) -> bool {
+                                            size_t /*inst_idx*/) -> bool {
     // Similar to zext pattern but for signed values
     // More complex due to sign extension semantics
     return false;
 }
 
-auto NarrowingPass::is_only_used_by_trunc(const Function& func, ValueId value,
-                                          int target_bits) -> bool {
+auto NarrowingPass::is_only_used_by_trunc(const Function& func, ValueId value, int target_bits)
+    -> bool {
     int use_count = 0;
     int trunc_use_count = 0;
 
@@ -195,7 +195,8 @@ auto NarrowingPass::find_def_inst(const Function& func, ValueId id) -> const Ins
 }
 
 auto NarrowingPass::get_bit_width(const MirTypePtr& type) -> int {
-    if (!type) return -1;
+    if (!type)
+        return -1;
 
     if (auto* prim = std::get_if<MirPrimitiveType>(&type->kind)) {
         switch (prim->kind) {
@@ -245,12 +246,16 @@ auto NarrowingPass::replace_uses(Function& func, ValueId old_value, ValueId new_
                     using T = std::decay_t<decltype(i)>;
 
                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                        if (i.left.id == old_value) i.left.id = new_value;
-                        if (i.right.id == old_value) i.right.id = new_value;
+                        if (i.left.id == old_value)
+                            i.left.id = new_value;
+                        if (i.right.id == old_value)
+                            i.right.id = new_value;
                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                        if (i.operand.id == old_value) i.operand.id = new_value;
+                        if (i.operand.id == old_value)
+                            i.operand.id = new_value;
                     } else if constexpr (std::is_same_v<T, CastInst>) {
-                        if (i.operand.id == old_value) i.operand.id = new_value;
+                        if (i.operand.id == old_value)
+                            i.operand.id = new_value;
                     }
                     // Add more as needed
                 },

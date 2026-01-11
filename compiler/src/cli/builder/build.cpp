@@ -188,11 +188,11 @@ int run_build(const std::string& path, bool verbose, bool emit_ir_only, bool emi
     }
 
     std::string llvm_ir;
-    std::set<std::string> link_libs;  // FFI libraries to link
+    std::set<std::string> link_libs; // FFI libraries to link
 
     // Use MIR-based codegen for O1+ optimizations, AST-based for O0
     int opt_level = tml::CompilerOptions::optimization_level;
-    if (opt_level > 0) {  // Use MIR codegen for optimized builds
+    if (opt_level > 0) { // Use MIR codegen for optimized builds
         // Build MIR from HIR for optimized codegen
         auto env_copy = env;
         hir::HirBuilder hir_builder(env_copy);

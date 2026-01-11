@@ -41,18 +41,18 @@
 //! - `--help` / `-h`: Show usage information
 //! - `--version` / `-V`: Show compiler version
 
-#include "build_config.hpp"
-#include "cmd_build.hpp"
-#include "cmd_cache.hpp"
-#include "cmd_debug.hpp"
-#include "cmd_format.hpp"
-#include "cmd_init.hpp"
-#include "cmd_lint.hpp"
-#include "cmd_pkg.hpp"
-#include "cmd_rlib.hpp"
-#include "cmd_test.hpp"
+#include "builder/build_config.hpp"
+#include "builder/parallel_build.hpp"
+#include "commands/cmd_build.hpp"
+#include "commands/cmd_cache.hpp"
+#include "commands/cmd_debug.hpp"
+#include "commands/cmd_format.hpp"
+#include "commands/cmd_init.hpp"
+#include "commands/cmd_lint.hpp"
+#include "commands/cmd_pkg.hpp"
+#include "commands/cmd_rlib.hpp"
+#include "commands/cmd_test.hpp"
 #include "common.hpp"
-#include "parallel_build.hpp"
 #include "utils.hpp"
 
 #include <iostream>

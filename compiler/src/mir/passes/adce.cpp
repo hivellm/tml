@@ -65,7 +65,7 @@ auto ADCEPass::run_on_function(Function& func) -> bool {
 }
 
 auto ADCEPass::mark_live(const Function& func, ValueId value,
-                          std::unordered_set<ValueId>& live_values) -> void {
+                         std::unordered_set<ValueId>& live_values) -> void {
     std::queue<ValueId> worklist;
     worklist.push(value);
 
@@ -74,7 +74,7 @@ auto ADCEPass::mark_live(const Function& func, ValueId value,
         worklist.pop();
 
         if (live_values.count(v) > 0) {
-            continue;  // Already marked
+            continue; // Already marked
         }
 
         live_values.insert(v);

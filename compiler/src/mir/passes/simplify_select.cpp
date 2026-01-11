@@ -21,7 +21,7 @@ auto SimplifySelectPass::run_on_function(Function& func) -> bool {
 }
 
 auto SimplifySelectPass::simplify_select(Function& func, BasicBlock& block, size_t idx,
-                                          SelectInst& sel) -> bool {
+                                         SelectInst& sel) -> bool {
     ValueId result = block.instructions[idx].result;
 
     // Check for constant condition
@@ -118,38 +118,54 @@ auto SimplifySelectPass::replace_uses(Function& func, ValueId old_val, ValueId n
                 [old_val, new_val](auto& inner) {
                     using T = std::decay_t<decltype(inner)>;
                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                        if (inner.left.id == old_val) inner.left.id = new_val;
-                        if (inner.right.id == old_val) inner.right.id = new_val;
+                        if (inner.left.id == old_val)
+                            inner.left.id = new_val;
+                        if (inner.right.id == old_val)
+                            inner.right.id = new_val;
                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                        if (inner.operand.id == old_val) inner.operand.id = new_val;
+                        if (inner.operand.id == old_val)
+                            inner.operand.id = new_val;
                     } else if constexpr (std::is_same_v<T, CastInst>) {
-                        if (inner.operand.id == old_val) inner.operand.id = new_val;
+                        if (inner.operand.id == old_val)
+                            inner.operand.id = new_val;
                     } else if constexpr (std::is_same_v<T, LoadInst>) {
-                        if (inner.ptr.id == old_val) inner.ptr.id = new_val;
+                        if (inner.ptr.id == old_val)
+                            inner.ptr.id = new_val;
                     } else if constexpr (std::is_same_v<T, StoreInst>) {
-                        if (inner.ptr.id == old_val) inner.ptr.id = new_val;
-                        if (inner.value.id == old_val) inner.value.id = new_val;
+                        if (inner.ptr.id == old_val)
+                            inner.ptr.id = new_val;
+                        if (inner.value.id == old_val)
+                            inner.value.id = new_val;
                     } else if constexpr (std::is_same_v<T, CallInst>) {
                         for (auto& arg : inner.args) {
-                            if (arg.id == old_val) arg.id = new_val;
+                            if (arg.id == old_val)
+                                arg.id = new_val;
                         }
                     } else if constexpr (std::is_same_v<T, MethodCallInst>) {
-                        if (inner.receiver.id == old_val) inner.receiver.id = new_val;
+                        if (inner.receiver.id == old_val)
+                            inner.receiver.id = new_val;
                         for (auto& arg : inner.args) {
-                            if (arg.id == old_val) arg.id = new_val;
+                            if (arg.id == old_val)
+                                arg.id = new_val;
                         }
                     } else if constexpr (std::is_same_v<T, SelectInst>) {
-                        if (inner.condition.id == old_val) inner.condition.id = new_val;
-                        if (inner.true_val.id == old_val) inner.true_val.id = new_val;
-                        if (inner.false_val.id == old_val) inner.false_val.id = new_val;
+                        if (inner.condition.id == old_val)
+                            inner.condition.id = new_val;
+                        if (inner.true_val.id == old_val)
+                            inner.true_val.id = new_val;
+                        if (inner.false_val.id == old_val)
+                            inner.false_val.id = new_val;
                     } else if constexpr (std::is_same_v<T, PhiInst>) {
                         for (auto& [val, _] : inner.incoming) {
-                            if (val.id == old_val) val.id = new_val;
+                            if (val.id == old_val)
+                                val.id = new_val;
                         }
                     } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
-                        if (inner.base.id == old_val) inner.base.id = new_val;
+                        if (inner.base.id == old_val)
+                            inner.base.id = new_val;
                         for (auto& idx : inner.indices) {
-                            if (idx.id == old_val) idx.id = new_val;
+                            if (idx.id == old_val)
+                                idx.id = new_val;
                         }
                     }
                 },

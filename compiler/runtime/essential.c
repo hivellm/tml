@@ -27,10 +27,21 @@
 
 #include <math.h>
 #include <setjmp.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Export macro for DLL visibility
+#ifdef _WIN32
+#define TML_EXPORT __declspec(dllexport)
+// Include Windows headers for SEH
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#define TML_EXPORT __attribute__((visibility("default")))
+#endif
 
 // ============================================================================
 // Panic Catching State (for @should_panic tests)
@@ -205,6 +216,255 @@ const char* tml_get_panic_message(void) {
     return tml_panic_msg;
 }
 
+/** @brief Callback type for test functions that return int (int -> void args). */
+typedef int32_t (*tml_test_entry_fn)(void);
+
+/** @brief Flag indicating test mode is active (for better error messages). */
+static int32_t tml_test_mode = 0;
+
+/** @brief Exit code from caught test failure. */
+static int32_t tml_test_exit_code = 0;
+
+/**
+ * @brief Enables test mode for better panic handling.
+ *
+ * When test mode is enabled, panics will be caught and logged
+ * with more detailed information rather than immediately exiting.
+ */
+void tml_enable_test_mode(void) {
+    tml_test_mode = 1;
+}
+
+/**
+ * @brief Disables test mode.
+ */
+void tml_disable_test_mode(void) {
+    tml_test_mode = 0;
+}
+
+/** @brief Signal handler for catching crashes during tests. */
+static void tml_signal_handler(int sig) {
+    const char* sig_name = "unknown signal";
+    switch (sig) {
+    case SIGSEGV:
+        sig_name = "SIGSEGV (Segmentation fault)";
+        break;
+    case SIGFPE:
+        sig_name = "SIGFPE (Floating point exception)";
+        break;
+    case SIGILL:
+        sig_name = "SIGILL (Illegal instruction)";
+        break;
+#ifndef _WIN32
+    case SIGBUS:
+        sig_name = "SIGBUS (Bus error)";
+        break;
+#endif
+    case SIGABRT:
+        sig_name = "SIGABRT (Abort)";
+        break;
+    }
+
+    // Store crash info and longjmp back if we're catching panics
+    if (tml_catching_panic) {
+        snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s", sig_name);
+        longjmp(tml_panic_jmp_buf, 2); // Use 2 to distinguish from panic
+    }
+
+    // Otherwise, print and exit
+    fprintf(stderr, "FATAL: %s\n", sig_name);
+    fflush(stderr);
+    _exit(128 + sig);
+}
+
+/** @brief Previous signal handlers (to restore after test). */
+static void (*prev_sigsegv)(int) = NULL;
+static void (*prev_sigfpe)(int) = NULL;
+static void (*prev_sigill)(int) = NULL;
+static void (*prev_sigabrt)(int) = NULL;
+#ifndef _WIN32
+static void (*prev_sigbus)(int) = NULL;
+#endif
+
+/** @brief Install signal handlers for test crash catching. */
+static void tml_install_signal_handlers(void) {
+    prev_sigsegv = signal(SIGSEGV, tml_signal_handler);
+    prev_sigfpe = signal(SIGFPE, tml_signal_handler);
+    prev_sigill = signal(SIGILL, tml_signal_handler);
+    prev_sigabrt = signal(SIGABRT, tml_signal_handler);
+#ifndef _WIN32
+    prev_sigbus = signal(SIGBUS, tml_signal_handler);
+#endif
+}
+
+/** @brief Restore previous signal handlers after test. */
+static void tml_restore_signal_handlers(void) {
+    signal(SIGSEGV, prev_sigsegv ? prev_sigsegv : SIG_DFL);
+    signal(SIGFPE, prev_sigfpe ? prev_sigfpe : SIG_DFL);
+    signal(SIGILL, prev_sigill ? prev_sigill : SIG_DFL);
+    signal(SIGABRT, prev_sigabrt ? prev_sigabrt : SIG_DFL);
+#ifndef _WIN32
+    signal(SIGBUS, prev_sigbus ? prev_sigbus : SIG_DFL);
+#endif
+}
+
+// ============================================================================
+// Windows Vectored Exception Handler (VEH)
+// ============================================================================
+
+#ifdef _WIN32
+static const char* tml_get_exception_name(DWORD code) {
+    switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+        return "ACCESS_VIOLATION (Segmentation fault)";
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        return "ILLEGAL_INSTRUCTION";
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+        return "INTEGER_DIVIDE_BY_ZERO";
+    case EXCEPTION_INT_OVERFLOW:
+        return "INTEGER_OVERFLOW";
+    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+        return "ARRAY_BOUNDS_EXCEEDED";
+    case EXCEPTION_FLT_DENORMAL_OPERAND:
+        return "FLOAT_DENORMAL_OPERAND";
+    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        return "FLOAT_DIVIDE_BY_ZERO";
+    case EXCEPTION_FLT_INEXACT_RESULT:
+        return "FLOAT_INEXACT_RESULT";
+    case EXCEPTION_FLT_INVALID_OPERATION:
+        return "FLOAT_INVALID_OPERATION";
+    case EXCEPTION_FLT_OVERFLOW:
+        return "FLOAT_OVERFLOW";
+    case EXCEPTION_FLT_STACK_CHECK:
+        return "FLOAT_STACK_CHECK";
+    case EXCEPTION_FLT_UNDERFLOW:
+        return "FLOAT_UNDERFLOW";
+    case EXCEPTION_STACK_OVERFLOW:
+        return "STACK_OVERFLOW";
+    default:
+        return "UNKNOWN_EXCEPTION";
+    }
+}
+
+/** @brief Previous unhandled exception filter. */
+static LPTOP_LEVEL_EXCEPTION_FILTER tml_prev_filter = NULL;
+
+/** @brief Top-level exception filter for crash catching. */
+static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
+    DWORD code = info->ExceptionRecord->ExceptionCode;
+
+    // Format and print the crash message immediately to stderr
+    // Using WriteFile for reliability in exception context
+    char msg[256];
+    int len = snprintf(msg, sizeof(msg), "CRASH: %s (0x%08lX)\n", tml_get_exception_name(code),
+                       (unsigned long)code);
+
+    DWORD written;
+    HANDLE hStderr = GetStdHandle(STD_ERROR_HANDLE);
+    WriteFile(hStderr, msg, (DWORD)len, &written, NULL);
+    FlushFileBuffers(hStderr);
+
+    // Store in global for potential retrieval
+    snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s (0x%08lX)",
+             tml_get_exception_name(code), (unsigned long)code);
+
+    // If we're in panic catching mode, try to longjmp back
+    if (tml_catching_panic) {
+        longjmp(tml_panic_jmp_buf, 2);
+    }
+
+    // Let the default handler run
+    if (tml_prev_filter) {
+        return tml_prev_filter(info);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+/** @brief Install the unhandled exception filter. */
+static void tml_install_exception_filter(void) {
+    tml_prev_filter = SetUnhandledExceptionFilter(tml_exception_filter);
+    // Also disable Windows Error Reporting popup
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+}
+
+/** @brief Remove the unhandled exception filter. */
+static void tml_remove_exception_filter(void) {
+    SetUnhandledExceptionFilter(tml_prev_filter);
+    tml_prev_filter = NULL;
+}
+#endif
+
+/**
+ * @brief Runs a test function with panic and crash catching.
+ *
+ * This is used by the test harness to run individual tests while
+ * catching panics AND crashes (SIGSEGV, etc.) and preserving error information.
+ *
+ * On Windows, uses Vectored Exception Handling (VEH) for proper crash catching.
+ * On Unix, uses signal handlers with setjmp/longjmp.
+ *
+ * @param test_fn The test function to execute (returns i32).
+ * @return The test result: 0 for success, -1 for panic, -2 for crash, or the test's return value.
+ */
+TML_EXPORT int32_t tml_run_test_with_catch(tml_test_entry_fn test_fn) {
+    tml_panic_msg[0] = '\0';
+    tml_catching_panic = 1;
+
+#ifdef _WIN32
+    // Windows: Use SetUnhandledExceptionFilter for crash catching
+    tml_install_exception_filter();
+
+    int jmp_result = setjmp(tml_panic_jmp_buf);
+    if (jmp_result == 0) {
+        // First time through - run the test
+        int32_t result = test_fn();
+        tml_catching_panic = 0;
+        tml_remove_exception_filter();
+        return result;
+    } else if (jmp_result == 1) {
+        // Got here via longjmp from panic()
+        tml_catching_panic = 0;
+        tml_remove_exception_filter();
+        fprintf(stderr, "panic: %s\n", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+        fflush(stderr);
+        return -1;
+    } else {
+        // Got here via longjmp from exception filter (jmp_result == 2)
+        tml_catching_panic = 0;
+        tml_remove_exception_filter();
+        // Message already printed by the filter
+        return -2;
+    }
+
+#else
+    // Unix: Use signal handlers
+    tml_install_signal_handlers();
+
+    int jmp_result = setjmp(tml_panic_jmp_buf);
+    if (jmp_result == 0) {
+        // First time through - run the test
+        int32_t result = test_fn();
+        tml_catching_panic = 0;
+        tml_restore_signal_handlers();
+        return result;
+    } else if (jmp_result == 1) {
+        // Got here via longjmp from panic()
+        tml_catching_panic = 0;
+        tml_restore_signal_handlers();
+        fprintf(stderr, "panic: %s\n", tml_panic_msg[0] ? tml_panic_msg : "(no message)");
+        fflush(stderr);
+        return -1;
+    } else {
+        // Got here via longjmp from signal handler (jmp_result == 2)
+        tml_catching_panic = 0;
+        tml_restore_signal_handlers();
+        fprintf(stderr, "%s\n", tml_panic_msg[0] ? tml_panic_msg : "CRASH: Unknown");
+        fflush(stderr);
+        return -2;
+    }
+#endif
+}
+
 /**
  * @brief Checks if the panic message contains expected substring.
  *
@@ -280,3 +540,32 @@ int32_t f64_is_nan(double value) {
 int32_t f64_is_infinite(double value) {
     return isinf(value) ? 1 : 0;
 }
+
+// ============================================================================
+// Windows DLL Entry Point
+// ============================================================================
+
+#ifdef _WIN32
+/**
+ * @brief DLL entry point - installs crash handler on load.
+ *
+ * This ensures that crash handling is set up as early as possible
+ * when the runtime DLL is loaded.
+ */
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+    (void)hinstDLL;
+    (void)lpvReserved;
+
+    switch (fdwReason) {
+    case DLL_PROCESS_ATTACH:
+        // Install crash handler when DLL is loaded
+        tml_install_exception_filter();
+        break;
+    case DLL_PROCESS_DETACH:
+        // Remove crash handler when DLL is unloaded
+        tml_remove_exception_filter();
+        break;
+    }
+    return TRUE;
+}
+#endif

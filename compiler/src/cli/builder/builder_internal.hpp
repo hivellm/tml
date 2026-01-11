@@ -22,12 +22,12 @@
 // Contains shared utilities, helpers, and type conversions
 
 // Headers from src/cli/ (need cli/ prefix from src/ include path)
-#include "cli/build_config.hpp"
-#include "cli/cmd_build.hpp"
-#include "cli/compiler_setup.hpp"
+#include "cli/builder/build_config.hpp"
+#include "cli/builder/compiler_setup.hpp"
+#include "cli/builder/object_compiler.hpp"
+#include "cli/builder/rlib.hpp"
+#include "cli/commands/cmd_build.hpp"
 #include "cli/diagnostic.hpp"
-#include "cli/object_compiler.hpp"
-#include "cli/rlib.hpp"
 #include "cli/utils.hpp"
 
 // Headers from include/ (no prefix needed, include/ is in path)
@@ -40,9 +40,9 @@
 #include "hir/hir_builder.hpp"
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
+#include "mir/hir_mir_builder.hpp"
 #include "mir/mir.hpp"
 #include "mir/mir_builder.hpp"
-#include "mir/hir_mir_builder.hpp"
 #include "mir/mir_pass.hpp"
 #include "parser/parser.hpp"
 #include "types/checker.hpp"

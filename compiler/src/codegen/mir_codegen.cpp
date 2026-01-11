@@ -350,8 +350,8 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     std::string suffix = i.func_name.substr(5);
                     if (suffix == "I8" || suffix == "I16" || suffix == "I32" || suffix == "I64" ||
                         suffix == "U8" || suffix == "U16" || suffix == "U32" || suffix == "U64" ||
-                        suffix == "F32" || suffix == "F64" || suffix == "Bool" || suffix == "Unit" ||
-                        suffix == "Char") {
+                        suffix == "F32" || suffix == "F64" || suffix == "Bool" ||
+                        suffix == "Unit" || suffix == "Char") {
                         return; // Skip primitive drops
                     }
                 }

@@ -39,8 +39,8 @@ static auto is_entry_point(const Function& func) -> bool {
 
     // Check for entry point attributes
     for (const auto& attr : func.attributes) {
-        if (attr == "test" || attr == "bench" || attr == "fuzz" ||
-            attr == "export" || attr == "extern" || attr == "public") {
+        if (attr == "test" || attr == "bench" || attr == "fuzz" || attr == "export" ||
+            attr == "extern" || attr == "public") {
             return true;
         }
     }
@@ -84,12 +84,12 @@ auto DeadFunctionEliminationPass::run(Module& module) -> bool {
     }
 
     // Remove dead functions
-    module.functions.erase(
-        std::remove_if(module.functions.begin(), module.functions.end(),
-                       [this](const Function& func) {
-                           return live_functions_.find(func.name) == live_functions_.end();
-                       }),
-        module.functions.end());
+    module.functions.erase(std::remove_if(module.functions.begin(), module.functions.end(),
+                                          [this](const Function& func) {
+                                              return live_functions_.find(func.name) ==
+                                                     live_functions_.end();
+                                          }),
+                           module.functions.end());
 
     stats_.functions_removed = original_size - module.functions.size();
     stats_.functions_kept = module.functions.size();

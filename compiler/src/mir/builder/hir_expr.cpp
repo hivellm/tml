@@ -105,12 +105,14 @@ auto HirMirBuilder::build_literal(const hir::HirLiteralExpr& lit) -> Value {
             if constexpr (std::is_same_v<T, int64_t>) {
                 // Signed integer - determine bit width from type if available
                 MirTypePtr mir_type = convert_type(lit.type);
-                int bit_width = (mir_type && mir_type->bit_width() > 0) ? mir_type->bit_width() : 32;
+                int bit_width =
+                    (mir_type && mir_type->bit_width() > 0) ? mir_type->bit_width() : 32;
                 return const_int(v, bit_width, true);
             } else if constexpr (std::is_same_v<T, uint64_t>) {
                 // Unsigned integer
                 MirTypePtr mir_type = convert_type(lit.type);
-                int bit_width = (mir_type && mir_type->bit_width() > 0) ? mir_type->bit_width() : 32;
+                int bit_width =
+                    (mir_type && mir_type->bit_width() > 0) ? mir_type->bit_width() : 32;
                 return const_int(static_cast<int64_t>(v), bit_width, false);
             } else if constexpr (std::is_same_v<T, double>) {
                 // Float - check if f64 from type
@@ -810,9 +812,8 @@ auto HirMirBuilder::build_when(const hir::HirWhenExpr& when) -> Value {
         const auto& arm = when.arms[i];
 
         uint32_t arm_block = create_block("when.arm" + std::to_string(i));
-        uint32_t next_block = (i + 1 < when.arms.size())
-                                  ? create_block("when.next" + std::to_string(i))
-                                  : exit_block;
+        uint32_t next_block =
+            (i + 1 < when.arms.size()) ? create_block("when.next" + std::to_string(i)) : exit_block;
 
         // Build pattern match condition
         Value matches = build_pattern_match(arm.pattern, scrutinee);

@@ -32,8 +32,8 @@ auto MergeReturnsPass::find_return_blocks(const Function& func) -> std::vector<s
     return result;
 }
 
-auto MergeReturnsPass::create_unified_exit(Function& func,
-                                            const std::vector<size_t>& return_blocks) -> bool {
+auto MergeReturnsPass::create_unified_exit(Function& func, const std::vector<size_t>& return_blocks)
+    -> bool {
     // Create a new exit block
     BasicBlock exit_block;
     exit_block.id = func.next_block_id++;

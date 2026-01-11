@@ -53,6 +53,7 @@
 //! - `mir/mir_pass.cpp` - MIR-level optimizations
 
 #include "hir/hir_pass.hpp"
+
 #include "hir/hir_expr.hpp"
 #include "hir/hir_stmt.hpp"
 #include "types/type.hpp"
@@ -147,7 +148,8 @@ auto ConstantFolding::run_pass(HirModule& module) -> bool {
 }
 
 void ConstantFolding::fold_function(HirFunction& func) {
-    if (!func.body) return;
+    if (!func.body)
+        return;
     fold_expr(func.body.value());
 }
 
@@ -167,7 +169,8 @@ void ConstantFolding::fold_stmt(HirStmt& stmt) {
 }
 
 auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
-    if (!expr) return false;
+    if (!expr)
+        return false;
 
     bool folded = false;
 
@@ -195,12 +198,14 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirIfExpr>) {
                 fold_expr(e.condition);
                 fold_expr(e.then_branch);
-                if (e.else_branch) fold_expr(e.else_branch.value());
+                if (e.else_branch)
+                    fold_expr(e.else_branch.value());
             } else if constexpr (std::is_same_v<T, HirBlockExpr>) {
                 for (auto& stmt : e.stmts) {
                     fold_stmt(*stmt);
                 }
-                if (e.expr) fold_expr(e.expr.value());
+                if (e.expr)
+                    fold_expr(e.expr.value());
             } else if constexpr (std::is_same_v<T, HirCallExpr>) {
                 // func_name is a string, not an expression - no need to fold
                 for (auto& arg : e.args) {
@@ -230,7 +235,8 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
                 for (auto& [name, val] : e.fields) {
                     fold_expr(val);
                 }
-                if (e.base) fold_expr(e.base.value());
+                if (e.base)
+                    fold_expr(e.base.value());
             } else if constexpr (std::is_same_v<T, HirEnumExpr>) {
                 for (auto& payload : e.payload) {
                     fold_expr(payload);
@@ -246,7 +252,8 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirWhenExpr>) {
                 fold_expr(e.scrutinee);
                 for (auto& arm : e.arms) {
-                    if (arm.guard) fold_expr(arm.guard.value());
+                    if (arm.guard)
+                        fold_expr(arm.guard.value());
                     fold_expr(arm.body);
                 }
             } else if constexpr (std::is_same_v<T, HirClosureExpr>) {
@@ -256,9 +263,11 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirAwaitExpr>) {
                 fold_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirReturnExpr>) {
-                if (e.value) fold_expr(e.value.value());
+                if (e.value)
+                    fold_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirBreakExpr>) {
-                if (e.value) fold_expr(e.value.value());
+                if (e.value)
+                    fold_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirCastExpr>) {
                 fold_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirAssignExpr>) {
@@ -271,7 +280,8 @@ auto ConstantFolding::fold_expr(HirExprPtr& expr) -> bool {
                 for (auto& stmt : e.stmts) {
                     fold_stmt(*stmt);
                 }
-                if (e.expr) fold_expr(e.expr.value());
+                if (e.expr)
+                    fold_expr(e.expr.value());
             }
             // HirLiteralExpr, HirVarExpr, HirContinueExpr - no subexpressions
         },
@@ -330,7 +340,8 @@ auto ConstantFolding::try_fold_binary(HirBinaryExpr& binary) -> std::optional<Hi
 
 auto ConstantFolding::try_fold_unary(HirUnaryExpr& unary) -> std::optional<HirExprPtr> {
     auto* operand_lit = std::get_if<HirLiteralExpr>(&unary.operand->kind);
-    if (!operand_lit) return std::nullopt;
+    if (!operand_lit)
+        return std::nullopt;
 
     switch (unary.op) {
     case HirUnaryOp::Neg:
@@ -374,10 +385,12 @@ auto ConstantFolding::eval_int_binary(HirBinOp op, int64_t left, int64_t right, 
     case HirBinOp::Mul:
         return make_int_literal(left * right, type, span);
     case HirBinOp::Div:
-        if (right == 0) return std::nullopt;
+        if (right == 0)
+            return std::nullopt;
         return make_int_literal(left / right, type, span);
     case HirBinOp::Mod:
-        if (right == 0) return std::nullopt;
+        if (right == 0)
+            return std::nullopt;
         return make_int_literal(left % right, type, span);
     case HirBinOp::Eq:
         return make_bool_literal(left == right, span);
@@ -417,10 +430,12 @@ auto ConstantFolding::eval_uint_binary(HirBinOp op, uint64_t left, uint64_t righ
     case HirBinOp::Mul:
         return make_uint_literal(left * right, type, span);
     case HirBinOp::Div:
-        if (right == 0) return std::nullopt;
+        if (right == 0)
+            return std::nullopt;
         return make_uint_literal(left / right, type, span);
     case HirBinOp::Mod:
-        if (right == 0) return std::nullopt;
+        if (right == 0)
+            return std::nullopt;
         return make_uint_literal(left % right, type, span);
     case HirBinOp::Eq:
         return make_bool_literal(left == right, span);
@@ -522,7 +537,8 @@ auto DeadCodeElimination::run_pass(HirModule& module) -> bool {
 }
 
 void DeadCodeElimination::eliminate_in_function(HirFunction& func) {
-    if (!func.body) return;
+    if (!func.body)
+        return;
     eliminate_in_expr(func.body.value());
 }
 
@@ -536,7 +552,8 @@ void DeadCodeElimination::eliminate_in_expr_stmt(HirStmt& stmt) {
         [this](auto& s) {
             using T = std::decay_t<decltype(s)>;
             if constexpr (std::is_same_v<T, HirLetStmt>) {
-                if (s.init) eliminate_in_expr(s.init.value());
+                if (s.init)
+                    eliminate_in_expr(s.init.value());
             } else if constexpr (std::is_same_v<T, HirExprStmt>) {
                 eliminate_in_expr(s.expr);
             }
@@ -545,7 +562,8 @@ void DeadCodeElimination::eliminate_in_expr_stmt(HirStmt& stmt) {
 }
 
 auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
-    if (!expr) return false;
+    if (!expr)
+        return false;
 
     std::visit(
         [this, &expr](auto& e) {
@@ -573,12 +591,14 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
                 }
 
                 eliminate_in_expr(e.then_branch);
-                if (e.else_branch) eliminate_in_expr(e.else_branch.value());
+                if (e.else_branch)
+                    eliminate_in_expr(e.else_branch.value());
             } else if constexpr (std::is_same_v<T, HirBlockExpr>) {
                 for (auto& stmt : e.stmts) {
                     eliminate_in_expr_stmt(*stmt);
                 }
-                if (e.expr) eliminate_in_expr(e.expr.value());
+                if (e.expr)
+                    eliminate_in_expr(e.expr.value());
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
                 eliminate_in_expr(e.body);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
@@ -590,7 +610,8 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirWhenExpr>) {
                 eliminate_in_expr(e.scrutinee);
                 for (auto& arm : e.arms) {
-                    if (arm.guard) eliminate_in_expr(arm.guard.value());
+                    if (arm.guard)
+                        eliminate_in_expr(arm.guard.value());
                     eliminate_in_expr(arm.body);
                 }
             } else if constexpr (std::is_same_v<T, HirClosureExpr>) {
@@ -629,7 +650,8 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
                 for (auto& [name, val] : e.fields) {
                     eliminate_in_expr(val);
                 }
-                if (e.base) eliminate_in_expr(e.base.value());
+                if (e.base)
+                    eliminate_in_expr(e.base.value());
             } else if constexpr (std::is_same_v<T, HirEnumExpr>) {
                 for (auto& payload : e.payload) {
                     eliminate_in_expr(payload);
@@ -639,9 +661,11 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirAwaitExpr>) {
                 eliminate_in_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirReturnExpr>) {
-                if (e.value) eliminate_in_expr(e.value.value());
+                if (e.value)
+                    eliminate_in_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirBreakExpr>) {
-                if (e.value) eliminate_in_expr(e.value.value());
+                if (e.value)
+                    eliminate_in_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirCastExpr>) {
                 eliminate_in_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirAssignExpr>) {
@@ -654,7 +678,8 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
                 for (auto& stmt : e.stmts) {
                     eliminate_in_expr_stmt(*stmt);
                 }
-                if (e.expr) eliminate_in_expr(e.expr.value());
+                if (e.expr)
+                    eliminate_in_expr(e.expr.value());
             }
             // HirLiteralExpr, HirVarExpr, HirContinueExpr - no subexpressions
         },
@@ -665,9 +690,12 @@ auto DeadCodeElimination::eliminate_in_expr(HirExprPtr& expr) -> bool {
 
 auto DeadCodeElimination::is_terminating(const HirStmt& stmt) -> bool {
     if (auto* expr_stmt = std::get_if<HirExprStmt>(&stmt.kind)) {
-        if (std::holds_alternative<HirReturnExpr>(expr_stmt->expr->kind)) return true;
-        if (std::holds_alternative<HirBreakExpr>(expr_stmt->expr->kind)) return true;
-        if (std::holds_alternative<HirContinueExpr>(expr_stmt->expr->kind)) return true;
+        if (std::holds_alternative<HirReturnExpr>(expr_stmt->expr->kind))
+            return true;
+        if (std::holds_alternative<HirBreakExpr>(expr_stmt->expr->kind))
+            return true;
+        if (std::holds_alternative<HirContinueExpr>(expr_stmt->expr->kind))
+            return true;
     }
     return false;
 }
@@ -684,16 +712,19 @@ auto DeadCodeElimination::is_pure_expr(const HirExpr& expr) -> bool {
             } else if constexpr (std::is_same_v<T, HirBinaryExpr>) {
                 return is_pure_expr(*e.left) && is_pure_expr(*e.right);
             } else if constexpr (std::is_same_v<T, HirUnaryExpr>) {
-                if (e.op == HirUnaryOp::Deref) return false;
+                if (e.op == HirUnaryOp::Deref)
+                    return false;
                 return is_pure_expr(*e.operand);
             } else if constexpr (std::is_same_v<T, HirTupleExpr>) {
                 for (const auto& elem : e.elements) {
-                    if (!is_pure_expr(*elem)) return false;
+                    if (!is_pure_expr(*elem))
+                        return false;
                 }
                 return true;
             } else if constexpr (std::is_same_v<T, HirArrayExpr>) {
                 for (const auto& elem : e.elements) {
-                    if (!is_pure_expr(*elem)) return false;
+                    if (!is_pure_expr(*elem))
+                        return false;
                 }
                 return true;
             } else if constexpr (std::is_same_v<T, HirFieldExpr>) {
@@ -751,11 +782,13 @@ static auto count_statements(const HirExpr& expr) -> size_t {
 
 // Helper to check if function is recursive (calls itself)
 static auto is_recursive(const HirFunction& func) -> bool {
-    if (!func.body) return false;
+    if (!func.body)
+        return false;
 
     bool found_self_call = false;
     std::function<void(const HirExpr&)> check_expr = [&](const HirExpr& expr) {
-        if (found_self_call) return;
+        if (found_self_call)
+            return;
 
         std::visit(
             [&](const auto& e) {
@@ -779,7 +812,8 @@ static auto is_recursive(const HirFunction& func) -> bool {
                             }
                         }
                     }
-                    if (e.expr) check_expr(**e.expr);
+                    if (e.expr)
+                        check_expr(**e.expr);
                 } else if constexpr (std::is_same_v<T, HirBinaryExpr>) {
                     check_expr(*e.left);
                     check_expr(*e.right);
@@ -788,7 +822,8 @@ static auto is_recursive(const HirFunction& func) -> bool {
                 } else if constexpr (std::is_same_v<T, HirIfExpr>) {
                     check_expr(*e.condition);
                     check_expr(*e.then_branch);
-                    if (e.else_branch) check_expr(**e.else_branch);
+                    if (e.else_branch)
+                        check_expr(**e.else_branch);
                 } else if constexpr (std::is_same_v<T, HirMethodCallExpr>) {
                     check_expr(*e.receiver);
                     for (const auto& arg : e.args) {
@@ -1214,7 +1249,8 @@ static void substitute_params(HirExpr& expr, const std::vector<std::string>& par
                         }
                     }
                 }
-                if (e.expr) substitute_params(**e.expr, param_names, args);
+                if (e.expr)
+                    substitute_params(**e.expr, param_names, args);
             } else if constexpr (std::is_same_v<T, HirCallExpr>) {
                 for (auto& arg : e.args) {
                     substitute_params(*arg, param_names, args);
@@ -1222,7 +1258,8 @@ static void substitute_params(HirExpr& expr, const std::vector<std::string>& par
             } else if constexpr (std::is_same_v<T, HirIfExpr>) {
                 substitute_params(*e.condition, param_names, args);
                 substitute_params(*e.then_branch, param_names, args);
-                if (e.else_branch) substitute_params(**e.else_branch, param_names, args);
+                if (e.else_branch)
+                    substitute_params(**e.else_branch, param_names, args);
             }
         },
         expr.kind);
@@ -1248,10 +1285,12 @@ auto Inlining::run(HirModule& module) -> bool {
 
     // Process each function looking for inline opportunities
     for (auto& func : module.functions) {
-        if (!func.body) continue;
+        if (!func.body)
+            continue;
 
         // Don't inline into functions that are themselves inlinable (avoid bloat)
-        if (inlinable.count(func.name) > 0) continue;
+        if (inlinable.count(func.name) > 0)
+            continue;
 
         inline_calls_in_expr(func.body.value(), inlinable);
     }
@@ -1266,14 +1305,17 @@ auto Inlining::run_pass(HirModule& module, size_t max_statements) -> bool {
 
 auto Inlining::should_inline(const HirFunction& func) -> bool {
     // Don't inline extern functions
-    if (func.is_extern) return false;
+    if (func.is_extern)
+        return false;
 
     // Don't inline functions without bodies
-    if (!func.body) return false;
+    if (!func.body)
+        return false;
 
     // Check for @noinline attribute
     for (const auto& attr : func.attributes) {
-        if (attr == "noinline") return false;
+        if (attr == "noinline")
+            return false;
     }
 
     // Check for @inline attribute (always inline if present)
@@ -1292,14 +1334,16 @@ auto Inlining::should_inline(const HirFunction& func) -> bool {
     }
 
     // Don't inline recursive functions
-    if (is_recursive(func)) return false;
+    if (is_recursive(func))
+        return false;
 
     return true;
 }
 
 auto Inlining::inline_call(HirCallExpr& call, const HirFunction& func)
     -> std::optional<HirExprPtr> {
-    if (!func.body) return std::nullopt;
+    if (!func.body)
+        return std::nullopt;
 
     // Clone the function body
     auto inlined_body = clone_expr(**func.body);
@@ -1318,9 +1362,8 @@ auto Inlining::inline_call(HirCallExpr& call, const HirFunction& func)
     for (size_t i = 0; i < func.params.size() && i < call.args.size(); ++i) {
         // Create let statement: let param_name = arg
         auto pattern = std::make_unique<HirPattern>();
-        pattern->kind =
-            HirBindingPattern{HirId{0}, func.params[i].name, func.params[i].is_mut,
-                              func.params[i].type, call.span};
+        pattern->kind = HirBindingPattern{HirId{0}, func.params[i].name, func.params[i].is_mut,
+                                          func.params[i].type, call.span};
 
         auto let_stmt = std::make_unique<HirStmt>();
         let_stmt->kind = HirLetStmt{HirId{0}, std::move(pattern), func.params[i].type,
@@ -1342,7 +1385,8 @@ auto Inlining::inline_call(HirCallExpr& call, const HirFunction& func)
 
 void Inlining::inline_calls_in_expr(
     HirExprPtr& expr, const std::unordered_map<std::string, const HirFunction*>& inlinable) {
-    if (!expr) return;
+    if (!expr)
+        return;
 
     std::visit(
         [this, &expr, &inlinable](auto& e) {
@@ -1376,11 +1420,13 @@ void Inlining::inline_calls_in_expr(
                         }
                     }
                 }
-                if (e.expr) inline_calls_in_expr(e.expr.value(), inlinable);
+                if (e.expr)
+                    inline_calls_in_expr(e.expr.value(), inlinable);
             } else if constexpr (std::is_same_v<T, HirIfExpr>) {
                 inline_calls_in_expr(e.condition, inlinable);
                 inline_calls_in_expr(e.then_branch, inlinable);
-                if (e.else_branch) inline_calls_in_expr(e.else_branch.value(), inlinable);
+                if (e.else_branch)
+                    inline_calls_in_expr(e.else_branch.value(), inlinable);
             } else if constexpr (std::is_same_v<T, HirMethodCallExpr>) {
                 inline_calls_in_expr(e.receiver, inlinable);
                 for (auto& arg : e.args) {
@@ -1397,7 +1443,8 @@ void Inlining::inline_calls_in_expr(
             } else if constexpr (std::is_same_v<T, HirWhenExpr>) {
                 inline_calls_in_expr(e.scrutinee, inlinable);
                 for (auto& arm : e.arms) {
-                    if (arm.guard) inline_calls_in_expr(arm.guard.value(), inlinable);
+                    if (arm.guard)
+                        inline_calls_in_expr(arm.guard.value(), inlinable);
                     inline_calls_in_expr(arm.body, inlinable);
                 }
             } else if constexpr (std::is_same_v<T, HirClosureExpr>) {
@@ -1407,9 +1454,11 @@ void Inlining::inline_calls_in_expr(
             } else if constexpr (std::is_same_v<T, HirAwaitExpr>) {
                 inline_calls_in_expr(e.expr, inlinable);
             } else if constexpr (std::is_same_v<T, HirReturnExpr>) {
-                if (e.value) inline_calls_in_expr(e.value.value(), inlinable);
+                if (e.value)
+                    inline_calls_in_expr(e.value.value(), inlinable);
             } else if constexpr (std::is_same_v<T, HirBreakExpr>) {
-                if (e.value) inline_calls_in_expr(e.value.value(), inlinable);
+                if (e.value)
+                    inline_calls_in_expr(e.value.value(), inlinable);
             } else if constexpr (std::is_same_v<T, HirCastExpr>) {
                 inline_calls_in_expr(e.expr, inlinable);
             } else if constexpr (std::is_same_v<T, HirFieldExpr>) {
@@ -1431,7 +1480,8 @@ void Inlining::inline_calls_in_expr(
                 for (auto& [name, val] : e.fields) {
                     inline_calls_in_expr(val, inlinable);
                 }
-                if (e.base) inline_calls_in_expr(e.base.value(), inlinable);
+                if (e.base)
+                    inline_calls_in_expr(e.base.value(), inlinable);
             } else if constexpr (std::is_same_v<T, HirEnumExpr>) {
                 for (auto& payload : e.payload) {
                     inline_calls_in_expr(payload, inlinable);
@@ -1452,7 +1502,8 @@ void Inlining::inline_calls_in_expr(
                         }
                     }
                 }
-                if (e.expr) inline_calls_in_expr(e.expr.value(), inlinable);
+                if (e.expr)
+                    inline_calls_in_expr(e.expr.value(), inlinable);
             }
             // HirLiteralExpr, HirVarExpr, HirContinueExpr - no subexpressions
         },
@@ -1489,12 +1540,14 @@ auto ClosureOptimization::run_pass(HirModule& module) -> bool {
 }
 
 void ClosureOptimization::optimize_function(HirFunction& func) {
-    if (!func.body) return;
+    if (!func.body)
+        return;
     optimize_in_expr(func.body.value());
 }
 
 void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
-    if (!expr) return;
+    if (!expr)
+        return;
 
     std::visit(
         [this](auto& e) {
@@ -1520,7 +1573,8 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
                         }
                     }
                 }
-                if (e.expr) optimize_in_expr(e.expr.value());
+                if (e.expr)
+                    optimize_in_expr(e.expr.value());
             } else if constexpr (std::is_same_v<T, HirCallExpr>) {
                 for (auto& arg : e.args) {
                     optimize_in_expr(arg);
@@ -1533,7 +1587,8 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
             } else if constexpr (std::is_same_v<T, HirIfExpr>) {
                 optimize_in_expr(e.condition);
                 optimize_in_expr(e.then_branch);
-                if (e.else_branch) optimize_in_expr(e.else_branch.value());
+                if (e.else_branch)
+                    optimize_in_expr(e.else_branch.value());
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
                 optimize_in_expr(e.body);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
@@ -1545,7 +1600,8 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
             } else if constexpr (std::is_same_v<T, HirWhenExpr>) {
                 optimize_in_expr(e.scrutinee);
                 for (auto& arm : e.arms) {
-                    if (arm.guard) optimize_in_expr(arm.guard.value());
+                    if (arm.guard)
+                        optimize_in_expr(arm.guard.value());
                     optimize_in_expr(arm.body);
                 }
             } else if constexpr (std::is_same_v<T, HirTryExpr>) {
@@ -1553,9 +1609,11 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
             } else if constexpr (std::is_same_v<T, HirAwaitExpr>) {
                 optimize_in_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirReturnExpr>) {
-                if (e.value) optimize_in_expr(e.value.value());
+                if (e.value)
+                    optimize_in_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirBreakExpr>) {
-                if (e.value) optimize_in_expr(e.value.value());
+                if (e.value)
+                    optimize_in_expr(e.value.value());
             } else if constexpr (std::is_same_v<T, HirCastExpr>) {
                 optimize_in_expr(e.expr);
             } else if constexpr (std::is_same_v<T, HirFieldExpr>) {
@@ -1577,7 +1635,8 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
                 for (auto& [name, val] : e.fields) {
                     optimize_in_expr(val);
                 }
-                if (e.base) optimize_in_expr(e.base.value());
+                if (e.base)
+                    optimize_in_expr(e.base.value());
             } else if constexpr (std::is_same_v<T, HirEnumExpr>) {
                 for (auto& payload : e.payload) {
                     optimize_in_expr(payload);
@@ -1598,7 +1657,8 @@ void ClosureOptimization::optimize_in_expr(HirExprPtr& expr) {
                         }
                     }
                 }
-                if (e.expr) optimize_in_expr(e.expr.value());
+                if (e.expr)
+                    optimize_in_expr(e.expr.value());
             }
             // HirLiteralExpr, HirVarExpr, HirContinueExpr - no subexpressions
         },
@@ -1662,7 +1722,8 @@ auto ClosureOptimization::check_var_usage(const HirExpr& expr, const std::string
 
     std::visit(
         [&found, &name, this](const auto& e) {
-            if (found) return;
+            if (found)
+                return;
             using T = std::decay_t<decltype(e)>;
 
             if constexpr (std::is_same_v<T, HirVarExpr>) {
@@ -1709,7 +1770,8 @@ auto ClosureOptimization::check_var_usage(const HirExpr& expr, const std::string
                     }
                 }
             } else if constexpr (std::is_same_v<T, HirIfExpr>) {
-                found = check_var_usage(*e.condition, name) || check_var_usage(*e.then_branch, name);
+                found =
+                    check_var_usage(*e.condition, name) || check_var_usage(*e.then_branch, name);
                 if (!found && e.else_branch) {
                     found = check_var_usage(**e.else_branch, name);
                 }
@@ -1720,12 +1782,12 @@ auto ClosureOptimization::check_var_usage(const HirExpr& expr, const std::string
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
                 found = check_var_usage(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
-                found =
-                    check_var_usage(*e.condition, name) || check_var_usage(*e.body, name);
+                found = check_var_usage(*e.condition, name) || check_var_usage(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirForExpr>) {
                 found = check_var_usage(*e.iter, name) || check_var_usage(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirReturnExpr>) {
-                if (e.value) found = check_var_usage(**e.value, name);
+                if (e.value)
+                    found = check_var_usage(**e.value, name);
             } else if constexpr (std::is_same_v<T, HirClosureExpr>) {
                 // Check if inner closure uses the variable
                 found = check_var_usage(*e.body, name);
@@ -1748,7 +1810,8 @@ auto ClosureOptimization::check_var_escapes(const HirExpr& expr, const std::stri
 
     std::visit(
         [&escapes, &name, this](const auto& e) {
-            if (escapes) return;
+            if (escapes)
+                return;
             using T = std::decay_t<decltype(e)>;
 
             if constexpr (std::is_same_v<T, HirReturnExpr>) {
@@ -1807,8 +1870,7 @@ auto ClosureOptimization::check_var_escapes(const HirExpr& expr, const std::stri
                     }
                 }
             } else if constexpr (std::is_same_v<T, HirBinaryExpr>) {
-                escapes =
-                    check_var_escapes(*e.left, name) || check_var_escapes(*e.right, name);
+                escapes = check_var_escapes(*e.left, name) || check_var_escapes(*e.right, name);
             } else if constexpr (std::is_same_v<T, HirBlockExpr>) {
                 for (const auto& stmt : e.stmts) {
                     if (auto* expr_stmt = std::get_if<HirExprStmt>(&stmt->kind)) {
@@ -1835,8 +1897,7 @@ auto ClosureOptimization::check_var_escapes(const HirExpr& expr, const std::stri
             } else if constexpr (std::is_same_v<T, HirLoopExpr>) {
                 escapes = check_var_escapes(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirWhileExpr>) {
-                escapes = check_var_escapes(*e.condition, name) ||
-                          check_var_escapes(*e.body, name);
+                escapes = check_var_escapes(*e.condition, name) || check_var_escapes(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirForExpr>) {
                 escapes = check_var_escapes(*e.iter, name) || check_var_escapes(*e.body, name);
             } else if constexpr (std::is_same_v<T, HirClosureExpr>) {
@@ -1878,7 +1939,8 @@ auto HirPassManager::run_to_fixpoint(HirModule& module, size_t max_iterations) -
     while (iterations < max_iterations) {
         bool changed = run(module);
         ++iterations;
-        if (!changed) break;
+        if (!changed)
+            break;
     }
     return iterations;
 }
@@ -1903,7 +1965,8 @@ auto optimize_hir(HirModule& module) -> bool {
 }
 
 auto optimize_hir_level(HirModule& module, int level) -> bool {
-    if (level <= 0) return false;
+    if (level <= 0)
+        return false;
 
     HirPassManager pm;
 

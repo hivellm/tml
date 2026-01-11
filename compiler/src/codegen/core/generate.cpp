@@ -337,9 +337,17 @@ auto LLVMIRGen::generate(const parser::Module& module)
                     types::TypePtr resolved = resolve_parser_type_with_subs(*binding.type, {});
                     current_associated_types_[binding.name] = resolved;
                 }
+                // In suite mode, add prefix to avoid symbol collisions when linking multiple test
+                // files Only for test-local types (not library types)
+                std::string suite_prefix = "";
+                if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+                    current_module_prefix_.empty()) {
+                    suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+                }
+
                 for (const auto& method : impl.methods) {
                     // Generate method with mangled name TypeName_MethodName
-                    std::string method_name = type_name + "_" + method.name;
+                    std::string method_name = suite_prefix + type_name + "_" + method.name;
                     current_func_ = method_name;
                     current_impl_type_ = type_name; // Track impl self type for 'this' access
                     locals_.clear();
@@ -480,7 +488,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 continue;
 
                             // Generate default implementation with type substitution
-                            std::string method_name = type_name + "_" + trait_method.name;
+                            // Use suite_prefix from the enclosing scope
+                            std::string method_name =
+                                suite_prefix + type_name + "_" + trait_method.name;
                             current_func_ = method_name;
                             current_impl_type_ = type_name;
                             locals_.clear();
@@ -942,10 +952,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
         }
         emit_line("entry:");
 
+        // In suite mode, test functions have a prefix to avoid collisions
+        std::string test_suite_prefix = "";
+        if (options_.suite_test_index >= 0 && options_.force_internal_linkage) {
+            test_suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+        }
+
         int test_idx = 0;
         std::string prev_block = "entry";
         for (const auto& test_info : test_functions) {
-            std::string test_fn = "@tml_" + test_info.name;
+            std::string test_fn = "@tml_" + test_suite_prefix + test_info.name;
             std::string idx_str = std::to_string(test_idx);
 
             if (test_info.should_panic) {
@@ -1041,6 +1057,13 @@ auto LLVMIRGen::generate(const parser::Module& module)
         // Standard main wrapper for user-defined main
         emit_line("; Entry point");
 
+        // In suite mode, tml_main has a prefix to avoid collisions
+        std::string main_suite_prefix = "";
+        if (options_.suite_test_index >= 0 && options_.force_internal_linkage) {
+            main_suite_prefix = "s" + std::to_string(options_.suite_test_index) + "_";
+        }
+        std::string tml_main_fn = "tml_" + main_suite_prefix + "main";
+
         // For DLL entry, generate exported test entry function instead of main
         if (options_.generate_dll_entry) {
             // Determine entry function name (tml_test_entry or tml_test_N for suites)
@@ -1054,7 +1077,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
             emit_line("define i32 @" + entry_name + "() {");
 #endif
             emit_line("entry:");
-            emit_line("  %ret = call i32 @tml_main()");
+            emit_line("  %ret = call i32 @" + tml_main_fn + "()");
             // Print coverage report if enabled
             if (options_.coverage_enabled) {
                 emit_line("  call void @print_coverage_report()");
@@ -1067,7 +1090,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
         } else {
             emit_line("define i32 @main(i32 %argc, ptr %argv) {");
             emit_line("entry:");
-            emit_line("  %ret = call i32 @tml_main()");
+            emit_line("  %ret = call i32 @" + tml_main_fn + "()");
             // Print coverage report if enabled
             if (options_.coverage_enabled) {
                 emit_line("  call void @print_coverage_report()");

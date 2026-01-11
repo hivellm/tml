@@ -308,47 +308,50 @@ target_include_directories(tml_format PUBLIC include src)
 
 # CLI library
 add_library(tml_cli STATIC
+    # Core CLI files
     src/cli/cli.cpp
     src/cli/utils.cpp
-    src/cli/compiler_setup.cpp
-    src/cli/cmd_debug.cpp
-    src/cli/cmd_build.cpp
-    src/cli/cmd_format.cpp
-    src/cli/cmd_cache.cpp
-    # Linter modules (split from cmd_lint.cpp for maintainability)
-    src/cli/linter/helpers.cpp
-    src/cli/linter/config.cpp
-    src/cli/linter/style.cpp
-    src/cli/linter/semantic.cpp
-    src/cli/linter/discovery.cpp
-    src/cli/linter/run.cpp
-    # Tester modules (split from cmd_test.cpp for maintainability)
-    src/cli/tester/helpers.cpp
-    src/cli/tester/discovery.cpp
-    src/cli/tester/execution.cpp
-    src/cli/tester/suite_execution.cpp
-    src/cli/tester/output.cpp
-    src/cli/tester/benchmark.cpp
-    src/cli/tester/fuzzer.cpp
-    src/cli/tester/run.cpp
-    src/cli/cmd_rlib.cpp
-    src/cli/cmd_init.cpp
-    src/cli/rlib.cpp
-    src/cli/build_config.cpp
-    src/cli/build_cache.cpp
     src/cli/diagnostic.cpp
     src/cli/dispatcher.cpp
-    src/cli/object_compiler.cpp
-    src/cli/parallel_build.cpp
-    src/cli/dependency_resolver.cpp
-    src/cli/cmd_pkg.cpp
-    # Builder modules (split from cmd_build.cpp for maintainability)
-    src/cli/builder/helpers.cpp
+    # Commands (cmd_*.cpp)
+    src/cli/commands/cmd_build.cpp
+    src/cli/commands/cmd_cache.cpp
+    src/cli/commands/cmd_debug.cpp
+    src/cli/commands/cmd_format.cpp
+    src/cli/commands/cmd_init.cpp
+    src/cli/commands/cmd_lint.cpp
+    src/cli/commands/cmd_pkg.cpp
+    src/cli/commands/cmd_rlib.cpp
+    src/cli/commands/cmd_test.cpp
+    # Builder modules
     src/cli/builder/build.cpp
+    src/cli/builder/build_cache.cpp
+    src/cli/builder/build_config.cpp
+    src/cli/builder/compiler_setup.cpp
+    src/cli/builder/dependency_resolver.cpp
+    src/cli/builder/helpers.cpp
+    src/cli/builder/object_compiler.cpp
+    src/cli/builder/parallel_build.cpp
+    src/cli/builder/rlib.cpp
     src/cli/builder/run.cpp
     src/cli/builder/run_profiled.cpp
-    # Test runner for in-process test execution
-    src/cli/test_runner.cpp
+    # Tester modules
+    src/cli/tester/benchmark.cpp
+    src/cli/tester/discovery.cpp
+    src/cli/tester/execution.cpp
+    src/cli/tester/fuzzer.cpp
+    src/cli/tester/helpers.cpp
+    src/cli/tester/output.cpp
+    src/cli/tester/run.cpp
+    src/cli/tester/suite_execution.cpp
+    src/cli/tester/test_runner.cpp
+    # Linter modules
+    src/cli/linter/config.cpp
+    src/cli/linter/discovery.cpp
+    src/cli/linter/helpers.cpp
+    src/cli/linter/run.cpp
+    src/cli/linter/semantic.cpp
+    src/cli/linter/style.cpp
 )
 target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
 target_include_directories(tml_cli PUBLIC include src)

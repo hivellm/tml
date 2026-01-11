@@ -63,7 +63,7 @@ auto MatchSimplifyPass::simplify_switch(Function& func, BasicBlock& block) -> bo
 }
 
 auto MatchSimplifyPass::blocks_equivalent(const Function& func, uint32_t block1_id,
-                                           uint32_t block2_id) -> bool {
+                                          uint32_t block2_id) -> bool {
     if (block1_id == block2_id) {
         return true;
     }
@@ -72,8 +72,10 @@ auto MatchSimplifyPass::blocks_equivalent(const Function& func, uint32_t block1_
     const BasicBlock* block2 = nullptr;
 
     for (const auto& b : func.blocks) {
-        if (b.id == block1_id) block1 = &b;
-        if (b.id == block2_id) block2 = &b;
+        if (b.id == block1_id)
+            block1 = &b;
+        if (b.id == block2_id)
+            block2 = &b;
     }
 
     if (!block1 || !block2) {
@@ -107,7 +109,7 @@ auto MatchSimplifyPass::blocks_equivalent(const Function& func, uint32_t block1_
 }
 
 auto MatchSimplifyPass::convert_to_conditional(Function& /*func*/, BasicBlock& block,
-                                                SwitchTerm& switch_term) -> bool {
+                                               SwitchTerm& switch_term) -> bool {
     if (switch_term.cases.size() != 1) {
         return false;
     }
@@ -154,7 +156,7 @@ auto MatchSimplifyPass::remove_redundant_cases(SwitchTerm& switch_term) -> bool 
 }
 
 auto MatchSimplifyPass::fold_constant_switch(Function& func, BasicBlock& block,
-                                              SwitchTerm& switch_term) -> bool {
+                                             SwitchTerm& switch_term) -> bool {
     auto const_val = get_constant_discriminant(func, switch_term.discriminant.id);
     if (!const_val) {
         return false;

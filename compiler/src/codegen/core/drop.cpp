@@ -64,7 +64,15 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
     // Create a pointer to pass to drop (drop takes mut this)
     // Actually, for drop we pass the pointer directly since it's `mut this`
     // The drop function signature is: void @tml_TypeName_drop(ptr %this)
-    std::string drop_func = "@tml_" + info.type_name + "_drop";
+    // Look up in functions_ to get the correct LLVM name
+    std::string drop_lookup_key = info.type_name + "_drop";
+    auto drop_it = functions_.find(drop_lookup_key);
+    std::string drop_func;
+    if (drop_it != functions_.end()) {
+        drop_func = drop_it->second.llvm_name;
+    } else {
+        drop_func = "@tml_" + get_suite_prefix() + info.type_name + "_drop";
+    }
     emit_line("  call void " + drop_func + "(ptr " + info.var_reg + ")");
 }
 

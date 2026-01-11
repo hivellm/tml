@@ -343,6 +343,10 @@ private:
     void emit(const std::string& code);
     void emit_line(const std::string& code);
 
+    /// Returns suite prefix (e.g., "s0_") when in suite mode, empty string otherwise.
+    /// Used to avoid symbol collisions when multiple test files are linked into one DLL.
+    auto get_suite_prefix() const -> std::string;
+
     // Type translation
     auto llvm_type(const parser::Type& type) -> std::string;
     auto llvm_type_ptr(const parser::TypePtr& type) -> std::string;

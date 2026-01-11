@@ -248,12 +248,11 @@ auto SimplifyCfgPass::merge_blocks(Function& func) -> bool {
     }
 
     // Remove empty blocks
-    func.blocks.erase(
-        std::remove_if(func.blocks.begin(), func.blocks.end(),
-                       [](const BasicBlock& b) {
-                           return b.instructions.empty() && !b.terminator.has_value();
-                       }),
-        func.blocks.end());
+    func.blocks.erase(std::remove_if(func.blocks.begin(), func.blocks.end(),
+                                     [](const BasicBlock& b) {
+                                         return b.instructions.empty() && !b.terminator.has_value();
+                                     }),
+                      func.blocks.end());
 
     return changed;
 }
@@ -292,12 +291,11 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
     }
 
     // Remove marked blocks
-    func.blocks.erase(
-        std::remove_if(func.blocks.begin(), func.blocks.end(),
-                       [](const BasicBlock& b) {
-                           return b.instructions.empty() && !b.terminator.has_value();
-                       }),
-        func.blocks.end());
+    func.blocks.erase(std::remove_if(func.blocks.begin(), func.blocks.end(),
+                                     [](const BasicBlock& b) {
+                                         return b.instructions.empty() && !b.terminator.has_value();
+                                     }),
+                      func.blocks.end());
 
     return changed;
 }
@@ -406,12 +404,11 @@ auto SimplifyCfgPass::remove_unreachable_blocks(Function& func) -> bool {
 
     // Remove unreachable blocks
     size_t original_size = func.blocks.size();
-    func.blocks.erase(
-        std::remove_if(func.blocks.begin(), func.blocks.end(),
-                       [&reachable](const BasicBlock& b) {
-                           return reachable.find(b.id) == reachable.end();
-                       }),
-        func.blocks.end());
+    func.blocks.erase(std::remove_if(func.blocks.begin(), func.blocks.end(),
+                                     [&reachable](const BasicBlock& b) {
+                                         return reachable.find(b.id) == reachable.end();
+                                     }),
+                      func.blocks.end());
 
     return func.blocks.size() < original_size;
 }

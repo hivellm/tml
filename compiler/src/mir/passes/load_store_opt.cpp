@@ -67,22 +67,31 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                                 using T = std::decay_t<decltype(inner)>;
 
                                 if constexpr (std::is_same_v<T, BinaryInst>) {
-                                    if (inner.left.id == result) inner.left.id = stored;
-                                    if (inner.right.id == result) inner.right.id = stored;
+                                    if (inner.left.id == result)
+                                        inner.left.id = stored;
+                                    if (inner.right.id == result)
+                                        inner.right.id = stored;
                                 } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                                    if (inner.operand.id == result) inner.operand.id = stored;
+                                    if (inner.operand.id == result)
+                                        inner.operand.id = stored;
                                 } else if constexpr (std::is_same_v<T, CastInst>) {
-                                    if (inner.operand.id == result) inner.operand.id = stored;
+                                    if (inner.operand.id == result)
+                                        inner.operand.id = stored;
                                 } else if constexpr (std::is_same_v<T, StoreInst>) {
-                                    if (inner.value.id == result) inner.value.id = stored;
+                                    if (inner.value.id == result)
+                                        inner.value.id = stored;
                                 } else if constexpr (std::is_same_v<T, CallInst>) {
                                     for (auto& arg : inner.args) {
-                                        if (arg.id == result) arg.id = stored;
+                                        if (arg.id == result)
+                                            arg.id = stored;
                                     }
                                 } else if constexpr (std::is_same_v<T, SelectInst>) {
-                                    if (inner.condition.id == result) inner.condition.id = stored;
-                                    if (inner.true_val.id == result) inner.true_val.id = stored;
-                                    if (inner.false_val.id == result) inner.false_val.id = stored;
+                                    if (inner.condition.id == result)
+                                        inner.condition.id = stored;
+                                    if (inner.true_val.id == result)
+                                        inner.true_val.id = stored;
+                                    if (inner.false_val.id == result)
+                                        inner.false_val.id = stored;
                                 }
                             },
                             block.instructions[j].inst);
@@ -102,22 +111,31 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                                 using T = std::decay_t<decltype(inner)>;
 
                                 if constexpr (std::is_same_v<T, BinaryInst>) {
-                                    if (inner.left.id == result) inner.left.id = prev_load;
-                                    if (inner.right.id == result) inner.right.id = prev_load;
+                                    if (inner.left.id == result)
+                                        inner.left.id = prev_load;
+                                    if (inner.right.id == result)
+                                        inner.right.id = prev_load;
                                 } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                                    if (inner.operand.id == result) inner.operand.id = prev_load;
+                                    if (inner.operand.id == result)
+                                        inner.operand.id = prev_load;
                                 } else if constexpr (std::is_same_v<T, CastInst>) {
-                                    if (inner.operand.id == result) inner.operand.id = prev_load;
+                                    if (inner.operand.id == result)
+                                        inner.operand.id = prev_load;
                                 } else if constexpr (std::is_same_v<T, StoreInst>) {
-                                    if (inner.value.id == result) inner.value.id = prev_load;
+                                    if (inner.value.id == result)
+                                        inner.value.id = prev_load;
                                 } else if constexpr (std::is_same_v<T, CallInst>) {
                                     for (auto& arg : inner.args) {
-                                        if (arg.id == result) arg.id = prev_load;
+                                        if (arg.id == result)
+                                            arg.id = prev_load;
                                     }
                                 } else if constexpr (std::is_same_v<T, SelectInst>) {
-                                    if (inner.condition.id == result) inner.condition.id = prev_load;
-                                    if (inner.true_val.id == result) inner.true_val.id = prev_load;
-                                    if (inner.false_val.id == result) inner.false_val.id = prev_load;
+                                    if (inner.condition.id == result)
+                                        inner.condition.id = prev_load;
+                                    if (inner.true_val.id == result)
+                                        inner.true_val.id = prev_load;
+                                    if (inner.false_val.id == result)
+                                        inner.false_val.id = prev_load;
                                 }
                             },
                             block.instructions[j].inst);

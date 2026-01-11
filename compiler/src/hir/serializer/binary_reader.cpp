@@ -299,13 +299,20 @@ auto HirBinaryReader::read_type() -> HirType {
 
     // Parse simple types - more complex types require type system context
     // For primitive types, we can reconstruct them directly
-    if (type_str == "I32") return types::make_i32();
-    if (type_str == "I64") return types::make_i64();
-    if (type_str == "F64") return types::make_f64();
-    if (type_str == "Bool") return types::make_bool();
-    if (type_str == "Str") return types::make_str();
-    if (type_str == "()" || type_str == "Unit") return types::make_unit();
-    if (type_str == "!") return types::make_never();
+    if (type_str == "I32")
+        return types::make_i32();
+    if (type_str == "I64")
+        return types::make_i64();
+    if (type_str == "F64")
+        return types::make_f64();
+    if (type_str == "Bool")
+        return types::make_bool();
+    if (type_str == "Str")
+        return types::make_str();
+    if (type_str == "()" || type_str == "Unit")
+        return types::make_unit();
+    if (type_str == "!")
+        return types::make_never();
 
     // For complex types (structs, generics, etc.), create a NamedType
     // This is a simplified version - full type fidelity requires type registry
@@ -415,8 +422,7 @@ auto HirBinaryReader::read_expr() -> HirExprPtr {
         SourceSpan span = read_span();
 
         auto expr = std::make_unique<HirExpr>();
-        expr->kind =
-            HirCallExpr{id, func_name, std::move(type_args), std::move(args), type, span};
+        expr->kind = HirCallExpr{id, func_name, std::move(type_args), std::move(args), type, span};
         return expr;
     }
 
@@ -555,14 +561,9 @@ auto HirBinaryReader::read_expr() -> HirExprPtr {
         SourceSpan span = read_span();
 
         auto expr = std::make_unique<HirExpr>();
-        expr->kind = HirEnumExpr{id,
-                                 enum_name,
-                                 variant_name,
-                                 variant_index,
-                                 std::move(type_args),
-                                 std::move(payload),
-                                 type,
-                                 span};
+        expr->kind = HirEnumExpr{
+            id,   enum_name, variant_name, variant_index, std::move(type_args), std::move(payload),
+            type, span};
         return expr;
     }
 

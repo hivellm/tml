@@ -86,7 +86,7 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
             }
 
             if (!compile_result.success) {
-                // Report compilation error
+                // Report compilation error but continue with other suites
                 TestResult error_result;
                 error_result.file_path = compile_result.failed_test;
                 error_result.test_name = fs::path(compile_result.failed_test).stem().string();
@@ -97,7 +97,15 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 error_result.error_message = "COMPILATION FAILED\n" + compile_result.error_message;
 
                 collector.add(std::move(error_result));
-                return 1; // Stop on compilation error
+
+                // Log the error immediately so user sees it
+                std::cerr << c.red() << c.bold() << "COMPILATION FAILED: " << c.reset()
+                          << error_result.test_name << "\n";
+                if (!compile_result.error_message.empty()) {
+                    std::cerr << c.dim() << compile_result.error_message << c.reset() << "\n";
+                }
+
+                continue; // Continue with other suites instead of stopping
             }
 
             suite.dll_path = compile_result.dll_path;
@@ -121,16 +129,36 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 error_result.error_message = "Failed to load suite DLL: " + lib.get_error();
 
                 collector.add(std::move(error_result));
-                return 1;
+
+                // Log the error immediately
+                std::cerr << c.red() << c.bold() << "DLL LOAD FAILED: " << c.reset() << suite.name
+                          << "\n";
+                std::cerr << c.dim() << lib.get_error() << c.reset() << "\n";
+
+                continue; // Continue with other suites instead of stopping
             }
 
             loaded_suites.push_back({std::move(suite), std::move(lib)});
         }
 
         // Run all tests from loaded suites
+        // Each suite runs in isolation - if one crashes, others continue
         for (auto& [suite, lib] : loaded_suites) {
+            if (opts.verbose) {
+                std::cerr << "[DEBUG] Running tests from suite: " << suite.name << " ("
+                          << suite.tests.size() << " test files)\n"
+                          << std::flush;
+            }
+
             for (size_t i = 0; i < suite.tests.size(); ++i) {
                 const auto& test_info = suite.tests[i];
+
+                if (opts.verbose) {
+                    std::cerr << "[DEBUG] Starting test " << (i + 1) << "/" << suite.tests.size()
+                              << ": " << test_info.test_name << " (" << test_info.test_count
+                              << " sub-tests)\n"
+                              << std::flush;
+                }
 
                 TestResult result;
                 result.file_path = test_info.file_path;
@@ -139,7 +167,26 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 result.test_count = test_info.test_count;
 
                 phase_start = Clock::now();
-                auto run_result = run_suite_test(lib, static_cast<int>(i));
+
+                // Flush all output before running test (helps with crash debugging)
+                std::cout << std::flush;
+                std::cerr << std::flush;
+                std::fflush(stdout);
+                std::fflush(stderr);
+
+                if (opts.verbose) {
+                    std::cerr << "[DEBUG] Calling run_suite_test for index " << i << "...\n"
+                              << std::flush;
+                }
+
+                auto run_result = run_suite_test(lib, static_cast<int>(i), opts.verbose);
+                int run_exit_code = run_result.exit_code;
+                bool run_success = run_result.success;
+                if (opts.verbose) {
+                    std::cerr << "[DEBUG] run_suite_test returned: exit_code=" << run_exit_code
+                              << ", success=" << (run_success ? "true" : "false") << "\n"
+                              << std::flush;
+                }
                 auto run_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                            Clock::now() - phase_start)
                                            .count();
@@ -150,17 +197,11 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
                 }
 
                 result.duration_ms = run_duration_us / 1000;
-                result.passed = run_result.success;
-                result.exit_code = run_result.exit_code;
+                result.passed = run_success;
+                result.exit_code = run_exit_code;
 
                 if (!result.passed) {
                     result.error_message = "Exit code: " + std::to_string(result.exit_code);
-                    if (!run_result.error.empty()) {
-                        result.error_message += "\n" + run_result.error;
-                    }
-                    if (!run_result.output.empty()) {
-                        result.error_message += "\n" + run_result.output;
-                    }
                 }
 
                 collector.add(std::move(result));

@@ -33,7 +33,7 @@ auto TailCallPass::run_on_function(Function& func) -> bool {
 }
 
 auto TailCallPass::is_tail_call_candidate(const Function& func, const BasicBlock& block,
-                                           size_t inst_idx) -> bool {
+                                          size_t inst_idx) -> bool {
     auto& inst = block.instructions[inst_idx];
 
     // Must be a call instruction
@@ -60,7 +60,7 @@ auto TailCallPass::is_tail_call_candidate(const Function& func, const BasicBlock
 }
 
 auto TailCallPass::is_followed_by_return(const BasicBlock& block, size_t inst_idx,
-                                          ValueId call_result) -> bool {
+                                         ValueId call_result) -> bool {
     // Check if there are any instructions between the call and the terminator
     // (other than the return itself)
 

@@ -71,7 +71,7 @@ auto StrengthReductionPass::get_const_int(const Function& func, ValueId id)
 }
 
 auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, size_t inst_idx,
-                                             const BinaryInst& mul) -> bool {
+                                            const BinaryInst& mul) -> bool {
     auto& inst = block.instructions[inst_idx];
 
     // Check for multiplication by power of 2
@@ -109,9 +109,8 @@ auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, s
         const_data.inst = const_inst;
 
         // Insert constant before the mul
-        block.instructions.insert(block.instructions.begin() +
-                                      static_cast<std::ptrdiff_t>(inst_idx),
-                                  const_data);
+        block.instructions.insert(
+            block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx), const_data);
 
         // Update the mul to be a shl
         BinaryInst shl;
@@ -148,7 +147,7 @@ auto StrengthReductionPass::reduce_multiply(Function& func, BasicBlock& block, s
 }
 
 auto StrengthReductionPass::reduce_divide(Function& func, BasicBlock& block, size_t inst_idx,
-                                           const BinaryInst& div) -> bool {
+                                          const BinaryInst& div) -> bool {
     // x / 2^n -> x >> n (for unsigned integers)
     auto right_const = get_const_int(func, div.right.id);
 
@@ -178,8 +177,7 @@ auto StrengthReductionPass::reduce_divide(Function& func, BasicBlock& block, siz
     const_data.inst = const_inst;
 
     // Insert constant before the div
-    block.instructions.insert(block.instructions.begin() +
-                                  static_cast<std::ptrdiff_t>(inst_idx),
+    block.instructions.insert(block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx),
                               const_data);
 
     // Replace div with shr
@@ -197,7 +195,7 @@ auto StrengthReductionPass::reduce_divide(Function& func, BasicBlock& block, siz
 }
 
 auto StrengthReductionPass::reduce_modulo(Function& func, BasicBlock& block, size_t inst_idx,
-                                           const BinaryInst& mod) -> bool {
+                                          const BinaryInst& mod) -> bool {
     // x % 2^n -> x & (2^n - 1) (for unsigned integers)
     auto right_const = get_const_int(func, mod.right.id);
 
@@ -223,8 +221,7 @@ auto StrengthReductionPass::reduce_modulo(Function& func, BasicBlock& block, siz
     const_data.inst = const_inst;
 
     // Insert constant before the mod
-    block.instructions.insert(block.instructions.begin() +
-                                  static_cast<std::ptrdiff_t>(inst_idx),
+    block.instructions.insert(block.instructions.begin() + static_cast<std::ptrdiff_t>(inst_idx),
                               const_data);
 
     // Replace mod with bitand

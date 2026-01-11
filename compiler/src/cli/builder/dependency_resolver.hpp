@@ -25,8 +25,8 @@
 #ifndef TML_CLI_DEPENDENCY_RESOLVER_HPP
 #define TML_CLI_DEPENDENCY_RESOLVER_HPP
 
-#include "build_config.hpp"
-#include "rlib.hpp"
+#include "cli/builder/build_config.hpp"
+#include "cli/builder/rlib.hpp"
 
 #include <filesystem>
 #include <map>

@@ -63,8 +63,7 @@ auto Mem2RegPass::collect_allocas(Function& func) -> std::vector<AllocaInfo> {
     return allocas;
 }
 
-auto Mem2RegPass::is_promotable(const Function& func, ValueId alloca_id,
-                                 AllocaInfo& info) -> bool {
+auto Mem2RegPass::is_promotable(const Function& func, ValueId alloca_id, AllocaInfo& info) -> bool {
     // Check all uses of the alloca
     for (size_t b = 0; b < func.blocks.size(); ++b) {
         const auto& block = func.blocks[b];
@@ -318,8 +317,7 @@ auto Mem2RegPass::replace_value(Function& func, ValueId old_value, ValueId new_v
 
 auto Mem2RegPass::remove_instruction(BasicBlock& block, size_t idx) -> void {
     if (idx < block.instructions.size()) {
-        block.instructions.erase(block.instructions.begin() +
-                                 static_cast<std::ptrdiff_t>(idx));
+        block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(idx));
     }
 }
 

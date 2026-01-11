@@ -33,7 +33,8 @@ auto ConstantHoistPass::find_loops(const Function& func) -> std::vector<LoopInfo
 
         for (uint32_t succ : block.successors) {
             int succ_idx = get_block_index(func, succ);
-            if (succ_idx < 0) continue;
+            if (succ_idx < 0)
+                continue;
 
             // Back edge: successor dominates current block
             if (static_cast<size_t>(succ_idx) <= i) {
@@ -51,12 +52,14 @@ auto ConstantHoistPass::find_loops(const Function& func) -> std::vector<LoopInfo
                     uint32_t curr = worklist.front();
                     worklist.pop();
 
-                    if (visited.count(curr)) continue;
+                    if (visited.count(curr))
+                        continue;
                     visited.insert(curr);
 
                     int curr_idx = get_block_index(func, curr);
                     if (curr_idx >= 0) {
-                        for (uint32_t pred : func.blocks[static_cast<size_t>(curr_idx)].predecessors) {
+                        for (uint32_t pred :
+                             func.blocks[static_cast<size_t>(curr_idx)].predecessors) {
                             if (!visited.count(pred)) {
                                 worklist.push(pred);
                             }
@@ -75,7 +78,8 @@ auto ConstantHoistPass::find_loops(const Function& func) -> std::vector<LoopInfo
 
 auto ConstantHoistPass::find_preheader(const Function& func, const LoopInfo& loop) -> uint32_t {
     int header_idx = get_block_index(func, loop.header);
-    if (header_idx < 0) return 0;
+    if (header_idx < 0)
+        return 0;
 
     const auto& header = func.blocks[static_cast<size_t>(header_idx)];
 
@@ -93,7 +97,8 @@ auto ConstantHoistPass::hoist_constants(Function& func, const LoopInfo& loop) ->
     bool changed = false;
 
     int preheader_idx = get_block_index(func, loop.preheader);
-    if (preheader_idx < 0) return false;
+    if (preheader_idx < 0)
+        return false;
 
     auto& preheader = func.blocks[static_cast<size_t>(preheader_idx)];
 
@@ -102,7 +107,8 @@ auto ConstantHoistPass::hoist_constants(Function& func, const LoopInfo& loop) ->
 
     for (uint32_t block_id : loop.blocks) {
         int block_idx = get_block_index(func, block_id);
-        if (block_idx < 0) continue;
+        if (block_idx < 0)
+            continue;
 
         auto& block = func.blocks[static_cast<size_t>(block_idx)];
         std::vector<size_t> to_remove;
@@ -148,15 +154,20 @@ auto ConstantHoistPass::hoist_constants(Function& func, const LoopInfo& loop) ->
                                 [old_val, new_val](auto& inner) {
                                     using T = std::decay_t<decltype(inner)>;
                                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                                        if (inner.left.id == old_val) inner.left.id = new_val;
-                                        if (inner.right.id == old_val) inner.right.id = new_val;
+                                        if (inner.left.id == old_val)
+                                            inner.left.id = new_val;
+                                        if (inner.right.id == old_val)
+                                            inner.right.id = new_val;
                                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                                        if (inner.operand.id == old_val) inner.operand.id = new_val;
+                                        if (inner.operand.id == old_val)
+                                            inner.operand.id = new_val;
                                     } else if constexpr (std::is_same_v<T, StoreInst>) {
-                                        if (inner.value.id == old_val) inner.value.id = new_val;
+                                        if (inner.value.id == old_val)
+                                            inner.value.id = new_val;
                                     } else if constexpr (std::is_same_v<T, CallInst>) {
                                         for (auto& arg : inner.args) {
-                                            if (arg.id == old_val) arg.id = new_val;
+                                            if (arg.id == old_val)
+                                                arg.id = new_val;
                                         }
                                     }
                                 },
@@ -185,15 +196,20 @@ auto ConstantHoistPass::hoist_constants(Function& func, const LoopInfo& loop) ->
                                 [old_val, new_val](auto& inner) {
                                     using T = std::decay_t<decltype(inner)>;
                                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                                        if (inner.left.id == old_val) inner.left.id = new_val;
-                                        if (inner.right.id == old_val) inner.right.id = new_val;
+                                        if (inner.left.id == old_val)
+                                            inner.left.id = new_val;
+                                        if (inner.right.id == old_val)
+                                            inner.right.id = new_val;
                                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                                        if (inner.operand.id == old_val) inner.operand.id = new_val;
+                                        if (inner.operand.id == old_val)
+                                            inner.operand.id = new_val;
                                     } else if constexpr (std::is_same_v<T, StoreInst>) {
-                                        if (inner.value.id == old_val) inner.value.id = new_val;
+                                        if (inner.value.id == old_val)
+                                            inner.value.id = new_val;
                                     } else if constexpr (std::is_same_v<T, CallInst>) {
                                         for (auto& arg : inner.args) {
-                                            if (arg.id == old_val) arg.id = new_val;
+                                            if (arg.id == old_val)
+                                                arg.id = new_val;
                                         }
                                     }
                                 },

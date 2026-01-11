@@ -174,7 +174,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
 
                 // Generate the static method call
-                std::string fn_name = "@tml_" + mangled_type_name + "_" + method;
+                // Look up in functions_ to get the correct LLVM name (handles suite prefix
+                // correctly)
+                std::string method_lookup_key = mangled_type_name + "_" + method;
+                auto method_it = functions_.find(method_lookup_key);
+                std::string fn_name;
+                if (method_it != functions_.end()) {
+                    fn_name = method_it->second.llvm_name;
+                } else {
+                    // Fallback: construct name with suite prefix for test-local functions
+                    fn_name = "@tml_" + get_suite_prefix() + mangled_type_name + "_" + method;
+                }
 
                 // Generate arguments (no receiver for static methods)
                 std::vector<std::pair<std::string, std::string>> typed_args;
@@ -497,7 +507,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
 
         if (func_sig) {
-            std::string fn_name = "@tml_" + receiver_type_name + "_" + method;
+            // Look up in functions_ to get the correct LLVM name
+            std::string method_lookup_key = receiver_type_name + "_" + method;
+            auto method_it = functions_.find(method_lookup_key);
+            std::string fn_name;
+            if (method_it != functions_.end()) {
+                fn_name = method_it->second.llvm_name;
+            } else {
+                fn_name = "@tml_" + get_suite_prefix() + receiver_type_name + "_" + method;
+            }
             std::string llvm_ty = llvm_type_from_semantic(receiver_type);
 
             // Build arguments - this (by value for primitives), then args
@@ -736,7 +754,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     }
                 }
 
-                std::string fn_name = "@tml_" + mangled_type_name + "_" + method;
+                // Look up in functions_ to get the correct LLVM name
+                std::string method_lookup_key = mangled_type_name + "_" + method;
+                auto method_it = functions_.find(method_lookup_key);
+                std::string fn_name;
+                if (method_it != functions_.end()) {
+                    fn_name = method_it->second.llvm_name;
+                } else {
+                    fn_name = "@tml_" + get_suite_prefix() + mangled_type_name + "_" + method;
+                }
                 std::string impl_receiver_val;
 
                 // Determine the LLVM type for the receiver based on the impl type
@@ -863,7 +889,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 }
             }
             if (func_sig) {
-                std::string fn_name = "@tml_" + named2.name + "_" + method;
+                // Look up in functions_ to get the correct LLVM name
+                std::string method_lookup_key = named2.name + "_" + method;
+                auto method_it = functions_.find(method_lookup_key);
+                std::string fn_name;
+                if (method_it != functions_.end()) {
+                    fn_name = method_it->second.llvm_name;
+                } else {
+                    fn_name = "@tml_" + get_suite_prefix() + named2.name + "_" + method;
+                }
                 std::string impl_receiver_val;
 
                 // Determine the LLVM type for the receiver based on the impl type

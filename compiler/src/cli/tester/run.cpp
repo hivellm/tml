@@ -24,6 +24,48 @@
 
 #include "tester_internal.hpp"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+// Global unhandled exception filter for crash logging
+static LONG WINAPI global_crash_filter(EXCEPTION_POINTERS* info) {
+    DWORD code = info->ExceptionRecord->ExceptionCode;
+
+    const char* name = "UNKNOWN";
+    switch (code) {
+    case EXCEPTION_ACCESS_VIOLATION:
+        name = "ACCESS_VIOLATION";
+        break;
+    case EXCEPTION_STACK_OVERFLOW:
+        name = "STACK_OVERFLOW";
+        break;
+    case EXCEPTION_INT_DIVIDE_BY_ZERO:
+        name = "INTEGER_DIVIDE_BY_ZERO";
+        break;
+    }
+
+    // Write directly to stderr handle for reliability
+    char msg[256];
+    int len = snprintf(msg, sizeof(msg),
+                       "\n[FATAL CRASH] Exception 0x%08lX (%s)\n"
+                       "Test crashed before exception could be caught.\n",
+                       (unsigned long)code, name);
+
+    HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD written;
+    WriteFile(hErr, msg, (DWORD)len, &written, NULL);
+    FlushFileBuffers(hErr);
+
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void install_global_crash_handler() {
+    SetUnhandledExceptionFilter(global_crash_filter);
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+}
+#endif
+
 namespace tml::cli {
 
 // Using tester namespace for internal functions
@@ -104,6 +146,11 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
 // ============================================================================
 
 int run_test(int argc, char* argv[], bool verbose) {
+#ifdef _WIN32
+    // Install global crash handler to log crashes that escape SEH
+    install_global_crash_handler();
+#endif
+
     // Enable ANSI colors on Windows
     enable_ansi_colors();
 
@@ -195,33 +242,10 @@ int run_test(int argc, char* argv[], bool verbose) {
     // Suite mode: compile multiple test files into single DLLs per suite
     // This is now the default behavior as internal linkage prevents duplicate symbols
     if (opts.suite_mode) {
-        int result_code = run_tests_suite_mode(test_files, opts, collector, c);
+        run_tests_suite_mode(test_files, opts, collector, c);
 
-        if (result_code != 0 || collector.has_compilation_error()) {
-            const auto& err = collector.first_compilation_error;
-
-            std::cerr << "\n";
-            std::cerr
-                << c.red() << c.bold()
-                << "==============================================================================="
-                << c.reset() << "\n";
-            std::cerr << c.red() << c.bold() << "COMPILATION ERROR - Test run aborted" << c.reset()
-                      << "\n";
-            std::cerr
-                << c.red() << c.bold()
-                << "==============================================================================="
-                << c.reset() << "\n";
-            std::cerr << "\n";
-            std::cerr << c.bold() << "File: " << c.reset() << err.file_path << "\n";
-            std::cerr << "\n";
-            std::cerr << c.red() << err.error_message << c.reset() << "\n";
-            std::cerr << "\n";
-            std::cerr << c.yellow() << "Fix the compilation error above before running tests again."
-                      << c.reset() << "\n";
-            std::cerr << "\n";
-
-            return 1;
-        }
+        // Note: We no longer abort on compilation errors - they are recorded and
+        // reported at the end, allowing other suites to continue running
 
         auto end_time = std::chrono::high_resolution_clock::now();
         int64_t total_duration_ms =
@@ -277,12 +301,8 @@ int run_test(int argc, char* argv[], bool verbose) {
             PhaseTimings timings;
             TestResult result = compile_and_run_test_profiled(file, opts, &timings);
             collector.add_timings(timings);
-            bool is_compilation_error = result.compilation_error;
             collector.add(std::move(result));
-
-            if (is_compilation_error) {
-                break;
-            }
+            // Continue running other tests even if this one failed to compile
         }
     }
     // Single-threaded mode for verbose/nocapture or if only 1 test
@@ -297,13 +317,8 @@ int run_test(int argc, char* argv[], bool verbose) {
             } else {
                 result = compile_and_run_test_with_result(file, opts);
             }
-            bool is_compilation_error = result.compilation_error;
             collector.add(std::move(result));
-
-            // Stop immediately if this was a compilation error
-            if (is_compilation_error) {
-                break;
-            }
+            // Continue running other tests even if this one failed to compile
         }
     } else {
         // Parallel execution
@@ -327,33 +342,8 @@ int run_test(int argc, char* argv[], bool verbose) {
     int64_t total_duration_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
-    // Check if we stopped due to a compilation error
-    if (collector.has_compilation_error()) {
-        const auto& err = collector.first_compilation_error;
-
-        // Print a clear, visible error message
-        std::cerr << "\n";
-        std::cerr
-            << c.red() << c.bold()
-            << "==============================================================================="
-            << c.reset() << "\n";
-        std::cerr << c.red() << c.bold() << "COMPILATION ERROR - Test run aborted" << c.reset()
-                  << "\n";
-        std::cerr
-            << c.red() << c.bold()
-            << "==============================================================================="
-            << c.reset() << "\n";
-        std::cerr << "\n";
-        std::cerr << c.bold() << "File: " << c.reset() << err.file_path << "\n";
-        std::cerr << "\n";
-        std::cerr << c.red() << err.error_message << c.reset() << "\n";
-        std::cerr << "\n";
-        std::cerr << c.yellow() << "Fix the compilation error above before running tests again."
-                  << c.reset() << "\n";
-        std::cerr << "\n";
-
-        return 1; // Fail immediately
-    }
+    // Note: Compilation errors are now recorded as failed tests and printed in the
+    // normal results output. We no longer abort the test run early.
 
     // Print results
     if (!opts.quiet) {

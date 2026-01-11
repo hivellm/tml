@@ -71,8 +71,7 @@ auto ReassociatePass::is_associative(BinOp op) -> bool {
     }
 }
 
-auto ReassociatePass::try_reassociate(Function& func, BasicBlock& block,
-                                       size_t inst_idx) -> bool {
+auto ReassociatePass::try_reassociate(Function& func, BasicBlock& block, size_t inst_idx) -> bool {
     auto& inst = block.instructions[inst_idx];
     auto* bin = std::get_if<BinaryInst>(&inst.inst);
     if (!bin) {
@@ -130,7 +129,7 @@ auto ReassociatePass::try_reassociate(Function& func, BasicBlock& block,
 }
 
 auto ReassociatePass::linearize(Function& func, ValueId root, BinOp op,
-                                 std::vector<ValueId>& operands) -> void {
+                                std::vector<ValueId>& operands) -> void {
     auto* def = find_def(func, root);
     if (!def || def->op != op) {
         // Leaf node
@@ -144,8 +143,8 @@ auto ReassociatePass::linearize(Function& func, ValueId root, BinOp op,
 }
 
 auto ReassociatePass::rebuild_tree(Function& func, BasicBlock& block, size_t insert_pos,
-                                    const std::vector<ValueId>& operands, BinOp op,
-                                    MirTypePtr result_type) -> ValueId {
+                                   const std::vector<ValueId>& operands, BinOp op,
+                                   MirTypePtr result_type) -> ValueId {
     if (operands.empty()) {
         return INVALID_VALUE;
     }

@@ -59,4 +59,14 @@ auto LLVMIRGen::add_string_literal(const std::string& value) -> std::string {
     return name;
 }
 
+auto LLVMIRGen::get_suite_prefix() const -> std::string {
+    // Suite prefix is only used for test-local functions (current_module_prefix_ empty)
+    // Library functions should NOT have suite prefix - they're shared across tests
+    if (options_.suite_test_index >= 0 && options_.force_internal_linkage &&
+        current_module_prefix_.empty()) {
+        return "s" + std::to_string(options_.suite_test_index) + "_";
+    }
+    return "";
+}
+
 } // namespace tml::codegen
