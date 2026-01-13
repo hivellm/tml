@@ -600,14 +600,24 @@ class Subject {
 
 | Component | Status |
 |-----------|--------|
-| Lexer keywords | Complete |
-| Parser grammar | Complete |
-| Type system | Complete |
-| Codegen (vtables) | Complete |
-| Virtual dispatch | Complete |
-| Namespace support | Pending |
-| Property syntax | Pending |
-| Optimizations | Pending |
+| Lexer keywords | ✅ Complete |
+| Parser grammar | ✅ Complete |
+| Type system | ✅ Complete |
+| Codegen (vtables) | ✅ Complete |
+| Virtual dispatch | ✅ Complete |
+| Class instantiation | ✅ Complete |
+| Static fields/methods | ✅ Complete |
+| Inheritance (extends) | ✅ Complete |
+| Interfaces (implements) | ✅ Complete |
+| `is` operator | ✅ Complete |
+| Visibility modifiers | ✅ Complete |
+| Abstract classes | ✅ Complete |
+| Sealed classes | ✅ Complete |
+| Virtual/Override | ✅ Complete |
+| Module registry | ✅ Complete |
+| Namespace support | 🔄 Pending |
+| Property syntax | 🔄 Pending |
+| MIR/HIR optimizations | 🔄 Pending |
 
 ---
 

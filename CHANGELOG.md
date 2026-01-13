@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **C#-Style Object-Oriented Programming** (2026-01-13) - Full OOP implementation with classes, inheritance, and interfaces
+  - **Classes**: Define classes with fields, static fields, and methods
+    - `class Point { x: I32; y: I32; func get_x(this) -> I32 { ... } }`
+    - Static fields: `static count: I32 = 0`
+    - Static methods: `static func create(x: I32, y: I32) -> Point { ... }`
+    - Factory pattern with `Class::create()` syntax
+  - **Inheritance**: Single inheritance via `extends` keyword
+    - `class Circle extends Shape { radius: I32; ... }`
+    - Methods can override parent methods
+    - Vtable-based virtual dispatch
+  - **Interfaces**: Define contracts with `interface` keyword
+    - `interface Drawable { func draw(this) -> I32 }`
+    - Multiple interface implementation: `class Canvas implements Drawable { ... }`
+  - **Type Checking Operator**: `is` operator for runtime type checking
+    - `if obj is Circle { ... }`
+    - Works with inheritance hierarchy
+  - **Visibility Modifiers**: `private`, `protected`, `pub` for field/method access control
+  - **Abstract/Sealed Classes**: `abstract class Shape { ... }`, `sealed class Final { ... }`
+  - **Virtual/Override Methods**: `virtual func speak(this)`, `override func speak(this)`
+  - **LLVM Codegen**: Complete code generation for OOP features
+    - Vtable pointer initialization for class instances
+    - Dynamic class size calculation via LLVM GEP trick
+    - Virtual method dispatch through vtables
+  - **Additional Optimizations**:
+    - Loop unrolling MIR pass complete implementation with block cloning
+    - Const generic argument evaluation via `as_expr()`
+    - Module registry support for classes/interfaces lookup
+    - Behavior inheritance cycle detection
+  - **Package Management**: `tml add` and `tml update` commands
+    - Add path dependencies: `tml add mylib --path ../mylib`
+    - Add git dependencies: `tml add mylib --git https://github.com/user/mylib`
+    - Validate dependencies: `tml update`
+  - Files added:
+    - `compiler/src/codegen/core/class_codegen.cpp` - Class LLVM IR generation
+    - `compiler/src/parser/parser_oop.cpp` - OOP parsing
+    - `compiler/include/parser/ast_oop.hpp` - OOP AST nodes
+    - `compiler/tests/compiler/oop.test.tml` - 35 comprehensive OOP tests
+    - `compiler/tests/oop_test.cpp` - C++ unit tests for OOP lexer/parser/type checker
+    - `docs/rfcs/RFC-0014-OOP-CLASSES.md` - Complete OOP specification
+  - Files modified:
+    - `compiler/src/lexer/lexer_core.cpp` - OOP keywords (class, interface, extends, implements, is, abstract, sealed, virtual, override, private, protected, base)
+    - `compiler/src/types/env_lookups.cpp` - Class/interface type resolution
+    - `compiler/src/types/module.cpp` - Module registry for classes/interfaces
+    - `compiler/src/codegen/expr/struct.cpp` - Dynamic class allocation
+    - `compiler/src/mir/passes/loop_unroll.cpp` - Full unrolling implementation
+    - `compiler/src/cli/commands/cmd_pkg.cpp` - Package add/update commands
+
 - **Complete Pattern Matching for `when` Expressions** (2026-01-13) - Full pattern matching support in when/match expressions
   - **Range Patterns**: Match value ranges with `to` (exclusive) and `through` (inclusive)
     - Integer ranges: `0 through 9 => "single digit"`

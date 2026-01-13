@@ -366,7 +366,7 @@ tml fmt                # format code
 | v0.5 | ✅ Active | Bootstrap compiler with LLVM backend |
 | v1.0 | 🔄 In Progress | Self-hosted compiler |
 
-### Implementation Status (Dec 2025)
+### Implementation Status (Jan 2026)
 
 | Feature | Status |
 |---------|--------|
@@ -386,6 +386,8 @@ tml fmt                # format code
 | Borrow Checker | ✅ Complete (reborrows, two-phase) |
 | Build Cache | ✅ Complete (content-based) |
 | Mid-level IR (MIR) | ✅ Complete (SSA, 6 optimization passes) |
+| **C#-Style OOP** | ✅ Complete (classes, inheritance, interfaces, vtables) |
+| Package Management | ✅ Complete (`tml add`, `tml update`) |
 
 ## License
 
