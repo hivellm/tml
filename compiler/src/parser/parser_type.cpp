@@ -256,7 +256,9 @@ auto Parser::parse_type() -> Result<TypePtr, ParseError> {
     }
 
     // Function type: Fn(Params) -> RetType (alternative syntax)
-    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "Fn") {
+    // Only treat as function type if followed by '(' - Fn[Args] is the behavior type
+    if (check(lexer::TokenKind::Identifier) && peek().lexeme == "Fn" &&
+        peek_next().kind == lexer::TokenKind::LParen) {
         advance(); // consume 'Fn'
 
         auto lparen = expect(lexer::TokenKind::LParen, "Expected '(' after 'Fn'");

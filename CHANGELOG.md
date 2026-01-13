@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Complete Pattern Matching for `when` Expressions** (2026-01-13) - Full pattern matching support in when/match expressions
+  - **Range Patterns**: Match value ranges with `to` (exclusive) and `through` (inclusive)
+    - Integer ranges: `0 through 9 => "single digit"`
+    - Character ranges: `'a' through 'z' => "lowercase"`
+  - **Struct Patterns**: Destructure structs in patterns
+    - `Point { x, y } => x + y`
+  - **Tuple Patterns**: Destructure tuples in patterns
+    - `(a, b, c) => a + b + c`
+  - **Array Patterns**: Destructure arrays in patterns
+    - `[first, second, _] => first + second`
+  - **Block Bodies**: Support multi-statement blocks in when arms
+    - Each arm can contain `{ let x = ...; let y = ...; x + y }`
+  - Type checker integration for all pattern types
+  - 33 new tests covering all pattern types
+  - Files modified:
+    - `compiler/src/parser/parser_pattern.cpp` - Range pattern parsing
+    - `compiler/src/types/checker/stmt.cpp` - Struct/array pattern type checking
+    - `compiler/src/codegen/llvm_ir_gen_control.cpp` - All pattern codegen
+  - Test files added:
+    - `compiler/tests/compiler/range_pattern.test.tml`
+    - `compiler/tests/compiler/struct_pattern.test.tml`
+    - `compiler/tests/compiler/tuple_pattern.test.tml`
+    - `compiler/tests/compiler/array_pattern.test.tml`
+    - `compiler/tests/compiler/when_block_body.test.tml`
+
 ### Changed
 - **CLI Folder Reorganization** (2026-01-10) - Split monolithic CLI into focused subfolders
   - New folder structure under `compiler/src/cli/`:

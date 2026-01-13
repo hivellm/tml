@@ -1,0 +1,82 @@
+use test
+
+func extract_first(t: (I32, I32)) -> I32 {
+    return when t {
+        (a, _) => a
+    }
+}
+
+func extract_second(t: (I32, I32)) -> I32 {
+    return when t {
+        (_, b) => b
+    }
+}
+
+func sum_pair(t: (I32, I32)) -> I32 {
+    return when t {
+        (a, b) => a + b
+    }
+}
+
+func sum_triple(t: (I32, I32, I32)) -> I32 {
+    return when t {
+        (a, b, c) => a + b + c
+    }
+}
+
+func swap_pair(t: (I32, I32)) -> (I32, I32) {
+    return when t {
+        (a, b) => (b, a)
+    }
+}
+
+@test
+func test_tuple_extract_first() -> I32 {
+    let t: (I32, I32) = (42i32, 100i32)
+    assert_eq(extract_first(t), 42, "extract first from (42, 100)")
+    return 0
+}
+
+@test
+func test_tuple_extract_second() -> I32 {
+    let t: (I32, I32) = (42i32, 100i32)
+    assert_eq(extract_second(t), 100, "extract second from (42, 100)")
+    return 0
+}
+
+@test
+func test_tuple_sum_pair() -> I32 {
+    let t: (I32, I32) = (10i32, 20i32)
+    assert_eq(sum_pair(t), 30, "(10, 20) => 30")
+    return 0
+}
+
+@test
+func test_tuple_sum_triple() -> I32 {
+    let t: (I32, I32, I32) = (1i32, 2i32, 3i32)
+    assert_eq(sum_triple(t), 6, "(1, 2, 3) => 6")
+    return 0
+}
+
+@test
+func test_tuple_with_zeros() -> I32 {
+    let t: (I32, I32) = (0i32, 0i32)
+    assert_eq(sum_pair(t), 0, "(0, 0) => 0")
+    return 0
+}
+
+@test
+func test_tuple_negative() -> I32 {
+    let t: (I32, I32) = (-5i32, 10i32)
+    assert_eq(sum_pair(t), 5, "(-5, 10) => 5")
+    return 0
+}
+
+@test
+func test_tuple_swap() -> I32 {
+    let t: (I32, I32) = (10i32, 20i32)
+    let swapped: (I32, I32) = swap_pair(t)
+    assert_eq(extract_first(swapped), 20, "first of swapped (10, 20) is 20")
+    assert_eq(extract_second(swapped), 10, "second of swapped (10, 20) is 10")
+    return 0
+}

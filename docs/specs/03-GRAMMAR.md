@@ -418,46 +418,90 @@ if let Ok(data) = result {
 
 ```ebnf
 WhenExpr = 'when' Expr '{' WhenArm+ '}'
-WhenArm  = Pattern '->' Expr ','?
+WhenArm  = Pattern '=>' Expr ','?
 
-Pattern = LiteralPattern
+Pattern = RangePattern
+        | LiteralPattern
         | IdentPattern
         | WildcardPattern
         | StructPattern
         | EnumPattern
         | TuplePattern
+        | ArrayPattern
 
 LiteralPattern   = Literal
+RangePattern     = Literal ('to' | 'through') Literal
 IdentPattern     = Ident
 WildcardPattern  = '_'
 StructPattern    = TypePath '{' FieldPattern (',' FieldPattern)* '}'
 FieldPattern     = Ident (':' Pattern)?
 EnumPattern      = TypePath ('(' Pattern (',' Pattern)* ')')?
 TuplePattern     = '(' Pattern (',' Pattern)+ ')'
+ArrayPattern     = '[' Pattern (',' Pattern)* ('..' Ident?)? ']'
 ```
+
+**Pattern Types:**
+
+| Pattern | Syntax | Example |
+|---------|--------|---------|
+| Literal | `value` | `42`, `"hello"`, `true` |
+| Range | `start to/through end` | `0 through 9`, `'a' to 'z'` |
+| Ident | `name` | `x`, `value` |
+| Wildcard | `_` | `_` (matches anything) |
+| Struct | `Type { fields }` | `Point { x, y }` |
+| Enum | `Variant(patterns)` | `Just(x)`, `Ok(value)` |
+| Tuple | `(patterns)` | `(a, b, c)` |
+| Array | `[patterns]` | `[first, second, _]` |
+
+**Range Keywords:**
+- `to` - exclusive end: `0 to 10` matches 0-9
+- `through` - inclusive end: `0 through 9` matches 0-9
 
 **Examples:**
 ```tml
+// Literal patterns
 when value {
-    0 -> "zero",
-    1 -> "one",
-    n -> "other: " + n.to_string(),
+    0 => "zero",
+    1 => "one",
+    n => "other: " + n.to_string(),
 }
 
+// Range patterns
+when n {
+    0 through 9 => "single digit",
+    10 to 100 => "two digits",
+    _ => "large",
+}
+
+// Enum patterns with payload extraction
 when result {
-    Ok(value) -> use(value),
-    Err(e) -> log(e),
+    Ok(value) => use(value),
+    Err(e) => log(e),
 }
 
+// Struct patterns with destructuring
 when point {
-    Point { x: 0, y: 0 } -> "origin",
-    Point { x, y } -> "at " + x.to_string(),
+    Point { x: 0, y: 0 } => "origin",
+    Point { x, y } => "at " + x.to_string(),
 }
 
-// No guards - use inline if
-when opt {
-    Just(x) -> if x > 0 then x else 0,
-    Nothing -> -1,
+// Tuple patterns
+when pair {
+    (a, b) => a + b,
+}
+
+// Array patterns
+when arr {
+    [first, _, _] => first,
+}
+
+// Block bodies in arms
+when n {
+    0 => {
+        let result: I32 = compute()
+        result * 2
+    },
+    _ => n,
 }
 ```
 

@@ -94,11 +94,44 @@ auto Parser::parse_pattern_no_or() -> Result<PatternPtr, ParseError> {
         return make_ident_pattern("this", false, start_span);
     }
 
-    // Literal pattern
+    // Literal pattern (possibly range pattern)
     if (check(lexer::TokenKind::IntLiteral) || check(lexer::TokenKind::FloatLiteral) ||
         check(lexer::TokenKind::StringLiteral) || check(lexer::TokenKind::CharLiteral) ||
         check(lexer::TokenKind::BoolLiteral) || check(lexer::TokenKind::NullLiteral)) {
         auto token = advance();
+
+        // Check for range pattern: start to end OR start through end
+        if (check(lexer::TokenKind::KwTo) || check(lexer::TokenKind::KwThrough)) {
+            bool inclusive = check(lexer::TokenKind::KwThrough);
+            advance(); // consume 'to' or 'through'
+
+            // Parse end expression (must be a literal for now)
+            if (!check(lexer::TokenKind::IntLiteral) && !check(lexer::TokenKind::FloatLiteral) &&
+                !check(lexer::TokenKind::CharLiteral)) {
+                return ParseError{.message =
+                                      "Expected literal after 'to'/'through' in range pattern",
+                                  .span = peek().span,
+                                  .notes = {}};
+            }
+            auto end_token = advance();
+
+            // Create start and end expressions from literals
+            auto start_expr = make_box<Expr>(
+                Expr{.kind = LiteralExpr{.token = std::move(token), .span = start_span},
+                     .span = start_span});
+            auto end_span = previous().span;
+            auto end_expr = make_box<Expr>(
+                Expr{.kind = LiteralExpr{.token = std::move(end_token), .span = end_span},
+                     .span = end_span});
+
+            auto span = SourceSpan::merge(start_span, previous().span);
+            return make_box<Pattern>(Pattern{.kind = RangePattern{.start = std::move(start_expr),
+                                                                  .end = std::move(end_expr),
+                                                                  .inclusive = inclusive,
+                                                                  .span = span},
+                                             .span = span});
+        }
+
         return make_box<Pattern>(
             Pattern{.kind = LiteralPattern{.literal = std::move(token), .span = start_span},
                     .span = start_span});

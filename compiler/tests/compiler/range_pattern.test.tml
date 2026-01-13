@@ -1,0 +1,96 @@
+//! Test range patterns in when expressions
+use test
+
+/// Classify a number into categories using range patterns
+func classify_number(n: I32) -> I32 {
+    return when n {
+        0 through 9 => 1,
+        10 to 100 => 2,
+        100 through 999 => 3,
+        _ => 4
+    }
+}
+
+/// Classify with I64
+func classify_big(n: I64) -> I32 {
+    return when n {
+        0 through 1000000 => 1,
+        1000001 through 1000000000 => 2,
+        _ => 3
+    }
+}
+
+@test
+func test_inclusive_range_lower_bound() -> I32 {
+    assert_eq(classify_number(0), 1, "0 in 0..=9")
+    return 0
+}
+
+@test
+func test_inclusive_range_upper_bound() -> I32 {
+    assert_eq(classify_number(9), 1, "9 in 0..=9")
+    return 0
+}
+
+@test
+func test_inclusive_range_middle() -> I32 {
+    assert_eq(classify_number(5), 1, "5 in 0..=9")
+    return 0
+}
+
+@test
+func test_exclusive_range_lower_bound() -> I32 {
+    assert_eq(classify_number(10), 2, "10 in 10..100")
+    return 0
+}
+
+@test
+func test_exclusive_range_upper_bound() -> I32 {
+    // 99 is in the range (exclusive upper)
+    assert_eq(classify_number(99), 2, "99 in 10..100")
+    return 0
+}
+
+@test
+func test_exclusive_range_excludes_upper() -> I32 {
+    // 100 is NOT in 10..100, it's in 100..=999
+    assert_eq(classify_number(100), 3, "100 NOT in 10..100, but in 100..=999")
+    return 0
+}
+
+@test
+func test_inclusive_range_three_digits() -> I32 {
+    assert_eq(classify_number(500), 3, "500 in 100..=999")
+    assert_eq(classify_number(999), 3, "999 in 100..=999")
+    return 0
+}
+
+@test
+func test_wildcard_fallback() -> I32 {
+    assert_eq(classify_number(1000), 4, "1000 -> wildcard")
+    return 0
+}
+
+@test
+func test_i64_range_lower() -> I32 {
+    assert_eq(classify_big(500000_i64), 1, "500000 in 0..=1000000")
+    return 0
+}
+
+@test
+func test_i64_range_upper_inclusive() -> I32 {
+    assert_eq(classify_big(1000000_i64), 1, "1000000 in 0..=1000000 (inclusive)")
+    return 0
+}
+
+@test
+func test_i64_range_next() -> I32 {
+    assert_eq(classify_big(1000001_i64), 2, "1000001 in next range")
+    return 0
+}
+
+@test
+func test_i64_range_large() -> I32 {
+    assert_eq(classify_big(500000000_i64), 2, "500000000 in second range")
+    return 0
+}

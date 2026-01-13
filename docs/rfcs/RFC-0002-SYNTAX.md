@@ -328,8 +328,8 @@ for item in collection {
     let mut __iter = collection.into_iter()
     loop {
         when __iter.next() {
-            Just(item) -> process(item),
-            Nothing -> break,
+            Just(item) => process(item),
+            Nothing => break,
         }
     }
 }
@@ -406,7 +406,7 @@ decorator log_calls {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         // Wrap function with logging
         when target {
-            Func(f) -> {
+            Func(f) => {
                 let original = f.body
                 f.body = quote {
                     println("Entering: " + ${f.name})
@@ -416,7 +416,7 @@ decorator log_calls {
                 }
                 DecoratorResult.Modified(f)
             },
-            _ -> DecoratorResult.Error("@log_calls only applies to functions"),
+            _ => DecoratorResult.Error("@log_calls only applies to functions"),
         }
     }
 }
@@ -430,14 +430,14 @@ Decorators can accept parameters:
 decorator retry(max_attempts: U32 = 3, delay_ms: U32 = 1000) {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
-            Func(f) -> {
+            Func(f) => {
                 let original = f.body
                 f.body = quote {
                     let mut attempts = 0
                     loop attempts < ${max_attempts} {
                         when ${original} {
-                            Ok(v) -> return Ok(v),
-                            Err(e) -> {
+                            Ok(v) => return Ok(v),
+                            Err(e) => {
                                 attempts += 1
                                 if attempts < ${max_attempts} then {
                                     sleep(Duration.millis(${delay_ms}))
@@ -450,7 +450,7 @@ decorator retry(max_attempts: U32 = 3, delay_ms: U32 = 1000) {
                 }
                 DecoratorResult.Modified(f)
             },
-            _ -> DecoratorResult.Error("@retry only applies to functions"),
+            _ => DecoratorResult.Error("@retry only applies to functions"),
         }
     }
 }
@@ -478,9 +478,9 @@ type DecoratorTarget =
 decorator validate {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
-            Field(f) -> { ... },
-            Param(p) -> { ... },
-            _ -> DecoratorResult.Error("@validate applies to fields and params"),
+            Field(f) => { ... },
+            Param(p) => { ... },
+            _ => DecoratorResult.Error("@validate applies to fields and params"),
         }
     }
 }
@@ -506,7 +506,7 @@ decorator deprecated(message: String = "This item is deprecated") {
 decorator memoize {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
-            Func(f) -> {
+            Func(f) => {
                 f.body = quote {
                     static cache: Map[Args, Return] = Map.new()
                     let args = (${f.params.as_tuple()})
@@ -519,7 +519,7 @@ decorator memoize {
                 }
                 DecoratorResult.Modified(f)
             },
-            _ -> DecoratorResult.Error("@memoize only applies to functions"),
+            _ => DecoratorResult.Error("@memoize only applies to functions"),
         }
     }
 }
@@ -581,11 +581,11 @@ Custom auto:
 decorator auto_serialize {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
-            Type(t) -> {
+            Type(t) => {
                 let impl_block = generate_serialize_impl(t)
                 DecoratorResult.AddItem(impl_block)
             },
-            _ -> DecoratorResult.Error("auto only applies to types"),
+            _ => DecoratorResult.Error("auto only applies to types"),
         }
     }
 }
@@ -602,7 +602,7 @@ Decorators use `quote` for code generation:
 decorator timer {
     func apply(target: DecoratorTarget) -> DecoratorResult {
         when target {
-            Func(f) -> {
+            Func(f) => {
                 let name = f.name
                 f.body = quote {
                     let start = Instant.now()
@@ -613,7 +613,7 @@ decorator timer {
                 }
                 DecoratorResult.Modified(f)
             },
-            _ -> DecoratorResult.Error("@timer only applies to functions"),
+            _ => DecoratorResult.Error("@timer only applies to functions"),
         }
     }
 }
@@ -742,8 +742,8 @@ if let Just(value) = maybe_value {
 
 // Desugars to
 when maybe_value {
-    Just(value) -> process(value),
-    Nothing -> default_action(),
+    Just(value) => process(value),
+    Nothing => default_action(),
 }
 ```
 
@@ -755,8 +755,8 @@ if let Ok(data) = result {
 
 // Desugars to (with implicit Nothing case)
 when result {
-    Ok(data) -> use_data(data),
-    Err(_) -> (),
+    Ok(data) => use_data(data),
+    Err(_) => (),
 }
 ```
 
@@ -814,8 +814,8 @@ do(x: I32, y: I32) -> I32 { x + y }
 ```tml
 // Surface: when expression
 when value {
-    Ok(x) -> process(x),
-    Err(e) -> handle(e),
+    Ok(x) => process(x),
+    Err(e) => handle(e),
 }
 
 // Desugars to IR match node
@@ -870,10 +870,10 @@ func find_max[T: Ord](items: ref List[T]) -> Maybe[ref T]
     let mut __iter = List::iter(items)
     loop {
       match Iterator::next(__iter) {
-        Just(item) -> {
+        Just(item) => {
           if Ord::gt(item, max) then max = ref item
         }
-        Nothing -> break
+        Nothing => break
       }
     }
     Just(max)

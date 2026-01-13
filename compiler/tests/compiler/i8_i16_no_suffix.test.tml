@@ -1,0 +1,26 @@
+// Test I8/I16 without explicit suffixes (type inference from context)
+use test
+
+// Test returning negative I8 literal without suffix
+func get_neg_i8() -> I8 {
+    return -42  // No suffix - should infer i8 from return type
+}
+
+// Test returning I8 MIN without suffix
+func get_i8_min() -> I8 {
+    return -128  // No suffix
+}
+
+@test
+func test_i8_negative_no_suffix() -> I32 {
+    let x: I8 = get_neg_i8()
+    assert_eq(x, -42i8, "should return -42")
+    return 0
+}
+
+@test
+func test_i8_min_no_suffix() -> I32 {
+    let x: I8 = get_i8_min()
+    assert_eq(x, -128i8, "should return -128")
+    return 0
+}

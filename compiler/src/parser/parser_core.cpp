@@ -103,9 +103,27 @@ auto Parser::expect(lexer::TokenKind kind, const std::string& message)
 }
 
 void Parser::skip_newlines() {
-    while (check(lexer::TokenKind::Newline)) {
+    while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::DocComment) ||
+           check(lexer::TokenKind::ModuleDocComment)) {
         advance();
     }
+}
+
+auto Parser::collect_doc_comment() -> std::optional<std::string> {
+    std::optional<std::string> doc;
+
+    // Skip newlines but collect the last doc comment before an item
+    while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::DocComment) ||
+           check(lexer::TokenKind::ModuleDocComment)) {
+        if (check(lexer::TokenKind::DocComment)) {
+            // Get the doc comment content from the token
+            const auto& token = peek();
+            doc = token.doc_value().content;
+        }
+        advance();
+    }
+
+    return doc;
 }
 
 void Parser::report_error(const std::string& message) {
@@ -288,9 +306,17 @@ auto Parser::make_deletion_fix(const SourceSpan& span, const std::string& desc) 
 
 auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector<ParseError>> {
     std::vector<DeclPtr> decls;
+    std::vector<std::string> module_docs;
     auto start_span = peek().span;
 
-    skip_newlines();
+    // Collect module-level doc comments (//!) at the start of the file
+    while (check(lexer::TokenKind::Newline) || check(lexer::TokenKind::ModuleDocComment)) {
+        if (check(lexer::TokenKind::ModuleDocComment)) {
+            const auto& token = peek();
+            module_docs.push_back(token.doc_value().content);
+        }
+        advance();
+    }
 
     while (!is_at_end()) {
         auto decl_result = parse_decl();
@@ -308,8 +334,10 @@ auto Parser::parse_module(const std::string& name) -> Result<Module, std::vector
     }
 
     auto end_span = previous().span;
-    return Module{
-        .name = name, .decls = std::move(decls), .span = SourceSpan::merge(start_span, end_span)};
+    return Module{.name = name,
+                  .module_docs = std::move(module_docs),
+                  .decls = std::move(decls),
+                  .span = SourceSpan::merge(start_span, end_span)};
 }
 
 // ============================================================================

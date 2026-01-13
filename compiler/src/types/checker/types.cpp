@@ -400,6 +400,29 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
                 }
             }
         }
+
+        // Try impl constant lookup (e.g., I32::MIN, I32::MAX)
+        std::string qualified_name = segments[0] + "::" + segments[1];
+        auto constant_sym = env_.current_scope()->lookup(qualified_name);
+        if (constant_sym) {
+            return constant_sym->type;
+        }
+
+        // Also check for primitive type constants directly
+        // This handles cases where the constant wasn't registered in scope
+        // but the type is a known primitive
+        if (segments[1] == "MIN" || segments[1] == "MAX") {
+            static const std::unordered_map<std::string, PrimitiveKind> primitive_kinds = {
+                {"I8", PrimitiveKind::I8},     {"I16", PrimitiveKind::I16},
+                {"I32", PrimitiveKind::I32},   {"I64", PrimitiveKind::I64},
+                {"I128", PrimitiveKind::I128}, {"U8", PrimitiveKind::U8},
+                {"U16", PrimitiveKind::U16},   {"U32", PrimitiveKind::U32},
+                {"U64", PrimitiveKind::U64},   {"U128", PrimitiveKind::U128}};
+            auto prim_it = primitive_kinds.find(segments[0]);
+            if (prim_it != primitive_kinds.end()) {
+                return make_primitive(prim_it->second);
+            }
+        }
     }
 
     return make_unit();

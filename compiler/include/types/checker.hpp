@@ -104,6 +104,7 @@ private:
     int loop_depth_ = 0;
     bool in_lowlevel_ = false;   // When true, & returns pointer instead of reference
     bool in_async_func_ = false; // When true, .await expressions are allowed
+    std::vector<WhereConstraint> current_where_constraints_; // Current function's where clauses
 
     // Declaration registration (first pass)
     void register_struct_decl(const parser::StructDecl& decl);

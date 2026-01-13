@@ -1,0 +1,31 @@
+// Test file for doc comment lexer functionality
+// This is a placeholder until parser support is added
+// The lexer now correctly produces DocComment and ModuleDocComment tokens
+
+use test
+
+// For now, just verify normal code still works
+// Doc comments will be fully tested once parser Phase 2 is complete
+
+func regular_function() -> I32 {
+    return 42
+}
+
+type RegularStruct {
+    value: I32,
+}
+
+// Regular comment - not a doc comment
+//// Four slashes - also not a doc comment
+
+@test
+func test_regular_code_works() {
+    let x: I32 = regular_function()
+    assert_eq(x, 42, "regular function should work")
+}
+
+@test
+func test_regular_struct_works() {
+    let s: RegularStruct = RegularStruct { value: 100 }
+    assert_eq(s.value, 100, "regular struct should work")
+}

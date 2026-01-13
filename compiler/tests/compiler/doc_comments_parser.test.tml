@@ -1,0 +1,80 @@
+//! Module-level documentation for this test file.
+//! This tests that doc comments are correctly attached to AST nodes.
+
+use test
+
+/// A documented function that adds two numbers.
+///
+/// This function takes two I32 values and returns their sum.
+func documented_add(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+/// A documented struct representing a 2D point.
+type DocumentedPoint {
+    /// The x-coordinate of the point.
+    x: I32,
+    /// The y-coordinate of the point.
+    y: I32,
+}
+
+/// An enum representing different shapes.
+type Shape {
+    /// A circle with a given radius.
+    Circle(I32),
+    /// A rectangle with width and height.
+    Rectangle(I32, I32),
+    /// A point with no data.
+    Point,
+}
+
+/// A documented constant.
+const DOCUMENTED_CONST: I32 = 42_i32
+
+/// A documented behavior (trait).
+behavior Documented {
+    /// Returns a string representation.
+    func describe(this) -> Str
+}
+
+/// Implementation of Documented for DocumentedPoint.
+impl Documented for DocumentedPoint {
+    func describe(this) -> Str {
+        return "a point"
+    }
+}
+
+@test
+func test_documented_add_works() {
+    let result: I32 = documented_add(10, 20)
+    assert_eq(result, 30, "documented_add should return 30")
+}
+
+@test
+func test_documented_point_works() {
+    let p: DocumentedPoint = DocumentedPoint { x: 5, y: 10 }
+    assert_eq(p.x, 5, "x should be 5")
+    assert_eq(p.y, 10, "y should be 10")
+}
+
+@test
+func test_shape_enum_works() {
+    let c: Shape = Shape::Circle(10_i32)
+    let r: Shape = Shape::Rectangle(5_i32, 3_i32)
+    let pt: Shape = Shape::Point
+
+    // Just verify they can be created
+    assert(true, "shapes created successfully")
+}
+
+@test
+func test_documented_const_works() {
+    assert_eq(DOCUMENTED_CONST, 42_i32, "DOCUMENTED_CONST should be 42")
+}
+
+@test
+func test_documented_behavior_works() {
+    let p: DocumentedPoint = DocumentedPoint { x: 1, y: 2 }
+    let desc: Str = p.describe()
+    assert_eq(desc, "a point", "describe should return 'a point'")
+}

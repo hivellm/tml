@@ -334,9 +334,12 @@ void TypeChecker::register_trait_decl(const parser::TraitDecl& decl) {
 
         std::vector<std::string> bounds;
         for (const auto& bound : assoc.bounds) {
-            // Convert TypePath to string (just use the last segment for now)
-            if (!bound.segments.empty()) {
-                bounds.push_back(bound.segments.back());
+            // Convert TypePtr to string (extract name from parser::NamedType)
+            if (bound && bound->is<parser::NamedType>()) {
+                const auto& named = bound->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    bounds.push_back(named.path.segments.back());
+                }
             }
         }
         // Resolve default type if present
@@ -519,19 +522,36 @@ void TypeChecker::check_func_decl(const parser::FuncDecl& func) {
                 }
             }
 
-            // Extract behavior names from type pointers
+            // Extract behavior names and parameterized bounds from type pointers
             std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
             for (const auto& behavior_type : behaviors) {
                 if (behavior_type->is<parser::NamedType>()) {
                     const auto& named = behavior_type->as<parser::NamedType>();
                     if (!named.path.segments.empty()) {
-                        behavior_names.push_back(named.path.segments.back());
+                        std::string behavior_name = named.path.segments.back();
+
+                        // Check if this has type arguments (parameterized bound)
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
                     }
                 }
             }
 
-            if (!type_param_name.empty() && !behavior_names.empty()) {
-                where_constraints.push_back(WhereConstraint{type_param_name, behavior_names});
+            if (!type_param_name.empty() &&
+                (!behavior_names.empty() || !parameterized_bounds.empty())) {
+                where_constraints.push_back(WhereConstraint{
+                    type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
             }
         }
     }
@@ -585,6 +605,50 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     bool was_async = in_async_func_;
     in_async_func_ = func.is_async;
 
+    // Extract and store where constraints for method lookup on bounded generics
+    auto saved_where_constraints = current_where_constraints_;
+    current_where_constraints_.clear();
+    if (func.where_clause) {
+        for (const auto& [type_ptr, behaviors] : func.where_clause->constraints) {
+            std::string type_param_name;
+            if (type_ptr->is<parser::NamedType>()) {
+                const auto& named = type_ptr->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    type_param_name = named.path.segments[0];
+                }
+            }
+
+            std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
+            for (const auto& behavior_type : behaviors) {
+                if (behavior_type->is<parser::NamedType>()) {
+                    const auto& named = behavior_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        std::string behavior_name = named.path.segments.back();
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
+                    }
+                }
+            }
+
+            if (!type_param_name.empty() &&
+                (!behavior_names.empty() || !parameterized_bounds.empty())) {
+                current_where_constraints_.push_back(WhereConstraint{
+                    type_param_name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+    }
+
     // Add parameters to scope
     for (const auto& p : func.params) {
         if (p.pattern->is<parser::IdentPattern>()) {
@@ -625,6 +689,7 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     env_.pop_scope();
     current_return_type_ = nullptr;
     in_async_func_ = was_async;
+    current_where_constraints_ = std::move(saved_where_constraints);
 }
 
 void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {

@@ -672,12 +672,35 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             generic_names.insert(g.name);
         }
 
-        // Infer type arguments using unification
-        // For each argument, unify the parameter type pattern with the argument type
+        // First, check for explicit type arguments in the callee
+        // e.g., get_from_container[IntBox](ref box, 0) has explicit type arg IntBox
         std::unordered_map<std::string, types::TypePtr> bindings;
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics.has_value() && !path_expr.generics->args.empty()) {
+                // Map explicit type args to generic parameters
+                for (size_t i = 0;
+                     i < path_expr.generics->args.size() && i < gen_func.generics.size(); ++i) {
+                    const auto& arg = path_expr.generics->args[i];
+                    if (arg.is_type()) {
+                        // Convert parser type to semantic type
+                        std::unordered_map<std::string, types::TypePtr> empty_subs;
+                        types::TypePtr explicit_type =
+                            resolve_parser_type_with_subs(*arg.as_type(), empty_subs);
+                        bindings[gen_func.generics[i].name] = explicit_type;
+                        TML_DEBUG_LN(
+                            "[GENERIC CALL] explicit type arg: "
+                            << gen_func.generics[i].name << " -> "
+                            << (explicit_type->is<types::NamedType>() ? "NamedType" : "other"));
+                    }
+                }
+            }
+        }
+
+        // Infer any remaining type arguments using unification
+        // For each argument, unify the parameter type pattern with the argument type
         for (size_t i = 0; i < call.args.size() && i < gen_func.params.size(); ++i) {
             types::TypePtr arg_type = infer_expr_type(*call.args[i]);
-
             unify_types(*gen_func.params[i].type, arg_type, generic_names, bindings);
         }
 

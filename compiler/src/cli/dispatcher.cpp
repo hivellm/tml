@@ -46,6 +46,7 @@
 #include "commands/cmd_build.hpp"
 #include "commands/cmd_cache.hpp"
 #include "commands/cmd_debug.hpp"
+#include "commands/cmd_doc.hpp"
 #include "commands/cmd_format.hpp"
 #include "commands/cmd_init.hpp"
 #include "commands/cmd_lint.hpp"
@@ -404,6 +405,12 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "lint") {
         return run_lint(argc, argv);
+    }
+
+    if (command == "doc") {
+        auto options = parse_doc_args(argc, argv);
+        options.verbose = verbose;
+        return run_doc(options);
     }
 
     if (command == "add") {

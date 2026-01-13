@@ -915,6 +915,94 @@ auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::strin
         return ""; // Binding pattern - always matches
     } else if (pattern.is<parser::WildcardPattern>()) {
         return ""; // Always matches
+    } else if (pattern.is<parser::RangePattern>()) {
+        const auto& range_pat = pattern.as<parser::RangePattern>();
+
+        // Generate comparisons for range bounds
+        // Range pattern: start to end (exclusive) or start through end (inclusive)
+        std::string cmp_start;
+        std::string cmp_end;
+
+        // Generate start comparison: scrutinee >= start
+        if (range_pat.start.has_value()) {
+            std::string start_val = gen_expr(*range_pat.start.value());
+            std::string start_type = last_expr_type_;
+
+            // Ensure types match
+            if (start_type != scrutinee_type && !start_type.empty()) {
+                // Try to convert if needed
+                if ((scrutinee_type == "i64" && start_type == "i32") ||
+                    (scrutinee_type == "i32" && start_type == "i64")) {
+                    std::string conv = fresh_reg();
+                    if (scrutinee_type == "i64" && start_type == "i32") {
+                        emit_line("  " + conv + " = sext i32 " + start_val + " to i64");
+                    } else {
+                        emit_line("  " + conv + " = trunc i64 " + start_val + " to i32");
+                    }
+                    start_val = conv;
+                }
+            }
+
+            cmp_start = fresh_reg();
+            if (scrutinee_type == "float" || scrutinee_type == "double") {
+                emit_line("  " + cmp_start + " = fcmp oge " + scrutinee_type + " " + scrutinee +
+                          ", " + start_val);
+            } else {
+                emit_line("  " + cmp_start + " = icmp sge " + scrutinee_type + " " + scrutinee +
+                          ", " + start_val);
+            }
+        }
+
+        // Generate end comparison: scrutinee < end (exclusive) or scrutinee <= end (inclusive)
+        if (range_pat.end.has_value()) {
+            std::string end_val = gen_expr(*range_pat.end.value());
+            std::string end_type = last_expr_type_;
+
+            // Ensure types match
+            if (end_type != scrutinee_type && !end_type.empty()) {
+                if ((scrutinee_type == "i64" && end_type == "i32") ||
+                    (scrutinee_type == "i32" && end_type == "i64")) {
+                    std::string conv = fresh_reg();
+                    if (scrutinee_type == "i64" && end_type == "i32") {
+                        emit_line("  " + conv + " = sext i32 " + end_val + " to i64");
+                    } else {
+                        emit_line("  " + conv + " = trunc i64 " + end_val + " to i32");
+                    }
+                    end_val = conv;
+                }
+            }
+
+            cmp_end = fresh_reg();
+            if (scrutinee_type == "float" || scrutinee_type == "double") {
+                if (range_pat.inclusive) {
+                    emit_line("  " + cmp_end + " = fcmp ole " + scrutinee_type + " " + scrutinee +
+                              ", " + end_val);
+                } else {
+                    emit_line("  " + cmp_end + " = fcmp olt " + scrutinee_type + " " + scrutinee +
+                              ", " + end_val);
+                }
+            } else {
+                if (range_pat.inclusive) {
+                    emit_line("  " + cmp_end + " = icmp sle " + scrutinee_type + " " + scrutinee +
+                              ", " + end_val);
+                } else {
+                    emit_line("  " + cmp_end + " = icmp slt " + scrutinee_type + " " + scrutinee +
+                              ", " + end_val);
+                }
+            }
+        }
+
+        // Combine comparisons
+        if (!cmp_start.empty() && !cmp_end.empty()) {
+            std::string combined = fresh_reg();
+            emit_line("  " + combined + " = and i1 " + cmp_start + ", " + cmp_end);
+            return combined;
+        } else if (!cmp_start.empty()) {
+            return cmp_start; // Only lower bound
+        } else if (!cmp_end.empty()) {
+            return cmp_end; // Only upper bound
+        }
+        return ""; // Open range - always matches
     }
     return ""; // Default: always matches
 }
@@ -1175,6 +1263,180 @@ auto LLVMIRGen::gen_when(const parser::WhenExpr& when) -> std::string {
                         locals_[ident.name] =
                             VarInfo{var_alloca, bound_type, payload_type, std::nullopt};
                     }
+                }
+            }
+        }
+        // Bind struct pattern variables
+        else if (arm.pattern->is<parser::StructPattern>()) {
+            const auto& struct_pat = arm.pattern->as<parser::StructPattern>();
+
+            // Get the struct type name from the pattern path
+            std::string struct_name;
+            if (!struct_pat.path.segments.empty()) {
+                struct_name = struct_pat.path.segments.back();
+            }
+
+            // Get semantic type info for field types
+            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+
+            // Look up struct field info from struct_fields_
+            auto struct_it = struct_fields_.find(struct_name);
+
+            for (size_t i = 0; i < struct_pat.fields.size(); ++i) {
+                const auto& [field_name, field_pattern] = struct_pat.fields[i];
+
+                // Only handle ident patterns for now
+                if (!field_pattern->is<parser::IdentPattern>()) {
+                    continue;
+                }
+
+                const auto& ident = field_pattern->as<parser::IdentPattern>();
+                if (ident.name.empty() || ident.name == "_") {
+                    continue;
+                }
+
+                // Find field index in struct
+                int field_idx = -1;
+                std::string field_type = "i64"; // Default
+                if (struct_it != struct_fields_.end()) {
+                    const auto& fields = struct_it->second;
+                    for (size_t fi = 0; fi < fields.size(); ++fi) {
+                        if (fields[fi].name == field_name) {
+                            field_idx = fields[fi].index;
+                            field_type = fields[fi].llvm_type;
+                            break;
+                        }
+                    }
+                }
+
+                if (field_idx < 0) {
+                    // Field not found in struct_fields_, try to use sequential index
+                    field_idx = static_cast<int>(i);
+                }
+
+                // Extract field pointer from scrutinee
+                std::string field_ptr = fresh_reg();
+                emit_line("  " + field_ptr + " = getelementptr inbounds " + scrutinee_type +
+                          ", ptr " + scrutinee_ptr + ", i32 0, i32 " + std::to_string(field_idx));
+
+                // For struct/complex types, store pointer directly
+                if (field_type.starts_with("%struct.") || field_type.starts_with("{")) {
+                    locals_[ident.name] = VarInfo{field_ptr, field_type, nullptr, std::nullopt};
+                } else {
+                    // For primitives, load and store
+                    std::string field_val = fresh_reg();
+                    emit_line("  " + field_val + " = load " + field_type + ", ptr " + field_ptr);
+
+                    std::string var_alloca = fresh_reg();
+                    emit_line("  " + var_alloca + " = alloca " + field_type);
+                    emit_line("  store " + field_type + " " + field_val + ", ptr " + var_alloca);
+                    locals_[ident.name] = VarInfo{var_alloca, field_type, nullptr, std::nullopt};
+                }
+            }
+        }
+        // Bind tuple pattern variables
+        else if (arm.pattern->is<parser::TuplePattern>()) {
+            const auto& tuple_pat = arm.pattern->as<parser::TuplePattern>();
+
+            // Get semantic type for the scrutinee
+            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+
+            // Use the existing helper function for tuple pattern binding
+            gen_tuple_pattern_binding(tuple_pat, scrutinee, scrutinee_type, scrutinee_semantic);
+        }
+        // Bind array pattern variables: [a, b, c] or [head, ..rest]
+        else if (arm.pattern->is<parser::ArrayPattern>()) {
+            const auto& array_pat = arm.pattern->as<parser::ArrayPattern>();
+
+            // Get semantic type for the scrutinee
+            types::TypePtr scrutinee_semantic = infer_expr_type(*when.scrutinee);
+
+            // Parse element type from the array type string (e.g., "[5 x i32]" -> "i32")
+            std::string elem_type = "i32"; // Default
+            size_t x_pos = scrutinee_type.find(" x ");
+            if (x_pos != std::string::npos) {
+                size_t end_pos = scrutinee_type.rfind(']');
+                if (end_pos != std::string::npos && end_pos > x_pos + 3) {
+                    elem_type = scrutinee_type.substr(x_pos + 3, end_pos - x_pos - 3);
+                }
+            }
+
+            // Get semantic element type if available
+            types::TypePtr semantic_elem = nullptr;
+            if (scrutinee_semantic && scrutinee_semantic->is<types::ArrayType>()) {
+                const auto& arr = scrutinee_semantic->as<types::ArrayType>();
+                semantic_elem = arr.element;
+            }
+
+            // Store the array value to a temporary so we can GEP into it
+            std::string array_ptr = fresh_reg();
+            emit_line("  " + array_ptr + " = alloca " + scrutinee_type);
+            emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " + array_ptr);
+
+            // Bind each element pattern
+            for (size_t i = 0; i < array_pat.elements.size(); ++i) {
+                const auto& elem_pattern = *array_pat.elements[i];
+
+                // Get pointer to element
+                std::string elem_ptr = fresh_reg();
+                emit_line("  " + elem_ptr + " = getelementptr inbounds " + scrutinee_type +
+                          ", ptr " + array_ptr + ", i32 0, i32 " + std::to_string(i));
+
+                // Load the element
+                std::string elem_val = fresh_reg();
+                emit_line("  " + elem_val + " = load " + elem_type + ", ptr " + elem_ptr);
+
+                // Bind based on pattern type
+                if (elem_pattern.is<parser::IdentPattern>()) {
+                    const auto& ident = elem_pattern.as<parser::IdentPattern>();
+                    if (!ident.name.empty() && ident.name != "_") {
+                        std::string alloca_reg = fresh_reg();
+                        emit_line("  " + alloca_reg + " = alloca " + elem_type);
+                        emit_line("  store " + elem_type + " " + elem_val + ", ptr " + alloca_reg);
+                        locals_[ident.name] =
+                            VarInfo{alloca_reg, elem_type, semantic_elem, std::nullopt};
+                    }
+                } else if (elem_pattern.is<parser::WildcardPattern>()) {
+                    // Ignore the value
+                }
+                // Note: Nested patterns could be added here recursively
+            }
+
+            // Handle rest pattern if present (e.g., [a, b, ..rest])
+            // Rest pattern binds to the remaining elements as a slice/array
+            if (array_pat.rest) {
+                const auto& rest_pattern = *array_pat.rest;
+                if (rest_pattern->is<parser::IdentPattern>()) {
+                    const auto& rest_ident = rest_pattern->as<parser::IdentPattern>();
+                    if (!rest_ident.name.empty() && rest_ident.name != "_") {
+                        // Calculate remaining elements pointer
+                        size_t rest_start = array_pat.elements.size();
+                        std::string rest_ptr = fresh_reg();
+                        emit_line("  " + rest_ptr + " = getelementptr inbounds " + scrutinee_type +
+                                  ", ptr " + array_ptr + ", i32 0, i32 " +
+                                  std::to_string(rest_start));
+                        // Bind as a pointer to the rest of the array
+                        locals_[rest_ident.name] =
+                            VarInfo{rest_ptr, "ptr", scrutinee_semantic, std::nullopt};
+                    }
+                }
+            }
+        }
+        // Bind ident pattern (simple variable binding to scrutinee)
+        else if (arm.pattern->is<parser::IdentPattern>()) {
+            const auto& ident = arm.pattern->as<parser::IdentPattern>();
+            if (!ident.name.empty() && ident.name != "_") {
+                // Bind the entire scrutinee to the variable
+                if (scrutinee_type.starts_with("%struct.") || scrutinee_type.starts_with("{")) {
+                    locals_[ident.name] =
+                        VarInfo{scrutinee_ptr, scrutinee_type, nullptr, std::nullopt};
+                } else {
+                    std::string var_alloca = fresh_reg();
+                    emit_line("  " + var_alloca + " = alloca " + scrutinee_type);
+                    emit_line("  store " + scrutinee_type + " " + scrutinee + ", ptr " +
+                              var_alloca);
+                    locals_[ident.name] =
+                        VarInfo{var_alloca, scrutinee_type, nullptr, std::nullopt};
                 }
             }
         }

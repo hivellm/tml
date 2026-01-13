@@ -50,6 +50,7 @@ void print_usage() {
     std::cout << "  test      Run tests\n";
     std::cout << "  fmt       Format source files\n";
     std::cout << "  lint      Check files for style issues\n";
+    std::cout << "  doc       Generate documentation\n";
     std::cout << "  cache     Manage build cache\n";
     std::cout << "  rlib      Inspect RLIB libraries\n";
     std::cout << "  init      Initialize a new project\n";

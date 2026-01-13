@@ -178,6 +178,14 @@ private:
     /// Skips a block comment (`/* ... */`), supporting nesting.
     void skip_block_comment();
 
+    /// Checks if current position is a doc comment (`///` or `//!`).
+    /// Returns true and sets kind if it's a doc comment.
+    [[nodiscard]] auto is_doc_comment() const -> bool;
+
+    /// Lexes a documentation comment (`///` or `//!`).
+    /// Collects consecutive doc comment lines into a single token.
+    [[nodiscard]] auto lex_doc_comment() -> Token;
+
     // ========================================================================
     // Token Lexers
     // ========================================================================

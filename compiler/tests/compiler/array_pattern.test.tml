@@ -1,0 +1,80 @@
+use test
+
+func sum_array(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [a, b, c] => a + b + c
+    }
+}
+
+func first_element(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [a, _, _] => a
+    }
+}
+
+func second_element(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [_, b, _] => b
+    }
+}
+
+func last_element(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [_, _, c] => c
+    }
+}
+
+func sum_pair(arr: [I32; 2]) -> I32 {
+    return when arr {
+        [a, b] => a + b
+    }
+}
+
+@test
+func test_array_pattern_sum() -> I32 {
+    let arr: [I32; 3] = [1i32, 2i32, 3i32]
+    assert_eq(sum_array(arr), 6, "[1, 2, 3] => 6")
+    return 0
+}
+
+@test
+func test_array_pattern_first() -> I32 {
+    let arr: [I32; 3] = [10i32, 20i32, 30i32]
+    assert_eq(first_element(arr), 10, "first of [10, 20, 30] is 10")
+    return 0
+}
+
+@test
+func test_array_pattern_second() -> I32 {
+    let arr: [I32; 3] = [10i32, 20i32, 30i32]
+    assert_eq(second_element(arr), 20, "second of [10, 20, 30] is 20")
+    return 0
+}
+
+@test
+func test_array_pattern_last() -> I32 {
+    let arr: [I32; 3] = [10i32, 20i32, 30i32]
+    assert_eq(last_element(arr), 30, "last of [10, 20, 30] is 30")
+    return 0
+}
+
+@test
+func test_array_pattern_zeros() -> I32 {
+    let arr: [I32; 3] = [0i32, 0i32, 0i32]
+    assert_eq(sum_array(arr), 0, "[0, 0, 0] => 0")
+    return 0
+}
+
+@test
+func test_array_pattern_negative() -> I32 {
+    let arr: [I32; 3] = [-1i32, 2i32, -3i32]
+    assert_eq(sum_array(arr), -2, "[-1, 2, -3] => -2")
+    return 0
+}
+
+@test
+func test_array_pattern_pair() -> I32 {
+    let arr: [I32; 2] = [42i32, 58i32]
+    assert_eq(sum_pair(arr), 100, "[42, 58] => 100")
+    return 0
+}

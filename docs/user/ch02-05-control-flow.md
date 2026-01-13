@@ -429,3 +429,186 @@ func main() {
     println("Sum: ", sum)  // Sum: 55
 }
 ```
+
+## Pattern Matching with `when`
+
+The `when` expression is TML's powerful pattern matching construct (similar to `match` in Rust or `switch` in other languages). It lets you compare a value against patterns and execute code based on which pattern matches.
+
+### Basic Syntax
+
+```tml
+func describe_number(n: I32) -> String {
+    return when n {
+        0 => "zero",
+        1 => "one",
+        2 => "two",
+        _ => "other"
+    }
+}
+```
+
+The `_` is a wildcard pattern that matches anything. Each arm is separated by commas.
+
+### Block Bodies
+
+Each arm can have a block with multiple statements:
+
+```tml
+func process_number(n: I32) -> I32 {
+    return when n {
+        0 => {
+            let x: I32 = 10
+            let y: I32 = 20
+            x + y  // Last expression is the return value
+        },
+        1 => {
+            let a: I32 = 100
+            a * 2
+        },
+        _ => n * n
+    }
+}
+```
+
+### Range Patterns
+
+Match ranges of values with `to` (exclusive) and `through` (inclusive):
+
+```tml
+func classify(n: I32) -> String {
+    return when n {
+        0 through 9 => "single digit",
+        10 to 100 => "two digits",
+        100 through 999 => "three digits",
+        _ => "large number"
+    }
+}
+
+// Character ranges also work
+func is_vowel(c: Char) -> Bool {
+    return when c {
+        'a' through 'e' => true,
+        'i' => true,
+        'o' => true,
+        'u' => true,
+        _ => false
+    }
+}
+```
+
+### Struct Patterns
+
+Destructure structs in patterns:
+
+```tml
+type Point {
+    x: I32,
+    y: I32,
+}
+
+func classify_point(p: Point) -> String {
+    return when p {
+        Point { x, y } => {
+            if x == 0 and y == 0 {
+                "origin"
+            } else if x == 0 {
+                "on y-axis"
+            } else if y == 0 {
+                "on x-axis"
+            } else {
+                "elsewhere"
+            }
+        }
+    }
+}
+
+func sum_point(p: Point) -> I32 {
+    return when p {
+        Point { x, y } => x + y
+    }
+}
+```
+
+### Tuple Patterns
+
+Destructure tuples in patterns:
+
+```tml
+func swap(pair: (I32, I32)) -> (I32, I32) {
+    return when pair {
+        (a, b) => (b, a)
+    }
+}
+
+func sum_triple(t: (I32, I32, I32)) -> I32 {
+    return when t {
+        (a, b, c) => a + b + c
+    }
+}
+```
+
+### Array Patterns
+
+Destructure arrays in patterns:
+
+```tml
+func first_element(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [a, _, _] => a
+    }
+}
+
+func sum_array(arr: [I32; 3]) -> I32 {
+    return when arr {
+        [a, b, c] => a + b + c
+    }
+}
+```
+
+### Enum Patterns
+
+Match enum variants:
+
+```tml
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+func unwrap_or(m: Maybe[I32], default: I32) -> I32 {
+    return when m {
+        Just(value) => value,
+        Nothing => default
+    }
+}
+
+type Outcome[T, E] {
+    Ok(T),
+    Err(E)
+}
+
+func handle_result(r: Outcome[I32, String]) -> I32 {
+    return when r {
+        Ok(value) => value,
+        Err(msg) => {
+            println("Error: " + msg)
+            -1
+        }
+    }
+}
+```
+
+### Compared to Traditional `switch`
+
+| Traditional Switch (C/Java) | TML `when` |
+|-----------------------------|-----------|
+| `case 1: { code; break; }` | `1 => { code }` |
+| Fall-through by default | Each arm isolated (no fall-through) |
+| `default:` | `_ =>` |
+| Statement (no return value) | Expression (returns value) |
+| Only matches literals | Supports pattern matching |
+
+TML's `when` is:
+- **Safer**: No accidental fall-through
+- **More expressive**: Returns values, supports destructuring
+- **Cleaner syntax**: No `break` statements needed

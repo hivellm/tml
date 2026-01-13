@@ -287,6 +287,12 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "newline";
     case TokenKind::Error:
         return "error";
+
+    // Documentation comments
+    case TokenKind::DocComment:
+        return "doc_comment";
+    case TokenKind::ModuleDocComment:
+        return "module_doc_comment";
     }
     return "unknown";
 }
@@ -327,6 +333,11 @@ auto Token::char_value() const -> const CharValue& {
 auto Token::bool_value() const -> bool {
     assert(kind == TokenKind::BoolLiteral);
     return std::get<bool>(value);
+}
+
+auto Token::doc_value() const -> const DocValue& {
+    assert(kind == TokenKind::DocComment || kind == TokenKind::ModuleDocComment);
+    return std::get<DocValue>(value);
 }
 
 } // namespace tml::lexer

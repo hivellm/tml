@@ -46,10 +46,21 @@ struct Symbol {
     SourceSpan span;  ///< Declaration location.
 };
 
+/// A single behavior bound with optional type parameters.
+///
+/// Represents a constraint like `FromIterator[T]` where `T` is a type argument.
+/// For simple bounds like `Clone`, the `type_args` vector is empty.
+struct BoundConstraint {
+    std::string behavior_name;      ///< Behavior name (e.g., "FromIterator").
+    std::vector<TypePtr> type_args; ///< Type arguments (e.g., [T] in FromIterator[T]).
+};
+
 /// A where clause constraint: type parameter -> required behaviors.
 struct WhereConstraint {
     std::string type_param;                      ///< The constrained type parameter.
-    std::vector<std::string> required_behaviors; ///< Required behavior implementations.
+    std::vector<std::string> required_behaviors; ///< Required behavior implementations (simple).
+    std::vector<BoundConstraint>
+        parameterized_bounds; ///< Parameterized bounds (e.g., FromIterator[T]).
 };
 
 /// A const generic parameter definition.
@@ -323,6 +334,10 @@ public:
     /// Returns true if the type implements the behavior.
     [[nodiscard]] bool type_implements(const std::string& type_name,
                                        const std::string& behavior_name) const;
+
+    /// Returns true if the type implements the behavior (TypePtr overload).
+    /// This overload handles special cases like closures implementing Fn traits.
+    [[nodiscard]] bool type_implements(const TypePtr& type, const std::string& behavior_name) const;
 
     /// Returns true if the type implements Drop.
     [[nodiscard]] bool type_needs_drop(const std::string& type_name) const;

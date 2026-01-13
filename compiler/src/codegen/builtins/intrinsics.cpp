@@ -113,8 +113,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     static const std::unordered_set<std::string> intrinsics = {
         "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
         "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
-        "size_of", "align_of", "type_name", "ptr_offset", "ptr_read", "ptr_write", "ptr_copy",
-        "volatile_read", "volatile_write", "atomic_load", "atomic_store", "atomic_cas",
+        "size_of", "align_of", "type_name", "type_id", "ptr_offset", "ptr_read", "ptr_write",
+        "ptr_copy", "volatile_read", "volatile_write", "atomic_load", "atomic_store", "atomic_cas",
         "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or", "atomic_xor",
         "fence", "black_box",
         // Math intrinsics
@@ -779,6 +779,41 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     if (fn_name == "align_of") {
         last_expr_type_ = "i64";
         return "8"; // Placeholder - would need type resolution
+    }
+
+    // type_id[T]() -> U64
+    // Returns a unique ID for each monomorphized type
+    if (fn_name == "type_id") {
+        // Get type argument from call
+        std::string type_name = "unknown";
+
+        // Try to extract type argument from PathExpr generics (e.g., type_id[I32]())
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    std::unordered_map<std::string, types::TypePtr> empty_subs;
+                    types::TypePtr type_arg =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), empty_subs);
+                    type_name = mangle_type(type_arg);
+                }
+            }
+        } else if (call.callee->is<parser::IdentExpr>()) {
+            // Try to look up in current context if type_id called with turbofish later
+            // For now, just handle the direct case
+        }
+
+        // Generate a stable hash from the type name
+        // Use FNV-1a hash for stability across compilations
+        uint64_t hash = 14695981039346656037ULL; // FNV-1a offset basis
+        for (char c : type_name) {
+            hash ^= static_cast<uint64_t>(c);
+            hash *= 1099511628211ULL; // FNV-1a prime
+        }
+
+        last_expr_type_ = "i64";
+        return std::to_string(hash);
     }
 
     // ============================================================================

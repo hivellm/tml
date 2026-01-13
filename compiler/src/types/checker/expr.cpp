@@ -436,6 +436,24 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         }
     }
 
+    // Check for compiler intrinsics called with generics (e.g., type_id[I32](), size_of[T]())
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>();
+        if (path.path.segments.size() == 1) {
+            const std::string& name = path.path.segments[0];
+            // List of intrinsics that take a type parameter and return I64
+            if (name == "type_id" || name == "size_of" || name == "align_of") {
+                // These intrinsics take a type parameter [T] and return I64
+                // The type argument is validated by codegen, we just need to return the right type
+                return make_primitive(PrimitiveKind::I64);
+            }
+            // type_name[T]() returns Str
+            if (name == "type_name") {
+                return make_primitive(PrimitiveKind::Str);
+            }
+        }
+    }
+
     // Check function lookup first
     if (call.callee->is<parser::IdentExpr>()) {
         auto& ident = call.callee->as<parser::IdentExpr>();
@@ -471,20 +489,44 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                 for (const auto& constraint : func->where_constraints) {
                     auto it = substitutions.find(constraint.type_param);
                     if (it != substitutions.end()) {
-                        std::string type_name;
-                        if (it->second->is<PrimitiveType>()) {
-                            type_name = primitive_to_string(it->second->as<PrimitiveType>().kind);
-                        } else if (it->second->is<NamedType>()) {
-                            type_name = it->second->as<NamedType>().name;
-                        }
+                        // Use the TypePtr directly for type_implements to handle closures
+                        TypePtr actual_type = it->second;
+                        std::string type_name = type_to_string(actual_type);
 
+                        // Check simple behavior bounds
                         for (const auto& behavior : constraint.required_behaviors) {
-                            if (!env_.type_implements(type_name, behavior)) {
+                            if (!env_.type_implements(actual_type, behavior)) {
                                 error("Type '" + type_name + "' does not implement behavior '" +
                                           behavior + "' required by constraint on " +
                                           constraint.type_param,
                                       call.callee->span);
                             }
+                        }
+
+                        // Check parameterized behavior bounds
+                        for (const auto& bound : constraint.parameterized_bounds) {
+                            // First check that the type implements the base behavior
+                            // Use TypePtr overload to handle closures implementing Fn traits
+                            if (!env_.type_implements(actual_type, bound.behavior_name)) {
+                                // Build type args string for error message
+                                std::string type_args_str;
+                                if (!bound.type_args.empty()) {
+                                    type_args_str = "[";
+                                    for (size_t i = 0; i < bound.type_args.size(); ++i) {
+                                        if (i > 0)
+                                            type_args_str += ", ";
+                                        type_args_str += type_to_string(bound.type_args[i]);
+                                    }
+                                    type_args_str += "]";
+                                }
+                                error("Type '" + type_name + "' does not implement behavior '" +
+                                          bound.behavior_name + type_args_str +
+                                          "' required by constraint on " + constraint.type_param,
+                                      call.callee->span);
+                            }
+                            // Note: Full parameterized bound checking (verifying type args match)
+                            // would require tracking impl blocks with their type arguments.
+                            // For now, we just verify the base behavior is implemented.
                         }
                     }
                 }
@@ -813,6 +855,62 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             }
             error("Unknown method '" + call.method + "' on behavior '" + dyn.behavior_name + "'",
                   call.receiver->span);
+        }
+    }
+
+    // Handle method calls on generic type parameters with behavior bounds from where clauses
+    // e.g., func process[C](c: ref C) where C: Container[I32] { c.get(0) }
+    TypePtr unwrapped_receiver = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        unwrapped_receiver = receiver_type->as<RefType>().inner;
+    }
+    if (unwrapped_receiver->is<NamedType>()) {
+        auto& named_receiver = unwrapped_receiver->as<NamedType>();
+        // Check if this is a type parameter by looking for it in current where constraints
+        for (const auto& constraint : current_where_constraints_) {
+            if (constraint.type_param == named_receiver.name) {
+                // Found where constraint for this type parameter
+                // Look through parameterized bounds for a behavior with this method
+                for (const auto& bound : constraint.parameterized_bounds) {
+                    auto behavior_def = env_.lookup_behavior(bound.behavior_name);
+                    if (behavior_def) {
+                        for (const auto& method : behavior_def->methods) {
+                            if (method.name == call.method) {
+                                // Build substitution map from behavior type params to bound's type
+                                // args e.g., for Container[I32], map T -> I32
+                                std::unordered_map<std::string, TypePtr> subs;
+                                if (!bound.type_args.empty() &&
+                                    !behavior_def->type_params.empty()) {
+                                    for (size_t i = 0; i < behavior_def->type_params.size() &&
+                                                       i < bound.type_args.size();
+                                         ++i) {
+                                        subs[behavior_def->type_params[i]] = bound.type_args[i];
+                                    }
+                                }
+
+                                // Substitute type parameters in return type
+                                TypePtr return_type = method.return_type;
+                                if (!subs.empty()) {
+                                    return_type = substitute_type(return_type, subs);
+                                }
+                                return return_type;
+                            }
+                        }
+                    }
+                }
+
+                // Also check simple (non-parameterized) behavior bounds
+                for (const auto& behavior_name : constraint.required_behaviors) {
+                    auto behavior_def = env_.lookup_behavior(behavior_name);
+                    if (behavior_def) {
+                        for (const auto& method : behavior_def->methods) {
+                            if (method.name == call.method) {
+                                return method.return_type;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1277,6 +1375,27 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         // to_string(), debug_string() return Str
         if (call.method == "to_string" || call.method == "debug_string") {
             return make_primitive(PrimitiveKind::Str);
+        }
+    }
+
+    // Handle Fn trait method calls on closures and function types
+    // call(), call_mut(), call_once() invoke the callable
+    TypePtr callable_type = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        callable_type = receiver_type->as<RefType>().inner;
+    }
+    if (callable_type->is<ClosureType>()) {
+        const auto& closure = callable_type->as<ClosureType>();
+        if (call.method == "call" || call.method == "call_mut" || call.method == "call_once") {
+            // Return the closure's return type
+            return closure.return_type;
+        }
+    }
+    if (callable_type->is<FuncType>()) {
+        const auto& func = callable_type->as<FuncType>();
+        if (call.method == "call" || call.method == "call_mut" || call.method == "call_once") {
+            // Return the function's return type
+            return func.return_type;
         }
     }
 

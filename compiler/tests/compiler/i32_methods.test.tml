@@ -1,0 +1,56 @@
+// Test I32 method implementations
+use test
+use core::num::*
+
+// Test I32 abs method
+@test
+func test_i32_abs() -> I32 {
+    let x: I32 = -42
+    let abs_x: I32 = x.abs()
+    assert_eq(abs_x, 42, "abs(-42) should be 42")
+    return 0
+}
+
+@test
+func test_i32_signum() -> I32 {
+    let pos: I32 = 42
+    let neg: I32 = -42
+    let zero: I32 = 0
+
+    assert_eq(pos.signum(), 1, "signum(42) should be 1")
+    assert_eq(neg.signum(), -1, "signum(-42) should be -1")
+    assert_eq(zero.signum(), 0, "signum(0) should be 0")
+    return 0
+}
+
+@test
+func test_i32_is_positive() -> I32 {
+    let pos: I32 = 42
+    let neg: I32 = -42
+    let zero: I32 = 0
+
+    assert(pos.is_positive(), "42 should be positive")
+    assert(not neg.is_positive(), "-42 should not be positive")
+    assert(not zero.is_positive(), "0 should not be positive")
+    return 0
+}
+
+@test
+func test_i32_is_negative() -> I32 {
+    let pos: I32 = 42
+    let neg: I32 = -42
+    let zero: I32 = 0
+
+    assert(not pos.is_negative(), "42 should not be negative")
+    assert(neg.is_negative(), "-42 should be negative")
+    assert(not zero.is_negative(), "0 should not be negative")
+    return 0
+}
+
+@test
+func test_i32_pow() -> I32 {
+    assert_eq(2.pow(10), 1024, "2^10 should be 1024")
+    assert_eq(3.pow(3), 27, "3^3 should be 27")
+    assert_eq(5.pow(0), 1, "5^0 should be 1")
+    return 0
+}

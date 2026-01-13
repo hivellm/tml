@@ -203,6 +203,64 @@ void TypeChecker::bind_pattern(const parser::Pattern& pattern, TypePtr type) {
                           pattern.span);
                     return;
                 }
+            } else if constexpr (std::is_same_v<T, parser::StructPattern>) {
+                // Struct pattern destructuring: Point { x, y }
+                if (!type->is<NamedType>()) {
+                    error("Cannot destructure non-struct type with struct pattern", pattern.span);
+                    return;
+                }
+
+                auto& named = type->as<NamedType>();
+                std::string struct_name = named.name;
+
+                // Lookup struct definition
+                auto struct_def = env_.lookup_struct(struct_name);
+                if (!struct_def) {
+                    error("Unknown struct type '" + struct_name + "' in pattern", pattern.span);
+                    return;
+                }
+
+                // Build field type map from struct definition
+                std::unordered_map<std::string, TypePtr> field_types;
+                for (const auto& field : struct_def->fields) {
+                    field_types[field.first] = field.second;
+                }
+
+                // Bind each field pattern
+                for (const auto& [field_name, field_pattern] : p.fields) {
+                    auto it = field_types.find(field_name);
+                    if (it == field_types.end()) {
+                        error("Unknown field '" + field_name + "' in struct '" + struct_name + "'",
+                              pattern.span);
+                        continue;
+                    }
+
+                    // Recursively bind the field pattern
+                    bind_pattern(*field_pattern, it->second);
+                }
+            } else if constexpr (std::is_same_v<T, parser::RangePattern>) {
+                // Range patterns don't bind variables, just match values
+                // No binding needed
+            } else if constexpr (std::is_same_v<T, parser::ArrayPattern>) {
+                // Array pattern destructuring: [a, b, c] or [head, ..rest]
+                if (!type->is<ArrayType>()) {
+                    error("Cannot destructure non-array type with array pattern", pattern.span);
+                    return;
+                }
+
+                auto& arr = type->as<ArrayType>();
+                TypePtr element_type = arr.element;
+
+                // Bind each element pattern
+                for (size_t i = 0; i < p.elements.size(); ++i) {
+                    bind_pattern(*p.elements[i], element_type);
+                }
+
+                // Bind rest pattern if present (binds to array/slice of remaining elements)
+                if (p.rest) {
+                    // Rest binds to an array of the same element type
+                    bind_pattern(**p.rest, type);
+                }
             }
         },
         pattern.kind);

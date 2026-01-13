@@ -165,13 +165,79 @@ func main() -> I32 {
 }
 ```
 
+## Pattern Matching with `when`
+
+Use `when` for exhaustive pattern matching on enums:
+
+```tml
+type Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+func describe_direction(dir: Direction) -> String {
+    return when dir {
+        Direction::North => "Going north",
+        Direction::South => "Going south",
+        Direction::East => "Going east",
+        Direction::West => "Going west"
+    }
+}
+
+func main() -> I32 {
+    let dir = Direction::East
+    println(describe_direction(dir))  // Going east
+    return 0
+}
+```
+
+This is cleaner than multiple `if` statements and ensures all cases are handled.
+
+## Algebraic Data Types (ADTs)
+
+TML supports enums with associated data (algebraic data types):
+
+```tml
+type Maybe[T] {
+    Just(T),
+    Nothing
+}
+
+type Outcome[T, E] {
+    Ok(T),
+    Err(E)
+}
+```
+
+Match and extract data with `when`:
+
+```tml
+func get_value(m: Maybe[I32]) -> I32 {
+    return when m {
+        Just(value) => value,
+        Nothing => 0
+    }
+}
+
+func handle_result(r: Outcome[I32, String]) -> I32 {
+    return when r {
+        Ok(value) => value,
+        Err(msg) => {
+            println("Error: " + msg)
+            -1
+        }
+    }
+}
+```
+
 ## Limitations
 
-Current TML enums are simple tagged enums (like C enums). They:
+Current TML simple enums (without data) are tagged enums (like C enums). They:
 
 - Map directly to integer values (0, 1, 2, ...)
 - Can be compared with `==` and `!=`
 - Can be stored in variables and passed to functions
-- Cannot currently hold associated data (planned for future)
 
-For more complex data structures, consider using structs or behaviors.
+Enums with associated data (ADTs like `Maybe`, `Outcome`) support full pattern matching with data extraction.

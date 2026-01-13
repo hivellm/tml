@@ -1,0 +1,31 @@
+// Test nested string returns
+use test
+
+// Test simple nested string return
+func inner_str() -> Str {
+    return "hello"
+}
+
+func outer_str() -> Str {
+    let s: Str = inner_str()
+    return s
+}
+
+@test
+func test_nested_string_return() -> I32 {
+    let result: Str = outer_str()
+    assert_eq(result, "hello", "nested return should work")
+    return 0
+}
+
+// Test multiple levels of nesting
+func level1() -> Str { return "world" }
+func level2() -> Str { return level1() }
+func level3() -> Str { return level2() }
+
+@test
+func test_deep_nested_string() -> I32 {
+    let result: Str = level3()
+    assert_eq(result, "world", "deep nested return should work")
+    return 0
+}

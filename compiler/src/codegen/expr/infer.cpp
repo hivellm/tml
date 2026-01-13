@@ -147,7 +147,7 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
         auto it = locals_.find(ident.name);
         if (it != locals_.end()) {
-            // Use semantic type if available (for complex types like Ptr[T])
+            // Use semantic type if available (for complex types like Ptr[T], FuncType)
             if (it->second.semantic_type) {
                 return it->second.semantic_type;
             }

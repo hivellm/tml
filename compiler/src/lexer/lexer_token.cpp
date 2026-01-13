@@ -40,6 +40,11 @@ auto Lexer::next_token() -> Token {
         return make_token(TokenKind::Newline);
     }
 
+    // Doc comments (check before operators, since /// starts with /)
+    if (c == '/' && is_doc_comment()) {
+        return lex_doc_comment();
+    }
+
     // Raw strings (check before identifiers, since 'r' is a valid identifier start)
     if (c == 'r' && peek_next() == '"') {
         return lex_raw_string();

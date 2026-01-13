@@ -123,7 +123,8 @@ auto Parser::parse_decorators() -> Result<std::vector<Decorator>, ParseError> {
 }
 
 auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
-    skip_newlines();
+    // Collect doc comment while skipping newlines
+    auto doc = collect_doc_comment();
 
     // Parse decorators first
     auto decorators_result = parse_decorators();
@@ -137,7 +138,7 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     case lexer::TokenKind::KwAsync:    // async func
     case lexer::TokenKind::KwLowlevel: // lowlevel func (unsafe)
     case lexer::TokenKind::KwFunc:
-        return parse_func_decl(vis, std::move(decorators));
+        return parse_func_decl(vis, std::move(decorators), std::move(doc));
     case lexer::TokenKind::KwType: {
         // Could be struct, enum, or type alias - look ahead
         auto type_pos = pos_;
@@ -168,12 +169,12 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         if (check(lexer::TokenKind::Assign)) {
             // Type alias: type Foo = Bar
             pos_ = type_pos;
-            return parse_type_alias_decl(vis);
+            return parse_type_alias_decl(vis, std::move(doc));
         }
 
         if (!check(lexer::TokenKind::LBrace)) {
             pos_ = type_pos;
-            return parse_struct_decl(vis, std::move(decorators));
+            return parse_struct_decl(vis, std::move(decorators), std::move(doc));
         }
 
         // Look inside braces to determine struct vs enum
@@ -202,17 +203,17 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
 
         if (is_enum) {
             advance(); // consume 'type'
-            return parse_enum_decl(vis, std::move(decorators));
+            return parse_enum_decl(vis, std::move(decorators), std::move(doc));
         } else {
-            return parse_struct_decl(vis, std::move(decorators));
+            return parse_struct_decl(vis, std::move(decorators), std::move(doc));
         }
     }
     case lexer::TokenKind::KwBehavior:
-        return parse_trait_decl(vis, std::move(decorators));
+        return parse_trait_decl(vis, std::move(decorators), std::move(doc));
     case lexer::TokenKind::KwImpl:
-        return parse_impl_decl();
+        return parse_impl_decl(std::move(doc));
     case lexer::TokenKind::KwConst:
-        return parse_const_decl(vis);
+        return parse_const_decl(vis, std::move(doc));
     case lexer::TokenKind::KwUse:
         return parse_use_decl(vis);
     case lexer::TokenKind::KwMod:
@@ -222,8 +223,8 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
     }
 }
 
-auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators,
+                             std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Check for async/unsafe modifiers
@@ -351,7 +352,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
         }
     }
 
-    auto func = FuncDecl{.decorators = std::move(decorators),
+    auto func = FuncDecl{.doc = std::move(doc),
+                         .decorators = std::move(decorators),
                          .vis = vis,
                          .name = std::move(name),
                          .generics = std::move(generics),
@@ -370,8 +372,8 @@ auto Parser::parse_func_decl(Visibility vis, std::vector<Decorator> decorators)
         Decl{.kind = std::move(func), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators,
+                               std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
@@ -408,6 +410,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
     std::vector<StructField> fields;
     skip_newlines();
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Collect doc comment for field
+        auto field_doc = collect_doc_comment();
         auto field_vis = parse_visibility();
 
         auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
@@ -429,6 +433,7 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
             return unwrap_err(field_type_result);
 
         fields.push_back(StructField{
+            .doc = std::move(field_doc),
             .vis = field_vis,
             .name = std::move(field_name),
             .type = std::move(unwrap(field_type_result)),
@@ -448,7 +453,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
 
     auto end_span = previous().span;
 
-    auto struct_decl = StructDecl{.decorators = std::move(decorators),
+    auto struct_decl = StructDecl{.doc = std::move(doc),
+                                  .decorators = std::move(decorators),
                                   .vis = vis,
                                   .name = std::move(name),
                                   .generics = std::move(generics),
@@ -460,8 +466,8 @@ auto Parser::parse_struct_decl(Visibility vis, std::vector<Decorator> decorators
         Decl{.kind = std::move(struct_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators,
+                             std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // 'type' keyword already consumed by parse_decl
@@ -490,6 +496,9 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
     skip_newlines();
 
     while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+        // Collect doc comment for variant
+        auto variant_doc = collect_doc_comment();
+
         auto variant_name_result = expect(lexer::TokenKind::Identifier, "Expected variant name");
         if (is_err(variant_name_result))
             return unwrap_err(variant_name_result);
@@ -532,6 +541,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
             skip_newlines();
 
             while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+                // Collect doc comment for struct variant field
+                auto field_doc = collect_doc_comment();
                 auto field_vis = parse_visibility();
 
                 auto field_name_result =
@@ -549,6 +560,7 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
                     return unwrap_err(field_type);
 
                 fields.push_back(StructField{
+                    .doc = std::move(field_doc),
                     .vis = field_vis,
                     .name = std::move(field_name),
                     .type = std::move(unwrap(field_type)),
@@ -569,7 +581,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
         }
 
         auto variant_end = previous().span;
-        variants.push_back(EnumVariant{.name = std::move(variant_name),
+        variants.push_back(EnumVariant{.doc = std::move(variant_doc),
+                                       .name = std::move(variant_name),
                                        .tuple_fields = std::move(tuple_fields),
                                        .struct_fields = std::move(struct_fields),
                                        .span = SourceSpan::merge(variant_start, variant_end)});
@@ -585,7 +598,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
 
     auto end_span = previous().span;
 
-    auto enum_decl = EnumDecl{.decorators = std::move(decorators),
+    auto enum_decl = EnumDecl{.doc = std::move(doc),
+                              .decorators = std::move(decorators),
                               .vis = vis,
                               .name = std::move(name),
                               .generics = std::move(generics),
@@ -597,8 +611,8 @@ auto Parser::parse_enum_decl(Visibility vis, std::vector<Decorator> decorators)
         Decl{.kind = std::move(enum_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
-    -> Result<DeclPtr, ParseError> {
+auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators,
+                              std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Consume 'behavior' keyword
@@ -668,15 +682,15 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
                 gat_generics = std::move(unwrap(generics_result));
             }
 
-            // Optional bounds: type Item: Display + Debug
-            std::vector<TypePath> bounds;
+            // Optional bounds: type Item: Display + Debug or type Item: Container[I32]
+            std::vector<TypePtr> bounds;
             if (match(lexer::TokenKind::Colon)) {
                 do {
                     skip_newlines();
-                    auto bound_path = parse_type_path();
-                    if (is_err(bound_path))
-                        return unwrap_err(bound_path);
-                    bounds.push_back(std::move(unwrap(bound_path)));
+                    auto bound_type = parse_type();
+                    if (is_err(bound_type))
+                        return unwrap_err(bound_type);
+                    bounds.push_back(std::move(unwrap(bound_type)));
                     skip_newlines();
                 } while (match(lexer::TokenKind::Plus));
             }
@@ -714,7 +728,8 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
 
     auto end_span = previous().span;
 
-    auto trait_decl = TraitDecl{.decorators = std::move(decorators),
+    auto trait_decl = TraitDecl{.doc = std::move(doc),
+                                .decorators = std::move(decorators),
                                 .vis = vis,
                                 .name = std::move(name),
                                 .generics = std::move(generics),
@@ -728,7 +743,7 @@ auto Parser::parse_trait_decl(Visibility vis, std::vector<Decorator> decorators)
         Decl{.kind = std::move(trait_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
+auto Parser::parse_impl_decl(std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Consume 'impl' keyword
@@ -851,7 +866,8 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
 
     auto end_span = previous().span;
 
-    auto impl_decl = ImplDecl{.generics = std::move(generics),
+    auto impl_decl = ImplDecl{.doc = std::move(doc),
+                              .generics = std::move(generics),
                               .trait_type = std::move(trait_type),
                               .self_type = std::move(self_type),
                               .type_bindings = std::move(type_bindings),
@@ -864,7 +880,8 @@ auto Parser::parse_impl_decl() -> Result<DeclPtr, ParseError> {
         Decl{.kind = std::move(impl_decl), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_type_alias_decl(Visibility vis, std::optional<std::string> doc)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
@@ -895,7 +912,8 @@ auto Parser::parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError
 
     auto end_span = previous().span;
 
-    auto alias = TypeAliasDecl{.vis = vis,
+    auto alias = TypeAliasDecl{.doc = std::move(doc),
+                               .vis = vis,
                                .name = std::move(name),
                                .generics = std::move(generics),
                                .type = std::move(unwrap(aliased_type)),
@@ -905,7 +923,8 @@ auto Parser::parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError
         Decl{.kind = std::move(alias), .span = SourceSpan::merge(start_span, end_span)});
 }
 
-auto Parser::parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
+auto Parser::parse_const_decl(Visibility vis, std::optional<std::string> doc)
+    -> Result<DeclPtr, ParseError> {
     auto start_span = peek().span;
 
     // Consume 'const' keyword
@@ -939,7 +958,8 @@ auto Parser::parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
 
     auto end_span = previous().span;
 
-    return make_box<Decl>(Decl{.kind = ConstDecl{.vis = vis,
+    return make_box<Decl>(Decl{.kind = ConstDecl{.doc = std::move(doc),
+                                                 .vis = vis,
                                                  .name = std::move(name),
                                                  .type = std::move(unwrap(type)),
                                                  .value = std::move(unwrap(value)),
@@ -1100,7 +1120,7 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
             return unwrap_err(name_result);
         auto name = std::string(unwrap(name_result).lexeme);
 
-        std::vector<TypePath> bounds;
+        std::vector<TypePtr> bounds;
         std::optional<TypePtr> default_type = std::nullopt;
 
         if (match(lexer::TokenKind::Colon)) {
@@ -1111,9 +1131,10 @@ auto Parser::parse_generic_params() -> Result<std::vector<GenericParam>, ParseEr
                     return unwrap_err(type_result);
                 const_type = std::move(unwrap(type_result));
             } else {
-                // Parse bounds: T: Trait + OtherTrait
+                // Parse bounds: T: Trait + OtherTrait or T: Trait[U] + OtherTrait[V]
+                // Bounds are now TypePtr to support parameterized bounds like Container[I32]
                 do {
-                    auto bound = parse_type_path();
+                    auto bound = parse_type();
                     if (is_err(bound))
                         return unwrap_err(bound);
                     bounds.push_back(std::move(unwrap(bound)));

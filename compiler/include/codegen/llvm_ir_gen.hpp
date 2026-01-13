@@ -123,6 +123,10 @@ private:
     // Maps type parameter names to their concrete types (e.g., "T" -> I64)
     std::unordered_map<std::string, types::TypePtr> current_type_subs_;
 
+    // Current where clause constraints (for method dispatch on bounded generics)
+    // Used to resolve methods like container.get() when C: Container[T]
+    std::vector<types::WhereConstraint> current_where_constraints_;
+
     // Current module prefix (for generating imported module functions)
     std::string
         current_module_prefix_; // e.g., "algorithms" when generating functions from algorithms.tml

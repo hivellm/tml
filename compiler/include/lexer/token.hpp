@@ -239,6 +239,12 @@ enum class TokenKind : uint8_t {
     // ========================================================================
     Newline, ///< Significant newline (statement separator)
     Error,   ///< Lexer error token
+
+    // ========================================================================
+    // Documentation Comments
+    // ========================================================================
+    DocComment,       ///< `///` documentation comment for following item
+    ModuleDocComment, ///< `//!` module-level documentation comment
 };
 
 // ============================================================================
@@ -297,6 +303,16 @@ struct CharValue {
     char32_t value;
 };
 
+/// Documentation comment value.
+///
+/// Contains the text content of a `///` or `//!` doc comment,
+/// with the comment prefix stripped but markdown formatting preserved.
+struct DocValue {
+    /// The documentation text (markdown formatted).
+    /// Multiple consecutive doc comment lines are joined with newlines.
+    std::string content;
+};
+
 // ============================================================================
 // Token
 // ============================================================================
@@ -332,7 +348,9 @@ struct Token {
     /// - `StringValue` for `StringLiteral`
     /// - `CharValue` for `CharLiteral`
     /// - `bool` for `BoolLiteral`
-    std::variant<std::monostate, IntValue, FloatValue, StringValue, CharValue, bool> value;
+    /// - `DocValue` for `DocComment` and `ModuleDocComment`
+    std::variant<std::monostate, IntValue, FloatValue, StringValue, CharValue, bool, DocValue>
+        value;
 
     /// Checks if this token is of the given kind.
     [[nodiscard]] auto is(TokenKind k) const -> bool {
@@ -372,6 +390,9 @@ struct Token {
 
     /// Gets the boolean value. Asserts this is a `BoolLiteral`.
     [[nodiscard]] auto bool_value() const -> bool;
+
+    /// Gets the doc comment value. Asserts this is a `DocComment` or `ModuleDocComment`.
+    [[nodiscard]] auto doc_value() const -> const DocValue&;
 };
 
 } // namespace tml::lexer

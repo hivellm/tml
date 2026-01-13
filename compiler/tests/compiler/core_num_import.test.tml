@@ -1,0 +1,12 @@
+// Test importing core::num module
+use test
+use core::num::*
+
+@test
+func test_i32_bounded() -> I32 {
+    // Test that Bounded works for I32 via impl constants
+    let min: I32 = I32::MIN
+    let max: I32 = I32::MAX
+    assert(min < max, "MIN should be less than MAX")
+    return 0
+}

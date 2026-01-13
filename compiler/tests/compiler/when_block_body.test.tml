@@ -1,0 +1,76 @@
+use test
+
+// Test that when expressions support block bodies with multiple statements
+
+func process_number(n: I32) -> I32 {
+    return when n {
+        0 => {
+            let x: I32 = 10
+            let y: I32 = 20
+            x + y
+        },
+        1 => {
+            let a: I32 = 100
+            a * 2
+        },
+        _ => {
+            let result: I32 = n * n
+            result
+        }
+    }
+}
+
+func complex_block(n: I32) -> I32 {
+    return when n {
+        0 through 9 => {
+            // Small numbers: return double
+            let doubled: I32 = n * 2
+            doubled
+        },
+        10 through 99 => {
+            // Medium numbers: return triple
+            let tripled: I32 = n * 3
+            tripled
+        },
+        _ => {
+            // Large numbers: return as-is
+            n
+        }
+    }
+}
+
+@test
+func test_when_block_zero() -> I32 {
+    assert_eq(process_number(0), 30, "0 => block should return 30")
+    return 0
+}
+
+@test
+func test_when_block_one() -> I32 {
+    assert_eq(process_number(1), 200, "1 => block should return 200")
+    return 0
+}
+
+@test
+func test_when_block_default() -> I32 {
+    assert_eq(process_number(5), 25, "5 => block should return 25 (5*5)")
+    return 0
+}
+
+@test
+func test_complex_small() -> I32 {
+    assert_eq(complex_block(5), 10, "5 is small, should return 10 (5*2)")
+    return 0
+}
+
+@test
+func test_complex_medium() -> I32 {
+    assert_eq(complex_block(20), 60, "20 is medium, should return 60 (20*3)")
+    return 0
+}
+
+@test
+func test_complex_large() -> I32 {
+    assert_eq(complex_block(100), 100, "100 is large, should return 100")
+    return 0
+}

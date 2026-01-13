@@ -1258,10 +1258,62 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     std::string saved_ret_type = current_ret_type_;
     bool saved_terminated = block_terminated_;
     auto saved_locals = locals_;
+    auto saved_type_subs = current_type_subs_;
+    auto saved_where_constraints = current_where_constraints_;
 
     current_func_ = mangled;
     locals_.clear();
     block_terminated_ = false;
+    current_type_subs_ = subs;
+
+    // Extract where constraints for bounded generic method dispatch
+    current_where_constraints_.clear();
+    if (func.where_clause) {
+        for (const auto& [type_ptr, bounds] : func.where_clause->constraints) {
+            // Get the type parameter name from the type pointer
+            std::string type_param_name;
+            if (type_ptr->is<parser::NamedType>()) {
+                const auto& named_type = type_ptr->as<parser::NamedType>();
+                if (!named_type.path.segments.empty()) {
+                    type_param_name = named_type.path.segments.back();
+                }
+            }
+
+            if (!type_param_name.empty()) {
+                types::WhereConstraint constraint;
+                constraint.type_param = type_param_name;
+
+                for (const auto& bound : bounds) {
+                    if (bound->is<parser::NamedType>()) {
+                        const auto& named = bound->as<parser::NamedType>();
+                        std::string behavior_name;
+                        if (!named.path.segments.empty()) {
+                            behavior_name = named.path.segments.back();
+                        }
+
+                        if (!named.generics.has_value() || named.generics->args.empty()) {
+                            // Simple bound like T: Display
+                            constraint.required_behaviors.push_back(behavior_name);
+                        } else {
+                            // Parameterized bound like C: Container[T]
+                            types::BoundConstraint bc;
+                            bc.behavior_name = behavior_name;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    // Resolve the type argument with current substitutions
+                                    bc.type_args.push_back(
+                                        resolve_parser_type_with_subs(*arg.as_type(), subs));
+                                }
+                            }
+                            constraint.parameterized_bounds.push_back(bc);
+                        }
+                    }
+                }
+
+                current_where_constraints_.push_back(constraint);
+            }
+        }
+    }
 
     // 3. Determine return type with substitution
     std::string ret_type = "void";
@@ -1440,6 +1492,8 @@ void LLVMIRGen::gen_func_instantiation(const parser::FuncDecl& func,
     current_ret_type_ = saved_ret_type;
     block_terminated_ = saved_terminated;
     locals_ = saved_locals;
+    current_type_subs_ = saved_type_subs;
+    current_where_constraints_ = saved_where_constraints;
     current_scope_id_ = 0;
     current_debug_loc_id_ = 0;
 }

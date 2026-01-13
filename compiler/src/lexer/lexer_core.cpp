@@ -174,6 +174,10 @@ void Lexer::skip_whitespace() {
             return;
         case '/':
             if (peek_next() == '/') {
+                // Check for doc comments - don't skip those
+                if (is_doc_comment()) {
+                    return;
+                }
                 skip_line_comment();
             } else if (peek_next() == '*') {
                 skip_block_comment();
@@ -185,6 +189,113 @@ void Lexer::skip_whitespace() {
             return;
         }
     }
+}
+
+auto Lexer::is_doc_comment() const -> bool {
+    // Check if we're at a doc comment: /// or //!
+    // We must be at //, and the next char must be / or !
+    // But //// is NOT a doc comment (4+ slashes)
+    if (pos_ + 2 >= source_.length()) {
+        return false;
+    }
+    if (peek() != '/' || peek_next() != '/') {
+        return false;
+    }
+    char third = peek_n(2);
+    if (third == '/' || third == '!') {
+        // Check that it's not //// (4 slashes)
+        if (third == '/' && pos_ + 3 < source_.length() && peek_n(3) == '/') {
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+auto Lexer::lex_doc_comment() -> Token {
+    token_start_ = pos_;
+
+    // Determine the doc comment type
+    advance();               // consume first /
+    advance();               // consume second /
+    char marker = advance(); // consume / or !
+
+    TokenKind kind = (marker == '!') ? TokenKind::ModuleDocComment : TokenKind::DocComment;
+
+    // Collect content from this line (skip leading space if present)
+    std::string content;
+
+    // Skip one leading space if present (common formatting)
+    if (!is_at_end() && peek() == ' ') {
+        advance();
+    }
+
+    // Read until end of line
+    while (!is_at_end() && peek() != '\n') {
+        content += advance();
+    }
+
+    // For consecutive doc comment lines, we merge them
+    // Look ahead to see if the next non-empty line is also a doc comment
+    size_t saved_pos = pos_;
+    while (!is_at_end()) {
+        // Skip the newline
+        if (peek() == '\n') {
+            advance();
+        }
+
+        // Skip whitespace (spaces and tabs only)
+        while (!is_at_end() && (peek() == ' ' || peek() == '\t')) {
+            advance();
+        }
+
+        // Check if this line is a continuation doc comment of the same type
+        if (!is_at_end() && peek() == '/' && peek_next() == '/') {
+            char next_marker = peek_n(2);
+            // Must be same type (/// or //!) and not ////
+            if (next_marker == marker) {
+                // Check for //// (not a doc comment)
+                if (marker == '/' && pos_ + 3 < source_.length() && peek_n(3) == '/') {
+                    break;
+                }
+                // This is a continuation - consume it
+                advance(); // /
+                advance(); // /
+                advance(); // / or !
+
+                // Add newline to content
+                content += '\n';
+
+                // Skip one leading space if present
+                if (!is_at_end() && peek() == ' ') {
+                    advance();
+                }
+
+                // Read line content
+                while (!is_at_end() && peek() != '\n') {
+                    content += advance();
+                }
+                saved_pos = pos_;
+            } else {
+                // Different doc comment type or regular comment - stop
+                break;
+            }
+        } else {
+            // Not a doc comment continuation - restore position
+            pos_ = saved_pos;
+            break;
+        }
+    }
+
+    // Create token
+    auto start_loc = source_.location(token_start_);
+    auto end_loc = source_.location(pos_ > 0 ? pos_ - 1 : 0);
+    end_loc.length = static_cast<uint32_t>(pos_ - token_start_);
+
+    return Token{.kind = kind,
+                 .span = {start_loc, end_loc},
+                 .lexeme = source_.slice(token_start_, pos_),
+                 .value = DocValue{.content = std::move(content)}};
 }
 
 void Lexer::skip_line_comment() {

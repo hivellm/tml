@@ -1,0 +1,33 @@
+// Test default behavior method dispatch
+use test
+
+behavior Counter {
+    func increment(mut this)
+
+    // Default implementation with return value
+    func count_to(mut this, n: I64) -> I64 {
+        var count: I64 = 0
+        loop {
+            if count >= n { return count }
+            this.increment()
+            count = count + 1
+        }
+    }
+}
+
+type SimpleCounter { value: I64 }
+
+impl Counter for SimpleCounter {
+    pub func increment(mut this) {
+        this.value = this.value + 1
+    }
+    // count_to uses default implementation
+}
+
+@test
+func test_default_method_returns_value() -> I32 {
+    var counter: SimpleCounter = SimpleCounter { value: 0 }
+    let result: I64 = counter.count_to(5)
+    assert_eq(result, 5, "default method should return I64")
+    return 0
+}

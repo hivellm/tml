@@ -1,0 +1,50 @@
+// Test I8/I16 negative literal returns
+use test
+
+// Test returning negative I8 literal
+func get_neg_i8() -> I8 {
+    return -42i8
+}
+
+// Test returning I8 MIN
+func get_i8_min() -> I8 {
+    return -128i8
+}
+
+// Test returning negative I16 literal
+func get_neg_i16() -> I16 {
+    return -1000i16
+}
+
+// Test returning I16 MIN
+func get_i16_min() -> I16 {
+    return -32768i16
+}
+
+@test
+func test_i8_negative_return() -> I32 {
+    let x: I8 = get_neg_i8()
+    assert_eq(x, -42i8, "should return -42")
+    return 0
+}
+
+@test
+func test_i8_min_return() -> I32 {
+    let x: I8 = get_i8_min()
+    assert_eq(x, -128i8, "should return -128")
+    return 0
+}
+
+@test
+func test_i16_negative_return() -> I32 {
+    let x: I16 = get_neg_i16()
+    assert_eq(x, -1000i16, "should return -1000")
+    return 0
+}
+
+@test
+func test_i16_min_return() -> I32 {
+    let x: I16 = get_i16_min()
+    assert_eq(x, -32768i16, "should return -32768")
+    return 0
+}

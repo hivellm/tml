@@ -797,11 +797,12 @@ enum class Visibility {
     PubCrate, ///< `pub(crate)` - visible within the current crate only.
 };
 
-/// A generic parameter: `T`, `T: Behavior`, or `const N: U64`.
+/// A generic parameter: `T`, `T: Behavior`, `T: Behavior[U]`, or `const N: U64`.
 struct GenericParam {
-    std::string name;                    ///< Parameter name.
-    std::vector<TypePath> bounds;        ///< Behavior bounds (for type params).
-    bool is_const = false;               ///< True for const generic params.
+    std::string name; ///< Parameter name.
+    std::vector<TypePtr>
+        bounds;            ///< Behavior bounds (for type params), supports parameterized bounds.
+    bool is_const = false; ///< True for const generic params.
     std::optional<TypePtr> const_type;   ///< Type of const param (e.g., `U64`).
     std::optional<TypePtr> default_type; ///< Default type (e.g., `T = This`).
     SourceSpan span;                     ///< Source location.
@@ -840,6 +841,7 @@ struct FuncParam {
 /// @extern("c") func printf(fmt: *const I8, ...) -> I32
 /// ```
 struct FuncDecl {
+    std::optional<std::string> doc;          ///< Documentation comment (from `///`).
     std::vector<Decorator> decorators;       ///< Decorators.
     Visibility vis;                          ///< Visibility.
     std::string name;                        ///< Function name.
@@ -860,10 +862,11 @@ struct FuncDecl {
 
 /// A struct field.
 struct StructField {
-    Visibility vis;   ///< Field visibility.
-    std::string name; ///< Field name.
-    TypePtr type;     ///< Field type.
-    SourceSpan span;  ///< Source location.
+    std::optional<std::string> doc; ///< Documentation comment (from `///`).
+    Visibility vis;                 ///< Field visibility.
+    std::string name;               ///< Field name.
+    TypePtr type;                   ///< Field type.
+    SourceSpan span;                ///< Source location.
 };
 
 /// Struct declaration.
@@ -877,6 +880,7 @@ struct StructField {
 /// }
 /// ```
 struct StructDecl {
+    std::optional<std::string> doc;          ///< Documentation comment (from `///`).
     std::vector<Decorator> decorators;       ///< Decorators.
     Visibility vis;                          ///< Visibility.
     std::string name;                        ///< Struct name.
@@ -888,6 +892,7 @@ struct StructDecl {
 
 /// An enum variant.
 struct EnumVariant {
+    std::optional<std::string> doc;                        ///< Documentation comment (from `///`).
     std::string name;                                      ///< Variant name.
     std::optional<std::vector<TypePtr>> tuple_fields;      ///< Tuple variant fields.
     std::optional<std::vector<StructField>> struct_fields; ///< Struct variant fields.
@@ -905,6 +910,7 @@ struct EnumVariant {
 /// }
 /// ```
 struct EnumDecl {
+    std::optional<std::string> doc;          ///< Documentation comment (from `///`).
     std::vector<Decorator> decorators;       ///< Decorators.
     Visibility vis;                          ///< Visibility.
     std::string name;                        ///< Enum name.
@@ -927,7 +933,7 @@ struct EnumDecl {
 struct AssociatedType {
     std::string name;                    ///< Type name.
     std::vector<GenericParam> generics;  ///< GAT generic parameters.
-    std::vector<TypePath> bounds;        ///< Behavior bounds.
+    std::vector<TypePtr> bounds;         ///< Behavior bounds (supports parameterized bounds).
     std::optional<TypePtr> default_type; ///< Optional default.
     SourceSpan span;                     ///< Source location.
 };
@@ -961,6 +967,7 @@ struct AssociatedTypeBinding {
 /// }
 /// ```
 struct TraitDecl {
+    std::optional<std::string> doc;               ///< Documentation comment (from `///`).
     std::vector<Decorator> decorators;            ///< Decorators.
     Visibility vis;                               ///< Visibility.
     std::string name;                             ///< Behavior name.
@@ -989,6 +996,7 @@ struct ConstDecl;
 /// }
 /// ```
 struct ImplDecl {
+    std::optional<std::string> doc;                   ///< Documentation comment (from `///`).
     std::vector<GenericParam> generics;               ///< Generic parameters.
     TypePtr trait_type;                               ///< Behavior being implemented (optional).
     TypePtr self_type;                                ///< Type being implemented.
@@ -1001,6 +1009,7 @@ struct ImplDecl {
 
 /// Type alias: `type Alias = OriginalType`.
 struct TypeAliasDecl {
+    std::optional<std::string> doc;     ///< Documentation comment (from `///`).
     Visibility vis;                     ///< Visibility.
     std::string name;                   ///< Alias name.
     std::vector<GenericParam> generics; ///< Generic parameters.
@@ -1010,11 +1019,12 @@ struct TypeAliasDecl {
 
 /// Constant declaration: `const PI: F64 = 3.14159`.
 struct ConstDecl {
-    Visibility vis;   ///< Visibility.
-    std::string name; ///< Constant name.
-    TypePtr type;     ///< Constant type.
-    ExprPtr value;    ///< Constant value.
-    SourceSpan span;  ///< Source location.
+    std::optional<std::string> doc; ///< Documentation comment (from `///`).
+    Visibility vis;                 ///< Visibility.
+    std::string name;               ///< Constant name.
+    TypePtr type;                   ///< Constant type.
+    ExprPtr value;                  ///< Constant value.
+    SourceSpan span;                ///< Source location.
 };
 
 /// Use declaration for imports.
@@ -1093,9 +1103,10 @@ struct Decl {
 /// Represents a single source file after parsing. Contains all top-level
 /// declarations.
 struct Module {
-    std::string name;           ///< Module name.
-    std::vector<DeclPtr> decls; ///< Top-level declarations.
-    SourceSpan span;            ///< Source location.
+    std::string name;                     ///< Module name.
+    std::vector<std::string> module_docs; ///< Module-level documentation (from `//!`).
+    std::vector<DeclPtr> decls;           ///< Top-level declarations.
+    SourceSpan span;                      ///< Source location.
 };
 
 // ============================================================================

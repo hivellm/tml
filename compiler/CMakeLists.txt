@@ -312,6 +312,17 @@ add_library(tml_format STATIC
 target_link_libraries(tml_format PUBLIC tml_parser)
 target_include_directories(tml_format PUBLIC include src)
 
+# Documentation library
+add_library(tml_doc STATIC
+    src/doc/doc_model.cpp
+    src/doc/doc_parser.cpp
+    src/doc/signature.cpp
+    src/doc/extractor.cpp
+    src/doc/generators.cpp
+)
+target_link_libraries(tml_doc PUBLIC tml_parser)
+target_include_directories(tml_doc PUBLIC include src)
+
 # CLI library
 add_library(tml_cli STATIC
     # Core CLI files
@@ -323,6 +334,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_build.cpp
     src/cli/commands/cmd_cache.cpp
     src/cli/commands/cmd_debug.cpp
+    src/cli/commands/cmd_doc.cpp
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
@@ -359,7 +371,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format)
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc)
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)

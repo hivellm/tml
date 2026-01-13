@@ -1,0 +1,47 @@
+// Test I8 constants and comparisons
+use test
+use core::num::*
+
+// Test I8 MIN/MAX constants
+@test
+func test_i8_min_max() -> I32 {
+    let min: I8 = I8::MIN
+    let max: I8 = I8::MAX
+    assert_eq(min, -128i8, "I8::MIN should be -128")
+    assert_eq(max, 127i8, "I8::MAX should be 127")
+    assert(min < max, "MIN should be less than MAX")
+    return 0
+}
+
+// Test I8 arithmetic
+@test
+func test_i8_arithmetic() -> I32 {
+    let a: I8 = 50i8
+    let b: I8 = 25i8
+    assert_eq(a + b, 75i8, "50 + 25 should be 75")
+    assert_eq(a - b, 25i8, "50 - 25 should be 25")
+    return 0
+}
+
+// Test I8 comparison
+@test
+func test_i8_comparison() -> I32 {
+    let a: I8 = -10i8
+    let b: I8 = 10i8
+    assert(a < b, "-10 should be less than 10")
+    assert(b > a, "10 should be greater than -10")
+    assert(a < 0i8, "-10 should be less than 0")
+    assert(b > 0i8, "10 should be greater than 0")
+    return 0
+}
+
+// Test I16 MIN/MAX constants
+@test
+func test_i16_min_max() -> I32 {
+    let min: I16 = I16::MIN
+    let max: I16 = I16::MAX
+    assert_eq(min, -32768i16, "I16::MIN should be -32768")
+    assert_eq(max, 32767i16, "I16::MAX should be 32767")
+    assert(min < max, "MIN should be less than MAX")
+    return 0
+}

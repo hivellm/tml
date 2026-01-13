@@ -85,7 +85,7 @@ void Formatter::format_generics(const std::vector<parser::GenericParam>& generic
             for (size_t j = 0; j < generics[i].bounds.size(); ++j) {
                 if (j > 0)
                     output_ << " + ";
-                output_ << format_type_path(generics[i].bounds[j]);
+                output_ << format_type(*generics[i].bounds[j]);
             }
         }
     }

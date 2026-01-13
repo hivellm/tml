@@ -614,6 +614,70 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
                 }
 
                 if (!type_name.empty()) {
+                    // Extract constants from impl block (e.g., I32::MIN, I32::MAX)
+                    for (const auto& const_decl : impl.constants) {
+                        std::string qualified_name = type_name + "::" + const_decl.name;
+                        std::string value;
+
+                        // Support: literal constants
+                        if (const_decl.value->is<parser::LiteralExpr>()) {
+                            const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                            if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                value = std::to_string(lit.token.int_value().value);
+                            } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                                value = (lit.token.lexeme == "true") ? "1" : "0";
+                            }
+                        }
+                        // Support: cast expressions (e.g., -2147483648 as I32)
+                        else if (const_decl.value->is<parser::CastExpr>()) {
+                            const auto& cast = const_decl.value->as<parser::CastExpr>();
+                            if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                                const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    value = std::to_string(lit.token.int_value().value);
+                                }
+                            } else if (cast.expr && cast.expr->is<parser::UnaryExpr>()) {
+                                const auto& unary = cast.expr->as<parser::UnaryExpr>();
+                                if (unary.op == parser::UnaryOp::Neg &&
+                                    unary.operand->is<parser::LiteralExpr>()) {
+                                    const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                        int64_t int_val =
+                                            static_cast<int64_t>(lit.token.int_value().value);
+                                        value = std::to_string(-int_val);
+                                    }
+                                }
+                            }
+                        }
+                        // Support: unary expressions (e.g., -128)
+                        else if (const_decl.value->is<parser::UnaryExpr>()) {
+                            const auto& unary = const_decl.value->as<parser::UnaryExpr>();
+                            if (unary.op == parser::UnaryOp::Neg &&
+                                unary.operand->is<parser::LiteralExpr>()) {
+                                const auto& lit = unary.operand->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                    int64_t int_val =
+                                        static_cast<int64_t>(lit.token.int_value().value);
+                                    value = std::to_string(-int_val);
+                                }
+                            } else if (unary.operand->is<parser::CastExpr>()) {
+                                const auto& cast = unary.operand->as<parser::CastExpr>();
+                                if (cast.expr && cast.expr->is<parser::LiteralExpr>()) {
+                                    const auto& lit = cast.expr->as<parser::LiteralExpr>();
+                                    if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                                        int64_t int_val =
+                                            static_cast<int64_t>(lit.token.int_value().value);
+                                        value = std::to_string(-int_val);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!value.empty()) {
+                            global_constants_[qualified_name] = value;
+                        }
+                    }
+
                     // For generic types (like Maybe[T]), ensure the generic struct type exists
                     // This is needed because impl methods use the base type name
                     auto enum_it = pending_generic_enums_.find(type_name);

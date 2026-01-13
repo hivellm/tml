@@ -307,6 +307,47 @@ bool TypeEnv::type_implements(const std::string& type_name,
     return false;
 }
 
+bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_name) const {
+    if (!type) {
+        return false;
+    }
+
+    // Handle ClosureType - closures automatically implement Fn, FnMut, FnOnce
+    if (type->is<ClosureType>()) {
+        // Closures implement Fn, FnMut, and FnOnce
+        // The specific trait depends on how captures are used:
+        // - No mut captures: Fn (can call multiple times immutably)
+        // - Has mut captures: FnMut (can call multiple times with mutation)
+        // - Consumes captures: FnOnce (can only call once)
+        // For now, assume all closures implement all three (conservative)
+        if (behavior_name == "Fn" || behavior_name == "FnMut" || behavior_name == "FnOnce") {
+            return true;
+        }
+        return false;
+    }
+
+    // Handle FuncType - function pointers also implement Fn traits
+    if (type->is<FuncType>()) {
+        if (behavior_name == "Fn" || behavior_name == "FnMut" || behavior_name == "FnOnce") {
+            return true;
+        }
+        return false;
+    }
+
+    // For named types, delegate to the string-based lookup
+    if (type->is<NamedType>()) {
+        return type_implements(type->as<NamedType>().name, behavior_name);
+    }
+
+    // For primitive types, check by name
+    if (type->is<PrimitiveType>()) {
+        return type_implements(primitive_kind_to_string(type->as<PrimitiveType>().kind),
+                               behavior_name);
+    }
+
+    return false;
+}
+
 bool TypeEnv::type_needs_drop(const std::string& type_name) const {
     // Check if type explicitly implements Drop
     if (type_implements(type_name, "Drop")) {

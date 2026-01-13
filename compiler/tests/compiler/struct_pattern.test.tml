@@ -1,0 +1,85 @@
+use test
+
+type Point {
+    x: I32,
+    y: I32,
+}
+
+type Color {
+    r: I32,
+    g: I32,
+    b: I32,
+}
+
+func classify_point(p: Point) -> I32 {
+    return when p {
+        Point { x, y } => x + y
+    }
+}
+
+func extract_x(p: Point) -> I32 {
+    return when p {
+        Point { x, y } => x
+    }
+}
+
+func extract_y(p: Point) -> I32 {
+    return when p {
+        Point { x, y } => y
+    }
+}
+
+func color_sum(c: Color) -> I32 {
+    return when c {
+        Color { r, g, b } => r + g + b
+    }
+}
+
+@test
+func test_struct_pattern_sum() -> I32 {
+    let p: Point = Point { x: 10, y: 20 }
+    assert_eq(classify_point(p), 30, "Point{10,20} => 10 + 20 = 30")
+    return 0
+}
+
+@test
+func test_struct_pattern_extract_x() -> I32 {
+    let p: Point = Point { x: 42, y: 100 }
+    assert_eq(extract_x(p), 42, "extract x from Point{42,100}")
+    return 0
+}
+
+@test
+func test_struct_pattern_extract_y() -> I32 {
+    let p: Point = Point { x: 42, y: 100 }
+    assert_eq(extract_y(p), 100, "extract y from Point{42,100}")
+    return 0
+}
+
+@test
+func test_struct_pattern_origin() -> I32 {
+    let p: Point = Point { x: 0, y: 0 }
+    assert_eq(classify_point(p), 0, "Point{0,0} => 0")
+    return 0
+}
+
+@test
+func test_struct_pattern_negative() -> I32 {
+    let p: Point = Point { x: -5, y: 10 }
+    assert_eq(classify_point(p), 5, "Point{-5,10} => 5")
+    return 0
+}
+
+@test
+func test_color_pattern() -> I32 {
+    let c: Color = Color { r: 255, g: 128, b: 64 }
+    assert_eq(color_sum(c), 447, "Color{255,128,64} => 447")
+    return 0
+}
+
+@test
+func test_color_black() -> I32 {
+    let c: Color = Color { r: 0, g: 0, b: 0 }
+    assert_eq(color_sum(c), 0, "Color{0,0,0} => 0")
+    return 0
+}

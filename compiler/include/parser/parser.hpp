@@ -170,6 +170,10 @@ private:
     /// Skips insignificant newlines.
     void skip_newlines();
 
+    /// Collects a doc comment if present (without consuming following newlines).
+    /// Returns nullopt if no doc comment is found.
+    [[nodiscard]] auto collect_doc_comment() -> std::optional<std::string>;
+
     // ========================================================================
     // Error Handling
     // ========================================================================
@@ -236,29 +240,36 @@ private:
     auto parse_decorators() -> Result<std::vector<Decorator>, ParseError>;
 
     /// Parses function declaration.
-    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {})
+    auto parse_func_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                         std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
     /// Parses struct declaration.
-    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {})
+    auto parse_struct_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                           std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
     /// Parses enum declaration.
-    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {})
+    auto parse_enum_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                         std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
     /// Parses behavior (trait) declaration.
-    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {})
+    auto parse_trait_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                          std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
     /// Parses impl block.
-    auto parse_impl_decl() -> Result<DeclPtr, ParseError>;
+    auto parse_impl_decl(std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
 
     /// Parses type alias.
-    auto parse_type_alias_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
+    auto parse_type_alias_decl(Visibility vis, std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
 
     /// Parses const declaration.
-    auto parse_const_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
+    auto parse_const_decl(Visibility vis, std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
 
     /// Parses use declaration.
     auto parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError>;

@@ -35,6 +35,8 @@ namespace tml::codegen {
 
 auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::string {
     const std::string& method = call.method;
+    TML_DEBUG_LN("[METHOD] gen_method_call: " << method << " where_constraints.size="
+                                              << current_where_constraints_.size());
 
     // =========================================================================
     // 1. Check for static method calls (Type::method)
@@ -419,6 +421,235 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 break;
             default:
                 break;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 4b. Handle method calls on bounded generics (e.g., C: Container[T])
+    // =========================================================================
+    // When the receiver is a type parameter with behavior bounds from where clauses,
+    // we need to dispatch to the concrete impl method for the substituted type.
+    TML_DEBUG_LN("[METHOD 4b] method=" << method
+                                       << " where_constraints=" << current_where_constraints_.size()
+                                       << " type_subs=" << current_type_subs_.size());
+    if (!current_where_constraints_.empty() && !current_type_subs_.empty()) {
+        // For bounded generics, the type checker has already validated that the method exists
+        // We need to find the concrete type and dispatch to its impl method
+
+        // Debug: dump current_type_subs_
+        for (const auto& [key, val] : current_type_subs_) {
+            TML_DEBUG_LN("[METHOD 4b] type_subs: " << key << " -> is_NamedType="
+                                                   << val->is<types::NamedType>());
+        }
+
+        // Iterate through all where constraints to find one with a behavior that has this method
+        for (const auto& constraint : current_where_constraints_) {
+            TML_DEBUG_LN("[METHOD 4b] checking constraint for type_param="
+                         << constraint.type_param
+                         << " parameterized_bounds=" << constraint.parameterized_bounds.size());
+
+            // Get the concrete type name from the type parameter substitution
+            std::string concrete_type_name;
+            auto sub_it = current_type_subs_.find(constraint.type_param);
+            if (sub_it != current_type_subs_.end()) {
+                auto sub_type = sub_it->second;
+                TML_DEBUG_LN("[METHOD 4b] sub_type for "
+                             << constraint.type_param
+                             << " is_NamedType=" << sub_type->is<types::NamedType>());
+                if (sub_type->is<types::NamedType>()) {
+                    concrete_type_name = sub_type->as<types::NamedType>().name;
+                }
+            }
+            TML_DEBUG_LN("[METHOD 4b] concrete_type_name=" << concrete_type_name);
+
+            // Look through parameterized bounds for a behavior with this method
+            for (const auto& bound : constraint.parameterized_bounds) {
+                TML_DEBUG_LN("[METHOD 4b] checking bound.behavior_name=" << bound.behavior_name);
+                auto behavior_def = env_.lookup_behavior(bound.behavior_name);
+                if (behavior_def) {
+                    TML_DEBUG_LN("[METHOD 4b] found behavior_def with "
+                                 << behavior_def->methods.size() << " methods");
+                    for (const auto& bmethod : behavior_def->methods) {
+                        TML_DEBUG_LN("[METHOD 4b] checking bmethod.name="
+                                     << bmethod.name << " vs method=" << method);
+                        if (bmethod.name == method) {
+                            // Found the method in the behavior!
+                            // Now dispatch to the concrete impl for the substituted type
+                            TML_DEBUG_LN("[METHOD 4b] FOUND method! concrete_type_name="
+                                         << concrete_type_name);
+
+                            // Build substitution map from behavior type params to bound's type args
+                            std::unordered_map<std::string, types::TypePtr> behavior_subs;
+                            if (!bound.type_args.empty() && !behavior_def->type_params.empty()) {
+                                for (size_t i = 0; i < behavior_def->type_params.size() &&
+                                                   i < bound.type_args.size();
+                                     ++i) {
+                                    behavior_subs[behavior_def->type_params[i]] =
+                                        bound.type_args[i];
+                                }
+                            }
+
+                            // Look up the impl method: ConcreteType::method
+                            std::string qualified_name = concrete_type_name + "::" + method;
+                            auto func_sig = env_.lookup_func(qualified_name);
+
+                            // If not found locally, search modules
+                            if (!func_sig && env_.module_registry()) {
+                                const auto& all_modules = env_.module_registry()->get_all_modules();
+                                for (const auto& [mod_name, mod] : all_modules) {
+                                    auto func_it = mod.functions.find(qualified_name);
+                                    if (func_it != mod.functions.end()) {
+                                        func_sig = func_it->second;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (func_sig) {
+                                // Generate the call to the concrete impl method
+                                std::string fn_name = "@tml_" + get_suite_prefix() +
+                                                      concrete_type_name + "_" + method;
+
+                                // Build arguments
+                                std::vector<std::pair<std::string, std::string>> typed_args;
+
+                                // First argument is 'this' (the receiver)
+                                std::string this_type = "ptr";
+                                std::string this_val = receiver;
+
+                                // For structs, we need a pointer to the struct
+                                // For ref types (ptr), we already have the pointer value
+                                if (call.receiver->is<parser::IdentExpr>()) {
+                                    const auto& ident = call.receiver->as<parser::IdentExpr>();
+                                    auto it = locals_.find(ident.name);
+                                    if (it != locals_.end()) {
+                                        if (it->second.type == "ptr") {
+                                            // Ref type: use loaded value (receiver) which is the
+                                            // ptr
+                                            this_val = receiver;
+                                        } else {
+                                            // Struct type: use the alloca which is a ptr to struct
+                                            this_val = it->second.reg;
+                                        }
+                                    }
+                                }
+
+                                typed_args.push_back({this_type, this_val});
+
+                                // Add remaining arguments with type substitution
+                                for (size_t i = 0; i < call.args.size(); ++i) {
+                                    std::string val = gen_expr(*call.args[i]);
+                                    std::string arg_type = "i32";
+                                    if (func_sig && i + 1 < func_sig->params.size()) {
+                                        auto param_type = func_sig->params[i + 1];
+                                        if (!behavior_subs.empty()) {
+                                            param_type =
+                                                types::substitute_type(param_type, behavior_subs);
+                                        }
+                                        arg_type = llvm_type_from_semantic(param_type);
+                                    }
+                                    typed_args.push_back({arg_type, val});
+                                }
+
+                                // Determine return type with substitution
+                                auto return_type = bmethod.return_type;
+                                if (!behavior_subs.empty()) {
+                                    return_type =
+                                        types::substitute_type(return_type, behavior_subs);
+                                }
+                                std::string ret_type = llvm_type_from_semantic(return_type);
+
+                                // Build args string
+                                std::string args_str;
+                                for (size_t i = 0; i < typed_args.size(); ++i) {
+                                    if (i > 0)
+                                        args_str += ", ";
+                                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                                }
+
+                                // Generate the call
+                                std::string result = fresh_reg();
+                                if (ret_type == "void") {
+                                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                                    last_expr_type_ = "void";
+                                    return "void";
+                                } else {
+                                    emit_line("  " + result + " = call " + ret_type + " " +
+                                              fn_name + "(" + args_str + ")");
+                                    last_expr_type_ = ret_type;
+                                    return result;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Also check simple (non-parameterized) behavior bounds
+            for (const auto& behavior_name : constraint.required_behaviors) {
+                auto behavior_def = env_.lookup_behavior(behavior_name);
+                if (behavior_def) {
+                    for (const auto& bmethod : behavior_def->methods) {
+                        if (bmethod.name == method) {
+                            // Dispatch to ConcreteType::method
+                            std::string qualified_name = concrete_type_name + "::" + method;
+                            auto func_sig = env_.lookup_func(qualified_name);
+
+                            if (func_sig) {
+                                std::string fn_name = "@tml_" + get_suite_prefix() +
+                                                      concrete_type_name + "_" + method;
+
+                                std::vector<std::pair<std::string, std::string>> typed_args;
+                                std::string this_val = receiver;
+                                if (call.receiver->is<parser::IdentExpr>()) {
+                                    const auto& ident = call.receiver->as<parser::IdentExpr>();
+                                    auto it = locals_.find(ident.name);
+                                    if (it != locals_.end()) {
+                                        if (it->second.type == "ptr") {
+                                            // Ref type: use loaded value (receiver)
+                                            this_val = receiver;
+                                        } else {
+                                            // Struct type: use the alloca
+                                            this_val = it->second.reg;
+                                        }
+                                    }
+                                }
+                                typed_args.push_back({"ptr", this_val});
+
+                                for (size_t i = 0; i < call.args.size(); ++i) {
+                                    std::string val = gen_expr(*call.args[i]);
+                                    std::string arg_type = "i32";
+                                    if (func_sig && i + 1 < func_sig->params.size()) {
+                                        arg_type = llvm_type_from_semantic(func_sig->params[i + 1]);
+                                    }
+                                    typed_args.push_back({arg_type, val});
+                                }
+
+                                std::string ret_type = llvm_type_from_semantic(bmethod.return_type);
+
+                                std::string args_str;
+                                for (size_t i = 0; i < typed_args.size(); ++i) {
+                                    if (i > 0)
+                                        args_str += ", ";
+                                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                                }
+
+                                std::string result = fresh_reg();
+                                if (ret_type == "void") {
+                                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                                    last_expr_type_ = "void";
+                                    return "void";
+                                } else {
+                                    emit_line("  " + result + " = call " + ret_type + " " +
+                                              fn_name + "(" + args_str + ")");
+                                    last_expr_type_ = ret_type;
+                                    return result;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1092,7 +1323,90 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     // =========================================================================
-    // 13. Handle File instance methods
+    // 13. Handle Fn trait method calls on closures and function types
+    // =========================================================================
+    // Closures and function pointers implement Fn, FnMut, FnOnce
+    // call(), call_mut(), call_once() invoke the callable
+    if (method == "call" || method == "call_mut" || method == "call_once") {
+        if (receiver_type) {
+            // Handle ClosureType
+            if (receiver_type->is<types::ClosureType>()) {
+                const auto& closure_type = receiver_type->as<types::ClosureType>();
+
+                // Generate arguments for the closure call
+                std::string args_str;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string arg_val = gen_expr(*call.args[i]);
+                    std::string arg_type = "i32"; // default
+                    if (i < closure_type.params.size()) {
+                        arg_type = llvm_type_from_semantic(closure_type.params[i]);
+                    }
+                    if (!args_str.empty())
+                        args_str += ", ";
+                    args_str += arg_type + " " + arg_val;
+                }
+
+                // Determine return type
+                std::string ret_type = "i32";
+                if (closure_type.return_type) {
+                    ret_type = llvm_type_from_semantic(closure_type.return_type);
+                }
+
+                // Call the closure (receiver is function pointer)
+                std::string result = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + receiver + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return "void";
+                } else {
+                    emit_line("  " + result + " = call " + ret_type + " " + receiver + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
+            }
+
+            // Handle FuncType (function pointers)
+            if (receiver_type->is<types::FuncType>()) {
+                const auto& func_type = receiver_type->as<types::FuncType>();
+
+                // Generate arguments for the function call
+                std::string args_str;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string arg_val = gen_expr(*call.args[i]);
+                    std::string arg_type = "i32"; // default
+                    if (i < func_type.params.size()) {
+                        arg_type = llvm_type_from_semantic(func_type.params[i]);
+                    }
+                    if (!args_str.empty())
+                        args_str += ", ";
+                    args_str += arg_type + " " + arg_val;
+                }
+
+                // Determine return type
+                std::string ret_type = "void";
+                if (func_type.return_type) {
+                    ret_type = llvm_type_from_semantic(func_type.return_type);
+                }
+
+                // Call the function pointer
+                std::string result = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + receiver + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return "void";
+                } else {
+                    emit_line("  " + result + " = call " + ret_type + " " + receiver + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // 14. Handle File instance methods
     // =========================================================================
     if (method == "is_open" || method == "read_line" || method == "write_str" || method == "size" ||
         method == "close") {

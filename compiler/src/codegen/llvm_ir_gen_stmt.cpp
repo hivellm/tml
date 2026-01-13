@@ -512,7 +512,10 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 emit_line("  " + alloca_reg + " = alloca ptr");
                 emit_line("  store ptr " + closure_fn + ", ptr " + alloca_reg);
 
-                VarInfo info{alloca_reg, "ptr", nullptr, std::nullopt};
+                // Resolve semantic type for FuncType - needed for Fn trait method dispatch
+                types::TypePtr semantic_type =
+                    resolve_parser_type_with_subs(**let.type_annotation, {});
+                VarInfo info{alloca_reg, "ptr", semantic_type, std::nullopt};
                 if (last_closure_captures_.has_value()) {
                     info.closure_captures = last_closure_captures_;
                     last_closure_captures_ = std::nullopt; // Clear after use

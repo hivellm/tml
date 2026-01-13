@@ -50,9 +50,12 @@ auto IRBuilder::build_func(const parser::FuncDecl& func) -> IRFunc {
         IRGenericParam param;
         param.name = gen.name;
         for (const auto& bound : gen.bounds) {
-            // Extract bound name from TypePath
-            if (!bound.segments.empty()) {
-                param.bounds.push_back(bound.segments[0]);
+            // Extract bound name from TypePtr (NamedType)
+            if (bound && bound->is<parser::NamedType>()) {
+                const auto& named = bound->as<parser::NamedType>();
+                if (!named.path.segments.empty()) {
+                    param.bounds.push_back(named.path.segments.back());
+                }
             }
         }
         ir_func.generics.push_back(param);

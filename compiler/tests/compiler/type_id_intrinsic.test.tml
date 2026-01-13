@@ -1,0 +1,45 @@
+// Test type_id intrinsic - returns unique ID for each type
+// Validates that type_id[T]() returns a stable U64 hash
+
+use test
+
+@test
+func test_type_id_basic() {
+    // Each type should have a unique ID
+    let i32_id: I64 = type_id[I32]()
+    let i64_id: I64 = type_id[I64]()
+    let str_id: I64 = type_id[Str]()
+
+    // IDs should be non-zero
+    assert_true(i32_id != 0, "I32 type_id should be non-zero")
+    assert_true(i64_id != 0, "I64 type_id should be non-zero")
+    assert_true(str_id != 0, "Str type_id should be non-zero")
+
+    // Different types should have different IDs
+    assert_true(i32_id != i64_id, "I32 and I64 should have different type_ids")
+    assert_true(i32_id != str_id, "I32 and Str should have different type_ids")
+    assert_true(i64_id != str_id, "I64 and Str should have different type_ids")
+}
+
+@test
+func test_type_id_consistency() {
+    // Same type should always have the same ID
+    let id1: I64 = type_id[I32]()
+    let id2: I64 = type_id[I32]()
+    assert_eq(id1, id2, "Same type should have same type_id")
+}
+
+@test
+func test_type_id_with_custom_type() {
+    // Custom type should have unique ID
+    let point_id: I64 = type_id[Point]()
+    let i32_id: I64 = type_id[I32]()
+
+    assert_true(point_id != 0, "Point type_id should be non-zero")
+    assert_true(point_id != i32_id, "Point and I32 should have different type_ids")
+}
+
+type Point {
+    x: I32,
+    y: I32,
+}
