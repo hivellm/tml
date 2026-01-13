@@ -19,10 +19,10 @@ func add(a: I32, b: I32) -> I32 {
 }
 
 // Function with loop
-func power(base: I32, exp: I32) -> I32 {
+func power(x: I32, exp: I32) -> I32 {
     var result = 1
     loop _ in 0 to exp {
-        result *= base
+        result *= x
     }
     return result
 }

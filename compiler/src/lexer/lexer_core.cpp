@@ -97,6 +97,24 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
 
     // Null literal
     {"null", TokenKind::NullLiteral},
+
+    // OOP (C#-style)
+    {"class", TokenKind::KwClass},
+    {"interface", TokenKind::KwInterface},
+    {"extends", TokenKind::KwExtends},
+    {"implements", TokenKind::KwImplements},
+    {"override", TokenKind::KwOverride},
+    {"virtual", TokenKind::KwVirtual},
+    {"abstract", TokenKind::KwAbstract},
+    {"sealed", TokenKind::KwSealed},
+    {"namespace", TokenKind::KwNamespace},
+    {"base", TokenKind::KwBase},
+    {"protected", TokenKind::KwProtected},
+    {"private", TokenKind::KwPrivate},
+    {"static", TokenKind::KwStatic},
+    // Note: 'new' is NOT a keyword - it's used as identifier in Type::new() pattern
+    // The parser checks for it contextually within class declarations
+    {"prop", TokenKind::KwProp},
 };
 
 } // anonymous namespace

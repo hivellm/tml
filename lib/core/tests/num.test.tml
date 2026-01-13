@@ -25,12 +25,12 @@ impl I32 {
         if exp == 0 { return 1 }
         if exp == 1 { return this }
         let mut result: I32 = 1
-        let mut base: I32 = this
+        let mut b: I32 = this
         let mut e: I32 = exp
         loop {
             if e <= 0 { return result }
-            if e % 2 == 1 { result = result * base }
-            base = base * base
+            if e % 2 == 1 { result = result * b }
+            b = b * b
             e = e / 2
         }
         return result

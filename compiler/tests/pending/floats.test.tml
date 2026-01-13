@@ -96,8 +96,8 @@ func test_float_sqrt() -> I32 {
 @test
 func test_float_pow() -> I32 {
     // Test pow function
-    let base: F64 = 2.0
-    let result: F64 = pow(base, 3)  // 2^3 = 8
+    let b: F64 = 2.0
+    let result: F64 = pow(b, 3)  // 2^3 = 8
 
     if result < 7.9 or result > 8.1 then {
         return 1

@@ -117,15 +117,15 @@ pub func signum_i32(value: I32) -> I32 {
 /// assert_eq(pow_i32(3, 3), 27)
 /// assert_eq(pow_i32(5, 0), 1)
 /// ```
-pub func pow_i32(base: I32, exp: I32) -> I32 {
+pub func pow_i32(x: I32, exp: I32) -> I32 {
     if exp == 0 {
         return 1
     }
     if exp == 1 {
-        return base
+        return x
     }
     let mut result: I32 = 1
-    let mut b: I32 = base
+    let mut b: I32 = x
     let mut e: I32 = exp
     loop {
         if e <= 0 {
@@ -168,7 +168,7 @@ pub func signum_i64(value: I64) -> I64 {
 }
 
 /// Raises an I64 integer to the power of `exp`.
-pub func pow_i64(base: I64, exp: I64) -> I64 {
+pub func pow_i64(x: I64, exp: I64) -> I64 {
     let zero: I64 = 0
     let one: I64 = 1
     let two: I64 = 2
@@ -176,10 +176,10 @@ pub func pow_i64(base: I64, exp: I64) -> I64 {
         return one
     }
     if exp == one {
-        return base
+        return x
     }
     let mut result: I64 = one
-    let mut b: I64 = base
+    let mut b: I64 = x
     let mut e: I64 = exp
     loop {
         if e <= zero {
@@ -246,16 +246,16 @@ impl I32 {
             return this
         }
         let mut result: I32 = 1
-        let mut base: I32 = this
+        let mut b: I32 = this
         let mut e: I32 = exp
         loop {
             if e <= 0 {
                 return result
             }
             if e % 2 == 1 {
-                result = result * base
+                result = result * b
             }
-            base = base * base
+            b = b * b
             e = e / 2
         }
         return result

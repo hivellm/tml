@@ -29,13 +29,13 @@ pub func isqrt(n: I32) -> I32 {
 // Modular Exponentiation
 // ============================================================================
 
-pub func mod_pow(base: I32, exp: I32, modulus: I32) -> I32 {
+pub func mod_pow(x: I32, exp: I32, modulus: I32) -> I32 {
     if modulus == 1 {
         return 0
     }
 
     let mut result: I32 = 1
-    let mut b: I32 = base % modulus
+    let mut b: I32 = x % modulus
     let mut e: I32 = exp
 
     loop {

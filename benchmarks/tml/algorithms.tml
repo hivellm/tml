@@ -59,7 +59,7 @@ pub func gcd_iterative(a: I32, b: I32) -> I32 {
 // Power (Fast Exponentiation)
 // ============================================================================
 
-pub func power_naive(base: I32, exp: I32) -> I32 {
+pub func power_naive(x: I32, exp: I32) -> I32 {
     let mut result: I32 = 1
     let mut i: I32 = 0
 
@@ -67,27 +67,27 @@ pub func power_naive(base: I32, exp: I32) -> I32 {
         if i >= exp {
             break
         }
-        result = result * base
+        result = result * x
         i = i + 1
     }
 
     return result
 }
 
-pub func power_fast(base: I32, exp: I32) -> I32 {
+pub func power_fast(x: I32, exp: I32) -> I32 {
     if exp == 0 {
         return 1
     }
     if exp == 1 {
-        return base
+        return x
     }
 
-    let half: I32 = power_fast(base, exp / 2)
+    let half: I32 = power_fast(x, exp / 2)
 
     if exp % 2 == 0 {
         return half * half
     }
-    return base * half * half
+    return x * half * half
 }
 
 // ============================================================================

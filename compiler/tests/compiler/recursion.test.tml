@@ -71,11 +71,11 @@ func test_sum_to_n() -> I32 {
 
 // ============ Power Function ============
 
-func power(base: I32, exp: I32) -> I32 {
+func power(x: I32, exp: I32) -> I32 {
     if exp <= 0 then {
         return 1
     }
-    return base * power(base, exp - 1)
+    return x * power(x, exp - 1)
 }
 
 @test

@@ -416,7 +416,7 @@ pub func exp[T](val: T) -> T
 
 /// Power (x^y). Maps to LLVM `llvm.pow`.
 @intrinsic
-pub func pow[T](base: T, exp: T) -> T
+pub func pow[T](x: T, exp: T) -> T
 
 /// Floor (round down).
 @intrinsic

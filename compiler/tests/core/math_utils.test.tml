@@ -153,14 +153,14 @@ func test_fibonacci() -> I32 {
 
 // ============ Power ============
 
-func power(base: I32, exp: I32) -> I32 {
+func power(x: I32, exp: I32) -> I32 {
     if exp == 0 then { return 1 }
 
     let mut result: I32 = 1
     let mut i: I32 = 0
     loop {
         if i >= exp then { break }
-        result = result * base
+        result = result * x
         i = i + 1
     }
     return result

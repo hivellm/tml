@@ -168,14 +168,14 @@ func test_factorial_loop() -> I32 {
 
 @test
 func test_power_loop() -> I32 {
-    let base: I32 = 2
+    let b: I32 = 2
     let exp: I32 = 10
     let mut result: I32 = 1
     let mut i: I32 = 0
 
     loop {
         if i >= exp then { break }
-        result = result * base
+        result = result * b
         i = i + 1
     }
 

@@ -270,15 +270,15 @@ func test_async_conditional_zero() {
 
 // Multiple awaits in different branches
 async func async_multi_branch(x: I64) -> I64 {
-    let base: I64 = await async_simple()  // 42
+    let b: I64 = await async_simple()  // 42
     if x > 10 {
         let y: I64 = await async_compute(x)
-        return base + y
+        return b + y
     } else if x > 0 {
-        let y: I64 = await async_add(x, base)
+        let y: I64 = await async_add(x, b)
         return y
     } else {
-        return base
+        return b
     }
 }
 

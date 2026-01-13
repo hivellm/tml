@@ -350,7 +350,7 @@ func test_lcm() -> I32 {
 // Power Function (Iterative)
 // ============================================================================
 
-func power(base: I32, exp: I32) -> I32 {
+func power(x: I32, exp: I32) -> I32 {
     if exp == 0 {
         return 1
     }
@@ -358,7 +358,7 @@ func power(base: I32, exp: I32) -> I32 {
     let mut i: I32 = 0
     loop {
         if i >= exp then break
-        result = result * base
+        result = result * x
         i = i + 1
     }
     return result
