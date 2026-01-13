@@ -1,11 +1,22 @@
 # RFC-0006: Object-Oriented Sugar
 
 ## Status
-Draft (Low Priority)
+**Superseded by [RFC-0014-OOP-CLASSES](RFC-0014-OOP-CLASSES.md)**
 
-## Summary
+> **Note:** This RFC has been superseded. TML now supports full C#-style OOP with:
+> - Classes with single inheritance (`extends`)
+> - Interfaces with multiple implementation (`implements`)
+> - Virtual methods and polymorphism (`virtual`, `override`)
+> - Abstract classes and methods (`abstract`)
+> - Sealed classes (`sealed`)
+> - Encapsulation (`private`, `protected`, `pub`)
+> - Namespaces
+>
+> See [RFC-0014-OOP-CLASSES](RFC-0014-OOP-CLASSES.md) for the complete OOP specification.
 
-This RFC defines optional OO syntactic sugar: `class`, `state`, and enhanced `this` patterns. These desugar to core constructs (types + impl blocks) and exist purely for ergonomics.
+## Summary (Historical)
+
+This RFC originally defined optional OO syntactic sugar: `class`, `state`, and enhanced `this` patterns. These would desugar to core constructs (types + impl blocks) and exist purely for ergonomics.
 
 ## Motivation
 

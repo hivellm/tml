@@ -228,6 +228,111 @@ struct BehaviorDef {
     SourceSpan span;                                 ///< Declaration location.
 };
 
+// ============================================================================
+// OOP Definitions (C#-style)
+// ============================================================================
+
+/// Member visibility for class/interface members.
+enum class MemberVisibility {
+    Private,   ///< `private` - only accessible within this class.
+    Protected, ///< `protected` - accessible within class and subclasses.
+    Public,    ///< `pub` - accessible everywhere.
+};
+
+/// Class field definition.
+struct ClassFieldDef {
+    std::string name;                 ///< Field name.
+    TypePtr type;                     ///< Field type.
+    MemberVisibility vis;             ///< Field visibility.
+    bool is_static;                   ///< True for static fields.
+    std::optional<TypePtr> init_type; ///< Type of initializer expression (if any).
+};
+
+/// Class method definition.
+struct ClassMethodDef {
+    FuncSig sig;          ///< Method signature.
+    MemberVisibility vis; ///< Method visibility.
+    bool is_static;       ///< True for static methods.
+    bool is_virtual;      ///< True for virtual methods.
+    bool is_override;     ///< True for override methods.
+    bool is_abstract;     ///< True for abstract methods.
+    size_t vtable_index;  ///< Index in vtable (for virtual methods).
+};
+
+/// Property definition with optional getter/setter.
+struct PropertyDef {
+    std::string name;     ///< Property name.
+    TypePtr type;         ///< Property type.
+    MemberVisibility vis; ///< Property visibility.
+    bool is_static;       ///< True for static properties.
+    bool has_getter;      ///< True if has getter.
+    bool has_setter;      ///< True if has setter.
+};
+
+/// Constructor definition.
+struct ConstructorDef {
+    std::vector<TypePtr> params; ///< Parameter types.
+    MemberVisibility vis;        ///< Constructor visibility.
+    bool calls_base;             ///< True if calls base constructor.
+};
+
+/// Class (OOP) definition.
+///
+/// Represents a class declaration with single inheritance, multiple
+/// interface implementation, and support for virtual dispatch.
+///
+/// # Example
+///
+/// ```tml
+/// class Dog extends Animal implements Friendly {
+///     private name: Str
+///     func new(name: Str) { this.name = name }
+///     override func speak(this) -> Str { "Woof!" }
+/// }
+/// ```
+struct ClassDef {
+    std::string name;                            ///< Class name.
+    std::vector<std::string> type_params;        ///< Generic type parameter names.
+    std::vector<ConstGenericParam> const_params; ///< Const generic parameters.
+    std::optional<std::string> base_class;       ///< Base class name (single inheritance).
+    std::vector<std::string> interfaces;         ///< Implemented interfaces.
+    std::vector<ClassFieldDef> fields;           ///< Class fields.
+    std::vector<ClassMethodDef> methods;         ///< Class methods.
+    std::vector<PropertyDef> properties;         ///< Class properties.
+    std::vector<ConstructorDef> constructors;    ///< Constructors.
+    bool is_abstract;                            ///< True for abstract classes.
+    bool is_sealed;                              ///< True for sealed classes.
+    SourceSpan span;                             ///< Declaration location.
+};
+
+/// Interface method definition.
+struct InterfaceMethodDef {
+    FuncSig sig;      ///< Method signature.
+    bool is_static;   ///< True for static interface methods.
+    bool has_default; ///< True if has default implementation.
+};
+
+/// Interface (OOP) definition.
+///
+/// Represents an interface declaration that classes can implement.
+/// Supports multiple inheritance (extends).
+///
+/// # Example
+///
+/// ```tml
+/// interface Drawable {
+///     func draw(this, canvas: ref Canvas)
+/// }
+/// ```
+struct InterfaceDef {
+    std::string name;                            ///< Interface name.
+    std::vector<std::string> type_params;        ///< Generic type parameter names.
+    std::vector<ConstGenericParam> const_params; ///< Const generic parameters.
+    std::vector<std::string> extends;            ///< Extended interfaces.
+    std::vector<InterfaceMethodDef> methods;     ///< Interface methods.
+    SourceSpan span;                             ///< Declaration location.
+};
+
 /// Lexical scope for local variable bindings.
 ///
 /// Scopes form a hierarchy where each scope can access its own symbols
@@ -323,6 +428,40 @@ public:
 
     /// Looks up a type alias by name.
     [[nodiscard]] auto lookup_type_alias(const std::string& name) const -> std::optional<TypePtr>;
+
+    // ========================================================================
+    // OOP Type Definitions (C#-style)
+    // ========================================================================
+
+    /// Registers a class definition.
+    void define_class(ClassDef def);
+
+    /// Registers an interface definition.
+    void define_interface(InterfaceDef def);
+
+    /// Looks up a class by name.
+    [[nodiscard]] auto lookup_class(const std::string& name) const -> std::optional<ClassDef>;
+
+    /// Looks up an interface by name.
+    [[nodiscard]] auto lookup_interface(const std::string& name) const
+        -> std::optional<InterfaceDef>;
+
+    /// Returns all registered classes.
+    [[nodiscard]] auto all_classes() const -> const std::unordered_map<std::string, ClassDef>&;
+
+    /// Returns all registered interfaces.
+    [[nodiscard]] auto all_interfaces() const
+        -> const std::unordered_map<std::string, InterfaceDef>&;
+
+    /// Records that a class implements an interface.
+    void register_class_interface(const std::string& class_name, const std::string& interface_name);
+
+    /// Returns true if a class implements an interface.
+    [[nodiscard]] bool class_implements_interface(const std::string& class_name,
+                                                  const std::string& interface_name) const;
+
+    /// Returns true if a class is a subclass of another class.
+    [[nodiscard]] bool is_subclass_of(const std::string& derived, const std::string& base) const;
 
     // ========================================================================
     // Behavior Implementation Tracking
@@ -472,6 +611,12 @@ private:
         behavior_impls_;                                    ///< Type -> behaviors.
     std::unordered_map<std::string, TypePtr> type_aliases_; ///< Type aliases.
     std::unordered_map<std::string, TypePtr> builtins_;     ///< Builtin types.
+
+    // OOP type definition tables (C#-style)
+    std::unordered_map<std::string, ClassDef> classes_;        ///< Registered classes.
+    std::unordered_map<std::string, InterfaceDef> interfaces_; ///< Registered interfaces.
+    std::unordered_map<std::string, std::vector<std::string>>
+        class_interfaces_; ///< Class -> implemented interfaces.
 
     // Scope and inference state
     std::shared_ptr<Scope> current_scope_;                ///< Current lexical scope.

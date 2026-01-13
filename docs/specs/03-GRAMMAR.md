@@ -46,8 +46,11 @@ Item = Function
      | BehaviorDecl
      | ExtendDecl
      | ConstDecl
+     | ClassDecl
+     | InterfaceDecl
+     | NamespaceDecl
 
-Visibility = 'public' | 'private'
+Visibility = 'public' | 'private' | 'protected'
 ```
 
 ### 3.1 Functions
@@ -251,6 +254,156 @@ ConstDecl = Visibility? 'const' Ident (':' Type)? '=' Expr
 const PI: F64 = 3.14159265359
 const MAX_SIZE: I32 = 1024
 public const VERSION: String = "1.0.0"
+```
+
+### 3.6 Classes (OOP)
+
+```ebnf
+ClassDecl = Directive* ClassModifiers? 'class' Ident GenericParams?
+            ExtendsClause? ImplementsClause?
+            '{' ClassMember* '}'
+
+ClassModifiers = 'abstract' | 'sealed'
+
+ExtendsClause = 'extends' TypePath
+ImplementsClause = 'implements' TypePath (',' TypePath)*
+
+ClassMember = ClassField | ClassMethod | ClassConstructor
+
+ClassField = FieldModifiers? Ident ':' Type ('=' Expr)?
+FieldModifiers = MemberVisibility? 'static'?
+MemberVisibility = 'private' | 'protected' | 'pub'
+
+ClassMethod = MethodModifiers? 'func' Ident GenericParams?
+              '(' Params? ')' ('->' Type)?
+              BaseCall?
+              (Block | ';')
+
+MethodModifiers = MemberVisibility? MethodKind*
+MethodKind = 'static' | 'virtual' | 'override' | 'abstract'
+
+BaseCall = 'base' ':' TypePath '::' Ident '(' Args? ')'
+```
+
+**Examples:**
+```tml
+// Simple class
+class Point {
+    x: F64
+    y: F64
+
+    func new(x: F64, y: F64) -> Point {
+        return Point { x: x, y: y }
+    }
+}
+
+// Abstract class with virtual methods
+abstract class Animal {
+    protected name: Str
+
+    abstract func speak(this) -> Str
+
+    virtual func move(this) {
+        println("Moving")
+    }
+}
+
+// Class with inheritance
+class Dog extends Animal implements Speakable {
+    private breed: Str
+
+    func new(name: Str, breed: Str) -> Dog
+        base: Animal::new(name)
+    {
+        return Dog { breed: breed }
+    }
+
+    override func speak(this) -> Str {
+        return "Woof!"
+    }
+}
+
+// Sealed class (cannot be extended)
+sealed class GermanShepherd extends Dog {
+    static count: I32 = 0
+}
+```
+
+### 3.7 Interfaces (OOP)
+
+```ebnf
+InterfaceDecl = Directive* Visibility? 'interface' Ident GenericParams?
+                InterfaceExtends?
+                '{' InterfaceMethod* '}'
+
+InterfaceExtends = 'extends' TypePath (',' TypePath)*
+
+InterfaceMethod = 'func' Ident GenericParams?
+                  '(' Params? ')' ('->' Type)?
+                  (Block | ';')
+```
+
+**Examples:**
+```tml
+// Simple interface
+interface Speakable {
+    func speak(this) -> Str
+}
+
+// Generic interface
+interface Comparable[T] {
+    func compare(this, other: T) -> I32
+}
+
+// Interface extending another
+interface Orderable extends Comparable[This] {
+    func less_than(this, other: This) -> Bool {
+        return this.compare(other) < 0
+    }
+}
+
+// Multiple methods
+interface Drawable {
+    func draw(this)
+    func get_bounds(this) -> (F64, F64, F64, F64)
+}
+```
+
+### 3.8 Namespaces (OOP)
+
+```ebnf
+NamespaceDecl = 'namespace' NamespacePath '{' Item* '}'
+
+NamespacePath = Ident ('.' Ident)*
+```
+
+**Examples:**
+```tml
+namespace graphics.shapes {
+    class Circle {
+        radius: F64
+    }
+
+    class Rectangle {
+        width: F64
+        height: F64
+    }
+
+    interface Drawable {
+        func draw(this)
+    }
+}
+
+// Nested namespaces
+namespace app {
+    namespace models {
+        class User { }
+    }
+
+    namespace controllers {
+        class UserController { }
+    }
+}
 ```
 
 ## 4. Statements

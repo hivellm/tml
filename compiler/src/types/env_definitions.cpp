@@ -62,4 +62,72 @@ void TypeEnv::define_type_alias(const std::string& name, TypePtr type) {
     type_aliases_[name] = std::move(type);
 }
 
+// ============================================================================
+// OOP Type Definitions (C#-style)
+// ============================================================================
+
+void TypeEnv::define_class(ClassDef def) {
+    // Register implemented interfaces
+    for (const auto& iface : def.interfaces) {
+        class_interfaces_[def.name].push_back(iface);
+    }
+    classes_[def.name] = std::move(def);
+}
+
+void TypeEnv::define_interface(InterfaceDef def) {
+    interfaces_[def.name] = std::move(def);
+}
+
+auto TypeEnv::all_classes() const -> const std::unordered_map<std::string, ClassDef>& {
+    return classes_;
+}
+
+auto TypeEnv::all_interfaces() const -> const std::unordered_map<std::string, InterfaceDef>& {
+    return interfaces_;
+}
+
+void TypeEnv::register_class_interface(const std::string& class_name,
+                                       const std::string& interface_name) {
+    class_interfaces_[class_name].push_back(interface_name);
+}
+
+bool TypeEnv::class_implements_interface(const std::string& class_name,
+                                         const std::string& interface_name) const {
+    auto it = class_interfaces_.find(class_name);
+    if (it == class_interfaces_.end())
+        return false;
+
+    for (const auto& iface : it->second) {
+        if (iface == interface_name)
+            return true;
+        // Check if the implemented interface extends the target interface
+        if (auto iface_def = lookup_interface(iface)) {
+            for (const auto& parent : iface_def->extends) {
+                if (parent == interface_name)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool TypeEnv::is_subclass_of(const std::string& derived, const std::string& base) const {
+    if (derived == base)
+        return true;
+
+    auto it = classes_.find(derived);
+    if (it == classes_.end())
+        return false;
+
+    if (!it->second.base_class)
+        return false;
+
+    // Direct parent
+    if (*it->second.base_class == base)
+        return true;
+
+    // Check recursively
+    return is_subclass_of(*it->second.base_class, base);
+}
+
 } // namespace tml::types

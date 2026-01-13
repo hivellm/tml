@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <set>
+#include <unordered_set>
 
 namespace tml::types {
 
@@ -237,6 +238,42 @@ auto TypeEnv::lookup_type_alias(const std::string& name) const -> std::optional<
     return std::nullopt;
 }
 
+auto TypeEnv::lookup_class(const std::string& name) const -> std::optional<ClassDef> {
+    auto it = classes_.find(name);
+    if (it != classes_.end())
+        return it->second;
+    if (module_registry_) {
+        auto import_path = resolve_imported_symbol(name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                std::string module_path = import_path->substr(0, pos);
+                std::string symbol_name = import_path->substr(pos + 2);
+                return module_registry_->lookup_class(module_path, symbol_name);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+auto TypeEnv::lookup_interface(const std::string& name) const -> std::optional<InterfaceDef> {
+    auto it = interfaces_.find(name);
+    if (it != interfaces_.end())
+        return it->second;
+    if (module_registry_) {
+        auto import_path = resolve_imported_symbol(name);
+        if (import_path) {
+            auto pos = import_path->rfind("::");
+            if (pos != std::string::npos) {
+                std::string module_path = import_path->substr(0, pos);
+                std::string symbol_name = import_path->substr(pos + 2);
+                return module_registry_->lookup_interface(module_path, symbol_name);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 auto TypeEnv::all_enums() const -> const std::unordered_map<std::string, EnumDef>& {
     return enums_;
 }
@@ -277,6 +314,33 @@ void TypeEnv::register_impl(const std::string& type_name, const std::string& beh
     behavior_impls_[type_name].push_back(behavior_name);
 }
 
+// Helper function to check if a behavior inherits from target_behavior with cycle detection
+static bool behavior_inherits_from(const TypeEnv& env, const std::string& behavior_name,
+                                   const std::string& target_behavior,
+                                   std::unordered_set<std::string>& visited) {
+    // Prevent cycles
+    if (visited.count(behavior_name) > 0) {
+        return false;
+    }
+    visited.insert(behavior_name);
+
+    auto behavior_def = env.lookup_behavior(behavior_name);
+    if (!behavior_def) {
+        return false;
+    }
+
+    for (const auto& super : behavior_def->super_behaviors) {
+        if (super == target_behavior) {
+            return true;
+        }
+        // Recursively check super behaviors
+        if (behavior_inherits_from(env, super, target_behavior, visited)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TypeEnv::type_implements(const std::string& type_name,
                               const std::string& behavior_name) const {
     auto it = behavior_impls_.find(type_name);
@@ -291,16 +355,9 @@ bool TypeEnv::type_implements(const std::string& type_name,
     // i.e., if type implements ChildBehavior and ChildBehavior: ParentBehavior,
     // then type also implements ParentBehavior
     for (const auto& impl_behavior : behaviors) {
-        auto behavior_def = lookup_behavior(impl_behavior);
-        if (behavior_def) {
-            for (const auto& super : behavior_def->super_behaviors) {
-                if (super == behavior_name) {
-                    return true;
-                }
-                // Recursively check super behaviors (handles A: B: C chains)
-                // To avoid infinite recursion, we pass the super behavior name
-                // TODO: Add cycle detection for complex inheritance hierarchies
-            }
+        std::unordered_set<std::string> visited;
+        if (behavior_inherits_from(*this, impl_behavior, behavior_name, visited)) {
+            return true;
         }
     }
 
@@ -343,6 +400,11 @@ bool TypeEnv::type_implements(const TypePtr& type, const std::string& behavior_n
     if (type->is<PrimitiveType>()) {
         return type_implements(primitive_kind_to_string(type->as<PrimitiveType>().kind),
                                behavior_name);
+    }
+
+    // For class types, check if the class implements the behavior (as an interface)
+    if (type->is<ClassType>()) {
+        return class_implements_interface(type->as<ClassType>().name, behavior_name);
     }
 
     return false;
@@ -454,6 +516,12 @@ bool TypeEnv::type_needs_drop(const TypePtr& type) const {
                 return false; // Conservative: let the container handle it
             } else if constexpr (std::is_same_v<T, ImplBehaviorType>) {
                 // Impl behavior types - check the underlying type
+                return false;
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                // Classes may need drop - check the class definition
+                return type_needs_drop(t.name);
+            } else if constexpr (std::is_same_v<T, InterfaceType>) {
+                // Interface types are abstract - don't need drop directly
                 return false;
             } else {
                 // Default: no drop needed

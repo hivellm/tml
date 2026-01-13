@@ -30,12 +30,14 @@ TML uses a **layered architecture**:
 | [RFC-0003](./RFC-0003-CONTRACTS.md) | Contracts | Draft | pre/post/forall/exists, static vs runtime |
 | [RFC-0004](./RFC-0004-ERRORS.md) | Error Handling | Draft | Outcome, ! operator, error propagation |
 | [RFC-0005](./RFC-0005-MODULES.md) | Modules & Caps | Draft | Module system, capabilities, imports |
-| [RFC-0006](./RFC-0006-OO.md) | OO Sugar | Draft | class/state/self syntactic sugar |
+| [RFC-0006](./RFC-0006-OO.md) | OO Sugar | Superseded | Replaced by RFC-0014 |
 | [RFC-0007](./RFC-0007-IR.md) | Intermediate Representation | Active | IR format, normalization, stable IDs, serialization |
 | [RFC-0008](./RFC-0008-GENERICS.md) | Generics | **Active** | Monomorphization, generic structs/enums |
 | [RFC-0010](./RFC-0010-TESTING.md) | Testing | Active | Test framework, @test decorator |
 | [RFC-0011](./RFC-0011-FFI.md) | FFI | **Active** | @extern and @link for C/C++ interop |
 | [RFC-0012](./RFC-0012-MIR.md) | Mid-level IR | **Active** | SSA-form MIR for optimization |
+| [RFC-0013](./RFC-0013-HIR.md) | High-level IR | **Active** | Type-resolved AST representation |
+| [RFC-0014](./RFC-0014-OOP-CLASSES.md) | C#-Style OOP | **Active** | Classes, interfaces, inheritance, polymorphism |
 
 ## Tooling Specifications
 
@@ -100,4 +102,9 @@ Related work, inspiration, prior art.
 6. **RFC-0005** (Modules) - ✅ Basic implementation - `use` declarations
 7. **RFC-0002** (Syntax) - Can evolve as sugar
 8. **RFC-0003** (Contracts) - Can be added incrementally
-9. **RFC-0006** (OO) - Pure sugar, lowest priority
+9. **RFC-0014** (OOP) - ✅ Implemented - Classes, interfaces, inheritance, vtables
+   - ✅ Class/interface declarations
+   - ✅ Virtual methods and polymorphism
+   - ✅ Vtable generation and dispatch
+   - 🔄 Namespace support (in progress)
+   - 📋 OOP optimizations (planned)

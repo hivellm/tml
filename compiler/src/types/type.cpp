@@ -269,6 +269,32 @@ auto type_to_string(const TypePtr& type) -> std::string {
                     ss << "]";
                 }
                 return ss.str();
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                std::ostringstream ss;
+                ss << t.name;
+                if (!t.type_args.empty()) {
+                    ss << "[";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            ss << ", ";
+                        ss << type_to_string(t.type_args[i]);
+                    }
+                    ss << "]";
+                }
+                return ss.str();
+            } else if constexpr (std::is_same_v<T, InterfaceType>) {
+                std::ostringstream ss;
+                ss << t.name;
+                if (!t.type_args.empty()) {
+                    ss << "[";
+                    for (size_t i = 0; i < t.type_args.size(); ++i) {
+                        if (i > 0)
+                            ss << ", ";
+                        ss << type_to_string(t.type_args[i]);
+                    }
+                    ss << "]";
+                }
+                return ss.str();
             } else {
                 return "<unknown>";
             }
@@ -372,6 +398,26 @@ auto types_equal(const TypePtr& a, const TypePtr& b) -> bool {
                 return true;
             } else if constexpr (std::is_same_v<T, ImplBehaviorType>) {
                 if (ta.behavior_name != tb.behavior_name)
+                    return false;
+                if (ta.type_args.size() != tb.type_args.size())
+                    return false;
+                for (size_t i = 0; i < ta.type_args.size(); ++i) {
+                    if (!types_equal(ta.type_args[i], tb.type_args[i]))
+                        return false;
+                }
+                return true;
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                if (ta.name != tb.name || ta.module_path != tb.module_path)
+                    return false;
+                if (ta.type_args.size() != tb.type_args.size())
+                    return false;
+                for (size_t i = 0; i < ta.type_args.size(); ++i) {
+                    if (!types_equal(ta.type_args[i], tb.type_args[i]))
+                        return false;
+                }
+                return true;
+            } else if constexpr (std::is_same_v<T, InterfaceType>) {
+                if (ta.name != tb.name || ta.module_path != tb.module_path)
                     return false;
                 if (ta.type_args.size() != tb.type_args.size())
                     return false;
@@ -515,6 +561,38 @@ auto substitute_type(const TypePtr& type, const std::unordered_map<std::string, 
                 result->kind = DynBehaviorType{t.behavior_name, std::move(new_args), t.is_mut};
                 return result;
             }
+            // ClassType: substitute type args
+            else if constexpr (std::is_same_v<T, ClassType>) {
+                if (t.type_args.empty()) {
+                    auto result = std::make_shared<Type>();
+                    result->kind = t;
+                    return result;
+                }
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type(arg, subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = ClassType{t.name, t.module_path, std::move(new_args)};
+                return result;
+            }
+            // InterfaceType: substitute type args
+            else if constexpr (std::is_same_v<T, InterfaceType>) {
+                if (t.type_args.empty()) {
+                    auto result = std::make_shared<Type>();
+                    result->kind = t;
+                    return result;
+                }
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type(arg, subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = InterfaceType{t.name, t.module_path, std::move(new_args)};
+                return result;
+            }
             // PrimitiveType, TypeVar: no substitution needed
             else {
                 auto result = std::make_shared<Type>();
@@ -536,6 +614,22 @@ auto make_const_generic(std::string name, TypePtr value_type) -> TypePtr {
 auto make_impl_behavior(std::string behavior_name, std::vector<TypePtr> type_args) -> TypePtr {
     auto type = std::make_shared<Type>();
     type->kind = ImplBehaviorType{std::move(behavior_name), std::move(type_args)};
+    type->id = next_type_id++;
+    return type;
+}
+
+auto make_class(std::string name, std::string module_path, std::vector<TypePtr> type_args)
+    -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = ClassType{std::move(name), std::move(module_path), std::move(type_args)};
+    type->id = next_type_id++;
+    return type;
+}
+
+auto make_interface(std::string name, std::string module_path, std::vector<TypePtr> type_args)
+    -> TypePtr {
+    auto type = std::make_shared<Type>();
+    type->kind = InterfaceType{std::move(name), std::move(module_path), std::move(type_args)};
     type->id = next_type_id++;
     return type;
 }
@@ -720,6 +814,38 @@ auto substitute_type_with_consts(const TypePtr& type,
                 }
                 auto result = std::make_shared<Type>();
                 result->kind = DynBehaviorType{t.behavior_name, std::move(new_args), t.is_mut};
+                return result;
+            }
+            // ClassType: substitute type args
+            else if constexpr (std::is_same_v<T, ClassType>) {
+                if (t.type_args.empty()) {
+                    auto result = std::make_shared<Type>();
+                    result->kind = t;
+                    return result;
+                }
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type_with_consts(arg, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = ClassType{t.name, t.module_path, std::move(new_args)};
+                return result;
+            }
+            // InterfaceType: substitute type args
+            else if constexpr (std::is_same_v<T, InterfaceType>) {
+                if (t.type_args.empty()) {
+                    auto result = std::make_shared<Type>();
+                    result->kind = t;
+                    return result;
+                }
+                std::vector<TypePtr> new_args;
+                new_args.reserve(t.type_args.size());
+                for (const auto& arg : t.type_args) {
+                    new_args.push_back(substitute_type_with_consts(arg, type_subs, const_subs));
+                }
+                auto result = std::make_shared<Type>();
+                result->kind = InterfaceType{t.name, t.module_path, std::move(new_args)};
                 return result;
             }
             // PrimitiveType, TypeVar: no substitution needed

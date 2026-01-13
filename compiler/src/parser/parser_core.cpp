@@ -404,6 +404,7 @@ auto Parser::get_precedence(lexer::TokenKind kind) -> int {
         return precedence::FACTOR;
 
     case lexer::TokenKind::KwAs:
+    case lexer::TokenKind::KwIs:
         return precedence::CAST;
 
     case lexer::TokenKind::LParen:

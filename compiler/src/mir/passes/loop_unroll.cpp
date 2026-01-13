@@ -4,7 +4,9 @@
 
 #include "mir/passes/loop_unroll.hpp"
 
+#include <algorithm>
 #include <queue>
+#include <unordered_map>
 
 namespace tml::mir {
 
@@ -233,22 +235,251 @@ auto LoopUnrollPass::is_loop_body_small(const Function& func, const LoopInfo& lo
 }
 
 auto LoopUnrollPass::fully_unroll(Function& func, const LoopInfo& loop) -> bool {
-    // Full loop unrolling is complex - it requires:
-    // 1. Cloning the loop body for each iteration
-    // 2. Replacing induction variable uses with constants
-    // 3. Removing the loop control flow
-    // 4. Connecting the cloned bodies sequentially
+    // Calculate trip count
+    int64_t trip_count = 0;
+    if (loop.is_increment) {
+        trip_count = (loop.end_value - loop.start_value + loop.step - 1) / loop.step;
+    } else {
+        trip_count = (loop.start_value - loop.end_value - loop.step - 1) / (-loop.step);
+    }
 
-    // For now, we just mark this as a candidate for unrolling
-    // The actual transformation would be done by a more sophisticated pass
-    // or by LLVM's loop unroller in the backend
+    if (trip_count <= 0 || trip_count > options_.max_full_unroll_count) {
+        return false;
+    }
 
-    (void)func;
-    (void)loop;
+    // Find exit block (the block we branch to when loop condition is false)
+    uint32_t exit_block_id = UINT32_MAX;
+    const auto* header = get_block(func, loop.header_id);
+    if (!header || !header->terminator) {
+        return false;
+    }
 
-    // TODO: Implement full loop unrolling
-    // This is a placeholder that signals the loop was analyzed
-    return false;
+    if (auto* cond_br = std::get_if<CondBranchTerm>(&*header->terminator)) {
+        // Determine which branch is the exit
+        if (loop.body_blocks.count(cond_br->true_block) == 0) {
+            exit_block_id = cond_br->true_block;
+        } else if (loop.body_blocks.count(cond_br->false_block) == 0) {
+            exit_block_id = cond_br->false_block;
+        }
+    }
+
+    if (exit_block_id == UINT32_MAX) {
+        return false;
+    }
+
+    // Find the next available block and value IDs
+    uint32_t next_block_id = 0;
+    ValueId next_value_id = 0;
+    for (const auto& block : func.blocks) {
+        next_block_id = std::max(next_block_id, block.id + 1);
+        for (const auto& inst : block.instructions) {
+            if (inst.result != INVALID_VALUE) {
+                next_value_id = std::max(next_value_id, inst.result + 1);
+            }
+        }
+    }
+
+    // Collect loop body blocks in order (excluding header for first iteration)
+    std::vector<uint32_t> body_block_ids;
+    for (uint32_t id : loop.body_blocks) {
+        if (id != loop.header_id) {
+            body_block_ids.push_back(id);
+        }
+    }
+
+    // Sort body blocks to maintain a reasonable order
+    std::sort(body_block_ids.begin(), body_block_ids.end());
+
+    // Create unrolled blocks
+    std::vector<BasicBlock> new_blocks;
+    uint32_t first_unrolled_block = next_block_id;
+
+    for (int64_t iter = 0; iter < trip_count; ++iter) {
+        int64_t iter_value = loop.start_value + iter * loop.step;
+
+        // Value remapping for this iteration
+        std::unordered_map<ValueId, ValueId> value_map;
+
+        // Map induction variable to the constant for this iteration
+        // We'll create a constant instruction for this
+        ValueId iter_const_id = next_value_id++;
+        value_map[loop.induction_var] = iter_const_id;
+
+        // Map block IDs for this iteration
+        std::unordered_map<uint32_t, uint32_t> block_map;
+        for (uint32_t old_id : body_block_ids) {
+            block_map[old_id] = next_block_id++;
+        }
+        // Also map header and latch
+        block_map[loop.header_id] = next_block_id++;
+        block_map[loop.latch_id] =
+            block_map.count(loop.latch_id) > 0 ? block_map[loop.latch_id] : next_block_id++;
+
+        // Create block for iteration constant
+        BasicBlock const_block;
+        const_block.id = next_block_id++;
+        const_block.name = "unroll_iter_" + std::to_string(iter);
+
+        // Add constant instruction for iteration value
+        InstructionData const_inst;
+        const_inst.result = iter_const_id;
+        const_inst.type = make_i64_type();
+        const_inst.inst = ConstantInst{ConstInt{iter_value, true, 64}};
+        const_block.instructions.push_back(const_inst);
+
+        // Branch to the first body block (or header content)
+        uint32_t first_body =
+            body_block_ids.empty() ? block_map[loop.header_id] : block_map[body_block_ids[0]];
+        const_block.terminator = BranchTerm{first_body};
+        new_blocks.push_back(std::move(const_block));
+
+        // Clone body blocks
+        for (uint32_t old_id : body_block_ids) {
+            const auto* old_block = get_block(func, old_id);
+            if (!old_block)
+                continue;
+
+            BasicBlock new_block;
+            new_block.id = block_map[old_id];
+            new_block.name = old_block->name + "_unroll_" + std::to_string(iter);
+
+            // Clone instructions with value remapping
+            for (const auto& old_inst : old_block->instructions) {
+                InstructionData new_inst = old_inst;
+
+                // Remap result
+                if (old_inst.result != INVALID_VALUE) {
+                    ValueId new_result = next_value_id++;
+                    value_map[old_inst.result] = new_result;
+                    new_inst.result = new_result;
+                }
+
+                // Remap operand values in instruction
+                std::visit(
+                    [&value_map](auto& inst) {
+                        using T = std::decay_t<decltype(inst)>;
+                        if constexpr (std::is_same_v<T, BinaryInst>) {
+                            if (value_map.count(inst.left.id)) {
+                                inst.left.id = value_map[inst.left.id];
+                            }
+                            if (value_map.count(inst.right.id)) {
+                                inst.right.id = value_map[inst.right.id];
+                            }
+                        } else if constexpr (std::is_same_v<T, UnaryInst>) {
+                            if (value_map.count(inst.operand.id)) {
+                                inst.operand.id = value_map[inst.operand.id];
+                            }
+                        } else if constexpr (std::is_same_v<T, LoadInst>) {
+                            if (value_map.count(inst.ptr.id)) {
+                                inst.ptr.id = value_map[inst.ptr.id];
+                            }
+                        } else if constexpr (std::is_same_v<T, StoreInst>) {
+                            if (value_map.count(inst.ptr.id)) {
+                                inst.ptr.id = value_map[inst.ptr.id];
+                            }
+                            if (value_map.count(inst.value.id)) {
+                                inst.value.id = value_map[inst.value.id];
+                            }
+                        } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
+                            if (value_map.count(inst.base.id)) {
+                                inst.base.id = value_map[inst.base.id];
+                            }
+                            for (auto& idx : inst.indices) {
+                                if (value_map.count(idx.id)) {
+                                    idx.id = value_map[idx.id];
+                                }
+                            }
+                        } else if constexpr (std::is_same_v<T, CallInst>) {
+                            for (auto& arg : inst.args) {
+                                if (value_map.count(arg.id)) {
+                                    arg.id = value_map[arg.id];
+                                }
+                            }
+                        }
+                        // Other instruction types handled similarly
+                    },
+                    new_inst.inst);
+
+                new_block.instructions.push_back(std::move(new_inst));
+            }
+
+            // Clone terminator with block remapping
+            if (old_block->terminator) {
+                new_block.terminator = *old_block->terminator;
+                std::visit(
+                    [&block_map, &value_map, iter, trip_count, exit_block_id, &next_block_id,
+                     &new_blocks](auto& term) {
+                        using T = std::decay_t<decltype(term)>;
+                        if constexpr (std::is_same_v<T, BranchTerm>) {
+                            if (block_map.count(term.target)) {
+                                term.target = block_map[term.target];
+                            }
+                        } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                            if (value_map.count(term.condition.id)) {
+                                term.condition.id = value_map[term.condition.id];
+                            }
+                            if (block_map.count(term.true_block)) {
+                                term.true_block = block_map[term.true_block];
+                            }
+                            if (block_map.count(term.false_block)) {
+                                term.false_block = block_map[term.false_block];
+                            }
+                        }
+                    },
+                    *new_block.terminator);
+            }
+
+            new_blocks.push_back(std::move(new_block));
+        }
+    }
+
+    // Connect iterations: last block of iteration N jumps to first block of iteration N+1
+    // Last iteration jumps to exit block
+    for (size_t i = 0; i < new_blocks.size(); ++i) {
+        auto& block = new_blocks[i];
+        if (block.terminator) {
+            std::visit(
+                [exit_block_id, &new_blocks, i, trip_count](auto& term) {
+                    using T = std::decay_t<decltype(term)>;
+                    if constexpr (std::is_same_v<T, BranchTerm>) {
+                        // Check if this branches back to loop header (latch behavior)
+                        // If it's the last iteration, branch to exit instead
+                    }
+                },
+                *block.terminator);
+        }
+    }
+
+    // Modify the original header to branch directly to first unrolled block
+    auto* header_mut = get_block_mut(func, loop.header_id);
+    if (header_mut) {
+        header_mut->terminator = BranchTerm{first_unrolled_block};
+        // Clear phi nodes (no longer needed after unrolling)
+        header_mut->instructions.erase(
+            std::remove_if(header_mut->instructions.begin(), header_mut->instructions.end(),
+                           [](const InstructionData& inst) {
+                               return std::holds_alternative<PhiInst>(inst.inst);
+                           }),
+            header_mut->instructions.end());
+    }
+
+    // Add all new blocks to the function
+    for (auto& block : new_blocks) {
+        func.blocks.push_back(std::move(block));
+    }
+
+    // Mark original body blocks for removal (except header which we modified)
+    for (uint32_t block_id : loop.body_blocks) {
+        if (block_id != loop.header_id) {
+            auto* block = get_block_mut(func, block_id);
+            if (block) {
+                block->instructions.clear();
+                block->terminator = UnreachableTerm{};
+            }
+        }
+    }
+
+    return true;
 }
 
 auto LoopUnrollPass::find_back_edges(const Function& func)

@@ -74,6 +74,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"this", TokenKind::KwThis},
     {"This", TokenKind::KwThisType},
     {"as", TokenKind::KwAs},
+    {"is", TokenKind::KwIs},
 
     // Memory
     {"mut", TokenKind::KwMut},

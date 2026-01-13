@@ -86,6 +86,7 @@ add_library(tml_parser STATIC
     src/parser/ast.cpp
     src/parser/parser_core.cpp
     src/parser/parser_decl.cpp
+    src/parser/parser_oop.cpp
     src/parser/parser_expr.cpp
     src/parser/parser_stmt.cpp
     src/parser/parser_type.cpp
@@ -263,6 +264,7 @@ add_library(tml_codegen STATIC
     src/codegen/core/debug_info.cpp
     src/codegen/core/target.cpp
     src/codegen/core/drop.cpp
+    src/codegen/core/class_codegen.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/core.cpp
     src/codegen/expr/binary.cpp
@@ -411,6 +413,7 @@ if(TML_BUILD_TESTS)
         tests/format_test.cpp
         tests/codegen_test.cpp
         tests/codegen_builtins_test.cpp
+        tests/oop_test.cpp
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
         tests/integration/cache_test.cpp

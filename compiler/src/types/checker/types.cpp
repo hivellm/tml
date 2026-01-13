@@ -77,18 +77,29 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
     std::string name = struct_expr.path.segments.empty() ? "" : struct_expr.path.segments.back();
     auto struct_def = env_.lookup_struct(name);
 
-    if (!struct_def) {
-        error("Unknown struct: " + name, SourceSpan{});
-        return make_unit();
-    }
-
+    // Check field expressions
     for (const auto& [field_name, field_expr] : struct_expr.fields) {
         check_expr(*field_expr);
     }
 
-    auto type = std::make_shared<Type>();
-    type->kind = NamedType{name, "", {}};
-    return type;
+    if (struct_def) {
+        // Struct type
+        auto type = std::make_shared<Type>();
+        type->kind = NamedType{name, "", {}};
+        return type;
+    }
+
+    // Check if it's a class type
+    auto class_def = env_.lookup_class(name);
+    if (class_def) {
+        // Class type - return ClassType
+        auto type = std::make_shared<Type>();
+        type->kind = ClassType{name};
+        return type;
+    }
+
+    error("Unknown struct or class: " + name, struct_expr.span);
+    return make_unit();
 }
 
 auto TypeChecker::check_closure(const parser::ClosureExpr& closure) -> TypePtr {
@@ -421,6 +432,16 @@ auto TypeChecker::check_path(const parser::PathExpr& path_expr, SourceSpan span)
             auto prim_it = primitive_kinds.find(segments[0]);
             if (prim_it != primitive_kinds.end()) {
                 return make_primitive(prim_it->second);
+            }
+        }
+
+        // Check for class static field access (e.g., Counter::count)
+        auto class_def = env_.lookup_class(segments[0]);
+        if (class_def.has_value()) {
+            for (const auto& field : class_def->fields) {
+                if (field.name == segments[1] && field.is_static) {
+                    return field.type;
+                }
             }
         }
     }

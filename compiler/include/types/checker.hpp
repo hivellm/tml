@@ -113,6 +113,28 @@ private:
     void register_type_alias(const parser::TypeAliasDecl& decl);
     void process_use_decl(const parser::UseDecl& use_decl);
 
+    // OOP declaration registration (first pass)
+    void register_interface_decl(const parser::InterfaceDecl& decl);
+    void register_class_decl(const parser::ClassDecl& decl);
+
+    // OOP declaration checking (second pass)
+    void check_class_decl(const parser::ClassDecl& cls);
+    void check_interface_decl(const parser::InterfaceDecl& iface);
+
+    // OOP body checking (third pass)
+    void check_class_body(const parser::ClassDecl& cls);
+
+    // OOP validation helpers
+    void validate_inheritance(const parser::ClassDecl& cls);
+    void validate_override(const parser::ClassDecl& cls, const parser::ClassMethod& method);
+    void validate_interface_impl(const parser::ClassDecl& cls);
+    void validate_abstract_methods(const parser::ClassDecl& cls);
+
+    // Visibility checking helpers
+    bool check_member_visibility(MemberVisibility vis, const std::string& defining_class,
+                                 const std::string& member_name, SourceSpan span);
+    bool is_subclass_of(const std::string& derived_class, const std::string& base_class);
+
     // Function and declaration checking
     void check_func_decl(const parser::FuncDecl& func);
     void check_func_body(const parser::FuncDecl& func);
@@ -149,7 +171,10 @@ private:
     auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
     auto check_interp_string(const parser::InterpolatedStringExpr& interp) -> TypePtr;
     auto check_cast(const parser::CastExpr& cast) -> TypePtr;
+    auto check_is(const parser::IsExpr& is_expr) -> TypePtr;
     auto check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr;
+    auto check_base(const parser::BaseExpr& base) -> TypePtr;
+    auto check_new(const parser::NewExpr& new_expr) -> TypePtr;
 
     // Statement checking
     auto check_stmt(const parser::Stmt& stmt) -> TypePtr;

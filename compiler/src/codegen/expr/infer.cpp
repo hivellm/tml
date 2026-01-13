@@ -346,14 +346,26 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             return result;
         }
     }
-    // Handle path expressions (enum variants like Ordering::Less)
+    // Handle path expressions (enum variants like Ordering::Less or class static fields)
     if (expr.is<parser::PathExpr>()) {
         const auto& path = expr.as<parser::PathExpr>();
         if (path.path.segments.size() >= 2) {
-            // First segment is the enum type name
-            std::string enum_name = path.path.segments[0];
+            std::string type_name = path.path.segments[0];
+            std::string member_name = path.path.segments[1];
+
+            // Check for class static field access
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value()) {
+                for (const auto& field : class_def->fields) {
+                    if (field.name == member_name && field.is_static) {
+                        return field.type;
+                    }
+                }
+            }
+
+            // Otherwise assume enum type
             auto result = std::make_shared<types::Type>();
-            result->kind = types::NamedType{enum_name, "", {}};
+            result->kind = types::NamedType{type_name, "", {}};
             return result;
         }
     }
@@ -491,6 +503,24 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                         return ftype;
                     }
                 }
+            }
+        }
+        // Also check for class types
+        if (obj_type && obj_type->is<types::ClassType>()) {
+            const auto& class_type = obj_type->as<types::ClassType>();
+            // Search in class hierarchy
+            std::string current_class = class_type.name;
+            while (!current_class.empty()) {
+                auto class_def = env_.lookup_class(current_class);
+                if (!class_def.has_value())
+                    break;
+                for (const auto& f : class_def->fields) {
+                    if (f.name == field.field) {
+                        return f.type;
+                    }
+                }
+                // Move to parent class
+                current_class = class_def->base_class.value_or("");
             }
         }
     }
@@ -683,6 +713,25 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                 if (call.method == "is_just" || call.method == "is_nothing") {
                     return types::make_bool();
                 }
+            }
+        }
+
+        // Check for class type methods
+        if (receiver_type && receiver_type->is<types::ClassType>()) {
+            const auto& class_type = receiver_type->as<types::ClassType>();
+            // Search for the method in class hierarchy
+            std::string current_class = class_type.name;
+            while (!current_class.empty()) {
+                auto class_def = env_.lookup_class(current_class);
+                if (!class_def.has_value())
+                    break;
+                for (const auto& m : class_def->methods) {
+                    if (m.sig.name == call.method && !m.is_static) {
+                        return m.sig.return_type;
+                    }
+                }
+                // Move to parent class
+                current_class = class_def->base_class.value_or("");
             }
         }
 

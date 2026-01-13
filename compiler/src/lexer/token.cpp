@@ -141,6 +141,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "This";
     case TokenKind::KwAs:
         return "as";
+    case TokenKind::KwIs:
+        return "is";
 
     // Keywords - memory
     case TokenKind::KwMut:
@@ -167,6 +169,38 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "where";
     case TokenKind::KwDyn:
         return "dyn";
+
+    // Keywords - OOP (C#-style)
+    case TokenKind::KwClass:
+        return "class";
+    case TokenKind::KwInterface:
+        return "interface";
+    case TokenKind::KwExtends:
+        return "extends";
+    case TokenKind::KwImplements:
+        return "implements";
+    case TokenKind::KwOverride:
+        return "override";
+    case TokenKind::KwVirtual:
+        return "virtual";
+    case TokenKind::KwAbstract:
+        return "abstract";
+    case TokenKind::KwSealed:
+        return "sealed";
+    case TokenKind::KwNamespace:
+        return "namespace";
+    case TokenKind::KwBase:
+        return "base";
+    case TokenKind::KwProtected:
+        return "protected";
+    case TokenKind::KwPrivate:
+        return "private";
+    case TokenKind::KwStatic:
+        return "static";
+    case TokenKind::KwNew:
+        return "new";
+    case TokenKind::KwProp:
+        return "prop";
 
     // Operators - arithmetic
     case TokenKind::Plus:
@@ -298,7 +332,7 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
 }
 
 auto is_keyword(TokenKind kind) -> bool {
-    return kind >= TokenKind::KwFunc && kind <= TokenKind::KwQuote;
+    return kind >= TokenKind::KwFunc && kind <= TokenKind::KwProp;
 }
 
 auto is_literal(TokenKind kind) -> bool {

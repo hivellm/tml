@@ -278,6 +278,30 @@ private:
     auto parse_mod_decl(Visibility vis) -> Result<DeclPtr, ParseError>;
 
     // ========================================================================
+    // OOP Declarations (C#-style)
+    // ========================================================================
+
+    /// Parses class declaration.
+    auto parse_class_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                          std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
+
+    /// Parses interface declaration.
+    auto parse_interface_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                              std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
+
+    /// Parses namespace declaration.
+    auto parse_namespace_decl() -> Result<DeclPtr, ParseError>;
+
+    /// Parses class member (field, method, property, constructor).
+    auto parse_class_member(const std::string& class_name)
+        -> Result<std::variant<ClassField, ClassMethod, PropertyDecl, ConstructorDecl>, ParseError>;
+
+    /// Parses member visibility (private, protected, pub).
+    auto parse_member_visibility() -> MemberVisibility;
+
+    // ========================================================================
     // Generic Parsing
     // ========================================================================
 
@@ -387,6 +411,9 @@ private:
 
     /// Parses lowlevel block expression.
     auto parse_lowlevel_expr() -> Result<ExprPtr, ParseError>;
+
+    /// Parses base expression for parent class access.
+    auto parse_base_expr() -> Result<ExprPtr, ParseError>;
 
     /// Parses interpolated string expression.
     auto parse_interp_string_expr() -> Result<ExprPtr, ParseError>;

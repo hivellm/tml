@@ -170,6 +170,10 @@ auto TypeChecker::check_module(const parser::Module& module)
             register_trait_decl(decl->as<parser::TraitDecl>());
         } else if (decl->is<parser::TypeAliasDecl>()) {
             register_type_alias(decl->as<parser::TypeAliasDecl>());
+        } else if (decl->is<parser::InterfaceDecl>()) {
+            register_interface_decl(decl->as<parser::InterfaceDecl>());
+        } else if (decl->is<parser::ClassDecl>()) {
+            register_class_decl(decl->as<parser::ClassDecl>());
         }
     }
 
@@ -181,6 +185,10 @@ auto TypeChecker::check_module(const parser::Module& module)
             check_impl_decl(decl->as<parser::ImplDecl>());
         } else if (decl->is<parser::ConstDecl>()) {
             check_const_decl(decl->as<parser::ConstDecl>());
+        } else if (decl->is<parser::ClassDecl>()) {
+            check_class_decl(decl->as<parser::ClassDecl>());
+        } else if (decl->is<parser::InterfaceDecl>()) {
+            check_interface_decl(decl->as<parser::InterfaceDecl>());
         }
     }
 
@@ -190,6 +198,8 @@ auto TypeChecker::check_module(const parser::Module& module)
             check_func_body(decl->as<parser::FuncDecl>());
         } else if (decl->is<parser::ImplDecl>()) {
             check_impl_body(decl->as<parser::ImplDecl>());
+        } else if (decl->is<parser::ClassDecl>()) {
+            check_class_body(decl->as<parser::ClassDecl>());
         }
     }
 
@@ -873,6 +883,715 @@ void TypeChecker::check_impl_body(const parser::ImplDecl& impl) {
     current_self_type_ = nullptr;
     current_associated_types_.clear();
     current_type_params_.clear();
+}
+
+// ============================================================================
+// OOP Type Checking - Interface Registration
+// ============================================================================
+
+void TypeChecker::register_interface_decl(const parser::InterfaceDecl& decl) {
+    // Check if the type name is reserved
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name + "'", decl.span);
+        return;
+    }
+
+    // Build InterfaceDef
+    InterfaceDef def;
+    def.name = decl.name;
+    def.span = decl.span;
+
+    // Collect type parameters
+    for (const auto& param : decl.generics) {
+        if (!param.is_const) {
+            def.type_params.push_back(param.name);
+        } else if (param.const_type.has_value()) {
+            def.const_params.push_back(
+                ConstGenericParam{param.name, resolve_type(*param.const_type.value())});
+        }
+    }
+
+    // Collect extended interfaces
+    for (const auto& ext : decl.extends) {
+        if (!ext.segments.empty()) {
+            def.extends.push_back(ext.segments.back());
+        }
+    }
+
+    // Collect methods
+    for (const auto& method : decl.methods) {
+        InterfaceMethodDef method_def;
+        method_def.is_static = method.is_static;
+        method_def.has_default = method.default_body.has_value();
+
+        // Build signature
+        FuncSig sig;
+        sig.name = method.name;
+        sig.is_async = false;
+        sig.span = method.span;
+
+        for (const auto& param : method.params) {
+            // Skip 'this' parameter - it's the implicit receiver
+            if (param.pattern && param.pattern->is<parser::IdentPattern>() &&
+                param.pattern->as<parser::IdentPattern>().name == "this") {
+                continue;
+            }
+            if (param.type) {
+                sig.params.push_back(resolve_type(*param.type));
+            }
+        }
+
+        if (method.return_type.has_value()) {
+            sig.return_type = resolve_type(*method.return_type.value());
+        } else {
+            sig.return_type = make_unit();
+        }
+
+        method_def.sig = sig;
+        def.methods.push_back(method_def);
+    }
+
+    env_.define_interface(std::move(def));
+}
+
+// ============================================================================
+// OOP Type Checking - Class Registration
+// ============================================================================
+
+void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
+    // Check if the type name is reserved
+    if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
+        error("Cannot redefine builtin type '" + decl.name + "'", decl.span);
+        return;
+    }
+
+    // Build ClassDef
+    ClassDef def;
+    def.name = decl.name;
+    def.is_abstract = decl.is_abstract;
+    def.is_sealed = decl.is_sealed;
+    def.span = decl.span;
+
+    // Collect type parameters
+    for (const auto& param : decl.generics) {
+        if (!param.is_const) {
+            def.type_params.push_back(param.name);
+        } else if (param.const_type.has_value()) {
+            def.const_params.push_back(
+                ConstGenericParam{param.name, resolve_type(*param.const_type.value())});
+        }
+    }
+
+    // Collect base class
+    if (decl.extends.has_value()) {
+        const auto& base = decl.extends.value();
+        if (!base.segments.empty()) {
+            def.base_class = base.segments.back();
+        }
+    }
+
+    // Collect implemented interfaces
+    for (const auto& iface : decl.implements) {
+        if (!iface.segments.empty()) {
+            def.interfaces.push_back(iface.segments.back());
+        }
+    }
+
+    // Collect fields
+    for (const auto& field : decl.fields) {
+        ClassFieldDef field_def;
+        field_def.name = field.name;
+        field_def.type = resolve_type(*field.type);
+        field_def.is_static = field.is_static;
+        field_def.vis = static_cast<MemberVisibility>(field.vis);
+        def.fields.push_back(field_def);
+    }
+
+    // Collect methods
+    for (const auto& method : decl.methods) {
+        ClassMethodDef method_def;
+        method_def.is_static = method.is_static;
+        method_def.is_virtual = method.is_virtual;
+        method_def.is_override = method.is_override;
+        method_def.is_abstract = method.is_abstract;
+        method_def.vis = static_cast<MemberVisibility>(method.vis);
+        method_def.vtable_index = 0; // Will be assigned during codegen
+
+        // Build signature
+        FuncSig sig;
+        sig.name = method.name;
+        sig.is_async = false;
+        sig.span = method.span;
+
+        for (const auto& param : method.params) {
+            if (param.type) {
+                sig.params.push_back(resolve_type(*param.type));
+            }
+        }
+
+        if (method.return_type.has_value()) {
+            sig.return_type = resolve_type(*method.return_type.value());
+        } else {
+            sig.return_type = make_unit();
+        }
+
+        method_def.sig = sig;
+        def.methods.push_back(method_def);
+    }
+
+    // Collect constructors
+    for (const auto& ctor : decl.constructors) {
+        ConstructorDef ctor_def;
+        ctor_def.vis = static_cast<MemberVisibility>(ctor.vis);
+        ctor_def.calls_base = ctor.base_args.has_value();
+
+        for (const auto& param : ctor.params) {
+            if (param.type) {
+                ctor_def.params.push_back(resolve_type(*param.type));
+            }
+        }
+
+        def.constructors.push_back(ctor_def);
+    }
+
+    env_.define_class(std::move(def));
+}
+
+// ============================================================================
+// OOP Type Checking - Interface Validation (Pass 2)
+// ============================================================================
+
+void TypeChecker::check_interface_decl(const parser::InterfaceDecl& iface) {
+    // Verify extended interfaces exist
+    for (const auto& ext : iface.extends) {
+        if (!ext.segments.empty()) {
+            const std::string& name = ext.segments.back();
+            if (!env_.lookup_interface(name).has_value()) {
+                error("Interface '" + name + "' not found", iface.span);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// OOP Type Checking - Class Validation (Pass 2)
+// ============================================================================
+
+void TypeChecker::check_class_decl(const parser::ClassDecl& cls) {
+    // Run all validation checks
+    validate_inheritance(cls);
+    validate_interface_impl(cls);
+
+    // Check override methods
+    for (const auto& method : cls.methods) {
+        if (method.is_override) {
+            validate_override(cls, method);
+        }
+    }
+
+    // Check abstract methods are implemented (non-abstract classes only)
+    if (!cls.is_abstract && cls.extends.has_value()) {
+        validate_abstract_methods(cls);
+    }
+}
+
+void TypeChecker::validate_abstract_methods(const parser::ClassDecl& cls) {
+    // Collect all abstract methods from inheritance chain
+    std::vector<std::pair<std::string, std::string>>
+        abstract_methods; // (method_name, declaring_class)
+    std::string current = cls.extends.value().segments.back();
+
+    while (!current.empty()) {
+        auto parent = env_.lookup_class(current);
+        if (!parent.has_value())
+            break;
+
+        for (const auto& method : parent->methods) {
+            if (method.is_abstract) {
+                abstract_methods.emplace_back(method.sig.name, current);
+            }
+        }
+
+        if (parent->base_class.has_value()) {
+            current = parent->base_class.value();
+        } else {
+            break;
+        }
+    }
+
+    // Check each abstract method has an implementation
+    for (const auto& [method_name, declaring_class] : abstract_methods) {
+        bool implemented = false;
+
+        // Check if this class implements it
+        for (const auto& method : cls.methods) {
+            if (method.name == method_name && (method.is_override || !method.is_abstract)) {
+                implemented = true;
+                break;
+            }
+        }
+
+        // Check if any intermediate class implements it
+        if (!implemented) {
+            current = cls.extends.value().segments.back();
+            while (current != declaring_class && !current.empty()) {
+                auto parent = env_.lookup_class(current);
+                if (!parent.has_value())
+                    break;
+
+                for (const auto& method : parent->methods) {
+                    if (method.sig.name == method_name && method.is_override) {
+                        implemented = true;
+                        break;
+                    }
+                }
+
+                if (implemented)
+                    break;
+
+                if (parent->base_class.has_value()) {
+                    current = parent->base_class.value();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (!implemented) {
+            error("Non-abstract class '" + cls.name + "' does not implement abstract method '" +
+                      method_name + "' from '" + declaring_class + "'",
+                  cls.span);
+        }
+    }
+}
+
+void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
+    if (!cls.extends.has_value()) {
+        return; // No inheritance to validate
+    }
+
+    const auto& base_path = cls.extends.value();
+    if (base_path.segments.empty()) {
+        return;
+    }
+
+    const std::string& base_name = base_path.segments.back();
+
+    // Check base class exists
+    auto base_def = env_.lookup_class(base_name);
+    if (!base_def.has_value()) {
+        error("Base class '" + base_name + "' not found", cls.span);
+        return;
+    }
+
+    // Check sealed class not extended
+    if (base_def->is_sealed) {
+        error("Cannot extend sealed class '" + base_name + "'", cls.span);
+        return;
+    }
+
+    // Check for circular inheritance
+    std::unordered_set<std::string> visited;
+    std::string current = base_name;
+
+    while (!current.empty()) {
+        if (visited.count(current) > 0) {
+            error("Circular inheritance detected involving class '" + cls.name + "'", cls.span);
+            return;
+        }
+        visited.insert(current);
+
+        auto parent = env_.lookup_class(current);
+        if (!parent.has_value() || !parent->base_class.has_value()) {
+            break;
+        }
+        current = parent->base_class.value();
+    }
+
+    // Check if current class would create a cycle
+    if (visited.count(cls.name) > 0) {
+        error("Circular inheritance: class '" + cls.name + "' cannot extend itself", cls.span);
+    }
+}
+
+void TypeChecker::validate_override(const parser::ClassDecl& cls,
+                                    const parser::ClassMethod& method) {
+    if (!cls.extends.has_value()) {
+        error("Cannot override method '" + method.name + "': class has no base class", method.span);
+        return;
+    }
+
+    const std::string& base_name = cls.extends.value().segments.back();
+    auto base_def = env_.lookup_class(base_name);
+
+    if (!base_def.has_value()) {
+        return; // Error already reported
+    }
+
+    // Search for method in base class hierarchy
+    bool found = false;
+    bool is_virtual = false;
+    std::string current = base_name;
+
+    while (!current.empty()) {
+        auto parent = env_.lookup_class(current);
+        if (!parent.has_value()) {
+            break;
+        }
+
+        for (const auto& parent_method : parent->methods) {
+            if (parent_method.sig.name == method.name) {
+                found = true;
+                is_virtual = parent_method.is_virtual || parent_method.is_abstract;
+
+                // Verify method is virtual/abstract
+                if (!is_virtual && !parent_method.is_override) {
+                    error("Cannot override non-virtual method '" + method.name + "' from '" +
+                              current + "'",
+                          method.span);
+                    return;
+                }
+
+                // Check signature match - return type
+                TypePtr override_ret = method.return_type.has_value()
+                                           ? resolve_type(**method.return_type)
+                                           : make_unit();
+                TypePtr parent_ret =
+                    parent_method.sig.return_type ? parent_method.sig.return_type : make_unit();
+
+                if (!types_equal(override_ret, parent_ret)) {
+                    error("Override method '" + method.name +
+                              "' has different return type than base method",
+                          method.span);
+                    return;
+                }
+
+                // Check parameter count (excluding implicit 'this' from both sides)
+                size_t override_params = method.params.size();
+                size_t parent_params = parent_method.sig.params.size();
+                // Exclude 'this' from override method params if present
+                if (override_params > 0 && method.params[0].pattern &&
+                    method.params[0].pattern->is<parser::IdentPattern>() &&
+                    method.params[0].pattern->as<parser::IdentPattern>().name == "this") {
+                    override_params -= 1;
+                }
+                // Exclude 'this' from parent method params
+                if (parent_params > 0)
+                    parent_params -= 1;
+
+                if (override_params != parent_params) {
+                    error("Override method '" + method.name + "' has " +
+                              std::to_string(override_params) +
+                              " parameters, but base method has " + std::to_string(parent_params),
+                          method.span);
+                    return;
+                }
+
+                // Check parameter types match
+                for (size_t i = 0; i < override_params; ++i) {
+                    TypePtr override_param_type =
+                        method.params[i].type ? resolve_type(*method.params[i].type) : make_unit();
+                    TypePtr parent_param_type = parent_method.sig.params.size() > i + 1
+                                                    ? parent_method.sig.params[i + 1]
+                                                    : make_unit();
+
+                    if (!types_equal(override_param_type, parent_param_type)) {
+                        error("Override method '" + method.name + "' parameter " +
+                                  std::to_string(i + 1) + " has different type than base method",
+                              method.span);
+                        return;
+                    }
+                }
+
+                break;
+            }
+        }
+
+        if (found)
+            break;
+
+        if (parent->base_class.has_value()) {
+            current = parent->base_class.value();
+        } else {
+            break;
+        }
+    }
+
+    if (!found) {
+        error("Method '" + method.name + "' marked as override but not found in any base class",
+              method.span);
+    }
+}
+
+void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
+    for (const auto& iface_path : cls.implements) {
+        if (iface_path.segments.empty()) {
+            continue;
+        }
+
+        const std::string& iface_name = iface_path.segments.back();
+        auto iface_def = env_.lookup_interface(iface_name);
+
+        if (!iface_def.has_value()) {
+            error("Interface '" + iface_name + "' not found", cls.span);
+            continue;
+        }
+
+        // Check all interface methods are implemented
+        for (const auto& iface_method : iface_def->methods) {
+            if (iface_method.has_default) {
+                continue; // Has default implementation
+            }
+
+            bool implemented = false;
+            for (const auto& cls_method : cls.methods) {
+                if (cls_method.name == iface_method.sig.name) {
+                    implemented = true;
+
+                    // Check signature match
+                    // 1. Check return type
+                    TypePtr expected_return =
+                        iface_method.sig.return_type ? iface_method.sig.return_type : make_unit();
+                    TypePtr actual_return = cls_method.return_type
+                                                ? resolve_type(**cls_method.return_type)
+                                                : make_unit();
+                    if (!types_equal(expected_return, actual_return)) {
+                        error("Method '" + cls_method.name + "' in class '" + cls.name +
+                                  "' has incompatible return type with interface '" + iface_name +
+                                  "'. Expected '" + type_to_string(expected_return) +
+                                  "' but got '" + type_to_string(actual_return) + "'",
+                              cls_method.span);
+                    }
+
+                    // 2. Check parameter count (excluding 'this')
+                    size_t expected_params = iface_method.sig.params.size();
+                    size_t actual_params = 0;
+                    for (const auto& p : cls_method.params) {
+                        if (!p.pattern || !p.pattern->is<parser::IdentPattern>() ||
+                            p.pattern->as<parser::IdentPattern>().name != "this") {
+                            actual_params++;
+                        }
+                    }
+                    if (expected_params != actual_params) {
+                        error("Method '" + cls_method.name + "' in class '" + cls.name +
+                                  "' has wrong number of parameters. Interface '" + iface_name +
+                                  "' expects " + std::to_string(expected_params) +
+                                  " parameters but got " + std::to_string(actual_params),
+                              cls_method.span);
+                    } else {
+                        // 3. Check parameter types
+                        size_t param_idx = 0;
+                        for (const auto& cls_param : cls_method.params) {
+                            if (cls_param.pattern &&
+                                cls_param.pattern->is<parser::IdentPattern>() &&
+                                cls_param.pattern->as<parser::IdentPattern>().name == "this") {
+                                continue; // Skip 'this' parameter
+                            }
+                            if (param_idx < expected_params && cls_param.type) {
+                                TypePtr expected_param_type = iface_method.sig.params[param_idx];
+                                TypePtr actual_param_type = resolve_type(*cls_param.type);
+                                if (!types_equal(expected_param_type, actual_param_type)) {
+                                    error("Parameter " + std::to_string(param_idx + 1) +
+                                              " of method '" + cls_method.name + "' in class '" +
+                                              cls.name +
+                                              "' has incompatible type with interface '" +
+                                              iface_name + "'. Expected '" +
+                                              type_to_string(expected_param_type) + "' but got '" +
+                                              type_to_string(actual_param_type) + "'",
+                                          cls_method.span);
+                                }
+                            }
+                            param_idx++;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (!implemented) {
+                error("Class '" + cls.name + "' does not implement method '" +
+                          iface_method.sig.name + "' from interface '" + iface_name + "'",
+                      cls.span);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// OOP Type Checking - Class Body Checking (Pass 3)
+// ============================================================================
+
+void TypeChecker::check_class_body(const parser::ClassDecl& cls) {
+    // Set up self type for 'this' references
+    auto class_type = std::make_shared<Type>();
+    class_type->kind = ClassType{cls.name};
+    current_self_type_ = class_type;
+
+    // Check constructor bodies
+    for (const auto& ctor : cls.constructors) {
+        if (ctor.body.has_value()) {
+            // Push a new scope
+            env_.push_scope();
+
+            // Bind 'this' in scope
+            auto this_type = make_ref(current_self_type_, true); // mut ref to class
+            env_.current_scope()->define("this", this_type, false, ctor.span);
+
+            // Bind constructor parameters
+            for (const auto& param : ctor.params) {
+                if (param.type) {
+                    TypePtr param_type = resolve_type(*param.type);
+                    bool is_mut = false;
+                    std::string name;
+
+                    if (param.pattern->is<parser::IdentPattern>()) {
+                        const auto& ident = param.pattern->as<parser::IdentPattern>();
+                        name = ident.name;
+                        is_mut = ident.is_mut;
+                    }
+
+                    if (!name.empty()) {
+                        env_.current_scope()->define(name, param_type, is_mut, param.span);
+                    }
+                }
+            }
+
+            // Check constructor body
+            check_block(ctor.body.value());
+
+            env_.pop_scope();
+        }
+    }
+
+    // Check method bodies
+    for (const auto& method : cls.methods) {
+        if (method.body.has_value()) {
+            // Set return type
+            if (method.return_type.has_value()) {
+                current_return_type_ = resolve_type(*method.return_type.value());
+            } else {
+                current_return_type_ = make_unit();
+            }
+
+            // Push a new scope
+            env_.push_scope();
+
+            // Bind 'this' for non-static methods
+            if (!method.is_static) {
+                auto this_type = make_ref(current_self_type_, true); // mut ref
+                env_.current_scope()->define("this", this_type, false, method.span);
+            }
+
+            // Bind parameters
+            for (const auto& param : method.params) {
+                if (param.type) {
+                    TypePtr param_type = resolve_type(*param.type);
+                    bool is_mut = false;
+                    std::string name;
+
+                    if (param.pattern->is<parser::IdentPattern>()) {
+                        const auto& ident = param.pattern->as<parser::IdentPattern>();
+                        name = ident.name;
+                        is_mut = ident.is_mut;
+                    }
+
+                    if (!name.empty()) {
+                        env_.current_scope()->define(name, param_type, is_mut, param.span);
+                    }
+                }
+            }
+
+            // Check method body
+            check_block(method.body.value());
+
+            env_.pop_scope();
+            current_return_type_ = nullptr;
+        }
+    }
+
+    current_self_type_ = nullptr;
+}
+
+// ============================================================================
+// Visibility Checking
+// ============================================================================
+
+bool TypeChecker::is_subclass_of(const std::string& derived_class, const std::string& base_class) {
+    if (derived_class == base_class) {
+        return true;
+    }
+
+    std::string current = derived_class;
+    std::set<std::string> visited;
+
+    while (!current.empty()) {
+        if (visited.count(current))
+            break; // Prevent infinite loop
+        visited.insert(current);
+
+        auto class_def = env_.lookup_class(current);
+        if (!class_def.has_value())
+            break;
+
+        if (class_def->base_class.has_value()) {
+            if (class_def->base_class.value() == base_class) {
+                return true;
+            }
+            current = class_def->base_class.value();
+        } else {
+            break;
+        }
+    }
+
+    return false;
+}
+
+bool TypeChecker::check_member_visibility(MemberVisibility vis, const std::string& defining_class,
+                                          const std::string& member_name, SourceSpan span) {
+    // Public members are always accessible
+    if (vis == MemberVisibility::Public) {
+        return true;
+    }
+
+    // Get current class context (if any)
+    std::string current_class_name;
+    if (current_self_type_ && current_self_type_->is<ClassType>()) {
+        current_class_name = current_self_type_->as<ClassType>().name;
+    }
+
+    // Private: only accessible within the defining class
+    if (vis == MemberVisibility::Private) {
+        if (current_class_name != defining_class) {
+            error("Cannot access private member '" + member_name + "' of class '" + defining_class +
+                      "' from " +
+                      (current_class_name.empty() ? "outside any class"
+                                                  : "class '" + current_class_name + "'"),
+                  span);
+            return false;
+        }
+        return true;
+    }
+
+    // Protected: accessible within the class and subclasses
+    if (vis == MemberVisibility::Protected) {
+        if (current_class_name.empty()) {
+            error("Cannot access protected member '" + member_name + "' of class '" +
+                      defining_class + "' from outside any class",
+                  span);
+            return false;
+        }
+
+        if (!is_subclass_of(current_class_name, defining_class)) {
+            error("Cannot access protected member '" + member_name + "' of class '" +
+                      defining_class + "' from class '" + current_class_name +
+                      "' which is not a subclass",
+                  span);
+            return false;
+        }
+        return true;
+    }
+
+    return true;
 }
 
 } // namespace tml::types

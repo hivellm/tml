@@ -93,6 +93,13 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
     if (name == "WaitGroup")
         return "ptr";
 
+    // Check if this is a class type - classes are reference types (heap allocated)
+    // Variables of class type store pointers to instances
+    auto class_def = env_.lookup_class(name);
+    if (class_def.has_value()) {
+        return "ptr"; // Class instances are pointers
+    }
+
     // User-defined type - return struct type
     return "%struct." + name;
 }
@@ -280,6 +287,14 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "ptr";
         }
 
+        // Check if this NamedType is actually a class type (can happen when
+        // method return types are resolved before the class is fully registered)
+        auto class_def = env_.lookup_class(named.name);
+        if (class_def.has_value()) {
+            // Classes are reference types - variables store pointers
+            return "ptr";
+        }
+
         // If it has type arguments, need to use mangled name and ensure instantiation
         if (!named.type_args.empty()) {
             // Check if it's a generic enum (like Maybe, Outcome)
@@ -330,6 +345,10 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
     } else if (type->is<types::SliceType>()) {
         // Slices are fat pointers: { ptr, i64 } - data pointer and length
         return "{ ptr, i64 }";
+    } else if (type->is<types::ClassType>()) {
+        // Class types are reference types - variables store pointers to heap-allocated instances
+        // The class struct is %class.ClassName, but variables are pointers (ptr)
+        return "ptr";
     }
 
     return "i32"; // Default
@@ -491,6 +510,14 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                 auto prim_it = primitives.find(name);
                 if (prim_it != primitives.end()) {
                     return types::make_primitive(prim_it->second);
+                }
+
+                // Check if it's a class type
+                auto class_def = env_.lookup_class(name);
+                if (class_def.has_value()) {
+                    auto result = std::make_shared<types::Type>();
+                    result->kind = types::ClassType{name};
+                    return result;
                 }
 
                 // Named type - process generic arguments if present

@@ -91,12 +91,18 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
     } else if (expr.is<parser::CastExpr>()) {
         return gen_cast(expr.as<parser::CastExpr>());
+    } else if (expr.is<parser::IsExpr>()) {
+        return gen_is_check(expr.as<parser::IsExpr>());
     } else if (expr.is<parser::TupleExpr>()) {
         return gen_tuple(expr.as<parser::TupleExpr>());
     } else if (expr.is<parser::AwaitExpr>()) {
         return gen_await(expr.as<parser::AwaitExpr>());
     } else if (expr.is<parser::TryExpr>()) {
         return gen_try(expr.as<parser::TryExpr>());
+    } else if (expr.is<parser::BaseExpr>()) {
+        return gen_base_expr(expr.as<parser::BaseExpr>());
+    } else if (expr.is<parser::NewExpr>()) {
+        return gen_new_expr(expr.as<parser::NewExpr>());
     }
 
     report_error("Unsupported expression type", expr.span);

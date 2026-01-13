@@ -346,6 +346,26 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
         return const_value;
     }
 
+    // Check for class static field access (e.g., Counter::count)
+    if (path.path.segments.size() == 2) {
+        std::string class_name = path.path.segments[0];
+        std::string field_name = path.path.segments[1];
+        auto class_def = env_.lookup_class(class_name);
+        if (class_def.has_value()) {
+            for (const auto& field : class_def->fields) {
+                if (field.name == field_name && field.is_static) {
+                    // Load from global variable @class.ClassName.fieldname
+                    std::string global_name = "@class." + class_name + "." + field_name;
+                    std::string llvm_type = llvm_type_from_semantic(field.type);
+                    std::string result = fresh_reg();
+                    emit_line("  " + result + " = load " + llvm_type + ", ptr " + global_name);
+                    last_expr_type_ = llvm_type;
+                    return result;
+                }
+            }
+        }
+    }
+
     // Look up in enum variants
     auto it = enum_variants_.find(full_path);
     if (it != enum_variants_.end()) {

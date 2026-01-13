@@ -130,6 +130,7 @@ enum class TokenKind : uint8_t {
     KwThis,     ///< `this` - self value in methods
     KwThisType, ///< `This` - self type (like Rust's `Self`)
     KwAs,       ///< `as` - type cast
+    KwIs,       ///< `is` - type check (e.g., `obj is Dog`)
 
     // ========================================================================
     // Keywords - Memory
@@ -152,6 +153,25 @@ enum class TokenKind : uint8_t {
     KwDyn,      ///< `dyn` - trait objects
     KwLowlevel, ///< `lowlevel` - unsafe block (clearer than `unsafe`)
     KwQuote,    ///< `quote` - metaprogramming/macros
+
+    // ========================================================================
+    // Keywords - OOP (C#-style)
+    // ========================================================================
+    KwClass,      ///< `class` - class declaration
+    KwInterface,  ///< `interface` - interface declaration
+    KwExtends,    ///< `extends` - class inheritance
+    KwImplements, ///< `implements` - interface implementation
+    KwOverride,   ///< `override` - override virtual method
+    KwVirtual,    ///< `virtual` - declare virtual method
+    KwAbstract,   ///< `abstract` - abstract class/method
+    KwSealed,     ///< `sealed` - prevent inheritance
+    KwNamespace,  ///< `namespace` - namespace declaration
+    KwBase,       ///< `base` - parent class reference
+    KwProtected,  ///< `protected` - protected visibility
+    KwPrivate,    ///< `private` - private visibility
+    KwStatic,     ///< `static` - static member
+    KwNew,        ///< `new` - constructor/object creation
+    KwProp,       ///< `prop` - property declaration
 
     // ========================================================================
     // Operators - Arithmetic

@@ -62,8 +62,9 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
         // Check if this is a valid infix operator (not a postfix or special case)
         bool is_infix =
             token_to_binary_op(next_kind).has_value() || next_kind == lexer::TokenKind::KwAs ||
-            next_kind == lexer::TokenKind::Question || next_kind == lexer::TokenKind::KwTo ||
-            next_kind == lexer::TokenKind::KwThrough || next_kind == lexer::TokenKind::DotDot;
+            next_kind == lexer::TokenKind::KwIs || next_kind == lexer::TokenKind::Question ||
+            next_kind == lexer::TokenKind::KwTo || next_kind == lexer::TokenKind::KwThrough ||
+            next_kind == lexer::TokenKind::DotDot;
 
         // Postfix operators (function calls, indexing, field access) should not
         // continue across newlines to avoid ambiguity
@@ -159,6 +160,22 @@ auto Parser::parse_expr_with_precedence(int min_precedence) -> Result<ExprPtr, P
             left = make_box<Expr>(Expr{.kind = CastExpr{.expr = std::move(unwrap(left)),
                                                         .target = std::move(unwrap(target_type)),
                                                         .span = span},
+                                       .span = span});
+            continue;
+        }
+
+        // Handle type check: expr is Type
+        if (check(lexer::TokenKind::KwIs)) {
+            advance(); // consume 'is'
+
+            auto target_type = parse_type();
+            if (is_err(target_type))
+                return unwrap_err(target_type);
+
+            auto span = SourceSpan::merge(unwrap(left)->span, unwrap(target_type)->span);
+            left = make_box<Expr>(Expr{.kind = IsExpr{.expr = std::move(unwrap(left)),
+                                                      .target = std::move(unwrap(target_type)),
+                                                      .span = span},
                                        .span = span});
             continue;
         }
@@ -470,6 +487,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         auto span = peek().span;
         advance();
         return make_ident_expr("this", span);
+    }
+
+    // 'base' expression (parent class access in methods)
+    if (check(lexer::TokenKind::KwBase)) {
+        return parse_base_expr();
     }
 
     // Parenthesized expression or tuple
@@ -1318,6 +1340,65 @@ auto Parser::parse_lowlevel_expr() -> Result<ExprPtr, ParseError> {
     return make_box<Expr>(
         Expr{.kind = LowlevelExpr{.stmts = std::move(stmts), .expr = std::move(expr), .span = span},
              .span = span});
+}
+
+auto Parser::parse_base_expr() -> Result<ExprPtr, ParseError> {
+    auto start_span = peek().span;
+    auto base_tok = expect(lexer::TokenKind::KwBase, "Expected 'base'");
+    if (is_err(base_tok))
+        return unwrap_err(base_tok);
+
+    // Require dot for member access: base.member
+    auto dot = expect(lexer::TokenKind::Dot, "Expected '.' after 'base'");
+    if (is_err(dot))
+        return unwrap_err(dot);
+
+    // Parse member name
+    auto member_tok = expect(lexer::TokenKind::Identifier, "Expected member name after 'base.'");
+    if (is_err(member_tok))
+        return unwrap_err(member_tok);
+
+    std::string member = std::string(previous().lexeme);
+    std::vector<TypePtr> type_args;
+    std::vector<ExprPtr> args;
+    bool is_method_call = false;
+
+    // Optional generic arguments
+    if (check(lexer::TokenKind::LBracket)) {
+        auto generics = parse_generic_args();
+        if (is_err(generics))
+            return unwrap_err(generics);
+        if (unwrap(generics).has_value()) {
+            for (auto& arg : unwrap(generics).value().args) {
+                if (arg.is_type()) {
+                    type_args.push_back(std::get<TypePtr>(std::move(arg.value)));
+                }
+            }
+        }
+    }
+
+    // Check for method call
+    if (check(lexer::TokenKind::LParen)) {
+        is_method_call = true;
+        advance(); // consume '('
+
+        auto call_args = parse_call_args();
+        if (is_err(call_args))
+            return unwrap_err(call_args);
+        args = std::move(unwrap(call_args));
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after arguments");
+        if (is_err(rparen))
+            return unwrap_err(rparen);
+    }
+
+    auto span = SourceSpan::merge(start_span, previous().span);
+    return make_box<Expr>(Expr{.kind = BaseExpr{.member = std::move(member),
+                                                .type_args = std::move(type_args),
+                                                .args = std::move(args),
+                                                .is_method_call = is_method_call,
+                                                .span = span},
+                               .span = span});
 }
 
 auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {

@@ -78,19 +78,45 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         std::string mangled = require_struct_instantiation(base_name, type_args);
         struct_type = "%struct." + mangled;
     } else {
-        // Non-generic struct
-        struct_type = "%struct." + base_name;
+        // Check if it's a class type
+        auto class_def = env_.lookup_class(base_name);
+        if (class_def.has_value()) {
+            struct_type = "%class." + base_name;
+        } else {
+            // Non-generic struct
+            struct_type = "%struct." + base_name;
+        }
     }
 
-    // Allocate struct on stack
+    // Allocate struct - heap for classes, stack for structs
     std::string ptr = fresh_reg();
-    emit_line("  " + ptr + " = alloca " + struct_type);
+    bool is_class = struct_type.starts_with("%class.");
+    if (is_class) {
+        // Heap allocate for classes (reference types)
+        // Calculate actual size of the class struct using LLVM GEP trick:
+        // Get the address offset from element 0 to element 1, which equals the struct size
+        std::string size_ptr = fresh_reg();
+        std::string size_reg = fresh_reg();
+        emit_line("  " + size_ptr + " = getelementptr " + struct_type + ", ptr null, i32 1");
+        emit_line("  " + size_reg + " = ptrtoint ptr " + size_ptr + " to i64");
+        emit_line("  " + ptr + " = call ptr @malloc(i64 " + size_reg + ")");
+
+        // Initialize vtable pointer (field 0) for class instances
+        std::string vtable_ptr = fresh_reg();
+        emit_line("  " + vtable_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
+                  ", i32 0, i32 0");
+        emit_line("  store ptr @vtable." + base_name + ", ptr " + vtable_ptr);
+    } else {
+        emit_line("  " + ptr + " = alloca " + struct_type);
+    }
 
     // Initialize fields - look up field index by name, not expression order
     // Get the struct name for field index lookup
     std::string struct_name_for_lookup = struct_type;
     if (struct_name_for_lookup.starts_with("%struct.")) {
         struct_name_for_lookup = struct_name_for_lookup.substr(8);
+    } else if (struct_name_for_lookup.starts_with("%class.")) {
+        struct_name_for_lookup = struct_name_for_lookup.substr(7);
     }
 
     for (size_t i = 0; i < s.fields.size(); ++i) {
@@ -239,7 +265,21 @@ auto LLVMIRGen::gen_struct_expr(const parser::StructExpr& s) -> std::string {
         std::string mangled = require_struct_instantiation(base_name, type_args);
         struct_type = "%struct." + mangled;
     } else {
-        struct_type = "%struct." + base_name;
+        // Check if it's a class type
+        auto class_def = env_.lookup_class(base_name);
+        if (class_def.has_value()) {
+            struct_type = "%class." + base_name;
+        } else {
+            struct_type = "%struct." + base_name;
+        }
+    }
+
+    // For classes, return the pointer directly (reference type)
+    // For structs, load and return the value
+    bool is_class = struct_type.starts_with("%class.");
+    if (is_class) {
+        last_expr_type_ = "ptr";
+        return ptr;
     }
 
     // Load the struct value
@@ -259,6 +299,16 @@ auto LLVMIRGen::get_field_index(const std::string& struct_name, const std::strin
     auto it = struct_fields_.find(struct_name);
     if (it != struct_fields_.end()) {
         for (const auto& field : it->second) {
+            if (field.name == field_name) {
+                return field.index;
+            }
+        }
+    }
+
+    // Check class_fields_ registry for class types
+    auto class_it = class_fields_.find(struct_name);
+    if (class_it != class_fields_.end()) {
+        for (const auto& field : class_it->second) {
             if (field.name == field_name) {
                 return field.index;
             }
@@ -296,6 +346,16 @@ auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string
         }
     }
 
+    // Check class_fields_ registry for class types
+    auto class_it = class_fields_.find(struct_name);
+    if (class_it != class_fields_.end()) {
+        for (const auto& field : class_it->second) {
+            if (field.name == field_name) {
+                return field.llvm_type;
+            }
+        }
+    }
+
     // Fallback for hardcoded types (legacy support)
     if (struct_name == "Rectangle" && field_name == "origin") {
         return "%struct.Point";
@@ -304,6 +364,23 @@ auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string
 }
 
 auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
+    // Handle static field access (ClassName.field)
+    if (field.object->is<parser::IdentExpr>()) {
+        const auto& ident = field.object->as<parser::IdentExpr>();
+
+        // Check if it's a class name for static field access
+        std::string static_key = ident.name + "." + field.field;
+        auto static_it = static_fields_.find(static_key);
+        if (static_it != static_fields_.end()) {
+            // Load from global static field
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = load " + static_it->second.type + ", ptr " +
+                      static_it->second.global_name);
+            last_expr_type_ = static_it->second.type;
+            return result;
+        }
+    }
+
     // Handle field access on struct
     std::string struct_type;
     std::string struct_ptr;
@@ -390,6 +467,12 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 std::string loaded_ptr = fresh_reg();
                 emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
                 struct_ptr = loaded_ptr;
+            } else if (semantic_type->is<types::ClassType>()) {
+                // Class types - 'this' is already a direct pointer parameter
+                // Use %class.ClassName as the struct type
+                const auto& cls = semantic_type->as<types::ClassType>();
+                struct_type = "%class." + cls.name;
+                // No need to load - struct_ptr (%this) is already the pointer
             } else {
                 struct_type = llvm_type_from_semantic(semantic_type);
             }
@@ -436,10 +519,12 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
         }
     }
 
-    // Get struct type name
+    // Get struct/class type name
     std::string type_name = struct_type;
     if (type_name.starts_with("%struct.")) {
         type_name = type_name.substr(8);
+    } else if (type_name.starts_with("%class.")) {
+        type_name = type_name.substr(7);
     }
 
     // Get field index and type

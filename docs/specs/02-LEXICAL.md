@@ -9,7 +9,7 @@
 | Indentation | Spaces (2 or 4); tabs prohibited |
 | BOM | Prohibited |
 
-## 2. Keywords (41 reserved words)
+## 2. Keywords (56 reserved words)
 
 ```
 // Declarations
@@ -35,6 +35,12 @@ crate     super     with
 
 // Async (reserved for future)
 async     await     quote
+
+// OOP (C#-style object-oriented programming)
+class     interface extends   implements
+override  virtual   abstract  sealed
+namespace base      protected private
+static    new       prop
 ```
 
 > **Note:** `true` and `false` are lexed as `BoolLiteral`, not keywords.

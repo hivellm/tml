@@ -778,6 +778,60 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
     }
 
+    // ============ CLASS CONSTRUCTOR CALLS ============
+    // Handle calls like Counter::new(10) where Counter is a class
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path = call.callee->as<parser::PathExpr>().path;
+        if (path.segments.size() == 2) {
+            const std::string& type_name = path.segments[0];
+            const std::string& method = path.segments[1];
+
+            // Check if this is a class constructor call
+            if (method == "new") {
+                auto class_def = env_.lookup_class(type_name);
+                if (class_def.has_value()) {
+                    std::string class_type = "%class." + type_name;
+                    std::string ctor_name = "@tml_" + get_suite_prefix() + type_name + "_new";
+
+                    // Generate arguments
+                    std::vector<std::string> args;
+                    std::vector<std::string> arg_types;
+
+                    // Get constructor parameter types from class definition
+                    if (!class_def->constructors.empty()) {
+                        const auto& ctor = class_def->constructors[0];
+                        for (size_t i = 0; i < call.args.size() && i < ctor.params.size(); ++i) {
+                            args.push_back(gen_expr(*call.args[i]));
+                            // Get the actual parameter type from constructor
+                            arg_types.push_back(llvm_type_from_semantic(ctor.params[i]));
+                        }
+                    } else {
+                        // Fallback: generate args without type info
+                        for (const auto& arg : call.args) {
+                            args.push_back(gen_expr(*arg));
+                            arg_types.push_back(last_expr_type_);
+                        }
+                    }
+
+                    // Generate call
+                    std::string result = fresh_reg();
+                    std::string call_str =
+                        "  " + result + " = call " + class_type + "* " + ctor_name + "(";
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (i > 0)
+                            call_str += ", ";
+                        call_str += arg_types[i] + " " + args[i];
+                    }
+                    call_str += ")";
+                    emit_line(call_str);
+
+                    last_expr_type_ = class_type + "*";
+                    return result;
+                }
+            }
+        }
+    }
+
     // ============ GENERIC STRUCT STATIC METHODS ============
     // Handle calls like Range::new(0, 10) where Range is a generic struct
     // These need type inference from expected_enum_type_ context

@@ -258,6 +258,70 @@ private:
     // Get vtable global name for a type/behavior pair
     auto get_vtable(const std::string& type_name, const std::string& behavior_name) -> std::string;
 
+    // ============ OOP Class Support (C#-style) ============
+    // Tracks classes with single inheritance and virtual dispatch
+
+    // Class field info for field access
+    struct ClassFieldInfo {
+        std::string name;
+        int index; // Field index in LLVM struct
+        std::string llvm_type;
+        parser::MemberVisibility vis;
+    };
+
+    // Virtual method info for vtable layout
+    struct VirtualMethodInfo {
+        std::string name;            // Method name
+        std::string declaring_class; // Class that first declared this virtual
+        std::string impl_class;      // Class that implements this slot (empty if abstract)
+        size_t vtable_index;         // Slot in vtable
+    };
+
+    // Class type mapping (class_name -> LLVM type name)
+    std::unordered_map<std::string, std::string> class_types_;
+
+    // Class field info (class_name -> field info list)
+    std::unordered_map<std::string, std::vector<ClassFieldInfo>> class_fields_;
+
+    // Static field info (ClassName.fieldName -> {global_name, type})
+    struct StaticFieldInfo {
+        std::string global_name; // LLVM global variable name
+        std::string type;        // LLVM type
+    };
+    std::unordered_map<std::string, StaticFieldInfo> static_fields_;
+
+    // Class vtable layout (class_name -> vtable method slots)
+    std::unordered_map<std::string, std::vector<VirtualMethodInfo>> class_vtable_layout_;
+
+    // Interface method order (interface_name -> method names)
+    std::unordered_map<std::string, std::vector<std::string>> interface_method_order_;
+
+    // Generate class declaration (type + vtable + methods)
+    void gen_class_decl(const parser::ClassDecl& c);
+
+    // Generate class vtable
+    void gen_class_vtable(const parser::ClassDecl& c);
+
+    // Generate class constructor
+    void gen_class_constructor(const parser::ClassDecl& c, const parser::ConstructorDecl& ctor);
+
+    // Generate class method
+    void gen_class_method(const parser::ClassDecl& c, const parser::ClassMethod& method);
+
+    // Generate virtual method call dispatch
+    auto gen_virtual_call(const std::string& obj_reg, const std::string& class_name,
+                          const std::string& method_name, const std::vector<std::string>& args,
+                          const std::vector<std::string>& arg_types) -> std::string;
+
+    // Generate interface declaration
+    void gen_interface_decl(const parser::InterfaceDecl& iface);
+
+    // Generate base expression (base.method() or base.field)
+    auto gen_base_expr(const parser::BaseExpr& base) -> std::string;
+
+    // Generate new expression (new ClassName(args))
+    auto gen_new_expr(const parser::NewExpr& new_expr) -> std::string;
+
     // ============ Generic Instantiation Support ============
     // Tracks generic type/function instantiations to avoid duplicates
     // and generate specialized code for each unique type argument combination
@@ -493,6 +557,7 @@ private:
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
+    auto gen_is_check(const parser::IsExpr& is_expr) -> std::string;
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
     auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
     auto gen_try(const parser::TryExpr& try_expr) -> std::string;

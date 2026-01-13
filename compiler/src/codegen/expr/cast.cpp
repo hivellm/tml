@@ -174,4 +174,84 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
     return src; // Return source unchanged
 }
 
+auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
+    // Generate the expression to check
+    std::string obj_ptr = gen_expr(*is_expr.expr);
+
+    // Get the target type name
+    std::string target_name;
+    if (is_expr.target->is<parser::NamedType>()) {
+        const auto& named = is_expr.target->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            target_name = named.path.segments.back();
+        }
+    }
+
+    if (target_name.empty()) {
+        report_error("Invalid type in 'is' expression", is_expr.span);
+        last_expr_type_ = "i1";
+        return "false";
+    }
+
+    // Check if target is a known class type
+    auto target_class_def = env_.lookup_class(target_name);
+    if (!target_class_def.has_value()) {
+        // Not a class type - for non-class types, we just return false at runtime
+        last_expr_type_ = "i1";
+        return "false";
+    }
+
+    // Get the compile-time type of the expression
+    types::TypePtr expr_type = infer_expr_type(*is_expr.expr);
+    std::string expr_class_name;
+    if (expr_type && expr_type->is<types::ClassType>()) {
+        expr_class_name = expr_type->as<types::ClassType>().name;
+    } else if (expr_type && expr_type->is<types::NamedType>()) {
+        // Sometimes class types are stored as NamedType
+        expr_class_name = expr_type->as<types::NamedType>().name;
+    }
+
+    if (!expr_class_name.empty()) {
+        // Check if expression type is the same as or a subclass of target type
+        std::string current = expr_class_name;
+        while (!current.empty()) {
+            if (current == target_name) {
+                // Expression type IS the target type or a subclass of it
+                // At compile time, we know this is always true
+                last_expr_type_ = "i1";
+                return "true";
+            }
+            // Move to parent class
+            auto current_def = env_.lookup_class(current);
+            if (current_def && current_def->base_class) {
+                current = current_def->base_class.value();
+            } else {
+                break;
+            }
+        }
+        // Expression type is not related to target type
+        // At compile time, we know this is always false
+        last_expr_type_ = "i1";
+        return "false";
+    }
+
+    // Fallback: dynamic check using vtable comparison (exact match only)
+    std::string result = fresh_reg();
+    std::string vtable_ptr_ptr = fresh_reg();
+    std::string obj_vtable = fresh_reg();
+
+    // Load vtable pointer from object (first field)
+    std::string class_type = "%class." + target_name;
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr " + class_type + ", ptr " + obj_ptr +
+              ", i32 0, i32 0");
+    emit_line("  " + obj_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
+
+    // Compare with target vtable
+    std::string target_vtable = "@vtable." + target_name;
+    emit_line("  " + result + " = icmp eq ptr " + obj_vtable + ", " + target_vtable);
+
+    last_expr_type_ = "i1";
+    return result;
+}
+
 } // namespace tml::codegen

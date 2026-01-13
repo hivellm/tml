@@ -181,6 +181,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
             gen_struct_decl(decl->as<parser::StructDecl>());
         } else if (decl->is<parser::EnumDecl>()) {
             gen_enum_decl(decl->as<parser::EnumDecl>());
+        } else if (decl->is<parser::ClassDecl>()) {
+            gen_class_decl(decl->as<parser::ClassDecl>());
+        } else if (decl->is<parser::InterfaceDecl>()) {
+            gen_interface_decl(decl->as<parser::InterfaceDecl>());
         } else if (decl->is<parser::ImplDecl>()) {
             // Register impl block for vtable generation
             register_impl(&decl->as<parser::ImplDecl>());

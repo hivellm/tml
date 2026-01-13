@@ -235,6 +235,53 @@ struct ImplBehaviorType {
     std::vector<TypePtr> type_args; ///< Generic parameters.
 };
 
+// ============================================================================
+// OOP Types (C#-style)
+// ============================================================================
+
+/// Class type for OOP-style classes.
+///
+/// Represents an instance of a class. Classes support:
+/// - Single inheritance (extends)
+/// - Multiple interface implementation (implements)
+/// - Virtual dispatch via vtables
+/// - Fields, methods, properties, constructors
+///
+/// # Example
+///
+/// ```tml
+/// class Dog extends Animal implements Friendly {
+///     private name: Str
+///     func new(name: Str) { this.name = name }
+///     override func speak(this) -> Str { "Woof!" }
+/// }
+/// ```
+struct ClassType {
+    std::string name;               ///< Class name.
+    std::string module_path;        ///< Fully qualified module path.
+    std::vector<TypePtr> type_args; ///< Generic type arguments.
+};
+
+/// Interface type for OOP-style interfaces.
+///
+/// Represents an interface that classes can implement.
+/// Interfaces support:
+/// - Multiple inheritance (extends)
+/// - Method signatures with optional default implementations
+///
+/// # Example
+///
+/// ```tml
+/// interface Drawable {
+///     func draw(this, canvas: ref Canvas)
+/// }
+/// ```
+struct InterfaceType {
+    std::string name;               ///< Interface name.
+    std::string module_path;        ///< Fully qualified module path.
+    std::vector<TypePtr> type_args; ///< Generic type arguments.
+};
+
 /// A semantic type.
 ///
 /// This is the unified type representation used throughout the compiler after
@@ -242,7 +289,7 @@ struct ImplBehaviorType {
 struct Type {
     std::variant<PrimitiveType, NamedType, RefType, PtrType, ArrayType, SliceType, TupleType,
                  FuncType, ClosureType, TypeVar, GenericType, ConstGenericType, DynBehaviorType,
-                 ImplBehaviorType>
+                 ImplBehaviorType, ClassType, InterfaceType>
         kind;        ///< The type variant.
     uint64_t id = 0; ///< Unique ID for fast comparison.
 
@@ -318,6 +365,14 @@ struct Type {
 /// Creates an impl behavior return type.
 [[nodiscard]] auto make_impl_behavior(std::string behavior_name,
                                       std::vector<TypePtr> type_args = {}) -> TypePtr;
+
+/// Creates a class type.
+[[nodiscard]] auto make_class(std::string name, std::string module_path = "",
+                              std::vector<TypePtr> type_args = {}) -> TypePtr;
+
+/// Creates an interface type.
+[[nodiscard]] auto make_interface(std::string name, std::string module_path = "",
+                                  std::vector<TypePtr> type_args = {}) -> TypePtr;
 
 // ============================================================================
 // Type Comparison and Conversion

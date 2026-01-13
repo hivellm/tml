@@ -139,10 +139,16 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
                 return check_interp_string(e);
             } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
                 return check_cast(e);
+            } else if constexpr (std::is_same_v<T, parser::IsExpr>) {
+                return check_is(e);
             } else if constexpr (std::is_same_v<T, parser::AwaitExpr>) {
                 return check_await(e, expr.span);
             } else if constexpr (std::is_same_v<T, parser::LowlevelExpr>) {
                 return check_lowlevel(e);
+            } else if constexpr (std::is_same_v<T, parser::BaseExpr>) {
+                return check_base(e);
+            } else if constexpr (std::is_same_v<T, parser::NewExpr>) {
+                return check_new(e);
             } else {
                 return make_unit();
             }
@@ -643,6 +649,34 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
 
             // Handle imported type static methods (e.g., Layout::from_size_align)
             if (!is_primitive_type) {
+                // First check if it's a class constructor call (ClassName::new)
+                auto class_def = env_.lookup_class(type_name);
+                if (class_def.has_value() && method == "new") {
+                    // Type check constructor arguments
+                    for (const auto& arg : call.args) {
+                        check_expr(*arg);
+                    }
+                    // Return the class type
+                    auto class_type = std::make_shared<Type>();
+                    class_type->kind = ClassType{type_name};
+                    return class_type;
+                }
+
+                // Check for class static method call (not constructor)
+                if (class_def.has_value()) {
+                    for (const auto& m : class_def->methods) {
+                        if (m.sig.name == method && m.is_static) {
+                            // Type check arguments
+                            for (const auto& arg : call.args) {
+                                check_expr(*arg);
+                            }
+                            // Check visibility
+                            check_member_visibility(m.vis, type_name, method, call.callee->span);
+                            return m.sig.return_type;
+                        }
+                    }
+                }
+
                 // Try to resolve type_name as an imported symbol
                 auto imported_path = env_.resolve_imported_symbol(type_name);
                 if (imported_path.has_value()) {
@@ -766,6 +800,24 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             if (type_name == "Str")
                 return make_primitive(PrimitiveKind::Str);
         }
+
+        // Check for static method calls on class types (e.g., Counter.get_count())
+        if (!is_primitive_type) {
+            auto class_def = env_.lookup_class(type_name);
+            if (class_def.has_value()) {
+                // Look for static method
+                for (const auto& method : class_def->methods) {
+                    if (method.sig.name == call.method && method.is_static) {
+                        // Check visibility
+                        if (!check_member_visibility(method.vis, type_name, call.method,
+                                                     call.receiver->span)) {
+                            return method.sig.return_type; // Return type for error recovery
+                        }
+                        return method.sig.return_type;
+                    }
+                }
+            }
+        }
     }
 
     auto receiver_type = check_expr(*call.receiver);
@@ -828,6 +880,46 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                     return apply_type_args(func_it->second);
                 }
             }
+        }
+    }
+
+    // Handle class type method calls with visibility checking
+    // Unwrap reference type if present
+    TypePtr class_receiver = receiver_type;
+    if (receiver_type->is<RefType>()) {
+        class_receiver = receiver_type->as<RefType>().inner;
+    }
+    if (class_receiver->is<ClassType>()) {
+        auto& class_type = class_receiver->as<ClassType>();
+        auto class_def = env_.lookup_class(class_type.name);
+        if (class_def.has_value()) {
+            // Search for the method in this class and its parents
+            std::string current_class = class_type.name;
+            while (!current_class.empty()) {
+                auto current_def = env_.lookup_class(current_class);
+                if (!current_def.has_value())
+                    break;
+
+                for (const auto& method : current_def->methods) {
+                    if (method.sig.name == call.method) {
+                        // Check visibility
+                        if (!check_member_visibility(method.vis, current_class, call.method,
+                                                     call.receiver->span)) {
+                            return method.sig.return_type; // Return type for error recovery
+                        }
+                        return method.sig.return_type;
+                    }
+                }
+
+                // Check parent class
+                if (current_def->base_class.has_value()) {
+                    current_class = current_def->base_class.value();
+                } else {
+                    break;
+                }
+            }
+            error("Unknown method '" + call.method + "' on class '" + class_type.name + "'",
+                  call.receiver->span);
         }
     }
 
@@ -1403,14 +1495,102 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
 }
 
 auto TypeChecker::check_field_access(const parser::FieldExpr& field) -> TypePtr {
+    // Handle static field access: ClassName.staticField
+    if (field.object->is<parser::IdentExpr>()) {
+        const auto& ident = field.object->as<parser::IdentExpr>();
+        auto class_def = env_.lookup_class(ident.name);
+        if (class_def.has_value()) {
+            // Look for static field
+            for (const auto& f : class_def->fields) {
+                if (f.name == field.field && f.is_static) {
+                    // Check visibility for static field access
+                    if (!check_member_visibility(f.vis, ident.name, field.field,
+                                                 field.object->span)) {
+                        return f.type; // Return type for error recovery
+                    }
+                    return f.type;
+                }
+            }
+            // If we're here, it might be a non-static field accessed statically (error)
+            // Or the field doesn't exist - fall through to regular handling
+        }
+    }
+
     auto obj_type = check_expr(*field.object);
 
     if (obj_type->is<RefType>()) {
         obj_type = obj_type->as<RefType>().inner;
     }
 
+    // Handle class type field access with visibility checking
+    if (obj_type->is<ClassType>()) {
+        auto& class_type = obj_type->as<ClassType>();
+        // Search for the field in this class and its parent classes
+        std::string current_class = class_type.name;
+        while (!current_class.empty()) {
+            auto current_def = env_.lookup_class(current_class);
+            if (!current_def.has_value())
+                break;
+
+            // Look for the field in this class
+            for (const auto& f : current_def->fields) {
+                if (f.name == field.field) {
+                    // Check visibility (defining class is current_class, not class_type.name)
+                    if (!check_member_visibility(f.vis, current_class, field.field,
+                                                 field.object->span)) {
+                        return f.type; // Return type anyway for error recovery
+                    }
+                    return f.type;
+                }
+            }
+
+            // Check parent class
+            if (current_def->base_class.has_value()) {
+                current_class = current_def->base_class.value();
+            } else {
+                break;
+            }
+        }
+        error("Unknown field: " + field.field + " on class " + class_type.name, field.object->span);
+    }
+
     if (obj_type->is<NamedType>()) {
         auto& named = obj_type->as<NamedType>();
+
+        // First check if this is a class (NamedType can refer to classes too)
+        auto class_def = env_.lookup_class(named.name);
+        if (class_def.has_value()) {
+            // Search for the field in this class and its parent classes
+            std::string current_class = named.name;
+            while (!current_class.empty()) {
+                auto current_def = env_.lookup_class(current_class);
+                if (!current_def.has_value())
+                    break;
+
+                // Look for the field in this class
+                for (const auto& f : current_def->fields) {
+                    if (f.name == field.field) {
+                        // Check visibility
+                        if (!check_member_visibility(f.vis, current_class, field.field,
+                                                     field.object->span)) {
+                            return f.type; // Return type anyway for error recovery
+                        }
+                        return f.type;
+                    }
+                }
+
+                // Check parent class
+                if (current_def->base_class.has_value()) {
+                    current_class = current_def->base_class.value();
+                } else {
+                    break;
+                }
+            }
+            error("Unknown field: " + field.field + " on class " + named.name, field.object->span);
+            return make_unit();
+        }
+
+        // Otherwise check if it's a struct
         auto struct_def = env_.lookup_struct(named.name);
         if (struct_def) {
             std::unordered_map<std::string, TypePtr> subs;
@@ -1507,6 +1687,24 @@ auto TypeChecker::check_cast(const parser::CastExpr& cast) -> TypePtr {
     return target_type;
 }
 
+auto TypeChecker::check_is(const parser::IsExpr& is_expr) -> TypePtr {
+    // Check the source expression
+    auto source_type = check_expr(*is_expr.expr);
+
+    // Resolve the target type
+    auto target_type = resolve_type(*is_expr.target);
+
+    // Validate that 'is' makes sense:
+    // - Source should be a class type (or interface type)
+    // - Target should be a class type
+    // For now, we allow any types and let codegen handle it
+    (void)source_type;
+    (void)target_type;
+
+    // 'is' expression always returns Bool
+    return make_bool();
+}
+
 auto TypeChecker::check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr {
     // Check that we're in an async function
     if (!in_async_func_) {
@@ -1586,6 +1784,105 @@ auto TypeChecker::check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePt
     env_.pop_scope();
     in_lowlevel_ = was_in_lowlevel;
 
+    return result;
+}
+
+auto TypeChecker::check_base(const parser::BaseExpr& base) -> TypePtr {
+    // Verify we're in a class context with a parent class
+    if (!current_self_type_) {
+        error("'base' can only be used inside a class method", base.span);
+        return make_unit();
+    }
+
+    // Check if self type is a ClassType
+    if (!current_self_type_->is<ClassType>()) {
+        error("'base' can only be used inside a class method", base.span);
+        return make_unit();
+    }
+
+    const auto& class_type = current_self_type_->as<ClassType>();
+    auto class_def = env_.lookup_class(class_type.name);
+
+    if (!class_def.has_value()) {
+        error("Class '" + class_type.name + "' not found", base.span);
+        return make_unit();
+    }
+
+    if (!class_def->base_class.has_value()) {
+        error("Class '" + class_type.name + "' has no base class", base.span);
+        return make_unit();
+    }
+
+    const std::string& base_class_name = class_def->base_class.value();
+    auto base_class_def = env_.lookup_class(base_class_name);
+
+    if (!base_class_def.has_value()) {
+        error("Base class '" + base_class_name + "' not found", base.span);
+        return make_unit();
+    }
+
+    if (base.is_method_call) {
+        // Look up the method in the base class
+        for (const auto& method : base_class_def->methods) {
+            if (method.sig.name == base.member) {
+                // Check arguments
+                for (size_t i = 0; i < base.args.size(); ++i) {
+                    check_expr(*base.args[i]);
+                }
+
+                // Return the method's return type
+                return method.sig.return_type;
+            }
+        }
+
+        error("Method '" + base.member + "' not found in base class '" + base_class_name + "'",
+              base.span);
+        return make_unit();
+    } else {
+        // Field access on base class
+        for (const auto& field : base_class_def->fields) {
+            if (field.name == base.member) {
+                return field.type;
+            }
+        }
+
+        error("Field '" + base.member + "' not found in base class '" + base_class_name + "'",
+              base.span);
+        return make_unit();
+    }
+}
+
+auto TypeChecker::check_new(const parser::NewExpr& new_expr) -> TypePtr {
+    // Resolve the class type
+    std::string class_name;
+    if (!new_expr.class_type.segments.empty()) {
+        class_name = new_expr.class_type.segments.back();
+    } else {
+        error("Invalid class name in new expression", new_expr.span);
+        return make_unit();
+    }
+
+    auto class_def = env_.lookup_class(class_name);
+
+    if (!class_def.has_value()) {
+        error("Class '" + class_name + "' not found", new_expr.span);
+        return make_unit();
+    }
+
+    // Check if class is abstract
+    if (class_def->is_abstract) {
+        error("Cannot instantiate abstract class '" + class_name + "'", new_expr.span);
+        return make_unit();
+    }
+
+    // Check constructor arguments
+    for (const auto& arg : new_expr.args) {
+        check_expr(*arg);
+    }
+
+    // Return the class type
+    auto result = std::make_shared<Type>();
+    result->kind = ClassType{class_name};
     return result;
 }
 

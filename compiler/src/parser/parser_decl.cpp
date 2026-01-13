@@ -218,6 +218,15 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         return parse_use_decl(vis);
     case lexer::TokenKind::KwMod:
         return parse_mod_decl(vis);
+    // OOP declarations (C#-style)
+    case lexer::TokenKind::KwClass:
+    case lexer::TokenKind::KwAbstract:
+    case lexer::TokenKind::KwSealed:
+        return parse_class_decl(vis, std::move(decorators), std::move(doc));
+    case lexer::TokenKind::KwInterface:
+        return parse_interface_decl(vis, std::move(decorators), std::move(doc));
+    case lexer::TokenKind::KwNamespace:
+        return parse_namespace_decl();
     default:
         return ParseError{.message = "Expected declaration", .span = peek().span, .notes = {}};
     }
@@ -1309,6 +1318,8 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
 }
 
 // ============================================================================
-// Statement Parsing
+// OOP Declarations
+// ============================================================================
+// Note: OOP parsing (class, interface, namespace) is in parser_oop.cpp
 
 } // namespace tml::parser

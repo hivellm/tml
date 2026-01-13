@@ -109,23 +109,68 @@
 - [ ] 5.3.3 Review DLL/shared library unloading
 - [ ] 5.3.4 Review temporary directory cleanup
 
-## Phase 6: Testing & Verification
+## Phase 6: OOP Memory Management
 
-### 6.1 Memory Tests
-- [ ] 6.1.1 Create stress test for repeated compilation
-- [ ] 6.1.2 Create test for large file compilation
-- [ ] 6.1.3 Create test for many small files
-- [ ] 6.1.4 Create test for error recovery paths
+### 6.1 Class Instance Memory
+- [ ] 6.1.1 Audit class allocation in constructors
+- [ ] 6.1.2 Verify vtable pointer initialization
+- [ ] 6.1.3 Check base class constructor memory handling
+- [ ] 6.1.4 Review constructor chain temporary allocations
+- [ ] 6.1.5 Verify destructor call order in inheritance
 
-### 6.2 Verification
-- [ ] 6.2.1 Run full test suite under ASan
-- [ ] 6.2.2 Run full test suite under Valgrind
-- [ ] 6.2.3 Verify zero leaks on clean exit
-- [ ] 6.2.4 Document any accepted leaks (with justification)
+### 6.2 Virtual Dispatch Memory
+- [ ] 6.2.1 Audit vtable global constant allocation
+- [ ] 6.2.2 Review vtable pointer storage in objects
+- [ ] 6.2.3 Check interface dispatch table memory
+- [ ] 6.2.4 Verify vtable deduplication doesn't leak
 
-## Validation Checklist
-- [ ] Zero memory leaks in normal compilation paths
-- [ ] Zero memory leaks in error recovery paths
-- [ ] Sanitizer builds pass all tests
-- [ ] Memory usage stays bounded during long sessions
-- [ ] All allocations have clear ownership documentation
+### 6.3 Object Pooling Memory
+- [ ] 6.3.1 Audit Pool[T] free list management
+- [ ] 6.3.2 Review pool growth allocation
+- [ ] 6.3.3 Check pool cleanup on program exit
+- [ ] 6.3.4 Verify thread-local pool cleanup on thread exit
+- [ ] 6.3.5 Test pool memory under high churn
+
+### 6.4 Arena Allocator Memory
+- [ ] 6.4.1 Audit Arena bump pointer management
+- [ ] 6.4.2 Review Arena chunk allocation
+- [ ] 6.4.3 Check Arena reset clears all allocations
+- [ ] 6.4.4 Verify nested Arena cleanup order
+- [ ] 6.4.5 Test Arena with destructor callbacks
+
+### 6.5 Value Classes
+- [ ] 6.5.1 Verify @value classes have no heap allocation
+- [ ] 6.5.2 Check pass-by-value copy correctness
+- [ ] 6.5.3 Review inline storage memory layout
+
+## Phase 7: Testing & Verification
+
+### 7.1 Memory Tests
+- [ ] 7.1.1 Create stress test for repeated compilation
+- [ ] 7.1.2 Create test for large file compilation
+- [ ] 7.1.3 Create test for many small files
+- [ ] 7.1.4 Create test for error recovery paths
+
+### 7.2 Verification
+- [ ] 7.2.1 Run full test suite under ASan
+- [ ] 7.2.2 Run full test suite under Valgrind
+- [ ] 7.2.3 Verify zero leaks on clean exit
+- [ ] 7.2.4 Document any accepted leaks (with justification)
+
+### 7.3 OOP-Specific Memory Tests
+- [ ] 7.3.1 Create stress test for class instantiation/destruction
+- [ ] 7.3.2 Create test for deep inheritance chains
+- [ ] 7.3.3 Create test for pool acquire/release cycles
+- [ ] 7.3.4 Create test for arena alloc/reset cycles
+- [ ] 7.3.5 Benchmark memory usage: OOP vs struct equivalents
+
+## Validation
+
+- [ ] V.1 Zero memory leaks in normal compilation paths
+- [ ] V.2 Zero memory leaks in error recovery paths
+- [ ] V.3 Sanitizer builds pass all tests
+- [ ] V.4 Memory usage stays bounded during long sessions
+- [ ] V.5 All allocations have clear ownership documentation
+- [ ] V.6 Class constructors don't leak on error
+- [ ] V.7 Pool/Arena memory correctly reclaimed
+- [ ] V.8 No vtable memory fragmentation

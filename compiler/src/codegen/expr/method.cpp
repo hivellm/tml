@@ -56,6 +56,42 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     }
 
     if (has_type_name) {
+        // Check for class static method call (ClassName.staticMethod())
+        auto class_def = env_.lookup_class(type_name);
+        if (class_def.has_value()) {
+            // Look for static method
+            for (const auto& m : class_def->methods) {
+                if (m.sig.name == method && m.is_static) {
+                    // Generate call to static method
+                    std::string func_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+                    std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
+
+                    // Generate arguments
+                    std::vector<std::string> args;
+                    std::vector<std::string> arg_types;
+                    for (const auto& arg : call.args) {
+                        args.push_back(gen_expr(*arg));
+                        arg_types.push_back(last_expr_type_);
+                    }
+
+                    // Generate call
+                    std::string result = fresh_reg();
+                    std::string call_str =
+                        "  " + result + " = call " + ret_type + " " + func_name + "(";
+                    for (size_t i = 0; i < args.size(); ++i) {
+                        if (i > 0)
+                            call_str += ", ";
+                        call_str += arg_types[i] + " " + args[i];
+                    }
+                    call_str += ")";
+                    emit_line(call_str);
+
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
+            }
+        }
+
         // Check if this is a generic struct from:
         // 1. Local pending_generic_structs_ or pending_generic_impls_
         // 2. Imported structs from module registry with type_params
@@ -368,7 +404,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
     std::string receiver_type_name;
     if (receiver_type) {
-        if (receiver_type->is<types::NamedType>()) {
+        if (receiver_type->is<types::ClassType>()) {
+            receiver_type_name = receiver_type->as<types::ClassType>().name;
+        } else if (receiver_type->is<types::NamedType>()) {
             receiver_type_name = receiver_type->as<types::NamedType>().name;
         } else if (receiver_type->is<types::PrimitiveType>()) {
             // Convert primitive type to name for method dispatch
@@ -1456,6 +1494,62 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         if (method == "close") {
             emit_line("  call void @file_close(ptr " + handle + ")");
             return "void";
+        }
+    }
+
+    // =========================================================================
+    // 15. Handle class instance method calls
+    // =========================================================================
+    if (receiver_type && receiver_type->is<types::ClassType>()) {
+        const auto& class_type = receiver_type->as<types::ClassType>();
+        auto class_def = env_.lookup_class(class_type.name);
+        if (class_def.has_value()) {
+            // Search for the method in this class and its parents
+            std::string current_class = class_type.name;
+            while (!current_class.empty()) {
+                auto current_def = env_.lookup_class(current_class);
+                if (!current_def.has_value())
+                    break;
+
+                for (const auto& m : current_def->methods) {
+                    if (m.sig.name == method && !m.is_static) {
+                        // Generate call to instance method
+                        // For class methods, the receiver is a pointer to the class instance
+                        std::string func_name =
+                            "@tml_" + get_suite_prefix() + current_class + "_" + method;
+                        std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
+
+                        // Get receiver pointer (for 'this')
+                        // For class types, 'receiver' is already the loaded class pointer
+                        // (class variables are pointers, so gen_ident loads the ptr from alloca)
+                        // We should NOT use receiver_ptr (the alloca address) for classes
+                        std::string this_ptr = receiver;
+
+                        // Generate arguments: this pointer + regular args
+                        std::string args_str = "ptr " + this_ptr;
+                        for (const auto& arg : call.args) {
+                            std::string arg_val = gen_expr(*arg);
+                            args_str += ", " + last_expr_type_ + " " + arg_val;
+                        }
+
+                        // Generate call
+                        if (ret_type == "void") {
+                            emit_line("  call void " + func_name + "(" + args_str + ")");
+                            last_expr_type_ = "void";
+                            return "void";
+                        } else {
+                            std::string result = fresh_reg();
+                            emit_line("  " + result + " = call " + ret_type + " " + func_name +
+                                      "(" + args_str + ")");
+                            last_expr_type_ = ret_type;
+                            return result;
+                        }
+                    }
+                }
+
+                // Move to parent class
+                current_class = current_def->base_class.value_or("");
+            }
         }
     }
 

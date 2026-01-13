@@ -205,7 +205,15 @@
         },
         {
           "name": "keyword.declaration.tml",
-          "match": "\\b(module|import|public|private|func|type|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator)\\b"
+          "match": "\\b(module|import|public|private|func|type|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator|namespace)\\b"
+        },
+        {
+          "name": "keyword.control.oop.tml",
+          "match": "\\b(class|interface|extends|implements|override|virtual|abstract|sealed|base|new|prop)\\b"
+        },
+        {
+          "name": "storage.modifier.access.tml",
+          "match": "\\b(protected|private|static)\\b"
         },
         {
           "name": "keyword.operator.logical.tml",
@@ -217,7 +225,7 @@
         },
         {
           "name": "keyword.other.tml",
-          "match": "\\b(this|This|ref|mut|dyn|lowlevel|async|await|with|quote|as)\\b"
+          "match": "\\b(this|This|ref|mut|dyn|lowlevel|async|await|with|quote|as|is)\\b"
         },
         {
           "name": "keyword.control.range.tml",

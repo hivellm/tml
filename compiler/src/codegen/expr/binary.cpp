@@ -100,8 +100,22 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                 emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr);
             }
         } else if (bin.left->is<parser::FieldExpr>()) {
-            // Field assignment: obj.field = value or this.field = value
+            // Field assignment: obj.field = value or this.field = value or ClassName.static = value
             const auto& field = bin.left->as<parser::FieldExpr>();
+
+            // Check for static field assignment first
+            if (field.object->is<parser::IdentExpr>()) {
+                const auto& ident = field.object->as<parser::IdentExpr>();
+                std::string static_key = ident.name + "." + field.field;
+                auto static_it = static_fields_.find(static_key);
+                if (static_it != static_fields_.end()) {
+                    // Store to global static field
+                    emit_line("  store " + static_it->second.type + " " + right + ", ptr " +
+                              static_it->second.global_name);
+                    return right; // Return the assigned value
+                }
+            }
+
             std::string struct_type;
             std::string struct_ptr;
 
@@ -142,6 +156,10 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                             std::string loaded_ptr = fresh_reg();
                             emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
                             struct_ptr = loaded_ptr;
+                        } else if (semantic_type->is<types::ClassType>()) {
+                            const auto& cls = semantic_type->as<types::ClassType>();
+                            struct_type = "%class." + cls.name;
+                            // For class types, 'this' is already a direct pointer - no load needed
                         } else {
                             struct_type = llvm_type_from_semantic(semantic_type);
                         }
@@ -150,19 +168,47 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
 
                 // Get the struct type name for field lookup
                 std::string type_name = struct_type;
+                // Strip pointer suffix if present
+                if (type_name.ends_with("*")) {
+                    type_name = type_name.substr(0, type_name.length() - 1);
+                }
+                // Strip %struct. or %class. prefix
                 if (type_name.starts_with("%struct.")) {
                     type_name = type_name.substr(8);
+                } else if (type_name.starts_with("%class.")) {
+                    type_name = type_name.substr(7);
+                }
+
+                // For class fields, use the class type without pointer suffix
+                std::string gep_type = struct_type;
+                if (gep_type.ends_with("*")) {
+                    gep_type = gep_type.substr(0, gep_type.length() - 1);
                 }
 
                 // Get field pointer
                 int field_idx = get_field_index(type_name, field.field);
                 std::string field_type = get_field_type(type_name, field.field);
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " +
+                emit_line("  " + field_ptr + " = getelementptr " + gep_type + ", ptr " +
                           struct_ptr + ", i32 0, i32 " + std::to_string(field_idx));
 
                 // Store value to field
                 emit_line("  store " + field_type + " " + right + ", ptr " + field_ptr);
+            }
+        } else if (bin.left->is<parser::PathExpr>()) {
+            // PathExpr assignment: Counter::count = value (static field via :: syntax)
+            const auto& path = bin.left->as<parser::PathExpr>();
+            if (path.path.segments.size() == 2) {
+                std::string class_name = path.path.segments[0];
+                std::string field_name = path.path.segments[1];
+                std::string static_key = class_name + "." + field_name;
+                auto static_it = static_fields_.find(static_key);
+                if (static_it != static_fields_.end()) {
+                    // Store to global static field
+                    emit_line("  store " + static_it->second.type + " " + right + ", ptr " +
+                              static_it->second.global_name);
+                    return right;
+                }
             }
         } else if (bin.left->is<parser::IndexExpr>()) {
             // Array index assignment: arr[i] = value

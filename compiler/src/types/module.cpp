@@ -160,6 +160,33 @@ auto ModuleRegistry::lookup_constant(const std::string& module_path,
     return std::nullopt;
 }
 
+auto ModuleRegistry::lookup_class(const std::string& module_path,
+                                  const std::string& symbol_name) const -> std::optional<ClassDef> {
+    auto module = get_module(module_path);
+    if (!module)
+        return std::nullopt;
+
+    auto it = module->classes.find(symbol_name);
+    if (it != module->classes.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+auto ModuleRegistry::lookup_interface(const std::string& module_path,
+                                      const std::string& symbol_name) const
+    -> std::optional<InterfaceDef> {
+    auto module = get_module(module_path);
+    if (!module)
+        return std::nullopt;
+
+    auto it = module->interfaces.find(symbol_name);
+    if (it != module->interfaces.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
 auto ModuleRegistry::lookup_symbol(const std::string& module_path,
                                    const std::string& symbol_name) const
     -> std::optional<ModuleSymbol> {

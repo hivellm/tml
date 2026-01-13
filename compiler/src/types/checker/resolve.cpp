@@ -48,11 +48,17 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                     // Resolve each generic argument
                     std::vector<TypePtr> type_args;
                     for (const auto& arg : t.generics->args) {
-                        // Only handle type arguments for now (not const generics)
                         if (arg.is_type()) {
                             type_args.push_back(resolve_type(*arg.as_type()));
+                        } else if (arg.is_const && arg.is_expr()) {
+                            // Const generic argument - evaluate and wrap in a ConstValue type
+                            auto const_val = evaluate_const_expr(*arg.as_expr(), make_i64());
+                            if (const_val) {
+                                // Create a type that carries the const value
+                                // For now, use the type associated with the const value
+                                type_args.push_back(const_val->type);
+                            }
                         }
-                        // TODO: Handle const generic arguments when fully implemented
                     }
                     // Create new type with type_args
                     if (base_type->template is<types::NamedType>()) {
@@ -119,9 +125,13 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                 std::vector<TypePtr> type_args;
                 if (t.generics) {
                     for (const auto& arg : t.generics->args) {
-                        // Only handle type arguments for now (not const generics)
                         if (arg.is_type()) {
                             type_args.push_back(resolve_type(*arg.as_type()));
+                        } else if (arg.is_const && arg.is_expr()) {
+                            auto const_val = evaluate_const_expr(*arg.as_expr(), make_i64());
+                            if (const_val) {
+                                type_args.push_back(const_val->type);
+                            }
                         }
                     }
                 }
@@ -149,6 +159,11 @@ auto TypeChecker::resolve_type(const parser::Type& type) -> TypePtr {
                     for (const auto& arg : t.generics->args) {
                         if (arg.is_type()) {
                             type_args.push_back(resolve_type(*arg.as_type()));
+                        } else if (arg.is_const && arg.is_expr()) {
+                            auto const_val = evaluate_const_expr(*arg.as_expr(), make_i64());
+                            if (const_val) {
+                                type_args.push_back(const_val->type);
+                            }
                         }
                     }
                 }
@@ -233,6 +248,14 @@ auto TypeChecker::resolve_type_path(const parser::TypePath& path) -> TypePtr {
     if (struct_def) {
         auto type = std::make_shared<Type>();
         type->kind = NamedType{name, "", {}};
+        return type;
+    }
+
+    // Check for class types
+    auto class_def = env_.lookup_class(name);
+    if (class_def) {
+        auto type = std::make_shared<Type>();
+        type->kind = ClassType{name};
         return type;
     }
 
