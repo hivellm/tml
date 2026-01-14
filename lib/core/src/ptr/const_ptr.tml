@@ -1,0 +1,371 @@
+//! Immutable raw pointer type.
+//!
+//! This module contains the `RawPtr[T]` type, TML's equivalent of Rust's `*const T`.
+
+use core::hash::*
+use core::option::*
+
+// ============================================================================
+// RawPtr[T] - Immutable Raw Pointer
+// ============================================================================
+
+/// A raw, potentially null pointer to `T`.
+///
+/// `RawPtr[T]` is the TML equivalent of Rust's `*const T`. It represents
+/// an immutable raw pointer that may or may not be valid.
+///
+/// # Safety
+///
+/// Raw pointers are `lowlevel` - dereferencing them requires explicit
+/// safety guarantees from the programmer:
+///
+/// - The pointer must not be null (use `is_null()` to check)
+/// - The pointer must be properly aligned for type `T`
+/// - The pointer must point to valid, initialized memory
+/// - The memory must remain valid for the duration of access
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::RawPtr
+///
+/// // Null pointer
+/// let null: RawPtr[I64] = RawPtr::null_ptr()
+/// assert(null.is_null())
+///
+/// // Pointer from address
+/// let ptr = RawPtr[I64]::from_addr(0x1000)
+/// assert(not ptr.is_null())
+///
+/// // Pointer arithmetic
+/// let next = ptr.add(1)  // Advances by 8 bytes (sizeof I64)
+/// let prev = ptr.sub(1)  // Goes back by 8 bytes
+/// ```
+///
+/// # Layout
+///
+/// `RawPtr[T]` is represented as a single `I64` containing the memory address.
+/// This is compatible with C pointer types.
+pub type RawPtr[T] {
+    addr: I64
+}
+
+impl[T] RawPtr[T] {
+    /// Creates a null pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr: RawPtr[I64] = RawPtr::null_ptr()
+    /// assert(ptr.is_null())
+    /// assert(ptr.addr() == 0)
+    /// ```
+    pub func null_ptr() -> RawPtr[T] {
+        return RawPtr { addr: 0 }
+    }
+
+    /// Returns `true` if this is a null pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let null_ptr: RawPtr[I64] = RawPtr::null_ptr()
+    /// let valid_ptr = RawPtr::from_addr(0x1000)
+    ///
+    /// assert(null_ptr.is_null())
+    /// assert(not valid_ptr.is_null())
+    /// ```
+    pub func is_null(this) -> Bool {
+        return this.addr == 0
+    }
+
+    /// Returns the address as an integer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// assert(ptr.addr() == 0x1000)
+    /// ```
+    pub func addr(this) -> I64 {
+        return this.addr
+    }
+
+    /// Creates a pointer from an integer address.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the address represents a valid pointer
+    /// if it will be dereferenced.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// ```
+    pub func from_addr(addr: I64) -> RawPtr[T] {
+        return RawPtr { addr: addr }
+    }
+
+    /// Casts this pointer to a pointer of a different type.
+    ///
+    /// This is equivalent to a C-style cast between pointer types.
+    /// The address remains the same; only the type changes.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let int_ptr: RawPtr[I64] = RawPtr::from_addr(0x1000)
+    /// let byte_ptr: RawPtr[U8] = int_ptr.cast[U8]()
+    ///
+    /// assert(byte_ptr.addr() == 0x1000)
+    /// ```
+    pub func cast[U](this) -> RawPtr[U] {
+        return RawPtr { addr: this.addr }
+    }
+
+    /// Offsets the pointer by `count` elements.
+    ///
+    /// The offset is in units of `T`, not bytes. The actual byte offset
+    /// is `count * sizeof(T)`.
+    ///
+    /// # Safety
+    ///
+    /// The resulting pointer must be within bounds of the allocated object,
+    /// or one past the end.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// let next = ptr.offset(1)   // 0x1008 (assuming 8-byte I64)
+    /// let prev = ptr.offset(-1)  // 0x0FF8
+    /// ```
+    pub func offset(this, count: I64) -> RawPtr[T] {
+        let element_size: I64 = lowlevel { sizeof_type[T]() }
+        return RawPtr { addr: this.addr + count * element_size }
+    }
+
+    /// Adds `count` to the pointer.
+    ///
+    /// Equivalent to `offset(count)`. Use this for forward iteration.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// let next = ptr.add(1)  // Move forward one element
+    /// ```
+    pub func add(this, count: I64) -> RawPtr[T] {
+        return this.offset(count)
+    }
+
+    /// Subtracts `count` from the pointer.
+    ///
+    /// Equivalent to `offset(-count)`. Use this for backward iteration.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// let prev = ptr.sub(1)  // Move backward one element
+    /// ```
+    pub func sub(this, count: I64) -> RawPtr[T] {
+        return this.offset(-count)
+    }
+
+    /// Calculates the distance to another pointer in elements.
+    ///
+    /// Returns the number of elements between `this` and `other`.
+    /// Positive if `other` is after `this`, negative if before.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let a = RawPtr[I64]::from_addr(0x1000)
+    /// let b = RawPtr[I64]::from_addr(0x1010)  // 16 bytes later
+    ///
+    /// let dist = a.offset_from(b)  // 2 (assuming 8-byte I64)
+    /// ```
+    pub func offset_from(this, other: RawPtr[T]) -> I64 {
+        let element_size: I64 = lowlevel { sizeof_type[T]() }
+        if element_size == 0 {
+            return 0
+        }
+        return (other.addr - this.addr) / element_size
+    }
+
+    /// Reads the value from the pointer without moving it.
+    ///
+    /// This creates a bitwise copy of the value at the pointer location.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Safety
+    ///
+    /// Beyond the null check, the caller must ensure:
+    /// - The pointer is properly aligned for `T`
+    /// - The memory contains a valid, initialized value of type `T`
+    /// - The memory remains valid during the read
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Assuming ptr points to valid memory containing an I64
+    /// let value: I64 = ptr.read()
+    /// ```
+    pub func read(this) -> T {
+        if this.is_null() {
+            panic("ptr::read: attempted to read from null pointer")
+        }
+        return lowlevel { ptr_read[T](this.addr) }
+    }
+
+    /// Reads the value without assuming alignment.
+    ///
+    /// Use this when the pointer may not be aligned to `T`'s alignment
+    /// requirements. This is slower than `read()` but safe for unaligned data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Safety
+    ///
+    /// The memory must contain a valid, initialized value of type `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Reading an I64 from a potentially unaligned address
+    /// let value = unaligned_ptr.read_unaligned()
+    /// ```
+    pub func read_unaligned(this) -> T {
+        if this.is_null() {
+            panic("ptr::read_unaligned: attempted to read from null pointer")
+        }
+        return lowlevel { ptr_read_unaligned[T](this.addr) }
+    }
+
+    /// Performs a volatile read from the pointer.
+    ///
+    /// Volatile reads are not optimized away by the compiler and are
+    /// guaranteed to actually read from memory. Use this for:
+    /// - Memory-mapped I/O
+    /// - Synchronization primitives
+    /// - Any memory that may change outside the program's control
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must be valid and properly aligned.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Reading from a hardware register
+    /// let status = mmio_ptr.read_volatile()
+    /// ```
+    pub func read_volatile(this) -> T {
+        if this.is_null() {
+            panic("ptr::read_volatile: attempted to read from null pointer")
+        }
+        return lowlevel { ptr_read_volatile[T](this.addr) }
+    }
+
+    /// Returns `true` if the pointer is aligned for type `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)  // Aligned
+    /// let ptr2 = RawPtr[I64]::from_addr(0x1001) // Not aligned
+    ///
+    /// assert(ptr.is_aligned())
+    /// assert(not ptr2.is_aligned())
+    /// ```
+    pub func is_aligned(this) -> Bool {
+        let align: I64 = lowlevel { alignof_type[T]() }
+        return this.addr % align == 0
+    }
+
+    /// Converts to a Maybe, returning Nothing if null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawPtr[I64]::from_addr(0x1000)
+    /// when ptr.as_maybe() {
+    ///     Just(p) => println("Valid pointer"),
+    ///     Nothing => println("Null pointer")
+    /// }
+    /// ```
+    pub func as_maybe(this) -> Maybe[RawPtr[T]] {
+        if this.is_null() {
+            return Nothing
+        }
+        return Just(this)
+    }
+
+    /// Wraps the pointer as a usize (address).
+    ///
+    /// This is the same as `addr()` but semantically indicates
+    /// that we're treating the pointer as an address.
+    pub func to_usize(this) -> I64 {
+        return this.addr
+    }
+}
+
+// ============================================================================
+// Comparison Implementations
+// ============================================================================
+
+/// Equality comparison for `RawPtr[T]`.
+///
+/// Two pointers are equal if they point to the same address.
+impl[T] PartialEq for RawPtr[T] {
+    pub func eq(this, other: ref RawPtr[T]) -> Bool {
+        return this.addr == other.addr
+    }
+}
+
+impl[T] Eq for RawPtr[T] {}
+
+/// Ordering comparison for `RawPtr[T]`.
+///
+/// Pointers are ordered by their memory addresses.
+impl[T] PartialOrd for RawPtr[T] {
+    pub func partial_cmp(this, other: ref RawPtr[T]) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl[T] Ord for RawPtr[T] {
+    pub func cmp(this, other: ref RawPtr[T]) -> Ordering {
+        if this.addr < other.addr {
+            return Less
+        }
+        if this.addr > other.addr {
+            return Greater
+        }
+        return Equal
+    }
+}
+
+// ============================================================================
+// Hash Implementation
+// ============================================================================
+
+/// Hashing for `RawPtr[T]`.
+///
+/// The hash is based on the pointer's address.
+impl[T] Hash for RawPtr[T] {
+    pub func hash(this) -> I64 {
+        return this.addr
+    }
+}

@@ -86,10 +86,19 @@ void LLVMIRGen::emit_dyn_type(const std::string& behavior_name) {
 auto LLVMIRGen::get_vtable(const std::string& type_name, const std::string& behavior_name)
     -> std::string {
     std::string key = type_name + "::" + behavior_name;
+
+    // First check behavior vtables (impl blocks)
     auto it = vtables_.find(key);
     if (it != vtables_.end()) {
         return it->second;
     }
+
+    // Check interface vtables (class implements)
+    auto iface_it = interface_vtables_.find(key);
+    if (iface_it != interface_vtables_.end()) {
+        return iface_it->second;
+    }
+
     return ""; // No vtable found
 }
 

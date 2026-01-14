@@ -407,10 +407,16 @@ auto HirBuilder::lower_impl(const parser::ImplDecl& impl_decl) -> HirImpl {
     hir_impl.self_type = resolve_type(*impl_decl.self_type);
     hir_impl.type_name = types::type_to_string(hir_impl.self_type);
 
+    // Set the context for resolving 'This'/'Self' types in method parameters
+    current_impl_self_type_ = hir_impl.self_type;
+
     // Methods
     for (const auto& method : impl_decl.methods) {
         hir_impl.methods.push_back(lower_function(method));
     }
+
+    // Clear the context
+    current_impl_self_type_ = std::nullopt;
 
     return hir_impl;
 }
@@ -500,6 +506,12 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
                 return types::make_str();
             if (name == "Unit" || name == "()")
                 return types::make_unit();
+
+            // Handle 'This' and 'Self' types in impl context
+            // These refer to the impl's self type (e.g., 'Number' in impl Addable for Number)
+            if ((name == "This" || name == "Self") && current_impl_self_type_.has_value()) {
+                return current_impl_self_type_.value();
+            }
 
             // For user-defined types, create a NamedType
             auto result = std::make_shared<types::Type>();

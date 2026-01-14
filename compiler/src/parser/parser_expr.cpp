@@ -539,6 +539,11 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_return_expr();
     }
 
+    // Throw
+    if (check(lexer::TokenKind::KwThrow)) {
+        return parse_throw_expr();
+    }
+
     // Break
     if (check(lexer::TokenKind::KwBreak)) {
         return parse_break_expr();
@@ -1101,6 +1106,21 @@ auto Parser::parse_return_expr() -> Result<ExprPtr, ParseError> {
     auto end_span = previous().span;
     return make_box<Expr>(Expr{.kind = ReturnExpr{.value = std::move(value),
                                                   .span = SourceSpan::merge(start_span, end_span)},
+                               .span = SourceSpan::merge(start_span, end_span)});
+}
+
+auto Parser::parse_throw_expr() -> Result<ExprPtr, ParseError> {
+    auto start_span = peek().span;
+    advance(); // consume 'throw'
+
+    // Throw requires an expression (e.g., `throw new Error("message")`)
+    auto expr = parse_expr();
+    if (is_err(expr))
+        return expr;
+
+    auto end_span = previous().span;
+    return make_box<Expr>(Expr{.kind = ThrowExpr{.expr = std::move(unwrap(expr)),
+                                                 .span = SourceSpan::merge(start_span, end_span)},
                                .span = SourceSpan::merge(start_span, end_span)});
 }
 

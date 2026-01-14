@@ -134,6 +134,74 @@ void TypeEnv::init_builtin_io() {
                 .stability = StabilityLevel::Stable,
                 .deprecated_message = "",
                 .since_version = "1.0"});
+
+    // ============ assert_ne ============
+    // assert_ne[T](left: T, right: T, message: Str) -> Unit
+
+    // assert_ne(left: I32, right: I32, message: Str) -> Unit
+    functions_["assert_ne"].push_back(
+        FuncSig{.name = "assert_ne",
+                .params = {make_primitive(PrimitiveKind::I32), make_primitive(PrimitiveKind::I32),
+                           make_primitive(PrimitiveKind::Str)},
+                .return_type = make_unit(),
+                .type_params = {},
+                .is_async = false,
+                .span = builtin_span,
+                .stability = StabilityLevel::Stable,
+                .deprecated_message = "",
+                .since_version = "1.0"});
+
+    // assert_ne(left: I64, right: I64, message: Str) -> Unit
+    functions_["assert_ne"].push_back(
+        FuncSig{.name = "assert_ne",
+                .params = {make_primitive(PrimitiveKind::I64), make_primitive(PrimitiveKind::I64),
+                           make_primitive(PrimitiveKind::Str)},
+                .return_type = make_unit(),
+                .type_params = {},
+                .is_async = false,
+                .span = builtin_span,
+                .stability = StabilityLevel::Stable,
+                .deprecated_message = "",
+                .since_version = "1.0"});
+
+    // assert_ne(left: Bool, right: Bool, message: Str) -> Unit
+    functions_["assert_ne"].push_back(
+        FuncSig{.name = "assert_ne",
+                .params = {make_primitive(PrimitiveKind::Bool), make_primitive(PrimitiveKind::Bool),
+                           make_primitive(PrimitiveKind::Str)},
+                .return_type = make_unit(),
+                .type_params = {},
+                .is_async = false,
+                .span = builtin_span,
+                .stability = StabilityLevel::Stable,
+                .deprecated_message = "",
+                .since_version = "1.0"});
+
+    // assert_ne(left: Str, right: Str, message: Str) -> Unit
+    functions_["assert_ne"].push_back(
+        FuncSig{.name = "assert_ne",
+                .params = {make_primitive(PrimitiveKind::Str), make_primitive(PrimitiveKind::Str),
+                           make_primitive(PrimitiveKind::Str)},
+                .return_type = make_unit(),
+                .type_params = {},
+                .is_async = false,
+                .span = builtin_span,
+                .stability = StabilityLevel::Stable,
+                .deprecated_message = "",
+                .since_version = "1.0"});
+
+    // assert_ne(left: F64, right: F64, message: Str) -> Unit
+    functions_["assert_ne"].push_back(
+        FuncSig{.name = "assert_ne",
+                .params = {make_primitive(PrimitiveKind::F64), make_primitive(PrimitiveKind::F64),
+                           make_primitive(PrimitiveKind::Str)},
+                .return_type = make_unit(),
+                .type_params = {},
+                .is_async = false,
+                .span = builtin_span,
+                .stability = StabilityLevel::Stable,
+                .deprecated_message = "",
+                .since_version = "1.0"});
 }
 
 } // namespace tml::types

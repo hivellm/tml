@@ -1007,10 +1007,11 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
     }
 
     // Continue parsing path segments
+    // Support both :: (module style) and . (namespace style) separators
     std::optional<std::vector<std::string>> symbols;
     bool is_glob = false;
 
-    while (match(lexer::TokenKind::ColonColon)) {
+    while (match(lexer::TokenKind::ColonColon) || match(lexer::TokenKind::Dot)) {
         // Check for glob import: *
         if (match(lexer::TokenKind::Star)) {
             is_glob = true;
@@ -1048,7 +1049,7 @@ auto Parser::parse_use_decl(Visibility vis) -> Result<DeclPtr, ParseError> {
             break;
         }
 
-        auto seg = expect(lexer::TokenKind::Identifier, "Expected identifier after '::'");
+        auto seg = expect(lexer::TokenKind::Identifier, "Expected identifier after path separator");
         if (is_err(seg))
             return unwrap_err(seg);
         path.segments.push_back(std::string(unwrap(seg).lexeme));
@@ -1279,8 +1280,11 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
         return unwrap_err(pattern_result);
     auto pattern = std::move(unwrap(pattern_result));
 
-    // Special case: 'this' or 'mut this' parameter doesn't require a type annotation
-    bool is_this_param = pattern->is<IdentPattern>() && pattern->as<IdentPattern>().name == "this";
+    // Special case: 'this'/'self' or 'mut this'/'mut self' parameter doesn't require a type annotation
+    // Note: 'self' is accepted as an alias for 'this' (Rust compatibility)
+    bool is_this_param = pattern->is<IdentPattern>() &&
+                         (pattern->as<IdentPattern>().name == "this" ||
+                          pattern->as<IdentPattern>().name == "self");
 
     if (is_this_param && !check(lexer::TokenKind::Colon)) {
         auto span = pattern->span;

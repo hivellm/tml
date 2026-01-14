@@ -64,6 +64,12 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         return;
     }
 
+    // If class has generic parameters, defer generation until instantiation
+    if (!c.generics.empty()) {
+        pending_generic_classes_[c.name] = &c;
+        return;
+    }
+
     // Generate LLVM type name
     std::string type_name = "%class." + c.name;
 
@@ -234,6 +240,14 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         static_fields_[c.name + "." + field.name] = {global_name, field_type};
     }
 
+    // Register properties for getter/setter lookup during field access
+    for (const auto& prop : c.properties) {
+        std::string prop_key = c.name + "." + prop.name;
+        std::string prop_llvm_type = llvm_type_ptr(prop.type);
+        class_properties_[prop_key] = {prop.name, prop_llvm_type, prop.has_getter, prop.has_setter,
+                                        prop.is_static};
+    }
+
     // Generate vtable
     gen_class_vtable(c);
 
@@ -245,6 +259,109 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     // Generate methods
     for (const auto& method : c.methods) {
         gen_class_method(c, method);
+    }
+
+    // Generate property getter/setter methods
+    for (const auto& prop : c.properties) {
+        gen_class_property(c, prop);
+    }
+
+    // Generate interface vtables for implemented interfaces
+    if (!c.is_abstract) {
+        gen_interface_vtables(c);
+    }
+}
+
+// ============================================================================
+// Interface Vtable Generation
+// ============================================================================
+
+void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
+    // For each implemented interface, generate a separate vtable
+    for (const auto& iface_path : c.implements) {
+        if (iface_path.segments.empty())
+            continue;
+        std::string iface_name = iface_path.segments.back();
+
+        // Get interface method order
+        auto iface_methods_it = interface_method_order_.find(iface_name);
+        if (iface_methods_it == interface_method_order_.end()) {
+            // Try behavior method order (interfaces may be registered as behaviors)
+            iface_methods_it = behavior_method_order_.find(iface_name);
+            if (iface_methods_it == behavior_method_order_.end()) {
+                continue;
+            }
+        }
+
+        const auto& iface_methods = iface_methods_it->second;
+        if (iface_methods.empty())
+            continue;
+
+        // Generate vtable type for this interface (if not already emitted)
+        std::string vtable_type_name = "%vtable." + iface_name;
+        if (emitted_interface_vtable_types_.find(iface_name) ==
+            emitted_interface_vtable_types_.end()) {
+            std::string vtable_type = vtable_type_name + " = type { ";
+            for (size_t i = 0; i < iface_methods.size(); ++i) {
+                if (i > 0)
+                    vtable_type += ", ";
+                vtable_type += "ptr";
+            }
+            vtable_type += " }";
+            emit_line(vtable_type);
+            emitted_interface_vtable_types_.insert(iface_name);
+        }
+
+        // Generate vtable global for this class implementing the interface
+        // Name format: @vtable.<ClassName>.<InterfaceName>
+        std::string vtable_name = "@vtable." + c.name + "." + iface_name;
+        std::string vtable_value = "{ ";
+
+        for (size_t i = 0; i < iface_methods.size(); ++i) {
+            if (i > 0)
+                vtable_value += ", ";
+
+            // Find the method implementation in the class
+            std::string method_name = iface_methods[i];
+            std::string impl_class = c.name;
+
+            // Check if the method exists in this class or its parent
+            bool found = false;
+            std::string current_class = c.name;
+            while (!current_class.empty() && !found) {
+                auto class_def = env_.lookup_class(current_class);
+                if (class_def) {
+                    for (const auto& method : class_def->methods) {
+                        if (method.sig.name == method_name) {
+                            impl_class = current_class;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found && class_def->base_class) {
+                        current_class = *class_def->base_class;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if (found) {
+                vtable_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + method_name;
+            } else {
+                // Method not found - emit null (should be caught by type checker)
+                vtable_value += "ptr null";
+            }
+        }
+
+        vtable_value += " }";
+        emit_line(vtable_name + " = internal constant " + vtable_type_name + " " + vtable_value);
+
+        // Store interface vtable offset for casting
+        // This maps (ClassName, InterfaceName) -> vtable global name
+        interface_vtables_[c.name + "::" + iface_name] = vtable_name;
     }
 }
 
@@ -347,7 +464,6 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
 
 void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
                                       const parser::ConstructorDecl& ctor) {
-    std::string func_name = "@tml_" + get_suite_prefix() + c.name + "_new";
     std::string class_type = "%class." + c.name;
 
     // Build parameter list
@@ -358,6 +474,37 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
         param_types.push_back(llvm_type_ptr(param.type));
         param_names.push_back(get_class_param_name(param));
     }
+
+    // Generate unique constructor name based on parameter types (for overloading)
+    // Format: ClassName_new or ClassName_new_Type1_Type2 for overloaded constructors
+    std::string func_name = "@tml_" + get_suite_prefix() + c.name + "_new";
+    if (!param_types.empty()) {
+        for (const auto& pt : param_types) {
+            // Convert LLVM type to simple name for mangling: i32 -> I32, ptr -> ptr, etc.
+            std::string type_suffix = pt;
+            if (type_suffix == "i8") type_suffix = "I8";
+            else if (type_suffix == "i16") type_suffix = "I16";
+            else if (type_suffix == "i32") type_suffix = "I32";
+            else if (type_suffix == "i64") type_suffix = "I64";
+            else if (type_suffix == "i128") type_suffix = "I128";
+            else if (type_suffix == "float") type_suffix = "F32";
+            else if (type_suffix == "double") type_suffix = "F64";
+            else if (type_suffix == "i1") type_suffix = "Bool";
+            // For ptr types and complex types, use "ptr"
+            else if (type_suffix.find("ptr") != std::string::npos || type_suffix.find("%") != std::string::npos)
+                type_suffix = "ptr";
+            func_name += "_" + type_suffix;
+        }
+    }
+
+    // Register constructor in functions_ map for lookup during calls
+    std::string ctor_key = c.name + "_new";
+    if (!param_types.empty()) {
+        for (const auto& pt : param_types) {
+            ctor_key += "_" + pt;
+        }
+    }
+    functions_[ctor_key] = FuncInfo{func_name, "ptr", "ptr", param_types};
 
     // Function signature - returns class pointer
     std::string sig = "define " + class_type + "* " + func_name + "(";
@@ -384,7 +531,6 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
     // Call base constructor if specified
     if (ctor.base_args && c.extends) {
         std::string base_name = c.extends->segments.back();
-        std::string base_ctor_name = "@tml_" + get_suite_prefix() + base_name + "_new";
 
         // Generate arguments for base constructor
         std::vector<std::string> base_args;
@@ -393,6 +539,29 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
             base_args.push_back(gen_expr(*arg));
             // Use the type from gen_expr which sets last_expr_type_
             base_arg_types.push_back(last_expr_type_.empty() ? "i64" : last_expr_type_);
+        }
+
+        // Resolve overloaded base constructor
+        std::string base_ctor_key = base_name + "_new";
+        if (!base_arg_types.empty()) {
+            for (const auto& at : base_arg_types) {
+                base_ctor_key += "_" + at;
+            }
+        }
+
+        std::string base_ctor_name;
+        auto func_it = functions_.find(base_ctor_key);
+        if (func_it != functions_.end()) {
+            base_ctor_name = func_it->second.llvm_name;
+        } else {
+            // Fallback: try without overload suffix
+            auto default_it = functions_.find(base_name + "_new");
+            if (default_it != functions_.end()) {
+                base_ctor_name = default_it->second.llvm_name;
+            } else {
+                // Last resort: generate basic name
+                base_ctor_name = "@tml_" + get_suite_prefix() + base_name + "_new";
+            }
         }
 
         // Call base constructor
@@ -450,6 +619,208 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
     emit_line("  ret " + class_type + "* " + obj);
     emit_line("}");
     emit_line("");
+}
+
+// ============================================================================
+// Generic Class Instantiation Helpers
+// ============================================================================
+
+void LLVMIRGen::gen_class_constructor_instantiation(
+    [[maybe_unused]] const parser::ClassDecl& c, const parser::ConstructorDecl& ctor,
+    const std::string& mangled_name,
+    const std::unordered_map<std::string, types::TypePtr>& type_subs) {
+
+    std::string class_type = "%class." + mangled_name;
+
+    // Save current type subs and set new ones
+    auto saved_subs = current_type_subs_;
+    current_type_subs_ = type_subs;
+
+    // Build parameter list with type substitution
+    std::vector<std::string> param_types;
+    std::vector<std::string> param_names;
+
+    for (const auto& param : ctor.params) {
+        auto resolved = resolve_parser_type_with_subs(*param.type, type_subs);
+        param_types.push_back(llvm_type_from_semantic(resolved));
+        param_names.push_back(get_class_param_name(param));
+    }
+
+    // Generate unique constructor name based on parameter types (for overloading)
+    std::string func_name = "@tml_" + get_suite_prefix() + mangled_name + "_new";
+    if (!param_types.empty()) {
+        for (const auto& pt : param_types) {
+            std::string type_suffix = pt;
+            if (type_suffix == "i8") type_suffix = "I8";
+            else if (type_suffix == "i16") type_suffix = "I16";
+            else if (type_suffix == "i32") type_suffix = "I32";
+            else if (type_suffix == "i64") type_suffix = "I64";
+            else if (type_suffix == "i128") type_suffix = "I128";
+            else if (type_suffix == "float") type_suffix = "F32";
+            else if (type_suffix == "double") type_suffix = "F64";
+            else if (type_suffix == "i1") type_suffix = "Bool";
+            else if (type_suffix.find("ptr") != std::string::npos ||
+                     type_suffix.find("%") != std::string::npos)
+                type_suffix = "ptr";
+            func_name += "_" + type_suffix;
+        }
+    }
+
+    // Register constructor in functions_ map
+    std::string ctor_key = mangled_name + "_new";
+    if (!param_types.empty()) {
+        for (const auto& pt : param_types) {
+            ctor_key += "_" + pt;
+        }
+    }
+    functions_[ctor_key] = FuncInfo{func_name, "ptr", "ptr", param_types};
+
+    // Function signature
+    std::string sig = "define " + class_type + "* " + func_name + "(";
+    for (size_t i = 0; i < param_types.size(); ++i) {
+        if (i > 0) sig += ", ";
+        sig += param_types[i] + " %" + param_names[i];
+    }
+    sig += ")";
+    emit_line(sig + " {");
+    emit_line("entry:");
+
+    // Allocate object
+    std::string obj = fresh_reg();
+    emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type +
+              "* getelementptr (" + class_type + ", " + class_type + "* null, i32 1) to i64))");
+
+    // Initialize vtable pointer
+    std::string vtable_ptr = fresh_reg();
+    emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
+              ", i32 0, i32 0");
+    emit_line("  store ptr @vtable." + mangled_name + ", ptr " + vtable_ptr);
+
+    // Generate constructor body
+    if (ctor.body) {
+        locals_["this"] = VarInfo{obj, class_type + "*", nullptr, std::nullopt};
+
+        for (size_t i = 0; i < param_names.size(); ++i) {
+            locals_[param_names[i]] =
+                VarInfo{"%" + param_names[i], param_types[i], nullptr, std::nullopt};
+        }
+
+        for (const auto& stmt : ctor.body->stmts) {
+            gen_stmt(*stmt);
+        }
+
+        if (ctor.body->expr.has_value()) {
+            gen_expr(*ctor.body->expr.value());
+        }
+
+        locals_.erase("this");
+    }
+
+    emit_line("  ret " + class_type + "* " + obj);
+    emit_line("}");
+    emit_line("");
+
+    // Restore type subs
+    current_type_subs_ = saved_subs;
+}
+
+void LLVMIRGen::gen_class_method_instantiation(
+    [[maybe_unused]] const parser::ClassDecl& c, const parser::ClassMethod& method,
+    const std::string& mangled_name,
+    const std::unordered_map<std::string, types::TypePtr>& type_subs) {
+
+    if (method.is_abstract) {
+        return;
+    }
+
+    // Save and set type substitutions
+    auto saved_subs = current_type_subs_;
+    current_type_subs_ = type_subs;
+
+    std::string func_name = "@tml_" + get_suite_prefix() + mangled_name + "_" + method.name;
+    std::string class_type = "%class." + mangled_name;
+
+    // Build parameter list with type substitution
+    std::vector<std::string> param_types;
+    std::vector<std::string> param_names;
+
+    if (!method.is_static) {
+        param_types.push_back("ptr");
+        param_names.push_back("this");
+    }
+
+    for (const auto& param : method.params) {
+        std::string pname = get_class_param_name(param);
+        if (pname == "this") continue;
+
+        auto resolved = resolve_parser_type_with_subs(*param.type, type_subs);
+        param_types.push_back(llvm_type_from_semantic(resolved));
+        param_names.push_back(pname);
+    }
+
+    // Return type with substitution
+    std::string ret_type = "void";
+    if (method.return_type) {
+        auto resolved = resolve_parser_type_with_subs(**method.return_type, type_subs);
+        ret_type = llvm_type_from_semantic(resolved);
+    }
+
+    // Function signature
+    std::string sig = "define " + ret_type + " " + func_name + "(";
+    for (size_t i = 0; i < param_types.size(); ++i) {
+        if (i > 0) sig += ", ";
+        sig += param_types[i] + " %" + param_names[i];
+    }
+    sig += ")";
+    emit_line(sig + " {");
+    emit_line("entry:");
+
+    // Set up locals
+    for (size_t i = 0; i < param_names.size(); ++i) {
+        auto sem_type = std::make_shared<types::Type>();
+        if (param_names[i] == "this") {
+            sem_type->kind = types::ClassType{mangled_name};
+        }
+        locals_[param_names[i]] = VarInfo{"%" + param_names[i], param_types[i], sem_type, std::nullopt};
+    }
+
+    // Generate body
+    if (method.body) {
+        for (const auto& stmt : method.body->stmts) {
+            gen_stmt(*stmt);
+        }
+
+        if (method.body->expr.has_value()) {
+            std::string result = gen_expr(*method.body->expr.value());
+            if (ret_type != "void") {
+                emit_line("  ret " + ret_type + " " + result);
+            }
+        } else if (ret_type != "void") {
+            // Default return
+            if (ret_type == "i64" || ret_type == "i32" || ret_type == "i1") {
+                emit_line("  ret " + ret_type + " 0");
+            } else {
+                emit_line("  ret " + ret_type + " zeroinitializer");
+            }
+        }
+    }
+
+    if (ret_type == "void") {
+        emit_line("  ret void");
+    }
+    emit_line("}");
+    emit_line("");
+
+    // Restore type substitutions
+    current_type_subs_ = saved_subs;
+
+    // Clean up locals
+    for (const auto& name : param_names) {
+        locals_.erase(name);
+    }
+
+    // Register method in functions_ map
+    functions_[mangled_name + "_" + method.name] = FuncInfo{func_name, ret_type, ret_type, param_types};
 }
 
 // ============================================================================
@@ -813,14 +1184,36 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
         return "null";
     }
 
-    // Generate constructor call
-    std::string ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
-
+    // Generate arguments and track types for constructor overload resolution
     std::vector<std::string> args;
     std::vector<std::string> arg_types;
     for (const auto& arg : new_expr.args) {
         args.push_back(gen_expr(*arg));
         arg_types.push_back(last_expr_type_.empty() ? "i64" : last_expr_type_);
+    }
+
+    // Build constructor lookup key based on argument types (for overload resolution)
+    std::string ctor_key = class_name + "_new";
+    if (!arg_types.empty()) {
+        for (const auto& at : arg_types) {
+            ctor_key += "_" + at;
+        }
+    }
+
+    // Look up the constructor in functions_ map to get mangled name
+    std::string ctor_name;
+    auto func_it = functions_.find(ctor_key);
+    if (func_it != functions_.end()) {
+        ctor_name = func_it->second.llvm_name;
+    } else {
+        // Fallback: try without overload suffix for default constructor
+        auto default_it = functions_.find(class_name + "_new");
+        if (default_it != functions_.end()) {
+            ctor_name = default_it->second.llvm_name;
+        } else {
+            // Last resort: generate basic name
+            ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
+        }
     }
 
     std::string result = fresh_reg();
@@ -834,6 +1227,154 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
     emit_line(call);
 
     return result;
+}
+
+// ============================================================================
+// Property Getter/Setter Generation
+// ============================================================================
+
+void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::PropertyDecl& prop) {
+    std::string class_type = "%class." + c.name;
+    std::string prop_type = llvm_type_ptr(prop.type);
+
+    // Generate getter if present
+    if (prop.has_getter) {
+        std::string getter_name = "@tml_" + get_suite_prefix() + c.name + "_get_" + prop.name;
+
+        // Getter signature: (this: ptr) -> PropertyType
+        std::string sig;
+        if (prop.is_static) {
+            sig = "define " + prop_type + " " + getter_name + "()";
+        } else {
+            sig = "define " + prop_type + " " + getter_name + "(ptr %this)";
+        }
+        emit_line(sig + " {");
+        emit_line("entry:");
+
+        if (prop.getter) {
+            // Set up 'this' for non-static properties
+            if (!prop.is_static) {
+                auto this_type = std::make_shared<types::Type>();
+                this_type->kind = types::ClassType{c.name};
+                locals_["this"] = VarInfo{"%this", "ptr", this_type, std::nullopt};
+            }
+
+            // Generate getter expression body
+            std::string result = gen_expr(**prop.getter);
+            emit_line("  ret " + prop_type + " " + result);
+
+            if (!prop.is_static) {
+                locals_.erase("this");
+            }
+        } else {
+            // No explicit getter body - generate default field access
+            // Find backing field (typically _name or same as property)
+            std::string backing_field = "_" + prop.name;
+            bool found = false;
+            int field_idx = -1;
+            std::string field_type_str;
+
+            // Look for backing field
+            for (const auto& field_info : class_fields_[c.name]) {
+                if (field_info.name == backing_field || field_info.name == prop.name) {
+                    field_idx = field_info.index;
+                    field_type_str = field_info.llvm_type;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) {
+                std::string field_ptr = fresh_reg();
+                emit_line("  " + field_ptr + " = getelementptr " + class_type + ", ptr %this, i32 0, i32 " +
+                          std::to_string(field_idx));
+                std::string value = fresh_reg();
+                emit_line("  " + value + " = load " + prop_type + ", ptr " + field_ptr);
+                emit_line("  ret " + prop_type + " " + value);
+            } else {
+                // Return zero-initialized value as fallback
+                emit_line("  ret " + prop_type + " zeroinitializer");
+            }
+        }
+
+        emit_line("}");
+        emit_line("");
+
+        // Register getter function
+        std::string getter_sig = prop_type + " (" + std::string(prop.is_static ? "" : "ptr") + ")";
+        std::vector<std::string> getter_params = prop.is_static ? std::vector<std::string>{}
+                                                                 : std::vector<std::string>{"ptr"};
+        functions_[c.name + "_get_" + prop.name] = FuncInfo{getter_name, getter_sig, prop_type, getter_params};
+    }
+
+    // Generate setter if present
+    if (prop.has_setter) {
+        std::string setter_name = "@tml_" + get_suite_prefix() + c.name + "_set_" + prop.name;
+
+        // Setter signature: (this: ptr, value: PropertyType) -> void
+        std::string sig;
+        if (prop.is_static) {
+            sig = "define void " + setter_name + "(" + prop_type + " %value)";
+        } else {
+            sig = "define void " + setter_name + "(ptr %this, " + prop_type + " %value)";
+        }
+        emit_line(sig + " {");
+        emit_line("entry:");
+
+        if (prop.setter) {
+            // Set up 'this' and 'value' for the setter body
+            if (!prop.is_static) {
+                auto this_type = std::make_shared<types::Type>();
+                this_type->kind = types::ClassType{c.name};
+                locals_["this"] = VarInfo{"%this", "ptr", this_type, std::nullopt};
+            }
+
+            // 'value' is the implicit parameter in setter
+            auto value_type = resolve_parser_type_with_subs(*prop.type, {});
+            locals_["value"] = VarInfo{"%value", prop_type, value_type, std::nullopt};
+
+            // Generate setter expression body
+            gen_expr(**prop.setter);
+
+            locals_.erase("value");
+            if (!prop.is_static) {
+                locals_.erase("this");
+            }
+        } else {
+            // No explicit setter body - generate default field store
+            std::string backing_field = "_" + prop.name;
+            bool found = false;
+            int field_idx = -1;
+
+            for (const auto& field_info : class_fields_[c.name]) {
+                if (field_info.name == backing_field || field_info.name == prop.name) {
+                    field_idx = field_info.index;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) {
+                std::string field_ptr = fresh_reg();
+                emit_line("  " + field_ptr + " = getelementptr " + class_type + ", ptr %this, i32 0, i32 " +
+                          std::to_string(field_idx));
+                emit_line("  store " + prop_type + " %value, ptr " + field_ptr);
+            }
+        }
+
+        emit_line("  ret void");
+        emit_line("}");
+        emit_line("");
+
+        // Register setter function
+        std::vector<std::string> setter_params = prop.is_static ? std::vector<std::string>{prop_type}
+                                                                 : std::vector<std::string>{"ptr", prop_type};
+        std::string setter_sig = std::string("void (") + (prop.is_static ? "" : "ptr, ") + prop_type + ")";
+        functions_[c.name + "_set_" + prop.name] = FuncInfo{setter_name, setter_sig, "void", setter_params};
+    }
+
+    // Clear locals after property generation
+    locals_.clear();
 }
 
 } // namespace tml::codegen

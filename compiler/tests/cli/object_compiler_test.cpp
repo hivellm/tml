@@ -1,6 +1,6 @@
 // Object compiler unit tests
-// Uses relative path to src/cli/ headers since they're not in include/
-#include "../../src/cli/object_compiler.hpp"
+// Uses relative path to src/cli/builder/ headers since they're not in include/
+#include "../../src/cli/builder/object_compiler.hpp"
 
 #include <filesystem>
 #include <fstream>

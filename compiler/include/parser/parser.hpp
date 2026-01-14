@@ -396,6 +396,9 @@ private:
     /// Parses return expression.
     auto parse_return_expr() -> Result<ExprPtr, ParseError>;
 
+    /// Parses throw expression: `throw expr`
+    auto parse_throw_expr() -> Result<ExprPtr, ParseError>;
+
     /// Parses break expression.
     auto parse_break_expr() -> Result<ExprPtr, ParseError>;
 

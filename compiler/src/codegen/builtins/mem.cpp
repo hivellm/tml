@@ -37,9 +37,20 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
     if (fn_name == "alloc") {
         if (!call.args.empty()) {
             std::string size = gen_expr(*call.args[0]);
+            std::string size_type = last_expr_type_;
             std::string result = fresh_reg();
-            // Size is already i64
-            emit_line("  " + result + " = call ptr @malloc(i64 " + size + ")");
+
+            // If size is i32, it's the count variant - multiply by 4 (sizeof I32)
+            if (size_type == "i32") {
+                std::string byte_size = fresh_reg();
+                std::string size_ext = fresh_reg();
+                emit_line("  " + size_ext + " = sext i32 " + size + " to i64");
+                emit_line("  " + byte_size + " = mul i64 " + size_ext + ", 4");
+                emit_line("  " + result + " = call ptr @malloc(i64 " + byte_size + ")");
+            } else {
+                // Size is already i64
+                emit_line("  " + result + " = call ptr @malloc(i64 " + size + ")");
+            }
             last_expr_type_ = "ptr";
             return result;
         }
@@ -166,7 +177,7 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
         return "0";
     }
 
-    // mem_eq(a: *Unit, b: *Unit, size: I64) -> Bool (I32)
+    // mem_eq(a: *Unit, b: *Unit, size: I64) -> Bool
     if (fn_name == "mem_eq") {
         if (call.args.size() >= 3) {
             std::string a = gen_expr(*call.args[0]);
@@ -175,15 +186,19 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @mem_eq(ptr " + a + ", ptr " + b + ", i64 " +
                       size + ")");
-            last_expr_type_ = "i32";
-            return result;
+            // Convert i32 result to i1 (Bool) - mem_eq returns 1 if equal, 0 if not equal
+            // So we compare with 0 to check if non-zero (true if equal)
+            std::string bool_result = fresh_reg();
+            emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
+            return bool_result;
         }
-        last_expr_type_ = "i32";
+        last_expr_type_ = "i1";
         return "0";
     }
 
     // Read from memory: read_i32(ptr) -> I32
-    if (fn_name == "read_i32" && !env_.lookup_func("read_i32").has_value()) {
+    if (fn_name == "read_i32") {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -196,7 +211,7 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
     }
 
     // Write to memory: write_i32(ptr, value)
-    if (fn_name == "write_i32" && !env_.lookup_func("write_i32").has_value()) {
+    if (fn_name == "write_i32") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string val = gen_expr(*call.args[1]);
@@ -206,12 +221,19 @@ auto LLVMIRGen::try_gen_builtin_mem(const std::string& fn_name, const parser::Ca
     }
 
     // Pointer offset: ptr_offset(ptr, offset) -> ptr
-    if (fn_name == "ptr_offset" && !env_.lookup_func("ptr_offset").has_value()) {
+    if (fn_name == "ptr_offset") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string offset = gen_expr(*call.args[1]);
+            std::string offset_type = last_expr_type_;
             std::string result = fresh_reg();
-            emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i32 " + offset);
+            // Convert offset to i64 if needed
+            std::string offset64 = offset;
+            if (offset_type == "i32") {
+                offset64 = fresh_reg();
+                emit_line("  " + offset64 + " = sext i32 " + offset + " to i64");
+            }
+            emit_line("  " + result + " = getelementptr i32, ptr " + ptr + ", i64 " + offset64);
             last_expr_type_ = "ptr";
             return result;
         }

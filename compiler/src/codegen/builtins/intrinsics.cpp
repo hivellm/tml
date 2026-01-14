@@ -113,10 +113,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     static const std::unordered_set<std::string> intrinsics = {
         "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
         "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
-        "size_of", "align_of", "type_name", "type_id", "ptr_offset", "ptr_read", "ptr_write",
-        "ptr_copy", "volatile_read", "volatile_write", "atomic_load", "atomic_store", "atomic_cas",
-        "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and", "atomic_or", "atomic_xor",
-        "fence", "black_box",
+        "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
+        "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "volatile_read", "volatile_write",
+        "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
+        "atomic_and", "atomic_or", "atomic_xor", "fence", "black_box",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
 
@@ -494,21 +494,50 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ptr_offset[T](ptr: Ptr[T], count: I64) -> Ptr[T]
+    // Also handles ptr_offset(ptr: mut ref T, count: I32) -> mut ref T for memory tests
     if (fn_name == "ptr_offset") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
 
-            // Infer element type
-            std::string elem_type = "i8"; // Default
+            // Infer element type from Ptr[T] or ref T
+            // Default to i32 for *Unit (void*) to match I32-sized memory operations
+            std::string elem_type = "i32";
             types::TypePtr arg_type = infer_expr_type(*call.args[0]);
-            if (arg_type->is<types::PtrType>()) {
-                elem_type = llvm_type_from_semantic(arg_type->as<types::PtrType>().inner);
+            if (arg_type) {
+                auto is_unit_type = [](const types::TypePtr& t) {
+                    if (t && t->is<types::PrimitiveType>()) {
+                        return t->as<types::PrimitiveType>().kind == types::PrimitiveKind::Unit;
+                    }
+                    return false;
+                };
+
+                if (arg_type->is<types::PtrType>()) {
+                    auto inner = arg_type->as<types::PtrType>().inner;
+                    // For *Unit (void*), default to i32 (for I32 memory operations)
+                    if (!is_unit_type(inner)) {
+                        elem_type = llvm_type_from_semantic(inner);
+                    }
+                } else if (arg_type->is<types::RefType>()) {
+                    auto inner = arg_type->as<types::RefType>().inner;
+                    if (!is_unit_type(inner)) {
+                        elem_type = llvm_type_from_semantic(inner);
+                    }
+                }
             }
 
             std::string count = gen_expr(*call.args[1]);
+            std::string count_type = last_expr_type_;
+
+            // Convert count to i64 if it's i32
+            std::string count64 = count;
+            if (count_type == "i32") {
+                count64 = fresh_reg();
+                emit_line("  " + count64 + " = sext i32 " + count + " to i64");
+            }
+
             std::string result = fresh_reg();
             emit_line("  " + result + " = getelementptr " + elem_type + ", ptr " + ptr + ", i64 " +
-                      count);
+                      count64);
             last_expr_type_ = "ptr";
             return result;
         }
@@ -762,23 +791,126 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // size_of[T]() -> I64
     if (fn_name == "size_of") {
-        // For now, use compile-time known sizes
-        // This would need type argument resolution for full support
-        std::string result = fresh_reg();
-        // Emit a placeholder - in practice this would be resolved at compile time
-        emit_line("  " + result + " = call i64 @llvm.sizeoftype(metadata token zeroinitializer)");
-        last_expr_type_ = "i64";
+        std::string type_llvm = "i64"; // Default
+        int size_bytes = 8;            // Default
 
-        // Simplified: return a default size
-        // In a full implementation, we'd resolve the type parameter
+        // Try to extract type argument from PathExpr generics (e.g., size_of[I32]())
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    // Resolve the type, using current type substitutions
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    type_llvm = llvm_type_from_semantic(resolved);
+
+                    // Calculate size based on LLVM type
+                    if (type_llvm == "i8")
+                        size_bytes = 1;
+                    else if (type_llvm == "i16")
+                        size_bytes = 2;
+                    else if (type_llvm == "i32" || type_llvm == "float")
+                        size_bytes = 4;
+                    else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                        size_bytes = 8;
+                    else if (type_llvm == "i128")
+                        size_bytes = 16;
+                    else if (type_llvm == "i1")
+                        size_bytes = 1;
+                    else if (type_llvm.starts_with("%struct.") || type_llvm.starts_with("%class.")) {
+                        // For structs, use GEP trick to get size
+                        std::string size_ptr = fresh_reg();
+                        std::string size_val = fresh_reg();
+                        emit_line("  " + size_ptr + " = getelementptr " + type_llvm +
+                                  ", ptr null, i32 1");
+                        emit_line("  " + size_val + " = ptrtoint ptr " + size_ptr + " to i64");
+                        last_expr_type_ = "i64";
+                        return size_val;
+                    }
+                }
+            }
+        }
+
         last_expr_type_ = "i64";
-        return "8"; // Placeholder
+        return std::to_string(size_bytes);
     }
 
-    // align_of[T]() -> I64
-    if (fn_name == "align_of") {
+    // align_of[T]() / alignof_type[T]() -> I64
+    if (fn_name == "align_of" || fn_name == "alignof_type") {
+        int align_bytes = 8; // Default
+
+        // Try to extract type argument from PathExpr generics
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    std::string type_llvm = llvm_type_from_semantic(resolved);
+
+                    // Calculate alignment based on LLVM type
+                    if (type_llvm == "i8" || type_llvm == "i1")
+                        align_bytes = 1;
+                    else if (type_llvm == "i16")
+                        align_bytes = 2;
+                    else if (type_llvm == "i32" || type_llvm == "float")
+                        align_bytes = 4;
+                    else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                        align_bytes = 8;
+                    else if (type_llvm == "i128")
+                        align_bytes = 16;
+                    // For structs/classes, use 8 as default (pointer alignment)
+                }
+            }
+        }
+
         last_expr_type_ = "i64";
-        return "8"; // Placeholder - would need type resolution
+        return std::to_string(align_bytes);
+    }
+
+    // sizeof_type[T]() -> I64 (alias for size_of)
+    if (fn_name == "sizeof_type") {
+        // Reuse size_of logic - same implementation needed
+        int size_bytes = 8;
+
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path_expr = call.callee->as<parser::PathExpr>();
+            if (path_expr.generics && !path_expr.generics->args.empty()) {
+                const auto& first_arg = path_expr.generics->args[0];
+                if (first_arg.is_type()) {
+                    auto resolved =
+                        resolve_parser_type_with_subs(*first_arg.as_type(), current_type_subs_);
+                    std::string type_llvm = llvm_type_from_semantic(resolved);
+
+                    if (type_llvm == "i8")
+                        size_bytes = 1;
+                    else if (type_llvm == "i16")
+                        size_bytes = 2;
+                    else if (type_llvm == "i32" || type_llvm == "float")
+                        size_bytes = 4;
+                    else if (type_llvm == "i64" || type_llvm == "double" || type_llvm == "ptr")
+                        size_bytes = 8;
+                    else if (type_llvm == "i128")
+                        size_bytes = 16;
+                    else if (type_llvm == "i1")
+                        size_bytes = 1;
+                    else if (type_llvm.starts_with("%struct.") || type_llvm.starts_with("%class.")) {
+                        std::string size_ptr = fresh_reg();
+                        std::string size_val = fresh_reg();
+                        emit_line("  " + size_ptr + " = getelementptr " + type_llvm +
+                                  ", ptr null, i32 1");
+                        emit_line("  " + size_val + " = ptrtoint ptr " + size_ptr + " to i64");
+                        last_expr_type_ = "i64";
+                        return size_val;
+                    }
+                }
+            }
+        }
+
+        last_expr_type_ = "i64";
+        return std::to_string(size_bytes);
     }
 
     // type_id[T]() -> U64
@@ -1050,16 +1182,24 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // pow[T](base: T, exp: T) -> T
+    // Only use LLVM intrinsic when both args are floats
+    // For integer exponent, fall through to math handler (uses @float_pow)
     if (fn_name == "pow") {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
             std::string base_type = last_expr_type_;
             std::string exp = gen_expr(*call.args[1]);
-            std::string result = fresh_reg();
-            emit_line("  " + result + " = call " + base_type + " @llvm.pow." + base_type + "(" +
-                      base_type + " " + base + ", " + base_type + " " + exp + ")");
-            last_expr_type_ = base_type;
-            return result;
+            std::string exp_type = last_expr_type_;
+            // Only use LLVM intrinsic if both arguments are the same float type
+            if ((base_type == "float" || base_type == "double") && base_type == exp_type) {
+                std::string result = fresh_reg();
+                emit_line("  " + result + " = call " + base_type + " @llvm.pow." + base_type + "(" +
+                          base_type + " " + base + ", " + base_type + " " + exp + ")");
+                last_expr_type_ = base_type;
+                return result;
+            }
+            // For integer exponent with float base, let the math handler deal with it
+            return std::nullopt;
         }
         return "1.0";
     }

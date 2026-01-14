@@ -13,11 +13,14 @@
 //! | float → float    | `fpext` or `fptrunc`          |
 //! | ptr → ptr        | `bitcast` (opaque ptrs: noop) |
 //! | int → bool       | `icmp ne 0`                   |
+//! | class → class    | Safe cast returning Maybe[T]  |
 //!
 //! ## TML Cast Syntax
 //!
 //! ```tml
-//! let x = value as I64
+//! let x = value as I64           // Primitive cast
+//! let animal = dog as Animal     // Upcast (always succeeds)
+//! let maybe_dog = animal as Dog  // Downcast (returns Maybe[Dog])
 //! ```
 
 #include "codegen/llvm_ir_gen.hpp"
@@ -168,6 +171,42 @@ auto LLVMIRGen::gen_cast(const parser::CastExpr& cast) -> std::string {
         }
     }
 
+    // Class/Interface safe casting - returns Maybe[TargetType]
+    // Check if target is a class or interface type
+    std::string target_name;
+    if (cast.target->is<parser::NamedType>()) {
+        const auto& named = cast.target->as<parser::NamedType>();
+        if (!named.path.segments.empty()) {
+            target_name = named.path.segments.back();
+        }
+    }
+
+    // Check if this is a class-to-class or class-to-interface cast
+    auto target_class_def = env_.lookup_class(target_name);
+    auto target_iface_def = env_.lookup_interface(target_name);
+
+    if (!target_name.empty() && (target_class_def || target_iface_def)) {
+        // Get the source expression's class type
+        types::TypePtr expr_type = infer_expr_type(*cast.expr);
+        std::string src_class_name;
+
+        if (expr_type && expr_type->is<types::ClassType>()) {
+            src_class_name = expr_type->as<types::ClassType>().name;
+        } else if (expr_type && expr_type->is<types::NamedType>()) {
+            // Check if this named type is actually a class
+            auto as_class = env_.lookup_class(expr_type->as<types::NamedType>().name);
+            if (as_class) {
+                src_class_name = expr_type->as<types::NamedType>().name;
+            }
+        }
+
+        if (!src_class_name.empty()) {
+            // This is a class-to-class or class-to-interface cast
+            return gen_class_safe_cast(src, src_class_name, target_name, cast.target,
+                                       target_class_def.has_value());
+        }
+    }
+
     // Fallback: bitcast for same-size types
     emit_line("  ; Warning: unhandled cast from " + src_type + " to " + target_type);
     last_expr_type_ = target_type;
@@ -251,6 +290,147 @@ auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
     emit_line("  " + result + " = icmp eq ptr " + obj_vtable + ", " + target_vtable);
 
     last_expr_type_ = "i1";
+    return result;
+}
+
+auto LLVMIRGen::gen_class_safe_cast(const std::string& src_ptr, const std::string& src_class,
+                                     const std::string& target_name,
+                                     [[maybe_unused]] const parser::TypePtr& target_type,
+                                     bool target_is_class) -> std::string {
+    // Check inheritance relationship at compile time
+    bool is_upcast = false;
+    bool is_exact_same = (src_class == target_name);
+
+    if (!is_exact_same) {
+        // Check if src_class is a subclass of target_name (upcast - always valid)
+        std::string current = src_class;
+        while (!current.empty()) {
+            auto current_def = env_.lookup_class(current);
+            if (current_def && current_def->base_class) {
+                if (current_def->base_class.value() == target_name) {
+                    is_upcast = true;
+                    break;
+                }
+                current = current_def->base_class.value();
+            } else {
+                break;
+            }
+        }
+
+        // Also check if src_class implements target interface
+        if (!is_upcast && !target_is_class) {
+            auto src_def = env_.lookup_class(src_class);
+            if (src_def) {
+                for (const auto& iface : src_def->interfaces) {
+                    if (iface == target_name) {
+                        is_upcast = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // For exact same type or upcast, just return the pointer (implicit conversion)
+    if (is_exact_same || is_upcast) {
+        last_expr_type_ = "ptr";
+        return src_ptr;
+    }
+
+    // Downcast: need runtime type check, return Maybe[TargetType]
+    // Create Maybe[TargetType] struct type
+    auto target_semantic_type = std::make_shared<types::Type>();
+    target_semantic_type->kind = types::ClassType{target_name};
+    std::vector<types::TypePtr> maybe_type_args = {target_semantic_type};
+    std::string maybe_mangled = require_enum_instantiation("Maybe", maybe_type_args);
+    std::string maybe_type = "%struct." + maybe_mangled;
+
+    // Allocate Maybe struct
+    std::string maybe_ptr = fresh_reg();
+    emit_line("  " + maybe_ptr + " = alloca " + maybe_type);
+
+    // Check if source is the target type or a subclass at runtime
+    // We need to walk the vtable chain to check inheritance
+    std::string is_valid = fresh_reg();
+
+    // For runtime check, we compare vtable pointers
+    // Load the object's vtable pointer
+    std::string vtable_ptr_ptr = fresh_reg();
+    std::string obj_vtable = fresh_reg();
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr %class." + src_class + ", ptr " + src_ptr +
+              ", i32 0, i32 0");
+    emit_line("  " + obj_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
+
+    // Check if vtable matches target or any ancestor
+    // For now, we do exact vtable comparison (will need RTTI for full inheritance check)
+    std::string target_vtable = "@vtable." + target_name;
+    emit_line("  " + is_valid + " = icmp eq ptr " + obj_vtable + ", " + target_vtable);
+
+    // Also check child classes: compare against all known subclass vtables
+    auto target_def = env_.lookup_class(target_name);
+    if (target_def) {
+        // Get all subclasses of target and check their vtables too
+        std::vector<std::string> subclass_vtables;
+        for (const auto& [class_name, class_def] : env_.all_classes()) {
+            // Check if this class is a subclass of target
+            std::string current = class_name;
+            while (!current.empty()) {
+                auto cur_def = env_.lookup_class(current);
+                if (cur_def && cur_def->base_class) {
+                    if (cur_def->base_class.value() == target_name) {
+                        subclass_vtables.push_back("@vtable." + class_name);
+                        break;
+                    }
+                    current = cur_def->base_class.value();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Check against each subclass vtable
+        for (const auto& sub_vtable : subclass_vtables) {
+            std::string sub_check = fresh_reg();
+            emit_line("  " + sub_check + " = icmp eq ptr " + obj_vtable + ", " + sub_vtable);
+            std::string combined = fresh_reg();
+            emit_line("  " + combined + " = or i1 " + is_valid + ", " + sub_check);
+            is_valid = combined;
+        }
+    }
+
+    // Branch based on validity
+    std::string label_valid = "cast_valid_" + std::to_string(label_counter_++);
+    std::string label_invalid = "cast_invalid_" + std::to_string(label_counter_++);
+    std::string label_end = "cast_end_" + std::to_string(label_counter_++);
+
+    emit_line("  br i1 " + is_valid + ", label %" + label_valid + ", label %" + label_invalid);
+
+    // Invalid: return Nothing (tag = 1)
+    emit_line(label_invalid + ":");
+    std::string tag_ptr_invalid = fresh_reg();
+    emit_line("  " + tag_ptr_invalid + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
+              ", i32 0, i32 0");
+    emit_line("  store i32 1, ptr " + tag_ptr_invalid);
+    emit_line("  br label %" + label_end);
+
+    // Valid: return Just(casted_ptr) (tag = 0)
+    emit_line(label_valid + ":");
+    std::string tag_ptr_valid = fresh_reg();
+    emit_line("  " + tag_ptr_valid + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
+              ", i32 0, i32 0");
+    emit_line("  store i32 0, ptr " + tag_ptr_valid);
+    std::string val_ptr = fresh_reg();
+    emit_line("  " + val_ptr + " = getelementptr " + maybe_type + ", ptr " + maybe_ptr +
+              ", i32 0, i32 1");
+    emit_line("  store ptr " + src_ptr + ", ptr " + val_ptr);
+    emit_line("  br label %" + label_end);
+
+    // End: load and return the Maybe struct
+    emit_line(label_end + ":");
+    std::string result = fresh_reg();
+    emit_line("  " + result + " = load " + maybe_type + ", ptr " + maybe_ptr);
+
+    last_expr_type_ = maybe_type;
     return result;
 }
 

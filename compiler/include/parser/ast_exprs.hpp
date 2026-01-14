@@ -642,6 +642,25 @@ struct AwaitExpr {
     SourceSpan span; ///< Source location.
 };
 
+/// Throw expression: `throw new Error("message")`.
+///
+/// Throws an exception/error, terminating execution with an error message.
+/// Similar to JavaScript/C# throw statements.
+///
+/// # Example
+///
+/// ```tml
+/// func validate(x: I32) {
+///     if x < 0 {
+///         throw new Error("x must be positive")
+///     }
+/// }
+/// ```
+struct ThrowExpr {
+    ExprPtr expr;    ///< Expression to throw (usually an Error).
+    SourceSpan span; ///< Source location.
+};
+
 // ============================================================================
 // Path and Lowlevel
 // ============================================================================
@@ -774,7 +793,7 @@ struct Expr {
                  IndexExpr, TupleExpr, ArrayExpr, StructExpr, IfExpr, TernaryExpr, IfLetExpr,
                  WhenExpr, LoopExpr, WhileExpr, ForExpr, BlockExpr, ReturnExpr, BreakExpr,
                  ContinueExpr, ClosureExpr, RangeExpr, CastExpr, IsExpr, TryExpr, AwaitExpr,
-                 PathExpr, LowlevelExpr, InterpolatedStringExpr, BaseExpr, NewExpr>
+                 ThrowExpr, PathExpr, LowlevelExpr, InterpolatedStringExpr, BaseExpr, NewExpr>
         kind;        ///< The expression variant.
     SourceSpan span; ///< Source location.
 

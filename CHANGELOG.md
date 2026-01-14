@@ -7,7 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Memory Pointer Type Consistency** (2026-01-14) - Unified pointer types for memory operations
+  - Changed `alloc` builtin return type from `mut ref I32` to `*Unit` (opaque pointer)
+  - Changed `dealloc` builtin parameter type to accept `*Unit`
+  - Updated `read_i32`, `write_i32`, `ptr_offset` signatures to use `*Unit`
+  - Updated `core::mem` library module to use `*Unit` consistently
+  - Fixes type mismatch errors in atomic operations and drop tests
+  - Files modified:
+    - `compiler/src/types/builtins/mem.cpp` - Updated builtin signatures
+    - `compiler/src/core/mem.tml` - Updated library declarations
+    - `compiler/src/codegen/builtins/intrinsics.cpp` - Fixed `ptr_offset` codegen for `*Unit`
+
+- **ptr_offset Codegen for Opaque Pointers** (2026-01-14) - Fixed LLVM IR generation for `*Unit` pointers
+  - `ptr_offset` with `*Unit` was generating invalid `getelementptr void` LLVM IR
+  - Now uses `i32` as element type for `*Unit` pointers (4-byte offsets for I32 semantics)
+  - Properly detects Unit type via `PrimitiveKind::Unit` check
+  - Files modified:
+    - `compiler/src/codegen/builtins/intrinsics.cpp` - Fixed element type detection
+
+- **Constant Imports from Modules** (2026-01-14) - Constants can now be imported via `use` declarations
+  - `use core::char::MAX` now correctly resolves the constant value
+  - Added constant lookup in `check_ident` when identifier not found in variables
+  - Resolves imported symbol path, finds module, looks up constant value
+  - Files modified:
+    - `compiler/src/types/checker/expr.cpp` - Added constant lookup in `check_ident`
+
+- **`self` as Alias for `this`** (2026-01-14) - Both keywords now work identically in methods
+  - `self` is now recognized as equivalent to `this` in method contexts
+  - HIR builder properly handles `self` identifier resolution
+  - Parser accepts both `self` and `this` in method signatures
+
+- **`This` Type Resolution** (2026-01-14) - Fixed `This` type in impl blocks
+  - `This` type now correctly resolves to the implementing type in HIR builder
+  - Enables patterns like `func new() -> This { ... }` in impl blocks
+
+### Changed
+- **Test Files Updated for `*Unit` Pointer Type** (2026-01-14) - Memory-related tests updated
+  - `compiler/tests/compiler/mem.test.tml` - Uses `*Unit` for alloc/dealloc
+  - `compiler/tests/compiler/memory.test.tml` - Uses `*Unit` for memory operations
+  - `compiler/tests/compiler/modules.test.tml` - Uses `*Unit` for module tests
+  - `compiler/tests/compiler/sync.test.tml` - Uses `*Unit` for atomic operations
+
 ### Added
+- **`core::cell` Module** (2026-01-14) - Interior mutability types following Rust's `core::cell` pattern
+  - New directory structure with separate files:
+    - `lib/core/src/cell/mod.tml` - Module root with re-exports
+    - `lib/core/src/cell/unsafe_cell.tml` - `UnsafeCell[T]` and `SyncUnsafeCell[T]`
+    - `lib/core/src/cell/cell.tml` - `Cell[T]` for `Duplicate` types
+    - `lib/core/src/cell/ref_cell.tml` - `RefCell[T]` with runtime borrow checking
+    - `lib/core/src/cell/once.tml` - `OnceCell[T]` for write-once values
+    - `lib/core/src/cell/lazy.tml` - `LazyCell[T]` and `LazyTryCell[T, E]`
+  - Types provided:
+    - `UnsafeCell[T]` - Core primitive for interior mutability
+    - `SyncUnsafeCell[T]` - Thread-safe version (marker only)
+    - `Cell[T]` - Interior mutability for Copy types with `get()`, `set()`, `replace()`, `swap()`
+    - `RefCell[T]` - Runtime borrow checking with `borrow()`, `borrow_mut()`, `try_borrow()`
+    - `Ref[T]`, `RefMut[T]` - Borrow guards with automatic release on drop
+    - `OnceCell[T]` - Write-once cell with `get_or_init()`, `get_or_try_init()`
+    - `LazyCell[T]` - Lazy initialization with `force()`
+    - `LazyTryCell[T, E]` - Lazy with fallible initialization
+    - `BorrowError`, `BorrowMutError` - Error types for RefCell
+
+- **`core::ptr` Module Refactoring** (2026-01-14) - Restructured ptr module into separate files like Rust
+  - Split `ptr.tml` into multiple files following Rust's `core::ptr` structure:
+    - `lib/core/src/ptr/mod.tml` - Module root with re-exports and `Ptr` alias
+    - `lib/core/src/ptr/const_ptr.tml` - `RawPtr[T]` (equivalent to Rust's `*const T`)
+    - `lib/core/src/ptr/mut_ptr.tml` - `RawMutPtr[T]` (equivalent to Rust's `*mut T`)
+    - `lib/core/src/ptr/non_null.tml` - `NonNull[T]` wrapper for non-null pointers
+    - `lib/core/src/ptr/ops.tml` - Free functions: `copy`, `copy_nonoverlapping`, `write_bytes`, etc.
+    - `lib/core/src/ptr/alignment.tml` - `Alignment` type and alignment utilities
+  - Added new functionality:
+    - `Alignment` type for type-safe alignment handling
+    - `size_of[T]()`, `align_of[T]()` intrinsics
+    - `align_up()`, `align_down()`, `is_aligned_to()`, `align_offset()` functions
+    - `is_power_of_two()`, `next_power_of_two()`, `prev_power_of_two()` utilities
+    - `null[T]()`, `null_mut[T]()` factory functions
+    - `swap()`, `swap_nonoverlapping()`, `replace()` operations
+    - `zero_memory()` for zeroing memory regions
+  - `Ptr` alias remains available via `use core::ptr::Ptr`
+
+- **Collections Test Suite** (2026-01-14) - Comprehensive tests for collection builtins
+  - Added `compiler/tests/compiler/collections.test.tml` with 3 test functions
+  - Tests `list_*`, `hashmap_*`, and `buffer_*` builtin functions
+  - Uses `*Unit` opaque pointer type for collection handles
+  - All collection operations tested: create, push, pop, get, set, len, destroy
+
 - **C#-Style Object-Oriented Programming** (2026-01-13) - Full OOP implementation with classes, inheritance, and interfaces
   - **Classes**: Define classes with fields, static fields, and methods
     - `class Point { x: I32; y: I32; func get_x(this) -> I32 { ... } }`

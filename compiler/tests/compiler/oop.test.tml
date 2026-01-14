@@ -587,3 +587,137 @@ func test_multiple_method_calls_same_object() -> I32 {
     assert_eq(c.get_value(), 5, "Five increments")
     return 0
 }
+
+// ============================================================================
+// 'as' Operator Tests - Safe Class Casting
+// ============================================================================
+
+@test
+func test_as_operator_upcast() -> I32 {
+    // Upcast from Circle to Shape (always succeeds)
+    let c: Circle = Circle::create(5)
+
+    // Upcast should just return the pointer directly (no Maybe wrapping)
+    let s: Shape = c as Shape
+    assert_eq(s.area(), 0, "Upcast to Shape - base method called")
+    return 0
+}
+
+@test
+func test_as_operator_same_type() -> I32 {
+    // Cast to same type (always succeeds)
+    let c: Circle = Circle::create(7)
+
+    // Same type cast should just return the pointer directly
+    let c2: Circle = c as Circle
+    assert_eq(c2.get_radius(), 7, "Same type cast preserves value")
+    return 0
+}
+
+// ============================================================================
+// Constructor Overloading Tests
+// ============================================================================
+
+/// Class with multiple constructors (overloading)
+class Vector3D {
+    x: I32
+    y: I32
+    z: I32
+
+    // Default constructor - creates zero vector
+    new() {
+        this.x = 0
+        this.y = 0
+        this.z = 0
+    }
+
+    // Single-value constructor - creates vector with same value for all
+    new(val: I32) {
+        this.x = val
+        this.y = val
+        this.z = val
+    }
+
+    // Full constructor - creates vector with specific values
+    new(x: I32, y: I32, z: I32) {
+        this.x = x
+        this.y = y
+        this.z = z
+    }
+
+    func get_x(this) -> I32 { return this.x }
+    func get_y(this) -> I32 { return this.y }
+    func get_z(this) -> I32 { return this.z }
+
+    func magnitude_squared(this) -> I32 {
+        return this.x * this.x + this.y * this.y + this.z * this.z
+    }
+}
+
+@test
+func test_constructor_overload_default() -> I32 {
+    let v: Vector3D = Vector3D::new()
+    assert_eq(v.get_x(), 0, "Default constructor x")
+    assert_eq(v.get_y(), 0, "Default constructor y")
+    assert_eq(v.get_z(), 0, "Default constructor z")
+    return 0
+}
+
+@test
+func test_constructor_overload_single() -> I32 {
+    let v: Vector3D = Vector3D::new(5)
+    assert_eq(v.get_x(), 5, "Single-value constructor x")
+    assert_eq(v.get_y(), 5, "Single-value constructor y")
+    assert_eq(v.get_z(), 5, "Single-value constructor z")
+    return 0
+}
+
+@test
+func test_constructor_overload_full() -> I32 {
+    let v: Vector3D = Vector3D::new(1, 2, 3)
+    assert_eq(v.get_x(), 1, "Full constructor x")
+    assert_eq(v.get_y(), 2, "Full constructor y")
+    assert_eq(v.get_z(), 3, "Full constructor z")
+    assert_eq(v.magnitude_squared(), 14, "Magnitude squared: 1+4+9=14")
+    return 0
+}
+
+// ============================================================================
+// Generic Class Tests (TODO: Pending full generic class support)
+// ============================================================================
+
+// Generic classes require additional work in the instantiation pipeline.
+// The infrastructure is in place (pending_generic_classes_, require_class_instantiation,
+// gen_class_instantiation), but the type flow from let statements to constructor calls
+// needs more integration work.
+
+// /// Generic container class
+// class Box[T] {
+//     value: T
+//
+//     new(value: T) {
+//         this.value = value
+//     }
+//
+//     func get(this) -> T {
+//         return this.value
+//     }
+//
+//     func set(mut this, value: T) {
+//         this.value = value
+//     }
+// }
+//
+// @test
+// func test_generic_class_i32() -> I32 {
+//     let b: Box[I32] = Box::new(42)
+//     assert_eq(b.get(), 42, "Box[I32] should hold 42")
+//     return 0
+// }
+//
+// @test
+// func test_generic_class_i64() -> I32 {
+//     let b: Box[I64] = Box::new(999999)
+//     assert_eq(b.get() as I32, 999999, "Box[I64] should hold 999999")
+//     return 0
+// }

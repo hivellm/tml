@@ -241,8 +241,9 @@ add_library(tml_mir STATIC
     src/mir/passes/const_hoist.cpp
     src/mir/passes/simplify_select.cpp
     src/mir/passes/merge_returns.cpp
+    src/mir/passes/devirtualization.cpp
 )
-target_link_libraries(tml_mir PUBLIC tml_hir)
+target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
 target_include_directories(tml_mir PUBLIC include src)
 
 # Codegen library (LLVM IR text generator + clang backend)

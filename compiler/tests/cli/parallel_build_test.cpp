@@ -1,8 +1,8 @@
 // Parallel Build System Tests
 // Tests for DependencyGraph, BuildQueue, ParallelBuilder
 
-#include "../../src/cli/build_cache.hpp"
-#include "../../src/cli/parallel_build.hpp"
+#include "../../src/cli/builder/build_cache.hpp"
+#include "../../src/cli/builder/parallel_build.hpp"
 
 #include <chrono>
 #include <fstream>

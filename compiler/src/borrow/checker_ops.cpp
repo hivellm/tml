@@ -386,18 +386,22 @@ void BorrowChecker::check_can_mutate(PlaceId place, Location loc) {
     const auto& state = env_.get_state(place);
 
     if (!state.is_mutable) {
-        BorrowError err;
-        err.code = BorrowErrorCode::AssignNotMutable;
-        err.message = "cannot assign to `" + state.name + "` because it is not mutable";
-        err.span = loc.span;
-        err.related_span = state.definition.span;
-        err.related_message = "`" + state.name + "` is declared here";
-        err.suggestions.push_back(BorrowSuggestion{
-            .message = "consider declaring as mutable",
-            .fix = "mut " + state.name,
-        });
-        errors_.push_back(err);
-        return;
+        // Allow assignment through mutable references (mut ref T)
+        // Even if the variable itself isn't mutable, we can assign through it
+        if (!state.is_mut_ref) {
+            BorrowError err;
+            err.code = BorrowErrorCode::AssignNotMutable;
+            err.message = "cannot assign to `" + state.name + "` because it is not mutable";
+            err.span = loc.span;
+            err.related_span = state.definition.span;
+            err.related_message = "`" + state.name + "` is declared here";
+            err.suggestions.push_back(BorrowSuggestion{
+                .message = "consider declaring as mutable",
+                .fix = "mut " + state.name,
+            });
+            errors_.push_back(err);
+            return;
+        }
     }
 
     if (state.state == OwnershipState::Moved) {

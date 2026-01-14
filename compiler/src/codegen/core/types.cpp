@@ -516,7 +516,17 @@ auto LLVMIRGen::resolve_parser_type_with_subs(
                 auto class_def = env_.lookup_class(name);
                 if (class_def.has_value()) {
                     auto result = std::make_shared<types::Type>();
-                    result->kind = types::ClassType{name};
+                    // Process generic arguments for generic classes
+                    std::vector<types::TypePtr> class_type_args;
+                    if (t.generics.has_value()) {
+                        for (const auto& arg : t.generics->args) {
+                            if (arg.is_type()) {
+                                class_type_args.push_back(
+                                    resolve_parser_type_with_subs(*arg.as_type(), subs));
+                            }
+                        }
+                    }
+                    result->kind = types::ClassType{name, "", std::move(class_type_args)};
                     return result;
                 }
 

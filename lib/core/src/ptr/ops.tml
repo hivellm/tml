@@ -1,0 +1,477 @@
+//! Pointer operations and free functions.
+//!
+//! This module contains free functions for pointer manipulation,
+//! including memory copying and byte-level operations.
+
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+
+// ============================================================================
+// Size and Alignment Intrinsics
+// ============================================================================
+
+/// Returns the size of type `T` in bytes.
+///
+/// This is equivalent to `sizeof(T)` in C.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::size_of
+///
+/// let i64_size = size_of[I64]()  // 8
+/// let i32_size = size_of[I32]()  // 4
+/// let u8_size = size_of[U8]()    // 1
+/// ```
+pub func size_of[T]() -> I64 {
+    return lowlevel { sizeof_type[T]() }
+}
+
+/// Returns the alignment of type `T` in bytes.
+///
+/// This is equivalent to `alignof(T)` in C.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::align_of
+///
+/// let i64_align = align_of[I64]()  // 8
+/// let i32_align = align_of[I32]()  // 4
+/// ```
+pub func align_of[T]() -> I64 {
+    return lowlevel { alignof_type[T]() }
+}
+
+/// Returns the size of a value's type in bytes.
+///
+/// This is similar to `size_of`, but takes a value instead of a type parameter.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::size_of_val
+///
+/// let x: I64 = 42
+/// let size = size_of_val(x)  // 8
+/// ```
+pub func size_of_val[T](val: ref T) -> I64 {
+    return size_of[T]()
+}
+
+/// Returns the alignment of a value's type in bytes.
+///
+/// This is similar to `align_of`, but takes a value instead of a type parameter.
+pub func align_of_val[T](val: ref T) -> I64 {
+    return align_of[T]()
+}
+
+// ============================================================================
+// Pointer Distance
+// ============================================================================
+
+/// Calculates the distance between two pointers in elements.
+///
+/// Returns the number of elements of type `T` between `from` and `to`.
+/// The result is positive if `to` is after `from`, negative if before.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{ptr_distance, RawPtr}
+///
+/// let a = RawPtr[I64]::from_addr(0x1000)
+/// let b = RawPtr[I64]::from_addr(0x1010)  // 16 bytes later
+///
+/// let dist = ptr_distance(a, b)  // 2 (assuming 8-byte I64)
+/// ```
+///
+/// # Note
+///
+/// Returns 0 if `T` is a zero-sized type.
+pub func ptr_distance[T](start: RawPtr[T], end: RawPtr[T]) -> I64 {
+    let element_size: I64 = size_of[T]()
+    if element_size == 0 {
+        return 0
+    }
+    return (end.addr() - start.addr()) / element_size
+}
+
+/// Calculates the distance between two mutable pointers in elements.
+pub func ptr_distance_mut[T](start: RawMutPtr[T], end: RawMutPtr[T]) -> I64 {
+    let element_size: I64 = size_of[T]()
+    if element_size == 0 {
+        return 0
+    }
+    return (end.addr() - start.addr()) / element_size
+}
+
+// ============================================================================
+// Memory Copy Operations
+// ============================================================================
+
+/// Copies `count` elements from `src` to `dst`.
+///
+/// This is a fast memory copy that assumes the source and destination
+/// regions do not overlap. If they might overlap, use [`copy`] instead.
+///
+/// # Safety
+///
+/// - `src` must be valid for reading `count` elements
+/// - `dst` must be valid for writing `count` elements
+/// - The memory regions must not overlap
+/// - Both pointers must be properly aligned
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{copy_nonoverlapping, RawPtr, RawMutPtr}
+///
+/// // Copy 10 I64 values from src to dst
+/// copy_nonoverlapping(src, dst, 10)
+/// ```
+pub func copy_nonoverlapping[T](src: RawPtr[T], dst: RawMutPtr[T], count: I64) {
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    lowlevel { memcpy(dst.addr(), src.addr(), size) }
+}
+
+/// Copies `count` elements from `src` to `dst`, allowing overlap.
+///
+/// This is a safe memory copy that handles overlapping regions correctly.
+/// If you know the regions don't overlap, [`copy_nonoverlapping`] is faster.
+///
+/// # Safety
+///
+/// - `src` must be valid for reading `count` elements
+/// - `dst` must be valid for writing `count` elements
+/// - Both pointers must be properly aligned
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{copy, RawPtr, RawMutPtr}
+///
+/// // Safe even if src and dst overlap
+/// copy(src, dst, 10)
+/// ```
+pub func copy[T](src: RawPtr[T], dst: RawMutPtr[T], count: I64) {
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    lowlevel { memmove(dst.addr(), src.addr(), size) }
+}
+
+/// Copies `count` elements from one mutable pointer to another.
+///
+/// The regions may overlap.
+pub func copy_mut[T](src: RawMutPtr[T], dst: RawMutPtr[T], count: I64) {
+    copy(src.as_const(), dst, count)
+}
+
+/// Copies `count` elements from one mutable pointer to another.
+///
+/// The regions must not overlap.
+pub func copy_nonoverlapping_mut[T](src: RawMutPtr[T], dst: RawMutPtr[T], count: I64) {
+    copy_nonoverlapping(src.as_const(), dst, count)
+}
+
+// ============================================================================
+// Memory Write Operations
+// ============================================================================
+
+/// Writes `count` copies of byte `value` to memory starting at `dst`.
+///
+/// This fills memory with a repeating byte pattern. It's equivalent to
+/// C's `memset`.
+///
+/// # Safety
+///
+/// - `dst` must be valid for writing `count * sizeof(T)` bytes
+/// - `dst` must be properly aligned
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{write_bytes, RawMutPtr}
+///
+/// // Zero out 10 I64 values
+/// write_bytes(ptr, 0, 10)
+///
+/// // Fill with 0xFF pattern
+/// write_bytes(ptr, 0xFF, 10)
+/// ```
+pub func write_bytes[T](dst: RawMutPtr[T], value: U8, count: I64) {
+    if count <= 0 {
+        return
+    }
+    let size: I64 = count * size_of[T]()
+    lowlevel { memset(dst.addr(), value, size) }
+}
+
+/// Zeroes out `count` elements starting at `dst`.
+///
+/// This is equivalent to `write_bytes(dst, 0, count)`.
+///
+/// # Safety
+///
+/// - `dst` must be valid for writing `count * sizeof(T)` bytes
+/// - `dst` must be properly aligned
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{zero_memory, RawMutPtr}
+///
+/// // Zero out 10 I64 values
+/// zero_memory(ptr, 10)
+/// ```
+pub func zero_memory[T](dst: RawMutPtr[T], count: I64) {
+    write_bytes(dst, 0, count)
+}
+
+// ============================================================================
+// Swap Operations
+// ============================================================================
+
+/// Swaps the values at two mutable pointers.
+///
+/// # Safety
+///
+/// - Both pointers must be valid for reads and writes of `sizeof(T)` bytes.
+/// - Both pointers must be properly aligned.
+/// - The pointers must not be the same.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::{swap, RawMutPtr}
+///
+/// swap(ptr_a, ptr_b)
+/// // *ptr_a and *ptr_b now have swapped values
+/// ```
+pub func swap[T](a: RawMutPtr[T], b: RawMutPtr[T]) {
+    let temp: T = a.read()
+    a.write(b.read())
+    b.write(temp)
+}
+
+/// Swaps `count` elements between two non-overlapping memory regions.
+///
+/// # Safety
+///
+/// - Both pointers must be valid for reads and writes of `count * sizeof(T)` bytes.
+/// - Both pointers must be properly aligned.
+/// - The memory regions must not overlap.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::swap_nonoverlapping
+///
+/// swap_nonoverlapping(arr_a, arr_b, 10)
+/// ```
+pub func swap_nonoverlapping[T](a: RawMutPtr[T], b: RawMutPtr[T], count: I64) {
+    if count <= 0 {
+        return
+    }
+    let mut i: I64 = 0
+    loop {
+        if i >= count then break
+        swap(a.add(i), b.add(i))
+        i = i + 1
+    }
+}
+
+// ============================================================================
+// Replace Operation
+// ============================================================================
+
+/// Replaces the value at `dst` with `src`, returning the old value.
+///
+/// # Safety
+///
+/// - `dst` must be valid for both reads and writes.
+/// - `dst` must be properly aligned.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::replace
+///
+/// let old = replace(ptr, new_value)
+/// ```
+pub func replace[T](dst: RawMutPtr[T], src: T) -> T {
+    let old: T = dst.read()
+    dst.write(src)
+    return old
+}
+
+// ============================================================================
+// Read/Write Convenience Functions
+// ============================================================================
+
+/// Reads the value at `src` without moving it.
+///
+/// # Safety
+///
+/// - `src` must be valid for reads.
+/// - `src` must be properly aligned.
+/// - `src` must point to a valid value of type `T`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::read
+///
+/// let value = read(ptr)
+/// ```
+pub func read[T](src: RawPtr[T]) -> T {
+    return src.read()
+}
+
+/// Reads the value at `src` without alignment requirements.
+///
+/// # Safety
+///
+/// - `src` must be valid for reads.
+/// - `src` must point to a valid value of type `T`.
+pub func read_unaligned[T](src: RawPtr[T]) -> T {
+    return src.read_unaligned()
+}
+
+/// Performs a volatile read from `src`.
+///
+/// # Safety
+///
+/// - `src` must be valid for reads.
+/// - `src` must be properly aligned.
+pub func read_volatile[T](src: RawPtr[T]) -> T {
+    return src.read_volatile()
+}
+
+/// Writes `value` to `dst`.
+///
+/// # Safety
+///
+/// - `dst` must be valid for writes.
+/// - `dst` must be properly aligned.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::write
+///
+/// write(ptr, 42)
+/// ```
+pub func write[T](dst: RawMutPtr[T], value: T) {
+    dst.write(value)
+}
+
+/// Writes `value` to `dst` without alignment requirements.
+///
+/// # Safety
+///
+/// - `dst` must be valid for writes.
+pub func write_unaligned[T](dst: RawMutPtr[T], value: T) {
+    dst.write_unaligned(value)
+}
+
+/// Performs a volatile write of `value` to `dst`.
+///
+/// # Safety
+///
+/// - `dst` must be valid for writes.
+/// - `dst` must be properly aligned.
+pub func write_volatile[T](dst: RawMutPtr[T], value: T) {
+    dst.write_volatile(value)
+}
+
+// ============================================================================
+// Null Pointer Functions
+// ============================================================================
+
+/// Creates a null immutable pointer.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::make_null
+///
+/// let ptr: RawPtr[I64] = make_null()
+/// assert(ptr.is_null())
+/// ```
+pub func make_null[T]() -> RawPtr[T] {
+    return RawPtr::null_ptr()
+}
+
+/// Creates a null mutable pointer.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::make_null_mut
+///
+/// let ptr: RawMutPtr[I64] = make_null_mut()
+/// assert(ptr.is_null())
+/// ```
+pub func make_null_mut[T]() -> RawMutPtr[T] {
+    return RawMutPtr::null_ptr()
+}
+
+// ============================================================================
+// Address Manipulation
+// ============================================================================
+
+/// Creates an immutable pointer from an address.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::from_addr
+///
+/// let ptr: RawPtr[I64] = from_addr(0x1000)
+/// ```
+pub func from_addr[T](addr: I64) -> RawPtr[T] {
+    return RawPtr::from_addr(addr)
+}
+
+/// Creates a mutable pointer from an address.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::from_addr_mut
+///
+/// let ptr: RawMutPtr[I64] = from_addr_mut(0x1000)
+/// ```
+pub func from_addr_mut[T](addr: I64) -> RawMutPtr[T] {
+    return RawMutPtr::from_addr(addr)
+}
+
+// ============================================================================
+// Comparison
+// ============================================================================
+
+/// Returns `true` if two pointers point to the same address.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::eq
+///
+/// let a = RawPtr[I64]::from_addr(0x1000)
+/// let b = RawPtr[I64]::from_addr(0x1000)
+/// assert(eq(a, b))
+/// ```
+pub func eq[T](a: RawPtr[T], b: RawPtr[T]) -> Bool {
+    return a.addr() == b.addr()
+}
+
+/// Returns `true` if two mutable pointers point to the same address.
+pub func eq_mut[T](a: RawMutPtr[T], b: RawMutPtr[T]) -> Bool {
+    return a.addr() == b.addr()
+}

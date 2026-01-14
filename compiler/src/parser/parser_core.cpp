@@ -185,6 +185,7 @@ void Parser::synchronize_to_stmt() {
         case lexer::TokenKind::KwWhile:
         case lexer::TokenKind::KwFor:
         case lexer::TokenKind::KwReturn:
+        case lexer::TokenKind::KwThrow:
         case lexer::TokenKind::KwBreak:
         case lexer::TokenKind::KwContinue:
         case lexer::TokenKind::KwWhen:
@@ -248,6 +249,7 @@ bool Parser::try_recover_missing_semi() {
     case lexer::TokenKind::KwWhile:
     case lexer::TokenKind::KwFor:
     case lexer::TokenKind::KwReturn:
+    case lexer::TokenKind::KwThrow:
     case lexer::TokenKind::KwBreak:
     case lexer::TokenKind::KwContinue:
     case lexer::TokenKind::RBrace:

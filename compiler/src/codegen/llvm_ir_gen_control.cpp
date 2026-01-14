@@ -811,6 +811,39 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
     return "void";
 }
 
+auto LLVMIRGen::gen_throw(const parser::ThrowExpr& thr) -> std::string {
+    // Generate the expression being thrown (e.g., new Error("message"))
+    std::string thrown_val = gen_expr(*thr.expr);
+    std::string thrown_type = last_expr_type_;
+
+    // If the thrown value is a pointer to an Error-like object with a 'message' field,
+    // extract the message and pass it to panic
+    std::string panic_msg = "null";
+
+    if (thrown_type == "ptr" || thrown_type.starts_with("%class.") ||
+        thrown_type.starts_with("%struct.")) {
+        // Try to access a 'message' field at index 0 (common convention for Error types)
+        // This handles `new Error("message")` where Error has a message field
+        std::string msg_ptr = fresh_reg();
+        std::string msg_val = fresh_reg();
+
+        // Assume Error-like objects have message as first field (ptr to char)
+        emit_line("  ; throw expression - extracting error message");
+        emit_line("  " + msg_ptr + " = getelementptr inbounds ptr, ptr " + thrown_val +
+                  ", i32 0");
+        emit_line("  " + msg_val + " = load ptr, ptr " + msg_ptr);
+        panic_msg = msg_val;
+    }
+
+    // Call panic to terminate the program (panic is declared by emit_runtime_decls)
+    // This integrates with @should_panic test infrastructure
+    emit_line("  call void @panic(ptr " + panic_msg + ")");
+    emit_line("  unreachable");
+
+    block_terminated_ = true;
+    return "void";
+}
+
 // Helper: generate comparison for a single pattern against scrutinee
 // Returns the comparison result register, or empty string for always-match patterns
 auto LLVMIRGen::gen_pattern_cmp(const parser::Pattern& pattern, const std::string& scrutinee,

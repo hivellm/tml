@@ -71,6 +71,26 @@ void TypeEnv::import_symbol(const std::string& module_path, const std::string& s
     // Determine the local name (use alias if provided, otherwise original name)
     std::string local_name = alias.value_or(symbol_name);
 
+    // Check for name conflicts - if a symbol with this name is already imported from a
+    // different module, track the conflict. The user can resolve by using an alias.
+    auto existing = imported_symbols_.find(local_name);
+    if (existing != imported_symbols_.end()) {
+        // Same symbol from same module is fine (duplicate import)
+        if (existing->second.module_path == module_path &&
+            existing->second.original_name == symbol_name) {
+            return; // Already imported - no-op
+        }
+
+        // Conflict: same local name from different source
+        // Store in conflict set for later error reporting during resolution
+        import_conflicts_[local_name].insert(existing->second.module_path + "::" +
+                                              existing->second.original_name);
+        import_conflicts_[local_name].insert(module_path + "::" + symbol_name);
+        TML_DEBUG_LN("[MODULE] Import conflict detected for '" << local_name << "': "
+                     << existing->second.module_path << "::" << existing->second.original_name
+                     << " vs " << module_path << "::" << symbol_name);
+    }
+
     // Create the imported symbol entry
     ImportedSymbol import{
         .original_name = symbol_name,
@@ -79,7 +99,7 @@ void TypeEnv::import_symbol(const std::string& module_path, const std::string& s
         .visibility = parser::Visibility::Public // Imported symbols are accessible
     };
 
-    // Store the import
+    // Store the import (last one wins for now - user should use alias to resolve)
     imported_symbols_[local_name] = import;
 }
 
@@ -114,6 +134,16 @@ void TypeEnv::import_all_from(const std::string& module_path) {
 
     // Import all behaviors
     for (const auto& [name, behavior_def] : module->behaviors) {
+        import_symbol(module_path, name, std::nullopt);
+    }
+
+    // Import all classes (OOP)
+    for (const auto& [name, class_def] : module->classes) {
+        import_symbol(module_path, name, std::nullopt);
+    }
+
+    // Import all interfaces (OOP)
+    for (const auto& [name, interface_def] : module->interfaces) {
         import_symbol(module_path, name, std::nullopt);
     }
 
@@ -158,6 +188,12 @@ void TypeEnv::import_all_from(const std::string& module_path) {
             for (const auto& [name, behavior_def] : source_module->behaviors) {
                 import_symbol(re_export.source_path, name, std::nullopt);
             }
+            for (const auto& [name, class_def] : source_module->classes) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
+            for (const auto& [name, interface_def] : source_module->interfaces) {
+                import_symbol(re_export.source_path, name, std::nullopt);
+            }
             for (const auto& [name, type_ptr] : source_module->type_aliases) {
                 import_symbol(re_export.source_path, name, std::nullopt);
             }
@@ -179,6 +215,12 @@ void TypeEnv::import_all_from(const std::string& module_path) {
                         import_symbol(nested_re_export.source_path, name, std::nullopt);
                     }
                     for (const auto& [name, behavior_def] : nested_module->behaviors) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    for (const auto& [name, class_def] : nested_module->classes) {
+                        import_symbol(nested_re_export.source_path, name, std::nullopt);
+                    }
+                    for (const auto& [name, interface_def] : nested_module->interfaces) {
                         import_symbol(nested_re_export.source_path, name, std::nullopt);
                     }
                     for (const auto& [name, type_ptr] : nested_module->type_aliases) {
@@ -206,6 +248,19 @@ auto TypeEnv::resolve_imported_symbol(const std::string& name) const -> std::opt
 
 auto TypeEnv::all_imports() const -> const std::unordered_map<std::string, ImportedSymbol>& {
     return imported_symbols_;
+}
+
+auto TypeEnv::has_import_conflict(const std::string& name) const -> bool {
+    return import_conflicts_.find(name) != import_conflicts_.end();
+}
+
+auto TypeEnv::get_import_conflict_sources(const std::string& name) const
+    -> std::optional<std::set<std::string>> {
+    auto it = import_conflicts_.find(name);
+    if (it != import_conflicts_.end()) {
+        return it->second;
+    }
+    return std::nullopt;
 }
 
 // Result type for parse_tml_file that includes error information
@@ -695,8 +750,14 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     // Create qualified function name: Type::method
                     std::string qualified_name = type_name + "::" + func.name;
 
-                    // Extract type parameters from generic declaration
+                    // Extract type parameters from impl block and method's generic declaration
+                    // Impl block generics (e.g., T in impl[T] Cell[T]) are needed for methods
+                    // that use the type parameter without declaring their own generics
                     std::vector<std::string> method_type_params;
+                    for (const auto& gp : impl_decl.generics) {
+                        method_type_params.push_back(gp.name);
+                    }
+                    // Then add method's own type params (if any)
                     for (const auto& gp : func.generics) {
                         method_type_params.push_back(gp.name);
                     }

@@ -206,7 +206,7 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     auto impl_it = pending_generic_impls_.find(type_name);
                     if (impl_it != pending_generic_impls_.end() || !imported_type_params.empty()) {
                         pending_impl_method_instantiations_.push_back(
-                            PendingImplMethod{mangled_type_name, method, type_subs, type_name});
+                            PendingImplMethod{mangled_type_name, method, type_subs, type_name, ""});
                         generated_impl_methods_.insert(mangled_method_name);
                     }
                 }
@@ -977,10 +977,41 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (func_sig) {
                 std::string mangled_type_name = named.name;
                 std::unordered_map<std::string, types::TypePtr> type_subs;
+                std::string method_type_suffix; // For method generic type args like cast[U8]
+
+                // Handle method-level generic type arguments (e.g., cast[U8])
+                // Use current_type_subs_ to resolve any type parameters (e.g., U -> U8)
+                // Method-level type params come AFTER impl-level type params in func_sig->type_params
+                // The impl-level params correspond to named.type_args (e.g., RawPtr[I64] -> T=I64)
+                // So we skip the first named.type_args.size() params when mapping call.type_args
+                if (!call.type_args.empty() && !func_sig->type_params.empty()) {
+                    size_t impl_param_count = named.type_args.size();
+                    for (size_t i = 0; i < call.type_args.size(); ++i) {
+                        size_t param_idx = impl_param_count + i;
+                        if (param_idx < func_sig->type_params.size()) {
+                            // Convert parser type to semantic type, using current type subs
+                            auto semantic_type =
+                                resolve_parser_type_with_subs(*call.type_args[i], current_type_subs_);
+                            if (semantic_type) {
+                                type_subs[func_sig->type_params[param_idx]] = semantic_type;
+                                // Build method type suffix for mangling
+                                if (!method_type_suffix.empty()) {
+                                    method_type_suffix += "_";
+                                }
+                                method_type_suffix += mangle_type(semantic_type);
+                            }
+                        }
+                    }
+                }
 
                 if (!named.type_args.empty()) {
                     mangled_type_name = mangle_struct_name(named.name, named.type_args);
-                    std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method;
+                    // Build full method name including method-level type args
+                    std::string method_for_key = method;
+                    if (!method_type_suffix.empty()) {
+                        method_for_key += "__" + method_type_suffix;
+                    }
+                    std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method_for_key;
 
                     // Check locally defined impls first
                     auto impl_it = pending_generic_impls_.find(named.name);
@@ -1034,20 +1065,25 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         if (impl_it != pending_generic_impls_.end() ||
                             !imported_type_params.empty()) {
                             pending_impl_method_instantiations_.push_back(PendingImplMethod{
-                                mangled_type_name, method, type_subs, named.name});
+                                mangled_type_name, method, type_subs, named.name, method_type_suffix});
                             generated_impl_methods_.insert(mangled_method_name);
                         }
                     }
                 }
 
                 // Look up in functions_ to get the correct LLVM name
-                std::string method_lookup_key = mangled_type_name + "_" + method;
+                // Include method type suffix for methods with their own generic params
+                std::string full_method_name = method;
+                if (!method_type_suffix.empty()) {
+                    full_method_name += "__" + method_type_suffix;
+                }
+                std::string method_lookup_key = mangled_type_name + "_" + full_method_name;
                 auto method_it = functions_.find(method_lookup_key);
                 std::string fn_name;
                 if (method_it != functions_.end()) {
                     fn_name = method_it->second.llvm_name;
                 } else {
-                    fn_name = "@tml_" + get_suite_prefix() + mangled_type_name + "_" + method;
+                    fn_name = "@tml_" + get_suite_prefix() + mangled_type_name + "_" + full_method_name;
                 }
                 std::string impl_receiver_val;
 
@@ -1091,15 +1127,34 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                 for (size_t i = 0; i < call.args.size(); ++i) {
                     std::string val = gen_expr(*call.args[i]);
-                    std::string arg_type = "i32";
+                    std::string actual_type = last_expr_type_;
+                    std::string expected_type = "i32";
                     if (func_sig && i + 1 < func_sig->params.size()) {
                         auto param_type = func_sig->params[i + 1];
                         if (!type_subs.empty()) {
                             param_type = types::substitute_type(param_type, type_subs);
                         }
-                        arg_type = llvm_type_from_semantic(param_type);
+                        expected_type = llvm_type_from_semantic(param_type);
                     }
-                    typed_args.push_back({arg_type, val});
+                    // Add type coercion if needed
+                    if (actual_type != expected_type) {
+                        // Integer width coercion
+                        bool is_int_actual = (actual_type[0] == 'i' && actual_type != "i1");
+                        bool is_int_expected = (expected_type[0] == 'i' && expected_type != "i1");
+                        if (is_int_actual && is_int_expected) {
+                            // Sign-extend or truncate
+                            int actual_bits = std::stoi(actual_type.substr(1));
+                            int expected_bits = std::stoi(expected_type.substr(1));
+                            std::string coerced = fresh_reg();
+                            if (expected_bits > actual_bits) {
+                                emit_line("  " + coerced + " = sext " + actual_type + " " + val + " to " + expected_type);
+                            } else {
+                                emit_line("  " + coerced + " = trunc " + actual_type + " " + val + " to " + expected_type);
+                            }
+                            val = coerced;
+                        }
+                    }
+                    typed_args.push_back({expected_type, val});
                 }
 
                 auto return_type = func_sig->return_type;

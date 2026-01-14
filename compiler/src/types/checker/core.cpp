@@ -35,8 +35,8 @@
 
 namespace tml::types {
 
-// Reserved type names - builtin types that cannot be redefined by user code
-// This prevents accidental shadowing of core types like Maybe, Outcome, List, etc.
+// Reserved type names - primitive types that cannot be redefined by user code
+// Only language primitives are reserved - library types like Maybe, List can be shadowed
 static const std::set<std::string> RESERVED_TYPE_NAMES = {
     // Primitive types
     "I8",
@@ -56,35 +56,6 @@ static const std::set<std::string> RESERVED_TYPE_NAMES = {
     "Str",
     "Unit",
     "Never",
-    // Core enums
-    "Maybe",
-    "Outcome",
-    "Ordering",
-    "Poll",
-    // Core collections (from std)
-    "List",
-    "HashMap",
-    "HashSet",
-    "Buffer",
-    // Smart pointers
-    "Heap",
-    "Shared",
-    "Sync",
-    // Other core types
-    "Range",
-    "RangeInclusive",
-    // Pointer types
-    "Ptr",
-    "Ref",
-    // I/O types
-    "File",
-    "Path",
-    // Concurrency types
-    "Thread",
-    "Channel",
-    "Mutex",
-    "WaitGroup",
-    "AtomicCounter",
     // String builder
     "StringBuilder",
     // Async types
@@ -174,6 +145,9 @@ auto TypeChecker::check_module(const parser::Module& module)
             register_interface_decl(decl->as<parser::InterfaceDecl>());
         } else if (decl->is<parser::ClassDecl>()) {
             register_class_decl(decl->as<parser::ClassDecl>());
+        } else if (decl->is<parser::NamespaceDecl>()) {
+            // Namespaces handle all passes internally
+            register_namespace_decl(decl->as<parser::NamespaceDecl>());
         }
     }
 
@@ -209,6 +183,83 @@ auto TypeChecker::check_module(const parser::Module& module)
     return env_;
 }
 
+// ============================================================================
+// Namespace Support
+// ============================================================================
+
+auto TypeChecker::qualified_name(const std::string& name) const -> std::string {
+    if (current_namespace_.empty()) {
+        return name;
+    }
+    std::string result;
+    for (const auto& seg : current_namespace_) {
+        result += seg + ".";
+    }
+    return result + name;
+}
+
+void TypeChecker::register_namespace_decl(const parser::NamespaceDecl& decl) {
+    // Save current namespace and extend it
+    auto saved_namespace = current_namespace_;
+    for (const auto& seg : decl.path) {
+        current_namespace_.push_back(seg);
+    }
+
+    // Process all declarations in this namespace
+    // Pass 1: Register types
+    for (const auto& item : decl.items) {
+        if (item->is<parser::StructDecl>()) {
+            register_struct_decl(item->as<parser::StructDecl>());
+        } else if (item->is<parser::EnumDecl>()) {
+            register_enum_decl(item->as<parser::EnumDecl>());
+        } else if (item->is<parser::TraitDecl>()) {
+            register_trait_decl(item->as<parser::TraitDecl>());
+        } else if (item->is<parser::TypeAliasDecl>()) {
+            register_type_alias(item->as<parser::TypeAliasDecl>());
+        } else if (item->is<parser::InterfaceDecl>()) {
+            register_interface_decl(item->as<parser::InterfaceDecl>());
+        } else if (item->is<parser::ClassDecl>()) {
+            register_class_decl(item->as<parser::ClassDecl>());
+        } else if (item->is<parser::NamespaceDecl>()) {
+            // Nested namespace - recurse
+            register_namespace_decl(item->as<parser::NamespaceDecl>());
+        }
+    }
+
+    // Pass 2: Check declarations
+    for (const auto& item : decl.items) {
+        if (item->is<parser::FuncDecl>()) {
+            check_func_decl(item->as<parser::FuncDecl>());
+        } else if (item->is<parser::ImplDecl>()) {
+            check_impl_decl(item->as<parser::ImplDecl>());
+        } else if (item->is<parser::ConstDecl>()) {
+            check_const_decl(item->as<parser::ConstDecl>());
+        } else if (item->is<parser::ClassDecl>()) {
+            check_class_decl(item->as<parser::ClassDecl>());
+        } else if (item->is<parser::InterfaceDecl>()) {
+            check_interface_decl(item->as<parser::InterfaceDecl>());
+        }
+    }
+
+    // Pass 3: Check bodies
+    for (const auto& item : decl.items) {
+        if (item->is<parser::FuncDecl>()) {
+            check_func_body(item->as<parser::FuncDecl>());
+        } else if (item->is<parser::ImplDecl>()) {
+            check_impl_body(item->as<parser::ImplDecl>());
+        } else if (item->is<parser::ClassDecl>()) {
+            check_class_body(item->as<parser::ClassDecl>());
+        }
+    }
+
+    // Restore namespace
+    current_namespace_ = saved_namespace;
+}
+
+// ============================================================================
+// Struct/Enum Registration
+// ============================================================================
+
 void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Check if the type name is reserved (builtin type)
     if (RESERVED_TYPE_NAMES.count(decl.name) > 0) {
@@ -233,7 +284,10 @@ void TypeChecker::register_struct_decl(const parser::StructDecl& decl) {
     // Extract const generic parameters
     std::vector<ConstGenericParam> const_params = extract_const_params(decl.generics);
 
-    env_.define_struct(StructDef{.name = decl.name,
+    // Use qualified name for namespaced types
+    std::string full_name = qualified_name(decl.name);
+
+    env_.define_struct(StructDef{.name = full_name,
                                  .type_params = std::move(type_params),
                                  .const_params = std::move(const_params),
                                  .fields = std::move(fields),
@@ -618,6 +672,42 @@ void TypeChecker::check_func_body(const parser::FuncDecl& func) {
     // Extract and store where constraints for method lookup on bounded generics
     auto saved_where_constraints = current_where_constraints_;
     current_where_constraints_.clear();
+
+    // First, process inline bounds from generic parameters (e.g., [T: Addable])
+    for (const auto& generic : func.generics) {
+        if (!generic.bounds.empty()) {
+            std::vector<std::string> behavior_names;
+            std::vector<BoundConstraint> parameterized_bounds;
+
+            for (const auto& bound : generic.bounds) {
+                if (bound->is<parser::NamedType>()) {
+                    const auto& named = bound->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        std::string behavior_name = named.path.segments.back();
+                        if (named.generics && !named.generics->args.empty()) {
+                            std::vector<TypePtr> type_args;
+                            for (const auto& arg : named.generics->args) {
+                                if (arg.is_type()) {
+                                    type_args.push_back(resolve_type(*arg.as_type()));
+                                }
+                            }
+                            parameterized_bounds.push_back(
+                                BoundConstraint{behavior_name, std::move(type_args)});
+                        } else {
+                            behavior_names.push_back(behavior_name);
+                        }
+                    }
+                }
+            }
+
+            if (!behavior_names.empty() || !parameterized_bounds.empty()) {
+                current_where_constraints_.push_back(WhereConstraint{
+                    generic.name, std::move(behavior_names), std::move(parameterized_bounds)});
+            }
+        }
+    }
+
+    // Then, process explicit where clause constraints
     if (func.where_clause) {
         for (const auto& [type_ptr, behaviors] : func.where_clause->constraints) {
             std::string type_param_name;
@@ -1037,6 +1127,18 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
 
         method_def.sig = sig;
         def.methods.push_back(method_def);
+    }
+
+    // Collect properties
+    for (const auto& prop : decl.properties) {
+        PropertyDef prop_def;
+        prop_def.name = prop.name;
+        prop_def.type = resolve_type(*prop.type);
+        prop_def.is_static = prop.is_static;
+        prop_def.vis = static_cast<MemberVisibility>(prop.vis);
+        prop_def.has_getter = prop.has_getter;
+        prop_def.has_setter = prop.has_setter;
+        def.properties.push_back(prop_def);
     }
 
     // Collect constructors

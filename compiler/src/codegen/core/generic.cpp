@@ -76,6 +76,19 @@ void LLVMIRGen::generate_pending_instantiations() {
                 }
             }
         }
+
+        // Generate pending class instantiations
+        for (auto& [key, inst] : class_instantiations_) {
+            if (!inst.generated) {
+                inst.generated = true;
+
+                auto it = pending_generic_classes_.find(inst.base_name);
+                if (it != pending_generic_classes_.end()) {
+                    gen_class_instantiation(*it->second, inst.type_args);
+                    types_changed = true;
+                }
+            }
+        }
     }
 
     // Second pass: generate functions (may discover new types, so we loop)
@@ -173,7 +186,7 @@ void LLVMIRGen::generate_pending_instantiations() {
                     for (const auto& m : impl.methods) {
                         if (m.name == pim.method_name) {
                             gen_impl_method_instantiation(pim.mangled_type_name, m, pim.type_subs,
-                                                          impl.generics);
+                                                          impl.generics, pim.method_type_suffix);
                             break;
                         }
                     }
@@ -269,7 +282,8 @@ void LLVMIRGen::generate_pending_instantiations() {
                                 if (method_decl.name == pim.method_name) {
                                     gen_impl_method_instantiation(pim.mangled_type_name,
                                                                   method_decl, pim.type_subs,
-                                                                  impl_decl.generics);
+                                                                  impl_decl.generics,
+                                                                  pim.method_type_suffix);
                                     found = true;
                                     break;
                                 }
@@ -340,6 +354,164 @@ auto LLVMIRGen::require_func_instantiation(const std::string& base_name,
     }
 
     return mangled;
+}
+
+// Request class instantiation - returns mangled name
+// Immediately generates the class type, vtable, and methods if not already generated
+auto LLVMIRGen::require_class_instantiation(const std::string& base_name,
+                                            const std::vector<types::TypePtr>& type_args)
+    -> std::string {
+    // Use the same mangling as structs for consistency
+    std::string mangled = mangle_struct_name(base_name, type_args);
+
+    auto it = class_instantiations_.find(mangled);
+    if (it != class_instantiations_.end()) {
+        return mangled;
+    }
+
+    class_instantiations_[mangled] = GenericInstantiation{
+        base_name, type_args, mangled,
+        true // Mark as generated since we'll generate it immediately
+    };
+
+    // Find the generic class declaration and generate instantiation
+    auto decl_it = pending_generic_classes_.find(base_name);
+    if (decl_it != pending_generic_classes_.end()) {
+        gen_class_instantiation(*decl_it->second, type_args);
+    }
+
+    return mangled;
+}
+
+// Generate a monomorphized class instance from a generic class declaration
+void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
+                                        const std::vector<types::TypePtr>& type_args) {
+    // Build mangled name
+    std::string mangled = mangle_struct_name(c.name, type_args);
+
+    // Skip if already generated
+    if (class_types_.find(mangled) != class_types_.end()) {
+        return;
+    }
+
+    // Create type substitution map
+    std::unordered_map<std::string, types::TypePtr> type_subs;
+    for (size_t i = 0; i < c.generics.size() && i < type_args.size(); ++i) {
+        type_subs[c.generics[i].name] = type_args[i];
+    }
+
+    // Save and set current type substitutions for field type resolution
+    auto saved_subs = current_type_subs_;
+    current_type_subs_ = type_subs;
+
+    // Generate LLVM type name
+    std::string type_name = "%class." + mangled;
+
+    // Collect field types with substituted generic parameters
+    std::vector<std::string> field_types;
+    field_types.push_back("ptr"); // Vtable pointer is always first
+
+    // If class extends another, include base class as embedded struct
+    if (c.extends) {
+        std::string base_name = c.extends->segments.back();
+        field_types.push_back("%class." + base_name);
+    }
+
+    // Add own instance fields with generic substitution
+    std::vector<ClassFieldInfo> field_info;
+    size_t field_offset = field_types.size();
+
+    for (const auto& field : c.fields) {
+        if (field.is_static)
+            continue;
+
+        // Resolve field type with generic substitution
+        std::string ft = llvm_type_ptr(field.type);
+        if (type_subs.count(ft) > 0 || ft.find('%') == std::string::npos) {
+            // Check if this is a generic type parameter
+            auto resolved = resolve_parser_type_with_subs(*field.type, type_subs);
+            ft = llvm_type_from_semantic(resolved);
+        }
+        if (ft == "void")
+            ft = "{}";
+        field_types.push_back(ft);
+
+        field_info.push_back({field.name, static_cast<int>(field_offset++), ft, field.vis});
+    }
+
+    // Emit class type definition
+    std::string def = type_name + " = type { ";
+    for (size_t i = 0; i < field_types.size(); ++i) {
+        if (i > 0)
+            def += ", ";
+        def += field_types[i];
+    }
+    def += " }";
+    emit_line(def);
+
+    // Register class type and fields
+    class_types_[mangled] = type_name;
+    class_fields_[mangled] = field_info;
+
+    // Generate vtable for this instantiation
+    std::string vtable_type_name = "%vtable." + mangled;
+    std::string vtable_name = "@vtable." + mangled;
+
+    // Collect virtual methods and their function names
+    std::vector<std::string> vtable_func_names;
+    std::vector<VirtualMethodInfo> vtable_methods;
+    size_t vtable_idx = 0;
+    for (const auto& method : c.methods) {
+        if (method.is_virtual || method.is_abstract) {
+            std::string method_func_name = "@tml_" + get_suite_prefix() + mangled + "_" + method.name;
+            vtable_func_names.push_back(method_func_name);
+            vtable_methods.push_back({method.name, mangled, mangled, vtable_idx++});
+        }
+    }
+
+    if (!vtable_func_names.empty()) {
+        // Generate vtable type
+        std::string vtable_type = vtable_type_name + " = type { ";
+        for (size_t i = 0; i < vtable_func_names.size(); ++i) {
+            if (i > 0)
+                vtable_type += ", ";
+            vtable_type += "ptr";
+        }
+        vtable_type += " }";
+        emit_line(vtable_type);
+
+        // Generate vtable global
+        std::string vtable_value = "{ ";
+        for (size_t i = 0; i < vtable_func_names.size(); ++i) {
+            if (i > 0)
+                vtable_value += ", ";
+            vtable_value += "ptr " + vtable_func_names[i];
+        }
+        vtable_value += " }";
+        emit_line(vtable_name + " = internal constant " + vtable_type_name + " " + vtable_value);
+    } else {
+        // Empty vtable - just emit a pointer placeholder
+        emit_line(vtable_type_name + " = type { ptr }");
+        emit_line(vtable_name + " = internal constant " + vtable_type_name + " { ptr null }");
+    }
+
+    // Store vtable layout
+    class_vtable_layout_[mangled] = vtable_methods;
+
+    // Generate constructors with mangled name
+    for (const auto& ctor : c.constructors) {
+        gen_class_constructor_instantiation(c, ctor, mangled, type_subs);
+    }
+
+    // Generate methods with mangled name
+    for (const auto& method : c.methods) {
+        if (!method.is_abstract) {
+            gen_class_method_instantiation(c, method, mangled, type_subs);
+        }
+    }
+
+    // Restore type substitutions
+    current_type_subs_ = saved_subs;
 }
 
 } // namespace tml::codegen

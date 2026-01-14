@@ -1,0 +1,109 @@
+//! A cell which can be written to only once.
+
+use core::option::*
+use core::result::*
+
+// ============================================================================
+// OnceCell[T]
+// ============================================================================
+
+/// A cell which can be written to only once.
+pub type OnceCell[T] {
+    value: Maybe[T],
+    initialized: Bool
+}
+
+impl[T] OnceCell[T] {
+    /// Creates a new empty `OnceCell`.
+    pub func new() -> OnceCell[T] {
+        return OnceCell { value: Nothing, initialized: false }
+    }
+
+    /// Creates a new `OnceCell` with the given value already set.
+    pub func with_value(value: T) -> OnceCell[T] {
+        return OnceCell { value: Just(value), initialized: true }
+    }
+
+    /// Returns `true` if the cell is empty.
+    pub func is_empty(this) -> Bool {
+        return not this.initialized
+    }
+
+    /// Returns `true` if the cell contains a value.
+    pub func is_initialized(this) -> Bool {
+        return this.initialized
+    }
+
+    /// Gets the reference to the underlying value.
+    pub func get(this) -> Maybe[ref T] {
+        if this.initialized {
+            when this.value {
+                Just(v) => return Just(ref v),
+                Nothing => return Nothing
+            }
+        }
+        return Nothing
+    }
+
+    /// Sets the contents of the cell to `value`.
+    pub func set(mut this, value: T) -> Outcome[Unit, T] {
+        if this.initialized {
+            return Err(value)
+        }
+        this.value = Just(value)
+        this.initialized = true
+        return Ok(())
+    }
+
+    /// Takes the value out of the cell, leaving it empty.
+    pub func take(mut this) -> Maybe[T] {
+        if not this.initialized {
+            return Nothing
+        }
+        this.initialized = false
+        let old: Maybe[T] = this.value
+        this.value = Nothing
+        return old
+    }
+
+    /// Consumes the cell and returns the inner value.
+    pub func into_inner(this) -> Maybe[T] {
+        return this.value
+    }
+}
+
+impl[T: Default] Default for OnceCell[T] {
+    pub func default() -> OnceCell[T] {
+        return OnceCell::new()
+    }
+}
+
+// ============================================================================
+// BorrowError types
+// ============================================================================
+
+/// Error returned when borrowing fails.
+pub type BorrowError {}
+
+impl BorrowError {
+    pub func new() -> BorrowError {
+        return BorrowError {}
+    }
+
+    pub func to_string(this) -> Str {
+        return "already mutably borrowed"
+    }
+}
+
+/// Error returned when mutable borrowing fails.
+pub type BorrowMutError {}
+
+impl BorrowMutError {
+    pub func new() -> BorrowMutError {
+        return BorrowMutError {}
+    }
+
+    pub func to_string(this) -> Str {
+        return "already borrowed"
+    }
+}

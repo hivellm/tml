@@ -1,0 +1,170 @@
+//! Pointer alignment utilities.
+//!
+//! This module provides functions for working with memory alignment.
+
+use core::option::*
+
+// ============================================================================
+// Alignment Functions
+// ============================================================================
+
+/// Rounds up an address to the next aligned address.
+///
+/// Returns the smallest address >= `addr` that is aligned to `align`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::align_up
+///
+/// let addr = 0x1003
+/// let aligned = align_up(addr, 4)  // 0x1004
+/// ```
+pub func align_up(addr: I64, align: I64) -> I64 {
+    // addr + (align - 1) & ~(align - 1)
+    let mask: I64 = align - 1
+    return (addr + mask) & (0 - align)
+}
+
+/// Rounds down an address to the previous aligned address.
+///
+/// Returns the largest address <= `addr` that is aligned to `align`.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::align_down
+///
+/// let addr = 0x1003
+/// let aligned = align_down(addr, 4)  // 0x1000
+/// ```
+pub func align_down(addr: I64, align: I64) -> I64 {
+    return addr & (0 - align)
+}
+
+/// Checks if an address is aligned to a given alignment.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::is_aligned_to
+///
+/// assert(is_aligned_to(0x1000, 8))   // true
+/// assert(not is_aligned_to(0x1001, 8))  // false
+/// ```
+pub func is_aligned_to(addr: I64, align: I64) -> Bool {
+    return (addr & (align - 1)) == 0
+}
+
+/// Calculates the offset needed to align an address.
+///
+/// Returns the number of bytes to add to `addr` to make it aligned to `align`.
+/// Returns 0 if `addr` is already aligned.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::align_offset
+///
+/// let offset = align_offset(0x1003, 4)  // 1 (need to add 1 to get 0x1004)
+/// let offset2 = align_offset(0x1004, 4) // 0 (already aligned)
+/// ```
+pub func align_offset(addr: I64, align: I64) -> I64 {
+    let aligned: I64 = align_up(addr, align)
+    return aligned - addr
+}
+
+/// Checks if a value is a power of two.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::is_power_of_two
+///
+/// assert(is_power_of_two(1))
+/// assert(is_power_of_two(2))
+/// assert(is_power_of_two(4))
+/// assert(not is_power_of_two(3))
+/// assert(not is_power_of_two(0))
+/// ```
+pub func is_power_of_two(n: I64) -> Bool {
+    return n > 0 and (n & (n - 1)) == 0
+}
+
+/// Returns the next power of two greater than or equal to `n`.
+///
+/// Returns `Nothing` if the result would overflow.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::checked_next_power_of_two
+///
+/// let p = checked_next_power_of_two(3)  // Just(4)
+/// let p2 = checked_next_power_of_two(8) // Just(8) (already power of 2)
+/// ```
+pub func checked_next_power_of_two(n: I64) -> Maybe[I64] {
+    if n <= 0 {
+        return Just(1)
+    }
+    if n > 4611686018427387904 {  // 2^62
+        return Nothing  // Would overflow
+    }
+    let mut p: I64 = 1
+    loop {
+        if p >= n then break
+        p = p * 2
+    }
+    return Just(p)
+}
+
+/// Returns the largest power of two less than or equal to `n`.
+///
+/// Returns 0 if `n` is 0.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::prev_power_of_two
+///
+/// let p = prev_power_of_two(5)  // 4
+/// let p2 = prev_power_of_two(8) // 8 (already power of 2)
+/// let p3 = prev_power_of_two(0) // 0
+/// ```
+pub func prev_power_of_two(n: I64) -> I64 {
+    if n <= 0 {
+        return 0
+    }
+    let mut p: I64 = 1
+    loop {
+        if p * 2 > n then break
+        p = p * 2
+    }
+    return p
+}
+
+/// Returns the base-2 logarithm of `n`, rounded down.
+///
+/// Returns `Nothing` if `n` is 0 or negative.
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::log2
+///
+/// let l = log2(8)   // Just(3)
+/// let l2 = log2(10) // Just(3) (floor of log2(10))
+/// ```
+pub func log2(n: I64) -> Maybe[I64] {
+    if n <= 0 {
+        return Nothing
+    }
+    let mut result: I64 = 0
+    let mut value: I64 = n
+    loop {
+        if value <= 1 then break
+        value = value / 2
+        result = result + 1
+    }
+    return Just(result)
+}

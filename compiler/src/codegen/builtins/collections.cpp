@@ -86,6 +86,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @list_pop(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -109,6 +110,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
                       ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -150,6 +152,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @list_len(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -163,6 +166,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @list_capacity(ptr " + list + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -185,6 +189,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + result + " = call i32 @list_is_empty(ptr " + list + ")");
             std::string bool_result = fresh_reg();
             emit_line("  " + bool_result + " = icmp ne i32 " + result + ", 0");
+            last_expr_type_ = "i1";
             return bool_result;
         }
         return "0";
@@ -245,6 +250,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
                       ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -259,6 +265,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + key + " = sext i32 " + i32_key + " to i64");
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @hashmap_has(ptr " + map + ", i64 " + key + ")");
+            last_expr_type_ = "i1";
             return result;
         }
         return "0";
@@ -274,6 +281,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i1 @hashmap_remove(ptr " + map + ", i64 " + key +
                       ")");
+            last_expr_type_ = "i1";
             return result;
         }
         return "0";
@@ -287,6 +295,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @hashmap_len(ptr " + map + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -354,6 +363,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             std::string buf = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @buffer_read_byte(ptr " + buf + ")");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -365,6 +375,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             std::string buf = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
             emit_line("  " + result + " = call i32 @buffer_read_i32(ptr " + buf + ")");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -378,6 +389,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @buffer_len(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -391,6 +403,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @buffer_capacity(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";
@@ -404,6 +417,7 @@ auto LLVMIRGen::try_gen_builtin_collections(const std::string& fn_name,
             emit_line("  " + i64_result + " = call i64 @buffer_remaining(ptr " + buf + ")");
             std::string result = fresh_reg();
             emit_line("  " + result + " = trunc i64 " + i64_result + " to i32");
+            last_expr_type_ = "i32";
             return result;
         }
         return "0";

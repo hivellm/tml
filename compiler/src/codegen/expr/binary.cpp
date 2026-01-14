@@ -36,41 +36,65 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (bin.left->is<parser::IdentExpr>()) {
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
             if (it != locals_.end()) {
-                // Handle integer truncation if needed (e.g., i32 result to i8 variable)
-                std::string value_to_store = right;
-                std::string right_type = last_expr_type_;
-                std::string target_type = it->second.type;
+                // Check if this is a mutable reference - if so, we need to store THROUGH the reference
+                bool is_mut_ref = false;
+                std::string inner_llvm_type = it->second.type;
 
-                // Helper to get integer size
-                auto get_int_size = [](const std::string& t) -> int {
-                    if (t == "i8")
-                        return 8;
-                    if (t == "i16")
-                        return 16;
-                    if (t == "i32")
-                        return 32;
-                    if (t == "i64")
-                        return 64;
-                    if (t == "i128")
-                        return 128;
-                    return 0;
-                };
-
-                if (right_type != target_type) {
-                    int right_size = get_int_size(right_type);
-                    int target_size = get_int_size(target_type);
-
-                    if (right_size > 0 && target_size > 0 && right_size > target_size) {
-                        // Truncate to smaller type
-                        std::string trunc_reg = fresh_reg();
-                        emit_line("  " + trunc_reg + " = trunc " + right_type + " " + right +
-                                  " to " + target_type);
-                        value_to_store = trunc_reg;
+                if (it->second.semantic_type &&
+                    it->second.semantic_type->is<types::RefType>() &&
+                    it->second.semantic_type->as<types::RefType>().is_mut) {
+                    is_mut_ref = true;
+                    // Get the inner type for store
+                    const auto& ref_type = it->second.semantic_type->as<types::RefType>();
+                    if (ref_type.inner) {
+                        inner_llvm_type = llvm_type_from_semantic(ref_type.inner);
                     }
                 }
 
-                emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
-                          it->second.reg);
+                if (is_mut_ref) {
+                    // Assignment through mutable reference:
+                    // 1. Load the pointer from the alloca
+                    // 2. Store the value through that pointer
+                    std::string ptr_reg = fresh_reg();
+                    emit_line("  " + ptr_reg + " = load ptr, ptr " + it->second.reg);
+                    emit_line("  store " + inner_llvm_type + " " + right + ", ptr " + ptr_reg);
+                } else {
+                    // Handle integer truncation if needed (e.g., i32 result to i8 variable)
+                    std::string value_to_store = right;
+                    std::string right_type = last_expr_type_;
+                    std::string target_type = it->second.type;
+
+                    // Helper to get integer size
+                    auto get_int_size = [](const std::string& t) -> int {
+                        if (t == "i8")
+                            return 8;
+                        if (t == "i16")
+                            return 16;
+                        if (t == "i32")
+                            return 32;
+                        if (t == "i64")
+                            return 64;
+                        if (t == "i128")
+                            return 128;
+                        return 0;
+                    };
+
+                    if (right_type != target_type) {
+                        int right_size = get_int_size(right_type);
+                        int target_size = get_int_size(target_type);
+
+                        if (right_size > 0 && target_size > 0 && right_size > target_size) {
+                            // Truncate to smaller type
+                            std::string trunc_reg = fresh_reg();
+                            emit_line("  " + trunc_reg + " = trunc " + right_type + " " + right +
+                                      " to " + target_type);
+                            value_to_store = trunc_reg;
+                        }
+                    }
+
+                    emit_line("  store " + target_type + " " + value_to_store + ", ptr " +
+                              it->second.reg);
+                }
             }
         } else if (bin.left->is<parser::UnaryExpr>()) {
             const auto& unary = bin.left->as<parser::UnaryExpr>();
@@ -177,6 +201,27 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
                     type_name = type_name.substr(8);
                 } else if (type_name.starts_with("%class.")) {
                     type_name = type_name.substr(7);
+                }
+
+                // Check if this is a property setter call
+                std::string prop_key = type_name + "." + field.field;
+                auto prop_it = class_properties_.find(prop_key);
+                if (prop_it != class_properties_.end() && prop_it->second.has_setter) {
+                    // Property assignment - call setter method instead of direct field store
+                    const auto& prop_info = prop_it->second;
+                    std::string setter_name =
+                        "@tml_" + get_suite_prefix() + type_name + "_set_" + prop_info.name;
+
+                    if (prop_info.is_static) {
+                        // Static property setter - no 'this' parameter
+                        emit_line("  call void " + setter_name + "(" + prop_info.llvm_type + " " +
+                                  right + ")");
+                    } else {
+                        // Instance property setter - pass 'this' pointer and value
+                        emit_line("  call void " + setter_name + "(ptr " + struct_ptr + ", " +
+                                  prop_info.llvm_type + " " + right + ")");
+                    }
+                    return right;
                 }
 
                 // For class fields, use the class type without pointer suffix

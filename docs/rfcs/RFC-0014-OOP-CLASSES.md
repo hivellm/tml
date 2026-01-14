@@ -615,9 +615,11 @@ class Subject {
 | Sealed classes | ✅ Complete |
 | Virtual/Override | ✅ Complete |
 | Module registry | ✅ Complete |
-| Namespace support | 🔄 Pending |
-| Property syntax | 🔄 Pending |
-| MIR/HIR optimizations | 🔄 Pending |
+| Namespace support | ✅ Complete |
+| Property syntax | ✅ Complete |
+| Devirtualization pass | ✅ Complete |
+| Escape analysis (classes) | 🔄 Pending |
+| Constructor inlining | 🔄 Pending |
 
 ---
 

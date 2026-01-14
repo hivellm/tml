@@ -172,6 +172,7 @@ enum class TokenKind : uint8_t {
     KwStatic,     ///< `static` - static member
     KwNew,        ///< `new` - constructor/object creation
     KwProp,       ///< `prop` - property declaration
+    KwThrow,      ///< `throw` - throw exception/error
 
     // ========================================================================
     // Operators - Arithmetic

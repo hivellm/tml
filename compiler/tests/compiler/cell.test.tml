@@ -1,0 +1,100 @@
+use test
+
+// Simple Cell implementation for testing
+type Cell[T] {
+    value: T
+}
+
+impl[T: Copy] Cell[T] {
+    pub func new(value: T) -> Cell[T] {
+        return Cell { value: value }
+    }
+
+    pub func get(this) -> T {
+        return this.value
+    }
+
+    pub func set(mut this, value: T) {
+        this.value = value
+    }
+
+    pub func replace(mut this, value: T) -> T {
+        let old: T = this.value
+        this.value = value
+        return old
+    }
+
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+}
+
+// ============================================================================
+// Cell[T] Tests
+// ============================================================================
+
+@test
+func test_cell_new_get() -> I32 {
+    let cell: Cell[I32] = Cell::new(42)
+    assert_eq(cell.get(), 42, "Cell should store value")
+    return 0
+}
+
+@test
+func test_cell_set() -> I32 {
+    let cell: Cell[I32] = Cell::new(10)
+    cell.set(20)
+    assert_eq(cell.get(), 20, "Cell::set should update value")
+    return 0
+}
+
+@test
+func test_cell_replace() -> I32 {
+    let cell: Cell[I32] = Cell::new(100)
+    let old: I32 = cell.replace(200)
+    assert_eq(old, 100, "replace should return old value")
+    assert_eq(cell.get(), 200, "replace should set new value")
+    return 0
+}
+
+@test
+func test_cell_into_inner() -> I32 {
+    let cell: Cell[I32] = Cell::new(99)
+    let value: I32 = cell.into_inner()
+    assert_eq(value, 99, "into_inner should return value")
+    return 0
+}
+
+@test
+func test_cell_multiple_sets() -> I32 {
+    let cell: Cell[I32] = Cell::new(0)
+    cell.set(1)
+    cell.set(2)
+    cell.set(3)
+    assert_eq(cell.get(), 3, "multiple sets should keep last value")
+    return 0
+}
+
+@test
+func test_cell_bool() -> I32 {
+    let cell: Cell[Bool] = Cell::new(false)
+    assert_eq(cell.get(), false, "Cell[Bool] should work")
+    cell.set(true)
+    assert_eq(cell.get(), true, "Cell[Bool] set should work")
+    return 0
+}
+
+@test
+func test_cell_counter_pattern() -> I32 {
+    let counter: Cell[I32] = Cell::new(0)
+
+    let mut i: I32 = 0
+    loop {
+        if i >= 5 then break
+        counter.set(counter.get() + 1)
+        i = i + 1
+    }
+
+    assert_eq(counter.get(), 5, "counter should be 5")
+    return 0
+}

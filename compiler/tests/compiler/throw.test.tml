@@ -1,0 +1,61 @@
+// Tests for throw expression
+use test
+
+// ============================================================================
+// Basic Error class for testing throw
+// ============================================================================
+
+class TestError {
+    message: Str
+
+    static func create(msg: Str) -> TestError {
+        return TestError { message: msg }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+}
+
+// ============================================================================
+// Throw Tests
+// ============================================================================
+
+// Test throw in conditional branch (this should pass without panic)
+@test
+func test_throw_conditional() -> I32 {
+    let should_throw: Bool = false
+    if should_throw {
+        throw TestError::create("conditional error")
+    }
+    // If we reach here, the test passes
+    return 0
+}
+
+// Test that throw syntax is valid with complex expressions
+@test
+func test_throw_syntax() -> I32 {
+    // Verify throw can be parsed in various contexts
+    let value: I32 = 42
+
+    // Throw in nested if (unreachable path)
+    if value < 0 {
+        if value < -100 {
+            throw TestError::create("very negative")
+        }
+        throw TestError::create("negative")
+    }
+
+    // Throw after other expressions (unreachable path)
+    if false {
+        let err: TestError = TestError::create("error")
+        throw err
+    }
+
+    return 0
+}
+
+// Note: Actual throw behavior (program termination) can be verified
+// by running a program with throw and checking the exit code.
+// Example: `throw TestError::create("message")` will call panic()
+// and terminate with exit code 1.

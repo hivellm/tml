@@ -789,27 +789,91 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             // Check if this is a class constructor call
             if (method == "new") {
                 auto class_def = env_.lookup_class(type_name);
-                if (class_def.has_value()) {
-                    std::string class_type = "%class." + type_name;
-                    std::string ctor_name = "@tml_" + get_suite_prefix() + type_name + "_new";
+                bool is_generic_class = pending_generic_classes_.find(type_name) != pending_generic_classes_.end();
 
-                    // Generate arguments
+                if (class_def.has_value() || is_generic_class) {
+                    std::string class_name = type_name;
+                    std::string class_type;
+
+                    // Handle generic class instantiation
+                    if (is_generic_class && !expected_enum_type_.empty()) {
+                        // Check if expected type is a class type like "%class.Box__I32"
+                        std::string expected_prefix = "%class." + type_name + "__";
+                        if (expected_enum_type_.find(expected_prefix) == 0) {
+                            // Extract mangled name
+                            std::string mangled = expected_enum_type_.substr(7); // Remove "%class."
+                            std::string type_arg_str = mangled.substr(type_name.length() + 2);
+
+                            // Infer type arguments from mangled name
+                            types::TypePtr type_arg = nullptr;
+                            auto make_prim = [](types::PrimitiveKind kind) -> types::TypePtr {
+                                auto t = std::make_shared<types::Type>();
+                                t->kind = types::PrimitiveType{kind};
+                                return t;
+                            };
+
+                            if (type_arg_str == "I64")
+                                type_arg = types::make_i64();
+                            else if (type_arg_str == "I32")
+                                type_arg = types::make_i32();
+                            else if (type_arg_str == "I8")
+                                type_arg = make_prim(types::PrimitiveKind::I8);
+                            else if (type_arg_str == "I16")
+                                type_arg = make_prim(types::PrimitiveKind::I16);
+                            else if (type_arg_str == "U8")
+                                type_arg = make_prim(types::PrimitiveKind::U8);
+                            else if (type_arg_str == "U16")
+                                type_arg = make_prim(types::PrimitiveKind::U16);
+                            else if (type_arg_str == "U32")
+                                type_arg = make_prim(types::PrimitiveKind::U32);
+                            else if (type_arg_str == "U64")
+                                type_arg = make_prim(types::PrimitiveKind::U64);
+                            else if (type_arg_str == "Bool")
+                                type_arg = types::make_bool();
+                            else
+                                type_arg = types::make_i64(); // Default fallback
+
+                            if (type_arg) {
+                                std::vector<types::TypePtr> type_args = {type_arg};
+                                class_name = require_class_instantiation(type_name, type_args);
+                            }
+                        }
+                    }
+
+                    if (class_type.empty()) {
+                        class_type = "%class." + class_name;
+                    }
+
+                    // Generate arguments and track types for overload resolution
                     std::vector<std::string> args;
                     std::vector<std::string> arg_types;
 
-                    // Get constructor parameter types from class definition
-                    if (!class_def->constructors.empty()) {
-                        const auto& ctor = class_def->constructors[0];
-                        for (size_t i = 0; i < call.args.size() && i < ctor.params.size(); ++i) {
-                            args.push_back(gen_expr(*call.args[i]));
-                            // Get the actual parameter type from constructor
-                            arg_types.push_back(llvm_type_from_semantic(ctor.params[i]));
+                    for (const auto& arg : call.args) {
+                        args.push_back(gen_expr(*arg));
+                        arg_types.push_back(last_expr_type_.empty() ? "i64" : last_expr_type_);
+                    }
+
+                    // Build constructor lookup key based on argument types (for overload resolution)
+                    std::string ctor_key = class_name + "_new";
+                    if (!arg_types.empty()) {
+                        for (const auto& at : arg_types) {
+                            ctor_key += "_" + at;
                         }
+                    }
+
+                    // Look up the constructor in functions_ map to get mangled name
+                    std::string ctor_name;
+                    auto func_it = functions_.find(ctor_key);
+                    if (func_it != functions_.end()) {
+                        ctor_name = func_it->second.llvm_name;
                     } else {
-                        // Fallback: generate args without type info
-                        for (const auto& arg : call.args) {
-                            args.push_back(gen_expr(*arg));
-                            arg_types.push_back(last_expr_type_);
+                        // Fallback: try without overload suffix for default constructor
+                        auto default_it = functions_.find(class_name + "_new");
+                        if (default_it != functions_.end()) {
+                            ctor_name = default_it->second.llvm_name;
+                        } else {
+                            // Last resort: generate basic name
+                            ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
                         }
                     }
 
@@ -925,6 +989,19 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     }
                 }
 
+                // If expected_enum_type_ didn't give us type info, try current_type_subs_
+                // This handles cases where we're inside a generic function and calling
+                // a generic struct's static method (e.g., from_addr[T] calling RawPtr::from_addr)
+                if (type_subs.empty() && !current_type_subs_.empty() && !generic_names.empty()) {
+                    for (const auto& gname : generic_names) {
+                        auto it = current_type_subs_.find(gname);
+                        if (it != current_type_subs_.end()) {
+                            type_subs[gname] = it->second;
+                            mangled_type_name = type_name + "__" + mangle_type(it->second);
+                        }
+                    }
+                }
+
                 // If we successfully inferred type args, generate the monomorphized call
                 if (!type_subs.empty()) {
                     std::string qualified_name = type_name + "::" + method;
@@ -950,7 +1027,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                             if (impl_it != pending_generic_impls_.end() ||
                                 !imported_type_params.empty()) {
                                 pending_impl_method_instantiations_.push_back(PendingImplMethod{
-                                    mangled_type_name, method, type_subs, type_name});
+                                    mangled_type_name, method, type_subs, type_name, ""});
                                 generated_impl_methods_.insert(mangled_method);
                             }
                         }

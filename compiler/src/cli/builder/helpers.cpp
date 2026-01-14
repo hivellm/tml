@@ -449,6 +449,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::cout << "Including async runtime: " << async_obj << "\n";
             }
         }
+
+        // Include math.c for math builtins (sqrt, pow, int_to_float, etc.)
+        fs::path math_c = runtime_dir / "math.c";
+        if (fs::exists(math_c)) {
+            std::string math_obj =
+                ensure_c_compiled(to_forward_slashes(math_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(math_obj));
+            if (verbose) {
+                std::cout << "Including math runtime: " << math_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported

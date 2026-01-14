@@ -201,6 +201,8 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
         return "new";
     case TokenKind::KwProp:
         return "prop";
+    case TokenKind::KwThrow:
+        return "throw";
 
     // Operators - arithmetic
     case TokenKind::Plus:

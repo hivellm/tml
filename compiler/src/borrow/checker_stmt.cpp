@@ -117,13 +117,19 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
         check_expr(**let.init);
     }
 
+    // Check if the type is a mutable reference
+    bool is_mut_ref = false;
+    if (let.type_annotation && (*let.type_annotation)->is<parser::RefType>()) {
+        is_mut_ref = (*let.type_annotation)->as<parser::RefType>().is_mut;
+    }
+
     // Bind the pattern
     std::visit(
-        [this, &let](const auto& p) {
+        [this, &let, is_mut_ref](const auto& p) {
             using T = std::decay_t<decltype(p)>;
             if constexpr (std::is_same_v<T, parser::IdentPattern>) {
                 auto loc = current_location(let.span);
-                env_.define(p.name, nullptr, p.is_mut, loc);
+                env_.define(p.name, nullptr, p.is_mut, loc, is_mut_ref);
             } else if constexpr (std::is_same_v<T, parser::TuplePattern>) {
                 // For tuple patterns, we'd need to destructure
                 // For now, just register each sub-pattern
@@ -131,7 +137,7 @@ void BorrowChecker::check_let(const parser::LetStmt& let) {
                     if (sub->template is<parser::IdentPattern>()) {
                         const auto& ident = sub->template as<parser::IdentPattern>();
                         auto loc = current_location(let.span);
-                        env_.define(ident.name, nullptr, ident.is_mut, loc);
+                        env_.define(ident.name, nullptr, ident.is_mut, loc, is_mut_ref);
                     }
                 }
             }

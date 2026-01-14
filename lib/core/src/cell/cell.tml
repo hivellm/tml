@@ -1,0 +1,78 @@
+//! A mutable memory location for `Copy` types.
+
+use core::option::*
+use core::cell::unsafe_cell::UnsafeCell
+
+// ============================================================================
+// Cell[T]
+// ============================================================================
+
+/// A mutable memory location for Copy types.
+pub type Cell[T] {
+    value: T
+}
+
+impl[T: Copy] Cell[T] {
+    /// Creates a new `Cell` containing the given value.
+    pub func new(value: T) -> Cell[T] {
+        return Cell { value: value }
+    }
+
+    /// Returns a copy of the contained value.
+    pub func get(this) -> T {
+        return this.value
+    }
+
+    /// Sets the contained value.
+    pub func set(mut this, value: T) {
+        this.value = value
+    }
+
+    /// Replaces the contained value and returns the old one.
+    pub func replace(mut this, value: T) -> T {
+        let old: T = this.value
+        this.value = value
+        return old
+    }
+
+    /// Swaps the values of two cells.
+    pub func swap(mut this, other: mut ref Cell[T]) {
+        let temp: T = this.value
+        this.value = other.value
+        other.value = temp
+    }
+
+    /// Unwraps the cell, returning the contained value.
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+}
+
+impl[T: Copy + Default] Cell[T] {
+    /// Takes the value, leaving `Default::default()` in its place.
+    pub func take(mut this) -> T {
+        return this.replace(T::default())
+    }
+}
+
+// ============================================================================
+// Comparison Implementations
+// ============================================================================
+
+impl[T: Copy + PartialEq] PartialEq for Cell[T] {
+    pub func eq(this, other: ref Cell[T]) -> Bool {
+        return this.value == other.value
+    }
+}
+
+impl[T: Copy + Eq] Eq for Cell[T] {}
+
+// ============================================================================
+// Default Implementation
+// ============================================================================
+
+impl[T: Copy + Default] Default for Cell[T] {
+    pub func default() -> Cell[T] {
+        return Cell::new(T::default())
+    }
+}

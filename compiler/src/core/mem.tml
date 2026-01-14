@@ -6,23 +6,29 @@
 // ============ MEMORY ALLOCATION ============
 
 // Allocate memory for N elements of size sizeof(i32)
-// Returns pointer to allocated memory
-pub lowlevel func alloc(count: I64) -> mut ref I32
+// Returns opaque pointer to allocated memory
+pub lowlevel func alloc(count: I64) -> *Unit
+
+// Allocate memory with I32 size argument
+pub lowlevel func alloc(count: I32) -> *Unit
 
 // Free allocated memory
 // ptr: Pointer previously returned by alloc()
-pub lowlevel func dealloc(ptr: mut ref I32) -> Unit
+pub lowlevel func dealloc(ptr: *Unit) -> Unit
 
 // ============ MEMORY READ/WRITE ============
 
 // Read i32 value from pointer
-pub lowlevel func read_i32(ptr: ref I32) -> I32
+pub lowlevel func read_i32(ptr: *Unit) -> I32
 
 // Write i32 value to pointer
-pub lowlevel func write_i32(ptr: mut ref I32, value: I32) -> Unit
+pub lowlevel func write_i32(ptr: *Unit, value: I32) -> Unit
 
 // ============ POINTER ARITHMETIC ============
 
 // Calculate pointer offset
 // Returns pointer + offset (in units of sizeof(i32))
-pub lowlevel func ptr_offset(ptr: mut ref I32, offset: I64) -> mut ref I32
+pub lowlevel func ptr_offset(ptr: *Unit, offset: I64) -> *Unit
+
+// Pointer offset with I32 offset
+pub lowlevel func ptr_offset(ptr: *Unit, offset: I32) -> *Unit

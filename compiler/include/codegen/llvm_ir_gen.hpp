@@ -109,6 +109,10 @@ private:
     bool current_func_is_async_ = false;  // Whether current function is async
     std::string current_poll_type_;       // Poll[T] type for async functions
     std::string current_poll_inner_type_; // Inner T type for Poll[T] in async functions
+
+    // Current namespace context for qualified names
+    std::vector<std::string> current_namespace_;
+    auto qualified_name(const std::string& name) const -> std::string;
     std::string current_block_;
     bool block_terminated_ = false;
 
@@ -290,11 +294,27 @@ private:
     };
     std::unordered_map<std::string, StaticFieldInfo> static_fields_;
 
+    // Property info for classes (ClassName.propName -> property info)
+    struct ClassPropertyInfo {
+        std::string name;        // Property name
+        std::string llvm_type;   // LLVM type of the property
+        bool has_getter;         // Has getter method
+        bool has_setter;         // Has setter method
+        bool is_static;          // Static property
+    };
+    std::unordered_map<std::string, ClassPropertyInfo> class_properties_;
+
     // Class vtable layout (class_name -> vtable method slots)
     std::unordered_map<std::string, std::vector<VirtualMethodInfo>> class_vtable_layout_;
 
     // Interface method order (interface_name -> method names)
     std::unordered_map<std::string, std::vector<std::string>> interface_method_order_;
+
+    // Emitted interface vtable types (to avoid duplicates)
+    std::set<std::string> emitted_interface_vtable_types_;
+
+    // Interface vtables for class implementations (ClassName::InterfaceName -> vtable name)
+    std::unordered_map<std::string, std::string> interface_vtables_;
 
     // Generate class declaration (type + vtable + methods)
     void gen_class_decl(const parser::ClassDecl& c);
@@ -302,11 +322,29 @@ private:
     // Generate class vtable
     void gen_class_vtable(const parser::ClassDecl& c);
 
+    // Generate interface vtables for implemented interfaces
+    void gen_interface_vtables(const parser::ClassDecl& c);
+
     // Generate class constructor
     void gen_class_constructor(const parser::ClassDecl& c, const parser::ConstructorDecl& ctor);
 
     // Generate class method
     void gen_class_method(const parser::ClassDecl& c, const parser::ClassMethod& method);
+
+    // Generate class constructor for generic class instantiation
+    void gen_class_constructor_instantiation(
+        const parser::ClassDecl& c, const parser::ConstructorDecl& ctor,
+        const std::string& mangled_name,
+        const std::unordered_map<std::string, types::TypePtr>& type_subs);
+
+    // Generate class method for generic class instantiation
+    void gen_class_method_instantiation(
+        const parser::ClassDecl& c, const parser::ClassMethod& method,
+        const std::string& mangled_name,
+        const std::unordered_map<std::string, types::TypePtr>& type_subs);
+
+    // Generate class property getter/setter methods
+    void gen_class_property(const parser::ClassDecl& c, const parser::PropertyDecl& prop);
 
     // Generate virtual method call dispatch
     auto gen_virtual_call(const std::string& obj_reg, const std::string& class_name,
@@ -333,16 +371,18 @@ private:
         bool generated = false;                // Has code been generated?
     };
 
-    // Cache of struct/enum instantiations (mangled_name -> info)
+    // Cache of struct/enum/class instantiations (mangled_name -> info)
     std::unordered_map<std::string, GenericInstantiation> struct_instantiations_;
     std::unordered_map<std::string, GenericInstantiation> enum_instantiations_;
     std::unordered_map<std::string, GenericInstantiation> func_instantiations_;
+    std::unordered_map<std::string, GenericInstantiation> class_instantiations_;
 
     // Pending generic declarations (base_name -> AST node pointer)
     // These are registered but not generated until instantiated
     std::unordered_map<std::string, const parser::StructDecl*> pending_generic_structs_;
     std::unordered_map<std::string, const parser::EnumDecl*> pending_generic_enums_;
     std::unordered_map<std::string, const parser::FuncDecl*> pending_generic_funcs_;
+    std::unordered_map<std::string, const parser::ClassDecl*> pending_generic_classes_;
 
     // Pending generic impl blocks (type_name -> impl block pointer)
     // These are registered and methods are instantiated when called on concrete types
@@ -357,12 +397,13 @@ private:
     std::unordered_set<std::string> generated_functions_;
 
     // Pending impl method instantiation requests
-    // Each entry: (mangled_type_name, method_name, type_subs, base_type_name)
+    // Each entry: (mangled_type_name, method_name, type_subs, base_type_name, method_type_suffix)
     struct PendingImplMethod {
         std::string mangled_type_name;
         std::string method_name;
         std::unordered_map<std::string, types::TypePtr> type_subs;
-        std::string base_type_name; // Used to find the impl block
+        std::string base_type_name;      // Used to find the impl block
+        std::string method_type_suffix;  // For method-level generics like cast[U8] -> "U8"
     };
     std::vector<PendingImplMethod> pending_impl_method_instantiations_;
 
@@ -438,6 +479,8 @@ private:
                                     const std::vector<types::TypePtr>& type_args) -> std::string;
     auto require_func_instantiation(const std::string& base_name,
                                     const std::vector<types::TypePtr>& type_args) -> std::string;
+    auto require_class_instantiation(const std::string& base_name,
+                                     const std::vector<types::TypePtr>& type_args) -> std::string;
     void generate_pending_instantiations();
     void gen_struct_instantiation(const parser::StructDecl& decl,
                                   const std::vector<types::TypePtr>& type_args);
@@ -445,6 +488,8 @@ private:
                                 const std::vector<types::TypePtr>& type_args);
     void gen_func_instantiation(const parser::FuncDecl& decl,
                                 const std::vector<types::TypePtr>& type_args);
+    void gen_class_instantiation(const parser::ClassDecl& decl,
+                                 const std::vector<types::TypePtr>& type_args);
 
     // Helper: convert parser type to semantic type with generic substitution
     auto resolve_parser_type_with_subs(const parser::Type& type,
@@ -482,9 +527,11 @@ private:
     gen_impl_method_instantiation(const std::string& mangled_type_name,
                                   const parser::FuncDecl& method,
                                   const std::unordered_map<std::string, types::TypePtr>& type_subs,
-                                  const std::vector<parser::GenericParam>& impl_generics);
+                                  const std::vector<parser::GenericParam>& impl_generics,
+                                  const std::string& method_type_suffix = "");
     void gen_struct_decl(const parser::StructDecl& s);
     void gen_enum_decl(const parser::EnumDecl& e);
+    void gen_namespace_decl(const parser::NamespaceDecl& ns);
 
     // Statement generation
     void gen_stmt(const parser::Stmt& stmt);
@@ -518,6 +565,7 @@ private:
     auto gen_while(const parser::WhileExpr& while_expr) -> std::string;
     auto gen_for(const parser::ForExpr& for_expr) -> std::string;
     auto gen_return(const parser::ReturnExpr& ret) -> std::string;
+    auto gen_throw(const parser::ThrowExpr& thr) -> std::string;
     auto gen_when(const parser::WhenExpr& when) -> std::string;
     auto gen_pattern_cmp(const parser::Pattern& pattern, const std::string& scrutinee,
                          const std::string& scrutinee_type, const std::string& tag,
@@ -558,6 +606,9 @@ private:
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
     auto gen_is_check(const parser::IsExpr& is_expr) -> std::string;
+    auto gen_class_safe_cast(const std::string& src_ptr, const std::string& src_class,
+                              const std::string& target_name, const parser::TypePtr& target_type,
+                              bool target_is_class) -> std::string;
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
     auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
     auto gen_try(const parser::TryExpr& try_expr) -> std::string;

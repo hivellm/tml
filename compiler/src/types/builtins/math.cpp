@@ -2,7 +2,7 @@
 //!
 //! This file registers mathematical intrinsics.
 //!
-//! ## Math Operations
+//! ## Math Operations (Integer)
 //!
 //! | Function | Signature            | Description     |
 //! |----------|----------------------|-----------------|
@@ -12,6 +12,15 @@
 //! | `floor`  | `(I32) -> I32`       | Floor           |
 //! | `ceil`   | `(I32) -> I32`       | Ceiling         |
 //! | `round`  | `(I32) -> I32`       | Round           |
+//!
+//! ## Math Operations (Float)
+//!
+//! | Function       | Signature            | Description              |
+//! |----------------|----------------------|--------------------------|
+//! | `sqrt`         | `(F64) -> F64`       | Square root (float)      |
+//! | `pow`          | `(F64, I32) -> F64`  | Exponentiation (float)   |
+//! | `int_to_float` | `(I32) -> F64`       | Integer to float         |
+//! | `float_to_int` | `(F64) -> I32`       | Float to integer         |
 //!
 //! ## Optimization Barriers
 //!
@@ -30,13 +39,13 @@ namespace tml::types {
 void TypeEnv::init_builtin_math() {
     SourceSpan builtin_span{};
 
-    // ============ Math Functions ============
+    // ============ Math Functions (Integer) ============
 
-    // sqrt(x: I32) -> I32 - Square root
+    // sqrt(x: I32) -> I32 - Square root (integer)
     functions_["sqrt"].push_back(
         FuncSig{"sqrt", {make_i32()}, make_i32(), {}, false, builtin_span});
 
-    // pow(base: I32, exp: I32) -> I32 - Power
+    // pow(base: I32, exp: I32) -> I32 - Power (integer)
     functions_["pow"].push_back(
         FuncSig{"pow", {make_i32(), make_i32()}, make_i32(), {}, false, builtin_span});
 
@@ -54,6 +63,32 @@ void TypeEnv::init_builtin_math() {
     // round(x: I32) -> I32 - Round
     functions_["round"].push_back(
         FuncSig{"round", {make_i32()}, make_i32(), {}, false, builtin_span});
+
+    // ============ Math Functions (Float) ============
+
+    // sqrt(x: F64) -> F64 - Square root (float)
+    functions_["sqrt"].push_back(
+        FuncSig{"sqrt", {make_f64()}, make_f64(), {}, false, builtin_span});
+
+    // pow(base: F64, exp: I32) -> F64 - Power (float base, int exponent)
+    functions_["pow"].push_back(
+        FuncSig{"pow", {make_f64(), make_i32()}, make_f64(), {}, false, builtin_span});
+
+    // pow(base: F64, exp: I64) -> F64 - Power (float base, int exponent, I64 version)
+    functions_["pow"].push_back(
+        FuncSig{"pow", {make_f64(), make_i64()}, make_f64(), {}, false, builtin_span});
+
+    // int_to_float(x: I32) -> F64 - Convert integer to float
+    functions_["int_to_float"].push_back(
+        FuncSig{"int_to_float", {make_i32()}, make_f64(), {}, false, builtin_span});
+
+    // int_to_float(x: I64) -> F64 - Convert I64 to float
+    functions_["int_to_float"].push_back(
+        FuncSig{"int_to_float", {make_i64()}, make_f64(), {}, false, builtin_span});
+
+    // float_to_int(x: F64) -> I32 - Convert float to integer (truncates)
+    functions_["float_to_int"].push_back(
+        FuncSig{"float_to_int", {make_f64()}, make_i32(), {}, false, builtin_span});
 
     // ============ Black Box (prevent optimization) ============
 

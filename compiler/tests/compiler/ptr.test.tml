@@ -1,0 +1,248 @@
+use test
+use core::ptr::*
+use core::option::*
+
+// ============================================================================
+// RawPtr[T] Tests
+// ============================================================================
+
+@test
+func test_rawptr_null() -> I32 {
+    let ptr: RawPtr[I32] = RawPtr::null_ptr()
+    assert_eq(ptr.is_null(), true, "null_ptr should be null")
+    assert_eq(ptr.addr(), 0, "null_ptr addr should be 0")
+    return 0
+}
+
+@test
+func test_rawptr_from_addr() -> I32 {
+    let ptr: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    assert_eq(ptr.is_null(), false, "from_addr should not be null")
+    assert_eq(ptr.addr(), 0x1000, "addr should match")
+    return 0
+}
+
+@test
+func test_rawptr_cast() -> I32 {
+    let int_ptr: RawPtr[I64] = RawPtr::from_addr(0x2000)
+    let byte_ptr: RawPtr[U8] = int_ptr.cast[U8]()
+    assert_eq(byte_ptr.addr(), 0x2000, "cast should preserve address")
+    return 0
+}
+
+@test
+func test_rawptr_offset() -> I32 {
+    // Assuming I64 is 8 bytes
+    let ptr: RawPtr[I64] = RawPtr::from_addr(0x1000)
+    let next: RawPtr[I64] = ptr.offset(1)
+    assert_eq(next.addr(), 0x1008, "offset(1) should add sizeof(I64)")
+
+    let prev: RawPtr[I64] = ptr.offset(-1)
+    assert_eq(prev.addr(), 0x0FF8, "offset(-1) should subtract sizeof(I64)")
+    return 0
+}
+
+@test
+func test_rawptr_add_sub() -> I32 {
+    let ptr: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let added: RawPtr[I32] = ptr.add(2)
+    assert_eq(added.addr(), 0x1008, "add(2) should add 2*sizeof(I32)")
+
+    let subbed: RawPtr[I32] = added.sub(1)
+    assert_eq(subbed.addr(), 0x1004, "sub(1) should subtract sizeof(I32)")
+    return 0
+}
+
+@test
+func test_rawptr_eq() -> I32 {
+    let a: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let b: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let c: RawPtr[I32] = RawPtr::from_addr(0x2000)
+
+    assert_eq(a == b, true, "same address should be equal")
+    assert_eq(a == c, false, "different address should not be equal")
+    return 0
+}
+
+@test
+func test_rawptr_ord() -> I32 {
+    let a: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let b: RawPtr[I32] = RawPtr::from_addr(0x2000)
+
+    assert_eq(a < b, true, "lower address should be less")
+    assert_eq(b > a, true, "higher address should be greater")
+    return 0
+}
+
+// ============================================================================
+// RawMutPtr[T] Tests
+// ============================================================================
+
+@test
+func test_rawmutptr_null() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::null_ptr()
+    assert_eq(ptr.is_null(), true, "null_ptr should be null")
+    return 0
+}
+
+@test
+func test_rawmutptr_from_addr() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(0x3000)
+    assert_eq(ptr.addr(), 0x3000, "addr should match")
+    return 0
+}
+
+@test
+func test_rawmutptr_as_const() -> I32 {
+    let mut_ptr: RawMutPtr[I32] = RawMutPtr::from_addr(0x4000)
+    let const_ptr: RawPtr[I32] = mut_ptr.as_const()
+    assert_eq(const_ptr.addr(), 0x4000, "as_const should preserve address")
+    return 0
+}
+
+@test
+func test_rawmutptr_offset() -> I32 {
+    let ptr: RawMutPtr[I32] = RawMutPtr::from_addr(0x1000)
+    let next: RawMutPtr[I32] = ptr.add(3)
+    assert_eq(next.addr(), 0x100C, "add(3) should add 3*sizeof(I32)")
+    return 0
+}
+
+// ============================================================================
+// NonNull[T] Tests
+// ============================================================================
+
+@test
+func test_nonnull_dangling() -> I32 {
+    let dangling: NonNull[I64] = NonNull::dangling()
+    assert_eq(dangling.as_ptr().is_null(), false, "dangling should not be null")
+    return 0
+}
+
+@test
+func test_nonnull_new_unchecked() -> I32 {
+    let raw: RawMutPtr[I64] = RawMutPtr::from_addr(0x6000)
+    let nn: NonNull[I64] = NonNull::new_unchecked(raw)
+    let casted: NonNull[U8] = nn.cast[U8]()
+    let addr: I64 = casted.as_ptr().addr()
+    assert_eq(addr, 0x6000, "cast should preserve address")
+    return 0
+}
+
+@test
+func test_nonnull_offset() -> I32 {
+    let raw: RawMutPtr[I32] = RawMutPtr::from_addr(0x1000)
+    let nn: NonNull[I32] = NonNull::new_unchecked(raw)
+    let next: NonNull[I32] = nn.add(2)
+    let addr: I64 = next.as_ptr().addr()
+    assert_eq(addr, 0x1008, "add should work on NonNull")
+    return 0
+}
+
+// ============================================================================
+// Alignment Utility Function Tests
+// ============================================================================
+
+@test
+func test_align_up() -> I32 {
+    let result: I64 = align_up(0x1003, 4)
+    assert_eq(result, 0x1004, "align_up(0x1003, 4) should be 0x1004")
+
+    let already: I64 = align_up(0x1000, 4)
+    assert_eq(already, 0x1000, "align_up(0x1000, 4) should be 0x1000")
+    return 0
+}
+
+@test
+func test_align_down() -> I32 {
+    let result: I64 = align_down(0x1003, 4)
+    assert_eq(result, 0x1000, "align_down(0x1003, 4) should be 0x1000")
+
+    let already: I64 = align_down(0x1004, 4)
+    assert_eq(already, 0x1004, "align_down(0x1004, 4) should be 0x1004")
+    return 0
+}
+
+@test
+func test_is_aligned_to() -> I32 {
+    assert_eq(is_aligned_to(0x1000, 8), true, "0x1000 is aligned to 8")
+    assert_eq(is_aligned_to(0x1001, 8), false, "0x1001 is not aligned to 8")
+    assert_eq(is_aligned_to(0x1004, 4), true, "0x1004 is aligned to 4")
+    return 0
+}
+
+@test
+func test_align_offset() -> I32 {
+    let offset: I64 = align_offset(0x1003, 4)
+    assert_eq(offset, 1, "offset to align 0x1003 to 4 should be 1")
+
+    let zero: I64 = align_offset(0x1004, 4)
+    assert_eq(zero, 0, "offset to align 0x1004 to 4 should be 0")
+    return 0
+}
+
+@test
+func test_is_power_of_two() -> I32 {
+    assert_eq(is_power_of_two(1), true, "1 is power of 2")
+    assert_eq(is_power_of_two(2), true, "2 is power of 2")
+    assert_eq(is_power_of_two(4), true, "4 is power of 2")
+    assert_eq(is_power_of_two(8), true, "8 is power of 2")
+    assert_eq(is_power_of_two(3), false, "3 is not power of 2")
+    assert_eq(is_power_of_two(6), false, "6 is not power of 2")
+    assert_eq(is_power_of_two(0), false, "0 is not power of 2")
+    return 0
+}
+
+@test
+func test_prev_power_of_two() -> I32 {
+    assert_eq(prev_power_of_two(5), 4, "prev_power_of_two(5) should be 4")
+    assert_eq(prev_power_of_two(8), 8, "prev_power_of_two(8) should be 8")
+    assert_eq(prev_power_of_two(15), 8, "prev_power_of_two(15) should be 8")
+    assert_eq(prev_power_of_two(0), 0, "prev_power_of_two(0) should be 0")
+    return 0
+}
+
+// ============================================================================
+// Ops Tests
+// ============================================================================
+
+@test
+func test_null_functions() -> I32 {
+    let null_const: RawPtr[I32] = make_null[I32]()
+    let null_mut_ptr: RawMutPtr[I32] = make_null_mut[I32]()
+
+    assert_eq(null_const.is_null(), true, "make_null() should create null ptr")
+    assert_eq(null_mut_ptr.is_null(), true, "make_null_mut() should create null ptr")
+    return 0
+}
+
+@test
+func test_from_addr_functions() -> I32 {
+    let ptr: RawPtr[I32] = from_addr[I32](0x7000)
+    let mut_ptr: RawMutPtr[I32] = from_addr_mut[I32](0x8000)
+
+    assert_eq(ptr.addr(), 0x7000, "from_addr should work")
+    assert_eq(mut_ptr.addr(), 0x8000, "from_addr_mut should work")
+    return 0
+}
+
+@test
+func test_eq_function() -> I32 {
+    let a: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let b: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let c: RawPtr[I32] = RawPtr::from_addr(0x2000)
+
+    assert_eq(eq(a, b), true, "eq should return true for same addr")
+    assert_eq(eq(a, c), false, "eq should return false for diff addr")
+    return 0
+}
+
+@test
+func test_ptr_distance() -> I32 {
+    let a: RawPtr[I32] = RawPtr::from_addr(0x1000)
+    let b: RawPtr[I32] = RawPtr::from_addr(0x1010)  // 16 bytes later
+
+    let dist: I64 = ptr_distance(a, b)
+    assert_eq(dist, 4, "distance should be 4 elements (16 bytes / 4 bytes per I32)")
+    return 0
+}

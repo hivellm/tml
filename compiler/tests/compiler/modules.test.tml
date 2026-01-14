@@ -14,7 +14,7 @@ use core::mem
 @test
 func test_mem_alloc_dealloc() -> I32 {
     // Allocate memory for 10 i32 values
-    let ptr: mut ref I32 = alloc(10)
+    let ptr: *Unit = alloc(10)
 
     // Write a value
     write_i32(ptr, 42)
@@ -31,7 +31,7 @@ func test_mem_alloc_dealloc() -> I32 {
 
 @test
 func test_mem_multiple_writes() -> I32 {
-    let ptr: mut ref I32 = alloc(5)
+    let ptr: *Unit = alloc(5)
 
     // Write value at base
     write_i32(ptr, 100)
@@ -46,16 +46,16 @@ func test_mem_multiple_writes() -> I32 {
 
 @test
 func test_mem_ptr_offset() -> I32 {
-    let ptr: mut ref I32 = alloc(10)
+    let ptr: *Unit = alloc(10)
 
     // Write at base
     write_i32(ptr, 10)
 
     // Get offset pointer and write
-    let ptr1: mut ref I32 = ptr_offset(ptr, 1)
+    let ptr1: *Unit = ptr_offset(ptr, 1)
     write_i32(ptr1, 20)
 
-    let ptr2: mut ref I32 = ptr_offset(ptr, 2)
+    let ptr2: *Unit = ptr_offset(ptr, 2)
     write_i32(ptr2, 30)
 
     // Read back all values
@@ -69,7 +69,7 @@ func test_mem_ptr_offset() -> I32 {
 
 @test
 func test_mem_negative_values() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
 
     write_i32(ptr, -100)
     let val: I32 = read_i32(ptr)
@@ -81,7 +81,7 @@ func test_mem_negative_values() -> I32 {
 
 @test
 func test_mem_zero_value() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
 
     write_i32(ptr, 0)
     let val: I32 = read_i32(ptr)
@@ -129,7 +129,7 @@ func test_test_module_assert_ne() -> I32 {
 @test
 func test_combined_module_usage() -> I32 {
     // Use both test and core::mem modules together
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     write_i32(ptr, 999)
 
     let val: I32 = read_i32(ptr)
@@ -146,7 +146,7 @@ func test_combined_module_usage() -> I32 {
 @test
 func test_array_pattern() -> I32 {
     // Simulate an array of 5 elements
-    let arr: mut ref I32 = alloc(5)
+    let arr: *Unit = alloc(5)
 
     // Write values 0, 10, 20, 30, 40
     write_i32(arr, 0)
@@ -171,7 +171,7 @@ func test_array_pattern() -> I32 {
 
 @test
 func test_overwrite_values() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
 
     // Write initial value
     write_i32(ptr, 1)

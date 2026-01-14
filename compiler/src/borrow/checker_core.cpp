@@ -223,6 +223,7 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
     // Register parameters - FuncParam is a simple struct with pattern, type, span
     for (const auto& param : func.params) {
         bool is_mut = false;
+        bool is_mut_ref = false;
         std::string name;
 
         if (param.pattern->template is<parser::IdentPattern>()) {
@@ -233,9 +234,14 @@ void BorrowChecker::check_func_decl(const parser::FuncDecl& func) {
             name = "_param";
         }
 
+        // Check if the parameter type is a mutable reference (mut ref T)
+        if (param.type && param.type->template is<parser::RefType>()) {
+            is_mut_ref = param.type->template as<parser::RefType>().is_mut;
+        }
+
         auto loc = current_location(func.span);
         // Note: We'd need the resolved type here - using nullptr for now
-        env_.define(name, nullptr, is_mut, loc);
+        env_.define(name, nullptr, is_mut, loc, is_mut_ref);
     }
 
     // Check function body - body is std::optional<BlockExpr>

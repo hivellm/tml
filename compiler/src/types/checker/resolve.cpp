@@ -307,7 +307,7 @@ void TypeChecker::error(const std::string& message, SourceSpan span) {
     errors_.push_back(TypeError{message, span, {}});
 }
 
-// Check if a block contains a return statement
+// Check if a block contains a return statement or has an implicit return (final expression)
 bool TypeChecker::block_has_return(const parser::BlockExpr& block) {
     // Check if any statement has return
     for (const auto& stmt : block.stmts) {
@@ -316,9 +316,12 @@ bool TypeChecker::block_has_return(const parser::BlockExpr& block) {
         }
     }
 
-    // Check the final expression
+    // If the block has a final expression, it's an implicit return
+    // The value of the final expression becomes the return value
     if (block.expr) {
-        return expr_has_return(**block.expr);
+        // The final expression IS the implicit return, we don't need explicit 'return'
+        // But we also check if it contains explicit returns (for nested blocks/when/if)
+        return true;
     }
 
     return false;

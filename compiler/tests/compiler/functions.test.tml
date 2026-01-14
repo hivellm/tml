@@ -1,214 +1,415 @@
 use test
 
-// ============ Basic Functions ============
+// ============================================================================
+// Comprehensive Function Tests
+// Tests function declarations, calls, recursion, and closures
+// ============================================================================
 
-func add(a: I32, b: I32) -> I32 {
-    return a + b
-}
-
-func multiply(a: I32, b: I32) -> I32 {
-    return a * b
-}
+// ============================================================================
+// Basic Function Calls
+// ============================================================================
 
 func identity(x: I32) -> I32 {
     return x
 }
 
-func constant_five() -> I32 {
-    return 5
-}
-
 @test
-func test_basic_functions() -> I32 {
-    assert_eq(add(2, 3), 5, "add(2, 3) should equal 5")
-    assert_eq(add(0, 0), 0, "add(0, 0) should equal 0")
-    assert_eq(add(-5, 5), 0, "add(-5, 5) should equal 0")
-
-    assert_eq(multiply(3, 4), 12, "multiply(3, 4) should equal 12")
-    assert_eq(multiply(0, 100), 0, "multiply(0, 100) should equal 0")
-
-    assert_eq(identity(42), 42, "identity(42) should equal 42")
-    assert_eq(constant_five(), 5, "constant_five() should equal 5")
-
+func test_identity_function() -> I32 {
+    let result: I32 = identity(42)
+    assert_eq(result, 42, "identity(42) should return 42")
     return 0
 }
 
-// ============ Function Composition ============
+func add_two(a: I32, b: I32) -> I32 {
+    return a + b
+}
+
+@test
+func test_two_param_function() -> I32 {
+    let result: I32 = add_two(10, 20)
+    assert_eq(result, 30, "add_two(10, 20) should return 30")
+    return 0
+}
+
+func add_three(a: I32, b: I32, c: I32) -> I32 {
+    return a + b + c
+}
+
+@test
+func test_three_param_function() -> I32 {
+    let result: I32 = add_three(1, 2, 3)
+    assert_eq(result, 6, "add_three(1, 2, 3) should return 6")
+    return 0
+}
+
+// ============================================================================
+// Function with No Return Value
+// ============================================================================
+
+func set_value(ptr: mut ref I32, value: I32) {
+    ptr = value
+}
+
+@test
+func test_void_function() -> I32 {
+    let mut x: I32 = 0
+    set_value(&mut x, 42)
+    assert_eq(x, 42, "set_value should modify the reference")
+    return 0
+}
+
+// ============================================================================
+// Nested Function Calls
+// ============================================================================
 
 func double(x: I32) -> I32 {
     return x * 2
 }
 
-func increment(x: I32) -> I32 {
-    return x + 1
-}
-
-func square(x: I32) -> I32 {
-    return x * x
+func triple(x: I32) -> I32 {
+    return x * 3
 }
 
 @test
-func test_function_composition() -> I32 {
-    // Nested calls
-    assert_eq(double(increment(5)), 12, "double(increment(5)) should equal 12")
-    assert_eq(increment(double(5)), 11, "increment(double(5)) should equal 11")
-    assert_eq(square(double(3)), 36, "square(double(3)) should equal 36")
-
-    // Triple nesting
-    assert_eq(double(double(double(2))), 16, "double(double(double(2))) should equal 16")
-    assert_eq(increment(increment(increment(0))), 3, "increment 3 times should equal 3")
-
+func test_nested_calls() -> I32 {
+    let result: I32 = double(triple(5))
+    assert_eq(result, 30, "double(triple(5)) should be 30")
     return 0
 }
 
-// ============ Recursion ============
-
-func factorial(n: I32) -> I32 {
-    if n <= 1 then {
-        return 1
-    }
-    return n * factorial(n - 1)
+@test
+func test_chained_calls() -> I32 {
+    let a: I32 = identity(5)
+    let b: I32 = double(a)
+    let c: I32 = triple(b)
+    assert_eq(c, 30, "chained calls should work correctly")
+    return 0
 }
 
-func fibonacci(n: I32) -> I32 {
-    if n <= 1 then {
-        return n
-    }
-    return fibonacci(n - 1) + fibonacci(n - 2)
-}
+// ============================================================================
+// Recursive Functions
+// ============================================================================
 
-func sum_to_n(n: I32) -> I32 {
-    if n <= 0 then {
+func recursive_sum(n: I32) -> I32 {
+    if n <= 0 {
         return 0
     }
-    return n + sum_to_n(n - 1)
+    return n + recursive_sum(n - 1)
 }
 
 @test
-func test_recursion() -> I32 {
-    // Factorial
-    assert_eq(factorial(0), 1, "factorial(0) should equal 1")
-    assert_eq(factorial(1), 1, "factorial(1) should equal 1")
-    assert_eq(factorial(5), 120, "factorial(5) should equal 120")
-    assert_eq(factorial(6), 720, "factorial(6) should equal 720")
-
-    // Fibonacci
-    assert_eq(fibonacci(0), 0, "fibonacci(0) should equal 0")
-    assert_eq(fibonacci(1), 1, "fibonacci(1) should equal 1")
-    assert_eq(fibonacci(10), 55, "fibonacci(10) should equal 55")
-
-    // Sum
-    assert_eq(sum_to_n(0), 0, "sum_to_n(0) should equal 0")
-    assert_eq(sum_to_n(5), 15, "sum_to_n(5) should equal 15")
-    assert_eq(sum_to_n(10), 55, "sum_to_n(10) should equal 55")
-
+func test_recursive_sum() -> I32 {
+    let result: I32 = recursive_sum(10)
+    assert_eq(result, 55, "recursive_sum(10) should be 55")
     return 0
 }
 
-// ============ Multiple Parameters ============
-
-func three_params(a: I32, b: I32, c: I32) -> I32 {
-    return a + b + c
-}
-
-func mixed_operations(a: I32, b: I32, c: I32, d: I32) -> I32 {
-    return (a + b) * (c - d)
-}
-
-@test
-func test_multiple_params() -> I32 {
-    assert_eq(three_params(1, 2, 3), 6, "three_params(1, 2, 3) should equal 6")
-    assert_eq(three_params(0, 0, 0), 0, "three_params(0, 0, 0) should equal 0")
-
-    assert_eq(mixed_operations(2, 3, 10, 5), 25, "(2+3) * (10-5) should equal 25")
-    assert_eq(mixed_operations(1, 1, 5, 5), 0, "(1+1) * (5-5) should equal 0")
-
-    return 0
-}
-
-// ============ Early Return ============
-
-func abs_value(x: I32) -> I32 {
-    if x >= 0 then {
-        return x
-    }
-    return 0 - x
-}
-
-func clamp(value: I32, min: I32, max: I32) -> I32 {
-    if value < min then {
-        return min
-    }
-    if value > max then {
-        return max
-    }
-    return value
-}
-
-func sign(x: I32) -> I32 {
-    if x > 0 then {
+func recursive_factorial(n: I32) -> I32 {
+    if n <= 1 {
         return 1
     }
-    if x < 0 then {
+    return n * recursive_factorial(n - 1)
+}
+
+@test
+func test_recursive_factorial() -> I32 {
+    let result: I32 = recursive_factorial(5)
+    assert_eq(result, 120, "recursive_factorial(5) should be 120")
+    return 0
+}
+
+// ============================================================================
+// Mutually Recursive Functions
+// ============================================================================
+
+func is_even(n: I32) -> Bool {
+    if n == 0 {
+        return true
+    }
+    return is_odd(n - 1)
+}
+
+func is_odd(n: I32) -> Bool {
+    if n == 0 {
+        return false
+    }
+    return is_even(n - 1)
+}
+
+@test
+func test_mutual_recursion_even() -> I32 {
+    assert_eq(is_even(0), true, "0 is even")
+    assert_eq(is_even(2), true, "2 is even")
+    assert_eq(is_even(4), true, "4 is even")
+    assert_eq(is_even(10), true, "10 is even")
+    return 0
+}
+
+@test
+func test_mutual_recursion_odd() -> I32 {
+    assert_eq(is_odd(1), true, "1 is odd")
+    assert_eq(is_odd(3), true, "3 is odd")
+    assert_eq(is_odd(5), true, "5 is odd")
+    assert_eq(is_odd(11), true, "11 is odd")
+    return 0
+}
+
+// ============================================================================
+// Functions with Complex Logic
+// ============================================================================
+
+func max_of_two(a: I32, b: I32) -> I32 {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+func max_of_three(a: I32, b: I32, c: I32) -> I32 {
+    return max_of_two(max_of_two(a, b), c)
+}
+
+@test
+func test_max_of_two() -> I32 {
+    assert_eq(max_of_two(5, 10), 10, "max(5, 10) should be 10")
+    assert_eq(max_of_two(10, 5), 10, "max(10, 5) should be 10")
+    assert_eq(max_of_two(7, 7), 7, "max(7, 7) should be 7")
+    return 0
+}
+
+@test
+func test_max_of_three() -> I32 {
+    assert_eq(max_of_three(1, 2, 3), 3, "max(1, 2, 3) should be 3")
+    assert_eq(max_of_three(3, 2, 1), 3, "max(3, 2, 1) should be 3")
+    assert_eq(max_of_three(2, 3, 1), 3, "max(2, 3, 1) should be 3")
+    return 0
+}
+
+func min_of_two(a: I32, b: I32) -> I32 {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+func clamp(value: I32, min_val: I32, max_val: I32) -> I32 {
+    return min_of_two(max_of_two(value, min_val), max_val)
+}
+
+@test
+func test_clamp() -> I32 {
+    assert_eq(clamp(5, 0, 10), 5, "5 clamped to [0,10] should be 5")
+    assert_eq(clamp(-5, 0, 10), 0, "-5 clamped to [0,10] should be 0")
+    assert_eq(clamp(15, 0, 10), 10, "15 clamped to [0,10] should be 10")
+    return 0
+}
+
+// ============================================================================
+// Functions with Multiple Return Points
+// ============================================================================
+
+func classify_number(n: I32) -> I32 {
+    if n < 0 {
+        return -1  // negative
+    }
+    if n == 0 {
+        return 0   // zero
+    }
+    if n < 10 {
+        return 1   // single digit
+    }
+    if n < 100 {
+        return 2   // two digits
+    }
+    return 3       // three or more digits
+}
+
+@test
+func test_classify_number() -> I32 {
+    assert_eq(classify_number(-5), -1, "-5 should be negative")
+    assert_eq(classify_number(0), 0, "0 should be zero")
+    assert_eq(classify_number(5), 1, "5 should be single digit")
+    assert_eq(classify_number(42), 2, "42 should be two digits")
+    assert_eq(classify_number(999), 3, "999 should be three+ digits")
+    return 0
+}
+
+// ============================================================================
+// Functions as Parameters (Higher-Order Functions)
+// ============================================================================
+
+func apply_twice(f: (I32) -> I32, x: I32) -> I32 {
+    return f(f(x))
+}
+
+@test
+func test_apply_twice() -> I32 {
+    let result: I32 = apply_twice(double, 5)
+    assert_eq(result, 20, "double applied twice to 5 should be 20")
+    return 0
+}
+
+func apply_binary(f: (I32, I32) -> I32, a: I32, b: I32) -> I32 {
+    return f(a, b)
+}
+
+@test
+func test_apply_binary() -> I32 {
+    let result: I32 = apply_binary(add_two, 10, 20)
+    assert_eq(result, 30, "apply_binary with add_two should work")
+    return 0
+}
+
+// ============================================================================
+// Closures (Basic)
+// ============================================================================
+
+@test
+func test_simple_closure() -> I32 {
+    let add_one: (I32) -> I32 = do(x: I32) x + 1
+    let result: I32 = add_one(41)
+    assert_eq(result, 42, "closure should add 1")
+    return 0
+}
+
+@test
+func test_closure_with_multiple_params() -> I32 {
+    let multiply: (I32, I32) -> I32 = do(a: I32, b: I32) a * b
+    let result: I32 = multiply(6, 7)
+    assert_eq(result, 42, "multiply closure should work")
+    return 0
+}
+
+@test
+func test_closure_with_block() -> I32 {
+    let complex: (I32) -> I32 = do(x: I32) -> I32 {
+        let doubled: I32 = x * 2
+        let incremented: I32 = doubled + 1
+        incremented
+    }
+    let result: I32 = complex(10)
+    assert_eq(result, 21, "complex closure should return 21")
+    return 0
+}
+
+// ============================================================================
+// Functions with Local Variables
+// ============================================================================
+
+func compute_with_temps(a: I32, b: I32) -> I32 {
+    let sum: I32 = a + b
+    let product: I32 = a * b
+    let diff: I32 = sum - product
+    return diff
+}
+
+@test
+func test_compute_with_temps() -> I32 {
+    // (3 + 4) - (3 * 4) = 7 - 12 = -5
+    let result: I32 = compute_with_temps(3, 4)
+    assert_eq(result, -5, "compute_with_temps(3, 4) should be -5")
+    return 0
+}
+
+// ============================================================================
+// GCD and LCM (Mathematical Functions)
+// ============================================================================
+
+func gcd(a: I32, b: I32) -> I32 {
+    let mut x: I32 = a
+    let mut y: I32 = b
+    loop {
+        if y == 0 then break
+        let temp: I32 = y
+        y = x % y
+        x = temp
+    }
+    return x
+}
+
+@test
+func test_gcd() -> I32 {
+    assert_eq(gcd(48, 18), 6, "gcd(48, 18) should be 6")
+    assert_eq(gcd(100, 25), 25, "gcd(100, 25) should be 25")
+    assert_eq(gcd(17, 13), 1, "gcd(17, 13) should be 1")
+    return 0
+}
+
+func lcm(a: I32, b: I32) -> I32 {
+    return (a * b) / gcd(a, b)
+}
+
+@test
+func test_lcm() -> I32 {
+    assert_eq(lcm(4, 6), 12, "lcm(4, 6) should be 12")
+    assert_eq(lcm(21, 6), 42, "lcm(21, 6) should be 42")
+    return 0
+}
+
+// ============================================================================
+// Power Function (Iterative)
+// ============================================================================
+
+func power(x: I32, exp: I32) -> I32 {
+    if exp == 0 {
+        return 1
+    }
+    let mut result: I32 = 1
+    let mut i: I32 = 0
+    loop {
+        if i >= exp then break
+        result = result * x
+        i = i + 1
+    }
+    return result
+}
+
+@test
+func test_power() -> I32 {
+    assert_eq(power(2, 0), 1, "2^0 should be 1")
+    assert_eq(power(2, 1), 2, "2^1 should be 2")
+    assert_eq(power(2, 10), 1024, "2^10 should be 1024")
+    assert_eq(power(3, 4), 81, "3^4 should be 81")
+    return 0
+}
+
+// ============================================================================
+// Absolute Value
+// ============================================================================
+
+func abs(x: I32) -> I32 {
+    if x < 0 {
+        return -x
+    }
+    return x
+}
+
+@test
+func test_abs() -> I32 {
+    assert_eq(abs(42), 42, "abs(42) should be 42")
+    assert_eq(abs(-42), 42, "abs(-42) should be 42")
+    assert_eq(abs(0), 0, "abs(0) should be 0")
+    return 0
+}
+
+// ============================================================================
+// Sign Function
+// ============================================================================
+
+func sign(x: I32) -> I32 {
+    if x > 0 {
+        return 1
+    }
+    if x < 0 {
         return -1
     }
     return 0
 }
 
 @test
-func test_early_return() -> I32 {
-    // Absolute value
-    assert_eq(abs_value(5), 5, "abs_value(5) should equal 5")
-    assert_eq(abs_value(-5), 5, "abs_value(-5) should equal 5")
-    assert_eq(abs_value(0), 0, "abs_value(0) should equal 0")
-
-    // Clamp
-    assert_eq(clamp(5, 0, 10), 5, "clamp(5, 0, 10) should equal 5")
-    assert_eq(clamp(-5, 0, 10), 0, "clamp(-5, 0, 10) should equal 0")
-    assert_eq(clamp(15, 0, 10), 10, "clamp(15, 0, 10) should equal 10")
-
-    // Sign
-    assert_eq(sign(10), 1, "sign(10) should equal 1")
-    assert_eq(sign(-10), -1, "sign(-10) should equal -1")
-    assert_eq(sign(0), 0, "sign(0) should equal 0")
-
-    return 0
-}
-
-// ============ Boolean Functions ============
-
-func is_even(n: I32) -> Bool {
-    return n % 2 == 0
-}
-
-func is_positive(n: I32) -> Bool {
-    return n > 0
-}
-
-func both_positive(a: I32, b: I32) -> Bool {
-    let a_pos: Bool = is_positive(a)
-    let b_pos: Bool = is_positive(b)
-    return a_pos and b_pos
-}
-
-@test
-func test_boolean_functions() -> I32 {
-    // Test is_even
-    assert(is_even(4), "4 should be even")
-    assert(is_even(0), "0 should be even")
-    assert_eq(is_even(5), false, "5 should not be even")
-    assert_eq(is_even(7), false, "7 should not be even")
-
-    // Test is_positive
-    assert(is_positive(5), "5 should be positive")
-    assert_eq(is_positive(-5), false, "-5 should not be positive")
-    assert_eq(is_positive(0), false, "0 should not be positive")
-
-    // Test both_positive
-    assert(both_positive(3, 4), "both_positive(3, 4) should be true")
-    assert_eq(both_positive(-1, 4), false, "both_positive(-1, 4) should be false")
-    assert_eq(both_positive(3, -1), false, "both_positive(3, -1) should be false")
-    assert_eq(both_positive(-1, -1), false, "both_positive(-1, -1) should be false")
-
+func test_sign() -> I32 {
+    assert_eq(sign(42), 1, "sign(42) should be 1")
+    assert_eq(sign(-42), -1, "sign(-42) should be -1")
+    assert_eq(sign(0), 0, "sign(0) should be 0")
     return 0
 }

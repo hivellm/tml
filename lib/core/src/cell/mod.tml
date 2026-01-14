@@ -1,0 +1,101 @@
+//! Shareable mutable containers.
+//!
+//! TML's memory safety relies on the "aliasing XOR mutation" principle:
+//! a value can have either multiple shared references OR one mutable reference,
+//! but not both. This module provides types that allow controlled mutation
+//! through shared references, known as "interior mutability".
+//!
+//! # Interior Mutability
+//!
+//! Interior mutability is a design pattern where you can mutate data
+//! even when there are immutable references to that data. This is useful for:
+//!
+//! - Caching computed values
+//! - Reference counting (like `Shared[T]`)
+//! - Implementing self-referential structures
+//! - Mutex and synchronization primitives
+//!
+//! # Types Overview
+//!
+//! | Type | Thread-safe | When to use |
+//! |------|-------------|-------------|
+//! | [`UnsafeCell[T]`] | No | Building other cell types |
+//! | [`Cell[T]`] | No | Simple values that implement `Duplicate` |
+//! | [`RefCell[T]`] | No | Complex types with runtime borrow checking |
+//! | [`OnceCell[T]`] | No | Write-once, read-many values |
+//! | [`LazyCell[T, F]`] | No | Lazily computed values |
+//!
+//! # Examples
+//!
+//! ## Cell for simple values
+//!
+//! ```tml
+//! use core::cell::Cell
+//!
+//! type Counter {
+//!     value: Cell[I32]
+//! }
+//!
+//! impl Counter {
+//!     func new() -> Counter {
+//!         return Counter { value: Cell::new(0) }
+//!     }
+//!
+//!     // Can increment through a shared reference!
+//!     func increment(ref this) {
+//!         this.value.set(this.value.get() + 1)
+//!     }
+//! }
+//! ```
+//!
+//! ## RefCell for complex types
+//!
+//! ```tml
+//! use core::cell::RefCell
+//!
+//! type Cache {
+//!     data: RefCell[Vec[Str]]
+//! }
+//!
+//! impl Cache {
+//!     func add(ref this, item: Str) {
+//!         this.data.borrow_mut().push(item)
+//!     }
+//!
+//!     func get_all(ref this) -> ref Vec[Str] {
+//!         return this.data.borrow()
+//!     }
+//! }
+//! ```
+//!
+//! ## OnceCell for lazy initialization
+//!
+//! ```tml
+//! use core::cell::OnceCell
+//!
+//! type Config {
+//!     db_connection: OnceCell[DbConnection]
+//! }
+//!
+//! impl Config {
+//!     func get_db(ref this) -> ref DbConnection {
+//!         return this.db_connection.get_or_init(do() {
+//!             DbConnection::connect("localhost:5432")
+//!         })
+//!     }
+//! }
+//! ```
+
+// Submodule declarations
+pub mod unsafe_cell
+pub mod cell
+pub mod ref_cell
+pub mod once
+pub mod lazy
+
+// Re-export main types
+pub use unsafe_cell::*
+pub use cell::*
+pub use ref_cell::*
+pub use once::*
+pub use lazy::*

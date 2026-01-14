@@ -185,6 +185,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
             gen_class_decl(decl->as<parser::ClassDecl>());
         } else if (decl->is<parser::InterfaceDecl>()) {
             gen_interface_decl(decl->as<parser::InterfaceDecl>());
+        } else if (decl->is<parser::NamespaceDecl>()) {
+            gen_namespace_decl(decl->as<parser::NamespaceDecl>());
         } else if (decl->is<parser::ImplDecl>()) {
             // Register impl block for vtable generation
             register_impl(&decl->as<parser::ImplDecl>());
@@ -387,8 +389,10 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this' parameter: primitive types pass by value, others by pointer
-                        if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                        // Handle 'this'/'self' parameter: primitive types pass by value, others by pointer
+                        // 'self' is an alias for 'this' (Rust compatibility)
+                        if ((param_name == "this" || param_name == "self") &&
+                            param_type.find("This") != std::string::npos) {
                             param_type = is_primitive_impl ? impl_llvm_type : "ptr";
                         }
                         params += param_type + " %" + param_name;
@@ -417,16 +421,24 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this' parameter: primitive types use value type, others use ptr
-                        if (param_name == "this" && param_type.find("This") != std::string::npos) {
+                        // Handle 'this'/'self' parameter: primitive types use value type, others use ptr
+                        // 'self' is an alias for 'this' (Rust compatibility)
+                        if ((param_name == "this" || param_name == "self") &&
+                            param_type.find("This") != std::string::npos) {
                             param_type = is_primitive_impl ? impl_llvm_type : "ptr";
                         }
 
-                        // 'this' is passed directly (by value for primitives, by pointer for
+                        // 'this'/'self' is passed directly (by value for primitives, by pointer for
                         // structs) Don't create alloca for it
-                        if (param_name == "this") {
-                            locals_[param_name] =
-                                VarInfo{"%" + param_name, param_type, nullptr, std::nullopt};
+                        if (param_name == "this" || param_name == "self") {
+                            // Create semantic type as the concrete impl type for field access
+                            types::TypePtr semantic_type = std::make_shared<types::Type>();
+                            semantic_type->kind = types::NamedType{type_name, "", {}};
+                            // Register the parameter under both 'this' and 'self' for flexibility
+                            locals_["this"] =
+                                VarInfo{"%" + param_name, param_type, semantic_type, std::nullopt};
+                            locals_["self"] =
+                                VarInfo{"%" + param_name, param_type, semantic_type, std::nullopt};
                         } else {
                             std::string alloca_reg = fresh_reg();
                             emit_line("  " + alloca_reg + " = alloca " + param_type);
@@ -1214,6 +1226,64 @@ auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
         return PrintArgType::Unknown;
     }
     return PrintArgType::Unknown;
+}
+
+// ============================================================================
+// Namespace Support
+// ============================================================================
+
+auto LLVMIRGen::qualified_name(const std::string& name) const -> std::string {
+    if (current_namespace_.empty()) {
+        return name;
+    }
+    std::string result;
+    for (const auto& seg : current_namespace_) {
+        result += seg + ".";
+    }
+    return result + name;
+}
+
+void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
+    // Save current namespace and extend it
+    auto saved_namespace = current_namespace_;
+    for (const auto& seg : ns.path) {
+        current_namespace_.push_back(seg);
+    }
+
+    // Process all declarations in this namespace
+    for (const auto& decl : ns.items) {
+        if (decl->is<parser::StructDecl>()) {
+            gen_struct_decl(decl->as<parser::StructDecl>());
+        } else if (decl->is<parser::EnumDecl>()) {
+            gen_enum_decl(decl->as<parser::EnumDecl>());
+        } else if (decl->is<parser::ClassDecl>()) {
+            gen_class_decl(decl->as<parser::ClassDecl>());
+        } else if (decl->is<parser::InterfaceDecl>()) {
+            gen_interface_decl(decl->as<parser::InterfaceDecl>());
+        } else if (decl->is<parser::NamespaceDecl>()) {
+            // Nested namespace - recurse
+            gen_namespace_decl(decl->as<parser::NamespaceDecl>());
+        } else if (decl->is<parser::ImplDecl>()) {
+            register_impl(&decl->as<parser::ImplDecl>());
+        } else if (decl->is<parser::FuncDecl>()) {
+            gen_func_decl(decl->as<parser::FuncDecl>());
+        } else if (decl->is<parser::ConstDecl>()) {
+            const auto& const_decl = decl->as<parser::ConstDecl>();
+            if (const_decl.value->is<parser::LiteralExpr>()) {
+                const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+                std::string value;
+                if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+                    value = std::to_string(lit.token.int_value().value);
+                } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+                    value = (lit.token.lexeme == "true") ? "1" : "0";
+                }
+                global_constants_[qualified_name(const_decl.name)] = value;
+            }
+        }
+    }
+
+    // Restore namespace
+    current_namespace_ = saved_namespace;
 }
 
 } // namespace tml::codegen

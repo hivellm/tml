@@ -55,6 +55,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_for(expr.as<parser::ForExpr>());
     } else if (expr.is<parser::ReturnExpr>()) {
         return gen_return(expr.as<parser::ReturnExpr>());
+    } else if (expr.is<parser::ThrowExpr>()) {
+        return gen_throw(expr.as<parser::ThrowExpr>());
     } else if (expr.is<parser::WhenExpr>()) {
         return gen_when(expr.as<parser::WhenExpr>());
     } else if (expr.is<parser::StructExpr>()) {

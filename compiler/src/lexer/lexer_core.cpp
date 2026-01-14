@@ -113,9 +113,8 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"protected", TokenKind::KwProtected},
     {"private", TokenKind::KwPrivate},
     {"static", TokenKind::KwStatic},
-    // Note: 'new' is NOT a keyword - it's used as identifier in Type::new() pattern
-    // The parser checks for it contextually within class declarations
     {"prop", TokenKind::KwProp},
+    {"throw", TokenKind::KwThrow},
 };
 
 } // anonymous namespace

@@ -1,12 +1,12 @@
 use test
-use std::collections
 
 // Collection Operations Tests (List, HashMap, Buffer)
+// Uses *Unit as opaque handle type for collection builtins
 
 @test
 func test_list() -> I32 {
     // Create list with initial capacity 4
-    let list: List = list_create(4)
+    let list: *Unit = list_create(4)
 
     // Push elements
     list_push(list, 10)
@@ -52,7 +52,7 @@ func test_list() -> I32 {
 @test
 func test_hashmap() {
     // Create hashmap with capacity 16
-    let map: HashMap = hashmap_create(16)
+    let map: *Unit = hashmap_create(16)
 
     // Set values
     hashmap_set(map, 1, 100)
@@ -98,7 +98,7 @@ func test_hashmap() {
 @test
 func test_buffer() -> I32 {
     // Create buffer with capacity 32
-    let buf: Buffer = buffer_create(32)
+    let buf: *Unit = buffer_create(32)
 
     // Test initial state
     assert_eq(buffer_len(buf), 0, "buffer_len should be 0 initially")

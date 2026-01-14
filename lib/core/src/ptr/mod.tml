@@ -1,0 +1,125 @@
+//! Raw pointer types and operations.
+//!
+//! This module provides low-level pointer manipulation for TML, following
+//! Rust's `core::ptr` module structure with separate files for each type.
+//!
+//! # Main Types
+//!
+//! - [`Ptr`] - An opaque pointer alias for `*Unit` (like `void*` in C)
+//! - [`RawPtr[T]`] - An immutable raw pointer (like `*const T` in Rust)
+//! - [`RawMutPtr[T]`] - A mutable raw pointer (like `*mut T` in Rust)
+//! - [`NonNull[T]`] - A non-null pointer wrapper
+//!
+//! # Module Structure
+//!
+//! - `const_ptr` - Immutable raw pointer (`RawPtr[T]`)
+//! - `mut_ptr` - Mutable raw pointer (`RawMutPtr[T]`)
+//! - `non_null` - Non-null pointer wrapper (`NonNull[T]`)
+//! - `ops` - Pointer operations (copy, write_bytes, etc.)
+//! - `alignment` - Alignment utilities
+//!
+//! # Safety
+//!
+//! Raw pointers are inherently unsafe. Unlike references (`ref T`), raw pointers:
+//!
+//! - Can be null
+//! - Can be dangling (pointing to freed memory)
+//! - Can be unaligned
+//! - Don't have lifetime tracking
+//! - Can alias freely
+//!
+//! Most operations on raw pointers require `lowlevel` blocks and careful
+//! attention to safety invariants.
+//!
+//! # When to Use Raw Pointers
+//!
+//! Raw pointers should be used sparingly, typically only when:
+//!
+//! - Interfacing with FFI/C code
+//! - Implementing custom data structures with complex ownership
+//! - Performance-critical code where borrow checker overhead matters
+//! - Building safe abstractions that need unsafe internals
+//!
+//! # Examples
+//!
+//! ## Basic Pointer Operations
+//!
+//! ```tml
+//! use core::ptr::{RawPtr, RawMutPtr, Ptr}
+//!
+//! // Opaque pointer for memory allocation
+//! let mem: Ptr = alloc(10)
+//! write_i32(mem, 42)
+//! dealloc(mem)
+//!
+//! // Typed immutable pointer
+//! let null_ptr: RawPtr[I64] = RawPtr::null_ptr()
+//! assert(null_ptr.is_null())
+//!
+//! // Pointer arithmetic
+//! let ptr = RawPtr::from_addr(0x1000)
+//! let next = ptr.add(1)  // Advances by sizeof(I64) bytes
+//! ```
+//!
+//! ## NonNull for Non-nullable Pointers
+//!
+//! ```tml
+//! use core::ptr::NonNull
+//!
+//! func process(ptr: NonNull[Data]) {
+//!     // No null check needed - NonNull guarantees non-null
+//!     let data = ptr.read()
+//! }
+//! ```
+//!
+//! ## Memory Copying
+//!
+//! ```tml
+//! use core::ptr::{copy_nonoverlapping, RawPtr, RawMutPtr}
+//!
+//! // Copy 10 elements from src to dst
+//! copy_nonoverlapping(src, dst, 10)
+//! ```
+
+// Submodule declarations
+pub mod const_ptr
+pub mod mut_ptr
+pub mod non_null
+pub mod ops
+pub mod alignment
+
+// Re-export all from submodules
+pub use const_ptr::*
+pub use mut_ptr::*
+pub use non_null::*
+pub use ops::*
+pub use alignment::*
+
+// ============================================================================
+// Type Aliases
+// ============================================================================
+
+/// Opaque pointer type alias.
+///
+/// `Ptr` is an alias for `*Unit`, representing a type-erased pointer
+/// (similar to `void*` in C). Use this for:
+///
+/// - Memory allocation functions (`alloc`, `dealloc`)
+/// - Atomic operations (`atomic_load`, `atomic_store`)
+/// - FFI with C code expecting `void*`
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::Ptr
+///
+/// let mem: Ptr = alloc(10)
+/// write_i32(mem, 42)
+/// let val: I32 = read_i32(mem)
+/// dealloc(mem)
+/// ```
+///
+/// # Note
+///
+/// For typed pointers, prefer `RawPtr[T]` or `RawMutPtr[T]` instead.
+pub type Ptr = *Unit

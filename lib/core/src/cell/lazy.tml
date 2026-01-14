@@ -1,0 +1,112 @@
+//! Lazy initialization cells.
+//!
+//! This module provides `LazyCell[T]`, a cell that lazily computes its value
+//! on first access using a provided initialization function.
+
+use core::option::*
+use core::cell::once::OnceCell
+
+// ============================================================================
+// LazyCell[T, F]
+// ============================================================================
+
+/// A value which is initialized on the first access.
+///
+/// `LazyCell[T, F]` is a cell that stores an initialization function and
+/// computes its value lazily on first access.
+pub type LazyCell[T, F] {
+    cell: OnceCell[T],
+    init: Maybe[F]
+}
+
+impl[T, F: FnOnce[(), Output = T]] LazyCell[T, F] {
+    /// Creates a new `LazyCell` with the given initialization function.
+    pub func new(f: F) -> LazyCell[T, F] {
+        return LazyCell {
+            cell: OnceCell::new(),
+            init: Just(f)
+        }
+    }
+
+    /// Forces evaluation of the lazy value and returns a reference to it.
+    pub func get(mut this) -> ref T {
+        if this.cell.is_empty() {
+            when this.init {
+                Just(f) => {
+                    let value: T = f()
+                    this.cell.set(value)
+                    this.init = Nothing
+                },
+                Nothing => panic("LazyCell: init function already consumed")
+            }
+        }
+        when this.cell.get() {
+            Just(v) => return v,
+            Nothing => panic("LazyCell: impossible state")
+        }
+    }
+
+    /// Returns `true` if the lazy value has been computed.
+    pub func is_initialized(this) -> Bool {
+        return this.cell.is_initialized()
+    }
+
+    /// Consumes this `LazyCell`, returning the wrapped value.
+    pub func into_inner(this) -> Maybe[T] {
+        return this.cell.into_inner()
+    }
+
+    /// Gets a mutable reference to the value if initialized.
+    pub func get_mut(mut this) -> Maybe[mut ref T] {
+        if this.cell.is_initialized() {
+            when this.cell.get() {
+                Just(v) => return Just(mut ref v),
+                Nothing => return Nothing
+            }
+        }
+        return Nothing
+    }
+}
+
+// ============================================================================
+// LazyCell with fallible initialization
+// ============================================================================
+
+/// A lazy cell that can fail during initialization.
+pub type LazyTryCell[T, E, F] {
+    cell: OnceCell[Outcome[T, E]],
+    init: Maybe[F]
+}
+
+impl[T, E, F: FnOnce[(), Output = Outcome[T, E]]] LazyTryCell[T, E, F] {
+    /// Creates a new `LazyTryCell` with the given fallible initialization function.
+    pub func new(f: F) -> LazyTryCell[T, E, F] {
+        return LazyTryCell {
+            cell: OnceCell::new(),
+            init: Just(f)
+        }
+    }
+
+    /// Forces evaluation and returns a reference to the result.
+    pub func get(mut this) -> ref Outcome[T, E] {
+        if this.cell.is_empty() {
+            when this.init {
+                Just(f) => {
+                    let result: Outcome[T, E] = f()
+                    this.cell.set(result)
+                    this.init = Nothing
+                },
+                Nothing => panic("LazyTryCell: init function already consumed")
+            }
+        }
+        when this.cell.get() {
+            Just(v) => return v,
+            Nothing => panic("LazyTryCell: impossible state")
+        }
+    }
+
+    /// Returns `true` if the lazy value has been computed.
+    pub func is_initialized(this) -> Bool {
+        return this.cell.is_initialized()
+    }
+}

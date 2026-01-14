@@ -915,17 +915,18 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     std::string param_types;
     std::vector<std::string> param_types_vec;
 
-    // Check if first param is 'this' or 'mut this' (instance method vs static)
+    // Check if first param is 'this'/'self' or 'mut this'/'mut self' (instance method vs static)
+    // Note: 'self' is an alias for 'this' (Rust compatibility)
     size_t param_start = 0;
     bool is_instance_method = false;
     bool is_mut_this = false;
     if (!method.params.empty()) {
         const auto& first_param = method.params[0];
         std::string first_name = get_param_name(first_param);
-        if (first_name == "this") {
+        if (first_name == "this" || first_name == "self") {
             is_instance_method = true;
-            param_start = 1; // Skip 'this' in param loop since we handle it specially
-            // Check if 'mut this' - need to pass by pointer for mutation
+            param_start = 1; // Skip 'this'/'self' in param loop since we handle it specially
+            // Check if 'mut this'/'mut self' - need to pass by pointer for mutation
             if (first_param.pattern && first_param.pattern->is<parser::IdentPattern>()) {
                 is_mut_this = first_param.pattern->as<parser::IdentPattern>().is_mut;
             }
@@ -983,17 +984,34 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");
 
-    // Register 'this' in locals only for instance methods
+    // Register 'this'/'self' in locals only for instance methods
+    // Remember what the parameter was named to register both names if needed
+    std::string this_param_name = "";
+    if (is_instance_method && !method.params.empty()) {
+        this_param_name = get_param_name(method.params[0]);
+    }
     if (is_instance_method) {
+        // Create semantic type for the impl type to enable field access
+        types::TypePtr impl_semantic_type = std::make_shared<types::Type>();
+        impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+
         if (!this_inner_type.empty()) {
-            // For 'mut this' on primitive types, create an alloca to allow mutation
+            // For 'mut this'/'mut self' on primitive types, create an alloca to allow mutation
             // The value is passed by value but we need an addressable location for assignment
             std::string alloca_reg = fresh_reg();
             emit_line("  " + alloca_reg + " = alloca " + this_inner_type);
             emit_line("  store " + this_inner_type + " %this, ptr " + alloca_reg);
-            locals_["this"] = VarInfo{alloca_reg, this_inner_type, nullptr, std::nullopt};
+            locals_["this"] = VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+            // Also register as 'self' if that was the parameter name
+            if (this_param_name == "self") {
+                locals_["self"] = VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+            }
         } else {
-            locals_["this"] = VarInfo{"%this", this_type, nullptr, std::nullopt};
+            locals_["this"] = VarInfo{"%this", this_type, impl_semantic_type, std::nullopt};
+            // Also register as 'self' if that was the parameter name
+            if (this_param_name == "self") {
+                locals_["self"] = VarInfo{"%this", this_type, impl_semantic_type, std::nullopt};
+            }
         }
     }
 
@@ -1080,7 +1098,8 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
 void LLVMIRGen::gen_impl_method_instantiation(
     const std::string& mangled_type_name, const parser::FuncDecl& method,
     const std::unordered_map<std::string, types::TypePtr>& type_subs,
-    [[maybe_unused]] const std::vector<parser::GenericParam>& impl_generics) {
+    [[maybe_unused]] const std::vector<parser::GenericParam>& impl_generics,
+    const std::string& method_type_suffix) {
     // Save current context
     std::string saved_func = current_func_;
     std::string saved_ret_type = current_ret_type_;
@@ -1089,7 +1108,12 @@ void LLVMIRGen::gen_impl_method_instantiation(
     auto saved_locals = locals_;
     auto saved_type_subs = current_type_subs_;
 
-    std::string method_name = mangled_type_name + "_" + method.name;
+    // Build method name, including method-level type suffix if present
+    std::string full_method_name = method.name;
+    if (!method_type_suffix.empty()) {
+        full_method_name += "__" + method_type_suffix;
+    }
+    std::string method_name = mangled_type_name + "_" + full_method_name;
     current_func_ = method_name;
     current_impl_type_ = mangled_type_name;
     current_type_subs_ = type_subs; // Set type substitutions for the method body
@@ -1149,7 +1173,7 @@ void LLVMIRGen::gen_impl_method_instantiation(
 
     // Function signature - include suite prefix for test suite mode
     std::string func_llvm_name =
-        "tml_" + get_suite_prefix() + mangled_type_name + "_" + method.name;
+        "tml_" + get_suite_prefix() + mangled_type_name + "_" + full_method_name;
     emit_line("");
     emit_line("define internal " + ret_type + " @" + func_llvm_name + "(" + params + ") #0 {");
     emit_line("entry:");

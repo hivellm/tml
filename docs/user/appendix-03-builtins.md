@@ -74,33 +74,76 @@ println("Temperature: {:.1}°C", temperature)  // Temperature: 36.8°C
 
 ## Memory Functions
 
+Memory operations use `*Unit` as an opaque pointer type (similar to `void*` in C).
+
+> **Tip:** The `core::ptr` module provides `Ptr` as a convenient alias for `*Unit`:
+> ```tml
+> use core::ptr::Ptr
+> let mem: Ptr = alloc(4)  // Equivalent to: let mem: *Unit = alloc(4)
+> ```
+
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `alloc(size)` | `(I32) -> ptr` | Allocate bytes |
-| `dealloc(ptr)` | `(ptr) -> Unit` | Free memory |
-| `read_i32(ptr)` | `(ptr) -> I32` | Read 32-bit int |
-| `write_i32(ptr, val)` | `(ptr, I32) -> Unit` | Write 32-bit int |
-| `ptr_offset(ptr, n)` | `(ptr, I32) -> ptr` | Offset pointer |
+| `alloc(size)` | `(I32) -> *Unit` | Allocate bytes (size * 4 bytes) |
+| `alloc(size)` | `(I64) -> *Unit` | Allocate bytes |
+| `dealloc(ptr)` | `(*Unit) -> Unit` | Free memory |
+| `read_i32(ptr)` | `(*Unit) -> I32` | Read 32-bit int |
+| `write_i32(ptr, val)` | `(*Unit, I32) -> Unit` | Write 32-bit int |
+| `ptr_offset(ptr, n)` | `(*Unit, I32) -> *Unit` | Offset pointer by n elements (4 bytes each) |
 
 ```tml
-let mem = alloc(4)
+let mem: *Unit = alloc(4)  // allocate space for 4 I32 values
 write_i32(mem, 42)
 println(read_i32(mem))  // 42
 dealloc(mem)
 ```
 
+### Array-like Usage
+
+```tml
+let arr: *Unit = alloc(3)  // allocate 3 elements
+
+// Write values at offsets
+write_i32(arr, 10)                      // arr[0] = 10
+write_i32(ptr_offset(arr, 1), 20)       // arr[1] = 20
+write_i32(ptr_offset(arr, 2), 30)       // arr[2] = 30
+
+// Read values
+let val0: I32 = read_i32(arr)                     // 10
+let val1: I32 = read_i32(ptr_offset(arr, 1))      // 20
+let val2: I32 = read_i32(ptr_offset(arr, 2))      // 30
+
+dealloc(arr)
+```
+
 ## Atomic Functions
+
+Atomic operations use `*Unit` as an opaque pointer type for thread-safe memory access.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `atomic_load(ptr)` | `(ptr) -> I32` | Atomic read |
-| `atomic_store(ptr, val)` | `(ptr, I32) -> Unit` | Atomic write |
-| `atomic_add(ptr, val)` | `(ptr, I32) -> I32` | Fetch and add |
-| `atomic_sub(ptr, val)` | `(ptr, I32) -> I32` | Fetch and subtract |
-| `atomic_exchange(ptr, val)` | `(ptr, I32) -> I32` | Swap |
-| `atomic_cas(ptr, exp, des)` | `(ptr, I32, I32) -> Bool` | Compare-and-swap |
-| `atomic_and(ptr, val)` | `(ptr, I32) -> I32` | Atomic AND |
-| `atomic_or(ptr, val)` | `(ptr, I32) -> I32` | Atomic OR |
+| `atomic_load(ptr)` | `(*Unit) -> I32` | Atomic read |
+| `atomic_store(ptr, val)` | `(*Unit, I32) -> Unit` | Atomic write |
+| `atomic_add(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and add |
+| `atomic_sub(ptr, val)` | `(*Unit, I32) -> I32` | Fetch and subtract |
+| `atomic_exchange(ptr, val)` | `(*Unit, I32) -> I32` | Swap |
+| `atomic_cas(ptr, exp, des)` | `(*Unit, I32, I32) -> Bool` | Compare-and-swap |
+| `atomic_and(ptr, val)` | `(*Unit, I32) -> I32` | Atomic AND |
+| `atomic_or(ptr, val)` | `(*Unit, I32) -> I32` | Atomic OR |
+
+```tml
+let counter: *Unit = alloc(1)
+atomic_store(counter, 0)
+
+// Atomic increment
+let old: I32 = atomic_add(counter, 1)
+println(old)  // 0
+
+let value: I32 = atomic_load(counter)
+println(value)  // 1
+
+dealloc(counter)
+```
 
 ## Synchronization Functions
 
@@ -108,9 +151,20 @@ dealloc(mem)
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `spin_lock(ptr)` | `(ptr) -> Unit` | Acquire spinlock |
-| `spin_unlock(ptr)` | `(ptr) -> Unit` | Release spinlock |
-| `spin_trylock(ptr)` | `(ptr) -> Bool` | Try acquire |
+| `spin_lock(ptr)` | `(*Unit) -> Unit` | Acquire spinlock |
+| `spin_unlock(ptr)` | `(*Unit) -> Unit` | Release spinlock |
+| `spin_trylock(ptr)` | `(*Unit) -> Bool` | Try acquire |
+
+```tml
+let lock: *Unit = alloc(1)
+atomic_store(lock, 0)  // Initialize lock
+
+spin_lock(lock)
+// Critical section
+spin_unlock(lock)
+
+dealloc(lock)
+```
 
 ### Memory Fences
 

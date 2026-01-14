@@ -104,41 +104,14 @@ const char* float_to_fixed(double value, int32_t decimals) {
     return float_buffer;
 }
 
-// float_to_precision(value: F64, precision: I32) -> Str
-const char* float_to_precision(double value, int32_t precision) {
-    if (precision < 1)
-        precision = 1;
-    if (precision > 21)
-        precision = 21;
-    snprintf(float_buffer, sizeof(float_buffer), "%.*g", precision, value);
-    return float_buffer;
-}
-
 // float_to_string(value: F64) -> Str
 const char* float_to_string(double value) {
     snprintf(float_buffer, sizeof(float_buffer), "%g", value);
     return float_buffer;
 }
 
-// float_to_exp(value: F64, uppercase: I32) -> Str
-const char* float_to_exp(double value, int32_t uppercase) {
-    if (uppercase) {
-        snprintf(float_buffer, sizeof(float_buffer), "%E", value);
-    } else {
-        snprintf(float_buffer, sizeof(float_buffer), "%e", value);
-    }
-    return float_buffer;
-}
-
-// f64_is_nan(value: F64) -> I32 (bool)
-int32_t f64_is_nan(double value) {
-    return isnan(value) ? 1 : 0;
-}
-
-// f64_is_infinite(value: F64) -> I32 (bool)
-int32_t f64_is_infinite(double value) {
-    return isinf(value) ? 1 : 0;
-}
+// Note: float_to_precision, float_to_exp, f64_is_nan, f64_is_infinite
+// are defined in essential.c to avoid duplicate symbol errors
 
 // int_to_float(value: I32) -> F64
 double int_to_float(int32_t value) {

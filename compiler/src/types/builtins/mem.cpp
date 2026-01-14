@@ -121,7 +121,7 @@ void TypeEnv::init_builtin_mem() {
 
     // ============ Simple Allocation (compatibility) ============
 
-    // alloc(size: I64) -> Ptr[Unit] - Simple allocation (maps to malloc)
+    // alloc(size: I64) -> *Unit - Simple allocation (for literal integers that default to I64)
     functions_["alloc"].push_back(FuncSig{"alloc",
                                           {make_primitive(PrimitiveKind::I64)},
                                           make_ptr(make_unit()),
@@ -129,9 +129,51 @@ void TypeEnv::init_builtin_mem() {
                                           false,
                                           builtin_span});
 
-    // dealloc(ptr: Ptr[Unit]) -> Unit - Simple deallocation (maps to free)
+    // alloc(size: I32) -> *Unit - Simple allocation for tests
+    functions_["alloc"].push_back(FuncSig{"alloc",
+                                          {make_primitive(PrimitiveKind::I32)},
+                                          make_ptr(make_unit()),
+                                          {},
+                                          false,
+                                          builtin_span});
+
+    // dealloc(ptr: *Unit) -> Unit - Simple deallocation for tests
     functions_["dealloc"].push_back(
-        FuncSig{"dealloc", {make_ptr(make_unit())}, make_unit(), {}, false, builtin_span});
+        FuncSig{"dealloc",
+                {make_ptr(make_unit())},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // ============ Simple I32 Memory Operations (for tests) ============
+
+    // read_i32(ptr: *Unit) -> I32 - Read I32 from memory
+    functions_["read_i32"].push_back(
+        FuncSig{"read_i32",
+                {make_ptr(make_unit())},
+                make_primitive(PrimitiveKind::I32),
+                {},
+                false,
+                builtin_span});
+
+    // write_i32(ptr: *Unit, value: I32) -> Unit - Write I32 to memory
+    functions_["write_i32"].push_back(
+        FuncSig{"write_i32",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
+                make_unit(),
+                {},
+                false,
+                builtin_span});
+
+    // ptr_offset(ptr: *Unit, offset: I32) -> *Unit - Offset pointer by elements
+    functions_["ptr_offset"].push_back(
+        FuncSig{"ptr_offset",
+                {make_ptr(make_unit()), make_primitive(PrimitiveKind::I32)},
+                make_ptr(make_unit()),
+                {},
+                false,
+                builtin_span});
 
     // ============ Size/Alignment ============
 

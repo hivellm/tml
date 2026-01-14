@@ -459,6 +459,10 @@ private:
 
     /// The module currently being built (for adding monomorphized items).
     HirModule* current_module_ = nullptr;
+
+    /// Current impl self type for resolving 'This'/'Self' types.
+    /// Set when lowering impl methods, cleared after.
+    std::optional<HirType> current_impl_self_type_ = std::nullopt;
 };
 
 } // namespace tml::hir

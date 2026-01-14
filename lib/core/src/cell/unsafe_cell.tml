@@ -1,0 +1,57 @@
+//! The core primitive for interior mutability.
+
+use core::option::*
+
+// ============================================================================
+// UnsafeCell[T]
+// ============================================================================
+
+/// The core primitive for interior mutability in TML.
+pub type UnsafeCell[T] {
+    value: T
+}
+
+impl[T] UnsafeCell[T] {
+    /// Creates a new `UnsafeCell` containing the given value.
+    pub func new(value: T) -> UnsafeCell[T] {
+        return UnsafeCell { value: value }
+    }
+
+    /// Unwraps the `UnsafeCell`, returning the inner value.
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+}
+
+impl[T: Default] Default for UnsafeCell[T] {
+    pub func default() -> UnsafeCell[T] {
+        return UnsafeCell::new(T::default())
+    }
+}
+
+// ============================================================================
+// SyncUnsafeCell[T] - Thread-safe version
+// ============================================================================
+
+/// A thread-safe version of `UnsafeCell`.
+pub type SyncUnsafeCell[T] {
+    value: T
+}
+
+impl[T] SyncUnsafeCell[T] {
+    /// Creates a new `SyncUnsafeCell` containing the given value.
+    pub func new(value: T) -> SyncUnsafeCell[T] {
+        return SyncUnsafeCell { value: value }
+    }
+
+    /// Unwraps the cell, returning the inner value.
+    pub func into_inner(this) -> T {
+        return this.value
+    }
+}
+
+impl[T: Default] Default for SyncUnsafeCell[T] {
+    pub func default() -> SyncUnsafeCell[T] {
+        return SyncUnsafeCell::new(T::default())
+    }
+}

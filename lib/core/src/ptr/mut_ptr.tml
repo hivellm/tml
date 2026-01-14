@@ -1,0 +1,454 @@
+//! Mutable raw pointer type.
+//!
+//! This module contains the `RawMutPtr[T]` type, TML's equivalent of Rust's `*mut T`.
+
+use core::hash::*
+use core::option::*
+use core::ptr::const_ptr::RawPtr
+
+// ============================================================================
+// RawMutPtr[T] - Mutable Raw Pointer
+// ============================================================================
+
+/// A raw, potentially null mutable pointer to `T`.
+///
+/// `RawMutPtr[T]` is the TML equivalent of Rust's `*mut T`. It represents
+/// a mutable raw pointer that may or may not be valid.
+///
+/// # Comparison with RawPtr
+///
+/// | Operation | `RawPtr[T]` | `RawMutPtr[T]` |
+/// |-----------|-------------|----------------|
+/// | Read      | Yes         | Yes            |
+/// | Write     | No          | Yes            |
+/// | Cast      | Yes         | Yes            |
+/// | Arithmetic| Yes         | Yes            |
+///
+/// # Examples
+///
+/// ```tml
+/// use core::ptr::RawMutPtr
+///
+/// // Creating a mutable pointer
+/// let ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0x1000)
+///
+/// // Writing a value
+/// ptr.write(42)
+///
+/// // Reading it back
+/// let value = ptr.read()  // 42
+///
+/// // Converting to immutable
+/// let const_ptr: RawPtr[I64] = ptr.as_const()
+/// ```
+///
+/// # Safety
+///
+/// In addition to the safety requirements of `RawPtr`, mutable operations
+/// require exclusive access to the pointed memory.
+pub type RawMutPtr[T] {
+    addr: I64
+}
+
+impl[T] RawMutPtr[T] {
+    /// Creates a null mutable pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr: RawMutPtr[I64] = RawMutPtr::null_ptr()
+    /// assert(ptr.is_null())
+    /// ```
+    pub func null_ptr() -> RawMutPtr[T] {
+        return RawMutPtr { addr: 0 }
+    }
+
+    /// Returns `true` if this is a null pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr: RawMutPtr[I64] = RawMutPtr::null_ptr()
+    /// assert(ptr.is_null())
+    /// ```
+    pub func is_null(this) -> Bool {
+        return this.addr == 0
+    }
+
+    /// Returns the address as an integer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// assert(ptr.addr() == 0x1000)
+    /// ```
+    pub func addr(this) -> I64 {
+        return this.addr
+    }
+
+    /// Creates a mutable pointer from an integer address.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// ```
+    pub func from_addr(addr: I64) -> RawMutPtr[T] {
+        return RawMutPtr { addr: addr }
+    }
+
+    /// Casts this pointer to a mutable pointer of a different type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let int_ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0x1000)
+    /// let byte_ptr: RawMutPtr[U8] = int_ptr.cast[U8]()
+    /// ```
+    pub func cast[U](this) -> RawMutPtr[U] {
+        return RawMutPtr { addr: this.addr }
+    }
+
+    /// Converts to an immutable pointer.
+    ///
+    /// This is a zero-cost conversion that changes only the type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let mut_ptr: RawMutPtr[I64] = RawMutPtr::from_addr(0x1000)
+    /// let const_ptr: RawPtr[I64] = mut_ptr.as_const()
+    /// ```
+    pub func as_const(this) -> RawPtr[T] {
+        return RawPtr { addr: this.addr }
+    }
+
+    /// Offsets the pointer by `count` elements.
+    ///
+    /// See [`RawPtr::offset`] for details.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// let next = ptr.offset(1)
+    /// ```
+    pub func offset(this, count: I64) -> RawMutPtr[T] {
+        let element_size: I64 = lowlevel { sizeof_type[T]() }
+        return RawMutPtr { addr: this.addr + count * element_size }
+    }
+
+    /// Adds `count` to the pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// let next = ptr.add(1)
+    /// ```
+    pub func add(this, count: I64) -> RawMutPtr[T] {
+        return this.offset(count)
+    }
+
+    /// Subtracts `count` from the pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// let prev = ptr.sub(1)
+    /// ```
+    pub func sub(this, count: I64) -> RawMutPtr[T] {
+        return this.offset(-count)
+    }
+
+    /// Calculates the distance to another pointer in elements.
+    ///
+    /// Returns the number of elements between `this` and `other`.
+    /// Positive if `other` is after `this`, negative if before.
+    pub func offset_from(this, other: RawMutPtr[T]) -> I64 {
+        let element_size: I64 = lowlevel { sizeof_type[T]() }
+        if element_size == 0 {
+            return 0
+        }
+        return (other.addr - this.addr) / element_size
+    }
+
+    /// Reads the value from the pointer.
+    ///
+    /// Delegates to `as_const().read()`. See [`RawPtr::read`] for details.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let value = ptr.read()
+    /// ```
+    pub func read(this) -> T {
+        return this.as_const().read()
+    }
+
+    /// Reads the value without assuming alignment.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    pub func read_unaligned(this) -> T {
+        return this.as_const().read_unaligned()
+    }
+
+    /// Performs a volatile read from the pointer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    pub func read_volatile(this) -> T {
+        return this.as_const().read_volatile()
+    }
+
+    /// Writes a value to the pointer.
+    ///
+    /// This overwrites the memory at the pointer location with `value`.
+    /// The old value is not dropped.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - The pointer is properly aligned for `T`
+    /// - The memory is writable
+    /// - No other references to this memory exist
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(buffer_addr)
+    /// ptr.write(42)
+    /// ```
+    pub func write(this, value: T) {
+        if this.is_null() {
+            panic("ptr::write: attempted to write to null pointer")
+        }
+        lowlevel { ptr_write[T](this.addr, value) }
+    }
+
+    /// Writes a value without assuming alignment.
+    ///
+    /// Use this when the pointer may not be aligned to `T`'s requirements.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// unaligned_ptr.write_unaligned(value)
+    /// ```
+    pub func write_unaligned(this, value: T) {
+        if this.is_null() {
+            panic("ptr::write_unaligned: attempted to write to null pointer")
+        }
+        lowlevel { ptr_write_unaligned[T](this.addr, value) }
+    }
+
+    /// Performs a volatile write to the pointer.
+    ///
+    /// Volatile writes are not optimized away and are guaranteed to
+    /// actually write to memory. Use this for memory-mapped I/O.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Writing to a hardware register
+    /// mmio_ptr.write_volatile(0x01)
+    /// ```
+    pub func write_volatile(this, value: T) {
+        if this.is_null() {
+            panic("ptr::write_volatile: attempted to write to null pointer")
+        }
+        lowlevel { ptr_write_volatile[T](this.addr, value) }
+    }
+
+    /// Replaces the value at the pointer, returning the old value.
+    ///
+    /// This is equivalent to reading the value, then writing a new one.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let old = ptr.replace(new_value)
+    /// ```
+    pub func replace(this, value: T) -> T {
+        let old: T = this.read()
+        this.write(value)
+        return old
+    }
+
+    /// Swaps the values at two pointers.
+    ///
+    /// After this operation, `this` contains the value that was in `other`,
+    /// and `other` contains the value that was in `this`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// ptr_a.swap(ptr_b)
+    /// // Now *ptr_a has the old value of *ptr_b and vice versa
+    /// ```
+    pub func swap(this, other: RawMutPtr[T]) {
+        let temp: T = this.read()
+        this.write(other.read())
+        other.write(temp)
+    }
+
+    /// Returns `true` if the pointer is aligned for type `T`.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)  // Aligned
+    /// let ptr2 = RawMutPtr[I64]::from_addr(0x1001) // Not aligned
+    ///
+    /// assert(ptr.is_aligned())
+    /// assert(not ptr2.is_aligned())
+    /// ```
+    pub func is_aligned(this) -> Bool {
+        let align: I64 = lowlevel { alignof_type[T]() }
+        return this.addr % align == 0
+    }
+
+    /// Converts to a Maybe, returning Nothing if null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let ptr = RawMutPtr[I64]::from_addr(0x1000)
+    /// when ptr.as_maybe() {
+    ///     Just(p) => println("Valid pointer"),
+    ///     Nothing => println("Null pointer")
+    /// }
+    /// ```
+    pub func as_maybe(this) -> Maybe[RawMutPtr[T]] {
+        if this.is_null() {
+            return Nothing
+        }
+        return Just(this)
+    }
+
+    /// Wraps the pointer as a usize (address).
+    pub func to_usize(this) -> I64 {
+        return this.addr
+    }
+
+    /// Copies `count` values from `src` to `self`.
+    ///
+    /// The regions may overlap.
+    ///
+    /// # Safety
+    ///
+    /// - `src` must be valid for reads of `count * sizeof(T)` bytes.
+    /// - `self` must be valid for writes of `count * sizeof(T)` bytes.
+    /// - Both must be properly aligned.
+    pub func copy_from(this, src: RawPtr[T], count: I64) {
+        if count <= 0 {
+            return
+        }
+        let size: I64 = count * lowlevel { sizeof_type[T]() }
+        lowlevel { memmove(this.addr, src.addr, size) }
+    }
+
+    /// Copies `count` values from `src` to `self`.
+    ///
+    /// The regions must not overlap.
+    ///
+    /// # Safety
+    ///
+    /// - `src` must be valid for reads of `count * sizeof(T)` bytes.
+    /// - `self` must be valid for writes of `count * sizeof(T)` bytes.
+    /// - Both must be properly aligned.
+    /// - The regions must not overlap.
+    pub func copy_from_nonoverlapping(this, src: RawPtr[T], count: I64) {
+        if count <= 0 {
+            return
+        }
+        let size: I64 = count * lowlevel { sizeof_type[T]() }
+        lowlevel { memcpy(this.addr, src.addr, size) }
+    }
+
+    /// Writes `count` copies of `val` to consecutive memory locations.
+    ///
+    /// # Safety
+    ///
+    /// - `self` must be valid for writes of `count * sizeof(T)` bytes.
+    /// - `self` must be properly aligned.
+    pub func write_bytes_val(this, val: U8, count: I64) {
+        if count <= 0 {
+            return
+        }
+        let size: I64 = count * lowlevel { sizeof_type[T]() }
+        lowlevel { memset(this.addr, val, size) }
+    }
+}
+
+// ============================================================================
+// Comparison Implementations
+// ============================================================================
+
+/// Equality comparison for `RawMutPtr[T]`.
+impl[T] PartialEq for RawMutPtr[T] {
+    pub func eq(this, other: ref RawMutPtr[T]) -> Bool {
+        return this.addr == other.addr
+    }
+}
+
+impl[T] Eq for RawMutPtr[T] {}
+
+/// Ordering comparison for `RawMutPtr[T]`.
+impl[T] PartialOrd for RawMutPtr[T] {
+    pub func partial_cmp(this, other: ref RawMutPtr[T]) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl[T] Ord for RawMutPtr[T] {
+    pub func cmp(this, other: ref RawMutPtr[T]) -> Ordering {
+        if this.addr < other.addr {
+            return Less
+        }
+        if this.addr > other.addr {
+            return Greater
+        }
+        return Equal
+    }
+}
+
+// ============================================================================
+// Hash Implementation
+// ============================================================================
+
+/// Hashing for `RawMutPtr[T]`.
+impl[T] Hash for RawMutPtr[T] {
+    pub func hash(this) -> I64 {
+        return this.addr
+    }
+}

@@ -1,0 +1,370 @@
+//! Non-null pointer wrapper.
+//!
+//! This module contains the `NonNull[T]` type, a pointer type guaranteed
+//! to never be null.
+
+use core::hash::*
+use core::option::*
+use core::ptr::const_ptr::RawPtr
+use core::ptr::mut_ptr::RawMutPtr
+
+// ============================================================================
+// NonNull[T] - Non-null Pointer Wrapper
+// ============================================================================
+
+/// A non-null pointer wrapper.
+///
+/// `NonNull[T]` is a pointer type that is guaranteed to never be null.
+/// This enables optimizations (like niche filling in enums) and provides
+/// a type-level guarantee that null checks have been performed.
+///
+/// # Use Cases
+///
+/// - When you have a raw pointer that you know is non-null
+/// - As a building block for safe abstractions like `Heap[T]`
+/// - When interfacing with C code that guarantees non-null pointers
+///
+/// # Examples
+///
+/// ## Creating NonNull
+///
+/// ```tml
+/// use core::ptr::{NonNull, RawMutPtr}
+///
+/// // From a raw pointer (checked)
+/// let raw = RawMutPtr[I64]::from_addr(0x1000)
+/// when NonNull::new(raw) {
+///     Just(ptr) => use_ptr(ptr),
+///     Nothing => panic("null pointer")
+/// }
+///
+/// // From a raw pointer (unchecked)
+/// let ptr = NonNull[I64]::new_unchecked(raw)
+///
+/// // Dangling pointer (non-null but not dereferenceable)
+/// let dangling = NonNull[I64]::dangling()
+/// ```
+///
+/// ## Using NonNull
+///
+/// ```tml
+/// func process(ptr: NonNull[Data]) {
+///     // No null check needed - guaranteed non-null
+///     let value = ptr.read()
+///
+///     // Get a reference
+///     let data_ref: ref Data = ptr.as_ref()
+/// }
+/// ```
+///
+/// # Covariance
+///
+/// `NonNull[T]` is covariant in `T`, meaning that `NonNull[Derived]` can
+/// be used where `NonNull[Base]` is expected (assuming proper subtyping).
+pub type NonNull[T] {
+    ptr: RawMutPtr[T]
+}
+
+impl[T] NonNull[T] {
+    /// Creates a `NonNull` from a raw pointer, returning `Nothing` if null.
+    ///
+    /// This is the safe way to create a `NonNull` when you're not sure
+    /// if the pointer is null.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let raw = RawMutPtr[I64]::from_addr(addr)
+    /// when NonNull::new(raw) {
+    ///     Just(ptr) => {
+    ///         // ptr is guaranteed non-null
+    ///         let value = ptr.read()
+    ///     },
+    ///     Nothing => {
+    ///         // Handle null case
+    ///     }
+    /// }
+    /// ```
+    pub func new(ptr: RawMutPtr[T]) -> Maybe[NonNull[T]] {
+        if ptr.is_null() {
+            return Nothing
+        }
+        return Just(NonNull { ptr: ptr })
+    }
+
+    /// Creates a `NonNull` from a raw pointer without checking for null.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must not be null. Calling this with a null pointer
+    /// is undefined behavior.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Only use when you're certain the pointer is non-null
+    /// let ptr = NonNull::new_unchecked(definitely_not_null_ptr)
+    /// ```
+    pub func new_unchecked(ptr: RawMutPtr[T]) -> NonNull[T] {
+        return NonNull { ptr: ptr }
+    }
+
+    /// Creates a `NonNull` from a const raw pointer without checking for null.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must not be null.
+    pub func from_const_unchecked(ptr: RawPtr[T]) -> NonNull[T] {
+        return NonNull { ptr: RawMutPtr::from_addr(ptr.addr()) }
+    }
+
+    /// Creates a dangling pointer that is non-null but not dereferenceable.
+    ///
+    /// The pointer is set to the alignment of `T`, which is a valid non-null
+    /// address that shouldn't be dereferenced.
+    ///
+    /// # Use Cases
+    ///
+    /// - Placeholder for uninitialized `NonNull` fields
+    /// - Empty collections that need a non-null pointer
+    /// - Testing non-null invariants without allocating memory
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// // Create a placeholder non-null pointer
+    /// let placeholder = NonNull[I64]::dangling()
+    /// assert(not placeholder.as_ptr().is_null())
+    /// // But don't dereference it!
+    /// ```
+    pub func dangling() -> NonNull[T] {
+        let align: I64 = lowlevel { alignof_type[T]() }
+        return NonNull { ptr: RawMutPtr::from_addr(align) }
+    }
+
+    /// Creates a `NonNull` from an integer address without checking.
+    ///
+    /// # Safety
+    ///
+    /// The address must be non-zero.
+    pub func from_addr_unchecked(addr: I64) -> NonNull[T] {
+        return NonNull { ptr: RawMutPtr::from_addr(addr) }
+    }
+
+    /// Returns the underlying raw mutable pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let nonnull = NonNull::new_unchecked(raw_ptr)
+    /// let raw: RawMutPtr[I64] = nonnull.as_ptr()
+    /// ```
+    pub func as_ptr(this) -> RawMutPtr[T] {
+        return this.ptr
+    }
+
+    /// Returns the pointer as an immutable raw pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let const_ptr: RawPtr[I64] = nonnull.as_const_ptr()
+    /// ```
+    pub func as_const_ptr(this) -> RawPtr[T] {
+        return this.ptr.as_const()
+    }
+
+    /// Returns the address of the pointer.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let addr = nonnull.addr()
+    /// ```
+    pub func addr(this) -> I64 {
+        return this.ptr.addr()
+    }
+
+    /// Casts to a `NonNull` of a different type.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let int_ptr: NonNull[I64] = get_ptr()
+    /// let byte_ptr: NonNull[U8] = int_ptr.cast[U8]()
+    /// ```
+    pub func cast[U](this) -> NonNull[U] {
+        return NonNull { ptr: this.ptr.cast[U]() }
+    }
+
+    /// Offsets the pointer by `count` elements.
+    ///
+    /// # Safety
+    ///
+    /// The resulting pointer must remain non-null and within bounds.
+    pub func offset(this, count: I64) -> NonNull[T] {
+        return NonNull { ptr: this.ptr.offset(count) }
+    }
+
+    /// Adds `count` to the pointer.
+    ///
+    /// # Safety
+    ///
+    /// The resulting pointer must remain non-null and within bounds.
+    pub func add(this, count: I64) -> NonNull[T] {
+        return NonNull { ptr: this.ptr.add(count) }
+    }
+
+    /// Subtracts `count` from the pointer.
+    ///
+    /// # Safety
+    ///
+    /// The resulting pointer must remain non-null and within bounds.
+    pub func sub(this, count: I64) -> NonNull[T] {
+        return NonNull { ptr: this.ptr.sub(count) }
+    }
+
+    /// Reads the value from the pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to valid, initialized memory.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let value: I64 = ptr.read()
+    /// ```
+    pub func read(this) -> T {
+        return this.ptr.read()
+    }
+
+    /// Writes a value to the pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to writable memory.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// ptr.write(42)
+    /// ```
+    pub func write(this, value: T) {
+        this.ptr.write(value)
+    }
+
+    /// Replaces the value at the pointer, returning the old value.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to valid, initialized memory.
+    pub func replace(this, value: T) -> T {
+        return this.ptr.replace(value)
+    }
+
+    /// Swaps the values at two NonNull pointers.
+    ///
+    /// # Safety
+    ///
+    /// Both pointers must point to valid, initialized memory.
+    pub func swap(this, other: NonNull[T]) {
+        this.ptr.swap(other.ptr)
+    }
+
+    /// Returns a reference to the value.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to valid, initialized memory that will
+    /// remain valid for the lifetime of the returned reference.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let data_ref: ref Data = ptr.as_ref()
+    /// ```
+    pub func as_ref(this) -> ref T {
+        return lowlevel { ptr_as_ref[T](this.ptr.addr()) }
+    }
+
+    /// Returns a mutable reference to the value.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to valid, initialized memory that will
+    /// remain valid for the lifetime of the returned reference. No other
+    /// references to this memory may exist.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let data_mut: mut ref Data = ptr.as_mut()
+    /// data_mut.field = new_value
+    /// ```
+    pub func as_mut(this) -> mut ref T {
+        return lowlevel { ptr_as_mut[T](this.ptr.addr()) }
+    }
+
+    /// Returns `true` if the pointer is aligned for type `T`.
+    pub func is_aligned(this) -> Bool {
+        return this.ptr.is_aligned()
+    }
+
+    /// Copies `count` values from `src` to `self`.
+    ///
+    /// The regions may overlap.
+    pub func copy_from(this, src: NonNull[T], count: I64) {
+        this.ptr.copy_from(src.as_const_ptr(), count)
+    }
+
+    /// Copies `count` values from `src` to `self`.
+    ///
+    /// The regions must not overlap.
+    pub func copy_from_nonoverlapping(this, src: NonNull[T], count: I64) {
+        this.ptr.copy_from_nonoverlapping(src.as_const_ptr(), count)
+    }
+}
+
+// ============================================================================
+// Comparison Implementations
+// ============================================================================
+
+/// Equality comparison for `NonNull[T]`.
+impl[T] PartialEq for NonNull[T] {
+    pub func eq(this, other: ref NonNull[T]) -> Bool {
+        return this.ptr.addr == other.ptr.addr
+    }
+}
+
+impl[T] Eq for NonNull[T] {}
+
+/// Ordering comparison for `NonNull[T]`.
+impl[T] PartialOrd for NonNull[T] {
+    pub func partial_cmp(this, other: ref NonNull[T]) -> Maybe[Ordering] {
+        return Just(this.cmp(other))
+    }
+}
+
+impl[T] Ord for NonNull[T] {
+    pub func cmp(this, other: ref NonNull[T]) -> Ordering {
+        if this.ptr.addr < other.ptr.addr {
+            return Less
+        }
+        if this.ptr.addr > other.ptr.addr {
+            return Greater
+        }
+        return Equal
+    }
+}
+
+// ============================================================================
+// Hash Implementation
+// ============================================================================
+
+/// Hashing for `NonNull[T]`.
+impl[T] Hash for NonNull[T] {
+    pub func hash(this) -> I64 {
+        return this.ptr.addr
+    }
+}

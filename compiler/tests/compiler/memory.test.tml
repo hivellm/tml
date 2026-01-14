@@ -5,14 +5,14 @@ use core::mem
 
 @test
 func test_alloc_dealloc_basic() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     dealloc(ptr)
     return 0
 }
 
 @test
 func test_write_read_i32() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     write_i32(ptr, 42)
     let value: I32 = read_i32(ptr)
     assert_eq(value, 42, "Should read back written value")
@@ -22,7 +22,7 @@ func test_write_read_i32() -> I32 {
 
 @test
 func test_write_read_negative() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     write_i32(ptr, -100)
     let value: I32 = read_i32(ptr)
     assert_eq(value, -100, "Should read back negative value")
@@ -32,7 +32,7 @@ func test_write_read_negative() -> I32 {
 
 @test
 func test_write_read_zero() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     write_i32(ptr, 0)
     let value: I32 = read_i32(ptr)
     assert_eq(value, 0, "Should read back zero")
@@ -42,7 +42,7 @@ func test_write_read_zero() -> I32 {
 
 @test
 func test_multiple_writes() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     write_i32(ptr, 10)
     write_i32(ptr, 20)
     write_i32(ptr, 30)
@@ -54,13 +54,13 @@ func test_multiple_writes() -> I32 {
 
 @test
 func test_ptr_offset_basic() -> I32 {
-    let ptr: mut ref I32 = alloc(3)
+    let ptr: *Unit = alloc(3)
 
     // Write to different offsets
     write_i32(ptr, 10)
-    let ptr1: mut ref I32 = ptr_offset(ptr, 1)
+    let ptr1: *Unit = ptr_offset(ptr, 1)
     write_i32(ptr1, 20)
-    let ptr2: mut ref I32 = ptr_offset(ptr, 2)
+    let ptr2: *Unit = ptr_offset(ptr, 2)
     write_i32(ptr2, 30)
 
     // Read back from different offsets
@@ -79,13 +79,13 @@ func test_ptr_offset_basic() -> I32 {
 @test
 func test_array_simulation() -> I32 {
     let size: I32 = 5
-    let arr: mut ref I32 = alloc(size)
+    let arr: *Unit = alloc(size)
 
     // Initialize array
     let mut i: I32 = 0
     loop {
         if i >= size then break
-        let ptr: mut ref I32 = ptr_offset(arr, i)
+        let ptr: *Unit = ptr_offset(arr, i)
         write_i32(ptr, i * 10)
         i = i + 1
     }
@@ -95,7 +95,7 @@ func test_array_simulation() -> I32 {
     let mut j: I32 = 0
     loop {
         if j >= size then break
-        let ptr: mut ref I32 = ptr_offset(arr, j)
+        let ptr: *Unit = ptr_offset(arr, j)
         let value: I32 = read_i32(ptr)
         sum = sum + value
         j = j + 1

@@ -6,7 +6,7 @@ use core::sync
 
 @test
 func test_atomic_store_load() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 42)
     let value: I32 = atomic_load(ptr)
     assert_eq(value, 42, "Should load stored value")
@@ -16,7 +16,7 @@ func test_atomic_store_load() -> I32 {
 
 @test
 func test_atomic_add() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 10)
     let old: I32 = atomic_add(ptr, 5)
     let new: I32 = atomic_load(ptr)
@@ -28,7 +28,7 @@ func test_atomic_add() -> I32 {
 
 @test
 func test_atomic_sub() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 20)
     let old: I32 = atomic_sub(ptr, 7)
     let new: I32 = atomic_load(ptr)
@@ -40,7 +40,7 @@ func test_atomic_sub() -> I32 {
 
 @test
 func test_atomic_exchange() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 100)
     let old: I32 = atomic_exchange(ptr, 200)
     let new: I32 = atomic_load(ptr)
@@ -52,7 +52,7 @@ func test_atomic_exchange() -> I32 {
 
 @test
 func test_atomic_cas_success() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 50)
     let success: Bool = atomic_cas(ptr, 50, 100)
     let value: I32 = atomic_load(ptr)
@@ -64,7 +64,7 @@ func test_atomic_cas_success() -> I32 {
 
 @test
 func test_atomic_cas_failure() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 50)
     let success: Bool = atomic_cas(ptr, 99, 100)
     let value: I32 = atomic_load(ptr)
@@ -76,7 +76,7 @@ func test_atomic_cas_failure() -> I32 {
 
 @test
 func test_atomic_cas_val() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 75)
     let old: I32 = atomic_cas_val(ptr, 75, 150)
     let new: I32 = atomic_load(ptr)
@@ -88,7 +88,7 @@ func test_atomic_cas_val() -> I32 {
 
 @test
 func test_atomic_and() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 15)  // 1111 in binary
     let old: I32 = atomic_and(ptr, 7)  // 0111 in binary
     let new: I32 = atomic_load(ptr)
@@ -100,7 +100,7 @@ func test_atomic_and() -> I32 {
 
 @test
 func test_atomic_or() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 8)  // 1000 in binary
     let old: I32 = atomic_or(ptr, 4)  // 0100 in binary
     let new: I32 = atomic_load(ptr)
@@ -112,7 +112,7 @@ func test_atomic_or() -> I32 {
 
 @test
 func test_atomic_increment_pattern() -> I32 {
-    let ptr: mut ref I32 = alloc(1)
+    let ptr: *Unit = alloc(1)
     atomic_store(ptr, 0)
 
     // Increment 10 times
@@ -149,7 +149,7 @@ func test_fence_release() -> I32 {
 
 @test
 func test_spinlock_basic() -> I32 {
-    let lock: mut ref I32 = alloc(1)
+    let lock: *Unit = alloc(1)
     atomic_store(lock, 0)  // Initialize lock to unlocked
 
     spin_lock(lock)
@@ -162,7 +162,7 @@ func test_spinlock_basic() -> I32 {
 
 @test
 func test_spin_trylock_success() -> I32 {
-    let lock: mut ref I32 = alloc(1)
+    let lock: *Unit = alloc(1)
     atomic_store(lock, 0)  // Initialize lock to unlocked
 
     let acquired: Bool = spin_trylock(lock)

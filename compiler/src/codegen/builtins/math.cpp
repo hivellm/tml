@@ -171,12 +171,19 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0";
     }
 
-    // int_to_float(value: I32) -> F64
+    // int_to_float(value: I32/I64) -> F64
     if (fn_name == "int_to_float" || fn_name == "toFloat") {
         if (!call.args.empty()) {
             std::string value = gen_expr(*call.args[0]);
+            std::string value_type = last_expr_type_;
+            // Convert to i32 if i64 (runtime function expects i32)
+            std::string i32_value = value;
+            if (value_type == "i64") {
+                i32_value = fresh_reg();
+                emit_line("  " + i32_value + " = trunc i64 " + value + " to i32");
+            }
             std::string result = fresh_reg();
-            emit_line("  " + result + " = call double @int_to_float(i32 " + value + ")");
+            emit_line("  " + result + " = call double @int_to_float(i32 " + i32_value + ")");
             return result;
         }
         return "0.0";
@@ -280,12 +287,13 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
         return "0.0";
     }
 
-    // pow(base: F64, exp: I32) -> F64 (returns double)
+    // pow(base: F64, exp: I32/I64) -> F64 (returns double)
     if (fn_name == "float_pow" || fn_name == "pow") {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
             std::string base_type = last_expr_type_;
             std::string exp = gen_expr(*call.args[1]);
+            std::string exp_type = last_expr_type_;
             std::string double_base;
             // Convert base to double if needed
             if (base_type == "i32" || base_type == "i64") {
@@ -295,9 +303,15 @@ auto LLVMIRGen::try_gen_builtin_math(const std::string& fn_name, const parser::C
             } else {
                 double_base = base; // Already a double
             }
+            // Convert exponent to i32 if it's i64
+            std::string i32_exp = exp;
+            if (exp_type == "i64") {
+                i32_exp = fresh_reg();
+                emit_line("  " + i32_exp + " = trunc i64 " + exp + " to i32");
+            }
             std::string result = fresh_reg();
             emit_line("  " + result + " = call double @float_pow(double " + double_base + ", i32 " +
-                      exp + ")");
+                      i32_exp + ")");
             last_expr_type_ = "double";
             return result;
         }

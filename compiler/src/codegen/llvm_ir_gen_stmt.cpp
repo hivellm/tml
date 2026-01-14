@@ -222,8 +222,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         std::string tuple_type;
         types::TypePtr semantic_tuple_type = nullptr;
         if (let.type_annotation) {
-            tuple_type = llvm_type_ptr(*let.type_annotation);
-            semantic_tuple_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+                semantic_tuple_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+            tuple_type = llvm_type_from_semantic(semantic_tuple_type);
         }
 
         // Generate the initializer expression
@@ -314,8 +314,11 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     std::string var_type = "i32";
     bool is_struct = false;
     bool is_ptr = false;
+    types::TypePtr semantic_var_type = nullptr;
     if (let.type_annotation) {
-        var_type = llvm_type_ptr(*let.type_annotation);
+        // Resolve type with current type substitutions (for generic impl methods)
+        semantic_var_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+        var_type = llvm_type_from_semantic(semantic_var_type);
         is_struct = var_type.starts_with("%struct.");
         is_ptr = (var_type == "ptr"); // Collection types like List[T] are pointers
     } else if (let.init.has_value()) {
@@ -395,8 +398,9 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     }
 
     // Handle dyn coercion: let d: dyn Describable = c (where c is Counter)
+    // This also handles interface casting: let d: dyn Drawable = circle
     if (var_type.starts_with("%dyn.") && let.init.has_value()) {
-        // Extract behavior name from %dyn.Describable
+        // Extract behavior/interface name from %dyn.Describable
         std::string behavior_name = var_type.substr(5); // Skip "%dyn."
 
         // Get the concrete type name from the initializer
@@ -411,6 +415,13 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                 std::string local_type = it->second.type;
                 if (local_type.starts_with("%struct.")) {
                     concrete_type = local_type.substr(8); // Skip "%struct."
+                } else if (local_type.starts_with("%class.")) {
+                    concrete_type = local_type.substr(7); // Skip "%class."
+                } else if (local_type == "ptr") {
+                    // For pointer types, try to get the type from semantic info
+                    if (it->second.semantic_type && it->second.semantic_type->is<types::ClassType>()) {
+                        concrete_type = it->second.semantic_type->as<types::ClassType>().name;
+                    }
                 }
                 data_ptr = it->second.reg; // Use alloca pointer
             }
@@ -552,6 +563,21 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         if (is_struct && var_type.find("__") != std::string::npos) {
             expected_enum_type_ = var_type;
         }
+
+        // Also handle generic class types
+        // If type annotation is a ClassType with type_args, compute mangled class name
+        if (let.type_annotation) {
+            auto sem_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            if (sem_type && sem_type->is<types::ClassType>()) {
+                const auto& class_type = sem_type->as<types::ClassType>();
+                if (!class_type.type_args.empty()) {
+                    // This is a generic class like Box[I32]
+                    std::string mangled = mangle_struct_name(class_type.name, class_type.type_args);
+                    expected_enum_type_ = "%class." + mangled;
+                }
+            }
+        }
+
         init_val = gen_expr(*let.init.value());
         expected_enum_type_.clear(); // Clear context after expression
         // If type wasn't explicitly annotated and expression has a known type, use it

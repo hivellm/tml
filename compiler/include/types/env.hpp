@@ -574,6 +574,13 @@ public:
     [[nodiscard]] auto all_imports() const
         -> const std::unordered_map<std::string, ImportedSymbol>&;
 
+    /// Checks if a symbol has import conflicts (same local name from different sources).
+    [[nodiscard]] auto has_import_conflict(const std::string& name) const -> bool;
+
+    /// Gets the conflicting import sources for a symbol, if any.
+    [[nodiscard]] auto get_import_conflict_sources(const std::string& name) const
+        -> std::optional<std::set<std::string>>;
+
     // ========================================================================
     // Module Lookup
     // ========================================================================
@@ -628,6 +635,8 @@ private:
     std::string current_module_path_;                 ///< Path of module being compiled.
     std::string source_directory_;                    ///< Source directory for local imports.
     std::unordered_map<std::string, ImportedSymbol> imported_symbols_; ///< Imported symbols.
+    std::unordered_map<std::string, std::set<std::string>>
+        import_conflicts_; ///< Tracks import name conflicts for error reporting.
     bool abort_on_module_error_ = true; ///< Abort on module load errors.
     std::unordered_set<std::string>
         loading_modules_; ///< Modules currently being loaded (cycle detection).

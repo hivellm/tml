@@ -68,3 +68,4 @@ pub mod async_iter // AsyncIterator for async streams
 pub mod time       // Duration
 pub mod tuple      // Tuple implementations (Default, Clone, PartialEq, Ord, etc.)
 pub mod any        // TypeId, Any for runtime type identification
+pub mod sync       // Atomic operations, fences, spinlocks

@@ -299,6 +299,30 @@ auto TypeChecker::check_ident(const parser::IdentExpr& ident, SourceSpan span) -
             }
         }
 
+        // Check if it's an imported constant
+        auto const_imported_path = env_.resolve_imported_symbol(ident.name);
+        if (const_imported_path.has_value()) {
+            std::string const_module_path;
+            size_t const_pos = const_imported_path->rfind("::");
+            if (const_pos != std::string::npos) {
+                const_module_path = const_imported_path->substr(0, const_pos);
+            }
+
+            auto const_module = env_.get_module(const_module_path);
+            if (const_module) {
+                auto const_it = const_module->constants.find(ident.name);
+                if (const_it != const_module->constants.end()) {
+                    // Found a constant - determine type from module path
+                    // For core::char constants (MIN, MAX), use Char (U32)
+                    if (const_module_path.find("char") != std::string::npos) {
+                        return make_primitive(PrimitiveKind::U32);
+                    }
+                    // Default to I64 for other numeric constants
+                    return make_primitive(PrimitiveKind::I64);
+                }
+            }
+        }
+
         // Build error message with suggestions
         std::string msg = "Undefined variable: " + ident.name;
         auto all_names = get_all_known_names();
@@ -337,6 +361,13 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
             const auto& ident = binary.left->as<parser::IdentExpr>();
             auto sym = env_.current_scope()->lookup(ident.name);
             if (sym && !sym->is_mutable) {
+                // Allow assignment through mutable references (mut ref T)
+                // Even if the variable itself isn't mutable, we can assign through it
+                auto resolved = env_.resolve(sym->type);
+                if (resolved && resolved->is<RefType>() && resolved->as<RefType>().is_mut) {
+                    // This is a mutable reference, assignment through it is allowed
+                    return;
+                }
                 error("Cannot assign to immutable variable '" + ident.name + "'",
                       binary.left->span);
             }
@@ -368,10 +399,25 @@ auto TypeChecker::check_binary(const parser::BinaryExpr& binary) -> TypePtr {
     case parser::BinaryOp::Shl:
     case parser::BinaryOp::Shr:
         return left;
-    case parser::BinaryOp::Assign:
+    case parser::BinaryOp::Assign: {
         check_assignable();
-        check_binary_types("=");
+        // For assignment through mutable references, check if LHS is mut ref T
+        // In that case, RHS should be compatible with T (the inner type)
+        TypePtr resolved_left = env_.resolve(left);
+        TypePtr resolved_right = env_.resolve(right);
+        if (resolved_left && resolved_left->is<RefType>() && resolved_left->as<RefType>().is_mut) {
+            // Assigning through mut ref T - check RHS against inner type T
+            TypePtr inner = env_.resolve(resolved_left->as<RefType>().inner);
+            if (!types_compatible(inner, resolved_right)) {
+                error(std::string("Cannot assign value of type ") + type_to_string(resolved_right) +
+                          " through reference of type " + type_to_string(resolved_left),
+                      binary.left->span);
+            }
+        } else {
+            check_binary_types("=");
+        }
         return make_unit();
+    }
     case parser::BinaryOp::AddAssign:
     case parser::BinaryOp::SubAssign:
     case parser::BinaryOp::MulAssign:
@@ -399,12 +445,26 @@ auto TypeChecker::check_unary(const parser::UnaryExpr& unary) -> TypePtr {
     case parser::UnaryOp::BitNot:
         return operand;
     case parser::UnaryOp::Ref:
+        // In lowlevel blocks, & returns raw pointer (*T) instead of reference (ref T)
+        if (in_lowlevel_) {
+            if (operand->is<RefType>()) {
+                return make_ptr(operand->as<RefType>().inner, false);
+            }
+            return make_ptr(operand, false);
+        }
         // Reborrowing: ref (ref T) -> ref T (like Rust's automatic reborrow)
         if (operand->is<RefType>()) {
             return make_ref(operand->as<RefType>().inner, false);
         }
         return make_ref(operand, false);
     case parser::UnaryOp::RefMut:
+        // In lowlevel blocks, &mut returns raw mutable pointer (*mut T)
+        if (in_lowlevel_) {
+            if (operand->is<RefType>()) {
+                return make_ptr(operand->as<RefType>().inner, true);
+            }
+            return make_ptr(operand, true);
+        }
         // Reborrowing: mut ref (mut ref T) -> mut ref T (like Rust's automatic reborrow)
         if (operand->is<RefType>() && operand->as<RefType>().is_mut) {
             return operand; // Already a mutable ref, just return it
@@ -464,7 +524,18 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
     if (call.callee->is<parser::IdentExpr>()) {
         auto& ident = call.callee->as<parser::IdentExpr>();
 
-        auto func = env_.lookup_func(ident.name);
+        // First, check argument types for overload resolution
+        std::vector<TypePtr> arg_types;
+        for (const auto& arg : call.args) {
+            arg_types.push_back(check_expr(*arg));
+        }
+
+        // Try to find the right overload based on argument types
+        auto func = env_.lookup_func_overload(ident.name, arg_types);
+        if (!func) {
+            // Fallback to first overload if no exact match
+            func = env_.lookup_func(ident.name);
+        }
         if (func) {
             // Handle generic functions
             if (!func->type_params.empty()) {
@@ -836,6 +907,61 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
         return func.return_type;
     };
 
+    // Handle method calls on pointer types (*T)
+    // Methods: read(), write(value), is_null(), offset(count)
+    if (receiver_type->is<PtrType>()) {
+        const auto& ptr_type = receiver_type->as<PtrType>();
+        TypePtr inner = ptr_type.inner;
+
+        if (call.method == "read") {
+            // p.read() -> T - dereference the pointer and read the value
+            if (!call.args.empty()) {
+                error("Pointer read() takes no arguments", call.receiver->span);
+            }
+            return inner;
+        } else if (call.method == "write") {
+            // p.write(value) -> () - write value through the pointer
+            if (call.args.size() != 1) {
+                error("Pointer write() requires exactly one argument", call.receiver->span);
+            } else {
+                TypePtr arg_type = check_expr(*call.args[0]);
+                TypePtr resolved_inner = env_.resolve(inner);
+                TypePtr resolved_arg = env_.resolve(arg_type);
+                if (!types_compatible(resolved_inner, resolved_arg)) {
+                    error("Type mismatch in pointer write: expected " + type_to_string(inner) +
+                              ", got " + type_to_string(arg_type),
+                          call.args[0]->span);
+                }
+            }
+            return make_unit();
+        } else if (call.method == "is_null") {
+            // p.is_null() -> Bool
+            if (!call.args.empty()) {
+                error("Pointer is_null() takes no arguments", call.receiver->span);
+            }
+            return make_bool();
+        } else if (call.method == "offset") {
+            // p.offset(count) -> *T - returns pointer offset by count elements
+            if (call.args.size() != 1) {
+                error("Pointer offset() requires exactly one argument", call.receiver->span);
+            } else {
+                TypePtr arg_type = check_expr(*call.args[0]);
+                // Allow I32 or I64 for offset
+                bool valid_offset =
+                    (arg_type->is<PrimitiveType>() &&
+                     (arg_type->as<PrimitiveType>().kind == PrimitiveKind::I32 ||
+                      arg_type->as<PrimitiveType>().kind == PrimitiveKind::I64));
+                if (!valid_offset) {
+                    error("Pointer offset() requires I32 or I64 argument", call.args[0]->span);
+                }
+            }
+            return receiver_type; // Return same pointer type
+        } else {
+            error("Unknown pointer method '" + call.method + "'", call.receiver->span);
+            return make_unit();
+        }
+    }
+
     if (receiver_type->is<NamedType>()) {
         auto& named = receiver_type->as<NamedType>();
         std::string qualified = named.name + "::" + call.method;
@@ -997,7 +1123,19 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                     if (behavior_def) {
                         for (const auto& method : behavior_def->methods) {
                             if (method.name == call.method) {
-                                return method.return_type;
+                                // Substitute Self with the type parameter
+                                // e.g., for T: Addable, Self in add() -> Self becomes T
+                                TypePtr return_type = method.return_type;
+                                if (return_type && return_type->is<NamedType>()) {
+                                    auto& named = return_type->as<NamedType>();
+                                    if (named.name == "Self" || named.name == "This") {
+                                        // Return the type parameter itself
+                                        auto type_param = std::make_shared<Type>();
+                                        type_param->kind = NamedType{constraint.type_param, "", {}};
+                                        return type_param;
+                                    }
+                                }
+                                return return_type;
                             }
                         }
                     }
