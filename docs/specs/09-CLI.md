@@ -161,6 +161,9 @@ tml test --test-threads=4
 tml test --coverage
 tml test --coverage --coverage-output=coverage.html
 
+# Memory leak detection (enabled by default)
+tml test --no-check-leaks    # Disable leak checking
+
 # Verbose
 tml test --verbose
 

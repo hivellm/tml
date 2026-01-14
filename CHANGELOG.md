@@ -50,6 +50,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `compiler/tests/compiler/sync.test.tml` - Uses `*Unit` for atomic operations
 
 ### Added
+- **Runtime Memory Leak Detection** (2026-01-14) - Automatic memory leak tracking for debug builds
+  - New `mem_track.h/.c` runtime module that tracks all allocations/deallocations
+  - Integrated with `mem.c` via `TML_DEBUG_MEMORY` preprocessor flag
+  - Reports unfreed allocations at program exit with address, size, and allocation ID
+  - CLI flags: `--check-leaks` (enable) and `--no-check-leaks` (disable)
+  - Enabled by default in debug builds, automatically disabled in release builds
+  - Thread-safe tracking with mutex protection
+  - Files added:
+    - `compiler/runtime/mem_track.h` - Memory tracking API
+    - `compiler/runtime/mem_track.c` - Tracking implementation
+  - Files modified:
+    - `compiler/runtime/mem.c` - Integration with tracking
+    - `compiler/include/common.hpp` - `CompilerOptions::check_leaks` flag
+    - `compiler/src/cli/builder/compiler_setup.cpp` - Extra flags support
+    - `compiler/src/cli/builder/helpers.cpp` - Automatic mem_track.c inclusion
+    - `compiler/src/cli/dispatcher.cpp` - CLI flag parsing
+    - `compiler/src/cli/tester/run.cpp` - Test runner integration
+
+- **Sanitizer Build Options** (2026-01-14) - CMake options for memory/undefined behavior sanitizers
+  - `TML_ENABLE_ASAN` - AddressSanitizer for memory errors
+  - `TML_ENABLE_UBSAN` - UndefinedBehaviorSanitizer
+  - `TML_ENABLE_LSAN` - LeakSanitizer (Linux/macOS)
+  - `TML_ENABLE_MSAN` - MemorySanitizer (Linux Clang)
+  - Build script flags: `--asan`, `--ubsan`, `--sanitize` (both)
+  - Files modified:
+    - `compiler/CMakeLists.txt` - Sanitizer options
+    - `scripts/build.bat` - CLI flags for sanitizers
+
 - **`core::cell` Module** (2026-01-14) - Interior mutability types following Rust's `core::cell` pattern
   - New directory structure with separate files:
     - `lib/core/src/cell/mod.tml` - Module root with re-exports

@@ -202,9 +202,91 @@ level = "info"
 format = "pretty"  # or "json"
 ```
 
-## 5. Profiling
+## 5. Memory Leak Detection
 
-### 5.1 CPU Profiler
+### 5.1 Runtime Tracking
+
+TML includes built-in memory leak detection for debug builds:
+
+```bash
+# Leak checking is enabled by default in debug builds
+tml build myapp.tml
+./myapp  # Reports leaks at exit
+
+# Disable leak checking
+tml build myapp.tml --no-check-leaks
+
+# Release builds have leak checking disabled automatically
+tml build myapp.tml --release
+```
+
+### 5.2 Leak Report Format
+
+When a program exits with unfreed allocations:
+
+```
+================================================================================
+                         TML MEMORY LEAK REPORT
+================================================================================
+
+Detected 2 unfreed allocation(s) totaling 256 bytes:
+
+  Leak #1:
+    Address:  0x7f8a12340000
+    Size:     128 bytes
+    Alloc ID: 1
+    Tag:      mem_alloc
+
+  Leak #2:
+    Address:  0x7f8a12340100
+    Size:     128 bytes
+    Alloc ID: 3
+    Tag:      mem_alloc
+
+================================================================================
+Summary: 2 leak(s), 256 bytes lost
+================================================================================
+
+[TML Memory] Program exited with 2 memory leak(s)
+```
+
+### 5.3 Tracking API
+
+For advanced use cases, the tracking API is available in C:
+
+```c
+#include "mem_track.h"
+
+// Get current statistics
+TmlMemStats stats;
+tml_mem_get_stats(&stats);
+printf("Current allocations: %llu\n", stats.current_allocations);
+printf("Peak allocations: %llu\n", stats.peak_allocations);
+printf("Peak bytes: %llu\n", stats.peak_bytes);
+
+// Print full statistics
+tml_mem_print_stats();
+
+// Manual leak check (returns count)
+int leaks = tml_mem_check_leaks();
+
+// Disable automatic check at exit
+tml_mem_set_check_at_exit(0);
+```
+
+### 5.4 Test Runner Integration
+
+```bash
+# Run tests with leak checking (default)
+tml test
+
+# Disable leak checking for tests
+tml test --no-check-leaks
+```
+
+## 6. Profiling
+
+### 6.1 CPU Profiler
 
 ```bash
 tml run --profile cpu
@@ -212,7 +294,7 @@ tml run --profile cpu
 # Generates: target/profile/cpu.json
 ```
 
-### 5.2 Memory Profiler
+### 6.2 Memory Profiler
 
 ```bash
 tml run --profile memory
@@ -220,7 +302,7 @@ tml run --profile memory
 # Tracks allocations
 ```
 
-### 5.3 Visualization
+### 6.3 Visualization
 
 ```bash
 tml profile view target/profile/cpu.json
@@ -230,7 +312,7 @@ tml profile flamegraph target/profile/cpu.json
 # Generates flamegraph
 ```
 
-### 5.4 Inline Profiling
+### 6.4 Inline Profiling
 
 ```tml
 import std.time.Instant
@@ -253,9 +335,9 @@ func with_timing() {
 }
 ```
 
-## 6. Runtime Assertions
+## 7. Runtime Assertions
 
-### 6.1 Debug Assertions
+### 7.1 Debug Assertions
 
 ```tml
 func process(x: I32) {
@@ -264,7 +346,7 @@ func process(x: I32) {
 }
 ```
 
-### 6.2 Runtime Checks
+### 7.2 Runtime Checks
 
 ```tml
 func divide(a: I32, b: I32) -> I32 {
@@ -277,16 +359,16 @@ let x: I32 = I32.MAX
 let y: I32 = x + 1  // panic in debug, wraps in release
 ```
 
-## 7. Panic Handling
+## 8. Panic Handling
 
-### 7.1 Panic with Message
+### 8.1 Panic with Message
 
 ```tml
 panic("something went wrong")
 panic("invalid state: " + state.to_string())
 ```
 
-### 7.2 Panic Hook
+### 8.2 Panic Hook
 
 ```tml
 import std.panic
@@ -300,7 +382,7 @@ func main() {
 }
 ```
 
-### 7.3 Catch Panic (Low-Level)
+### 8.3 Catch Panic (Low-Level)
 
 ```tml
 import std.panic
@@ -315,16 +397,16 @@ when result {
 }
 ```
 
-## 8. Backtraces
+## 9. Backtraces
 
-### 8.1 Enabling
+### 9.1 Enabling
 
 ```bash
 TML_BACKTRACE=1 tml run
 TML_BACKTRACE=full tml run  # with all frames
 ```
 
-### 8.2 Format
+### 9.2 Format
 
 ```
 thread 'main' panicked at 'index out of bounds'
@@ -336,9 +418,9 @@ stack backtrace:
    2: std::rt::lang_start
 ```
 
-## 9. Inspect Tools
+## 10. Inspect Tools
 
-### 9.1 Type Info
+### 10.1 Type Info
 
 ```tml
 import std.debug
@@ -348,7 +430,7 @@ print(debug.type_name(x))  // "Maybe[I32]"
 print(debug.size_of(x))    // 8
 ```
 
-### 9.2 Debug Behavior
+### 10.2 Debug Behavior
 
 ```tml
 behavior Debug {
@@ -362,7 +444,7 @@ let p: Point = Point { x: 1.0, y: 2.0 }
 print(p.debug())  // "Point { x: 1.0, y: 2.0 }"
 ```
 
-### 9.3 Dbg Helper
+### 10.3 Dbg Helper
 
 ```tml
 let x: T = dbg(expensive_computation())
@@ -370,9 +452,9 @@ let x: T = dbg(expensive_computation())
 // Returns the value to continue pipeline
 ```
 
-## 10. IDE Integration
+## 11. IDE Integration
 
-### 10.1 Inline Diagnostics
+### 11.1 Inline Diagnostics
 
 The LSP sends diagnostics in real-time:
 
@@ -393,7 +475,7 @@ The LSP sends diagnostics in real-time:
 }
 ```
 
-### 10.2 Code Actions
+### 11.2 Code Actions
 
 ```json
 {
