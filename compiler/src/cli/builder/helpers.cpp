@@ -418,13 +418,34 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             }
         }
 
+        // Determine if memory tracking is enabled
+        std::string mem_flags = "";
+        if (CompilerOptions::check_leaks) {
+            mem_flags = "-DTML_DEBUG_MEMORY";
+        }
+
         fs::path mem_c = runtime_dir / "mem.c";
         if (fs::exists(mem_c)) {
-            std::string mem_obj =
-                ensure_c_compiled(to_forward_slashes(mem_c.string()), deps_cache, clang, verbose);
+            std::string mem_obj = ensure_c_compiled(to_forward_slashes(mem_c.string()), deps_cache,
+                                                    clang, verbose, mem_flags);
             objects.push_back(fs::path(mem_obj));
             if (verbose) {
                 std::cout << "Including mem runtime: " << mem_obj << "\n";
+            }
+        }
+
+        // Include memory tracking runtime when leak checking is enabled
+        if (CompilerOptions::check_leaks) {
+            fs::path mem_track_c = runtime_dir / "mem_track.c";
+            if (fs::exists(mem_track_c)) {
+                std::string mem_track_obj =
+                    ensure_c_compiled(to_forward_slashes(mem_track_c.string()), deps_cache, clang,
+                                      verbose, mem_flags);
+                objects.push_back(fs::path(mem_track_obj));
+                if (verbose) {
+                    std::cout << "Including mem_track runtime (leak checking): " << mem_track_obj
+                              << "\n";
+                }
             }
         }
 

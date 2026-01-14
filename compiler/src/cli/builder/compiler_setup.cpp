@@ -216,7 +216,8 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
 }
 
 std::string ensure_c_compiled(const std::string& c_path_str, const std::string& cache_dir,
-                              const std::string& clang, bool verbose) {
+                              const std::string& clang, bool verbose,
+                              const std::string& extra_flags) {
     fs::path c_path = c_path_str;
 
     // Create cache directory if needed
@@ -224,7 +225,20 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     fs::create_directories(cache_path);
 
     // Generate object file name from source file name
+    // Include hash of extra_flags in filename to avoid collisions
     std::string base_name = c_path.stem().string();
+    if (!extra_flags.empty()) {
+        // Simple hash for flag suffix (use first 8 chars of flags, sanitized)
+        std::string flag_suffix;
+        for (char c : extra_flags) {
+            if (std::isalnum(c) && flag_suffix.size() < 8) {
+                flag_suffix += c;
+            }
+        }
+        if (!flag_suffix.empty()) {
+            base_name += "_" + flag_suffix;
+        }
+    }
     fs::path obj_path = cache_path / base_name;
 #ifdef _WIN32
     obj_path += ".obj";
@@ -256,20 +270,24 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
     if (should_compile) {
         if (verbose) {
             std::cout << "Compiling: " << c_path.filename().string() << " -> "
-                      << obj_path.filename().string() << "\n";
+                      << obj_path.filename().string();
+            if (!extra_flags.empty()) {
+                std::cout << " (flags: " << extra_flags << ")";
+            }
+            std::cout << "\n";
         }
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
         std::string compile_cmd = quote_command(clang) +
 #ifdef _WIN32
                                   " -c -O3 -fms-extensions -march=native -mtune=native "
-                                  "-fomit-frame-pointer -funroll-loops -o \"" +
+                                  "-fomit-frame-pointer -funroll-loops " +
 #else
                                   " -c -O3 -march=native -mtune=native -fomit-frame-pointer "
-                                  "-funroll-loops -o \"" +
+                                  "-funroll-loops " +
 #endif
-                                  obj_path_str + "\" \"" + to_forward_slashes(c_path.string()) +
-                                  "\"";
+                                  extra_flags + " -o \"" + obj_path_str + "\" \"" +
+                                  to_forward_slashes(c_path.string()) + "\"";
         int ret = std::system(compile_cmd.c_str());
 
         // Mark compilation as done

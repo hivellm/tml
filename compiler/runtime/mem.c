@@ -29,12 +29,22 @@
  *
  * All functions are thread-safe as they wrap standard C library functions.
  *
+ * ## Memory Tracking
+ *
+ * When TML_DEBUG_MEMORY is defined, all allocations are tracked and
+ * memory leaks are reported at program exit.
+ *
  * @see env_builtins_mem.cpp for compiler builtin registration
+ * @see mem_track.h for memory tracking API
  */
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef TML_DEBUG_MEMORY
+#include "mem_track.h"
+#endif
 
 // ============================================================================
 // Allocation Functions
@@ -49,7 +59,13 @@
  * @return Pointer to allocated memory, or NULL on failure.
  */
 void* mem_alloc(int64_t size) {
+#ifdef TML_DEBUG_MEMORY
+    void* ptr = malloc((size_t)size);
+    tml_mem_track_alloc(ptr, (size_t)size, "mem_alloc");
+    return ptr;
+#else
     return malloc((size_t)size);
+#endif
 }
 
 /**
@@ -61,7 +77,13 @@ void* mem_alloc(int64_t size) {
  * @return Pointer to zero-initialized memory, or NULL on failure.
  */
 void* mem_alloc_zeroed(int64_t size) {
+#ifdef TML_DEBUG_MEMORY
+    void* ptr = calloc(1, (size_t)size);
+    tml_mem_track_alloc(ptr, (size_t)size, "mem_alloc_zeroed");
+    return ptr;
+#else
     return calloc(1, (size_t)size);
+#endif
 }
 
 /**
@@ -74,7 +96,13 @@ void* mem_alloc_zeroed(int64_t size) {
  * @return Pointer to reallocated memory, or NULL on failure.
  */
 void* mem_realloc(void* ptr, int64_t new_size) {
+#ifdef TML_DEBUG_MEMORY
+    void* new_ptr = realloc(ptr, (size_t)new_size);
+    tml_mem_track_realloc(ptr, new_ptr, (size_t)new_size);
+    return new_ptr;
+#else
     return realloc(ptr, (size_t)new_size);
+#endif
 }
 
 /**
@@ -85,6 +113,9 @@ void* mem_realloc(void* ptr, int64_t new_size) {
  * @param ptr Pointer to memory to free. NULL is safe.
  */
 void mem_free(void* ptr) {
+#ifdef TML_DEBUG_MEMORY
+    tml_mem_track_free(ptr);
+#endif
     free(ptr);
 }
 

@@ -162,6 +162,7 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  -Wpedantic          Enable pedantic warnings\n";
             std::cerr << "  -Werror             Treat warnings as errors\n";
             std::cerr << "  --error-format=json Output diagnostics as JSON\n";
+            std::cerr << "  --no-check-leaks    Disable memory leak detection (enabled by default)\n";
             return 1;
         }
 
@@ -214,6 +215,8 @@ int tml_main(int argc, char* argv[]) {
                 no_cache = true;
             } else if (arg == "--release") {
                 opt_level = 3;
+                // Disable leak checking in release mode for performance
+                tml::CompilerOptions::check_leaks = false;
             } else if (arg == "--debug" || arg == "-g") {
                 debug_info = true;
                 debug_level = 2; // -g is equivalent to -g2
@@ -283,6 +286,10 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--coverage-output=")) {
                 tml::CompilerOptions::coverage_output = arg.substr(18);
                 tml::CompilerOptions::coverage = true; // Implicitly enable coverage
+            } else if (arg == "--check-leaks") {
+                tml::CompilerOptions::check_leaks = true;
+            } else if (arg == "--no-check-leaks") {
+                tml::CompilerOptions::check_leaks = false;
             } else if (arg.starts_with("-D")) {
                 // Preprocessor define: -DSYMBOL or -DSYMBOL=VALUE
                 if (arg.length() > 2) {

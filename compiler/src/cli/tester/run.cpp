@@ -118,6 +118,10 @@ TestOptions parse_test_args(int argc, char* argv[], int start_index) {
         } else if (arg.starts_with("--coverage-output=")) {
             opts.coverage_output = arg.substr(18);
             opts.coverage = true; // Implicitly enable coverage
+        } else if (arg == "--check-leaks") {
+            opts.check_leaks = true;
+        } else if (arg == "--no-check-leaks") {
+            opts.check_leaks = false;
         } else if (arg == "--profile") {
             opts.profile = true;
             opts.test_threads = 1; // Force single-threaded for accurate profiling
@@ -169,6 +173,9 @@ int run_test(int argc, char* argv[], bool verbose) {
         // Default coverage output file if coverage is enabled but no path specified
         tml::CompilerOptions::coverage_output = "coverage.html";
     }
+
+    // Set memory leak checking option
+    tml::CompilerOptions::check_leaks = opts.check_leaks;
 
     ColorOutput c(!opts.no_color);
 

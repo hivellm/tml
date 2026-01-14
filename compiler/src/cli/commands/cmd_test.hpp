@@ -136,6 +136,7 @@ struct TestOptions {
     bool suite_mode = true;            // Use suite-based DLL compilation (fewer DLLs, faster)
     std::string corpus_dir;            // Directory for fuzz corpus (inputs)
     std::string crashes_dir;           // Directory to save crash inputs
+    bool check_leaks = true;           // Memory leak detection (enabled by default)
 };
 
 // Parse test command arguments

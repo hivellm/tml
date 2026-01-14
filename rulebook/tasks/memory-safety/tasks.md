@@ -1,34 +1,34 @@
 # Tasks: Memory Safety & Leak Prevention
 
-**Status**: Not started
+**Status**: In progress (~45%)
 
 **Priority**: High - Infrastructure reliability
 
 ## Phase 1: Compiler Memory Audit
 
 ### 1.1 AST Memory Management
-- [ ] 1.1.1 Audit AST node allocations in parser
-- [ ] 1.1.2 Verify AST destruction in ASTNode destructors
-- [ ] 1.1.3 Check for orphaned nodes in error recovery paths
-- [ ] 1.1.4 Review unique_ptr/shared_ptr usage consistency
+- [x] 1.1.1 Audit AST node allocations in parser (uses Box<T>/unique_ptr throughout)
+- [x] 1.1.2 Verify AST destruction in ASTNode destructors (RAII via unique_ptr)
+- [x] 1.1.3 Check for orphaned nodes in error recovery paths (synchronize* functions, no manual cleanup)
+- [x] 1.1.4 Review unique_ptr/shared_ptr usage consistency (85+ make_box calls, no raw new)
 
 ### 1.2 MIR Memory Management
-- [ ] 1.2.1 Audit MIR instruction allocations
-- [ ] 1.2.2 Verify MIR function/block cleanup
-- [ ] 1.2.3 Check MIR optimization pass memory handling
-- [ ] 1.2.4 Review MIR cache eviction and cleanup
+- [x] 1.2.1 Audit MIR instruction allocations (value types in std::vector, no raw pointers)
+- [x] 1.2.2 Verify MIR function/block cleanup (RAII via std::vector<BasicBlock>)
+- [x] 1.2.3 Check MIR optimization pass memory handling (passes work on refs, no ownership)
+- [x] 1.2.4 Review MIR cache eviction and cleanup (std::optional return, file-based storage)
 
 ### 1.3 Type System Memory
-- [ ] 1.3.1 Audit TypeInfo allocation in TypeRegistry
-- [ ] 1.3.2 Review GenericInstance memory lifecycle
-- [ ] 1.3.3 Check BehaviorImpl memory management
-- [ ] 1.3.4 Verify constraint/bound cleanup
+- [x] 1.3.1 Audit TypeInfo allocation in TypeRegistry (shared_ptr<Type>, standard maps)
+- [x] 1.3.2 Review GenericInstance memory lifecycle (TypePtr with type_args vectors)
+- [x] 1.3.3 Check BehaviorImpl memory management (stored in unordered_map by value)
+- [x] 1.3.4 Verify constraint/bound cleanup (RAII via TypeEnv destruction)
 
 ### 1.4 Symbol Tables & Scopes
-- [ ] 1.4.1 Audit Scope allocation/deallocation
-- [ ] 1.4.2 Review SymbolTable cleanup on scope exit
-- [ ] 1.4.3 Check module symbol cleanup
-- [ ] 1.4.4 Verify import resolution cleanup
+- [x] 1.4.1 Audit Scope allocation/deallocation (Scope::symbols_ is unordered_map)
+- [x] 1.4.2 Review SymbolTable cleanup on scope exit (scopes stored in stack, RAII)
+- [x] 1.4.3 Check module symbol cleanup (imported_symbols_ map, RAII)
+- [x] 1.4.4 Verify import resolution cleanup (RAII via TypeEnv member maps)
 
 ### 1.5 Module System
 - [ ] 1.5.1 Audit ModuleRegistry memory
@@ -39,18 +39,18 @@
 ## Phase 2: Runtime Memory Audit
 
 ### 2.1 Core Runtime (essential.c)
-- [ ] 2.1.1 Audit tml_string_* allocations
+- [x] 2.1.1 Audit tml_string_* allocations (i64_to_str/f64_to_str documented, caller frees)
 - [ ] 2.1.2 Review tml_array_* allocations
 - [ ] 2.1.3 Check tml_slice_* ownership
-- [ ] 2.1.4 Verify panic/error path cleanup
-- [ ] 2.1.5 Review printf format string handling
+- [x] 2.1.4 Verify panic/error path cleanup (panic catching uses static buffer, no leak)
+- [x] 2.1.5 Review printf format string handling (safe, no dynamic allocation)
 
 ### 2.2 Async Runtime (async.c)
-- [ ] 2.2.1 Audit TmlTask allocation/deallocation
-- [ ] 2.2.2 Review TmlExecutor cleanup
-- [ ] 2.2.3 Check TmlChannel buffer management
+- [x] 2.2.1 Audit TmlTask allocation/deallocation (proper NULL checks, freed on completion)
+- [x] 2.2.2 Review TmlExecutor cleanup (cleans up all tasks in tml_executor_free)
+- [x] 2.2.3 Check TmlChannel buffer management (freed in tml_channel_destroy)
 - [ ] 2.2.4 Verify timer/waker cleanup
-- [ ] 2.2.5 Review spawn/join memory lifecycle
+- [x] 2.2.5 Review spawn/join memory lifecycle (state freed after task completion)
 
 ### 2.3 Heap Allocations
 - [ ] 2.3.1 Review Heap[T] allocation codegen
@@ -74,10 +74,10 @@
 ## Phase 4: Tooling Integration
 
 ### 4.1 Sanitizer Support
-- [ ] 4.1.1 Add AddressSanitizer build option (-fsanitize=address)
-- [ ] 4.1.2 Add LeakSanitizer integration
-- [ ] 4.1.3 Add MemorySanitizer option for uninitialized reads
-- [ ] 4.1.4 Create sanitizer test target in CMake
+- [x] 4.1.1 Add AddressSanitizer build option (-fsanitize=address)
+- [x] 4.1.2 Add LeakSanitizer integration
+- [x] 4.1.3 Add MemorySanitizer option for uninitialized reads
+- [x] 4.1.4 Create sanitizer test target in CMake (via TML_ENABLE_ASAN/UBSAN/LSAN/MSAN)
 
 ### 4.2 Valgrind Support
 - [ ] 4.2.1 Create Valgrind suppression file for known false positives
@@ -88,6 +88,13 @@
 - [ ] 4.3.1 Add sanitizer build to CI pipeline
 - [ ] 4.3.2 Add memory leak check gate
 - [ ] 4.3.3 Create memory benchmark tracking
+
+### 4.4 Runtime Memory Tracking
+- [x] 4.4.1 Create mem_track.h/.c tracking runtime
+- [x] 4.4.2 Integrate with mem.c via TML_DEBUG_MEMORY flag
+- [x] 4.4.3 Add --check-leaks / --no-check-leaks CLI flags
+- [x] 4.4.4 Enable leak checking by default in debug builds
+- [x] 4.4.5 Disable leak checking in release builds automatically
 
 ## Phase 5: Fixes & Improvements
 

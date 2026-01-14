@@ -18,6 +18,8 @@ if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "TARGET=aarch64-pc-windows-msvc"
 set "BUILD_TYPE=debug"
 set "CLEAN_BUILD=0"
 set "BUILD_TESTS=ON"
+set "ENABLE_ASAN=OFF"
+set "ENABLE_UBSAN=OFF"
 
 :: Parse arguments
 :parse_args
@@ -27,6 +29,9 @@ if /i "%~1"=="release" set "BUILD_TYPE=release" & shift & goto :parse_args
 if /i "%~1"=="--clean" set "CLEAN_BUILD=1" & shift & goto :parse_args
 if /i "%~1"=="--no-tests" set "BUILD_TESTS=OFF" & shift & goto :parse_args
 if /i "%~1"=="--tests" set "BUILD_TESTS=ON" & shift & goto :parse_args
+if /i "%~1"=="--asan" set "ENABLE_ASAN=ON" & shift & goto :parse_args
+if /i "%~1"=="--ubsan" set "ENABLE_UBSAN=ON" & shift & goto :parse_args
+if /i "%~1"=="--sanitize" set "ENABLE_ASAN=ON" & set "ENABLE_UBSAN=ON" & shift & goto :parse_args
 if /i "%~1"=="--help" goto :show_help
 if /i "%~1"=="-h" goto :show_help
 echo Unknown argument: %~1
@@ -45,6 +50,9 @@ echo Options:
 echo   --clean     Clean build directory before building
 echo   --tests     Build tests (default)
 echo   --no-tests  Don't build tests
+echo   --asan      Enable AddressSanitizer (memory error detection)
+echo   --ubsan     Enable UndefinedBehaviorSanitizer
+echo   --sanitize  Enable both ASan and UBSan
 echo   --help      Show this help message
 echo.
 echo Host target: %TARGET%
@@ -72,6 +80,8 @@ echo Build type:  %BUILD_TYPE%
 echo Cache dir:   %CACHE_DIR%
 echo Output dir:  %OUTPUT_DIR%
 echo Tests:       %BUILD_TESTS%
+if "%ENABLE_ASAN%"=="ON" echo ASan:        Enabled
+if "%ENABLE_UBSAN%"=="ON" echo UBSan:       Enabled
 echo.
 
 :: Clean if requested
@@ -95,6 +105,8 @@ cd /d "%CACHE_DIR%"
 cmake "%ROOT_DIR%\compiler" ^
     -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE% ^
     -DTML_BUILD_TESTS=%BUILD_TESTS% ^
+    -DTML_ENABLE_ASAN=%ENABLE_ASAN% ^
+    -DTML_ENABLE_UBSAN=%ENABLE_UBSAN% ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
     -DTML_OUTPUT_DIR="%OUTPUT_DIR%"
 

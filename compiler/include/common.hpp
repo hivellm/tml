@@ -120,6 +120,11 @@ struct CompilerOptions {
 
     /// Output path for coverage HTML report.
     static inline std::string coverage_output;
+
+    /// Enable memory leak checking at runtime.
+    /// When enabled, compiled programs track all allocations and report
+    /// unfreed memory at exit. Always enabled in debug builds by default.
+    static inline bool check_leaks = true;
 };
 
 // ============================================================================

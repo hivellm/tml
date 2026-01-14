@@ -42,9 +42,11 @@ std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std
 
 // Ensure any C file is compiled with caching
 // cache_dir: where to store the .o/.obj file
+// extra_flags: optional additional compiler flags (e.g., "-DTML_DEBUG_MEMORY")
 // Returns: path to compiled object file, or original .c path on failure
 std::string ensure_c_compiled(const std::string& c_path, const std::string& cache_dir,
-                              const std::string& clang, bool verbose);
+                              const std::string& clang, bool verbose,
+                              const std::string& extra_flags = "");
 
 // Find runtime path
 std::string find_runtime();

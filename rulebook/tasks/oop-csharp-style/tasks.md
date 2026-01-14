@@ -1,6 +1,6 @@
 # Tasks: C#-Style Object-Oriented Programming
 
-**Status**: Complete (~95%)
+**Status**: Complete (~98%)
 
 **Priority**: High - Core language feature
 
@@ -88,14 +88,14 @@
 - [x] 3.1.1 Create InterfaceType in types system
 - [x] 3.1.2 Track interface method signatures
 - [x] 3.1.3 Track interface inheritance chain
-- [ ] 3.1.4 Support generic interfaces
+- [x] 3.1.4 Support generic interfaces (basic support via generic type param fixes)
 
 ### 3.2 Class Type
 - [x] 3.2.1 Create ClassType in types system
 - [x] 3.2.2 Track parent class (single inheritance)
 - [x] 3.2.3 Track implemented interfaces
 - [x] 3.2.4 Track virtual method table layout
-- [ ] 3.2.5 Support generic classes
+- [x] 3.2.5 Support generic classes (basic support via generic type param fixes)
 
 ### 3.3 Inheritance Validation
 - [x] 3.3.1 Verify single inheritance (no multiple class inheritance)
@@ -365,7 +365,7 @@
 |-------|-------------|--------|----------|
 | 1 | Lexer Keywords | Complete | 16/16 |
 | 2 | Parser Grammar | Complete | 32/32 |
-| 3 | Type System | Complete | 22/22 |
+| 3 | Type System | Complete | 24/24 |
 | 4 | Codegen | Complete | 31/32 |
 | 5 | MIR/HIR Optimizations | Complete | 6/9 |
 | 6 | Standard Library | Not Started | 0/19 |
@@ -374,7 +374,7 @@
 | 9 | Documentation | Partial | 7/13 |
 | 10 | Performance | Partial | 4/14 |
 | 11 | Integration | Partial | 5/7 |
-| **Total** | | **~99% Core Complete** | **~143/191** |
+| **Total** | | **~98% Core Complete** | **~145/193** |
 
 ## Files Added/Modified
 
@@ -396,14 +396,28 @@
 - `compiler/include/types/type.hpp` - ClassType, InterfaceType
 - `compiler/include/types/env.hpp` - ClassDef, InterfaceDef, PropertyDef
 - `compiler/src/types/env_lookups.cpp` - Class/interface lookup
-- `compiler/src/types/env_module_support.cpp` - Class/interface import support in glob imports
+- `compiler/src/types/env_module_support.cpp` - Class/interface import support in glob imports, impl-level type params in method signatures
 - `compiler/src/types/checker/core.cpp` - Namespace/property registration
 - `compiler/include/codegen/llvm_ir_gen.hpp` - Class codegen infrastructure, interface vtables
 - `compiler/src/codegen/core/generate.cpp` - Namespace codegen
 - `compiler/src/codegen/core/dyn.cpp` - Interface vtable lookup
 - `compiler/src/codegen/expr/struct.cpp` - Property getter access
 - `compiler/src/codegen/expr/binary.cpp` - Property setter assignment
-- `compiler/src/codegen/llvm_ir_gen_stmt.cpp` - Class-to-interface coercion
+- `compiler/src/codegen/expr/method.cpp` - Method-level type args mapping fix for generic methods
+- `compiler/src/codegen/llvm_ir_gen_stmt.cpp` - Class-to-interface coercion, type substitution in let statements
 - `compiler/src/codegen/expr/cast.cpp` - Safe `as` operator for class casting
 - `compiler/CMakeLists.txt` - New source files
 - `vscode-tml/syntaxes/tml.tmLanguage.json` - OOP syntax highlighting
+
+## Recent Fixes (Generic Type Parameters)
+
+The following fixes improved generic class/interface support:
+
+1. **env_module_support.cpp**: Include impl-level type params when registering method signatures
+   - Methods in `impl[T] Cell[T]` now correctly have `T` in their type params
+
+2. **llvm_ir_gen_stmt.cpp**: Use `current_type_subs_` when resolving type annotations in let statements
+   - Fixes "Cannot allocate unsized type %struct.T" errors in generic methods
+
+3. **method.cpp**: Correctly map method-level type args to method params (not impl params)
+   - For `ptr.cast[U8]()`, `U8` now maps to `U` (method param) instead of `T` (impl param)
