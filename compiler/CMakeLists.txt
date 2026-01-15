@@ -441,6 +441,7 @@ if(TML_BUILD_TESTS)
         tests/cli/parallel_build_test.cpp
         tests/integration/cache_test.cpp
         tests/integration/ffi_test.cpp
+        tests/integration/memory_test.cpp
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli

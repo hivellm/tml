@@ -160,19 +160,36 @@ static void tml_internal_wake(void* data) {
     }
 }
 
+// Internal WakeData structure with refcount for proper cleanup
+typedef struct WakeData {
+    TmlExecutor* executor;
+    uint64_t task_id;
+    int32_t refcount; // Reference count for clone support
+} WakeData;
+
 TmlWaker tml_waker_create(TmlExecutor* executor, uint64_t task_id) {
     TmlWaker waker;
     waker.wake_fn = tml_internal_wake;
-    // Allocate wake data (leaked for now, proper impl would ref-count)
-    struct WakeData {
-        TmlExecutor* executor;
-        uint64_t task_id;
-    }* data = (struct WakeData*)malloc(sizeof(struct WakeData));
-    data->executor = executor;
-    data->task_id = task_id;
+    WakeData* data = (WakeData*)malloc(sizeof(WakeData));
+    if (data) {
+        data->executor = executor;
+        data->task_id = task_id;
+        data->refcount = 1;
+    }
     waker.data = data;
     waker.task_id = task_id;
     return waker;
+}
+
+void tml_waker_destroy(TmlWaker* waker) {
+    if (waker && waker->data) {
+        WakeData* data = (WakeData*)waker->data;
+        data->refcount--;
+        if (data->refcount <= 0) {
+            free(data);
+        }
+        waker->data = NULL;
+    }
 }
 
 void tml_waker_wake(TmlWaker* waker) {
@@ -184,8 +201,13 @@ void tml_waker_wake(TmlWaker* waker) {
 TmlWaker tml_waker_clone(const TmlWaker* waker) {
     TmlWaker clone;
     clone.wake_fn = waker->wake_fn;
-    clone.data = waker->data; // Shallow copy - proper impl would ref-count
+    clone.data = waker->data;
     clone.task_id = waker->task_id;
+    // Increment refcount for clone
+    if (waker->data) {
+        WakeData* data = (WakeData*)waker->data;
+        data->refcount++;
+    }
     return clone;
 }
 
@@ -301,6 +323,9 @@ int32_t tml_executor_poll_task(TmlExecutor* executor, TmlTask* task) {
     TmlPoll result = task->poll_fn(task->state, &cx);
 
     executor->current_task = NULL;
+
+    // Clean up waker - it was created for this poll only
+    tml_waker_destroy(&cx.waker);
 
     if (tml_poll_is_ready(&result)) {
         // Task completed
@@ -419,6 +444,7 @@ TmlPoll tml_block_on(TmlPollFn poll_fn, void* state, size_t state_size) {
     }
 
     // Cleanup
+    tml_waker_destroy(&cx.waker);
     if (task.state) {
         free(task.state);
     }

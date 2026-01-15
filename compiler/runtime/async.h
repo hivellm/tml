@@ -312,6 +312,15 @@ void tml_waker_wake(TmlWaker* waker);
  */
 TmlWaker tml_waker_clone(const TmlWaker* waker);
 
+/**
+ * @brief Destroys a waker and frees associated memory.
+ * @param waker The waker to destroy.
+ *
+ * This decrements the reference count on the waker's internal data.
+ * When the count reaches zero, the data is freed.
+ */
+void tml_waker_destroy(TmlWaker* waker);
+
 // ============================================================================
 // Poll Result Utilities
 // ============================================================================

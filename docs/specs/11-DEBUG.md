@@ -494,6 +494,84 @@ The LSP sends diagnostics in real-time:
 }
 ```
 
+## 12. External Memory Tools
+
+### 12.1 AddressSanitizer (Recommended)
+
+AddressSanitizer (ASan) is the recommended memory debugging tool on all platforms:
+
+```bash
+# Build with AddressSanitizer
+tml build myapp.tml --sanitize=address
+
+# Run - crashes on memory errors with detailed stack traces
+./myapp
+```
+
+ASan detects:
+- Buffer overflows (stack, heap, global)
+- Use-after-free
+- Double-free
+- Memory leaks (with LeakSanitizer)
+
+### 12.2 Valgrind (Linux)
+
+Valgrind provides comprehensive memory debugging on Linux:
+
+```bash
+# Install Valgrind (Ubuntu/Debian)
+sudo apt install valgrind
+
+# Run with memcheck (memory errors)
+valgrind --leak-check=full ./myapp
+
+# Run with detailed leak origins
+valgrind --leak-check=full --track-origins=yes ./myapp
+
+# Generate suppression file for false positives
+valgrind --gen-suppressions=all ./myapp 2>&1 | grep -A4 "^{"
+```
+
+Common Valgrind options:
+| Option | Description |
+|--------|-------------|
+| `--leak-check=full` | Full leak checking |
+| `--show-leak-kinds=all` | Show all leak types |
+| `--track-origins=yes` | Track uninitialized values |
+| `--suppressions=file.supp` | Use suppression file |
+
+### 12.3 Windows Memory Tools
+
+On Windows, use Visual Studio's diagnostics or Dr. Memory:
+
+```bash
+# Dr. Memory (open source)
+drmemory -- ./myapp.exe
+
+# Visual Studio: Debug → Windows → Memory Diagnostic
+```
+
+### 12.4 Sanitizer Build Options
+
+The TML compiler supports sanitizer flags:
+
+```bash
+# AddressSanitizer (memory errors + leaks)
+tml build --sanitize=address
+
+# UndefinedBehaviorSanitizer (UB detection)
+tml build --sanitize=undefined
+
+# MemorySanitizer (uninitialized reads, Linux only)
+tml build --sanitize=memory
+
+# ThreadSanitizer (data races)
+tml build --sanitize=thread
+
+# Combine multiple sanitizers
+tml build --sanitize=address,undefined
+```
+
 ---
 
 *Previous: [10-TESTING.md](./10-TESTING.md)*
