@@ -135,5 +135,5 @@ pub use builders::*
 pub use num::*
 pub use formatter::*
 pub use impls::*
-// pub use rt::*  // TODO: Disabled - rt.tml has slice method issues (len() returning ())
+pub use rt::*
 pub use float::*

@@ -244,10 +244,10 @@ impl Debug for NetError {
 /// - On POSIX systems, uses errno values (ECONNREFUSED, ETIMEDOUT, etc.)
 /// - On Windows, uses Winsock error codes (WSAECONNREFUSED, WSAETIMEDOUT, etc.)
 pub func error_kind_from_code(code: I32) -> NetErrorKind {
-    // Common POSIX errno values
-    // These are the most common values; actual values may vary by platform
-    #if POSIX
+    // Combined mapping for both POSIX errno and Windows Winsock error codes
+    // POSIX codes are typically < 200, Windows WSA codes are 10000+
     when code {
+        // POSIX errno values
         111 => NetErrorKind::ConnectionRefused,  // ECONNREFUSED
         104 => NetErrorKind::ConnectionReset,    // ECONNRESET
         103 => NetErrorKind::ConnectionAborted,  // ECONNABORTED
@@ -262,11 +262,7 @@ pub func error_kind_from_code(code: I32) -> NetErrorKind {
         13  => NetErrorKind::PermissionDenied,   // EACCES
         22  => NetErrorKind::InvalidInput,       // EINVAL
         4   => NetErrorKind::Interrupted,        // EINTR
-        _   => NetErrorKind::OsError(code),
-    }
-    #elif WINDOWS
-    // Windows Winsock error codes (WSA*)
-    when code {
+        // Windows Winsock error codes (WSA*)
         10061 => NetErrorKind::ConnectionRefused,  // WSAECONNREFUSED
         10054 => NetErrorKind::ConnectionReset,    // WSAECONNRESET
         10053 => NetErrorKind::ConnectionAborted,  // WSAECONNABORTED
@@ -281,12 +277,9 @@ pub func error_kind_from_code(code: I32) -> NetErrorKind {
         10013 => NetErrorKind::PermissionDenied,   // WSAEACCES
         10022 => NetErrorKind::InvalidInput,       // WSAEINVAL
         10004 => NetErrorKind::Interrupted,        // WSAEINTR
+        // Unknown error code
         _     => NetErrorKind::OsError(code),
     }
-    #else
-    // Generic fallback
-    NetErrorKind::OsError(code)
-    #endif
 }
 
 /// Creates a NetError from a platform-specific error code.

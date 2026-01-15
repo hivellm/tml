@@ -374,7 +374,7 @@ impl Debug for BoxedError {
 
 impl Error for BoxedError {
     pub func source(this) -> Maybe[ref dyn Error] {
-        // TODO: Dynamic method calls on dyn Error not fully supported yet
+        // BoxedError is a simple message-only error with no underlying cause
         return Nothing
     }
 }
@@ -905,9 +905,7 @@ impl Iterator for ErrorChain {
     pub func next(mut this) -> Maybe[ref dyn Error] {
         when this.current {
             Just(err) => {
-                // TODO: Dynamic method calls on dyn Error not fully supported yet
-                // this.current = err.source()
-                this.current = Nothing
+                this.current = err.source()
                 return Just(err)
             },
             Nothing => return Nothing
