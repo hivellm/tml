@@ -9,3 +9,7 @@ criterion = "0.5"
 [[bench]]
 name = "algorithms"
 harness = false
+
+[[bench]]
+name = "http_server_bench"
+harness = false

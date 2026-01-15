@@ -743,6 +743,19 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                             }
                             // Check visibility
                             check_member_visibility(m.vis, type_name, method, call.callee->span);
+                            // Apply type arguments for generic static methods
+                            if (path.generics.has_value() && !m.sig.type_params.empty()) {
+                                std::unordered_map<std::string, TypePtr> subs;
+                                const auto& gen_args = path.generics.value().args;
+                                for (size_t i = 0;
+                                     i < m.sig.type_params.size() && i < gen_args.size(); ++i) {
+                                    if (gen_args[i].is_type()) {
+                                        subs[m.sig.type_params[i]] =
+                                            resolve_type(*gen_args[i].as_type());
+                                    }
+                                }
+                                return substitute_type(m.sig.return_type, subs);
+                            }
                             return m.sig.return_type;
                         }
                     }
@@ -883,6 +896,16 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                         if (!check_member_visibility(method.vis, type_name, call.method,
                                                      call.receiver->span)) {
                             return method.sig.return_type; // Return type for error recovery
+                        }
+                        // Apply type arguments for generic static methods
+                        if (!call.type_args.empty() && !method.sig.type_params.empty()) {
+                            std::unordered_map<std::string, TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < method.sig.type_params.size() && i < call.type_args.size();
+                                 ++i) {
+                                subs[method.sig.type_params[i]] = resolve_type(*call.type_args[i]);
+                            }
+                            return substitute_type(method.sig.return_type, subs);
                         }
                         return method.sig.return_type;
                     }

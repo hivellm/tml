@@ -1561,8 +1561,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     // =========================================================================
     // 15. Handle class instance method calls
     // =========================================================================
-    if (receiver_type && receiver_type->is<types::ClassType>()) {
-        const auto& class_type = receiver_type->as<types::ClassType>();
+    // Unwrap RefType if present (e.g., ref Counter -> Counter)
+    types::TypePtr effective_receiver_type = receiver_type;
+    if (receiver_type && receiver_type->is<types::RefType>()) {
+        effective_receiver_type = receiver_type->as<types::RefType>().inner;
+    }
+    if (effective_receiver_type && effective_receiver_type->is<types::ClassType>()) {
+        const auto& class_type = effective_receiver_type->as<types::ClassType>();
         auto class_def = env_.lookup_class(class_type.name);
         if (class_def.has_value()) {
             // Search for the method in this class and its parents
@@ -1581,10 +1586,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
                         // Get receiver pointer (for 'this')
-                        // For class types, 'receiver' is already the loaded class pointer
-                        // (class variables are pointers, so gen_ident loads the ptr from alloca)
-                        // We should NOT use receiver_ptr (the alloca address) for classes
                         std::string this_ptr = receiver;
+
+                        // If receiver was 'ref ClassType', we have a pointer to the class variable
+                        // which itself holds a pointer. Need to load to get the actual class ptr.
+                        if (receiver_type && receiver_type->is<types::RefType>()) {
+                            std::string loaded_this = fresh_reg();
+                            emit_line("  " + loaded_this + " = load ptr, ptr " + receiver);
+                            this_ptr = loaded_this;
+                        }
 
                         // Generate arguments: this pointer + regular args
                         std::string args_str = "ptr " + this_ptr;

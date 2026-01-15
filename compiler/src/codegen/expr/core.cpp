@@ -70,7 +70,15 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
             return std::to_string(val);
         }
 
-        // No suffix - infer type from value magnitude
+        // No suffix - check for expected type context from variable declaration
+        // e.g., "var a: U8 = 128" should use i8 for the literal
+        if (!expected_literal_type_.empty()) {
+            last_expr_type_ = expected_literal_type_;
+            last_expr_is_unsigned_ = expected_literal_is_unsigned_;
+            return std::to_string(val);
+        }
+
+        // No expected type - infer type from value magnitude
         // Check if value fits in signed i32 range (-2^31 to 2^31-1)
         // For unsigned values, check if it fits in 0 to 2^31-1 (positive i32)
         constexpr uint64_t MAX_I32 = 2147483647ULL; // 2^31 - 1
@@ -158,10 +166,11 @@ auto LLVMIRGen::gen_ident(const parser::IdentExpr& ident) -> std::string {
             }
         }
         // Check if it's an alloca (starts with %t and has digit after) that needs loading
-        // But skip %this which is a direct parameter, not an alloca
+        // Also check is_ptr_to_value for cases like 'mut this' on primitives
         // This includes ptr types - we load the pointer value from the alloca
-        if (var.reg[0] == '%' && var.reg[1] == 't' && var.reg.length() > 2 &&
-            std::isdigit(var.reg[2])) {
+        if ((var.reg[0] == '%' && var.reg[1] == 't' && var.reg.length() > 2 &&
+             std::isdigit(var.reg[2])) ||
+            var.is_ptr_to_value) {
             std::string reg = fresh_reg();
             emit_line("  " + reg + " = load " + var.type + ", ptr " + var.reg);
             return reg;

@@ -69,7 +69,7 @@
 ### 2.6 Constructor
 - [x] 2.6.1 Parse `func new(...) -> ClassName { ... }`
 - [x] 2.6.2 Parse base constructor call `base: Parent::new(...)`
-- [ ] 2.6.3 Handle constructor overloading
+- [x] 2.6.3 Handle constructor overloading
 
 ### 2.7 Properties
 - [x] 2.7.1 Parse `prop name: Type { get; set }`
@@ -164,7 +164,7 @@
 - [x] 4.6.1 Generate global variables for static fields
 - [x] 4.6.2 Generate static initializers (literals supported)
 - [x] 4.6.3 Generate static methods as regular functions
-- [ ] 4.6.4 Handle static generic methods
+- [x] 4.6.4 Handle static generic methods
 
 ### 4.7 Interface Dispatch
 - [x] 4.7.1 Generate interface vtable (subset of class vtable)
@@ -279,9 +279,9 @@
 - [x] 8.4.1 Implement classic design patterns
   - [x] Factory pattern
   - [x] Observer pattern
-  - [ ] Strategy pattern
-  - [ ] Decorator pattern
-  - [ ] Template method pattern
+  - [x] Strategy pattern
+  - [x] Decorator pattern
+  - [x] Template method pattern
 - [ ] 8.4.2 Port C# samples to TML
 - [ ] 8.4.3 Benchmark virtual dispatch overhead
 
@@ -366,7 +366,7 @@
 | 1 | Lexer Keywords | Complete | 16/16 |
 | 2 | Parser Grammar | Complete | 32/32 |
 | 3 | Type System | Complete | 24/24 |
-| 4 | Codegen | Complete | 31/32 |
+| 4 | Codegen | Complete | 32/32 |
 | 5 | MIR/HIR Optimizations | Complete | 6/9 |
 | 6 | Standard Library | Not Started | 0/19 |
 | 7 | IDE/Tooling | Partial | 3/11 |
@@ -374,7 +374,7 @@
 | 9 | Documentation | Partial | 7/13 |
 | 10 | Performance | Partial | 4/14 |
 | 11 | Integration | Partial | 5/7 |
-| **Total** | | **~98% Core Complete** | **~145/193** |
+| **Total** | | **~98% Core Complete** | **~146/193** |
 
 ## Files Added/Modified
 

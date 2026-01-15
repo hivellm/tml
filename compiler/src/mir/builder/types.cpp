@@ -199,6 +199,20 @@ auto MirBuilder::convert_semantic_type(const types::TypePtr& type) -> MirTypePtr
             } else if constexpr (std::is_same_v<T, types::GenericType>) {
                 // Generic type parameter - should be instantiated
                 return make_i32_type(); // Fallback
+            } else if constexpr (std::is_same_v<T, types::ClassType>) {
+                // Class types are represented as struct types in MIR
+                std::vector<MirTypePtr> type_args;
+                for (const auto& arg : t.type_args) {
+                    type_args.push_back(convert_semantic_type(arg));
+                }
+                return make_struct_type(t.name, std::move(type_args));
+            } else if constexpr (std::is_same_v<T, types::InterfaceType>) {
+                // Interface types are represented as struct types in MIR
+                std::vector<MirTypePtr> type_args;
+                for (const auto& arg : t.type_args) {
+                    type_args.push_back(convert_semantic_type(arg));
+                }
+                return make_struct_type(t.name, std::move(type_args));
             } else {
                 return make_unit_type();
             }

@@ -83,6 +83,20 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
             std::string arg_val = gen_expr(arg_expr);
             auto arg_type = infer_print_type(arg_expr);
 
+            // Check last_expr_type_ from gen_expr to infer actual type
+            if (arg_type == PrintArgType::Unknown || arg_type == PrintArgType::Int) {
+                if (last_expr_type_ == "i64")
+                    arg_type = PrintArgType::I64;
+                else if (last_expr_type_ == "i1")
+                    arg_type = PrintArgType::Bool;
+                else if (last_expr_type_ == "float" || last_expr_type_ == "double")
+                    arg_type = PrintArgType::Float;
+                else if (last_expr_type_ == "ptr")
+                    arg_type = PrintArgType::Str;
+                else if (last_expr_type_ == "i32")
+                    arg_type = PrintArgType::Int;
+            }
+
             // For identifiers, check variable type
             if (arg_type == PrintArgType::Unknown && arg_expr.is<parser::IdentExpr>()) {
                 const auto& ident = arg_expr.as<parser::IdentExpr>();

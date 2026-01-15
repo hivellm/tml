@@ -90,9 +90,18 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
             arg_type = PrintArgType::Str;
         }
 
-        // Use gen_type as fallback for interpolated strings and other ptr results
-        if (arg_type == PrintArgType::Unknown && gen_type == "ptr") {
-            arg_type = PrintArgType::Str;
+        // Use gen_type as fallback for type inference from gen_expr result
+        if (arg_type == PrintArgType::Unknown || arg_type == PrintArgType::Int) {
+            if (gen_type == "i64")
+                arg_type = PrintArgType::I64;
+            else if (gen_type == "ptr")
+                arg_type = PrintArgType::Str;
+            else if (gen_type == "i1")
+                arg_type = PrintArgType::Bool;
+            else if (gen_type == "float" || gen_type == "double")
+                arg_type = PrintArgType::Float;
+            else if (gen_type == "i32")
+                arg_type = PrintArgType::Int;
         }
 
         // Use runtime print functions that respect output suppression flag

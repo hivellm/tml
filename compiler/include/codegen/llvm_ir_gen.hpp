@@ -142,6 +142,7 @@ private:
     // Current loop context for break/continue
     std::string current_loop_start_;
     std::string current_loop_end_;
+    std::string current_loop_stack_save_; // For stacksave/stackrestore in loops
 
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
@@ -150,6 +151,12 @@ private:
     // Expected type context for enum constructors (used in gen_call_expr)
     // When set, enum constructors will use this type instead of inferring
     std::string expected_enum_type_; // e.g., "%struct.Outcome__I32__I32"
+
+    // Expected type context for numeric literals (used in gen_literal)
+    // When set, unsuffixed literals use this type instead of defaulting to i32
+    // e.g., "i8" for U8, "i16" for I16, etc.
+    std::string expected_literal_type_;
+    bool expected_literal_is_unsigned_ = false;
 
 public:
     /// Information about captured variables in a closure.
@@ -167,6 +174,7 @@ public:
         std::string type;             ///< LLVM type string.
         types::TypePtr semantic_type; ///< Full semantic type (for complex types).
         std::optional<ClosureCaptureInfo> closure_captures; ///< Capture info if closure.
+        bool is_ptr_to_value = false; ///< True if reg is a pointer to the value (needs loading).
     };
 
     /// Drop tracking information for RAII.
@@ -296,11 +304,11 @@ private:
 
     // Property info for classes (ClassName.propName -> property info)
     struct ClassPropertyInfo {
-        std::string name;        // Property name
-        std::string llvm_type;   // LLVM type of the property
-        bool has_getter;         // Has getter method
-        bool has_setter;         // Has setter method
-        bool is_static;          // Static property
+        std::string name;      // Property name
+        std::string llvm_type; // LLVM type of the property
+        bool has_getter;       // Has getter method
+        bool has_setter;       // Has setter method
+        bool is_static;        // Static property
     };
     std::unordered_map<std::string, ClassPropertyInfo> class_properties_;
 
@@ -318,6 +326,9 @@ private:
 
     // Generate class declaration (type + vtable + methods)
     void gen_class_decl(const parser::ClassDecl& c);
+
+    // Emit type definition for external class (from imported module)
+    void emit_external_class_type(const std::string& name, const types::ClassDef& def);
 
     // Generate class vtable
     void gen_class_vtable(const parser::ClassDecl& c);
@@ -341,6 +352,12 @@ private:
     void gen_class_method_instantiation(
         const parser::ClassDecl& c, const parser::ClassMethod& method,
         const std::string& mangled_name,
+        const std::unordered_map<std::string, types::TypePtr>& type_subs);
+
+    // Generate generic static method with method-level type parameters
+    void gen_generic_class_static_method(
+        const parser::ClassDecl& c, const parser::ClassMethod& method,
+        const std::string& method_suffix,
         const std::unordered_map<std::string, types::TypePtr>& type_subs);
 
     // Generate class property getter/setter methods
@@ -402,10 +419,27 @@ private:
         std::string mangled_type_name;
         std::string method_name;
         std::unordered_map<std::string, types::TypePtr> type_subs;
-        std::string base_type_name;      // Used to find the impl block
-        std::string method_type_suffix;  // For method-level generics like cast[U8] -> "U8"
+        std::string base_type_name;     // Used to find the impl block
+        std::string method_type_suffix; // For method-level generics like cast[U8] -> "U8"
     };
     std::vector<PendingImplMethod> pending_impl_method_instantiations_;
+
+    // Pending generic class methods ((class_name::method_name) -> (class_decl, method_index))
+    // For generic static methods like Utils::identity[T]
+    struct PendingGenericClassMethod {
+        const parser::ClassDecl* class_decl;
+        size_t method_index;
+    };
+    std::unordered_map<std::string, PendingGenericClassMethod> pending_generic_class_methods_;
+
+    // Pending generic class method instantiations to generate at end
+    struct PendingGenericClassMethodInst {
+        const parser::ClassDecl* class_decl;
+        const parser::ClassMethod* method;
+        std::string method_suffix;
+        std::unordered_map<std::string, types::TypePtr> type_subs;
+    };
+    std::vector<PendingGenericClassMethodInst> pending_generic_class_method_insts_;
 
     // Function return types (func_name -> semantic return type)
     // Used by infer_expr_type to determine return types of function calls
@@ -607,8 +641,8 @@ private:
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
     auto gen_is_check(const parser::IsExpr& is_expr) -> std::string;
     auto gen_class_safe_cast(const std::string& src_ptr, const std::string& src_class,
-                              const std::string& target_name, const parser::TypePtr& target_type,
-                              bool target_is_class) -> std::string;
+                             const std::string& target_name, const parser::TypePtr& target_type,
+                             bool target_is_class) -> std::string;
     auto gen_tuple(const parser::TupleExpr& tuple) -> std::string;
     auto gen_await(const parser::AwaitExpr& await_expr) -> std::string;
     auto gen_try(const parser::TryExpr& try_expr) -> std::string;

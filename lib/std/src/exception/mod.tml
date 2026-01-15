@@ -1,0 +1,533 @@
+//! Exception class hierarchy for error handling.
+//!
+//! This module provides a C#-style exception hierarchy for structured error
+//! handling in TML applications.
+//!
+//! # Main Types
+//!
+//! | Exception | Description |
+//! |-----------|-------------|
+//! | [`Exception`] | Base exception class |
+//! | [`ArgumentException`] | Invalid argument provided |
+//! | [`ArgumentNullException`] | Null argument when non-null expected |
+//! | [`ArgumentOutOfRangeException`] | Argument outside valid range |
+//! | [`InvalidOperationException`] | Operation invalid for current state |
+//! | [`NotSupportedException`] | Operation not supported |
+//! | [`NotImplementedException`] | Method not yet implemented |
+//! | [`IndexOutOfRangeException`] | Index outside array bounds |
+//! | [`KeyNotFoundException`] | Key not found in dictionary |
+//! | [`IOException`] | I/O operation failure |
+//! | [`FileNotFoundException`] | File does not exist |
+//! | [`ArithmeticException`] | Arithmetic error (overflow, divide by zero) |
+//! | [`FormatException`] | Invalid format string |
+//! | [`InvalidCastException`] | Invalid type conversion |
+//! | [`TimeoutException`] | Operation timed out |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::exception::*
+//!
+//! func validate_age(age: I32) -> Outcome[I32, Exception] {
+//!     if age < 0 {
+//!         return Err(ArgumentOutOfRangeException::create("age", age, "Age cannot be negative"))
+//!     }
+//!     return Ok(age)
+//! }
+//! ```
+
+use std::object::*
+use std::interfaces::*
+
+// ============================================================================
+// Exception
+// ============================================================================
+
+/// Base exception class for all exception types.
+///
+/// All exception types inherit from `Exception`. Provides a message
+/// describing the error and methods for string representation.
+///
+/// # Example
+///
+/// ```tml
+/// let err = Exception::create("Something went wrong")
+/// print(err.get_message())  // "Something went wrong"
+/// ```
+pub class Exception extends Object {
+    message: Str
+
+    static func create(message: Str) -> Exception {
+        return Exception { message: message }
+    }
+
+    /// Returns the error message.
+    virtual func get_message(this) -> Str {
+        return this.message
+    }
+
+    /// Returns the exception type name.
+    override func to_string(this) -> Str {
+        return "Exception: " + this.message
+    }
+
+    override func get_type(this) -> Str {
+        return "Exception"
+    }
+}
+
+// ============================================================================
+// ArgumentNullException
+// ============================================================================
+
+/// Exception thrown when a null argument is passed where non-null is required.
+///
+/// # Example
+///
+/// ```tml
+/// func process(name: Str) {
+///     if name.is_empty() {
+///         panic(ArgumentNullException::create("name"))
+///     }
+/// }
+/// ```
+pub class ArgumentNullException extends Exception {
+    param_name: Str
+
+    static func create(param_name: Str) -> ArgumentNullException {
+        return ArgumentNullException {
+            message: "Value cannot be null: " + param_name,
+            param_name: param_name
+        }
+    }
+
+    func get_param_name(this) -> Str {
+        return this.param_name
+    }
+
+    override func get_type(this) -> Str {
+        return "ArgumentNullException"
+    }
+
+    override func to_string(this) -> Str {
+        return "ArgumentNullException: " + this.message
+    }
+}
+
+// ============================================================================
+// ArgumentOutOfRangeException
+// ============================================================================
+
+/// Exception thrown when an argument is outside the allowable range.
+///
+/// # Example
+///
+/// ```tml
+/// func set_volume(level: I32) {
+///     if level < 0 or level > 100 {
+///         panic(ArgumentOutOfRangeException::create("level", level, "Volume must be 0-100"))
+///     }
+/// }
+/// ```
+pub class ArgumentOutOfRangeException extends Exception {
+    param_name: Str
+    actual_value: I64
+
+    static func create(param_name: Str, actual: I64, message: Str) -> ArgumentOutOfRangeException {
+        return ArgumentOutOfRangeException {
+            message: message,
+            param_name: param_name,
+            actual_value: actual
+        }
+    }
+
+    func get_param_name(this) -> Str {
+        return this.param_name
+    }
+
+    func get_actual_value(this) -> I64 {
+        return this.actual_value
+    }
+
+    override func get_type(this) -> Str {
+        return "ArgumentOutOfRangeException"
+    }
+
+    override func to_string(this) -> Str {
+        return "ArgumentOutOfRangeException: " + this.message
+    }
+}
+
+// ============================================================================
+// ArgumentException
+// ============================================================================
+
+/// Exception thrown when an invalid argument is provided.
+///
+/// Use more specific exceptions like [`ArgumentNullException`] or
+/// [`ArgumentOutOfRangeException`] when applicable.
+///
+/// # Example
+///
+/// ```tml
+/// func parse_email(email: Str) {
+///     if not email.contains("@") {
+///         panic(ArgumentException::with_param("Invalid email format", "email"))
+///     }
+/// }
+/// ```
+pub class ArgumentException extends Exception {
+    param_name: Str
+
+    static func create(message: Str) -> ArgumentException {
+        return ArgumentException { message: message, param_name: "" }
+    }
+
+    static func with_param(message: Str, param_name: Str) -> ArgumentException {
+        return ArgumentException { message: message, param_name: param_name }
+    }
+
+    func get_param_name(this) -> Str {
+        return this.param_name
+    }
+
+    override func get_type(this) -> Str {
+        return "ArgumentException"
+    }
+
+    override func to_string(this) -> Str {
+        return "ArgumentException: " + this.message
+    }
+}
+
+// ============================================================================
+// InvalidOperationException
+// ============================================================================
+
+/// Exception thrown when an operation is invalid for the current object state.
+///
+/// # Example
+///
+/// ```tml
+/// class Connection {
+///     connected: Bool
+///
+///     func send(this, data: Str) {
+///         if not this.connected {
+///             panic(InvalidOperationException::create("Cannot send while disconnected"))
+///         }
+///     }
+/// }
+/// ```
+pub class InvalidOperationException extends Exception {
+    static func create(message: Str) -> InvalidOperationException {
+        return InvalidOperationException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "InvalidOperationException"
+    }
+
+    override func to_string(this) -> Str {
+        return "InvalidOperationException: " + this.message
+    }
+}
+
+// ============================================================================
+// NotSupportedException
+// ============================================================================
+
+/// Exception thrown when an operation is not supported.
+///
+/// Use this for methods that are intentionally not implemented because
+/// the operation doesn't make sense for this type.
+pub class NotSupportedException extends Exception {
+    static func create() -> NotSupportedException {
+        return NotSupportedException { message: "Operation is not supported" }
+    }
+
+    static func with_message(message: Str) -> NotSupportedException {
+        return NotSupportedException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "NotSupportedException"
+    }
+
+    override func to_string(this) -> Str {
+        return "NotSupportedException: " + this.message
+    }
+}
+
+// ============================================================================
+// NotImplementedException
+// ============================================================================
+
+/// Exception thrown when a method is not yet implemented.
+///
+/// Use this as a placeholder during development for methods that need
+/// implementation. Consider [`NotSupportedException`] for methods that
+/// will never be implemented.
+pub class NotImplementedException extends Exception {
+    static func create() -> NotImplementedException {
+        return NotImplementedException { message: "Method not implemented" }
+    }
+
+    static func with_message(message: Str) -> NotImplementedException {
+        return NotImplementedException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "NotImplementedException"
+    }
+
+    override func to_string(this) -> Str {
+        return "NotImplementedException: " + this.message
+    }
+}
+
+// ============================================================================
+// IndexOutOfRangeException
+// ============================================================================
+
+/// Exception thrown when an index is outside array or collection bounds.
+///
+/// # Example
+///
+/// ```tml
+/// func get_element(arr: [I32], index: I64) -> I32 {
+///     if index < 0 or index >= arr.len() {
+///         panic(IndexOutOfRangeException::with_bounds(index, arr.len()))
+///     }
+///     return arr[index]
+/// }
+/// ```
+pub class IndexOutOfRangeException extends Exception {
+    index: I64
+    length: I64
+
+    static func create(index: I64) -> IndexOutOfRangeException {
+        return IndexOutOfRangeException {
+            message: "Index out of range",
+            index: index,
+            length: 0
+        }
+    }
+
+    static func with_bounds(index: I64, length: I64) -> IndexOutOfRangeException {
+        return IndexOutOfRangeException {
+            message: "Index out of range",
+            index: index,
+            length: length
+        }
+    }
+
+    func get_index(this) -> I64 {
+        return this.index
+    }
+
+    func get_length(this) -> I64 {
+        return this.length
+    }
+
+    override func get_type(this) -> Str {
+        return "IndexOutOfRangeException"
+    }
+
+    override func to_string(this) -> Str {
+        return "IndexOutOfRangeException: " + this.message
+    }
+}
+
+// ============================================================================
+// KeyNotFoundException
+// ============================================================================
+
+/// Exception thrown when a key is not found in a dictionary or map.
+pub class KeyNotFoundException extends Exception {
+    static func create() -> KeyNotFoundException {
+        return KeyNotFoundException { message: "Key not found in collection" }
+    }
+
+    static func with_message(message: Str) -> KeyNotFoundException {
+        return KeyNotFoundException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "KeyNotFoundException"
+    }
+
+    override func to_string(this) -> Str {
+        return "KeyNotFoundException: " + this.message
+    }
+}
+
+// ============================================================================
+// IOException
+// ============================================================================
+
+/// Exception thrown when an I/O operation fails.
+///
+/// Base class for I/O related exceptions. See also [`FileNotFoundException`].
+pub class IOException extends Exception {
+    static func create(message: Str) -> IOException {
+        return IOException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "IOException"
+    }
+
+    override func to_string(this) -> Str {
+        return "IOException: " + this.message
+    }
+}
+
+// ============================================================================
+// FileNotFoundException
+// ============================================================================
+
+/// Exception thrown when a file is not found.
+///
+/// # Example
+///
+/// ```tml
+/// func read_config(path: Str) -> Str {
+///     if not file_exists(path) {
+///         panic(FileNotFoundException::create(path))
+///     }
+///     return read_file(path)
+/// }
+/// ```
+pub class FileNotFoundException extends IOException {
+    file_path: Str
+
+    static func create(file_path: Str) -> FileNotFoundException {
+        return FileNotFoundException {
+            message: "File not found: " + file_path,
+            file_path: file_path
+        }
+    }
+
+    func get_file_path(this) -> Str {
+        return this.file_path
+    }
+
+    override func get_type(this) -> Str {
+        return "FileNotFoundException"
+    }
+
+    override func to_string(this) -> Str {
+        return "FileNotFoundException: " + this.message
+    }
+}
+
+// ============================================================================
+// ArithmeticException
+// ============================================================================
+
+/// Exception thrown on arithmetic errors like overflow or divide by zero.
+///
+/// # Factory Methods
+///
+/// - `overflow()` - For arithmetic overflow
+/// - `divide_by_zero()` - For division by zero
+pub class ArithmeticException extends Exception {
+    static func create(message: Str) -> ArithmeticException {
+        return ArithmeticException { message: message }
+    }
+
+    static func overflow() -> ArithmeticException {
+        return ArithmeticException { message: "Arithmetic overflow" }
+    }
+
+    static func divide_by_zero() -> ArithmeticException {
+        return ArithmeticException { message: "Division by zero" }
+    }
+
+    override func get_type(this) -> Str {
+        return "ArithmeticException"
+    }
+
+    override func to_string(this) -> Str {
+        return "ArithmeticException: " + this.message
+    }
+}
+
+// ============================================================================
+// FormatException
+// ============================================================================
+
+/// Exception thrown when a format string is invalid or parsing fails.
+pub class FormatException extends Exception {
+    static func create() -> FormatException {
+        return FormatException { message: "Invalid format" }
+    }
+
+    static func with_message(message: Str) -> FormatException {
+        return FormatException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "FormatException"
+    }
+
+    override func to_string(this) -> Str {
+        return "FormatException: " + this.message
+    }
+}
+
+// ============================================================================
+// InvalidCastException
+// ============================================================================
+
+/// Exception thrown when a type conversion or cast fails.
+///
+/// # Example
+///
+/// ```tml
+/// func as_int(obj: Object) -> I32 {
+///     // If runtime type check fails
+///     panic(InvalidCastException::create("Object", "I32"))
+/// }
+/// ```
+pub class InvalidCastException extends Exception {
+    static func create(from_type: Str, to_type: Str) -> InvalidCastException {
+        return InvalidCastException { message: "Cannot cast from " + from_type + " to " + to_type }
+    }
+
+    static func with_message(message: Str) -> InvalidCastException {
+        return InvalidCastException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "InvalidCastException"
+    }
+
+    override func to_string(this) -> Str {
+        return "InvalidCastException: " + this.message
+    }
+}
+
+// ============================================================================
+// TimeoutException
+// ============================================================================
+
+/// Exception thrown when an operation times out.
+pub class TimeoutException extends Exception {
+    static func create() -> TimeoutException {
+        return TimeoutException { message: "Operation timed out" }
+    }
+
+    static func with_message(message: Str) -> TimeoutException {
+        return TimeoutException { message: message }
+    }
+
+    override func get_type(this) -> Str {
+        return "TimeoutException"
+    }
+
+    override func to_string(this) -> Str {
+        return "TimeoutException: " + this.message
+    }
+}

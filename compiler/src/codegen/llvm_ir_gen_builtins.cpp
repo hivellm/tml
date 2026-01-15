@@ -898,6 +898,88 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
         }
     }
 
+    // ============ GENERIC CLASS STATIC METHODS ============
+    // Handle calls like Utils::identity[I32](42) where identity is a generic static method
+    if (call.callee->is<parser::PathExpr>()) {
+        const auto& path_expr = call.callee->as<parser::PathExpr>();
+        const auto& path = path_expr.path;
+        if (path.segments.size() == 2 && path_expr.generics.has_value()) {
+            const std::string& class_name = path.segments[0];
+            const std::string& method_name = path.segments[1];
+            const auto& gen_args = path_expr.generics->args;
+
+            // Check if this is a generic class static method
+            std::string method_key = class_name + "::" + method_name;
+            auto pending_it = pending_generic_class_methods_.find(method_key);
+            if (pending_it != pending_generic_class_methods_.end()) {
+                const auto& pending = pending_it->second;
+                const auto& method = pending.class_decl->methods[pending.method_index];
+
+                // Build type substitutions from generic arguments
+                std::unordered_map<std::string, types::TypePtr> type_subs;
+                for (size_t i = 0; i < method.generics.size() && i < gen_args.size(); ++i) {
+                    if (!method.generics[i].is_const && gen_args[i].is_type()) {
+                        type_subs[method.generics[i].name] =
+                            resolve_parser_type_with_subs(*gen_args[i].as_type(), {});
+                    }
+                }
+
+                // Build mangled name suffix (e.g., "_I32" for identity[I32])
+                std::vector<types::TypePtr> method_type_args;
+                for (const auto& arg : gen_args) {
+                    if (arg.is_type()) {
+                        auto sem_type = resolve_parser_type_with_subs(*arg.as_type(), {});
+                        method_type_args.push_back(sem_type);
+                    }
+                }
+                std::string type_suffix =
+                    method_type_args.empty() ? "" : "__" + mangle_type_args(method_type_args);
+
+                // Generate mangled function name
+                std::string mangled_func =
+                    "@tml_" + get_suite_prefix() + class_name + "_" + method_name + type_suffix;
+
+                // Queue the instantiation for later (after current function)
+                if (generated_functions_.find(mangled_func) == generated_functions_.end()) {
+                    pending_generic_class_method_insts_.push_back(PendingGenericClassMethodInst{
+                        pending.class_decl, &method, type_suffix, type_subs});
+                    generated_functions_.insert(mangled_func);
+                }
+
+                // Generate arguments
+                std::vector<std::string> args;
+                std::vector<std::string> arg_types;
+                for (const auto& arg : call.args) {
+                    args.push_back(gen_expr(*arg));
+                    arg_types.push_back(last_expr_type_);
+                }
+
+                // Determine return type with substitution
+                std::string ret_type = "void";
+                if (method.return_type) {
+                    auto sem_ret =
+                        resolve_parser_type_with_subs(*method.return_type.value(), type_subs);
+                    ret_type = llvm_type_from_semantic(sem_ret);
+                }
+
+                // Generate call
+                std::string result = fresh_reg();
+                std::string call_str =
+                    "  " + result + " = call " + ret_type + " " + mangled_func + "(";
+                for (size_t i = 0; i < args.size(); ++i) {
+                    if (i > 0)
+                        call_str += ", ";
+                    call_str += arg_types[i] + " " + args[i];
+                }
+                call_str += ")";
+                emit_line(call_str);
+
+                last_expr_type_ = ret_type;
+                return result;
+            }
+        }
+    }
+
     // ============ GENERIC STRUCT STATIC METHODS ============
     // Handle calls like Range::new(0, 10) where Range is a generic struct
     // These need type inference from expected_enum_type_ context

@@ -400,6 +400,7 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
+    std::string saved_loop_stack_save = current_loop_stack_save_;
     current_loop_start_ = label_start;
     current_loop_end_ = label_end;
 
@@ -407,9 +408,16 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     emit_line(label_start + ":");
     block_terminated_ = false;
 
+    // Save stack at start of each iteration to reclaim alloca space
+    std::string stack_save = fresh_reg();
+    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save;
+
     gen_expr(*loop.body);
 
     if (!block_terminated_) {
+        // Restore stack before looping back to reclaim allocas from this iteration
+        emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
         emit_line("  br label %" + label_start);
     }
 
@@ -420,6 +428,7 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     // Restore loop labels
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
 
     return "0";
 }
@@ -432,6 +441,7 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
+    std::string saved_loop_stack_save = current_loop_stack_save_;
     current_loop_start_ = label_cond;
     current_loop_end_ = label_end;
 
@@ -441,6 +451,12 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     // Condition block
     emit_line(label_cond + ":");
     block_terminated_ = false;
+
+    // Save stack at start of each iteration to reclaim alloca space
+    std::string stack_save = fresh_reg();
+    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save;
+
     std::string cond = gen_expr(*while_expr.condition);
 
     // If condition is not already i1 (bool), convert it
@@ -457,6 +473,8 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     block_terminated_ = false;
     gen_expr(*while_expr.body);
     if (!block_terminated_) {
+        // Restore stack before looping back to reclaim allocas from this iteration
+        emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
         emit_line("  br label %" + label_cond);
     }
 
@@ -468,6 +486,7 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     // Restore loop labels
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
 
     return "0";
 }
@@ -486,6 +505,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
+    std::string saved_loop_stack_save = current_loop_stack_save_;
     current_loop_start_ = label_incr; // continue goes to increment
     current_loop_end_ = label_end;
 
@@ -577,6 +597,11 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line(label_body + ":");
     block_terminated_ = false;
 
+    // Save stack at start of each iteration to reclaim alloca space
+    std::string stack_save = fresh_reg();
+    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
+    current_loop_stack_save_ = stack_save;
+
     // If iterating over a collection, get the element and bind it to the loop variable
     if (is_collection_iter) {
         // Load the collection pointer
@@ -619,6 +644,8 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line("  " + current2 + " = load " + range_type + ", ptr " + var_alloca);
     emit_line("  " + next_val + " = add nsw " + range_type + " " + current2 + ", 1");
     emit_line("  store " + range_type + " " + next_val + ", ptr " + var_alloca);
+    // Restore stack before looping back to reclaim allocas from this iteration
+    emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
     emit_line("  br label %" + label_cond);
 
     // End block
@@ -629,6 +656,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     // Restore loop labels
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
+    current_loop_stack_save_ = saved_loop_stack_save;
 
     return "0";
 }

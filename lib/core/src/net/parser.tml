@@ -140,7 +140,7 @@ pub func parse_ipv4(s: Str) -> Outcome[Ipv4Addr, AddrParseError] {
         return Err(AddrParseError::new(AddrParseErrorKind::Empty))
     }
 
-    let parts = s.split(".")
+    let parts: List[Str] = s.split(".")
     if parts.len() != 4 {
         return Err(AddrParseError::new(AddrParseErrorKind::InvalidIpv4))
     }
@@ -203,19 +203,19 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
     }
 
     // Handle :: compression
-    let has_double_colon = s.contains("::")
+    let has_double_colon: Bool = s.contains("::")
 
     if has_double_colon {
-        let parts = s.split("::")
+        let parts: List[Str] = s.split("::")
         if parts.len() > 2 {
             // Multiple :: not allowed
             return Err(AddrParseError::new(AddrParseErrorKind::InvalidIpv6))
         }
 
-        let left = if parts[0].is_empty() { [] } else { parts[0].split(":") }
-        let right = if parts.len() < 2 or parts[1].is_empty() { [] } else { parts[1].split(":") }
+        let left: List[Str] = if parts[0].is_empty() { [] } else { parts[0].split(":") }
+        let right: List[Str] = if parts.len() < 2 or parts[1].is_empty() { [] } else { parts[1].split(":") }
 
-        let total = left.len() + right.len()
+        let total: I64 = left.len() + right.len()
         if total > 8 {
             return Err(AddrParseError::new(AddrParseErrorKind::InvalidIpv6))
         }
@@ -231,7 +231,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         }
 
         // Parse right side (from the end)
-        let right_start = 8 - right.len()
+        let right_start: I64 = 8 - right.len()
         for i in 0 to right.len() {
             when parse_hex_u16(right[i]) {
                 Just(seg) => segments[right_start + i] = seg,
@@ -245,7 +245,7 @@ pub func parse_ipv6(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         ))
     } else {
         // No compression - must have exactly 8 parts
-        let parts = s.split(":")
+        let parts: List[Str] = s.split(":")
         if parts.len() != 8 {
             return Err(AddrParseError::new(AddrParseErrorKind::InvalidIpv6))
         }
@@ -273,7 +273,7 @@ func parse_hex_u16(s: Str) -> Maybe[U16] {
 
     let mut result: U32 = 0
     for c in s.chars() {
-        let digit = hex_digit_value(c)
+        let digit: Maybe[U8] = hex_digit_value(c)
         when digit {
             Just(d) => result = result * 16 + (d as U32),
             Nothing => return Nothing,
@@ -342,15 +342,15 @@ pub func parse_ip(s: Str) -> Outcome[IpAddr, AddrParseError] {
 /// assert_eq(addr.unwrap().port(), 8080)
 /// ```
 pub func parse_socket_addr_v4(s: Str) -> Outcome[SocketAddrV4, AddrParseError] {
-    let colon_pos = s.rfind(":")
+    let colon_pos: Maybe[I64] = s.rfind(":")
     when colon_pos {
         Nothing => return Err(AddrParseError::new(AddrParseErrorKind::InvalidSocketAddr)),
         Just(pos) => {
-            let ip_str = s.slice(0, pos)
-            let port_str = s.slice(pos + 1, s.len())
+            let ip_str: Str = s.slice(0, pos)
+            let port_str: Str = s.slice(pos + 1, s.len())
 
-            let ip = parse_ipv4(ip_str)!
-            let port = parse_port(port_str)!
+            let ip: Ipv4Addr = parse_ipv4(ip_str)!
+            let port: U16 = parse_port(port_str)!
 
             Ok(SocketAddrV4::new(ip, port))
         },
@@ -374,15 +374,15 @@ pub func parse_socket_addr_v6(s: Str) -> Outcome[SocketAddrV6, AddrParseError] {
         return Err(AddrParseError::new(AddrParseErrorKind::InvalidSocketAddr))
     }
 
-    let bracket_pos = s.find("]:")
+    let bracket_pos: Maybe[I64] = s.find("]:")
     when bracket_pos {
         Nothing => return Err(AddrParseError::new(AddrParseErrorKind::InvalidSocketAddr)),
         Just(pos) => {
-            let ip_str = s.slice(1, pos)
-            let port_str = s.slice(pos + 2, s.len())
+            let ip_str: Str = s.slice(1, pos)
+            let port_str: Str = s.slice(pos + 2, s.len())
 
-            let ip = parse_ipv6(ip_str)!
-            let port = parse_port(port_str)!
+            let ip: Ipv6Addr = parse_ipv6(ip_str)!
+            let port: U16 = parse_port(port_str)!
 
             Ok(SocketAddrV6::new(ip, port, 0, 0))
         },
@@ -402,11 +402,11 @@ pub func parse_socket_addr_v6(s: Str) -> Outcome[SocketAddrV6, AddrParseError] {
 pub func parse_socket_addr(s: Str) -> Outcome[SocketAddr, AddrParseError] {
     if s.starts_with("[") {
         // IPv6 format
-        let addr = parse_socket_addr_v6(s)!
+        let addr: SocketAddrV6 = parse_socket_addr_v6(s)!
         Ok(SocketAddr::V6(addr))
     } else {
         // IPv4 format
-        let addr = parse_socket_addr_v4(s)!
+        let addr: SocketAddrV4 = parse_socket_addr_v4(s)!
         Ok(SocketAddr::V4(addr))
     }
 }
@@ -438,42 +438,42 @@ func parse_port(s: Str) -> Outcome[U16, AddrParseError] {
 // Note: In std::net, these would be implemented via the FromStr behavior.
 // For core, we provide explicit parse functions that can be called directly.
 
-extend Ipv4Addr {
+impl Ipv4Addr {
     /// Parses an IPv4 address from a string.
     pub func parse(s: Str) -> Outcome[Ipv4Addr, AddrParseError] {
         parse_ipv4(s)
     }
 }
 
-extend Ipv6Addr {
+impl Ipv6Addr {
     /// Parses an IPv6 address from a string.
     pub func parse(s: Str) -> Outcome[Ipv6Addr, AddrParseError] {
         parse_ipv6(s)
     }
 }
 
-extend IpAddr {
+impl IpAddr {
     /// Parses an IP address from a string.
     pub func parse(s: Str) -> Outcome[IpAddr, AddrParseError] {
         parse_ip(s)
     }
 }
 
-extend SocketAddrV4 {
+impl SocketAddrV4 {
     /// Parses a socket address from a string.
     pub func parse(s: Str) -> Outcome[SocketAddrV4, AddrParseError] {
         parse_socket_addr_v4(s)
     }
 }
 
-extend SocketAddrV6 {
+impl SocketAddrV6 {
     /// Parses a socket address from a string.
     pub func parse(s: Str) -> Outcome[SocketAddrV6, AddrParseError] {
         parse_socket_addr_v6(s)
     }
 }
 
-extend SocketAddr {
+impl SocketAddr {
     /// Parses a socket address from a string.
     pub func parse(s: Str) -> Outcome[SocketAddr, AddrParseError] {
         parse_socket_addr(s)

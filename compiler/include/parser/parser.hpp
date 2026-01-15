@@ -267,6 +267,14 @@ private:
     auto parse_type_alias_decl(Visibility vis, std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;
 
+    /// Parses sum type declaration (type Foo = V1 | V2(T) | V3).
+    auto parse_sum_type_decl(Visibility vis, std::vector<Decorator> decorators = {},
+                             std::optional<std::string> doc = std::nullopt)
+        -> Result<DeclPtr, ParseError>;
+
+    /// Parses a single variant in a sum type.
+    auto parse_sum_type_variant() -> Result<EnumVariant, ParseError>;
+
     /// Parses const declaration.
     auto parse_const_decl(Visibility vis, std::optional<std::string> doc = std::nullopt)
         -> Result<DeclPtr, ParseError>;

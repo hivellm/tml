@@ -63,17 +63,25 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                 if (base_type->is<types::NamedType>()) {
                     type_name = base_type->as<types::NamedType>().name;
                     type_args = base_type->as<types::NamedType>().type_args;
+                } else if (base_type->is<types::ClassType>()) {
+                    type_name = base_type->as<types::ClassType>().name;
+                    type_args = base_type->as<types::ClassType>().type_args;
                 } else if (base_type->is<types::RefType>()) {
                     auto inner = base_type->as<types::RefType>().inner;
                     if (inner && inner->is<types::NamedType>()) {
                         type_name = inner->as<types::NamedType>().name;
                         type_args = inner->as<types::NamedType>().type_args;
+                    } else if (inner && inner->is<types::ClassType>()) {
+                        type_name = inner->as<types::ClassType>().name;
+                        type_args = inner->as<types::ClassType>().type_args;
                     }
                 }
 
                 if (!type_name.empty()) {
-                    auto struct_def = env_.lookup_struct(type_name);
                     int field_idx = -1;
+
+                    // Try struct lookup first
+                    auto struct_def = env_.lookup_struct(type_name);
                     if (struct_def) {
                         for (size_t i = 0; i < struct_def->fields.size(); ++i) {
                             if (struct_def->fields[i].first == field_expr.field) {
@@ -83,16 +91,46 @@ auto LLVMIRGen::gen_unary(const parser::UnaryExpr& unary) -> std::string {
                         }
                     }
 
+                    // Try class lookup if struct lookup failed
+                    if (field_idx < 0) {
+                        auto class_def = env_.lookup_class(type_name);
+                        if (class_def) {
+                            for (size_t i = 0; i < class_def->fields.size(); ++i) {
+                                if (class_def->fields[i].name == field_expr.field) {
+                                    field_idx = static_cast<int>(i);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     if (field_idx >= 0) {
-                        std::string llvm_struct_type = llvm_type_name(type_name);
+                        std::string llvm_struct_type;
+                        bool is_class = env_.lookup_class(type_name).has_value();
                         if (!type_args.empty()) {
                             llvm_struct_type =
                                 "%struct." + mangle_struct_name(type_name, type_args);
+                        } else if (is_class) {
+                            // Classes use %class. prefix in LLVM type names
+                            // Note: class fields are offset by 1 due to vtable pointer
+                            llvm_struct_type = "%class." + type_name;
+                            field_idx += 1; // Skip vtable pointer
+                        } else {
+                            llvm_struct_type = llvm_type_name(type_name);
+                        }
+
+                        // For classes, the local variable stores a pointer to the instance
+                        // We need to load that pointer first
+                        std::string actual_struct_ptr = struct_ptr;
+                        if (is_class) {
+                            std::string loaded_ptr = fresh_reg();
+                            emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                            actual_struct_ptr = loaded_ptr;
                         }
 
                         std::string field_ptr = fresh_reg();
                         emit_line("  " + field_ptr + " = getelementptr " + llvm_struct_type +
-                                  ", ptr " + struct_ptr + ", i32 0, i32 " +
+                                  ", ptr " + actual_struct_ptr + ", i32 0, i32 " +
                                   std::to_string(field_idx));
                         last_expr_type_ = "ptr";
                         return field_ptr;

@@ -58,7 +58,7 @@ pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
 pub mod collections  // List, HashMap behavior implementations
-// pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, NetError (TODO: enum variant syntax + preprocessor not supported in library code)
+pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, NetError
 pub mod range    // Range, RangeInclusive, RangeFrom, RangeTo, RangeFull
 pub mod num      // Zero, One, Bounded, Saturating, Wrapping, NonZero
 pub mod pin      // Pin, Unpin - pinned memory locations

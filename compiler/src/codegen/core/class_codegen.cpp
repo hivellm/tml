@@ -84,6 +84,10 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         // Make sure base class type is generated first
         auto base_class = env_.lookup_class(base_name);
         if (base_class) {
+            // If base class type hasn't been generated yet (external module), emit it now
+            if (class_types_.find(base_name) == class_types_.end()) {
+                emit_external_class_type(base_name, *base_class);
+            }
             // Base class fields are embedded (excluding vtable since we have our own)
             // For simplicity, include base as embedded struct
             field_types.push_back("%class." + base_name);
@@ -256,8 +260,15 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         gen_class_constructor(c, ctor);
     }
 
-    // Generate methods
-    for (const auto& method : c.methods) {
+    // Generate methods (store generic methods for later instantiation)
+    for (size_t i = 0; i < c.methods.size(); ++i) {
+        const auto& method = c.methods[i];
+        if (!method.generics.empty()) {
+            // Generic method - defer until instantiated
+            std::string key = c.name + "::" + method.name;
+            pending_generic_class_methods_[key] = PendingGenericClassMethod{&c, i};
+            continue;
+        }
         gen_class_method(c, method);
     }
 
@@ -278,10 +289,12 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
 
 void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
     // For each implemented interface, generate a separate vtable
-    for (const auto& iface_path : c.implements) {
-        if (iface_path.segments.empty())
+    for (const auto& iface_type : c.implements) {
+        // Extract interface name from the type (supports generic interfaces)
+        auto* named = std::get_if<parser::NamedType>(&iface_type->kind);
+        if (!named || named->path.segments.empty())
             continue;
-        std::string iface_name = iface_path.segments.back();
+        std::string iface_name = named->path.segments.back();
 
         // Get interface method order
         auto iface_methods_it = interface_method_order_.find(iface_name);
@@ -846,6 +859,115 @@ void LLVMIRGen::gen_class_method_instantiation(
 }
 
 // ============================================================================
+// Generic Static Method Generation (Method-Level Generics)
+// ============================================================================
+
+void LLVMIRGen::gen_generic_class_static_method(
+    const parser::ClassDecl& c, const parser::ClassMethod& method, const std::string& method_suffix,
+    const std::unordered_map<std::string, types::TypePtr>& type_subs) {
+
+    if (method.is_abstract || !method.is_static) {
+        return;
+    }
+
+    // Save and set type substitutions
+    auto saved_subs = current_type_subs_;
+    current_type_subs_ = type_subs;
+
+    // Function name: @tml_ClassName_methodName_TypeSuffix
+    // e.g., @tml_Utils_identity_I32
+    std::string func_name =
+        "@tml_" + get_suite_prefix() + c.name + "_" + method.name + method_suffix;
+
+    // Build parameter list with type substitution
+    std::vector<std::string> param_types;
+    std::vector<std::string> param_names;
+
+    for (const auto& param : method.params) {
+        std::string pname = get_class_param_name(param);
+        auto resolved = resolve_parser_type_with_subs(*param.type, type_subs);
+        param_types.push_back(llvm_type_from_semantic(resolved));
+        param_names.push_back(pname);
+    }
+
+    // Return type with substitution
+    std::string ret_type = "void";
+    if (method.return_type) {
+        auto resolved = resolve_parser_type_with_subs(*method.return_type.value(), type_subs);
+        ret_type = llvm_type_from_semantic(resolved);
+    }
+
+    // Function signature
+    std::string sig = "define " + ret_type + " " + func_name + "(";
+    for (size_t i = 0; i < param_types.size(); ++i) {
+        if (i > 0)
+            sig += ", ";
+        sig += param_types[i] + " %" + param_names[i];
+    }
+    sig += ")";
+    emit_line(sig + " {");
+    emit_line("entry:");
+
+    // Set up locals for parameters
+    for (size_t i = 0; i < param_names.size(); ++i) {
+        types::TypePtr semantic = nullptr;
+        if (i < method.params.size() && method.params[i].type) {
+            semantic = resolve_parser_type_with_subs(*method.params[i].type, type_subs);
+        }
+        locals_[param_names[i]] =
+            VarInfo{"%" + param_names[i], param_types[i], semantic, std::nullopt};
+    }
+
+    // Generate body
+    if (method.body) {
+        current_func_ = func_name;
+        current_ret_type_ = ret_type;
+        block_terminated_ = false;
+
+        for (const auto& stmt : method.body->stmts) {
+            gen_stmt(*stmt);
+            if (block_terminated_) {
+                break;
+            }
+        }
+
+        // Generate trailing expression (if any)
+        if (method.body->expr.has_value() && !block_terminated_) {
+            std::string expr_val = gen_expr(*method.body->expr.value());
+            // Return the expression value for non-void methods
+            if (ret_type != "void" && !block_terminated_) {
+                emit_line("  ret " + ret_type + " " + expr_val);
+                block_terminated_ = true;
+            }
+        }
+
+        // Default return if no explicit return
+        if (!block_terminated_) {
+            if (ret_type == "void") {
+                emit_line("  ret void");
+            } else {
+                emit_line("  ret " + ret_type + " zeroinitializer");
+            }
+        }
+    }
+
+    emit_line("}");
+    emit_line("");
+
+    // Restore type substitutions
+    current_type_subs_ = saved_subs;
+
+    // Clean up locals
+    for (const auto& name : param_names) {
+        locals_.erase(name);
+    }
+
+    // Register method in functions_ map
+    functions_[c.name + "_" + method.name + method_suffix] =
+        FuncInfo{func_name, ret_type, ret_type, param_types};
+}
+
+// ============================================================================
 // Method Generation
 // ============================================================================
 
@@ -1065,6 +1187,73 @@ void LLVMIRGen::gen_interface_decl(const parser::InterfaceDecl& iface) {
     // Emit dyn type for interface (fat pointer: data + vtable)
     std::string dyn_type = "%dyn." + iface.name + " = type { ptr, ptr }";
     emit_line(dyn_type);
+}
+
+// ============================================================================
+// External Class Type Generation
+// ============================================================================
+
+void LLVMIRGen::emit_external_class_type(const std::string& name, const types::ClassDef& def) {
+    // Skip if already emitted
+    if (class_types_.find(name) != class_types_.end()) {
+        return;
+    }
+
+    std::string type_name = "%class." + name;
+
+    // Collect field types
+    std::vector<std::string> field_types;
+    field_types.push_back("ptr"); // Vtable pointer is always first
+
+    // If base class, recursively emit it first
+    if (def.base_class) {
+        auto base_class = env_.lookup_class(*def.base_class);
+        if (base_class) {
+            if (class_types_.find(*def.base_class) == class_types_.end()) {
+                emit_external_class_type(*def.base_class, *base_class);
+            }
+            field_types.push_back("%class." + *def.base_class);
+        }
+    }
+
+    // Add own instance fields
+    std::vector<ClassFieldInfo> field_info;
+    size_t field_offset = field_types.size();
+
+    for (const auto& field : def.fields) {
+        if (field.is_static)
+            continue;
+
+        std::string ft = llvm_type_from_semantic(field.type);
+        if (ft == "void")
+            ft = "{}";
+        field_types.push_back(ft);
+
+        ClassFieldInfo fi;
+        fi.name = field.name;
+        fi.index = static_cast<int>(field_offset++);
+        fi.llvm_type = ft;
+        fi.vis = static_cast<parser::MemberVisibility>(field.vis);
+        field_info.push_back(fi);
+    }
+
+    // Emit class type definition
+    std::string type_def = type_name + " = type { ";
+    for (size_t i = 0; i < field_types.size(); ++i) {
+        if (i > 0)
+            type_def += ", ";
+        type_def += field_types[i];
+    }
+    type_def += " }";
+    emit_line(type_def);
+
+    // Register class type
+    class_types_[name] = type_name;
+    class_fields_[name] = field_info;
+
+    // Emit vtable type (even if empty)
+    std::string vtable_type = "%vtable." + name + " = type { ptr }";
+    emit_line(vtable_type);
 }
 
 // ============================================================================

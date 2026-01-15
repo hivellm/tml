@@ -925,6 +925,178 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         }
                     }
                 }
+            } else if (decl->is<parser::InterfaceDecl>()) {
+                // Handle interface declarations (OOP interfaces)
+                const auto& iface_decl = decl->as<parser::InterfaceDecl>();
+
+                // Only include public interfaces
+                if (iface_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Extract type params
+                std::vector<std::string> type_params;
+                for (const auto& param : iface_decl.generics) {
+                    if (!param.is_const) {
+                        type_params.push_back(param.name);
+                    }
+                }
+
+                // Extract extended interfaces
+                std::vector<std::string> extends;
+                for (const auto& ext : iface_decl.extends) {
+                    if (!ext.segments.empty()) {
+                        extends.push_back(ext.segments.back());
+                    }
+                }
+
+                // Build method signatures
+                std::vector<InterfaceMethodDef> methods;
+                for (const auto& method : iface_decl.methods) {
+                    InterfaceMethodDef method_def;
+                    method_def.is_static = method.is_static;
+                    method_def.has_default = method.default_body.has_value();
+
+                    // Build signature
+                    FuncSig sig;
+                    sig.name = method.name;
+                    sig.is_async = false;
+                    sig.span = method.span;
+
+                    // Convert param types (simplified - skip 'this')
+                    for (const auto& param : method.params) {
+                        if (param.pattern && param.pattern->is<parser::IdentPattern>() &&
+                            param.pattern->as<parser::IdentPattern>().name == "this") {
+                            continue;
+                        }
+                        if (param.type) {
+                            sig.params.push_back(resolve_simple_type(*param.type));
+                        }
+                    }
+
+                    // Return type
+                    if (method.return_type.has_value()) {
+                        sig.return_type = resolve_simple_type(*method.return_type.value());
+                    } else {
+                        sig.return_type = make_unit();
+                    }
+
+                    method_def.sig = sig;
+                    methods.push_back(method_def);
+                }
+
+                // Create interface definition
+                InterfaceDef iface_def;
+                iface_def.name = iface_decl.name;
+                iface_def.type_params = std::move(type_params);
+                iface_def.extends = std::move(extends);
+                iface_def.methods = std::move(methods);
+                iface_def.span = iface_decl.span;
+
+                mod.interfaces[iface_decl.name] = std::move(iface_def);
+                TML_DEBUG_LN("[MODULE] Registered interface: " << iface_decl.name << " in module "
+                                                               << module_path);
+            } else if (decl->is<parser::ClassDecl>()) {
+                // Handle class declarations (OOP classes)
+                const auto& class_decl = decl->as<parser::ClassDecl>();
+
+                // Only include public classes
+                if (class_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Extract type params
+                std::vector<std::string> type_params;
+                for (const auto& param : class_decl.generics) {
+                    if (!param.is_const) {
+                        type_params.push_back(param.name);
+                    }
+                }
+
+                // Extract base class
+                std::optional<std::string> base_class;
+                if (class_decl.extends.has_value()) {
+                    const auto& ext = class_decl.extends.value();
+                    if (!ext.segments.empty()) {
+                        base_class = ext.segments.back();
+                    }
+                }
+
+                // Extract implemented interfaces
+                std::vector<std::string> interfaces;
+                for (const auto& iface_type : class_decl.implements) {
+                    if (auto* named = std::get_if<parser::NamedType>(&iface_type->kind)) {
+                        if (!named->path.segments.empty()) {
+                            interfaces.push_back(named->path.segments.back());
+                        }
+                    }
+                }
+
+                // Extract fields
+                std::vector<ClassFieldDef> fields;
+                for (const auto& field : class_decl.fields) {
+                    ClassFieldDef field_def;
+                    field_def.name = field.name;
+                    field_def.is_static = field.is_static;
+                    if (field.type) {
+                        field_def.type = resolve_simple_type(*field.type);
+                    }
+                    fields.push_back(field_def);
+                }
+
+                // Extract methods
+                std::vector<ClassMethodDef> methods;
+                for (const auto& method : class_decl.methods) {
+                    ClassMethodDef method_def;
+                    method_def.is_static = method.is_static;
+                    method_def.is_virtual = method.is_virtual;
+                    method_def.is_override = method.is_override;
+                    method_def.is_abstract = method.is_abstract;
+                    method_def.vis = MemberVisibility::Public; // Default to public
+
+                    // Build signature
+                    FuncSig sig;
+                    sig.name = method.name;
+                    sig.is_async = false;
+                    sig.span = method.span;
+
+                    // Convert param types (skip 'this')
+                    for (const auto& param : method.params) {
+                        if (param.pattern && param.pattern->is<parser::IdentPattern>() &&
+                            param.pattern->as<parser::IdentPattern>().name == "this") {
+                            continue;
+                        }
+                        if (param.type) {
+                            sig.params.push_back(resolve_simple_type(*param.type));
+                        }
+                    }
+
+                    // Return type
+                    if (method.return_type.has_value()) {
+                        sig.return_type = resolve_simple_type(*method.return_type.value());
+                    } else {
+                        sig.return_type = make_unit();
+                    }
+
+                    method_def.sig = sig;
+                    methods.push_back(method_def);
+                }
+
+                // Create class definition
+                ClassDef class_def;
+                class_def.name = class_decl.name;
+                class_def.type_params = std::move(type_params);
+                class_def.base_class = base_class;
+                class_def.interfaces = std::move(interfaces);
+                class_def.fields = std::move(fields);
+                class_def.methods = std::move(methods);
+                class_def.is_abstract = class_decl.is_abstract;
+                class_def.is_sealed = class_decl.is_sealed;
+                class_def.span = class_decl.span;
+
+                mod.classes[class_decl.name] = std::move(class_def);
+                TML_DEBUG_LN("[MODULE] Registered class: " << class_decl.name << " in module "
+                                                           << module_path);
             } else if (decl->is<parser::ModDecl>()) {
                 const auto& mod_decl = decl->as<parser::ModDecl>();
 

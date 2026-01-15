@@ -51,7 +51,13 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     if (expr.is<parser::IdentExpr>()) {
         const auto& ident = expr.as<parser::IdentExpr>();
 
-        // Special handling for 'this' in impl methods
+        // First check if there's a semantic type in locals (works for both 'this' and other vars)
+        auto local_it = locals_.find(ident.name);
+        if (local_it != locals_.end() && local_it->second.semantic_type) {
+            return local_it->second.semantic_type;
+        }
+
+        // Special handling for 'this' in impl methods when no semantic type is available
         if (ident.name == "this" && !current_impl_type_.empty()) {
             auto result = std::make_shared<types::Type>();
             // current_impl_type_ might be a mangled name like Maybe__I32

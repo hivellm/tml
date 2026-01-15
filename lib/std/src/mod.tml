@@ -2,6 +2,9 @@
 // Re-exports all standard library modules
 
 pub mod traits      // Core behaviors (Copy, Eq, Ord, Hash, etc.)
+pub mod interfaces  // C#-style OOP interfaces (IEquatable, IComparable, etc.)
+pub mod object      // Object base class
+pub mod exception   // Exception class hierarchy
 pub mod types       // Maybe[T], Outcome[T, E]
 pub mod collections // List, HashMap, Buffer
 pub mod file        // File I/O

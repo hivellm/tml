@@ -299,6 +299,18 @@ void LLVMIRGen::generate_pending_instantiations() {
             }
             changed = true;
         }
+
+        // Generate pending generic class method instantiations
+        while (!pending_generic_class_method_insts_.empty()) {
+            auto pending = std::move(pending_generic_class_method_insts_);
+            pending_generic_class_method_insts_.clear();
+
+            for (const auto& p : pending) {
+                gen_generic_class_static_method(*p.class_decl, *p.method, p.method_suffix,
+                                                p.type_subs);
+            }
+            changed = true;
+        }
     }
 }
 

@@ -683,6 +683,294 @@ func test_constructor_overload_full() -> I32 {
 }
 
 // ============================================================================
+// Static Generic Method Tests
+// ============================================================================
+
+/// Utility class with static generic methods
+class Utils {
+    x: I32  // Dummy field - classes need at least one field
+
+    // Identity function - returns the input unchanged
+    static func identity[T](val: T) -> T {
+        return val
+    }
+
+    // Return the first of two values
+    static func first[T](a: T, b: T) -> T {
+        return a
+    }
+
+    // Return the second of two values
+    static func second[T](a: T, b: T) -> T {
+        return b
+    }
+}
+
+@test
+func test_static_generic_identity_i32() -> I32 {
+    let x: I32 = Utils::identity[I32](42)
+    assert_eq(x, 42, "identity[I32](42) should return 42")
+    return 0
+}
+
+@test
+func test_static_generic_identity_i64() -> I32 {
+    let x: I64 = Utils::identity[I64](100)
+    assert_eq(x as I32, 100, "identity[I64](100) should return 100")
+    return 0
+}
+
+@test
+func test_static_generic_first() -> I32 {
+    let x: I32 = Utils::first[I32](10, 20)
+    assert_eq(x, 10, "first[I32](10, 20) should return 10")
+    return 0
+}
+
+@test
+func test_static_generic_second() -> I32 {
+    let x: I32 = Utils::second[I32](10, 20)
+    assert_eq(x, 20, "second[I32](10, 20) should return 20")
+    return 0
+}
+
+// ============================================================================
+// Design Patterns - Strategy Pattern
+// ============================================================================
+
+/// Strategy interface for payment methods
+interface PaymentStrategy {
+    func pay(this, amount: I32) -> I32
+}
+
+/// Credit card payment strategy
+class CreditCardPayment implements PaymentStrategy {
+    fee: I32  // Percentage fee (e.g., 3 = 3%)
+
+    static func create(fee: I32) -> CreditCardPayment {
+        return CreditCardPayment { fee: fee }
+    }
+
+    func pay(this, amount: I32) -> I32 {
+        // Returns amount plus fee
+        return amount + (amount * this.fee / 100)
+    }
+}
+
+/// Cash payment strategy (no fee)
+class CashPayment implements PaymentStrategy {
+    discount: I32  // Discount percentage for cash
+
+    static func create(discount: I32) -> CashPayment {
+        return CashPayment { discount: discount }
+    }
+
+    func pay(this, amount: I32) -> I32 {
+        // Returns amount minus discount
+        return amount - (amount * this.discount / 100)
+    }
+}
+
+/// Context that uses a payment strategy
+class PaymentProcessor {
+    base_amount: I32
+
+    static func create(amount: I32) -> PaymentProcessor {
+        return PaymentProcessor { base_amount: amount }
+    }
+
+    func process_with_credit(this, card: CreditCardPayment) -> I32 {
+        return card.pay(this.base_amount)
+    }
+
+    func process_with_cash(this, cash: CashPayment) -> I32 {
+        return cash.pay(this.base_amount)
+    }
+}
+
+@test
+func test_strategy_pattern_credit() -> I32 {
+    let processor: PaymentProcessor = PaymentProcessor::create(100)
+    let credit: CreditCardPayment = CreditCardPayment::create(3)  // 3% fee
+    let total: I32 = processor.process_with_credit(credit)
+    assert_eq(total, 103, "Credit card payment with 3% fee")
+    return 0
+}
+
+@test
+func test_strategy_pattern_cash() -> I32 {
+    let processor: PaymentProcessor = PaymentProcessor::create(100)
+    let cash: CashPayment = CashPayment::create(5)  // 5% discount
+    let total: I32 = processor.process_with_cash(cash)
+    assert_eq(total, 95, "Cash payment with 5% discount")
+    return 0
+}
+
+// ============================================================================
+// Design Patterns - Decorator Pattern
+// ============================================================================
+
+/// Base coffee interface
+interface Coffee {
+    func cost(this) -> I32
+}
+
+/// Simple coffee implementation
+class SimpleCoffee implements Coffee {
+    base_cost: I32
+
+    static func create() -> SimpleCoffee {
+        return SimpleCoffee { base_cost: 10 }
+    }
+
+    func cost(this) -> I32 {
+        return this.base_cost
+    }
+}
+
+/// Milk decorator - adds cost
+class MilkDecorator implements Coffee {
+    wrapped_cost: I32
+
+    static func create(coffee_cost: I32) -> MilkDecorator {
+        return MilkDecorator { wrapped_cost: coffee_cost + 2 }
+    }
+
+    func cost(this) -> I32 {
+        return this.wrapped_cost
+    }
+}
+
+/// Sugar decorator - adds cost
+class SugarDecorator implements Coffee {
+    wrapped_cost: I32
+
+    static func create(coffee_cost: I32) -> SugarDecorator {
+        return SugarDecorator { wrapped_cost: coffee_cost + 1 }
+    }
+
+    func cost(this) -> I32 {
+        return this.wrapped_cost
+    }
+}
+
+@test
+func test_decorator_pattern_simple() -> I32 {
+    let coffee: SimpleCoffee = SimpleCoffee::create()
+    assert_eq(coffee.cost(), 10, "Simple coffee costs 10")
+    return 0
+}
+
+@test
+func test_decorator_pattern_with_milk() -> I32 {
+    let coffee: SimpleCoffee = SimpleCoffee::create()
+    let with_milk: MilkDecorator = MilkDecorator::create(coffee.cost())
+    assert_eq(with_milk.cost(), 12, "Coffee with milk costs 12")
+    return 0
+}
+
+@test
+func test_decorator_pattern_full() -> I32 {
+    // Build up: coffee + milk + sugar
+    let simple_coffee: SimpleCoffee = SimpleCoffee::create()
+    let with_milk: MilkDecorator = MilkDecorator::create(simple_coffee.cost())
+    let with_sugar: SugarDecorator = SugarDecorator::create(with_milk.cost())
+    assert_eq(with_sugar.cost(), 13, "Coffee with milk and sugar costs 13")
+    return 0
+}
+
+// ============================================================================
+// Design Patterns - Template Method Pattern
+// ============================================================================
+
+/// Abstract document processor with template method
+class DocumentProcessor {
+    doc_type: I32  // 1=text, 2=pdf, 3=html
+
+    static func create(doc_type: I32) -> DocumentProcessor {
+        return DocumentProcessor { doc_type: doc_type }
+    }
+
+    // Template method - defines the algorithm structure
+    func process(this) -> I32 {
+        let step1: I32 = this.open_document()
+        let step2: I32 = this.parse_content()
+        let step3: I32 = this.close_document()
+        return step1 + step2 + step3
+    }
+
+    // Steps that vary by document type
+    func open_document(this) -> I32 {
+        return this.doc_type * 10  // Base: 10, 20, 30 for different types
+    }
+
+    func parse_content(this) -> I32 {
+        return this.doc_type * 5  // Base: 5, 10, 15 for different types
+    }
+
+    func close_document(this) -> I32 {
+        return 1  // Always 1 for cleanup
+    }
+}
+
+/// Text document processor
+class TextProcessor extends DocumentProcessor {
+    line_count: I32
+
+    static func create(lines: I32) -> TextProcessor {
+        return TextProcessor { line_count: lines }
+    }
+
+    func parse_content(this) -> I32 {
+        // Text parsing: 1 unit per line
+        return this.line_count
+    }
+}
+
+/// PDF document processor
+class PdfProcessor extends DocumentProcessor {
+    page_count: I32
+
+    static func create(pages: I32) -> PdfProcessor {
+        return PdfProcessor { page_count: pages }
+    }
+
+    func parse_content(this) -> I32 {
+        // PDF parsing: 10 units per page (more complex)
+        return this.page_count * 10
+    }
+}
+
+@test
+func test_template_method_base() -> I32 {
+    let doc: DocumentProcessor = DocumentProcessor::create(1)  // Text type
+    let result: I32 = doc.process()
+    // open(10) + parse(5) + close(1) = 16
+    assert_eq(result, 16, "Base document processing")
+    return 0
+}
+
+@test
+func test_template_method_text() -> I32 {
+    let doc: TextProcessor = TextProcessor::create(25)  // 25 lines
+    // TextProcessor inherits from DocumentProcessor
+    // parse_content is overridden to return line_count
+    let parse_result: I32 = doc.parse_content()
+    assert_eq(parse_result, 25, "Text parsing 25 lines")
+    return 0
+}
+
+@test
+func test_template_method_pdf() -> I32 {
+    let doc: PdfProcessor = PdfProcessor::create(5)  // 5 pages
+    // PdfProcessor inherits from DocumentProcessor
+    // parse_content is overridden to return page_count * 10
+    let parse_result: I32 = doc.parse_content()
+    assert_eq(parse_result, 50, "PDF parsing 5 pages")
+    return 0
+}
+
+// ============================================================================
 // Generic Class Tests (TODO: Pending full generic class support)
 // ============================================================================
 

@@ -390,7 +390,9 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emit("    ");
                 }
                 // Method name is mangled: Type__method
-                emit("call " + ret_type + " @" + i.receiver_type + "__" + i.method_name + "(");
+                // Use "Unknown" if receiver type is empty (indicates MIR builder issue)
+                std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
+                emit("call " + ret_type + " @" + recv_type + "__" + i.method_name + "(");
                 // First argument is self/receiver
                 std::string receiver = get_value_reg(i.receiver);
                 emit("ptr " + receiver);

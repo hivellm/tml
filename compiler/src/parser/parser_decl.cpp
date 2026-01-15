@@ -167,9 +167,48 @@ auto Parser::parse_decl() -> Result<DeclPtr, ParseError> {
         skip_newlines();
 
         if (check(lexer::TokenKind::Assign)) {
-            // Type alias: type Foo = Bar
+            // Could be type alias or sum type - look ahead for '|' pattern
+            // Sum type: type Foo = Bar | Baz or type Foo = Bar(T) | Baz(U)
+            // Type alias: type Foo = SomeType[T]
+            advance(); // consume '='
+            skip_newlines();
+
+            // Look for '|' at the top level (not inside brackets/parens)
+            bool is_sum_type = false;
+            int bracket_depth = 0;
+            int paren_depth = 0;
+            int brace_depth = 0;
+
+            while (!is_at_end() && !check(lexer::TokenKind::Newline) &&
+                   !check(lexer::TokenKind::Semi)) {
+                if (check(lexer::TokenKind::LBracket))
+                    bracket_depth++;
+                else if (check(lexer::TokenKind::RBracket))
+                    bracket_depth--;
+                else if (check(lexer::TokenKind::LParen))
+                    paren_depth++;
+                else if (check(lexer::TokenKind::RParen))
+                    paren_depth--;
+                else if (check(lexer::TokenKind::LBrace))
+                    brace_depth++;
+                else if (check(lexer::TokenKind::RBrace))
+                    brace_depth--;
+                else if (check(lexer::TokenKind::BitOr) && bracket_depth == 0 && paren_depth == 0 &&
+                         brace_depth == 0) {
+                    // Found '|' at top level - this is a sum type
+                    is_sum_type = true;
+                    break;
+                }
+                advance();
+            }
+
             pos_ = type_pos;
-            return parse_type_alias_decl(vis, std::move(doc));
+
+            if (is_sum_type) {
+                return parse_sum_type_decl(vis, std::move(decorators), std::move(doc));
+            } else {
+                return parse_type_alias_decl(vis, std::move(doc));
+            }
         }
 
         if (!check(lexer::TokenKind::LBrace)) {
@@ -930,6 +969,161 @@ auto Parser::parse_type_alias_decl(Visibility vis, std::optional<std::string> do
 
     return make_box<Decl>(
         Decl{.kind = std::move(alias), .span = SourceSpan::merge(start_span, end_span)});
+}
+
+auto Parser::parse_sum_type_decl(Visibility vis, std::vector<Decorator> decorators,
+                                 std::optional<std::string> doc) -> Result<DeclPtr, ParseError> {
+    auto start_span = peek().span;
+
+    auto type_result = expect(lexer::TokenKind::KwType, "Expected 'type'");
+    if (is_err(type_result))
+        return unwrap_err(type_result);
+
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected type name");
+    if (is_err(name_result))
+        return unwrap_err(name_result);
+    auto name = std::string(unwrap(name_result).lexeme);
+
+    // Generic parameters
+    std::vector<GenericParam> generics;
+    if (check(lexer::TokenKind::LBracket)) {
+        auto gen_result = parse_generic_params();
+        if (is_err(gen_result))
+            return unwrap_err(gen_result);
+        generics = std::move(unwrap(gen_result));
+    }
+
+    skip_newlines();
+    auto eq = expect(lexer::TokenKind::Assign, "Expected '=' in sum type");
+    if (is_err(eq))
+        return unwrap_err(eq);
+
+    // Parse variants separated by '|'
+    std::vector<EnumVariant> variants;
+    skip_newlines();
+
+    // Handle optional leading '|' (for multiline format like: type Foo = | V1 | V2)
+    match(lexer::TokenKind::BitOr);
+    skip_newlines();
+
+    // Parse first variant (must exist)
+    auto first_variant = parse_sum_type_variant();
+    if (is_err(first_variant))
+        return unwrap_err(first_variant);
+    variants.push_back(std::move(unwrap(first_variant)));
+
+    // Parse additional variants after '|'
+    skip_newlines();
+    while (match(lexer::TokenKind::BitOr)) {
+        skip_newlines();
+        auto variant = parse_sum_type_variant();
+        if (is_err(variant))
+            return unwrap_err(variant);
+        variants.push_back(std::move(unwrap(variant)));
+        skip_newlines();
+    }
+
+    auto end_span = previous().span;
+
+    auto enum_decl = EnumDecl{.doc = std::move(doc),
+                              .decorators = std::move(decorators),
+                              .vis = vis,
+                              .name = std::move(name),
+                              .generics = std::move(generics),
+                              .variants = std::move(variants),
+                              .where_clause = std::nullopt,
+                              .span = SourceSpan::merge(start_span, end_span)};
+
+    return make_box<Decl>(
+        Decl{.kind = std::move(enum_decl), .span = SourceSpan::merge(start_span, end_span)});
+}
+
+auto Parser::parse_sum_type_variant() -> Result<EnumVariant, ParseError> {
+    auto start_span = peek().span;
+
+    auto name_result = expect(lexer::TokenKind::Identifier, "Expected variant name");
+    if (is_err(name_result))
+        return unwrap_err(name_result);
+    auto variant_name = std::string(unwrap(name_result).lexeme);
+
+    std::optional<std::vector<TypePtr>> tuple_fields;
+    std::optional<std::vector<StructField>> struct_fields;
+
+    // Check for tuple variant: Variant(T1, T2)
+    if (match(lexer::TokenKind::LParen)) {
+        std::vector<TypePtr> fields;
+        skip_newlines();
+
+        while (!check(lexer::TokenKind::RParen) && !is_at_end()) {
+            auto field_type = parse_type();
+            if (is_err(field_type))
+                return unwrap_err(field_type);
+            fields.push_back(std::move(unwrap(field_type)));
+
+            skip_newlines();
+            if (!check(lexer::TokenKind::RParen)) {
+                auto comma = expect(lexer::TokenKind::Comma, "Expected ',' between tuple fields");
+                if (is_err(comma))
+                    return unwrap_err(comma);
+                skip_newlines();
+            }
+        }
+
+        auto rparen = expect(lexer::TokenKind::RParen, "Expected ')' after tuple fields");
+        if (is_err(rparen))
+            return unwrap_err(rparen);
+
+        tuple_fields = std::move(fields);
+    }
+    // Check for struct variant: Variant { field: Type }
+    else if (match(lexer::TokenKind::LBrace)) {
+        std::vector<StructField> fields;
+        skip_newlines();
+
+        while (!check(lexer::TokenKind::RBrace) && !is_at_end()) {
+            auto field_doc = collect_doc_comment();
+            auto field_vis = parse_visibility();
+
+            auto field_name_result = expect(lexer::TokenKind::Identifier, "Expected field name");
+            if (is_err(field_name_result))
+                return unwrap_err(field_name_result);
+            auto field_name = std::string(unwrap(field_name_result).lexeme);
+
+            auto colon = expect(lexer::TokenKind::Colon, "Expected ':' after field name");
+            if (is_err(colon))
+                return unwrap_err(colon);
+
+            auto field_type = parse_type();
+            if (is_err(field_type))
+                return unwrap_err(field_type);
+
+            fields.push_back(StructField{
+                .doc = std::move(field_doc),
+                .vis = field_vis,
+                .name = std::move(field_name),
+                .type = std::move(unwrap(field_type)),
+                .span = SourceSpan::merge(unwrap(field_name_result).span, previous().span)});
+
+            skip_newlines();
+            if (!check(lexer::TokenKind::RBrace)) {
+                match(lexer::TokenKind::Comma);
+                skip_newlines();
+            }
+        }
+
+        auto rbrace = expect(lexer::TokenKind::RBrace, "Expected '}' after struct fields");
+        if (is_err(rbrace))
+            return unwrap_err(rbrace);
+
+        struct_fields = std::move(fields);
+    }
+
+    auto variant_end = previous().span;
+    return EnumVariant{.doc = std::nullopt,
+                       .name = std::move(variant_name),
+                       .tuple_fields = std::move(tuple_fields),
+                       .struct_fields = std::move(struct_fields),
+                       .span = SourceSpan::merge(start_span, variant_end)};
 }
 
 auto Parser::parse_const_decl(Visibility vis, std::optional<std::string> doc)

@@ -111,7 +111,7 @@ impl PartialOrd for SocketAddrV4 {
 
 impl Ord for SocketAddrV4 {
     func cmp(this, other: ref SocketAddrV4) -> Ordering {
-        let ip_ord = this.ip.cmp(ref other.ip)
+        let ip_ord: Ordering = this.ip.cmp(ref other.ip)
         if ip_ord != Ordering::Equal {
             ip_ord
         } else {
@@ -255,7 +255,7 @@ impl PartialOrd for SocketAddrV6 {
 
 impl Ord for SocketAddrV6 {
     func cmp(this, other: ref SocketAddrV6) -> Ordering {
-        let ip_ord = this.ip.cmp(ref other.ip)
+        let ip_ord: Ordering = this.ip.cmp(ref other.ip)
         if ip_ord != Ordering::Equal {
             return ip_ord
         }
@@ -349,21 +349,13 @@ impl SocketAddr {
 
     /// Sets the IP address.
     pub func set_ip(mut this, ip: IpAddr) {
-        when (mut this, ip) {
-            (V4(mut addr), IpAddr::V4(new_ip)) => addr.set_ip(new_ip),
-            (V6(mut addr), IpAddr::V6(new_ip)) => addr.set_ip(new_ip),
-            _ => {
-                // Type mismatch - convert the socket address
-                when ip {
-                    IpAddr::V4(new_ip) => {
-                        let port = this.port()
-                        this = SocketAddr::V4(SocketAddrV4::new(new_ip, port))
-                    },
-                    IpAddr::V6(new_ip) => {
-                        let port = this.port()
-                        this = SocketAddr::V6(SocketAddrV6::new(new_ip, port, 0, 0))
-                    },
-                }
+        let port: U16 = this.port()
+        when ip {
+            IpAddr::V4(new_ip) => {
+                this = SocketAddr::V4(SocketAddrV4::new(new_ip, port))
+            },
+            IpAddr::V6(new_ip) => {
+                this = SocketAddr::V6(SocketAddrV6::new(new_ip, port, 0, 0))
             },
         }
     }
@@ -378,9 +370,15 @@ impl SocketAddr {
 
     /// Sets the port number.
     pub func set_port(mut this, port: U16) {
-        when mut this {
-            V4(mut addr) => addr.set_port(port),
-            V6(mut addr) => addr.set_port(port),
+        when this {
+            V4(addr) => {
+                let ip: Ipv4Addr = addr.ip()
+                this = SocketAddr::V4(SocketAddrV4::new(ip, port))
+            },
+            V6(addr) => {
+                let ip: Ipv6Addr = addr.ip()
+                this = SocketAddr::V6(SocketAddrV6::new(ip, port, addr.flowinfo(), addr.scope_id()))
+            },
         }
     }
 }

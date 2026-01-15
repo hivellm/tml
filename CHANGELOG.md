@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Implicit Numeric Literal Coercion** (2026-01-15) - Variables and struct fields with type annotations now accept unsuffixed literals
+  - `var a: U8 = 128` works without requiring `128 as U8`
+  - `let b: I16 = 1000` works without requiring `1000 as I16`
+  - `Simple { value: 5000 }` works for `value: I64` fields without `5000 as I64`
+  - Supports all integer types: I8, I16, I32, I64, U8, U16, U32, U64
+  - Float struct fields: automatic `double → float` truncation via `fptrunc`
+  - Explicit `as Type` casts still work for complex expressions or when inference isn't available
+  - Files modified:
+    - `compiler/include/codegen/llvm_ir_gen.hpp` - Added `expected_literal_type_` context
+    - `compiler/src/codegen/expr/core.cpp` - Use expected type in `gen_literal`
+    - `compiler/src/codegen/llvm_ir_gen_stmt.cpp` - Set context before initializer generation
+    - `compiler/src/codegen/expr/struct.cpp` - Set expected type for struct field initializers
+
 ### Fixed
 - **Memory Pointer Type Consistency** (2026-01-14) - Unified pointer types for memory operations
   - Changed `alloc` builtin return type from `mut ref I32` to `*Unit` (opaque pointer)

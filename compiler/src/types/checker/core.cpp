@@ -1080,10 +1080,12 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
         }
     }
 
-    // Collect implemented interfaces
-    for (const auto& iface : decl.implements) {
-        if (!iface.segments.empty()) {
-            def.interfaces.push_back(iface.segments.back());
+    // Collect implemented interfaces (supports generic interfaces like IEquatable[T])
+    for (const auto& iface_type : decl.implements) {
+        if (auto* named = std::get_if<parser::NamedType>(&iface_type->kind)) {
+            if (!named->path.segments.empty()) {
+                def.interfaces.push_back(named->path.segments.back());
+            }
         }
     }
 
@@ -1113,7 +1115,20 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
         sig.is_async = false;
         sig.span = method.span;
 
+        // Collect method's type parameters (for generic methods)
+        for (const auto& gp : method.generics) {
+            if (!gp.is_const) {
+                sig.type_params.push_back(gp.name);
+            }
+        }
+
+        // Collect parameters (skip 'this' to match module loading behavior)
         for (const auto& param : method.params) {
+            // Skip 'this' parameter
+            if (param.pattern && param.pattern->is<parser::IdentPattern>() &&
+                param.pattern->as<parser::IdentPattern>().name == "this") {
+                continue;
+            }
             if (param.type) {
                 sig.params.push_back(resolve_type(*param.type));
             }
@@ -1377,9 +1392,7 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                     method.params[0].pattern->as<parser::IdentPattern>().name == "this") {
                     override_params -= 1;
                 }
-                // Exclude 'this' from parent method params
-                if (parent_params > 0)
-                    parent_params -= 1;
+                // Note: parent_method.sig.params already excludes 'this' when loaded from module
 
                 if (override_params != parent_params) {
                     error("Override method '" + method.name + "' has " +
@@ -1390,11 +1403,18 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
                 }
 
                 // Check parameter types match
+                // Note: override params are at method.params[1], [2], etc. (index 0 is 'this')
+                // parent params are at sig.params[0], [1], etc. ('this' already excluded)
                 for (size_t i = 0; i < override_params; ++i) {
+                    // Override param: skip 'this' by adding 1 to index
+                    size_t override_idx = i + 1; // method.params[0] is 'this'
                     TypePtr override_param_type =
-                        method.params[i].type ? resolve_type(*method.params[i].type) : make_unit();
-                    TypePtr parent_param_type = parent_method.sig.params.size() > i + 1
-                                                    ? parent_method.sig.params[i + 1]
+                        (override_idx < method.params.size() && method.params[override_idx].type)
+                            ? resolve_type(*method.params[override_idx].type)
+                            : make_unit();
+                    // Parent param: 'this' already excluded from sig.params
+                    TypePtr parent_param_type = parent_method.sig.params.size() > i
+                                                    ? parent_method.sig.params[i]
                                                     : make_unit();
 
                     if (!types_equal(override_param_type, parent_param_type)) {
@@ -1426,12 +1446,14 @@ void TypeChecker::validate_override(const parser::ClassDecl& cls,
 }
 
 void TypeChecker::validate_interface_impl(const parser::ClassDecl& cls) {
-    for (const auto& iface_path : cls.implements) {
-        if (iface_path.segments.empty()) {
+    for (const auto& iface_type : cls.implements) {
+        // Extract interface name from the type (supports generic interfaces)
+        auto* named = std::get_if<parser::NamedType>(&iface_type->kind);
+        if (!named || named->path.segments.empty()) {
             continue;
         }
 
-        const std::string& iface_name = iface_path.segments.back();
+        const std::string& iface_name = named->path.segments.back();
         auto iface_def = env_.lookup_interface(iface_name);
 
         if (!iface_def.has_value()) {

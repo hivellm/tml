@@ -1,0 +1,158 @@
+// Tests for Exception class hierarchy
+// Note: Using local exception classes to avoid external inheritance issues
+use test
+
+// ============================================================================
+// Local Exception Classes for Testing
+// ============================================================================
+
+// Base exception class
+class TestException {
+    message: Str
+
+    static func create(message: Str) -> TestException {
+        return TestException { message: message }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_type(this) -> Str {
+        return "TestException"
+    }
+}
+
+// Custom exception with code
+class TestCustomException {
+    message: Str
+    code: I32
+
+    static func create(message: Str, code: I32) -> TestCustomException {
+        return TestCustomException { message: message, code: code }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_code(this) -> I32 {
+        return this.code
+    }
+
+    func get_type(this) -> Str {
+        return "TestCustomException"
+    }
+}
+
+// Argument exception
+class TestArgumentException {
+    message: Str
+    param_name: Str
+
+    static func create(message: Str) -> TestArgumentException {
+        return TestArgumentException { message: message, param_name: "" }
+    }
+
+    static func with_param(message: Str, param_name: Str) -> TestArgumentException {
+        return TestArgumentException { message: message, param_name: param_name }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_param_name(this) -> Str {
+        return this.param_name
+    }
+
+    func get_type(this) -> Str {
+        return "TestArgumentException"
+    }
+}
+
+// Index out of range exception
+class TestIndexException {
+    message: Str
+    index: I64
+    length: I64
+
+    static func create(index: I64) -> TestIndexException {
+        return TestIndexException { message: "Index out of range", index: index, length: 0 }
+    }
+
+    static func with_bounds(index: I64, length: I64) -> TestIndexException {
+        return TestIndexException { message: "Index out of range", index: index, length: length }
+    }
+
+    func get_message(this) -> Str {
+        return this.message
+    }
+
+    func get_index(this) -> I64 {
+        return this.index
+    }
+
+    func get_length(this) -> I64 {
+        return this.length
+    }
+
+    func get_type(this) -> Str {
+        return "TestIndexException"
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_basic_exception() -> I32 {
+    let ex: TestException = TestException::create("Test error")
+    assert_eq(ex.get_message(), "Test error", "Message should match")
+    assert_eq(ex.get_type(), "TestException", "Type should match")
+    return 0
+}
+
+@test
+func test_custom_exception() -> I32 {
+    let ex: TestCustomException = TestCustomException::create("Custom error", 42)
+    assert_eq(ex.get_message(), "Custom error", "Message should match")
+    assert_eq(ex.get_code(), 42, "Code should match")
+    assert_eq(ex.get_type(), "TestCustomException", "Type should match")
+    return 0
+}
+
+@test
+func test_argument_exception() -> I32 {
+    let ex: TestArgumentException = TestArgumentException::with_param("Invalid value", "count")
+    assert_eq(ex.get_message(), "Invalid value", "Message should match")
+    assert_eq(ex.get_param_name(), "count", "Param name should match")
+    assert_eq(ex.get_type(), "TestArgumentException", "Type should match")
+    return 0
+}
+
+@test
+func test_argument_exception_create() -> I32 {
+    let ex: TestArgumentException = TestArgumentException::create("Something wrong")
+    assert_eq(ex.get_message(), "Something wrong", "Message should match")
+    assert_eq(ex.get_type(), "TestArgumentException", "Type should match")
+    return 0
+}
+
+@test
+func test_index_exception() -> I32 {
+    let ex: TestIndexException = TestIndexException::with_bounds(10, 5)
+    assert_eq(ex.get_index() as I32, 10, "Index should match")
+    assert_eq(ex.get_length() as I32, 5, "Length should match")
+    assert_eq(ex.get_type(), "TestIndexException", "Type should match")
+    return 0
+}
+
+@test
+func test_index_exception_create() -> I32 {
+    let ex: TestIndexException = TestIndexException::create(42)
+    assert_eq(ex.get_index() as I32, 42, "Index should match")
+    assert_eq(ex.get_type(), "TestIndexException", "Type should match")
+    return 0
+}

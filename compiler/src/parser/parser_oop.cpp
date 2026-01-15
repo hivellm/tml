@@ -114,14 +114,14 @@ auto Parser::parse_class_decl(Visibility vis, std::vector<Decorator> decorators,
         extends = std::move(unwrap(path_result));
     }
 
-    // Parse implements (multiple interfaces)
-    std::vector<TypePath> implements;
+    // Parse implements (multiple interfaces, supports generics like IEquatable[T])
+    std::vector<Box<Type>> implements;
     if (match(lexer::TokenKind::KwImplements)) {
         do {
-            auto path_result = parse_type_path();
-            if (is_err(path_result))
-                return unwrap_err(path_result);
-            implements.push_back(std::move(unwrap(path_result)));
+            auto type_result = parse_type();
+            if (is_err(type_result))
+                return unwrap_err(type_result);
+            implements.push_back(std::move(unwrap(type_result)));
         } while (match(lexer::TokenKind::Comma));
     }
 

@@ -581,8 +581,64 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
             }
         }
 
+        // Set expected type for numeric literals based on type annotation
+        // This allows "var a: U8 = 128" without requiring "128 as U8"
+        if (let.type_annotation && semantic_var_type) {
+            if (semantic_var_type->is<types::PrimitiveType>()) {
+                const auto& prim = semantic_var_type->as<types::PrimitiveType>();
+                switch (prim.kind) {
+                case types::PrimitiveKind::I8:
+                    expected_literal_type_ = "i8";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                case types::PrimitiveKind::I16:
+                    expected_literal_type_ = "i16";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                case types::PrimitiveKind::I32:
+                    expected_literal_type_ = "i32";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                case types::PrimitiveKind::I64:
+                case types::PrimitiveKind::I128:
+                    expected_literal_type_ = "i64";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                case types::PrimitiveKind::U8:
+                    expected_literal_type_ = "i8";
+                    expected_literal_is_unsigned_ = true;
+                    break;
+                case types::PrimitiveKind::U16:
+                    expected_literal_type_ = "i16";
+                    expected_literal_is_unsigned_ = true;
+                    break;
+                case types::PrimitiveKind::U32:
+                    expected_literal_type_ = "i32";
+                    expected_literal_is_unsigned_ = true;
+                    break;
+                case types::PrimitiveKind::U64:
+                case types::PrimitiveKind::U128:
+                    expected_literal_type_ = "i64";
+                    expected_literal_is_unsigned_ = true;
+                    break;
+                case types::PrimitiveKind::F32:
+                    expected_literal_type_ = "float";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                case types::PrimitiveKind::F64:
+                    expected_literal_type_ = "double";
+                    expected_literal_is_unsigned_ = false;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
         init_val = gen_expr(*let.init.value());
         expected_enum_type_.clear(); // Clear context after expression
+        expected_literal_type_.clear();
+        expected_literal_is_unsigned_ = false;
         // If type wasn't explicitly annotated and expression has a known type, use it
         if (!let.type_annotation && last_expr_type_ != "i32") {
             if (last_expr_type_ == "double" || last_expr_type_ == "i64" ||

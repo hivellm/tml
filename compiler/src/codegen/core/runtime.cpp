@@ -98,6 +98,12 @@ void LLVMIRGen::emit_runtime_decls() {
         emit_line("");
     }
 
+    // Stack save/restore intrinsics (for loop alloca cleanup)
+    emit_line("; Stack management intrinsics");
+    emit_line("declare ptr @llvm.stacksave() nounwind");
+    emit_line("declare void @llvm.stackrestore(ptr) nounwind");
+    emit_line("");
+
     // Threading runtime declarations
     emit_line("; Threading runtime (tml_runtime.c)");
     emit_line("declare ptr @thread_spawn(ptr, ptr)");

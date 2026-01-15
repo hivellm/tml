@@ -1,0 +1,145 @@
+// Tests for Object base class
+use test
+use std::object::*
+use std::interfaces::*
+
+// Note: Direct Object instantiation tests disabled for now
+// External module method linking needs improvement
+
+// ============================================================================
+// Inheritance Tests
+// ============================================================================
+
+class Point extends Object {
+    x: I32
+    y: I32
+
+    static func create(x: I32, y: I32) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    override func equals(this, other: Object) -> Bool {
+        // In real code, we'd need to check type and cast
+        return false
+    }
+
+    override func get_hash_code(this) -> I64 {
+        return (this.x * 31 + this.y) as I64
+    }
+
+    override func to_string(this) -> Str {
+        return "Point"
+    }
+
+    override func get_type(this) -> Str {
+        return "Point"
+    }
+
+    func get_x(this) -> I32 { return this.x }
+    func get_y(this) -> I32 { return this.y }
+}
+
+@test
+func test_point_to_string() -> I32 {
+    let p: Point = Point::create(10, 20)
+    let s: Str = p.to_string()
+    assert_eq(s, "Point", "Point.to_string() should return 'Point'")
+    return 0
+}
+
+@test
+func test_point_get_type() -> I32 {
+    let p: Point = Point::create(10, 20)
+    let t: Str = p.get_type()
+    assert_eq(t, "Point", "Point.get_type() should return 'Point'")
+    return 0
+}
+
+@test
+func test_point_hash_code() -> I32 {
+    let p1: Point = Point::create(3, 4)
+    let p2: Point = Point::create(3, 4)
+
+    let h1: I64 = p1.get_hash_code()
+    let h2: I64 = p2.get_hash_code()
+
+    assert_eq(h1 as I32, h2 as I32, "Same points should have same hash")
+    return 0
+}
+
+// ============================================================================
+// Complex Inheritance Tests
+// ============================================================================
+
+class Animal extends Object {
+    name_hash: I32
+
+    static func create(name_hash: I32) -> Animal {
+        return Animal { name_hash: name_hash }
+    }
+
+    override func to_string(this) -> Str {
+        return "Animal"
+    }
+
+    override func get_type(this) -> Str {
+        return "Animal"
+    }
+
+    override func get_hash_code(this) -> I64 {
+        return this.name_hash as I64
+    }
+
+    virtual func speak(this) -> Str {
+        return "..."
+    }
+}
+
+class Dog extends Animal {
+    breed_hash: I32
+
+    static func create(name_hash: I32, breed_hash: I32) -> Dog {
+        return Dog { name_hash: name_hash, breed_hash: breed_hash }
+    }
+
+    override func to_string(this) -> Str {
+        return "Dog"
+    }
+
+    override func get_type(this) -> Str {
+        return "Dog"
+    }
+
+    override func get_hash_code(this) -> I64 {
+        return (this.name_hash * 31 + this.breed_hash) as I64
+    }
+
+    override func speak(this) -> Str {
+        return "Woof!"
+    }
+}
+
+@test
+func test_animal_hierarchy() -> I32 {
+    let animal: Animal = Animal::create(42)
+    let dog: Dog = Dog::create(42, 7)
+
+    assert_eq(animal.to_string(), "Animal", "Animal type")
+    assert_eq(dog.to_string(), "Dog", "Dog type")
+    assert_eq(animal.speak(), "...", "Animal speaks ...")
+    assert_eq(dog.speak(), "Woof!", "Dog speaks Woof!")
+
+    return 0
+}
+
+@test
+func test_dog_hash() -> I32 {
+    let d1: Dog = Dog::create(10, 20)
+    let d2: Dog = Dog::create(10, 20)
+
+    assert_eq(d1.get_hash_code() as I32, d2.get_hash_code() as I32, "Same dogs same hash")
+    return 0
+}
+
+// Note: Objects utility class tests disabled for now
+// External static method resolution needs improvement

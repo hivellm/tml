@@ -261,13 +261,19 @@ auto MirBuilder::get_type_name(const MirTypePtr& type) const -> std::string {
     }
 
     return std::visit(
-        [](const auto& t) -> std::string {
+        [this](const auto& t) -> std::string {
             using T = std::decay_t<decltype(t)>;
 
             if constexpr (std::is_same_v<T, MirStructType>) {
                 return t.name;
             } else if constexpr (std::is_same_v<T, MirEnumType>) {
                 return t.name;
+            } else if constexpr (std::is_same_v<T, MirPointerType>) {
+                // For pointer types (including class instances), get the underlying type name
+                if (t.pointee) {
+                    return get_type_name(t.pointee);
+                }
+                return "";
             } else if constexpr (std::is_same_v<T, MirPrimitiveType>) {
                 switch (t.kind) {
                 case PrimitiveType::I8:

@@ -469,9 +469,33 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
         }
 
-        // Build arguments - 'this' is passed by value for primitives
+        // Check if method has 'mut this' - indicated by first param being a mut ref
+        bool is_mut_this = false;
+        if (!func_sig->params.empty() && func_sig->params[0]) {
+            if (func_sig->params[0]->is<types::RefType>()) {
+                is_mut_this = func_sig->params[0]->as<types::RefType>().is_mut;
+            }
+        }
+
+        // Build arguments - 'this' is passed by pointer for 'mut this' methods, by value otherwise
         std::vector<std::pair<std::string, std::string>> typed_args;
-        typed_args.push_back({llvm_ty, receiver});
+        if (is_mut_this) {
+            // For 'mut this', pass a pointer to the receiver
+            // Use receiver_ptr if available, otherwise create a temporary alloca
+            std::string ptr_to_pass;
+            if (!receiver_ptr.empty()) {
+                ptr_to_pass = receiver_ptr;
+            } else {
+                // Need to create temporary storage for the value
+                std::string tmp = fresh_reg();
+                emit_line("  " + tmp + " = alloca " + llvm_ty);
+                emit_line("  store " + llvm_ty + " " + receiver + ", ptr " + tmp);
+                ptr_to_pass = tmp;
+            }
+            typed_args.push_back({"ptr", ptr_to_pass});
+        } else {
+            typed_args.push_back({llvm_ty, receiver});
+        }
 
         // Add remaining arguments
         for (size_t i = 0; i < call.args.size(); ++i) {

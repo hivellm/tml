@@ -244,13 +244,26 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 expected_enum_type_ = target_field_type;
             }
 
+            // Set expected type for integer literals based on field type
+            // This allows "Point { x: 10, y: 20 }" without "10 as U8"
+            // Note: float/double not included - LLVM literals are always double and need fptrunc
+            if (target_field_type == "i8") {
+                expected_literal_type_ = "i8";
+                expected_literal_is_unsigned_ = false;
+            } else if (target_field_type == "i16") {
+                expected_literal_type_ = "i16";
+                expected_literal_is_unsigned_ = false;
+            } else if (target_field_type == "i64") {
+                expected_literal_type_ = "i64";
+                expected_literal_is_unsigned_ = false;
+            }
+
             field_val = gen_expr(*s.fields[i].second);
             std::string actual_llvm_type =
                 last_expr_type_;         // Capture actual LLVM type from gen_expr
             expected_enum_type_.clear(); // Clear after expression
-            // Infer expression type for proper casting
-            types::TypePtr expr_type = infer_expr_type(*s.fields[i].second);
-            std::string expr_llvm_type = llvm_type_from_semantic(expr_type);
+            expected_literal_type_.clear();
+            expected_literal_is_unsigned_ = false;
 
             // If the expression is a pointer (like 'this') but the field expects a struct value,
             // we need to load the struct value from the pointer
@@ -260,26 +273,39 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                 field_val = loaded;
                 field_type = target_field_type;
             }
-            // If target field type is different from expression type, cast as needed
-            else if (target_field_type != expr_llvm_type && target_field_type != "i32") {
-                // Cast integer literals to the correct field type
-                if ((expr_llvm_type == "i32" || expr_llvm_type == "i64") &&
+            // If target field type is different from actual expression type, cast as needed
+            // Use actual_llvm_type (from gen_expr) not inferred type, since expected_literal_type_
+            // may have been used to generate the literal with the correct type already
+            else if (target_field_type != actual_llvm_type && target_field_type != "i32") {
+                // Cast integer types to the correct field type
+                if ((actual_llvm_type == "i32" || actual_llvm_type == "i64") &&
                     (target_field_type == "i64" || target_field_type == "i32")) {
-                    if (expr_llvm_type == "i32" && target_field_type == "i64") {
+                    if (actual_llvm_type == "i32" && target_field_type == "i64") {
                         // Sign extend i32 to i64
                         std::string casted = fresh_reg();
                         emit_line("  " + casted + " = sext i32 " + field_val + " to i64");
                         field_val = casted;
-                    } else if (expr_llvm_type == "i64" && target_field_type == "i32") {
+                    } else if (actual_llvm_type == "i64" && target_field_type == "i32") {
                         // Truncate i64 to i32
                         std::string casted = fresh_reg();
                         emit_line("  " + casted + " = trunc i64 " + field_val + " to i32");
                         field_val = casted;
                     }
                 }
+                // Handle float/double conversions
+                // LLVM float literals are always double, so truncate to float if needed
+                else if (actual_llvm_type == "double" && target_field_type == "float") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = fptrunc double " + field_val + " to float");
+                    field_val = casted;
+                } else if (actual_llvm_type == "float" && target_field_type == "double") {
+                    std::string casted = fresh_reg();
+                    emit_line("  " + casted + " = fpext float " + field_val + " to double");
+                    field_val = casted;
+                }
                 field_type = target_field_type;
             } else {
-                field_type = expr_llvm_type;
+                field_type = actual_llvm_type;
             }
         }
 

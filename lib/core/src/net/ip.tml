@@ -55,17 +55,17 @@ pub type Ipv4Addr {
 
 impl Ipv4Addr {
     // =========================================================================
-    // Constants
+    // Constants (as static functions)
     // =========================================================================
 
     /// An IPv4 address representing localhost: `127.0.0.1`
-    pub const LOCALHOST: Ipv4Addr = Ipv4Addr { octets: [127, 0, 0, 1] }
+    pub func LOCALHOST() -> Ipv4Addr { Ipv4Addr { octets: [127, 0, 0, 1] } }
 
     /// An IPv4 address representing the unspecified address: `0.0.0.0`
-    pub const UNSPECIFIED: Ipv4Addr = Ipv4Addr { octets: [0, 0, 0, 0] }
+    pub func UNSPECIFIED() -> Ipv4Addr { Ipv4Addr { octets: [0, 0, 0, 0] } }
 
     /// An IPv4 address representing the broadcast address: `255.255.255.255`
-    pub const BROADCAST: Ipv4Addr = Ipv4Addr { octets: [255, 255, 255, 255] }
+    pub func BROADCAST() -> Ipv4Addr { Ipv4Addr { octets: [255, 255, 255, 255] } }
 
     // =========================================================================
     // Constructors
@@ -296,14 +296,14 @@ pub type Ipv6Addr {
 
 impl Ipv6Addr {
     // =========================================================================
-    // Constants
+    // Constants (as static functions)
     // =========================================================================
 
     /// An IPv6 address representing localhost: `::1`
-    pub const LOCALHOST: Ipv6Addr = Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 1] }
+    pub func LOCALHOST() -> Ipv6Addr { Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 1] } }
 
     /// An IPv6 address representing the unspecified address: `::`
-    pub const UNSPECIFIED: Ipv6Addr = Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 0] }
+    pub func UNSPECIFIED() -> Ipv6Addr { Ipv6Addr { segments: [0, 0, 0, 0, 0, 0, 0, 0] } }
 
     // =========================================================================
     // Constructors
@@ -485,7 +485,7 @@ impl Hash for Ipv6Addr {
 
 impl Default for Ipv6Addr {
     func default() -> Ipv6Addr {
-        return Ipv6Addr::UNSPECIFIED
+        return Ipv6Addr::UNSPECIFIED()
     }
 }
 

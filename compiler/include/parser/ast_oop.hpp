@@ -316,7 +316,7 @@ struct ClassDecl {
     std::string name;                          ///< Class name.
     std::vector<GenericParam> generics;        ///< Generic parameters.
     std::optional<TypePath> extends;           ///< Parent class (single inheritance).
-    std::vector<TypePath> implements;          ///< Implemented interfaces.
+    std::vector<Box<Type>> implements;         ///< Implemented interfaces (supports generics).
     std::vector<ClassField> fields;            ///< Fields.
     std::vector<ClassMethod> methods;          ///< Methods.
     std::vector<PropertyDecl> properties;      ///< Properties.

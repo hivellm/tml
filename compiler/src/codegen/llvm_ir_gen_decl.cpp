@@ -934,18 +934,23 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
     }
 
     // Add 'this' as first parameter only for instance methods
-    // For primitive types, pass by value (even for 'mut this' - we'll use an alloca)
+    // For primitive types with 'mut this', pass by pointer so mutations propagate back
+    // For primitive types without 'mut this', pass by value
     // For structs/enums, always pass by pointer
     std::string this_type = "ptr";    // default for structs
     std::string this_inner_type = ""; // For mut this on primitives, the actual primitive type
     if (is_instance_method) {
-        // Check if implementing on a primitive type - pass by value if so
+        // Check if implementing on a primitive type
         std::string llvm_type = llvm_type_name(type_name);
         if (llvm_type[0] != '%') {
-            // Primitive type (i32, i64, i1, float, double, etc.) - pass by value
-            this_type = llvm_type;
+            // Primitive type (i32, i64, i1, float, double, etc.)
             if (is_mut_this) {
-                this_inner_type = llvm_type; // Remember the type for alloca
+                // For 'mut this', pass by pointer so changes propagate back to caller
+                this_type = "ptr";
+                this_inner_type = llvm_type; // Remember the actual type for load/store
+            } else {
+                // For immutable 'this', pass by value
+                this_type = llvm_type;
             }
         }
         // Skip 'this' parameter for Unit type (void is not valid in LLVM parameter lists)
@@ -991,22 +996,64 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
         this_param_name = get_param_name(method.params[0]);
     }
     if (is_instance_method) {
-        // Create semantic type for the impl type to enable field access
+        // Create semantic type for the impl type
         types::TypePtr impl_semantic_type = std::make_shared<types::Type>();
-        impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+
+        // For primitive types, create a PrimitiveType (needed for signedness checks in codegen)
+        // Otherwise, use NamedType for structs/enums
+        auto create_primitive_type = [](const std::string& name) -> std::optional<types::Type> {
+            types::Type t;
+            if (name == "I8")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::I8};
+            else if (name == "I16")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::I16};
+            else if (name == "I32")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::I32};
+            else if (name == "I64")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::I64};
+            else if (name == "I128")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::I128};
+            else if (name == "U8")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::U8};
+            else if (name == "U16")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::U16};
+            else if (name == "U32")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::U32};
+            else if (name == "U64")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::U64};
+            else if (name == "U128")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::U128};
+            else if (name == "F32")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::F32};
+            else if (name == "F64")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::F64};
+            else if (name == "Bool")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::Bool};
+            else if (name == "Str")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::Str};
+            else if (name == "Char")
+                t.kind = types::PrimitiveType{types::PrimitiveKind::Char};
+            else
+                return std::nullopt;
+            return t;
+        };
+
+        auto prim = create_primitive_type(current_impl_type_);
+        if (prim) {
+            impl_semantic_type->kind = std::get<types::PrimitiveType>(prim->kind);
+        } else {
+            impl_semantic_type->kind = types::NamedType{current_impl_type_, "", {}};
+        }
 
         if (!this_inner_type.empty()) {
-            // For 'mut this'/'mut self' on primitive types, create an alloca to allow mutation
-            // The value is passed by value but we need an addressable location for assignment
-            std::string alloca_reg = fresh_reg();
-            emit_line("  " + alloca_reg + " = alloca " + this_inner_type);
-            emit_line("  store " + this_inner_type + " %this, ptr " + alloca_reg);
+            // For 'mut this'/'mut self' on primitive types, %this is a pointer to the value
+            // Mark is_ptr_to_value so gen_ident will load from %this
             locals_["this"] =
-                VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+                VarInfo{"%this", this_inner_type, impl_semantic_type, std::nullopt, true};
             // Also register as 'self' if that was the parameter name
             if (this_param_name == "self") {
                 locals_["self"] =
-                    VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+                    VarInfo{"%this", this_inner_type, impl_semantic_type, std::nullopt, true};
             }
         } else {
             locals_["this"] = VarInfo{"%this", this_type, impl_semantic_type, std::nullopt};

@@ -28,12 +28,46 @@ TML has a static and strong type system:
 **Literals:**
 ```tml
 let a: I32 = 42          // I32 (default)
-let b: I64 = 42i64       // I64
-let c: U8 = 255u8       // U8
-let d: U32 = 0xFF_u32    // U32 hex
+let b: I64 = 42i64       // I64 with suffix
+let c: U8 = 255u8        // U8 with suffix
+let d: U32 = 0xFF_u32    // U32 hex with suffix
 ```
 
-**Explicit conversions:**
+**Implicit Coercion for Typed Contexts:**
+
+When a variable or struct field has an explicit type annotation, unsuffixed numeric literals are automatically coerced to the declared type:
+
+```tml
+// Variable declarations
+var a: U8 = 128          // 128 is coerced to U8 (no suffix needed)
+let b: I16 = 1000        // 1000 is coerced to I16
+var c: U64 = 4294967296  // large value coerced to U64
+let d: F32 = 3.14        // float coerced to F32
+
+// Struct field initializers
+type Data {
+    id: I64,
+    count: U16,
+    ratio: F32
+}
+
+let data: Data = Data {
+    id: 9000000000,      // coerced to I64 (no suffix needed)
+    count: 500,          // coerced to U16
+    ratio: 0.75          // coerced to F32
+}
+```
+
+This eliminates the need for explicit casts in simple assignments:
+```tml
+// Old style (still works)
+var a: U8 = 128 as U8
+
+// New style (preferred)
+var a: U8 = 128
+```
+
+**Explicit conversions between variables:**
 ```tml
 let x: I32 = 100
 let y: I64 = x.to_i64()   // explicit, never implicit

@@ -164,9 +164,16 @@ auto LLVMIRGen::generate(const parser::Module& module)
     for (const auto& decl : module.decls) {
         if (decl->is<parser::ConstDecl>()) {
             const auto& const_decl = decl->as<parser::ConstDecl>();
-            // For now, only support literal constants
-            if (const_decl.value->is<parser::LiteralExpr>()) {
-                const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+            // Support literal constants and cast expressions wrapping literals
+            const parser::Expr* expr = const_decl.value.get();
+
+            // Unwrap cast expressions (e.g., "0 as I32")
+            if (expr->is<parser::CastExpr>()) {
+                expr = expr->as<parser::CastExpr>().expr.get();
+            }
+
+            if (expr->is<parser::LiteralExpr>()) {
+                const auto& lit = expr->as<parser::LiteralExpr>();
                 std::string value;
                 if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     value = std::to_string(lit.token.int_value().value);
@@ -1269,8 +1276,15 @@ void LLVMIRGen::gen_namespace_decl(const parser::NamespaceDecl& ns) {
             gen_func_decl(decl->as<parser::FuncDecl>());
         } else if (decl->is<parser::ConstDecl>()) {
             const auto& const_decl = decl->as<parser::ConstDecl>();
-            if (const_decl.value->is<parser::LiteralExpr>()) {
-                const auto& lit = const_decl.value->as<parser::LiteralExpr>();
+            const parser::Expr* expr = const_decl.value.get();
+
+            // Unwrap cast expressions (e.g., "0 as I32")
+            if (expr->is<parser::CastExpr>()) {
+                expr = expr->as<parser::CastExpr>().expr.get();
+            }
+
+            if (expr->is<parser::LiteralExpr>()) {
+                const auto& lit = expr->as<parser::LiteralExpr>();
                 std::string value;
                 if (lit.token.kind == lexer::TokenKind::IntLiteral) {
                     value = std::to_string(lit.token.int_value().value);
