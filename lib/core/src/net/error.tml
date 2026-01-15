@@ -1,0 +1,295 @@
+//! Network error types.
+//!
+//! This module defines error types for network I/O operations.
+//!
+//! # Error Types
+//!
+//! - [`NetError`] - Errors from socket operations (connect, bind, send, recv)
+//! - [`NetErrorKind`] - The kind of network error that occurred
+//!
+//! # Examples
+//!
+//! ```tml
+//! use core::net::error::{NetError, NetErrorKind}
+//!
+//! func handle_error(err: NetError) {
+//!     when err.kind() {
+//!         ConnectionRefused => print("Server not available"),
+//!         TimedOut => print("Connection timed out"),
+//!         AddrInUse => print("Port already in use"),
+//!         _ => print("Network error: " + err.to_string()),
+//!     }
+//! }
+//! ```
+
+use core::fmt::{Debug, Display, Formatter, FormatResult}
+use core::option::Maybe::{Just, Nothing}
+
+// =============================================================================
+// Network Error Kind
+// =============================================================================
+
+/// The kind of network error that occurred.
+///
+/// This enum categorizes network errors into common types that can be
+/// handled programmatically.
+pub type NetErrorKind =
+    /// The connection was actively refused by the target.
+    | ConnectionRefused
+    /// The connection was reset by the peer.
+    | ConnectionReset
+    /// The connection was aborted by the network.
+    | ConnectionAborted
+    /// The remote host is not reachable.
+    | HostUnreachable
+    /// The network is unreachable.
+    | NetworkUnreachable
+    /// The operation timed out.
+    | TimedOut
+    /// The address is already in use (e.g., binding to a port).
+    | AddrInUse
+    /// The address is not available for use.
+    | AddrNotAvailable
+    /// The operation would block (non-blocking socket).
+    | WouldBlock
+    /// The socket is already connected.
+    | AlreadyConnected
+    /// The socket is not connected.
+    | NotConnected
+    /// Permission denied for the operation.
+    | PermissionDenied
+    /// Invalid input provided to the operation.
+    | InvalidInput
+    /// Invalid data received from the network.
+    | InvalidData
+    /// The connection was interrupted by a signal.
+    | Interrupted
+    /// End of file / connection closed cleanly.
+    | UnexpectedEof
+    /// An OS-level error with a specific code.
+    | OsError(I32)
+    /// Other unspecified error.
+    | Other
+
+// =============================================================================
+// Network Error
+// =============================================================================
+
+/// An error from a network operation.
+///
+/// This type wraps a [`NetErrorKind`] and provides methods for querying
+/// and displaying the error.
+///
+/// # Examples
+///
+/// ```tml
+/// let err = NetError::new(NetErrorKind::ConnectionRefused)
+/// assert(err.kind() is ConnectionRefused)
+/// println(err.to_string())  // "connection refused"
+/// ```
+pub type NetError {
+    kind: NetErrorKind,
+}
+
+impl NetError {
+    /// Creates a new network error with the given kind.
+    pub func new(kind: NetErrorKind) -> NetError {
+        NetError { kind }
+    }
+
+    /// Creates a connection refused error.
+    pub func connection_refused() -> NetError {
+        NetError::new(NetErrorKind::ConnectionRefused)
+    }
+
+    /// Creates a connection reset error.
+    pub func connection_reset() -> NetError {
+        NetError::new(NetErrorKind::ConnectionReset)
+    }
+
+    /// Creates a timed out error.
+    pub func timed_out() -> NetError {
+        NetError::new(NetErrorKind::TimedOut)
+    }
+
+    /// Creates an address in use error.
+    pub func addr_in_use() -> NetError {
+        NetError::new(NetErrorKind::AddrInUse)
+    }
+
+    /// Creates an address not available error.
+    pub func addr_not_available() -> NetError {
+        NetError::new(NetErrorKind::AddrNotAvailable)
+    }
+
+    /// Creates a would block error.
+    pub func would_block() -> NetError {
+        NetError::new(NetErrorKind::WouldBlock)
+    }
+
+    /// Creates an OS error with the given error code.
+    pub func from_os_error(code: I32) -> NetError {
+        NetError::new(NetErrorKind::OsError(code))
+    }
+
+    /// Returns the kind of this error.
+    pub func kind(this) -> NetErrorKind {
+        this.kind
+    }
+
+    /// Returns true if this error indicates the operation would block.
+    pub func is_would_block(this) -> Bool {
+        when this.kind {
+            WouldBlock => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this error is a timeout.
+    pub func is_timeout(this) -> Bool {
+        when this.kind {
+            TimedOut => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this error indicates the connection was refused.
+    pub func is_connection_refused(this) -> Bool {
+        when this.kind {
+            ConnectionRefused => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this error indicates the connection was reset.
+    pub func is_connection_reset(this) -> Bool {
+        when this.kind {
+            ConnectionReset | ConnectionAborted => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this error is an address-related error.
+    pub func is_addr_error(this) -> Bool {
+        when this.kind {
+            AddrInUse | AddrNotAvailable => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this is an OS error with a specific code.
+    pub func is_os_error(this) -> Bool {
+        when this.kind {
+            OsError(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns the OS error code if this is an OS error, otherwise Nothing.
+    pub func os_error_code(this) -> Maybe[I32] {
+        when this.kind {
+            OsError(code) => Just(code),
+            _ => Nothing,
+        }
+    }
+}
+
+impl Display for NetError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        when this.kind {
+            ConnectionRefused => f.write_str("connection refused"),
+            ConnectionReset => f.write_str("connection reset by peer"),
+            ConnectionAborted => f.write_str("connection aborted"),
+            HostUnreachable => f.write_str("host unreachable"),
+            NetworkUnreachable => f.write_str("network unreachable"),
+            TimedOut => f.write_str("operation timed out"),
+            AddrInUse => f.write_str("address already in use"),
+            AddrNotAvailable => f.write_str("address not available"),
+            WouldBlock => f.write_str("operation would block"),
+            AlreadyConnected => f.write_str("socket already connected"),
+            NotConnected => f.write_str("socket not connected"),
+            PermissionDenied => f.write_str("permission denied"),
+            InvalidInput => f.write_str("invalid input"),
+            InvalidData => f.write_str("invalid data"),
+            Interrupted => f.write_str("operation interrupted"),
+            UnexpectedEof => f.write_str("unexpected end of file"),
+            OsError(code) => {
+                f.write_str("os error ")
+                f.write_i64(code as I64)
+            },
+            Other => f.write_str("other network error"),
+        }
+    }
+}
+
+impl Debug for NetError {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        f.write_str("NetError(")
+        Display::fmt(this, f)
+        f.write_str(")")
+    }
+}
+
+// =============================================================================
+// Platform Error Code Mapping
+// =============================================================================
+
+/// Maps a platform-specific error code to a NetErrorKind.
+///
+/// This function handles the mapping from OS-level error codes (errno on POSIX,
+/// WSAGetLastError on Windows) to the appropriate NetErrorKind variant.
+///
+/// # Platform Notes
+///
+/// - On POSIX systems, uses errno values (ECONNREFUSED, ETIMEDOUT, etc.)
+/// - On Windows, uses Winsock error codes (WSAECONNREFUSED, WSAETIMEDOUT, etc.)
+pub func error_kind_from_code(code: I32) -> NetErrorKind {
+    // Common POSIX errno values
+    // These are the most common values; actual values may vary by platform
+    #if POSIX
+    when code {
+        111 => NetErrorKind::ConnectionRefused,  // ECONNREFUSED
+        104 => NetErrorKind::ConnectionReset,    // ECONNRESET
+        103 => NetErrorKind::ConnectionAborted,  // ECONNABORTED
+        113 => NetErrorKind::HostUnreachable,    // EHOSTUNREACH
+        101 => NetErrorKind::NetworkUnreachable, // ENETUNREACH
+        110 => NetErrorKind::TimedOut,           // ETIMEDOUT
+        98  => NetErrorKind::AddrInUse,          // EADDRINUSE
+        99  => NetErrorKind::AddrNotAvailable,   // EADDRNOTAVAIL
+        11  => NetErrorKind::WouldBlock,         // EAGAIN/EWOULDBLOCK
+        106 => NetErrorKind::AlreadyConnected,   // EISCONN
+        107 => NetErrorKind::NotConnected,       // ENOTCONN
+        13  => NetErrorKind::PermissionDenied,   // EACCES
+        22  => NetErrorKind::InvalidInput,       // EINVAL
+        4   => NetErrorKind::Interrupted,        // EINTR
+        _   => NetErrorKind::OsError(code),
+    }
+    #elif WINDOWS
+    // Windows Winsock error codes (WSA*)
+    when code {
+        10061 => NetErrorKind::ConnectionRefused,  // WSAECONNREFUSED
+        10054 => NetErrorKind::ConnectionReset,    // WSAECONNRESET
+        10053 => NetErrorKind::ConnectionAborted,  // WSAECONNABORTED
+        10065 => NetErrorKind::HostUnreachable,    // WSAEHOSTUNREACH
+        10051 => NetErrorKind::NetworkUnreachable, // WSAENETUNREACH
+        10060 => NetErrorKind::TimedOut,           // WSAETIMEDOUT
+        10048 => NetErrorKind::AddrInUse,          // WSAEADDRINUSE
+        10049 => NetErrorKind::AddrNotAvailable,   // WSAEADDRNOTAVAIL
+        10035 => NetErrorKind::WouldBlock,         // WSAEWOULDBLOCK
+        10056 => NetErrorKind::AlreadyConnected,   // WSAEISCONN
+        10057 => NetErrorKind::NotConnected,       // WSAENOTCONN
+        10013 => NetErrorKind::PermissionDenied,   // WSAEACCES
+        10022 => NetErrorKind::InvalidInput,       // WSAEINVAL
+        10004 => NetErrorKind::Interrupted,        // WSAEINTR
+        _     => NetErrorKind::OsError(code),
+    }
+    #else
+    // Generic fallback
+    NetErrorKind::OsError(code)
+    #endif
+}
+
+/// Creates a NetError from a platform-specific error code.
+pub func net_error_from_code(code: I32) -> NetError {
+    NetError::new(error_kind_from_code(code))
+}

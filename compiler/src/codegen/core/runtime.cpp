@@ -107,10 +107,16 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @thread_id()");
     emit_line("");
 
-    // I/O functions (print, println) - polymorphic, accept any type
-    emit_line("; I/O functions");
+    // I/O functions - all check output suppression flag
+    emit_line("; I/O functions (check output suppression)");
     emit_line("declare void @print(ptr)");
     emit_line("declare void @println(ptr)");
+    emit_line("declare void @print_i32(i32)");
+    emit_line("declare void @print_i64(i64)");
+    emit_line("declare void @print_f32(float)");
+    emit_line("declare void @print_f64(double)");
+    emit_line("declare void @print_bool(i32)");
+    emit_line("declare void @print_char(i32)");
     emit_line("");
 
     // NOTE: Math functions moved to core::math module
@@ -338,6 +344,10 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i32 @char_code(i32)");
     emit_line("declare i32 @char_from_code(i32)");
     emit_line("declare ptr @char_to_string(i8)");
+    emit_line("declare ptr @utf8_2byte_to_string(i8, i8)");
+    emit_line("declare ptr @utf8_3byte_to_string(i8, i8, i8)");
+    emit_line("declare ptr @utf8_4byte_to_string(i8, i8, i8, i8)");
+    emit_line("declare i64 @tml_random_seed()");
     emit_line("");
 
     // StringBuilder utilities (matches runtime/string.c)

@@ -280,10 +280,9 @@ void LLVMIRGen::generate_pending_instantiations() {
                             for (size_t mi = 0; mi < impl_decl.methods.size(); ++mi) {
                                 const auto& method_decl = impl_decl.methods[mi];
                                 if (method_decl.name == pim.method_name) {
-                                    gen_impl_method_instantiation(pim.mangled_type_name,
-                                                                  method_decl, pim.type_subs,
-                                                                  impl_decl.generics,
-                                                                  pim.method_type_suffix);
+                                    gen_impl_method_instantiation(
+                                        pim.mangled_type_name, method_decl, pim.type_subs,
+                                        impl_decl.generics, pim.method_type_suffix);
                                     found = true;
                                     break;
                                 }
@@ -463,7 +462,8 @@ void LLVMIRGen::gen_class_instantiation(const parser::ClassDecl& c,
     size_t vtable_idx = 0;
     for (const auto& method : c.methods) {
         if (method.is_virtual || method.is_abstract) {
-            std::string method_func_name = "@tml_" + get_suite_prefix() + mangled + "_" + method.name;
+            std::string method_func_name =
+                "@tml_" + get_suite_prefix() + mangled + "_" + method.name;
             vtable_func_names.push_back(method_func_name);
             vtable_methods.push_back({method.name, mangled, mangled, vtable_idx++});
         }

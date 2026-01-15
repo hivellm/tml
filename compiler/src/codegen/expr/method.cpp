@@ -981,17 +981,18 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                 // Handle method-level generic type arguments (e.g., cast[U8])
                 // Use current_type_subs_ to resolve any type parameters (e.g., U -> U8)
-                // Method-level type params come AFTER impl-level type params in func_sig->type_params
-                // The impl-level params correspond to named.type_args (e.g., RawPtr[I64] -> T=I64)
-                // So we skip the first named.type_args.size() params when mapping call.type_args
+                // Method-level type params come AFTER impl-level type params in
+                // func_sig->type_params The impl-level params correspond to named.type_args (e.g.,
+                // RawPtr[I64] -> T=I64) So we skip the first named.type_args.size() params when
+                // mapping call.type_args
                 if (!call.type_args.empty() && !func_sig->type_params.empty()) {
                     size_t impl_param_count = named.type_args.size();
                     for (size_t i = 0; i < call.type_args.size(); ++i) {
                         size_t param_idx = impl_param_count + i;
                         if (param_idx < func_sig->type_params.size()) {
                             // Convert parser type to semantic type, using current type subs
-                            auto semantic_type =
-                                resolve_parser_type_with_subs(*call.type_args[i], current_type_subs_);
+                            auto semantic_type = resolve_parser_type_with_subs(*call.type_args[i],
+                                                                               current_type_subs_);
                             if (semantic_type) {
                                 type_subs[func_sig->type_params[param_idx]] = semantic_type;
                                 // Build method type suffix for mangling
@@ -1011,7 +1012,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     if (!method_type_suffix.empty()) {
                         method_for_key += "__" + method_type_suffix;
                     }
-                    std::string mangled_method_name = "tml_" + mangled_type_name + "_" + method_for_key;
+                    std::string mangled_method_name =
+                        "tml_" + mangled_type_name + "_" + method_for_key;
 
                     // Check locally defined impls first
                     auto impl_it = pending_generic_impls_.find(named.name);
@@ -1064,8 +1066,9 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                         // Request instantiation for both local and imported generic impls
                         if (impl_it != pending_generic_impls_.end() ||
                             !imported_type_params.empty()) {
-                            pending_impl_method_instantiations_.push_back(PendingImplMethod{
-                                mangled_type_name, method, type_subs, named.name, method_type_suffix});
+                            pending_impl_method_instantiations_.push_back(
+                                PendingImplMethod{mangled_type_name, method, type_subs, named.name,
+                                                  method_type_suffix});
                             generated_impl_methods_.insert(mangled_method_name);
                         }
                     }
@@ -1083,7 +1086,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 if (method_it != functions_.end()) {
                     fn_name = method_it->second.llvm_name;
                 } else {
-                    fn_name = "@tml_" + get_suite_prefix() + mangled_type_name + "_" + full_method_name;
+                    fn_name =
+                        "@tml_" + get_suite_prefix() + mangled_type_name + "_" + full_method_name;
                 }
                 std::string impl_receiver_val;
 
@@ -1147,9 +1151,11 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             int expected_bits = std::stoi(expected_type.substr(1));
                             std::string coerced = fresh_reg();
                             if (expected_bits > actual_bits) {
-                                emit_line("  " + coerced + " = sext " + actual_type + " " + val + " to " + expected_type);
+                                emit_line("  " + coerced + " = sext " + actual_type + " " + val +
+                                          " to " + expected_type);
                             } else {
-                                emit_line("  " + coerced + " = trunc " + actual_type + " " + val + " to " + expected_type);
+                                emit_line("  " + coerced + " = trunc " + actual_type + " " + val +
+                                          " to " + expected_type);
                             }
                             val = coerced;
                         }

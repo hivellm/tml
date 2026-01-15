@@ -104,49 +104,55 @@ auto LLVMIRGen::gen_try(const parser::TryExpr& try_expr) -> std::string {
     emit_line("  " + data_ptr + " = getelementptr inbounds " + expr_type + ", ptr " + alloca_reg +
               ", i32 0, i32 1");
 
-    // Determine the inner type
-    // For Outcome[T, E], we want T
-    // For Maybe[T], we want T
-    // We need to figure out the LLVM type for T
-    // For now, use a conservative approach - load as the largest reasonable type
-    // TODO: Get the actual inner type from type inference
-
-    // Try to determine inner type from the mangled name
-    // e.g., Outcome__I32__Str means T=I32, E=Str
+    // Determine the inner type using type inference
+    // For Outcome[T, E], we want T; For Maybe[T], we want T
     std::string inner_type = "i64"; // Default fallback
 
-    // Find the type arguments in the mangled name
-    size_t pos = expr_type.find("__");
-    if (pos != std::string::npos) {
-        std::string after_name = expr_type.substr(pos + 2);
-        // First type arg is the success type
-        size_t end_pos = after_name.find("__");
-        if (end_pos == std::string::npos) {
-            end_pos = after_name.length();
+    // Try to get the actual type from type inference
+    auto semantic_type = infer_expr_type(*try_expr.expr);
+    if (semantic_type && semantic_type->is<types::NamedType>()) {
+        const auto& named = semantic_type->as<types::NamedType>();
+        if ((named.name == "Outcome" || named.name == "Maybe") && !named.type_args.empty()) {
+            // First type arg is the success/inner type
+            inner_type = llvm_type_from_semantic(named.type_args[0]);
         }
-        std::string type_name = after_name.substr(0, end_pos);
+    }
 
-        // Convert type name to LLVM type
-        if (type_name == "I8" || type_name == "U8")
-            inner_type = "i8";
-        else if (type_name == "I16" || type_name == "U16")
-            inner_type = "i16";
-        else if (type_name == "I32" || type_name == "U32")
-            inner_type = "i32";
-        else if (type_name == "I64" || type_name == "U64")
-            inner_type = "i64";
-        else if (type_name == "I128" || type_name == "U128")
-            inner_type = "i128";
-        else if (type_name == "F32")
-            inner_type = "float";
-        else if (type_name == "F64")
-            inner_type = "double";
-        else if (type_name == "Bool")
-            inner_type = "i1";
-        else if (type_name == "Str")
-            inner_type = "ptr";
-        else
-            inner_type = "%struct." + type_name; // User-defined type
+    // Fallback: try to determine inner type from the mangled name
+    // e.g., Outcome__I32__Str means T=I32, E=Str
+    if (inner_type == "i64") {
+        size_t pos = expr_type.find("__");
+        if (pos != std::string::npos) {
+            std::string after_name = expr_type.substr(pos + 2);
+            // First type arg is the success type
+            size_t end_pos = after_name.find("__");
+            if (end_pos == std::string::npos) {
+                end_pos = after_name.length();
+            }
+            std::string type_name = after_name.substr(0, end_pos);
+
+            // Convert type name to LLVM type
+            if (type_name == "I8" || type_name == "U8")
+                inner_type = "i8";
+            else if (type_name == "I16" || type_name == "U16")
+                inner_type = "i16";
+            else if (type_name == "I32" || type_name == "U32")
+                inner_type = "i32";
+            else if (type_name == "I64" || type_name == "U64")
+                inner_type = "i64";
+            else if (type_name == "I128" || type_name == "U128")
+                inner_type = "i128";
+            else if (type_name == "F32")
+                inner_type = "float";
+            else if (type_name == "F64")
+                inner_type = "double";
+            else if (type_name == "Bool")
+                inner_type = "i1";
+            else if (type_name == "Str")
+                inner_type = "ptr";
+            else
+                inner_type = "%struct." + type_name; // User-defined type
+        }
     }
 
     std::string result = fresh_reg();

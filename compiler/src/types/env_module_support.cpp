@@ -83,12 +83,13 @@ void TypeEnv::import_symbol(const std::string& module_path, const std::string& s
 
         // Conflict: same local name from different source
         // Store in conflict set for later error reporting during resolution
-        import_conflicts_[local_name].insert(existing->second.module_path + "::" +
-                                              existing->second.original_name);
+        import_conflicts_[local_name].insert(existing->second.module_path +
+                                             "::" + existing->second.original_name);
         import_conflicts_[local_name].insert(module_path + "::" + symbol_name);
-        TML_DEBUG_LN("[MODULE] Import conflict detected for '" << local_name << "': "
-                     << existing->second.module_path << "::" << existing->second.original_name
-                     << " vs " << module_path << "::" << symbol_name);
+        TML_DEBUG_LN("[MODULE] Import conflict detected for '"
+                     << local_name << "': " << existing->second.module_path
+                     << "::" << existing->second.original_name << " vs " << module_path
+                     << "::" << symbol_name);
     }
 
     // Create the imported symbol entry

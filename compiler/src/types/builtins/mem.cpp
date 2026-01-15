@@ -139,23 +139,17 @@ void TypeEnv::init_builtin_mem() {
 
     // dealloc(ptr: *Unit) -> Unit - Simple deallocation for tests
     functions_["dealloc"].push_back(
-        FuncSig{"dealloc",
-                {make_ptr(make_unit())},
-                make_unit(),
-                {},
-                false,
-                builtin_span});
+        FuncSig{"dealloc", {make_ptr(make_unit())}, make_unit(), {}, false, builtin_span});
 
     // ============ Simple I32 Memory Operations (for tests) ============
 
     // read_i32(ptr: *Unit) -> I32 - Read I32 from memory
-    functions_["read_i32"].push_back(
-        FuncSig{"read_i32",
-                {make_ptr(make_unit())},
-                make_primitive(PrimitiveKind::I32),
-                {},
-                false,
-                builtin_span});
+    functions_["read_i32"].push_back(FuncSig{"read_i32",
+                                             {make_ptr(make_unit())},
+                                             make_primitive(PrimitiveKind::I32),
+                                             {},
+                                             false,
+                                             builtin_span});
 
     // write_i32(ptr: *Unit, value: I32) -> Unit - Write I32 to memory
     functions_["write_i32"].push_back(

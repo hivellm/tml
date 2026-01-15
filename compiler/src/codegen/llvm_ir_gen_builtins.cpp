@@ -789,7 +789,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
             // Check if this is a class constructor call
             if (method == "new") {
                 auto class_def = env_.lookup_class(type_name);
-                bool is_generic_class = pending_generic_classes_.find(type_name) != pending_generic_classes_.end();
+                bool is_generic_class =
+                    pending_generic_classes_.find(type_name) != pending_generic_classes_.end();
 
                 if (class_def.has_value() || is_generic_class) {
                     std::string class_name = type_name;
@@ -853,7 +854,8 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         arg_types.push_back(last_expr_type_.empty() ? "i64" : last_expr_type_);
                     }
 
-                    // Build constructor lookup key based on argument types (for overload resolution)
+                    // Build constructor lookup key based on argument types (for overload
+                    // resolution)
                     std::string ctor_key = class_name + "_new";
                     if (!arg_types.empty()) {
                         for (const auto& at : arg_types) {

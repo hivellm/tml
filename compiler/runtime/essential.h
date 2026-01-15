@@ -35,6 +35,27 @@ extern "C" {
 #endif
 
 // ============================================================================
+// Output Suppression (for test runner)
+// ============================================================================
+
+/**
+ * @brief Sets the output suppression flag.
+ *
+ * When set to non-zero, print/println functions will not produce output.
+ * This is used by the test runner to suppress test output when not in
+ * verbose mode.
+ *
+ * @param suppress Non-zero to suppress output, zero to enable output.
+ */
+void tml_set_output_suppressed(int32_t suppress);
+
+/**
+ * @brief Gets the current output suppression state.
+ * @return Non-zero if output is suppressed, zero otherwise.
+ */
+int32_t tml_get_output_suppressed(void);
+
+// ============================================================================
 // IO Functions
 // ============================================================================
 

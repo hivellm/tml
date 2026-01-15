@@ -32,10 +32,10 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
 
         if (call.args.empty()) {
             if (with_newline) {
-                std::string result = fresh_reg();
-                emit_line("  " + result + " = call i32 @putchar(i32 10)");
-                last_expr_type_ = "i32";
-                return result;
+                // Use runtime println(null) for just newline - respects suppression
+                emit_line("  call void @println(ptr null)");
+                last_expr_type_ = "void";
+                return "0";
             }
             last_expr_type_ = "void";
             return "0";
@@ -95,59 +95,34 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
             arg_type = PrintArgType::Str;
         }
 
-        std::string result = fresh_reg();
-
+        // Use runtime print functions that respect output suppression flag
         switch (arg_type) {
         case PrintArgType::Str: {
             if (with_newline) {
-                emit_line("  " + result + " = call i32 @puts(ptr " + arg_val + ")");
+                // Use runtime println() which checks suppression flag
+                emit_line("  call void @println(ptr " + arg_val + ")");
             } else {
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + arg_val +
-                          ")");
+                // Use runtime print() which checks suppression flag
+                emit_line("  call void @print(ptr " + arg_val + ")");
             }
             break;
         }
         case PrintArgType::Bool: {
-            std::string label_true = fresh_label("print.true");
-            std::string label_false = fresh_label("print.false");
-            std::string label_end = fresh_label("print.end");
-
-            emit_line("  br i1 " + arg_val + ", label %" + label_true + ", label %" + label_false);
-
-            emit_line(label_true + ":");
-            std::string r1 = fresh_reg();
+            // Use runtime print_bool() which checks suppression flag
+            std::string bool_val = fresh_reg();
+            emit_line("  " + bool_val + " = zext i1 " + arg_val + " to i32");
+            emit_line("  call void @print_bool(i32 " + bool_val + ")");
             if (with_newline) {
-                emit_line("  " + r1 + " = call i32 @puts(ptr @.str.true)");
-            } else {
-                emit_line("  " + r1 +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.true)");
+                // Use runtime println(null) for newline with suppression check
+                emit_line("  call void @println(ptr null)");
             }
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_false + ":");
-            std::string r2 = fresh_reg();
-            if (with_newline) {
-                emit_line("  " + r2 + " = call i32 @puts(ptr @.str.false)");
-            } else {
-                emit_line("  " + r2 +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.false)");
-            }
-            emit_line("  br label %" + label_end);
-
-            emit_line(label_end + ":");
-            block_terminated_ = false;
-            last_expr_type_ = "i32"; // Bool print returns i32
-            return "0";
+            break;
         }
         case PrintArgType::I64: {
+            // Use runtime print_i64() which checks suppression flag
+            emit_line("  call void @print_i64(i64 " + arg_val + ")");
             if (with_newline) {
-                emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.i64, i64 " +
-                          arg_val + ")");
-            } else {
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.i64.no_nl, i64 " + arg_val +
-                          ")");
+                emit_line("  call void @println(ptr null)");
             }
             break;
         }
@@ -155,33 +130,27 @@ auto LLVMIRGen::try_gen_builtin_io(const std::string& fn_name, const parser::Cal
             // For printf, floats are promoted to double - convert if needed
             std::string double_val = fresh_reg();
             emit_line("  " + double_val + " = fpext float " + arg_val + " to double");
+            // Use runtime print_f64() which checks suppression flag
+            emit_line("  call void @print_f64(double " + double_val + ")");
             if (with_newline) {
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.float, double " + double_val +
-                          ")");
-            } else {
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.float.no_nl, double " +
-                          double_val + ")");
+                emit_line("  call void @println(ptr null)");
             }
             break;
         }
         case PrintArgType::Int:
         case PrintArgType::Unknown:
         default: {
+            // Use runtime print_i32() which checks suppression flag
+            emit_line("  call void @print_i32(i32 " + arg_val + ")");
             if (with_newline) {
-                emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.int, i32 " +
-                          arg_val + ")");
-            } else {
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.int.no_nl, i32 " + arg_val +
-                          ")");
+                emit_line("  call void @println(ptr null)");
             }
             break;
         }
         }
-        last_expr_type_ = "i32"; // print/println return i32
-        return result;
+        // Print functions return void/Unit in TML - return dummy 0
+        last_expr_type_ = "void";
+        return "0";
     }
 
     // panic(msg: Str) -> Never

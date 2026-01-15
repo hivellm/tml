@@ -1,379 +1,284 @@
-# Tasks: Network Standard Library Implementation
+# Tasks: Network Standard Library
 
-## Overview
+**Status**: In Progress (~10%)
 
-Implement a high-performance, memory-safe networking standard library for TML with TCP/UDP sockets, HTTP client/server, and a NestJS-inspired decorator-based web framework.
-
----
+**Priority**: Medium - Standard library feature
 
 ## Phase 1: Core Socket Infrastructure
 
-### 1.1 Address Types ✅ COMPLETE
+### 1.1 Address Types
+- [x] 1.1.1 Define `IpAddr` enum (V4, V6)
+- [x] 1.1.2 Define `Ipv4Addr` struct (4 bytes with octets array)
+- [x] 1.1.3 Define `Ipv6Addr` struct (16 bytes with segments array)
+- [x] 1.1.4 Define `SocketAddr` struct (ip + port)
+- [x] 1.1.5 Define `SocketAddrV4` struct (IPv4 + port)
+- [x] 1.1.6 Define `SocketAddrV6` struct (IPv6 + port + flowinfo + scope_id)
+- [x] 1.1.7 Implement `parse()` for address strings
+- [x] 1.1.8 Implement `Display` behavior for all types
+- [x] 1.1.9 Implement `Copy`, `Duplicate`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default`, `Debug`
+- [x] 1.1.10 Add classification methods: `is_loopback()`, `is_private()`, `is_multicast()`, `is_link_local()`
+- [x] 1.1.11 Add conversion methods: `to_ipv6_mapped()`, `to_ipv6_compatible()`, `to_ipv4()`
+- [x] 1.1.12 Add tests for address parsing and formatting
 
-> **Implementation**: `lib/core/src/net/` (ip.tml, socket.tml, parser.tml, mod.tml)
-> **Tests**: `lib/core/tests/pending/net.test.tml`
+### 1.2 Error Types
+- [x] 1.2.1 Define `AddrParseError` enum (Empty, InvalidIpv4, InvalidIpv6, InvalidPort, InvalidSocketAddr)
+- [x] 1.2.2 Implement `Display` for `AddrParseError`
+- [x] 1.2.3 Define `NetError` enum with all variants
+- [x] 1.2.4 Implement `Display` for `NetError`
+- [x] 1.2.5 Map platform error codes to `NetError` (POSIX + Windows)
 
-- [x] Define `IpAddr` enum (V4, V6)
-- [x] Define `Ipv4Addr` struct (4 bytes with octets array)
-- [x] Define `Ipv6Addr` struct (16 bytes with segments array)
-- [x] Define `SocketAddr` struct (ip + port)
-- [x] Define `SocketAddrV4` struct (IPv4 + port)
-- [x] Define `SocketAddrV6` struct (IPv6 + port + flowinfo + scope_id)
-- [x] Implement `parse()` for address strings (via parser.tml)
-- [x] Implement `Display` behavior for all types
-- [x] Implement additional behaviors: `Copy`, `Duplicate`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default`, `Debug`
-- [x] Add classification methods: `is_loopback()`, `is_private()`, `is_multicast()`, `is_link_local()`, etc.
-- [x] Add conversion methods: `to_ipv6_mapped()`, `to_ipv6_compatible()`, `to_ipv4()`
-- [x] Add tests for address parsing and formatting
+### 1.3 Buffer Management
+- [ ] 1.3.1 Define `Buffer` struct with capacity and length
+- [ ] 1.3.2 Define `BufferView` for zero-copy borrowed slices
+- [ ] 1.3.3 Implement `BufferPool` for pre-allocated buffers
+- [ ] 1.3.4 Add `Arena` allocator for request-scoped memory
+- [ ] 1.3.5 Implement `read_into()` and `write_from()` methods
+- [ ] 1.3.6 Add tests for buffer operations and pool reuse
 
-### 1.2 Buffer Management
-
-- [ ] Define `Buffer` struct with capacity and length
-- [ ] Define `BufferView` for zero-copy borrowed slices
-- [ ] Implement `BufferPool` for pre-allocated buffers
-- [ ] Add `Arena` allocator for request-scoped memory
-- [ ] Implement `read_into()` and `write_from()` methods
-- [ ] Add tests for buffer operations and pool reuse
-
-### 1.3 Platform Abstraction Layer
-
-- [ ] Create `sys/mod.tml` with platform detection
-- [ ] Implement Windows socket wrappers (Winsock2)
-- [ ] Implement POSIX socket wrappers (BSD sockets)
-- [ ] Define `RawSocket` handle type
-- [ ] Implement `socket()`, `bind()`, `listen()`, `accept()`
-- [ ] Implement `connect()`, `send()`, `recv()`, `close()`
-- [ ] Add non-blocking mode support (`set_nonblocking()`)
-
-### 1.4 Error Types (Partial)
-
-> **Implementation**: `lib/core/src/net/parser.tml` (AddrParseError only)
-
-- [x] Define `AddrParseError` enum with variants (Empty, InvalidIpv4, InvalidIpv6, InvalidPort, InvalidSocketAddr)
-- [x] Implement `Display` for parse error messages
-- [ ] Define `NetError` enum with variants:
-  - `ConnectionRefused`
-  - `ConnectionReset`
-  - `TimedOut`
-  - `AddrInUse`
-  - `AddrNotAvailable`
-  - `WouldBlock`
-  - `InvalidInput`
-  - `Other(I32)`
-- [ ] Implement `Display` for network error messages
-- [ ] Map platform error codes to `NetError`
-
----
+### 1.4 Platform Abstraction Layer
+- [ ] 1.4.1 Create `sys/mod.tml` with platform detection
+- [ ] 1.4.2 Implement Windows socket wrappers (Winsock2)
+- [ ] 1.4.3 Implement POSIX socket wrappers (BSD sockets)
+- [ ] 1.4.4 Define `RawSocket` handle type
+- [ ] 1.4.5 Implement `socket()`, `bind()`, `listen()`, `accept()`
+- [ ] 1.4.6 Implement `connect()`, `send()`, `recv()`, `close()`
+- [ ] 1.4.7 Add non-blocking mode support (`set_nonblocking()`)
 
 ## Phase 2: TCP Implementation
 
 ### 2.1 TCP Listener
-
-- [ ] Define `TcpListener` struct
-- [ ] Implement `bind(addr: SocketAddr) -> Outcome[TcpListener, NetError]`
-- [ ] Implement `accept() -> Outcome[TcpStream, NetError]`
-- [ ] Implement `local_addr() -> SocketAddr`
-- [ ] Add `set_ttl()`, `ttl()` methods
-- [ ] Implement `incoming() -> TcpIncoming` iterator
-- [ ] Add tests for listener bind and accept
+- [ ] 2.1.1 Define `TcpListener` struct
+- [ ] 2.1.2 Implement `bind(addr: SocketAddr) -> Outcome[TcpListener, NetError]`
+- [ ] 2.1.3 Implement `accept() -> Outcome[TcpStream, NetError]`
+- [ ] 2.1.4 Implement `local_addr() -> SocketAddr`
+- [ ] 2.1.5 Add `set_ttl()`, `ttl()` methods
+- [ ] 2.1.6 Implement `incoming() -> TcpIncoming` iterator
+- [ ] 2.1.7 Add tests for listener bind and accept
 
 ### 2.2 TCP Stream
+- [ ] 2.2.1 Define `TcpStream` struct
+- [ ] 2.2.2 Implement `connect(addr: SocketAddr) -> Outcome[TcpStream, NetError]`
+- [ ] 2.2.3 Implement `Read` behavior (`read()`, `read_exact()`)
+- [ ] 2.2.4 Implement `Write` behavior (`write()`, `write_all()`, `flush()`)
+- [ ] 2.2.5 Add `peer_addr()`, `local_addr()` methods
+- [ ] 2.2.6 Implement `set_read_timeout()`, `set_write_timeout()`
+- [ ] 2.2.7 Add `set_nodelay()`, `nodelay()` for Nagle's algorithm
+- [ ] 2.2.8 Implement `shutdown(how: Shutdown)` method
+- [ ] 2.2.9 Add tests for TCP echo client/server
 
-- [ ] Define `TcpStream` struct
-- [ ] Implement `connect(addr: SocketAddr) -> Outcome[TcpStream, NetError]`
-- [ ] Implement `Read` behavior (`read()`, `read_exact()`)
-- [ ] Implement `Write` behavior (`write()`, `write_all()`, `flush()`)
-- [ ] Add `peer_addr()`, `local_addr()` methods
-- [ ] Implement `set_read_timeout()`, `set_write_timeout()`
-- [ ] Add `set_nodelay()`, `nodelay()` for Nagle's algorithm
-- [ ] Implement `shutdown(how: Shutdown)` method
-- [ ] Add tests for TCP echo client/server
-
-### 2.3 Async TCP (requires async runtime)
-
-- [ ] Define `AsyncTcpListener` struct
-- [ ] Define `AsyncTcpStream` struct
-- [ ] Implement async `accept()` with `await`
-- [ ] Implement async `read()` and `write()` with `await`
-- [ ] Integrate with io_uring (Linux) / IOCP (Windows)
-- [ ] Add tests for async TCP operations
-
----
+### 2.3 Async TCP
+- [ ] 2.3.1 Define `AsyncTcpListener` struct
+- [ ] 2.3.2 Define `AsyncTcpStream` struct
+- [ ] 2.3.3 Implement async `accept()` with `await`
+- [ ] 2.3.4 Implement async `read()` and `write()` with `await`
+- [ ] 2.3.5 Integrate with io_uring (Linux) / IOCP (Windows)
+- [ ] 2.3.6 Add tests for async TCP operations
 
 ## Phase 3: UDP Implementation
 
 ### 3.1 UDP Socket
-
-- [ ] Define `UdpSocket` struct
-- [ ] Implement `bind(addr: SocketAddr) -> Outcome[UdpSocket, NetError]`
-- [ ] Implement `send_to(buf: ref [U8], addr: SocketAddr) -> Outcome[U64, NetError]`
-- [ ] Implement `recv_from(buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), NetError]`
-- [ ] Add `connect()` for connected UDP mode
-- [ ] Implement `send()` and `recv()` for connected sockets
-- [ ] Add multicast support: `join_multicast_v4()`, `leave_multicast_v4()`
-- [ ] Add broadcast support: `set_broadcast()`, `broadcast()`
-- [ ] Add tests for UDP send/receive
+- [ ] 3.1.1 Define `UdpSocket` struct
+- [ ] 3.1.2 Implement `bind(addr: SocketAddr) -> Outcome[UdpSocket, NetError]`
+- [ ] 3.1.3 Implement `send_to(buf: ref [U8], addr: SocketAddr) -> Outcome[U64, NetError]`
+- [ ] 3.1.4 Implement `recv_from(buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), NetError]`
+- [ ] 3.1.5 Add `connect()` for connected UDP mode
+- [ ] 3.1.6 Implement `send()` and `recv()` for connected sockets
+- [ ] 3.1.7 Add multicast support: `join_multicast_v4()`, `leave_multicast_v4()`
+- [ ] 3.1.8 Add broadcast support: `set_broadcast()`, `broadcast()`
+- [ ] 3.1.9 Add tests for UDP send/receive
 
 ### 3.2 Async UDP
-
-- [ ] Define `AsyncUdpSocket` struct
-- [ ] Implement async `send_to()` and `recv_from()`
-- [ ] Add tests for async UDP operations
-
----
+- [ ] 3.2.1 Define `AsyncUdpSocket` struct
+- [ ] 3.2.2 Implement async `send_to()` and `recv_from()`
+- [ ] 3.2.3 Add tests for async UDP operations
 
 ## Phase 4: HTTP Implementation
 
 ### 4.1 HTTP Types
-
-- [ ] Define `Method` enum (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
-- [ ] Define `StatusCode` struct with common constants
-- [ ] Define `Headers` type (case-insensitive map)
-- [ ] Define `Version` enum (HTTP10, HTTP11, HTTP2)
-- [ ] Implement header parsing and serialization
-- [ ] Add tests for HTTP type operations
+- [ ] 4.1.1 Define `Method` enum (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+- [ ] 4.1.2 Define `StatusCode` struct with common constants
+- [ ] 4.1.3 Define `Headers` type (case-insensitive map)
+- [ ] 4.1.4 Define `Version` enum (HTTP10, HTTP11, HTTP2)
+- [ ] 4.1.5 Implement header parsing and serialization
+- [ ] 4.1.6 Add tests for HTTP type operations
 
 ### 4.2 HTTP Request
-
-- [ ] Define `Request[B]` generic struct
-- [ ] Fields: method, uri, version, headers, body
-- [ ] Implement `builder()` pattern for construction
-- [ ] Implement body reading with streaming support
-- [ ] Add `Request::get(uri)`, `Request::post(uri)` shortcuts
-- [ ] Add tests for request building and parsing
+- [ ] 4.2.1 Define `Request[B]` generic struct
+- [ ] 4.2.2 Implement `builder()` pattern for construction
+- [ ] 4.2.3 Implement body reading with streaming support
+- [ ] 4.2.4 Add `Request::get(uri)`, `Request::post(uri)` shortcuts
+- [ ] 4.2.5 Add tests for request building and parsing
 
 ### 4.3 HTTP Response
-
-- [ ] Define `Response[B]` generic struct
-- [ ] Fields: status, version, headers, body
-- [ ] Implement `builder()` pattern for construction
-- [ ] Add `Response::ok()`, `Response::not_found()` shortcuts
-- [ ] Implement streaming body support
-- [ ] Add tests for response building and serialization
+- [ ] 4.3.1 Define `Response[B]` generic struct
+- [ ] 4.3.2 Implement `builder()` pattern for construction
+- [ ] 4.3.3 Add `Response::ok()`, `Response::not_found()` shortcuts
+- [ ] 4.3.4 Implement streaming body support
+- [ ] 4.3.5 Add tests for response building and serialization
 
 ### 4.4 HTTP Client
+- [ ] 4.4.1 Define `HttpClient` struct with connection pool
+- [ ] 4.4.2 Implement `send(req: Request) -> Outcome[Response, HttpError]`
+- [ ] 4.4.3 Add connection pooling with configurable limits
+- [ ] 4.4.4 Implement keep-alive connection reuse
+- [ ] 4.4.5 Add timeout configuration
+- [ ] 4.4.6 Implement redirect following (configurable)
+- [ ] 4.4.7 Add TLS support for HTTPS
+- [ ] 4.4.8 Add tests for HTTP client operations
 
-- [ ] Define `HttpClient` struct with connection pool
-- [ ] Implement `send(req: Request) -> Outcome[Response, HttpError]`
-- [ ] Add connection pooling with configurable limits
-- [ ] Implement keep-alive connection reuse
-- [ ] Add timeout configuration
-- [ ] Implement redirect following (configurable)
-- [ ] Add TLS support for HTTPS
-- [ ] Add tests for HTTP client operations
+### 4.5 HTTP Server
+- [ ] 4.5.1 Define `HttpServer` struct
+- [ ] 4.5.2 Implement `bind(addr: SocketAddr) -> Outcome[HttpServer, NetError]`
+- [ ] 4.5.3 Define `Handler` type: `func(Request) -> Response`
+- [ ] 4.5.4 Implement request parsing from TCP stream
+- [ ] 4.5.5 Implement response serialization to TCP stream
+- [ ] 4.5.6 Add connection handling with keep-alive
+- [ ] 4.5.7 Implement graceful shutdown
+- [ ] 4.5.8 Add tests for HTTP server
 
-### 4.5 HTTP Server (Low-Level)
-
-- [ ] Define `HttpServer` struct
-- [ ] Implement `bind(addr: SocketAddr) -> Outcome[HttpServer, NetError]`
-- [ ] Define `Handler` type: `func(Request) -> Response`
-- [ ] Implement request parsing from TCP stream
-- [ ] Implement response serialization to TCP stream
-- [ ] Add connection handling with keep-alive
-- [ ] Implement graceful shutdown
-- [ ] Add tests for HTTP server
-
----
-
-## Phase 5: Decorator-Based Server Framework
+## Phase 5: Web Framework (NestJS-inspired)
 
 ### 5.1 Core Decorators
-
-- [ ] Implement `@Controller(path: Str)` decorator
-- [ ] Implement `@Get(path: Str)` route decorator
-- [ ] Implement `@Post(path: Str)` route decorator
-- [ ] Implement `@Put(path: Str)` route decorator
-- [ ] Implement `@Delete(path: Str)` route decorator
-- [ ] Implement `@Patch(path: Str)` route decorator
-- [ ] Store decorator metadata in compile-time reflection data
-- [ ] Add tests for decorator parsing
+- [ ] 5.1.1 Implement `@Controller(path: Str)` decorator
+- [ ] 5.1.2 Implement `@Get(path: Str)` route decorator
+- [ ] 5.1.3 Implement `@Post(path: Str)` route decorator
+- [ ] 5.1.4 Implement `@Put(path: Str)` route decorator
+- [ ] 5.1.5 Implement `@Delete(path: Str)` route decorator
+- [ ] 5.1.6 Implement `@Patch(path: Str)` route decorator
+- [ ] 5.1.7 Store decorator metadata in compile-time reflection data
+- [ ] 5.1.8 Add tests for decorator parsing
 
 ### 5.2 Parameter Decorators
-
-- [ ] Implement `@Param(name: Str)` for URL parameters
-- [ ] Implement `@Query(name: Str)` for query string
-- [ ] Implement `@Body` for request body deserialization
-- [ ] Implement `@Header(name: Str)` for header values
-- [ ] Implement `@Req` for raw request access
-- [ ] Implement `@Res` for raw response access
-- [ ] Add automatic type coercion for parameters
-- [ ] Add tests for parameter injection
+- [ ] 5.2.1 Implement `@Param(name: Str)` for URL parameters
+- [ ] 5.2.2 Implement `@Query(name: Str)` for query string
+- [ ] 5.2.3 Implement `@Body` for request body deserialization
+- [ ] 5.2.4 Implement `@Header(name: Str)` for header values
+- [ ] 5.2.5 Implement `@Req` for raw request access
+- [ ] 5.2.6 Implement `@Res` for raw response access
+- [ ] 5.2.7 Add automatic type coercion for parameters
+- [ ] 5.2.8 Add tests for parameter injection
 
 ### 5.3 Router
-
-- [ ] Define `Router` struct with route tree
-- [ ] Implement path pattern matching with parameters (`:id`, `*wildcard`)
-- [ ] Implement route registration from decorated classes
-- [ ] Add route conflict detection
-- [ ] Implement efficient route lookup (radix tree)
-- [ ] Add tests for routing
+- [ ] 5.3.1 Define `Router` struct with route tree
+- [ ] 5.3.2 Implement path pattern matching with parameters (`:id`, `*wildcard`)
+- [ ] 5.3.3 Implement route registration from decorated classes
+- [ ] 5.3.4 Add route conflict detection
+- [ ] 5.3.5 Implement efficient route lookup (radix tree)
+- [ ] 5.3.6 Add tests for routing
 
 ### 5.4 Middleware System
-
-- [ ] Define `Middleware` behavior
-- [ ] Implement `@Middleware` decorator for classes
-- [ ] Implement `@UseMiddleware(M)` decorator for controllers/routes
-- [ ] Define middleware execution order (global -> controller -> route)
-- [ ] Implement `next()` pattern for middleware chaining
-- [ ] Add built-in middleware: `Logger`, `Cors`, `Compression`
-- [ ] Add tests for middleware chain
+- [ ] 5.4.1 Define `Middleware` behavior
+- [ ] 5.4.2 Implement `@Middleware` decorator for classes
+- [ ] 5.4.3 Implement `@UseMiddleware(M)` decorator
+- [ ] 5.4.4 Define middleware execution order (global -> controller -> route)
+- [ ] 5.4.5 Implement `next()` pattern for middleware chaining
+- [ ] 5.4.6 Add built-in middleware: `Logger`, `Cors`, `Compression`
+- [ ] 5.4.7 Add tests for middleware chain
 
 ### 5.5 Guards and Interceptors
-
-- [ ] Define `Guard` behavior with `canActivate()` method
-- [ ] Implement `@Guard` decorator
-- [ ] Implement `@UseGuard(G)` decorator
-- [ ] Define `Interceptor` behavior with `intercept()` method
-- [ ] Implement `@Interceptor` decorator
-- [ ] Implement `@UseInterceptor(I)` decorator
-- [ ] Add tests for guards and interceptors
+- [ ] 5.5.1 Define `Guard` behavior with `canActivate()` method
+- [ ] 5.5.2 Implement `@Guard` decorator
+- [ ] 5.5.3 Implement `@UseGuard(G)` decorator
+- [ ] 5.5.4 Define `Interceptor` behavior with `intercept()` method
+- [ ] 5.5.5 Implement `@Interceptor` decorator
+- [ ] 5.5.6 Implement `@UseInterceptor(I)` decorator
+- [ ] 5.5.7 Add tests for guards and interceptors
 
 ### 5.6 Application Bootstrap
-
-- [ ] Define `Application` struct
-- [ ] Implement `Application::create(modules: [...])` factory
-- [ ] Implement module scanning for decorated classes
-- [ ] Implement dependency injection container
-- [ ] Add `listen(port: U16)` to start server
-- [ ] Add graceful shutdown support
-- [ ] Add tests for application lifecycle
-
----
+- [ ] 5.6.1 Define `Application` struct
+- [ ] 5.6.2 Implement `Application::create(modules: [...])` factory
+- [ ] 5.6.3 Implement module scanning for decorated classes
+- [ ] 5.6.4 Implement dependency injection container
+- [ ] 5.6.5 Add `listen(port: U16)` to start server
+- [ ] 5.6.6 Add graceful shutdown support
+- [ ] 5.6.7 Add tests for application lifecycle
 
 ## Phase 6: Performance Optimization
 
 ### 6.1 I/O Backend Selection
-
-- [ ] Implement io_uring backend for Linux 5.1+
-- [ ] Implement IOCP backend for Windows
-- [ ] Implement kqueue backend for macOS/BSD
-- [ ] Implement epoll fallback for older Linux
-- [ ] Add runtime backend detection and selection
-- [ ] Add tests for each backend
+- [ ] 6.1.1 Implement io_uring backend for Linux 5.1+
+- [ ] 6.1.2 Implement IOCP backend for Windows
+- [ ] 6.1.3 Implement kqueue backend for macOS/BSD
+- [ ] 6.1.4 Implement epoll fallback for older Linux
+- [ ] 6.1.5 Add runtime backend detection and selection
+- [ ] 6.1.6 Add tests for each backend
 
 ### 6.2 Memory Optimization
-
-- [ ] Implement slab allocator for fixed-size objects
-- [ ] Add object pooling for Request/Response
-- [ ] Implement zero-copy buffer chains
-- [ ] Add memory-mapped file serving
-- [ ] Profile and eliminate allocations in hot paths
-- [ ] Add memory usage tests/benchmarks
+- [ ] 6.2.1 Implement slab allocator for fixed-size objects
+- [ ] 6.2.2 Add object pooling for Request/Response
+- [ ] 6.2.3 Implement zero-copy buffer chains
+- [ ] 6.2.4 Add memory-mapped file serving
+- [ ] 6.2.5 Profile and eliminate allocations in hot paths
+- [ ] 6.2.6 Add memory usage tests/benchmarks
 
 ### 6.3 Connection Management
-
-- [ ] Implement connection pool with health checking
-- [ ] Add connection limiting per client IP
-- [ ] Implement backpressure for slow clients
-- [ ] Add graceful connection draining on shutdown
-- [ ] Add connection metrics (active, idle, total)
-- [ ] Add tests for connection management
-
----
+- [ ] 6.3.1 Implement connection pool with health checking
+- [ ] 6.3.2 Add connection limiting per client IP
+- [ ] 6.3.3 Implement backpressure for slow clients
+- [ ] 6.3.4 Add graceful connection draining on shutdown
+- [ ] 6.3.5 Add connection metrics (active, idle, total)
+- [ ] 6.3.6 Add tests for connection management
 
 ## Phase 7: Documentation and Examples
 
 ### 7.1 API Documentation
-
-- [ ] Document all public types with doc comments
-- [ ] Add examples in doc comments
-- [ ] Generate API reference documentation
-- [ ] Add architecture overview document
+- [ ] 7.1.1 Document all public types with doc comments
+- [ ] 7.1.2 Add examples in doc comments
+- [ ] 7.1.3 Generate API reference documentation
+- [ ] 7.1.4 Add architecture overview document
 
 ### 7.2 Examples
-
-- [ ] TCP echo server example
-- [ ] UDP ping/pong example
-- [ ] HTTP file server example
-- [ ] REST API with decorators example
-- [ ] WebSocket chat example (if WebSocket added)
-- [ ] Middleware composition example
+- [ ] 7.2.1 TCP echo server example
+- [ ] 7.2.2 UDP ping/pong example
+- [ ] 7.2.3 HTTP file server example
+- [ ] 7.2.4 REST API with decorators example
+- [ ] 7.2.5 WebSocket chat example
+- [ ] 7.2.6 Middleware composition example
 
 ### 7.3 Guides
+- [ ] 7.3.1 Getting started with networking
+- [ ] 7.3.2 Building a REST API
+- [ ] 7.3.3 Performance tuning guide
+- [ ] 7.3.4 Memory management best practices
 
-- [ ] Getting started with networking
-- [ ] Building a REST API
-- [ ] Performance tuning guide
-- [ ] Memory management best practices
+## Summary
 
----
+| Phase | Description | Status | Progress |
+|-------|-------------|--------|----------|
+| 1 | Core Infrastructure | In Progress | 17/24 |
+| 2 | TCP Implementation | Not Started | 0/22 |
+| 3 | UDP Implementation | Not Started | 0/12 |
+| 4 | HTTP Implementation | Not Started | 0/30 |
+| 5 | Web Framework | Not Started | 0/44 |
+| 6 | Performance | Not Started | 0/18 |
+| 7 | Documentation | Not Started | 0/14 |
+| **Total** | | **~10%** | **17/164** |
 
-## Progress Tracking
+## Files Added/Modified
 
-| Phase                        | Status      | Completion |
-| ---------------------------- | ----------- | ---------- |
-| Phase 1: Core Infrastructure | In Progress | 40%        |
-| Phase 2: TCP                 | Not Started | 0%         |
-| Phase 3: UDP                 | Not Started | 0%         |
-| Phase 4: HTTP                | Not Started | 0%         |
-| Phase 5: Decorator Framework | Not Started | 0%         |
-| Phase 6: Performance         | Not Started | 0%         |
-| Phase 7: Documentation       | Not Started | 0%         |
+### New Files
+- `lib/core/src/net/mod.tml` - Network module entry point
+- `lib/core/src/net/ip.tml` - IP address types (Ipv4Addr, Ipv6Addr, IpAddr)
+- `lib/core/src/net/socket.tml` - Socket address types
+- `lib/core/src/net/parser.tml` - Address parsing utilities
+- `lib/core/src/net/error.tml` - Network error types (NetError, NetErrorKind)
 
-### Phase 1 Breakdown:
-- 1.1 Address Types: ✅ Complete (100%)
-- 1.2 Buffer Management: ⏳ Not Started (0%)
-- 1.3 Platform Abstraction: ⏳ Not Started (0%)
-- 1.4 Error Types: 🔶 Partial (30% - AddrParseError done, NetError pending)
-
----
-
-## Validation
-
-### Unit Tests
-
-```bash
-tml test lib/std/tests/net/
-```
-
-### Integration Tests
-
-```bash
-tml test lib/std/tests/net/integration/
-```
-
-### Benchmarks
-
-```bash
-tml bench benchmarks/net/
-```
-
-### Performance Validation
-
-- HTTP throughput: `wrk -t12 -c400 -d30s http://localhost:8080/`
-- Memory profiling: `valgrind --tool=massif ./server`
-- Latency: `wrk -t1 -c1 -d10s --latency http://localhost:8080/`
-
----
+### Modified Files
+- `lib/core/src/mod.tml` - Export net module
 
 ## Dependencies
 
 ### External
-
-- OpenSSL or BoringSSL for TLS (optional, can use system TLS)
+- OpenSSL or BoringSSL for TLS (optional)
 - Platform headers for syscalls
 
 ### Internal
-
 - `core::alloc` - Memory allocation
 - `core::iter` - Iterators
 - `core::slice` - Slice operations
-- `core::net` - ✅ **Available** - IP addresses and socket addresses (Ipv4Addr, Ipv6Addr, IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6, parsing)
 - `core::hash` - Hash and Hasher behaviors
 - `core::option` - Maybe type
 - `core::result` - Outcome type
 - `std::collections` - HashMap for headers
 - `std::io` - Read/Write behaviors
 - `std::sync` - Synchronization primitives
-
----
-
-## Risk Mitigation
-
-| Risk                     | Mitigation                                            |
-| ------------------------ | ----------------------------------------------------- |
-| Platform differences     | Comprehensive abstraction layer, CI on all platforms  |
-| Memory leaks             | Arena allocators, RAII patterns, memory tests         |
-| Performance regression   | Continuous benchmarking, performance tests in CI      |
-| Security vulnerabilities | TLS by default, timeout enforcement, input validation |
-| API instability          | Design review before implementation, RFC process      |

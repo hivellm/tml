@@ -389,8 +389,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this'/'self' parameter: primitive types pass by value, others by pointer
-                        // 'self' is an alias for 'this' (Rust compatibility)
+                        // Handle 'this'/'self' parameter: primitive types pass by value, others by
+                        // pointer 'self' is an alias for 'this' (Rust compatibility)
                         if ((param_name == "this" || param_name == "self") &&
                             param_type.find("This") != std::string::npos) {
                             param_type = is_primitive_impl ? impl_llvm_type : "ptr";
@@ -421,8 +421,8 @@ auto LLVMIRGen::generate(const parser::Module& module)
                         } else {
                             param_name = "_anon";
                         }
-                        // Handle 'this'/'self' parameter: primitive types use value type, others use ptr
-                        // 'self' is an alias for 'this' (Rust compatibility)
+                        // Handle 'this'/'self' parameter: primitive types use value type, others
+                        // use ptr 'self' is an alias for 'this' (Rust compatibility)
                         if ((param_name == "this" || param_name == "self") &&
                             param_type.find("This") != std::string::npos) {
                             param_type = is_primitive_impl ? impl_llvm_type : "ptr";

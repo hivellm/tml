@@ -34,6 +34,7 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
     size_t pos = 0;
     std::string result = "0";
 
+    // All print calls use runtime functions that respect output suppression flag
     while (pos < format.size()) {
         // Find next { placeholder
         size_t placeholder = format.find('{', pos);
@@ -43,10 +44,8 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
             if (pos < format.size()) {
                 std::string remaining = format.substr(pos);
                 std::string str_const = add_string_literal(remaining);
-                result = fresh_reg();
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + str_const +
-                          ")");
+                // Use runtime print() which checks suppression flag
+                emit_line("  call void @print(ptr " + str_const + ")");
             }
             break;
         }
@@ -55,9 +54,8 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
         if (placeholder > pos) {
             std::string segment = format.substr(pos, placeholder - pos);
             std::string str_const = add_string_literal(segment);
-            result = fresh_reg();
-            emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " +
-                      str_const + ")");
+            // Use runtime print() which checks suppression flag
+            emit_line("  call void @print(ptr " + str_const + ")");
         }
 
         // Parse placeholder: {} or {:.N}
@@ -79,7 +77,7 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
             }
         }
 
-        // Print argument
+        // Print argument using runtime functions that check suppression
         if (arg_idx < args.size()) {
             const auto& arg_expr = *args[arg_idx];
             std::string arg_val = gen_expr(arg_expr);
@@ -108,41 +106,21 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
                 arg_type = PrintArgType::Str;
             }
 
-            result = fresh_reg();
             switch (arg_type) {
             case PrintArgType::Str:
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr " + arg_val +
-                          ")");
+                // Use runtime print() which checks suppression flag
+                emit_line("  call void @print(ptr " + arg_val + ")");
                 break;
             case PrintArgType::Bool: {
-                std::string label_true = fresh_label("fmt.true");
-                std::string label_false = fresh_label("fmt.false");
-                std::string label_end = fresh_label("fmt.end");
-
-                emit_line("  br i1 " + arg_val + ", label %" + label_true + ", label %" +
-                          label_false);
-
-                emit_line(label_true + ":");
-                std::string r1 = fresh_reg();
-                emit_line("  " + r1 +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.true)");
-                emit_line("  br label %" + label_end);
-
-                emit_line(label_false + ":");
-                std::string r2 = fresh_reg();
-                emit_line("  " + r2 +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.str.no_nl, ptr @.str.false)");
-                emit_line("  br label %" + label_end);
-
-                emit_line(label_end + ":");
-                block_terminated_ = false;
+                // Use runtime print_bool() which checks suppression flag
+                std::string bool_val = fresh_reg();
+                emit_line("  " + bool_val + " = zext i1 " + arg_val + " to i32");
+                emit_line("  call void @print_bool(i32 " + bool_val + ")");
                 break;
             }
             case PrintArgType::I64:
-                emit_line("  " + result +
-                          " = call i32 (ptr, ...) @printf(ptr @.fmt.i64.no_nl, i64 " + arg_val +
-                          ")");
+                // Use runtime print_i64() which checks suppression flag
+                emit_line("  call void @print_i64(i64 " + arg_val + ")");
                 break;
             case PrintArgType::Float: {
                 // Check if already double (from variable type or last_expr_type_)
@@ -165,15 +143,14 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
                     emit_line("  " + double_val + " = fpext float " + arg_val + " to double");
                 }
                 if (precision >= 0) {
-                    // Create custom format string for precision
-                    std::string fmt_str = "%." + std::to_string(precision) + "f";
-                    std::string fmt_const = add_string_literal(fmt_str);
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr " + fmt_const +
-                              ", double " + double_val + ")");
+                    // Use float_to_precision then print() for formatted output
+                    result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @float_to_precision(double " +
+                              double_val + ", i32 " + std::to_string(precision) + ")");
+                    emit_line("  call void @print(ptr " + result + ")");
                 } else {
-                    emit_line("  " + result +
-                              " = call i32 (ptr, ...) @printf(ptr @.fmt.float.no_nl, double " +
-                              double_val + ")");
+                    // Use runtime print_f64() which checks suppression flag
+                    emit_line("  call void @print_f64(double " + double_val + ")");
                 }
                 break;
             }
@@ -185,14 +162,14 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
                     // Convert i32 to double for fractional display (e.g., us to ms)
                     std::string double_val = fresh_reg();
                     emit_line("  " + double_val + " = sitofp i32 " + arg_val + " to double");
-                    std::string fmt_str = "%." + std::to_string(precision) + "f";
-                    std::string fmt_const = add_string_literal(fmt_str);
-                    emit_line("  " + result + " = call i32 (ptr, ...) @printf(ptr " + fmt_const +
-                              ", double " + double_val + ")");
+                    // Use float_to_precision then print() for formatted output
+                    result = fresh_reg();
+                    emit_line("  " + result + " = call ptr @float_to_precision(double " +
+                              double_val + ", i32 " + std::to_string(precision) + ")");
+                    emit_line("  call void @print(ptr " + result + ")");
                 } else {
-                    emit_line("  " + result +
-                              " = call i32 (ptr, ...) @printf(ptr @.fmt.int.no_nl, i32 " + arg_val +
-                              ")");
+                    // Use runtime print_i32() which checks suppression flag
+                    emit_line("  call void @print_i32(i32 " + arg_val + ")");
                 }
                 break;
             }
@@ -202,10 +179,9 @@ auto LLVMIRGen::gen_format_print(const std::string& format,
         pos = end_brace + 1; // Skip past }
     }
 
-    // Print newline if println
+    // Print newline if println - use runtime function that checks suppression
     if (with_newline) {
-        result = fresh_reg();
-        emit_line("  " + result + " = call i32 @putchar(i32 10)");
+        emit_line("  call void @println(ptr null)");
     }
 
     return result;

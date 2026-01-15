@@ -605,7 +605,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     if (prop_it != class_properties_.end() && prop_it->second.has_getter) {
         // Property access - call getter method instead of direct field access
         const auto& prop_info = prop_it->second;
-        std::string getter_name = "@tml_" + get_suite_prefix() + type_name + "_get_" + prop_info.name;
+        std::string getter_name =
+            "@tml_" + get_suite_prefix() + type_name + "_get_" + prop_info.name;
 
         std::string result = fresh_reg();
         if (prop_info.is_static) {
@@ -613,8 +614,8 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
             emit_line("  " + result + " = call " + prop_info.llvm_type + " " + getter_name + "()");
         } else {
             // Instance property getter - pass 'this' pointer
-            emit_line("  " + result + " = call " + prop_info.llvm_type + " " + getter_name + "(ptr " +
-                      struct_ptr + ")");
+            emit_line("  " + result + " = call " + prop_info.llvm_type + " " + getter_name +
+                      "(ptr " + struct_ptr + ")");
         }
         last_expr_type_ = prop_info.llvm_type;
         return result;

@@ -247,9 +247,16 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                       << " functions)\n";
         }
 
-        // Note: MIR codegen doesn't currently track @link libraries
-        // For FFI support with optimizations, we still need to parse them from AST
-        // TODO: Extract link_libs from AST decorators for MIR codegen path
+        // Extract link_libs from AST @extern/@link decorated functions
+        // MIR codegen doesn't track these, so we extract them directly from AST
+        for (const auto& decl : module.decls) {
+            if (decl->is<parser::FuncDecl>()) {
+                const auto& func = decl->as<parser::FuncDecl>();
+                for (const auto& lib : func.link_libs) {
+                    link_libs.insert(lib);
+                }
+            }
+        }
     } else {
         // Use AST-based codegen for O0 (no optimizations)
         codegen::LLVMGenOptions llvm_gen_options;

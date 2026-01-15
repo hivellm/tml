@@ -947,10 +947,9 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
             } else {
                 TypePtr arg_type = check_expr(*call.args[0]);
                 // Allow I32 or I64 for offset
-                bool valid_offset =
-                    (arg_type->is<PrimitiveType>() &&
-                     (arg_type->as<PrimitiveType>().kind == PrimitiveKind::I32 ||
-                      arg_type->as<PrimitiveType>().kind == PrimitiveKind::I64));
+                bool valid_offset = (arg_type->is<PrimitiveType>() &&
+                                     (arg_type->as<PrimitiveType>().kind == PrimitiveKind::I32 ||
+                                      arg_type->as<PrimitiveType>().kind == PrimitiveKind::I64));
                 if (!valid_offset) {
                     error("Pointer offset() requires I32 or I64 argument", call.args[0]->span);
                 }

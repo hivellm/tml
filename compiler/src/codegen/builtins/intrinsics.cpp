@@ -113,10 +113,10 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     static const std::unordered_set<std::string> intrinsics = {
         "unreachable", "assume", "likely", "unlikely", "llvm_add", "llvm_sub", "llvm_mul",
         "llvm_div", "llvm_and", "llvm_or", "llvm_xor", "llvm_shl", "llvm_shr", "transmute",
-        "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id",
-        "ptr_offset", "ptr_read", "ptr_write", "ptr_copy", "volatile_read", "volatile_write",
-        "atomic_load", "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub",
-        "atomic_and", "atomic_or", "atomic_xor", "fence", "black_box",
+        "size_of", "align_of", "alignof_type", "sizeof_type", "type_name", "type_id", "ptr_offset",
+        "ptr_read", "ptr_write", "ptr_copy", "volatile_read", "volatile_write", "atomic_load",
+        "atomic_store", "atomic_cas", "atomic_exchange", "atomic_add", "atomic_sub", "atomic_and",
+        "atomic_or", "atomic_xor", "fence", "black_box",
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
 
@@ -818,7 +818,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                         size_bytes = 16;
                     else if (type_llvm == "i1")
                         size_bytes = 1;
-                    else if (type_llvm.starts_with("%struct.") || type_llvm.starts_with("%class.")) {
+                    else if (type_llvm.starts_with("%struct.") ||
+                             type_llvm.starts_with("%class.")) {
                         // For structs, use GEP trick to get size
                         std::string size_ptr = fresh_reg();
                         std::string size_val = fresh_reg();
@@ -896,7 +897,8 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
                         size_bytes = 16;
                     else if (type_llvm == "i1")
                         size_bytes = 1;
-                    else if (type_llvm.starts_with("%struct.") || type_llvm.starts_with("%class.")) {
+                    else if (type_llvm.starts_with("%struct.") ||
+                             type_llvm.starts_with("%class.")) {
                         std::string size_ptr = fresh_reg();
                         std::string size_val = fresh_reg();
                         emit_line("  " + size_ptr + " = getelementptr " + type_llvm +

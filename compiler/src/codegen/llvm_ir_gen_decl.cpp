@@ -1001,10 +1001,12 @@ void LLVMIRGen::gen_impl_method(const std::string& type_name, const parser::Func
             std::string alloca_reg = fresh_reg();
             emit_line("  " + alloca_reg + " = alloca " + this_inner_type);
             emit_line("  store " + this_inner_type + " %this, ptr " + alloca_reg);
-            locals_["this"] = VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+            locals_["this"] =
+                VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
             // Also register as 'self' if that was the parameter name
             if (this_param_name == "self") {
-                locals_["self"] = VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
+                locals_["self"] =
+                    VarInfo{alloca_reg, this_inner_type, impl_semantic_type, std::nullopt};
             }
         } else {
             locals_["this"] = VarInfo{"%this", this_type, impl_semantic_type, std::nullopt};

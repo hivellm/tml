@@ -230,10 +230,11 @@ private:
     [[nodiscard]] auto is_terminated() const -> bool;
 
     /// Emits an instruction to the current block, returning the result value.
-    [[nodiscard]] auto emit(Instruction inst, MirTypePtr type) -> Value;
+    [[nodiscard]] auto emit(Instruction inst, MirTypePtr type, SourceSpan span = SourceSpan{})
+        -> Value;
 
     /// Emits a void instruction (no result value).
-    void emit_void(Instruction inst);
+    void emit_void(Instruction inst, SourceSpan span = SourceSpan{});
 
     /// Emits a return terminator.
     void emit_return(std::optional<Value> value = std::nullopt);

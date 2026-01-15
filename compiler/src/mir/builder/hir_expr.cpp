@@ -234,7 +234,7 @@ auto HirMirBuilder::build_binary(const hir::HirBinaryExpr& bin) -> Value {
     inst.right = right;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, bin.span);
 }
 
 // ============================================================================
@@ -348,7 +348,7 @@ auto HirMirBuilder::build_unary(const hir::HirUnaryExpr& unary) -> Value {
     inst.operand = operand;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, unary.span);
 }
 
 // ============================================================================
@@ -374,7 +374,7 @@ auto HirMirBuilder::build_call(const hir::HirCallExpr& call) -> Value {
     inst.arg_types = std::move(arg_types);
     inst.return_type = return_type;
 
-    return emit(inst, return_type);
+    return emit(inst, return_type, call.span);
 }
 
 // ============================================================================
@@ -405,7 +405,7 @@ auto HirMirBuilder::build_method_call(const hir::HirMethodCallExpr& call) -> Val
     inst.arg_types = std::move(arg_types);
     inst.return_type = return_type;
 
-    return emit(inst, return_type);
+    return emit(inst, return_type, call.span);
 }
 
 // ============================================================================
@@ -423,7 +423,7 @@ auto HirMirBuilder::build_field(const hir::HirFieldExpr& field) -> Value {
     inst.aggregate_type = base.type;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, field.span);
 }
 
 // ============================================================================
@@ -442,14 +442,14 @@ auto HirMirBuilder::build_index(const hir::HirIndexExpr& index) -> Value {
     gep.base_type = base.type;
     gep.result_type = make_pointer_type(result_type, false);
 
-    Value ptr = emit(gep, gep.result_type);
+    Value ptr = emit(gep, gep.result_type, index.span);
 
     // Load the value
     LoadInst load;
     load.ptr = ptr;
     load.result_type = result_type;
 
-    return emit(load, result_type);
+    return emit(load, result_type, index.span);
 }
 
 // ============================================================================
@@ -876,7 +876,7 @@ auto HirMirBuilder::build_struct_expr(const hir::HirStructExpr& s) -> Value {
     inst.field_types = std::move(field_types);
 
     MirTypePtr result_type = convert_type(s.type);
-    return emit(inst, result_type);
+    return emit(inst, result_type, s.span);
 }
 
 auto HirMirBuilder::build_enum_expr(const hir::HirEnumExpr& e) -> Value {
@@ -897,7 +897,7 @@ auto HirMirBuilder::build_enum_expr(const hir::HirEnumExpr& e) -> Value {
     inst.payload_types = std::move(payload_types);
 
     MirTypePtr result_type = convert_type(e.type);
-    return emit(inst, result_type);
+    return emit(inst, result_type, e.span);
 }
 
 auto HirMirBuilder::build_tuple(const hir::HirTupleExpr& tuple) -> Value {
@@ -915,7 +915,7 @@ auto HirMirBuilder::build_tuple(const hir::HirTupleExpr& tuple) -> Value {
     inst.element_types = element_types;
     inst.result_type = make_tuple_type(element_types);
 
-    return emit(inst, inst.result_type);
+    return emit(inst, inst.result_type, tuple.span);
 }
 
 auto HirMirBuilder::build_array(const hir::HirArrayExpr& arr) -> Value {
@@ -933,7 +933,7 @@ auto HirMirBuilder::build_array(const hir::HirArrayExpr& arr) -> Value {
     inst.element_type = element_type;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, arr.span);
 }
 
 auto HirMirBuilder::build_array_repeat(const hir::HirArrayRepeatExpr& arr) -> Value {
@@ -949,7 +949,7 @@ auto HirMirBuilder::build_array_repeat(const hir::HirArrayRepeatExpr& arr) -> Va
     inst.element_type = element_type;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, arr.span);
 }
 
 // ============================================================================
@@ -994,7 +994,7 @@ auto HirMirBuilder::build_cast(const hir::HirCastExpr& cast) -> Value {
     inst.source_type = source_type;
     inst.target_type = target_type;
 
-    return emit(inst, target_type);
+    return emit(inst, target_type, cast.span);
 }
 
 // ============================================================================
@@ -1053,7 +1053,7 @@ auto HirMirBuilder::build_closure(const hir::HirClosureExpr& closure) -> Value {
     inst.func_type = func_type;
     inst.result_type = result_type;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, closure.span);
 }
 
 // ============================================================================
@@ -1161,7 +1161,7 @@ auto HirMirBuilder::build_await(const hir::HirAwaitExpr& await_expr) -> Value {
     inst.result_type = result_type;
     inst.suspension_id = ctx_.next_suspension_id++;
 
-    return emit(inst, result_type);
+    return emit(inst, result_type, await_expr.span);
 }
 
 // ============================================================================
@@ -1204,7 +1204,7 @@ auto HirMirBuilder::build_compound_assign(const hir::HirCompoundAssignExpr& assi
     bin.right = rhs;
     bin.result_type = result_type;
 
-    Value result = emit(bin, result_type);
+    Value result = emit(bin, result_type, assign.span);
 
     // Store back
     if (auto* var = std::get_if<hir::HirVarExpr>(&assign.target->kind)) {

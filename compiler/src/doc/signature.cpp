@@ -12,6 +12,53 @@ namespace tml::doc {
 // Forward declaration for mutual recursion
 auto type_to_string(const parser::Type& type) -> std::string;
 
+/// Converts an expression to string (for array size expressions).
+auto expr_to_string(const parser::Expr& expr) -> std::string {
+    if (expr.is<parser::LiteralExpr>()) {
+        const auto& lit = expr.as<parser::LiteralExpr>();
+        if (lit.token.kind == lexer::TokenKind::IntLiteral) {
+            return std::to_string(lit.token.int_value().value);
+        } else if (lit.token.kind == lexer::TokenKind::BoolLiteral) {
+            return std::string(lit.token.lexeme);
+        }
+        return std::string(lit.token.lexeme);
+    } else if (expr.is<parser::IdentExpr>()) {
+        return expr.as<parser::IdentExpr>().name;
+    } else if (expr.is<parser::PathExpr>()) {
+        const auto& path_expr = expr.as<parser::PathExpr>();
+        std::string result;
+        for (size_t i = 0; i < path_expr.path.segments.size(); ++i) {
+            if (i > 0) {
+                result += "::";
+            }
+            result += path_expr.path.segments[i];
+        }
+        return result;
+    } else if (expr.is<parser::BinaryExpr>()) {
+        const auto& bin = expr.as<parser::BinaryExpr>();
+        std::string op;
+        switch (bin.op) {
+        case parser::BinaryOp::Add:
+            op = " + ";
+            break;
+        case parser::BinaryOp::Sub:
+            op = " - ";
+            break;
+        case parser::BinaryOp::Mul:
+            op = " * ";
+            break;
+        case parser::BinaryOp::Div:
+            op = " / ";
+            break;
+        default:
+            op = " ? ";
+            break;
+        }
+        return expr_to_string(*bin.left) + op + expr_to_string(*bin.right);
+    }
+    return "N";
+}
+
 /// Converts a GenericArg to string representation.
 auto generic_arg_to_string(const parser::GenericArg& arg) -> std::string {
     if (arg.is_type()) {
@@ -58,8 +105,7 @@ auto type_to_string(const parser::Type& type) -> std::string {
                 std::string result = "[";
                 result += type_to_string(*t.element);
                 result += "; ";
-                // TODO: stringify the size expression
-                result += "N";
+                result += expr_to_string(*t.size);
                 result += "]";
                 return result;
             } else if constexpr (std::is_same_v<T, parser::SliceType>) {

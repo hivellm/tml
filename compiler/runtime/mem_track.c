@@ -7,10 +7,11 @@
  */
 
 #include "mem_track.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -107,7 +108,7 @@ void tml_mem_track_init(void) {
 
     memset(&g_track.stats, 0, sizeof(g_track.stats));
     g_track.output = stderr;
-    g_track.check_at_exit = 1;  // Enable by default
+    g_track.check_at_exit = 1; // Enable by default
     g_track.next_alloc_id = 1;
     g_track.initialized = 1;
 
@@ -143,7 +144,8 @@ void tml_mem_track_shutdown(void) {
 // ============================================================================
 
 void tml_mem_track_alloc(void* ptr, size_t size, const char* tag) {
-    if (!ptr) return;
+    if (!ptr)
+        return;
 
     if (!g_track.initialized) {
         tml_mem_track_init();
@@ -185,7 +187,8 @@ void tml_mem_track_alloc(void* ptr, size_t size, const char* tag) {
 }
 
 int32_t tml_mem_track_free(void* ptr) {
-    if (!ptr || !g_track.initialized) return 0;
+    if (!ptr || !g_track.initialized)
+        return 0;
 
     TML_MUTEX_LOCK(g_track.mutex);
 
@@ -283,7 +286,8 @@ void tml_mem_track_realloc(void* old_ptr, void* new_ptr, size_t new_size) {
 // ============================================================================
 
 int32_t tml_mem_check_leaks(void) {
-    if (!g_track.initialized) return 0;
+    if (!g_track.initialized)
+        return 0;
 
     TML_MUTEX_LOCK(g_track.mutex);
 
@@ -303,12 +307,16 @@ int32_t tml_mem_check_leaks(void) {
 
     if (leak_count > 0) {
         fprintf(out, "\n");
-        fprintf(out, "================================================================================\n");
+        fprintf(
+            out,
+            "================================================================================\n");
         fprintf(out, "                         TML MEMORY LEAK REPORT\n");
-        fprintf(out, "================================================================================\n");
+        fprintf(
+            out,
+            "================================================================================\n");
         fprintf(out, "\n");
-        fprintf(out, "Detected %d unfreed allocation(s) totaling %llu bytes:\n\n",
-                leak_count, (unsigned long long)leak_bytes);
+        fprintf(out, "Detected %d unfreed allocation(s) totaling %llu bytes:\n\n", leak_count,
+                (unsigned long long)leak_bytes);
 
         int shown = 0;
         for (int i = 0; i < HASH_BUCKETS && shown < 50; i++) {
@@ -331,10 +339,14 @@ int32_t tml_mem_check_leaks(void) {
             fprintf(out, "  ... and %d more leaks not shown\n\n", leak_count - 50);
         }
 
-        fprintf(out, "================================================================================\n");
-        fprintf(out, "Summary: %d leak(s), %llu bytes lost\n",
-                leak_count, (unsigned long long)leak_bytes);
-        fprintf(out, "================================================================================\n");
+        fprintf(
+            out,
+            "================================================================================\n");
+        fprintf(out, "Summary: %d leak(s), %llu bytes lost\n", leak_count,
+                (unsigned long long)leak_bytes);
+        fprintf(
+            out,
+            "================================================================================\n");
     }
 
     TML_MUTEX_UNLOCK(g_track.mutex);
@@ -346,7 +358,8 @@ int32_t tml_mem_check_leaks(void) {
 // ============================================================================
 
 void tml_mem_get_stats(TmlMemStats* stats) {
-    if (!stats) return;
+    if (!stats)
+        return;
 
     if (!g_track.initialized) {
         memset(stats, 0, sizeof(TmlMemStats));
@@ -369,22 +382,32 @@ void tml_mem_print_stats(void) {
     FILE* out = g_track.output ? g_track.output : stderr;
 
     fprintf(out, "\n");
-    fprintf(out, "================================================================================\n");
+    fprintf(out,
+            "================================================================================\n");
     fprintf(out, "                         TML MEMORY STATISTICS\n");
-    fprintf(out, "================================================================================\n");
+    fprintf(out,
+            "================================================================================\n");
     fprintf(out, "\n");
-    fprintf(out, "  Total allocations:      %llu\n", (unsigned long long)g_track.stats.total_allocations);
-    fprintf(out, "  Total deallocations:    %llu\n", (unsigned long long)g_track.stats.total_deallocations);
-    fprintf(out, "  Current allocations:    %llu\n", (unsigned long long)g_track.stats.current_allocations);
-    fprintf(out, "  Peak allocations:       %llu\n", (unsigned long long)g_track.stats.peak_allocations);
+    fprintf(out, "  Total allocations:      %llu\n",
+            (unsigned long long)g_track.stats.total_allocations);
+    fprintf(out, "  Total deallocations:    %llu\n",
+            (unsigned long long)g_track.stats.total_deallocations);
+    fprintf(out, "  Current allocations:    %llu\n",
+            (unsigned long long)g_track.stats.current_allocations);
+    fprintf(out, "  Peak allocations:       %llu\n",
+            (unsigned long long)g_track.stats.peak_allocations);
     fprintf(out, "\n");
-    fprintf(out, "  Total bytes allocated:  %llu\n", (unsigned long long)g_track.stats.total_bytes_allocated);
-    fprintf(out, "  Current bytes in use:   %llu\n", (unsigned long long)g_track.stats.current_bytes);
+    fprintf(out, "  Total bytes allocated:  %llu\n",
+            (unsigned long long)g_track.stats.total_bytes_allocated);
+    fprintf(out, "  Current bytes in use:   %llu\n",
+            (unsigned long long)g_track.stats.current_bytes);
     fprintf(out, "  Peak bytes in use:      %llu\n", (unsigned long long)g_track.stats.peak_bytes);
     fprintf(out, "\n");
-    fprintf(out, "  Invalid frees:          %llu\n", (unsigned long long)g_track.stats.invalid_frees);
+    fprintf(out, "  Invalid frees:          %llu\n",
+            (unsigned long long)g_track.stats.invalid_frees);
     fprintf(out, "\n");
-    fprintf(out, "================================================================================\n");
+    fprintf(out,
+            "================================================================================\n");
 
     TML_MUTEX_UNLOCK(g_track.mutex);
 }
@@ -416,7 +439,7 @@ void* tml_mem_alloc_zeroed_tracked(int64_t size, const char* tag) {
 void* tml_mem_realloc_tracked(void* ptr, int64_t new_size, const char* tag) {
     void* new_ptr = realloc(ptr, (size_t)new_size);
     tml_mem_track_realloc(ptr, new_ptr, (size_t)new_size);
-    (void)tag;  // Tag preserved from original allocation
+    (void)tag; // Tag preserved from original allocation
     return new_ptr;
 }
 

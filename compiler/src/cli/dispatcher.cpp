@@ -162,7 +162,8 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  -Wpedantic          Enable pedantic warnings\n";
             std::cerr << "  -Werror             Treat warnings as errors\n";
             std::cerr << "  --error-format=json Output diagnostics as JSON\n";
-            std::cerr << "  --no-check-leaks    Disable memory leak detection (enabled by default)\n";
+            std::cerr
+                << "  --no-check-leaks    Disable memory leak detection (enabled by default)\n";
             return 1;
         }
 

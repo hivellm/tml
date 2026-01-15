@@ -44,6 +44,38 @@
 #endif
 
 // ============================================================================
+// Output Suppression (for test runner to suppress test output)
+// ============================================================================
+
+/** @brief Flag indicating whether output should be suppressed. */
+static int32_t tml_suppress_output = 0;
+
+/**
+ * @brief Sets the output suppression flag.
+ *
+ * When set to non-zero, print/println functions will not produce output.
+ * This is used by the test runner to suppress test output when not in
+ * verbose mode.
+ *
+ * @param suppress Non-zero to suppress output, zero to enable output.
+ */
+TML_EXPORT void tml_set_output_suppressed(int32_t suppress) {
+    tml_suppress_output = suppress;
+    // Ensure immediate effect by flushing
+    fflush(stdout);
+    fflush(stderr);
+}
+
+/**
+ * @brief Gets the current output suppression state.
+ *
+ * @return Non-zero if output is suppressed, zero otherwise.
+ */
+TML_EXPORT int32_t tml_get_output_suppressed(void) {
+    return tml_suppress_output;
+}
+
+// ============================================================================
 // Panic Catching State (for @should_panic tests)
 // ============================================================================
 
@@ -64,10 +96,13 @@ static char tml_panic_msg[1024] = {0};
  * @brief Prints a string to stdout without a newline.
  *
  * Maps to TML's `print(message: Str) -> Unit` builtin.
+ * Output is suppressed when tml_suppress_output is set.
  *
  * @param message The null-terminated string to print. NULL is ignored.
  */
 void print(const char* message) {
+    if (tml_suppress_output)
+        return;
     if (message)
         printf("%s", message);
 }
@@ -76,10 +111,13 @@ void print(const char* message) {
  * @brief Prints a string to stdout followed by a newline.
  *
  * Maps to TML's `println(message: Str) -> Unit` builtin.
+ * Output is suppressed when tml_suppress_output is set.
  *
  * @param message The null-terminated string to print. NULL prints only newline.
  */
 void println(const char* message) {
+    if (tml_suppress_output)
+        return;
     if (message)
         printf("%s\n", message);
     else
@@ -135,31 +173,43 @@ void assert_tml(int32_t condition, const char* message) {
 
 /** @brief Prints a 32-bit signed integer to stdout. */
 void print_i32(int32_t n) {
+    if (tml_suppress_output)
+        return;
     printf("%d", n);
 }
 
 /** @brief Prints a 64-bit signed integer to stdout. */
 void print_i64(int64_t n) {
+    if (tml_suppress_output)
+        return;
     printf("%lld", (long long)n);
 }
 
 /** @brief Prints a 32-bit floating point number to stdout. */
 void print_f32(float n) {
+    if (tml_suppress_output)
+        return;
     printf("%g", n);
 }
 
 /** @brief Prints a 64-bit floating point number to stdout. */
 void print_f64(double n) {
+    if (tml_suppress_output)
+        return;
     printf("%g", n);
 }
 
 /** @brief Prints a boolean as "true" or "false" to stdout. */
 void print_bool(int32_t b) {
+    if (tml_suppress_output)
+        return;
     printf("%s", b ? "true" : "false");
 }
 
 /** @brief Prints a character to stdout. */
 void print_char(int32_t c) {
+    if (tml_suppress_output)
+        return;
     printf("%c", (char)c);
 }
 
@@ -539,6 +589,99 @@ int32_t f64_is_nan(double value) {
  */
 int32_t f64_is_infinite(double value) {
     return isinf(value) ? 1 : 0;
+}
+
+// ============================================================================
+// UTF-8 String Encoding Functions
+// ============================================================================
+
+/** @brief Buffer for UTF-8 character output (max 4 bytes + null terminator). */
+static char utf8_char_buffer[8];
+
+/**
+ * @brief Converts a 2-byte UTF-8 sequence to a string.
+ *
+ * Used for Unicode code points U+0080 to U+07FF.
+ *
+ * @param b1 First byte (110xxxxx).
+ * @param b2 Second byte (10xxxxxx).
+ * @return A static buffer containing the 2-byte UTF-8 string.
+ */
+TML_EXPORT const char* utf8_2byte_to_string(uint8_t b1, uint8_t b2) {
+    utf8_char_buffer[0] = (char)b1;
+    utf8_char_buffer[1] = (char)b2;
+    utf8_char_buffer[2] = '\0';
+    return utf8_char_buffer;
+}
+
+/**
+ * @brief Converts a 3-byte UTF-8 sequence to a string.
+ *
+ * Used for Unicode code points U+0800 to U+FFFF.
+ *
+ * @param b1 First byte (1110xxxx).
+ * @param b2 Second byte (10xxxxxx).
+ * @param b3 Third byte (10xxxxxx).
+ * @return A static buffer containing the 3-byte UTF-8 string.
+ */
+TML_EXPORT const char* utf8_3byte_to_string(uint8_t b1, uint8_t b2, uint8_t b3) {
+    utf8_char_buffer[0] = (char)b1;
+    utf8_char_buffer[1] = (char)b2;
+    utf8_char_buffer[2] = (char)b3;
+    utf8_char_buffer[3] = '\0';
+    return utf8_char_buffer;
+}
+
+/**
+ * @brief Converts a 4-byte UTF-8 sequence to a string.
+ *
+ * Used for Unicode code points U+10000 to U+10FFFF.
+ *
+ * @param b1 First byte (11110xxx).
+ * @param b2 Second byte (10xxxxxx).
+ * @param b3 Third byte (10xxxxxx).
+ * @param b4 Fourth byte (10xxxxxx).
+ * @return A static buffer containing the 4-byte UTF-8 string.
+ */
+TML_EXPORT const char* utf8_4byte_to_string(uint8_t b1, uint8_t b2, uint8_t b3, uint8_t b4) {
+    utf8_char_buffer[0] = (char)b1;
+    utf8_char_buffer[1] = (char)b2;
+    utf8_char_buffer[2] = (char)b3;
+    utf8_char_buffer[3] = (char)b4;
+    utf8_char_buffer[4] = '\0';
+    return utf8_char_buffer;
+}
+
+// ============================================================================
+// Random Seed Generation
+// ============================================================================
+
+/** @brief Global counter for generating unique seeds. */
+static uint64_t tml_seed_counter = 0;
+
+/**
+ * @brief Gets a unique random seed value.
+ *
+ * Uses a combination of a monotonic counter and the process address space
+ * to generate unique seeds across multiple calls.
+ *
+ * @return A 64-bit seed value.
+ */
+TML_EXPORT uint64_t tml_random_seed(void) {
+    // Increment counter atomically (simple version - not thread-safe)
+    uint64_t counter = ++tml_seed_counter;
+
+    // Mix in the address of the counter variable for additional entropy
+    uint64_t addr = (uint64_t)(uintptr_t)&tml_seed_counter;
+
+    // Simple mixing function (similar to SplitMix64)
+    uint64_t seed = counter ^ addr;
+    seed = seed * 0x9E3779B97F4A7C15ULL;
+    seed ^= seed >> 30;
+    seed = seed * 0xBF58476D1CE4E5B9ULL;
+    seed ^= seed >> 27;
+
+    return seed;
 }
 
 // ============================================================================

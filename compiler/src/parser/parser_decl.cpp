@@ -1280,11 +1280,11 @@ auto Parser::parse_func_param() -> Result<FuncParam, ParseError> {
         return unwrap_err(pattern_result);
     auto pattern = std::move(unwrap(pattern_result));
 
-    // Special case: 'this'/'self' or 'mut this'/'mut self' parameter doesn't require a type annotation
-    // Note: 'self' is accepted as an alias for 'this' (Rust compatibility)
-    bool is_this_param = pattern->is<IdentPattern>() &&
-                         (pattern->as<IdentPattern>().name == "this" ||
-                          pattern->as<IdentPattern>().name == "self");
+    // Special case: 'this'/'self' or 'mut this'/'mut self' parameter doesn't require a type
+    // annotation Note: 'self' is accepted as an alias for 'this' (Rust compatibility)
+    bool is_this_param =
+        pattern->is<IdentPattern>() &&
+        (pattern->as<IdentPattern>().name == "this" || pattern->as<IdentPattern>().name == "self");
 
     if (is_this_param && !check(lexer::TokenKind::Colon)) {
         auto span = pattern->span;

@@ -304,7 +304,7 @@ auto HirMirBuilder::is_terminated() const -> bool {
     return block && block->terminator.has_value();
 }
 
-auto HirMirBuilder::emit(Instruction inst, MirTypePtr type) -> Value {
+auto HirMirBuilder::emit(Instruction inst, MirTypePtr type, SourceSpan span) -> Value {
     if (!ctx_.current_func) {
         throw std::runtime_error("No current function in HirMirBuilder::emit");
     }
@@ -321,14 +321,14 @@ auto HirMirBuilder::emit(Instruction inst, MirTypePtr type) -> Value {
     data.result = result_id;
     data.type = type;
     data.inst = std::move(inst);
-    data.span = {}; // TODO: Get span from HIR
+    data.span = span;
 
     block->instructions.push_back(std::move(data));
 
     return result;
 }
 
-void HirMirBuilder::emit_void(Instruction inst) {
+void HirMirBuilder::emit_void(Instruction inst, SourceSpan span) {
     if (!ctx_.current_func) {
         throw std::runtime_error("No current function in HirMirBuilder::emit_void");
     }
@@ -342,7 +342,7 @@ void HirMirBuilder::emit_void(Instruction inst) {
     data.result = INVALID_VALUE;
     data.type = make_unit_type();
     data.inst = std::move(inst);
-    data.span = {};
+    data.span = span;
 
     block->instructions.push_back(std::move(data));
 }

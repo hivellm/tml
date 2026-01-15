@@ -36,12 +36,12 @@ auto LLVMIRGen::gen_binary(const parser::BinaryExpr& bin) -> std::string {
         if (bin.left->is<parser::IdentExpr>()) {
             auto it = locals_.find(bin.left->as<parser::IdentExpr>().name);
             if (it != locals_.end()) {
-                // Check if this is a mutable reference - if so, we need to store THROUGH the reference
+                // Check if this is a mutable reference - if so, we need to store THROUGH the
+                // reference
                 bool is_mut_ref = false;
                 std::string inner_llvm_type = it->second.type;
 
-                if (it->second.semantic_type &&
-                    it->second.semantic_type->is<types::RefType>() &&
+                if (it->second.semantic_type && it->second.semantic_type->is<types::RefType>() &&
                     it->second.semantic_type->as<types::RefType>().is_mut) {
                     is_mut_ref = true;
                     // Get the inner type for store

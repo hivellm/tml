@@ -475,17 +475,15 @@ pub type RandomState {
 impl RandomState {
     /// Creates a new `RandomState` with random keys.
     ///
-    /// The randomness is derived from a global counter and the current
-    /// time (if available), providing reasonable uniqueness.
+    /// The randomness is derived from a runtime counter that provides
+    /// unique values across multiple calls.
     pub func new() -> RandomState {
-        // Use a simple PRNG seeded with a counter for now
-        // In a real implementation, this would use OS randomness
-        // For now, use a fixed seed since global mutable state isn't supported yet
-        let seed: U64 = 0x9E3779B97F4A7C15
-        let seed: U64 = seed ^ (seed >> 30)
+        // Get unique seeds from the runtime using the global counter
+        let seed: U64 = lowlevel { tml_random_seed() }
+        let seed2: U64 = lowlevel { tml_random_seed() }
         return RandomState {
             k0: seed,
-            k1: seed ^ 0x5555555555555555
+            k1: seed2
         }
     }
 
@@ -516,9 +514,6 @@ impl Duplicate for RandomState {
         return RandomState { k0: this.k0, k1: this.k1 }
     }
 }
-
-// TODO: Add global mutable state support for true random seeding
-// var GLOBAL_SEED_COUNTER: U64 = 0
 
 // ============================================================================
 // Imports

@@ -59,11 +59,15 @@
 //! - [`ip`] - IP address types (`Ipv4Addr`, `Ipv6Addr`, `IpAddr`)
 //! - [`socket`] - Socket address types (`SocketAddrV4`, `SocketAddrV6`, `SocketAddr`)
 //! - [`parser`] - Parsing utilities for addresses
+//! - [`error`] - Network error types (`NetError`, `NetErrorKind`)
 
 pub mod ip
 pub mod socket
 pub mod parser
+pub mod error
 
 // Re-export main types
 pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
 pub use socket::{SocketAddr, SocketAddrV4, SocketAddrV6}
+pub use error::{NetError, NetErrorKind}
+pub use parser::AddrParseError

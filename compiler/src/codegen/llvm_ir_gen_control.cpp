@@ -829,8 +829,7 @@ auto LLVMIRGen::gen_throw(const parser::ThrowExpr& thr) -> std::string {
 
         // Assume Error-like objects have message as first field (ptr to char)
         emit_line("  ; throw expression - extracting error message");
-        emit_line("  " + msg_ptr + " = getelementptr inbounds ptr, ptr " + thrown_val +
-                  ", i32 0");
+        emit_line("  " + msg_ptr + " = getelementptr inbounds ptr, ptr " + thrown_val + ", i32 0");
         emit_line("  " + msg_val + " = load ptr, ptr " + msg_ptr);
         panic_msg = msg_val;
     }

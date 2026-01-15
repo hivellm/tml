@@ -14,7 +14,8 @@ namespace tml::mir {
 // ============================================================================
 
 void DevirtualizationPass::build_class_hierarchy() {
-    if (hierarchy_built_) return;
+    if (hierarchy_built_)
+        return;
 
     // First pass: collect all classes and their direct relationships
     for (const auto& [name, class_def] : env_.all_classes()) {
@@ -84,9 +85,10 @@ auto DevirtualizationPass::is_sealed_class(const std::string& class_name) const 
 }
 
 auto DevirtualizationPass::is_virtual_method(const std::string& class_name,
-                                              const std::string& method_name) const -> bool {
+                                             const std::string& method_name) const -> bool {
     auto class_def = env_.lookup_class(class_name);
-    if (!class_def) return false;
+    if (!class_def)
+        return false;
 
     for (const auto& method : class_def->methods) {
         if (method.sig.name == method_name) {
@@ -103,15 +105,17 @@ auto DevirtualizationPass::is_virtual_method(const std::string& class_name,
 }
 
 auto DevirtualizationPass::get_single_implementation(const std::string& class_name,
-                                                      const std::string& method_name) const
+                                                     const std::string& method_name) const
     -> std::optional<std::string> {
     auto info = get_class_info(class_name);
-    if (!info) return std::nullopt;
+    if (!info)
+        return std::nullopt;
 
     // If the class itself implements the method and has no subclasses that override it,
     // return this class as the single implementation
     auto class_def = env_.lookup_class(class_name);
-    if (!class_def) return std::nullopt;
+    if (!class_def)
+        return std::nullopt;
 
     // Check if this class has the method
     bool has_method = false;
@@ -139,7 +143,8 @@ auto DevirtualizationPass::get_single_implementation(const std::string& class_na
 
     for (const auto& subclass : info->all_subclasses) {
         auto sub_def = env_.lookup_class(subclass);
-        if (!sub_def) continue;
+        if (!sub_def)
+            continue;
 
         for (const auto& method : sub_def->methods) {
             if (method.sig.name == method_name && method.is_override) {
@@ -160,8 +165,7 @@ auto DevirtualizationPass::get_single_implementation(const std::string& class_na
 // ============================================================================
 
 auto DevirtualizationPass::can_devirtualize(const std::string& receiver_type,
-                                             const std::string& method_name) const
-    -> DevirtReason {
+                                            const std::string& method_name) const -> DevirtReason {
     // Check if it's even a class type
     auto class_def = env_.lookup_class(receiver_type);
     if (!class_def) {

@@ -245,7 +245,7 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         std::string prop_key = c.name + "." + prop.name;
         std::string prop_llvm_type = llvm_type_ptr(prop.type);
         class_properties_[prop_key] = {prop.name, prop_llvm_type, prop.has_getter, prop.has_setter,
-                                        prop.is_static};
+                                       prop.is_static};
     }
 
     // Generate vtable
@@ -482,16 +482,25 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
         for (const auto& pt : param_types) {
             // Convert LLVM type to simple name for mangling: i32 -> I32, ptr -> ptr, etc.
             std::string type_suffix = pt;
-            if (type_suffix == "i8") type_suffix = "I8";
-            else if (type_suffix == "i16") type_suffix = "I16";
-            else if (type_suffix == "i32") type_suffix = "I32";
-            else if (type_suffix == "i64") type_suffix = "I64";
-            else if (type_suffix == "i128") type_suffix = "I128";
-            else if (type_suffix == "float") type_suffix = "F32";
-            else if (type_suffix == "double") type_suffix = "F64";
-            else if (type_suffix == "i1") type_suffix = "Bool";
+            if (type_suffix == "i8")
+                type_suffix = "I8";
+            else if (type_suffix == "i16")
+                type_suffix = "I16";
+            else if (type_suffix == "i32")
+                type_suffix = "I32";
+            else if (type_suffix == "i64")
+                type_suffix = "I64";
+            else if (type_suffix == "i128")
+                type_suffix = "I128";
+            else if (type_suffix == "float")
+                type_suffix = "F32";
+            else if (type_suffix == "double")
+                type_suffix = "F64";
+            else if (type_suffix == "i1")
+                type_suffix = "Bool";
             // For ptr types and complex types, use "ptr"
-            else if (type_suffix.find("ptr") != std::string::npos || type_suffix.find("%") != std::string::npos)
+            else if (type_suffix.find("ptr") != std::string::npos ||
+                     type_suffix.find("%") != std::string::npos)
                 type_suffix = "ptr";
             func_name += "_" + type_suffix;
         }
@@ -651,14 +660,22 @@ void LLVMIRGen::gen_class_constructor_instantiation(
     if (!param_types.empty()) {
         for (const auto& pt : param_types) {
             std::string type_suffix = pt;
-            if (type_suffix == "i8") type_suffix = "I8";
-            else if (type_suffix == "i16") type_suffix = "I16";
-            else if (type_suffix == "i32") type_suffix = "I32";
-            else if (type_suffix == "i64") type_suffix = "I64";
-            else if (type_suffix == "i128") type_suffix = "I128";
-            else if (type_suffix == "float") type_suffix = "F32";
-            else if (type_suffix == "double") type_suffix = "F64";
-            else if (type_suffix == "i1") type_suffix = "Bool";
+            if (type_suffix == "i8")
+                type_suffix = "I8";
+            else if (type_suffix == "i16")
+                type_suffix = "I16";
+            else if (type_suffix == "i32")
+                type_suffix = "I32";
+            else if (type_suffix == "i64")
+                type_suffix = "I64";
+            else if (type_suffix == "i128")
+                type_suffix = "I128";
+            else if (type_suffix == "float")
+                type_suffix = "F32";
+            else if (type_suffix == "double")
+                type_suffix = "F64";
+            else if (type_suffix == "i1")
+                type_suffix = "Bool";
             else if (type_suffix.find("ptr") != std::string::npos ||
                      type_suffix.find("%") != std::string::npos)
                 type_suffix = "ptr";
@@ -678,7 +695,8 @@ void LLVMIRGen::gen_class_constructor_instantiation(
     // Function signature
     std::string sig = "define " + class_type + "* " + func_name + "(";
     for (size_t i = 0; i < param_types.size(); ++i) {
-        if (i > 0) sig += ", ";
+        if (i > 0)
+            sig += ", ";
         sig += param_types[i] + " %" + param_names[i];
     }
     sig += ")";
@@ -687,8 +705,8 @@ void LLVMIRGen::gen_class_constructor_instantiation(
 
     // Allocate object
     std::string obj = fresh_reg();
-    emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type +
-              "* getelementptr (" + class_type + ", " + class_type + "* null, i32 1) to i64))");
+    emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type + "* getelementptr (" +
+              class_type + ", " + class_type + "* null, i32 1) to i64))");
 
     // Initialize vtable pointer
     std::string vtable_ptr = fresh_reg();
@@ -751,7 +769,8 @@ void LLVMIRGen::gen_class_method_instantiation(
 
     for (const auto& param : method.params) {
         std::string pname = get_class_param_name(param);
-        if (pname == "this") continue;
+        if (pname == "this")
+            continue;
 
         auto resolved = resolve_parser_type_with_subs(*param.type, type_subs);
         param_types.push_back(llvm_type_from_semantic(resolved));
@@ -768,7 +787,8 @@ void LLVMIRGen::gen_class_method_instantiation(
     // Function signature
     std::string sig = "define " + ret_type + " " + func_name + "(";
     for (size_t i = 0; i < param_types.size(); ++i) {
-        if (i > 0) sig += ", ";
+        if (i > 0)
+            sig += ", ";
         sig += param_types[i] + " %" + param_names[i];
     }
     sig += ")";
@@ -781,7 +801,8 @@ void LLVMIRGen::gen_class_method_instantiation(
         if (param_names[i] == "this") {
             sem_type->kind = types::ClassType{mangled_name};
         }
-        locals_[param_names[i]] = VarInfo{"%" + param_names[i], param_types[i], sem_type, std::nullopt};
+        locals_[param_names[i]] =
+            VarInfo{"%" + param_names[i], param_types[i], sem_type, std::nullopt};
     }
 
     // Generate body
@@ -820,7 +841,8 @@ void LLVMIRGen::gen_class_method_instantiation(
     }
 
     // Register method in functions_ map
-    functions_[mangled_name + "_" + method.name] = FuncInfo{func_name, ret_type, ret_type, param_types};
+    functions_[mangled_name + "_" + method.name] =
+        FuncInfo{func_name, ret_type, ret_type, param_types};
 }
 
 // ============================================================================
@@ -1286,8 +1308,8 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
             if (found) {
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + class_type + ", ptr %this, i32 0, i32 " +
-                          std::to_string(field_idx));
+                emit_line("  " + field_ptr + " = getelementptr " + class_type +
+                          ", ptr %this, i32 0, i32 " + std::to_string(field_idx));
                 std::string value = fresh_reg();
                 emit_line("  " + value + " = load " + prop_type + ", ptr " + field_ptr);
                 emit_line("  ret " + prop_type + " " + value);
@@ -1302,9 +1324,10 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
         // Register getter function
         std::string getter_sig = prop_type + " (" + std::string(prop.is_static ? "" : "ptr") + ")";
-        std::vector<std::string> getter_params = prop.is_static ? std::vector<std::string>{}
-                                                                 : std::vector<std::string>{"ptr"};
-        functions_[c.name + "_get_" + prop.name] = FuncInfo{getter_name, getter_sig, prop_type, getter_params};
+        std::vector<std::string> getter_params =
+            prop.is_static ? std::vector<std::string>{} : std::vector<std::string>{"ptr"};
+        functions_[c.name + "_get_" + prop.name] =
+            FuncInfo{getter_name, getter_sig, prop_type, getter_params};
     }
 
     // Generate setter if present
@@ -1356,8 +1379,8 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
             if (found) {
                 std::string field_ptr = fresh_reg();
-                emit_line("  " + field_ptr + " = getelementptr " + class_type + ", ptr %this, i32 0, i32 " +
-                          std::to_string(field_idx));
+                emit_line("  " + field_ptr + " = getelementptr " + class_type +
+                          ", ptr %this, i32 0, i32 " + std::to_string(field_idx));
                 emit_line("  store " + prop_type + " %value, ptr " + field_ptr);
             }
         }
@@ -1367,10 +1390,13 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
         emit_line("");
 
         // Register setter function
-        std::vector<std::string> setter_params = prop.is_static ? std::vector<std::string>{prop_type}
-                                                                 : std::vector<std::string>{"ptr", prop_type};
-        std::string setter_sig = std::string("void (") + (prop.is_static ? "" : "ptr, ") + prop_type + ")";
-        functions_[c.name + "_set_" + prop.name] = FuncInfo{setter_name, setter_sig, "void", setter_params};
+        std::vector<std::string> setter_params = prop.is_static
+                                                     ? std::vector<std::string>{prop_type}
+                                                     : std::vector<std::string>{"ptr", prop_type};
+        std::string setter_sig =
+            std::string("void (") + (prop.is_static ? "" : "ptr, ") + prop_type + ")";
+        functions_[c.name + "_set_" + prop.name] =
+            FuncInfo{setter_name, setter_sig, "void", setter_params};
     }
 
     // Clear locals after property generation

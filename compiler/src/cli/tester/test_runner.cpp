@@ -182,7 +182,10 @@ public:
         temp_file_path_ = get_run_cache_dir() / ("capture_" + std::to_string(std::time(nullptr)) +
                                                  "_" + std::to_string(rand()) + ".tmp");
 
-        // Flush before redirecting
+        // Sync C++ streams with C stdio and flush all buffers
+        std::ios_base::sync_with_stdio(true);
+        std::cout << std::flush;
+        std::cerr << std::flush;
         std::fflush(stdout);
         std::fflush(stderr);
 
@@ -191,14 +194,23 @@ public:
         saved_stdout_ = _dup(_fileno(stdout));
         saved_stderr_ = _dup(_fileno(stderr));
 
-        // Open temp file and redirect stdout/stderr to it
+        if (saved_stdout_ < 0 || saved_stderr_ < 0) {
+            return false;
+        }
+
+        // Open temp file for capturing output
         int temp_fd = -1;
         errno_t err = _sopen_s(&temp_fd, temp_file_path_.string().c_str(),
                                _O_WRONLY | _O_CREAT | _O_TRUNC, _SH_DENYNO, _S_IREAD | _S_IWRITE);
         if (err != 0 || temp_fd < 0) {
+            _close(saved_stdout_);
+            _close(saved_stderr_);
+            saved_stdout_ = -1;
+            saved_stderr_ = -1;
             return false;
         }
 
+        // Redirect stdout/stderr to temp file
         _dup2(temp_fd, _fileno(stdout));
         _dup2(temp_fd, _fileno(stderr));
         _close(temp_fd);
@@ -207,12 +219,21 @@ public:
         saved_stdout_ = dup(STDOUT_FILENO);
         saved_stderr_ = dup(STDERR_FILENO);
 
-        // Open temp file and redirect stdout/stderr to it
-        int temp_fd = open(temp_file_path_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (temp_fd < 0) {
+        if (saved_stdout_ < 0 || saved_stderr_ < 0) {
             return false;
         }
 
+        // Open temp file for capturing output
+        int temp_fd = open(temp_file_path_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (temp_fd < 0) {
+            close(saved_stdout_);
+            close(saved_stderr_);
+            saved_stdout_ = -1;
+            saved_stderr_ = -1;
+            return false;
+        }
+
+        // Redirect stdout/stderr to temp file
         dup2(temp_fd, STDOUT_FILENO);
         dup2(temp_fd, STDERR_FILENO);
         close(temp_fd);
@@ -226,7 +247,10 @@ public:
         if (!capturing_)
             return "";
 
-        // Flush before restoring
+        // Ensure C++ streams are synced and flushed
+        std::ios_base::sync_with_stdio(true);
+        std::cout << std::flush;
+        std::cerr << std::flush;
         std::fflush(stdout);
         std::fflush(stderr);
 
@@ -244,6 +268,8 @@ public:
         close(saved_stderr_);
 #endif
 
+        saved_stdout_ = -1;
+        saved_stderr_ = -1;
         capturing_ = false;
 
         // Read the captured output from the temp file
@@ -1613,6 +1639,26 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
                   << std::flush;
     }
 
+    // Get output suppression function from runtime (to suppress test output when not verbose)
+    using TmlSetOutputSuppressed = void (*)(int32_t);
+    auto set_output_suppressed =
+        lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
+    if (verbose) {
+        std::cerr << "[DEBUG]   tml_set_output_suppressed: "
+                  << (set_output_suppressed ? "found" : "NOT FOUND") << "\n"
+                  << std::flush;
+    }
+
+    // Suppress output when not in verbose mode
+    if (!verbose) {
+        if (set_output_suppressed) {
+            set_output_suppressed(1);
+        }
+        // Also flush to ensure no buffered output appears
+        std::fflush(stdout);
+        std::fflush(stderr);
+    }
+
     // Set up output capture (skip in verbose mode to see crash output directly)
     OutputCapture capture;
     bool capture_started = verbose ? false : capture.start();
@@ -1692,6 +1738,11 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
         result.output = capture.stop();
     }
 
+    // Restore output after test (important for error messages)
+    if (!verbose && set_output_suppressed) {
+        set_output_suppressed(0);
+    }
+
     return result;
 }
 
@@ -1721,7 +1772,17 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
 
     // Try to get the panic-catching wrapper from the runtime
     auto run_with_catch = lib.get_function<TmlRunTestWithCatch>("tml_run_test_with_catch");
+
+    // Get output suppression function from runtime
+    using TmlSetOutputSuppressed = void (*)(int32_t);
+    auto set_output_suppressed =
+        lib.get_function<TmlSetOutputSuppressed>("tml_set_output_suppressed");
     record_phase("exec.get_symbol", phase_start);
+
+    // Suppress output for profiled tests (cleaner profiling output)
+    if (set_output_suppressed) {
+        set_output_suppressed(1);
+    }
 
     // Phase: Set up output capture
     phase_start = Clock::now();
@@ -1761,6 +1822,11 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
         result.output = capture.stop();
     }
     record_phase("exec.capture_stop", phase_start);
+
+    // Restore output after test
+    if (set_output_suppressed) {
+        set_output_suppressed(0);
+    }
 
     return result;
 }

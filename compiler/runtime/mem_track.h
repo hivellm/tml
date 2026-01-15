@@ -19,8 +19,8 @@
 #ifndef TML_MEM_TRACK_H
 #define TML_MEM_TRACK_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,11 +48,11 @@ extern "C" {
  * @brief Record of a single allocation.
  */
 typedef struct TmlAllocRecord {
-    void* ptr;                  /**< Allocated pointer */
-    size_t size;                /**< Allocation size in bytes */
-    uint64_t alloc_id;          /**< Sequential allocation ID */
-    uint64_t timestamp_ns;      /**< Allocation timestamp (nanoseconds) */
-    const char* tag;            /**< Optional allocation tag/label */
+    void* ptr;             /**< Allocated pointer */
+    size_t size;           /**< Allocation size in bytes */
+    uint64_t alloc_id;     /**< Sequential allocation ID */
+    uint64_t timestamp_ns; /**< Allocation timestamp (nanoseconds) */
+    const char* tag;       /**< Optional allocation tag/label */
 } TmlAllocRecord;
 
 // ============================================================================
@@ -163,8 +163,10 @@ void tml_mem_set_output(void* fp);
  * @brief Tracked allocation with automatic tag.
  */
 #define TML_ALLOC(size) tml_mem_alloc_tracked((size), __FILE__ ":" TML_STRINGIFY(__LINE__))
-#define TML_ALLOC_ZEROED(size) tml_mem_alloc_zeroed_tracked((size), __FILE__ ":" TML_STRINGIFY(__LINE__))
-#define TML_REALLOC(ptr, size) tml_mem_realloc_tracked((ptr), (size), __FILE__ ":" TML_STRINGIFY(__LINE__))
+#define TML_ALLOC_ZEROED(size)                                                                     \
+    tml_mem_alloc_zeroed_tracked((size), __FILE__ ":" TML_STRINGIFY(__LINE__))
+#define TML_REALLOC(ptr, size)                                                                     \
+    tml_mem_realloc_tracked((ptr), (size), __FILE__ ":" TML_STRINGIFY(__LINE__))
 #define TML_FREE(ptr) tml_mem_free_tracked(ptr)
 
 #define TML_STRINGIFY_HELPER(x) #x

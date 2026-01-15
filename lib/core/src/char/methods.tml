@@ -612,10 +612,29 @@ func char_to_string(c: Char) -> Str {
         let byte: U8 = c as U8
         return lowlevel { char_to_string(byte) }
     }
-    // For non-ASCII, encode as UTF-8
-    // TODO: Implement proper UTF-8 encoding for non-ASCII characters
-    // For now, just return a placeholder
-    return "?"
+
+    // UTF-8 encoding for non-ASCII characters
+    // 2 bytes: 110xxxxx 10xxxxxx (U+0080 to U+07FF)
+    if c < 0x800 {
+        let b1: U8 = (0xC0 | ((c >> 6) & 0x1F)) as U8
+        let b2: U8 = (0x80 | (c & 0x3F)) as U8
+        return lowlevel { utf8_2byte_to_string(b1, b2) }
+    }
+
+    // 3 bytes: 1110xxxx 10xxxxxx 10xxxxxx (U+0800 to U+FFFF)
+    if c < 0x10000 {
+        let b1: U8 = (0xE0 | ((c >> 12) & 0x0F)) as U8
+        let b2: U8 = (0x80 | ((c >> 6) & 0x3F)) as U8
+        let b3: U8 = (0x80 | (c & 0x3F)) as U8
+        return lowlevel { utf8_3byte_to_string(b1, b2, b3) }
+    }
+
+    // 4 bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx (U+10000 to U+10FFFF)
+    let b1: U8 = (0xF0 | ((c >> 18) & 0x07)) as U8
+    let b2: U8 = (0x80 | ((c >> 12) & 0x3F)) as U8
+    let b3: U8 = (0x80 | ((c >> 6) & 0x3F)) as U8
+    let b4: U8 = (0x80 | (c & 0x3F)) as U8
+    return lowlevel { utf8_4byte_to_string(b1, b2, b3, b4) }
 }
 
 // ============================================================================

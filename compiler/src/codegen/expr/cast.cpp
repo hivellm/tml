@@ -294,9 +294,9 @@ auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
 }
 
 auto LLVMIRGen::gen_class_safe_cast(const std::string& src_ptr, const std::string& src_class,
-                                     const std::string& target_name,
-                                     [[maybe_unused]] const parser::TypePtr& target_type,
-                                     bool target_is_class) -> std::string {
+                                    const std::string& target_name,
+                                    [[maybe_unused]] const parser::TypePtr& target_type,
+                                    bool target_is_class) -> std::string {
     // Check inheritance relationship at compile time
     bool is_upcast = false;
     bool is_exact_same = (src_class == target_name);

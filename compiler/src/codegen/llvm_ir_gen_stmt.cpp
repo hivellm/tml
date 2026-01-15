@@ -222,7 +222,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         std::string tuple_type;
         types::TypePtr semantic_tuple_type = nullptr;
         if (let.type_annotation) {
-                semantic_tuple_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+            semantic_tuple_type =
+                resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
             tuple_type = llvm_type_from_semantic(semantic_tuple_type);
         }
 
@@ -317,7 +318,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     types::TypePtr semantic_var_type = nullptr;
     if (let.type_annotation) {
         // Resolve type with current type substitutions (for generic impl methods)
-        semantic_var_type = resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
+        semantic_var_type =
+            resolve_parser_type_with_subs(**let.type_annotation, current_type_subs_);
         var_type = llvm_type_from_semantic(semantic_var_type);
         is_struct = var_type.starts_with("%struct.");
         is_ptr = (var_type == "ptr"); // Collection types like List[T] are pointers
@@ -419,7 +421,8 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
                     concrete_type = local_type.substr(7); // Skip "%class."
                 } else if (local_type == "ptr") {
                     // For pointer types, try to get the type from semantic info
-                    if (it->second.semantic_type && it->second.semantic_type->is<types::ClassType>()) {
+                    if (it->second.semantic_type &&
+                        it->second.semantic_type->is<types::ClassType>()) {
                         concrete_type = it->second.semantic_type->as<types::ClassType>().name;
                     }
                 }
