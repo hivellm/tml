@@ -397,9 +397,23 @@ auto HirMirBuilder::build_method_call(const hir::HirMethodCallExpr& call) -> Val
 
     MirTypePtr return_type = convert_type(call.type);
 
+    // Get receiver type name from HIR (preserves class name even when converted to ptr)
+    std::string recv_type_name;
+    if (call.receiver_type) {
+        if (auto* class_type = std::get_if<types::ClassType>(&call.receiver_type->kind)) {
+            recv_type_name = class_type->name;
+        } else if (auto* named_type = std::get_if<types::NamedType>(&call.receiver_type->kind)) {
+            recv_type_name = named_type->name;
+        } else {
+            recv_type_name = get_type_name(receiver.type);
+        }
+    } else {
+        recv_type_name = get_type_name(receiver.type);
+    }
+
     MethodCallInst inst;
     inst.receiver = receiver;
-    inst.receiver_type = get_type_name(receiver.type);
+    inst.receiver_type = recv_type_name;
     inst.method_name = call.method_name;
     inst.args = std::move(args);
     inst.arg_types = std::move(arg_types);

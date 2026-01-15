@@ -234,8 +234,19 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string left = get_value_reg(i.left);
                 std::string right = get_value_reg(i.right);
 
-                // Use result_type if available, otherwise use left operand's type
-                mir::MirTypePtr type_ptr = i.result_type ? i.result_type : i.left.type;
+                // Check if it's a comparison
+                bool is_comparison = (i.op >= mir::BinOp::Eq && i.op <= mir::BinOp::Ge);
+
+                // For comparisons, always use the operand's type (not result_type which is bool)
+                // For other operations, prefer result_type if available
+                mir::MirTypePtr type_ptr;
+                if (is_comparison) {
+                    // Comparison uses operand types - prefer left.type
+                    type_ptr = i.left.type ? i.left.type : i.right.type;
+                } else {
+                    // Other ops use result_type if available
+                    type_ptr = i.result_type ? i.result_type : i.left.type;
+                }
                 if (!type_ptr) {
                     // Fallback to i32 if no type info
                     type_ptr = mir::make_i32_type();
@@ -245,8 +256,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 bool is_float = type_ptr->is_float();
                 bool is_signed = type_ptr->is_signed();
 
-                // Check if it's a comparison
-                if (i.op >= mir::BinOp::Eq && i.op <= mir::BinOp::Ge) {
+                if (is_comparison) {
                     std::string pred = get_cmp_predicate(i.op, is_float, is_signed);
                     if (is_float) {
                         emitln("    " + result_reg + " = fcmp " + pred + " " + type_str + " " +
@@ -356,6 +366,14 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     }
                 }
 
+                // Sanitize function name: replace :: with __ for LLVM compatibility
+                std::string func_name = i.func_name;
+                size_t pos = 0;
+                while ((pos = func_name.find("::", pos)) != std::string::npos) {
+                    func_name.replace(pos, 2, "__");
+                    pos += 2;
+                }
+
                 mir::MirTypePtr ret_ptr = i.return_type ? i.return_type : mir::make_unit_type();
                 std::string ret_type = mir_type_to_llvm(ret_ptr);
                 if (ret_type != "void" && !result_reg.empty()) {
@@ -363,7 +381,7 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 } else {
                     emit("    ");
                 }
-                emit("call " + ret_type + " @" + i.func_name + "(");
+                emit("call " + ret_type + " @" + func_name + "(");
                 for (size_t j = 0; j < i.args.size(); ++j) {
                     if (j > 0) {
                         emit(", ");

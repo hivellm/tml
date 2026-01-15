@@ -267,6 +267,16 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
         return std::make_shared<MirType>(MirType{MirFunctionType{std::move(params), ret}});
     }
 
+    // Class types are always heap-allocated and passed as pointers
+    if (auto* class_type = std::get_if<types::ClassType>(&type->kind)) {
+        return make_ptr_type();
+    }
+
+    // Interface types are also passed as pointers (trait objects)
+    if (auto* iface_type = std::get_if<types::InterfaceType>(&type->kind)) {
+        return make_ptr_type();
+    }
+
     // Default fallback
     return make_unit_type();
 }

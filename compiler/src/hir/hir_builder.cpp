@@ -257,12 +257,16 @@ auto HirBuilder::lower_function(const parser::FuncDecl& func) -> HirFunction {
     if (func.body) {
         // Create scope for function body
         scopes_.emplace_back();
+        type_env_.push_scope(); // Also push type environment scope for variable types
         for (const auto& param : hir_func.params) {
             scopes_.back().insert(param.name);
+            // Define parameter in type environment so we can look up its type later
+            type_env_.current_scope()->define(param.name, param.type, param.is_mut, param.span);
         }
 
         hir_func.body = lower_block(*func.body);
 
+        type_env_.pop_scope(); // Pop type environment scope
         scopes_.pop_back();
     }
 
@@ -513,7 +517,14 @@ auto HirBuilder::resolve_type(const parser::Type& type) -> HirType {
                 return current_impl_self_type_.value();
             }
 
-            // For user-defined types, create a NamedType
+            // Check if this is a class type
+            if (auto class_def = type_env_.lookup_class(name)) {
+                auto result = std::make_shared<types::Type>();
+                result->kind = types::ClassType{name};
+                return result;
+            }
+
+            // For user-defined types (structs, enums), create a NamedType
             auto result = std::make_shared<types::Type>();
             result->kind = types::NamedType{name, "", {}};
             return result;

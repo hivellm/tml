@@ -105,6 +105,10 @@ auto HirBuilder::lower_let(const parser::LetStmt& let_stmt) -> HirStmtPtr {
         if (!scopes_.empty()) {
             scopes_.back().insert(ident.name);
         }
+        // Also define in type environment scope so we can look up the type later
+        if (auto scope = type_env_.current_scope()) {
+            scope->define(ident.name, type, ident.is_mut, let_stmt.span);
+        }
     }
 
     // Lower initializer
@@ -141,6 +145,10 @@ auto HirBuilder::lower_var(const parser::VarStmt& var_stmt) -> HirStmtPtr {
     // Add to current scope
     if (!scopes_.empty()) {
         scopes_.back().insert(var_stmt.name);
+    }
+    // Also define in type environment scope so we can look up the type later
+    if (auto scope = type_env_.current_scope()) {
+        scope->define(var_stmt.name, type, true, var_stmt.span);
     }
 
     // Lower initializer

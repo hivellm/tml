@@ -365,6 +365,23 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
     HirType return_type = types::make_unit();
     if (auto sig = type_env_.lookup_func(func_name)) {
         return_type = type_env_.resolve(sig->return_type);
+    } else {
+        // Check for class static method (ClassName::method)
+        auto pos = func_name.find("::");
+        if (pos != std::string::npos) {
+            std::string class_name = func_name.substr(0, pos);
+            std::string method_name = func_name.substr(pos + 2);
+
+            // Try to find the class and its static method
+            if (auto class_def = type_env_.lookup_class(class_name)) {
+                for (const auto& method : class_def->methods) {
+                    if (method.sig.name == method_name && method.is_static) {
+                        return_type = type_env_.resolve(method.sig.return_type);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     return make_hir_call(fresh_id(), func_name, {}, std::move(args), return_type, call.span);
@@ -393,11 +410,25 @@ auto HirBuilder::lower_method_call(const parser::MethodCallExpr& call) -> HirExp
     // Look up method return type from type environment
     HirType return_type = types::make_unit();
     // Get type name from receiver to look up method
+    std::string type_name;
     if (receiver_type && receiver_type->is<types::NamedType>()) {
-        std::string type_name = receiver_type->as<types::NamedType>().name;
+        type_name = receiver_type->as<types::NamedType>().name;
+    } else if (receiver_type && receiver_type->is<types::ClassType>()) {
+        type_name = receiver_type->as<types::ClassType>().name;
+    }
+
+    if (!type_name.empty()) {
         std::string method_name = type_name + "::" + call.method;
         if (auto sig = type_env_.lookup_func(method_name)) {
             return_type = type_env_.resolve(sig->return_type);
+        } else if (auto class_def = type_env_.lookup_class(type_name)) {
+            // Try to find instance method in class definition
+            for (const auto& method : class_def->methods) {
+                if (method.sig.name == call.method && !method.is_static) {
+                    return_type = type_env_.resolve(method.sig.return_type);
+                    break;
+                }
+            }
         }
     }
 
@@ -417,16 +448,25 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
     std::string type_name;
     if (object_type && object_type->is<types::NamedType>()) {
         type_name = object_type->as<types::NamedType>().name;
+    } else if (object_type && object_type->is<types::ClassType>()) {
+        type_name = object_type->as<types::ClassType>().name;
     }
     int field_index = get_field_index(type_name, field.field);
 
-    // Look up field type from struct definition
+    // Look up field type from struct definition or class definition
     HirType field_type = types::make_unit();
     if (!type_name.empty()) {
         if (auto struct_def = type_env_.lookup_struct(type_name)) {
             for (const auto& f : struct_def->fields) {
                 if (f.first == field.field) {
                     field_type = type_env_.resolve(f.second);
+                    break;
+                }
+            }
+        } else if (auto class_def = type_env_.lookup_class(type_name)) {
+            for (const auto& f : class_def->fields) {
+                if (f.name == field.field) {
+                    field_type = type_env_.resolve(f.type);
                     break;
                 }
             }
@@ -697,6 +737,7 @@ auto HirBuilder::lower_for(const parser::ForExpr& for_expr) -> HirExprPtr {
 
 auto HirBuilder::lower_block(const parser::BlockExpr& block) -> HirExprPtr {
     scopes_.emplace_back();
+    type_env_.push_scope(); // Push type environment scope for variable types
 
     std::vector<HirStmtPtr> stmts;
     for (const auto& stmt : block.stmts) {
@@ -710,6 +751,7 @@ auto HirBuilder::lower_block(const parser::BlockExpr& block) -> HirExprPtr {
 
     HirType type = expr ? (*expr)->type() : types::make_unit();
 
+    type_env_.pop_scope(); // Pop type environment scope
     scopes_.pop_back();
 
     return make_hir_block(fresh_id(), std::move(stmts), std::move(expr), type, block.span);

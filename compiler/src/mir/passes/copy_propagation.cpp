@@ -32,18 +32,42 @@ auto CopyPropagationPass::run_on_function(Function& func) -> bool {
     bool changed = false;
     bool any_changed = true;
 
+    // Build value type map once (types don't change during propagation)
+    auto value_types = build_value_types(func);
+
     // Iterate until no more changes (transitive propagation)
     while (any_changed) {
         any_changed = false;
 
         auto copies = find_copies(func);
         if (!copies.empty()) {
-            any_changed = propagate_copies(func, copies);
+            any_changed = propagate_copies(func, copies, value_types);
             changed |= any_changed;
         }
     }
 
     return changed;
+}
+
+auto CopyPropagationPass::build_value_types(const Function& func)
+    -> std::unordered_map<ValueId, MirTypePtr> {
+    std::unordered_map<ValueId, MirTypePtr> value_types;
+
+    // Add parameter types
+    for (const auto& param : func.params) {
+        value_types[param.value_id] = param.type;
+    }
+
+    // Add instruction result types
+    for (const auto& block : func.blocks) {
+        for (const auto& inst : block.instructions) {
+            if (inst.result != INVALID_VALUE && inst.type) {
+                value_types[inst.result] = inst.type;
+            }
+        }
+    }
+
+    return value_types;
 }
 
 auto CopyPropagationPass::find_copies(const Function& func)
@@ -123,16 +147,22 @@ auto CopyPropagationPass::is_copy(const Instruction& inst) -> std::optional<Valu
         inst);
 }
 
-auto CopyPropagationPass::propagate_copies(Function& func,
-                                           const std::unordered_map<ValueId, ValueId>& copies)
-    -> bool {
+auto CopyPropagationPass::propagate_copies(
+    Function& func, const std::unordered_map<ValueId, ValueId>& copies,
+    const std::unordered_map<ValueId, MirTypePtr>& value_types) -> bool {
     bool changed = false;
 
     // Helper to replace a value if it's a known copy
-    auto replace = [&copies, &changed](ValueId& id) {
-        auto it = copies.find(id);
+    // Also updates the type to match the new value's type
+    auto replace = [&copies, &value_types, &changed](Value& val) {
+        auto it = copies.find(val.id);
         if (it != copies.end()) {
-            id = it->second;
+            val.id = it->second;
+            // Update type to match the original value's type
+            auto type_it = value_types.find(val.id);
+            if (type_it != value_types.end()) {
+                val.type = type_it->second;
+            }
             changed = true;
         }
     };
@@ -144,65 +174,65 @@ auto CopyPropagationPass::propagate_copies(Function& func,
                     using T = std::decay_t<decltype(i)>;
 
                     if constexpr (std::is_same_v<T, BinaryInst>) {
-                        replace(i.left.id);
-                        replace(i.right.id);
+                        replace(i.left);
+                        replace(i.right);
                     } else if constexpr (std::is_same_v<T, UnaryInst>) {
-                        replace(i.operand.id);
+                        replace(i.operand);
                     } else if constexpr (std::is_same_v<T, LoadInst>) {
-                        replace(i.ptr.id);
+                        replace(i.ptr);
                     } else if constexpr (std::is_same_v<T, StoreInst>) {
-                        replace(i.ptr.id);
-                        replace(i.value.id);
+                        replace(i.ptr);
+                        replace(i.value);
                     } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
-                        replace(i.base.id);
+                        replace(i.base);
                         for (auto& idx : i.indices) {
-                            replace(idx.id);
+                            replace(idx);
                         }
                     } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
-                        replace(i.aggregate.id);
+                        replace(i.aggregate);
                     } else if constexpr (std::is_same_v<T, InsertValueInst>) {
-                        replace(i.aggregate.id);
-                        replace(i.value.id);
+                        replace(i.aggregate);
+                        replace(i.value);
                     } else if constexpr (std::is_same_v<T, CallInst>) {
                         for (auto& arg : i.args) {
-                            replace(arg.id);
+                            replace(arg);
                         }
                     } else if constexpr (std::is_same_v<T, MethodCallInst>) {
-                        replace(i.receiver.id);
+                        replace(i.receiver);
                         for (auto& arg : i.args) {
-                            replace(arg.id);
+                            replace(arg);
                         }
                     } else if constexpr (std::is_same_v<T, CastInst>) {
-                        replace(i.operand.id);
+                        replace(i.operand);
                     } else if constexpr (std::is_same_v<T, PhiInst>) {
                         for (auto& [val, _] : i.incoming) {
-                            replace(val.id);
+                            replace(val);
                         }
                     } else if constexpr (std::is_same_v<T, SelectInst>) {
-                        replace(i.condition.id);
-                        replace(i.true_val.id);
-                        replace(i.false_val.id);
+                        replace(i.condition);
+                        replace(i.true_val);
+                        replace(i.false_val);
                     } else if constexpr (std::is_same_v<T, StructInitInst>) {
                         for (auto& field : i.fields) {
-                            replace(field.id);
+                            replace(field);
                         }
                     } else if constexpr (std::is_same_v<T, EnumInitInst>) {
                         for (auto& p : i.payload) {
-                            replace(p.id);
+                            replace(p);
                         }
                     } else if constexpr (std::is_same_v<T, TupleInitInst>) {
                         for (auto& elem : i.elements) {
-                            replace(elem.id);
+                            replace(elem);
                         }
                     } else if constexpr (std::is_same_v<T, ArrayInitInst>) {
                         for (auto& elem : i.elements) {
-                            replace(elem.id);
+                            replace(elem);
                         }
                     } else if constexpr (std::is_same_v<T, AwaitInst>) {
-                        replace(i.poll_value.id);
+                        replace(i.poll_value);
                     } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
                         for (auto& cap : i.captures) {
-                            replace(cap.second.id);
+                            replace(cap.second);
                         }
                     }
                     // ConstantInst and AllocaInst have no value operands
@@ -218,12 +248,12 @@ auto CopyPropagationPass::propagate_copies(Function& func,
 
                     if constexpr (std::is_same_v<T, ReturnTerm>) {
                         if (t.value.has_value()) {
-                            replace(t.value->id);
+                            replace(*t.value);
                         }
                     } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
-                        replace(t.condition.id);
+                        replace(t.condition);
                     } else if constexpr (std::is_same_v<T, SwitchTerm>) {
-                        replace(t.discriminant.id);
+                        replace(t.discriminant);
                     }
                 },
                 *block.terminator);

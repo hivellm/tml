@@ -1135,7 +1135,21 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
         }
 
         if (method.return_type.has_value()) {
-            sig.return_type = resolve_type(*method.return_type.value());
+            // Check if return type is the class being registered (self-referential)
+            // Since the class isn't registered yet, we need to handle this case specially
+            const auto& ret_type = *method.return_type.value();
+            if (auto* named = std::get_if<parser::NamedType>(&ret_type.kind)) {
+                if (!named->path.segments.empty() && named->path.segments.back() == decl.name) {
+                    // Return type is the class itself - create ClassType directly
+                    auto class_type = std::make_shared<Type>();
+                    class_type->kind = ClassType{decl.name};
+                    sig.return_type = class_type;
+                } else {
+                    sig.return_type = resolve_type(ret_type);
+                }
+            } else {
+                sig.return_type = resolve_type(ret_type);
+            }
         } else {
             sig.return_type = make_unit();
         }

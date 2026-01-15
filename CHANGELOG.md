@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `compiler/src/codegen/expr/struct.cpp` - Set expected type for struct field initializers
 
 ### Fixed
+- **MIR Codegen Class Type Resolution** (2026-01-15) - Fixed class instance method calls with -O3 optimization
+  - Class variables (e.g., `let p: Point = ...`) now correctly resolve to `ClassType` instead of `NamedType`
+  - Method calls like `p.get_x()` now generate correct IR: `@Point__get_x` instead of `@Ptr__get_x`
+  - HIR builder now maintains type environment scopes during lowering for proper variable type lookup
+  - Copy propagation pass now preserves operand types to prevent type mismatches in icmp instructions
+  - Files modified:
+    - `compiler/src/hir/hir_builder.cpp` - Added class type lookup in `resolve_type`, push type env scope in `lower_function`
+    - `compiler/src/hir/hir_builder_expr.cpp` - Push/pop type env scope in `lower_block`
+    - `compiler/src/hir/hir_builder_stmt.cpp` - Define let/var bindings in type env scope
+    - `compiler/src/mir/builder/hir_expr.cpp` - Use HIR receiver_type for method calls
+    - `compiler/src/mir/builder/types.cpp` - Return ptr type for ClassType
+    - `compiler/src/mir/hir_mir_builder.cpp` - Handle ClassType in convert_type_impl
+    - `compiler/src/mir/passes/copy_propagation.cpp` - Preserve types during value replacement
+    - `compiler/src/types/checker/core.cpp` - Handle self-referential class return types
+    - `compiler/src/codegen/mir_codegen.cpp` - Fix :: to __ replacement in function names
+
 - **Memory Pointer Type Consistency** (2026-01-14) - Unified pointer types for memory operations
   - Changed `alloc` builtin return type from `mut ref I32` to `*Unit` (opaque pointer)
   - Changed `dealloc` builtin parameter type to accept `*Unit`

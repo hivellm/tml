@@ -60,9 +60,12 @@ private:
     /// Returns a map from copied value ID to original value ID.
     auto find_copies(const Function& func) -> std::unordered_map<ValueId, ValueId>;
 
+    /// Builds a map from ValueId to its type.
+    auto build_value_types(const Function& func) -> std::unordered_map<ValueId, MirTypePtr>;
+
     /// Replaces all uses of copied values with their originals.
-    auto propagate_copies(Function& func, const std::unordered_map<ValueId, ValueId>& copies)
-        -> bool;
+    auto propagate_copies(Function& func, const std::unordered_map<ValueId, ValueId>& copies,
+                          const std::unordered_map<ValueId, MirTypePtr>& value_types) -> bool;
 
     /// Checks if an instruction is a simple copy.
     /// Returns the source value ID if it's a copy, nullopt otherwise.
