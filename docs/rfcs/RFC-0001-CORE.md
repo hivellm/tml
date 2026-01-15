@@ -16,6 +16,8 @@ Active (v0.5.0)
 | Generic Functions | ✅ Complete | Full codegen with monomorphization |
 | Bounds/Constraints | ✅ Complete | `where T: Addable` syntax |
 | String Interpolation | ✅ Complete | `"Hello {name}!"` syntax |
+| **Text Type** | ✅ Complete | Dynamic strings with SSO, `std::text::Text` |
+| **Template Literals** | ✅ Complete | `` `Hello {name}!` `` produces Text type |
 | Effects | ❌ Not Started | `with io, panic` |
 | Ownership | ✅ Basic | Move semantics, no borrow checker |
 | **Concurrency** | ✅ Complete | Atomics, fences, spinlocks |

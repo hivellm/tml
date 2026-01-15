@@ -477,6 +477,12 @@ auto Parser::parse_primary_expr() -> Result<ExprPtr, ParseError> {
         return parse_interp_string_expr();
     }
 
+    // Template literal: `Hello {name}!` (produces Text type)
+    if (check(lexer::TokenKind::TemplateLiteralStart) ||
+        check(lexer::TokenKind::TemplateLiteralEnd)) {
+        return parse_template_literal_expr();
+    }
+
     // Identifier or path
     if (check(lexer::TokenKind::Identifier)) {
         return parse_ident_or_path_expr();
@@ -1489,6 +1495,90 @@ auto Parser::parse_interp_string_expr() -> Result<ExprPtr, ParseError> {
     return make_box<Expr>(
         Expr{.kind = InterpolatedStringExpr{.segments = std::move(segments),
                                             .span = SourceSpan::merge(start_span, end_span)},
+             .span = SourceSpan::merge(start_span, end_span)});
+}
+
+auto Parser::parse_template_literal_expr() -> Result<ExprPtr, ParseError> {
+    // Parse template literal: `Hello {name}, you are {age} years old`
+    // Token sequence: TemplateLiteralStart("Hello ") -> Identifier(name) ->
+    // TemplateLiteralMiddle(", you are ") -> Identifier(age) -> TemplateLiteralEnd(" years old")
+    //
+    // Simple case (no interpolation): TemplateLiteralEnd("Hello world")
+    //
+    // IMPORTANT: The lexer intercepts the '}' and returns TemplateLiteralMiddle/End directly
+    // instead of returning RBrace. So after parsing the expression, we expect to see
+    // TemplateLiteralMiddle or TemplateLiteralEnd immediately.
+
+    auto start_span = peek().span;
+    std::vector<InterpolatedSegment> segments;
+
+    // Check for simple template literal (no interpolation)
+    if (check(lexer::TokenKind::TemplateLiteralEnd)) {
+        auto end_token = advance();
+        const auto& str = std::get<lexer::StringValue>(end_token.value).value;
+        if (!str.empty()) {
+            segments.push_back(InterpolatedSegment{.content = str, .span = end_token.span});
+        }
+        return make_box<Expr>(
+            Expr{.kind = TemplateLiteralExpr{.segments = std::move(segments), .span = start_span},
+                 .span = start_span});
+    }
+
+    // First token is TemplateLiteralStart (contains text before first {)
+    auto start_token = advance();
+    if (!start_token.is(lexer::TokenKind::TemplateLiteralStart)) {
+        return ParseError{
+            .message = "Expected template literal start", .span = start_token.span, .notes = {}};
+    }
+
+    // Add the initial text segment (may be empty)
+    const auto& start_str = std::get<lexer::StringValue>(start_token.value).value;
+    if (!start_str.empty()) {
+        segments.push_back(InterpolatedSegment{.content = start_str, .span = start_token.span});
+    }
+
+    // Loop: parse expression, then check for TemplateLiteralMiddle or TemplateLiteralEnd
+    while (true) {
+        // Parse the interpolated expression
+        auto expr = parse_expr();
+        if (is_err(expr))
+            return expr;
+
+        segments.push_back(
+            InterpolatedSegment{.content = std::move(unwrap(expr)), .span = previous().span});
+
+        // After the expression, the lexer should have already consumed the '}'
+        // and returned the continuation token (TemplateLiteralMiddle or TemplateLiteralEnd)
+        if (check(lexer::TokenKind::TemplateLiteralMiddle)) {
+            auto middle_token = advance();
+            const auto& middle_str = std::get<lexer::StringValue>(middle_token.value).value;
+            if (!middle_str.empty()) {
+                segments.push_back(
+                    InterpolatedSegment{.content = middle_str, .span = middle_token.span});
+            }
+            // Continue the loop to parse next expression
+        } else if (check(lexer::TokenKind::TemplateLiteralEnd)) {
+            auto end_token = advance();
+            const auto& end_str = std::get<lexer::StringValue>(end_token.value).value;
+            if (!end_str.empty()) {
+                segments.push_back(InterpolatedSegment{.content = end_str, .span = end_token.span});
+            }
+            // Done parsing the template literal
+            break;
+        } else {
+            // Unexpected token
+            return ParseError{.message = "Expected '}' to close template expression (got " +
+                                         std::string(lexer::token_kind_to_string(peek().kind)) +
+                                         ")",
+                              .span = peek().span,
+                              .notes = {}};
+        }
+    }
+
+    auto end_span = previous().span;
+    return make_box<Expr>(
+        Expr{.kind = TemplateLiteralExpr{.segments = std::move(segments),
+                                         .span = SourceSpan::merge(start_span, end_span)},
              .span = SourceSpan::merge(start_span, end_span)});
 }
 

@@ -216,7 +216,74 @@ let greeting: String = "Hi {user.name}!"
 - Lexer tracks interpolation depth for nested braces
 - Type checker validates all interpolated expressions
 
-### 4.5 Bytes
+### 4.5 Template Literals
+
+Template literals use backticks and produce the `Text` type (dynamic, growable strings).
+
+```ebnf
+TemplateLiteral = '`' (TemplateChar | '{' Expr '}')* '`'
+TemplateChar    = EscapeSeq | [^`\\{\n] | '\n'
+```
+
+**Key differences from interpolated strings:**
+| Feature | Interpolated Strings (`"..."`) | Template Literals (`` `...` ``) |
+|---------|-------------------------------|--------------------------------|
+| Result type | `Str` (static) | `Text` (dynamic) |
+| Multi-line | No | Yes |
+| Heap allocation | No | Yes (with SSO) |
+| Growable | No | Yes |
+
+**Lexer tokens:**
+- `TemplateLiteralStart` - Opening part before first `{`
+- `TemplateLiteralMiddle` - Part between `}` and next `{`
+- `TemplateLiteralEnd` - Closing part after last `}`
+
+**Examples:**
+```tml
+use std::text::Text
+
+// Simple template literal
+let greeting: Text = `Hello, World!`
+
+// Variable interpolation
+let name: Str = "Alice"
+let msg: Text = `Hello, {name}!`       // "Hello, Alice!"
+
+// Expression interpolation with type conversion
+let age: I32 = 25
+let info: Text = `Age: {age}`          // "Age: 25"
+
+// Multiple interpolations
+let x: I32 = 10
+let y: I32 = 20
+let coords: Text = `x={x}, y={y}`      // "x=10, y=20"
+
+// Multi-line templates
+let poem: Text = `Roses are red,
+Violets are blue,
+TML is great,
+And so are you!`
+
+// Escaped braces
+let code: Text = `Use \{ and \} for literals`
+
+// Empty template
+let empty: Text = ``
+```
+
+**Supported interpolation types:**
+- `Str` - Directly embedded
+- `I32`, `I64` - Converted via `i32_to_str`, `i64_to_str`
+- `F64` - Converted via `f64_to_str`
+- `Bool` - Converted to `"true"` or `"false"`
+
+**Implementation notes:**
+- Template literals always produce `Text` type, even without interpolation
+- Text type has Small String Optimization (SSO) for strings ≤23 bytes
+- Interpolated expressions are converted and concatenated at runtime
+- Lexer tracks template depth separately from interpolated strings
+
+### 4.6 Bytes
 
 ```ebnf
 Bytes    = 'b"' ByteChar* '"'

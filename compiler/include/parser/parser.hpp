@@ -429,6 +429,9 @@ private:
     /// Parses interpolated string expression.
     auto parse_interp_string_expr() -> Result<ExprPtr, ParseError>;
 
+    /// Parses template literal expression (produces Text type).
+    auto parse_template_literal_expr() -> Result<ExprPtr, ParseError>;
+
     // ========================================================================
     // Call and Member Access
     // ========================================================================

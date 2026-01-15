@@ -732,6 +732,23 @@ struct InterpolatedStringExpr {
     SourceSpan span;                           ///< Source location.
 };
 
+/// Template literal: `` `Hello {name}!` `` (produces Text type).
+///
+/// Similar to interpolated strings but uses backticks and produces Text.
+/// Supports multi-line strings and embedded expressions.
+///
+/// # Example
+///
+/// ```tml
+/// let greeting = `Hello {user.name}!`
+/// let multi_line = `Line 1
+/// Line 2`
+/// ```
+struct TemplateLiteralExpr {
+    std::vector<InterpolatedSegment> segments; ///< String segments.
+    SourceSpan span;                           ///< Source location.
+};
+
 // ============================================================================
 // OOP Expressions
 // ============================================================================
@@ -793,7 +810,8 @@ struct Expr {
                  IndexExpr, TupleExpr, ArrayExpr, StructExpr, IfExpr, TernaryExpr, IfLetExpr,
                  WhenExpr, LoopExpr, WhileExpr, ForExpr, BlockExpr, ReturnExpr, BreakExpr,
                  ContinueExpr, ClosureExpr, RangeExpr, CastExpr, IsExpr, TryExpr, AwaitExpr,
-                 ThrowExpr, PathExpr, LowlevelExpr, InterpolatedStringExpr, BaseExpr, NewExpr>
+                 ThrowExpr, PathExpr, LowlevelExpr, InterpolatedStringExpr, TemplateLiteralExpr,
+                 BaseExpr, NewExpr>
         kind;        ///< The expression variant.
     SourceSpan span; ///< Source location.
 

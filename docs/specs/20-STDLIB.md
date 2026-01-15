@@ -22,6 +22,7 @@ std
 │   └── iter       # Iterator behavior
 ├── alloc          # Requires allocator
 │   ├── string     # String type
+│   ├── text       # Text type (dynamic strings with SSO)
 │   ├── heap       # Heap[T]
 │   ├── shared     # Shared[T], Weak[T]
 │   ├── sync       # Sync[T], Weak[T]
@@ -391,7 +392,102 @@ extend String with Add[ref str] {
 }
 ```
 
-### 4.3 List (Vec)
+### 4.3 Text
+
+Dynamic, growable string with Small String Optimization (SSO).
+
+```tml
+// std.text
+use std::text::Text
+
+// Constructors
+public func new() -> Text
+public func from(s: Str) -> Text
+public func with_capacity(cap: I64) -> Text
+
+// Template literal syntax produces Text
+let greeting: Text = `Hello, {name}!`
+
+// Properties
+public func len(this) -> I64
+public func capacity(this) -> I64
+public func is_empty(this) -> Bool
+public func byte_at(this, idx: I64) -> I32
+
+// Modification
+public func push(this, c: I32)
+public func push_str(this, s: Str)
+public func clear(this)
+public func reserve(this, additional: I64)
+
+// Conversion
+public func as_str(this) -> Str
+public func clone(this) -> Text
+public func drop(this)
+
+// Search
+public func contains(this, search: Str) -> Bool
+public func starts_with(this, prefix: Str) -> Bool
+public func ends_with(this, suffix: Str) -> Bool
+public func index_of(this, search: Str) -> I64
+public func last_index_of(this, search: Str) -> I64
+
+// Transformation (returns new Text)
+public func to_upper_case(this) -> Text
+public func to_lower_case(this) -> Text
+public func trim(this) -> Text
+public func trim_start(this) -> Text
+public func trim_end(this) -> Text
+public func substring(this, start: I64, end: I64) -> Text
+public func replace(this, search: Str, replacement: Str) -> Text
+public func replace_all(this, search: Str, replacement: Str) -> Text
+public func repeat(this, count: I64) -> Text
+public func reverse(this) -> Text
+public func pad_start(this, len: I64, pad: I32) -> Text
+public func pad_end(this, len: I64, pad: I32) -> Text
+
+// Concatenation
+public func concat(this, other: Str) -> Text
+public func concat_str(this, s: Str) -> Text
+
+// Comparison
+public func compare(this, other: ref Text) -> I32
+public func equals(this, other: ref Text) -> Bool
+
+// Output
+public func print(this)
+public func println(this)
+
+// Static constructors
+public func from_i64(n: I64) -> Text
+public func from_f64(n: F64) -> Text
+public func from_f64_precision(n: F64, precision: I32) -> Text
+public func from_bool(b: Bool) -> Text
+```
+
+**SSO (Small String Optimization):**
+- Strings ≤23 bytes are stored inline without heap allocation
+- Threshold: 23 bytes (fits in 24-byte struct minus length byte)
+- Growth strategy: 2x until 4KB, then 1.5x
+
+**Example:**
+```tml
+use std::text::Text
+
+func greet(name: Str) -> Text {
+    let greeting: Text = `Hello, {name}!`
+    greeting.push_str(" Welcome!")
+    return greeting
+}
+
+func main() {
+    let msg: Text = greet("World")
+    msg.println()  // "Hello, World! Welcome!"
+    msg.drop()     // Required: free memory
+}
+```
+
+### 4.4 List (Vec)
 
 ```tml
 // std.alloc.vec

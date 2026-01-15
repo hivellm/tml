@@ -65,6 +65,11 @@ auto Lexer::next_token() -> Token {
         return lex_string();
     }
 
+    // Template literals (backtick strings - produce Text type)
+    if (c == '`') {
+        return lex_template_literal();
+    }
+
     // Characters
     if (c == '\'') {
         return lex_char();

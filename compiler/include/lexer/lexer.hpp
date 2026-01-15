@@ -137,6 +137,13 @@ private:
     bool in_interpolation_ = false; ///< True when inside `{expr}` of a string.
 
     // ========================================================================
+    // Template Literal State (produces Text type)
+    // ========================================================================
+
+    int template_depth_ = 0;           ///< Nesting depth of `{` in template literals.
+    bool in_template_literal_ = false; ///< True when inside `{expr}` of a template literal.
+
+    // ========================================================================
     // Character Access
     // ========================================================================
 
@@ -217,6 +224,16 @@ private:
 
     /// Checks if current string contains interpolation.
     [[nodiscard]] auto check_string_has_interpolation() const -> bool;
+
+    // ========================================================================
+    // Template Literal Support (produces Text type)
+    // ========================================================================
+
+    /// Lexes a template literal (backtick string).
+    [[nodiscard]] auto lex_template_literal() -> Token;
+
+    /// Continues lexing a template literal after `}`.
+    [[nodiscard]] auto lex_template_literal_continue() -> Token;
 
     // ========================================================================
     // Number Parsing

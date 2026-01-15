@@ -137,6 +137,8 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
                 return check_range(e);
             } else if constexpr (std::is_same_v<T, parser::InterpolatedStringExpr>) {
                 return check_interp_string(e);
+            } else if constexpr (std::is_same_v<T, parser::TemplateLiteralExpr>) {
+                return check_template_literal(e);
             } else if constexpr (std::is_same_v<T, parser::CastExpr>) {
                 return check_cast(e);
             } else if constexpr (std::is_same_v<T, parser::IsExpr>) {
@@ -1833,6 +1835,19 @@ auto TypeChecker::check_interp_string(const parser::InterpolatedStringExpr& inte
         }
     }
     return make_str();
+}
+
+auto TypeChecker::check_template_literal(const parser::TemplateLiteralExpr& tpl) -> TypePtr {
+    // Template literals produce Text type
+    for (const auto& segment : tpl.segments) {
+        if (std::holds_alternative<parser::ExprPtr>(segment.content)) {
+            const auto& expr = std::get<parser::ExprPtr>(segment.content);
+            auto expr_type = check_expr(*expr);
+            (void)expr_type;
+        }
+    }
+    // Return Text type - this is a named type from std::text
+    return std::make_shared<Type>(Type{NamedType{"Text", "", {}}});
 }
 
 auto TypeChecker::check_cast(const parser::CastExpr& cast) -> TypePtr {

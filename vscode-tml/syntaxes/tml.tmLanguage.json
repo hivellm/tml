@@ -241,7 +241,7 @@
         },
         {
           "name": "storage.type.builtin.tml",
-          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration|Layout|Allocator|Iterator|IntoIterator|FromIterator)\\b"
+          "match": "\\b(List|Map|HashMap|Set|Vec|Buffer|Maybe|Outcome|Result|Option|Heap|Shared|Sync|Instant|Duration|Layout|Allocator|Iterator|IntoIterator|FromIterator|Text)\\b"
         },
         {
           "name": "constant.language.enum-variant.tml",
@@ -337,6 +337,73 @@
               "include": "#string-escapes"
             }
           ]
+        },
+        {
+          "include": "#template-literal"
+        }
+      ]
+    },
+    "template-literal": {
+      "name": "string.template.tml",
+      "begin": "`",
+      "end": "`",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.begin.tml"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.template.end.tml"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#template-interpolation"
+        },
+        {
+          "include": "#string-escapes"
+        }
+      ]
+    },
+    "template-interpolation": {
+      "name": "meta.template.expression.tml",
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.begin.tml"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.end.tml"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#types"
+        },
+        {
+          "include": "#literals"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#builtins"
+        },
+        {
+          "include": "#functions"
+        },
+        {
+          "include": "#variables"
         }
       ]
     },
@@ -344,7 +411,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.tml",
-          "match": "\\\\(\\\\|\"|'|n|r|t|0|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})"
+          "match": "\\\\(\\\\|\"|'|n|r|t|0|\\{|\\}|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]+\\})"
         }
       ]
     },

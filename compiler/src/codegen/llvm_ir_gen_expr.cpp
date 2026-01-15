@@ -99,6 +99,8 @@ auto LLVMIRGen::gen_expr(const parser::Expr& expr) -> std::string {
         return gen_lowlevel(expr.as<parser::LowlevelExpr>());
     } else if (expr.is<parser::InterpolatedStringExpr>()) {
         return gen_interp_string(expr.as<parser::InterpolatedStringExpr>());
+    } else if (expr.is<parser::TemplateLiteralExpr>()) {
+        return gen_template_literal(expr.as<parser::TemplateLiteralExpr>());
     } else if (expr.is<parser::CastExpr>()) {
         return gen_cast(expr.as<parser::CastExpr>());
     } else if (expr.is<parser::IsExpr>()) {

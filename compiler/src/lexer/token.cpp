@@ -52,6 +52,14 @@ auto token_kind_to_string(TokenKind kind) -> std::string_view {
     case TokenKind::InterpStringEnd:
         return "interp_string_end";
 
+    // Template literal tokens (produce Text type)
+    case TokenKind::TemplateLiteralStart:
+        return "template_literal_start";
+    case TokenKind::TemplateLiteralMiddle:
+        return "template_literal_middle";
+    case TokenKind::TemplateLiteralEnd:
+        return "template_literal_end";
+
     // Identifier
     case TokenKind::Identifier:
         return "identifier";
@@ -339,7 +347,8 @@ auto is_keyword(TokenKind kind) -> bool {
 
 auto is_literal(TokenKind kind) -> bool {
     return (kind >= TokenKind::IntLiteral && kind <= TokenKind::NullLiteral) ||
-           (kind >= TokenKind::InterpStringStart && kind <= TokenKind::InterpStringEnd);
+           (kind >= TokenKind::InterpStringStart && kind <= TokenKind::InterpStringEnd) ||
+           (kind >= TokenKind::TemplateLiteralStart && kind <= TokenKind::TemplateLiteralEnd);
 }
 
 auto is_operator(TokenKind kind) -> bool {

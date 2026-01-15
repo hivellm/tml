@@ -140,6 +140,66 @@ data.len()        // 5
 data.get(0)       // Just(104)  (ASCII 'h')
 ```
 
+### 2.7 Text
+
+Dynamic, growable, heap-allocated string with Small String Optimization (SSO).
+
+```tml
+use std::text::Text
+
+// Construction
+let t1: Text = Text::new()               // empty
+let t2: Text = Text::from("hello")       // from Str
+let t3: Text = Text::with_capacity(100)  // pre-allocated
+let t4: Text = `Hello, {name}!`          // template literal
+
+// Properties
+t2.len()           // 5
+t2.capacity()      // >= 5
+t2.is_empty()      // false
+
+// Modification (mutates in place)
+t1.push('H')              // push single char
+t1.push_str("ello")       // push string
+t1.clear()                // empty the text
+
+// Conversion
+t2.as_str()        // borrow as Str
+t2.clone()         // deep copy
+
+// Search
+t2.contains("ell")        // true
+t2.starts_with("hel")     // true
+t2.ends_with("lo")        // true
+t2.index_of("l")          // 2
+
+// Transformation (returns new Text)
+t2.to_upper_case()        // "HELLO"
+t2.to_lower_case()        // "hello"
+t2.trim()                 // strip whitespace
+t2.substring(0, 3)        // "hel"
+t2.replace("l", "L")      // "heLlo"
+t2.replace_all("l", "L")  // "heLLo"
+t2.repeat(3)              // "hellohellohello"
+t2.reverse()              // "olleh"
+
+// Memory management
+t2.drop()          // free memory (required!)
+```
+
+**SSO (Small String Optimization):**
+- Strings ≤23 bytes are stored inline (no heap allocation)
+- Larger strings use heap with growth strategy: 2x until 4KB, then 1.5x
+
+**Template Literals:**
+Template literals (backtick strings) always produce `Text` type:
+```tml
+let name: Str = "World"
+let greeting: Text = `Hello, {name}!`  // Text, not Str
+```
+
+See [02-LEXICAL.md §4.5](02-LEXICAL.md#45-template-literals) for syntax details.
+
 ## 3. Composite Types
 
 ### 3.1 Structs

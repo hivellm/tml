@@ -54,6 +54,8 @@ module.exports = grammar({
         $.const_def,
         $.behavior_def,
         $.impl_block,
+        $.class_def,
+        $.interface_def,
         $.mod_def,
         $.decorator_def,
         $.use_decl,
@@ -130,6 +132,135 @@ module.exports = grammar({
       repeat($.decorator),
       optional($.visibility),
       $.func_def,
+    ),
+
+    // ==========================================================================
+    // OOP - CLASSES AND INTERFACES (C#-style)
+    // ==========================================================================
+
+    class_def: $ => seq(
+      optional($.class_modifiers),
+      'class',
+      field('name', $.ident),
+      optional($.generic_params),
+      optional($.class_inheritance),
+      '{',
+      repeat($.class_member),
+      '}',
+    ),
+
+    class_modifiers: $ => repeat1(choice('abstract', 'sealed')),
+
+    class_inheritance: $ => choice(
+      seq('extends', field('base', $._type), optional(seq('implements', $.type_list))),
+      seq('implements', $.type_list),
+    ),
+
+    class_member: $ => seq(
+      repeat($.decorator),
+      optional($.member_visibility),
+      $.class_member_kind,
+    ),
+
+    member_visibility: $ => choice('public', 'protected', 'private'),
+
+    class_member_kind: $ => choice(
+      $.field_def,
+      $.method_def,
+      $.property_def,
+      $.constructor_def,
+    ),
+
+    field_def: $ => seq(
+      optional('static'),
+      field('name', $.ident),
+      ':',
+      field('type', $._type),
+      optional(seq('=', field('default', $._expr))),
+      optional(';'),
+    ),
+
+    method_def: $ => seq(
+      optional($.method_modifiers),
+      'func',
+      field('name', $.ident),
+      optional($.generic_params),
+      '(',
+      optional($.params),
+      ')',
+      optional(seq('->', field('return_type', $._type))),
+      choice($.block, ';'),
+    ),
+
+    method_modifiers: $ => repeat1(choice('static', 'virtual', 'override', 'abstract')),
+
+    property_def: $ => seq(
+      'prop',
+      field('name', $.ident),
+      ':',
+      field('type', $._type),
+      $.property_accessors,
+    ),
+
+    property_accessors: $ => seq(
+      '{',
+      optional($.property_getter),
+      optional($.property_setter),
+      '}',
+    ),
+
+    property_getter: $ => seq('get', choice($.block, ';')),
+
+    property_setter: $ => seq('set', choice($.block, ';')),
+
+    constructor_def: $ => seq(
+      'new',
+      '(',
+      optional($.params),
+      ')',
+      optional(seq(':', 'base', '(', optional($.arg_list), ')')),
+      $.block,
+    ),
+
+    interface_def: $ => seq(
+      'interface',
+      field('name', $.ident),
+      optional($.generic_params),
+      optional($.interface_inheritance),
+      '{',
+      repeat($.interface_member),
+      '}',
+    ),
+
+    interface_inheritance: $ => seq('extends', $.type_list),
+
+    interface_member: $ => seq(
+      repeat($.decorator),
+      $.interface_member_kind,
+    ),
+
+    interface_member_kind: $ => choice(
+      $.interface_method_def,
+      $.interface_property_def,
+    ),
+
+    interface_method_def: $ => seq(
+      'func',
+      field('name', $.ident),
+      optional($.generic_params),
+      '(',
+      optional($.params),
+      ')',
+      optional(seq('->', field('return_type', $._type))),
+      ';',
+    ),
+
+    interface_property_def: $ => seq(
+      'prop',
+      field('name', $.ident),
+      ':',
+      field('type', $._type),
+      ';',
     ),
 
     mod_def: $ => seq(
@@ -782,6 +913,7 @@ module.exports = grammar({
     // ==========================================================================
 
     _literal: $ => choice(
+      $.template_literal,
       $.string_literal,
       $.char_literal,
       $.number_literal,
@@ -789,6 +921,31 @@ module.exports = grammar({
       $.unit_literal,
     ),
 
+    // Template Literals (backticks) - produce Text type
+    template_literal: $ => seq(
+      '`',
+      repeat(choice(
+        $.template_escape_sequence,
+        $.template_content,
+        $.template_interpolation,
+      )),
+      '`',
+    ),
+
+    template_content: $ => /[^`\\{]+/,
+
+    template_interpolation: $ => seq('{', $._expr, '}'),
+
+    template_escape_sequence: $ => token(seq(
+      '\\',
+      choice(
+        /[nrt\\"`0{}]/,
+        /x[0-9a-fA-F]{2}/,
+        /u\{[0-9a-fA-F]+\}/,
+      ),
+    )),
+
+    // String Literals (double quotes) - produce Str type
     string_literal: $ => choice(
       $.raw_string,
       $.basic_string,
@@ -817,7 +974,7 @@ module.exports = grammar({
     escape_sequence: $ => token(seq(
       '\\',
       choice(
-        /[nrt\\"0]/,
+        /[nrt\\"0{}]/,
         /x[0-9a-fA-F]{2}/,
         /u\{[0-9a-fA-F]+\}/,
       ),

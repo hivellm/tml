@@ -638,6 +638,7 @@ private:
     auto gen_closure(const parser::ClosureExpr& closure) -> std::string;
     auto gen_lowlevel(const parser::LowlevelExpr& lowlevel) -> std::string;
     auto gen_interp_string(const parser::InterpolatedStringExpr& interp) -> std::string;
+    auto gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> std::string;
     auto gen_cast(const parser::CastExpr& cast) -> std::string;
     auto gen_is_check(const parser::IsExpr& is_expr) -> std::string;
     auto gen_class_safe_cast(const std::string& src_ptr, const std::string& src_class,

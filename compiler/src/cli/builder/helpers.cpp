@@ -567,6 +567,18 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "std::file");
     }
 
+    // Link std::text runtime if imported (Text type with SSO)
+    if (registry->has_module("std::text")) {
+        add_runtime(
+            {
+                "compiler/runtime/text.c",
+                "runtime/text.c",
+                "../runtime/text.c",
+                "F:/Node/hivellm/tml/compiler/runtime/text.c",
+            },
+            "std::text");
+    }
+
     return objects;
 }
 

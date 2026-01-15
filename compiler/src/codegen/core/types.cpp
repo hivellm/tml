@@ -86,6 +86,8 @@ auto LLVMIRGen::llvm_type_name(const std::string& name) -> std::string {
         return "%struct.HashMap";
     if (name == "Buffer")
         return "%struct.Buffer";
+    if (name == "Text")
+        return "%struct.Text";
     if (name == "Channel")
         return "ptr";
     if (name == "Mutex")

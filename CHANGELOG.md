@@ -8,6 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Text Type with Template Literals** (2026-01-15) - Complete dynamic string type implementation
+  - New `Text` type in `std::text` module - heap-allocated, growable strings with SSO
+  - Small String Optimization (SSO) for strings ≤23 bytes - no heap allocation
+  - 40+ runtime functions in `compiler/runtime/text.c`
+  - Template literal syntax: `` `Hello, {name}!` `` produces `Text` type
+  - String interpolation with automatic type conversion for I32, I64, F64, Bool, Str
+  - Multi-line template literals supported
+  - Escape sequences: `\{`, `\}`, `\n`, `\t`, `\\`, etc.
+  - Comprehensive method set: `len`, `push`, `push_str`, `concat`, `substring`, `trim`, `replace`, `contains`, `starts_with`, `ends_with`, `to_upper_case`, `to_lower_case`, `pad_start`, `pad_end`, `reverse`, `repeat`, and more
+  - VSCode syntax highlighting for template literals and `Text` type
+  - 134 TML tests + 42 C++ codegen tests
+  - Files added:
+    - `compiler/runtime/text.c` - Text runtime implementation
+    - `lib/std/src/text.tml` - Text TML module
+    - `lib/std/tests/text.test.tml` - TML unit tests
+    - `compiler/tests/text_test.cpp` - C++ codegen tests
+  - Files modified:
+    - `compiler/include/lexer/token.hpp` - Template literal token types
+    - `compiler/src/lexer/lexer_string.cpp` - Template literal lexing
+    - `compiler/include/parser/ast_exprs.hpp` - TemplateLiteralExpr AST node
+    - `compiler/src/parser/parser_expr.cpp` - Template literal parsing
+    - `compiler/src/types/checker/expr.cpp` - Template literal type checking
+    - `compiler/src/codegen/expr/core.cpp` - Template literal codegen
+    - `compiler/src/codegen/core/runtime.cpp` - Text runtime declarations
+    - `vscode-tml/syntaxes/tml.tmLanguage.json` - Syntax highlighting
+
 - **Implicit Numeric Literal Coercion** (2026-01-15) - Variables and struct fields with type annotations now accept unsuffixed literals
   - `var a: U8 = 128` works without requiring `128 as U8`
   - `let b: I16 = 1000` works without requiring `1000 as I16`

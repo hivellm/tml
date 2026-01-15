@@ -68,6 +68,13 @@ enum class TokenKind : uint8_t {
     InterpStringEnd,    ///< End of interpolated string: `} world"`
 
     // ========================================================================
+    // Template Literals (produce Text type)
+    // ========================================================================
+    TemplateLiteralStart,  ///< Start of template literal: `` `Hello { ``
+    TemplateLiteralMiddle, ///< Middle of template literal: `} text {`
+    TemplateLiteralEnd,    ///< End of template literal: `` } world` ``
+
+    // ========================================================================
     // Identifiers
     // ========================================================================
     Identifier, ///< User identifier: `foo`, `_bar`, `café`

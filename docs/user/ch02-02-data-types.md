@@ -133,6 +133,91 @@ func main() {
 }
 ```
 
+## Text Type
+
+While `Str` is immutable and static, TML provides `Text` for dynamic, growable strings:
+
+```tml
+use std::text::Text
+
+func main() {
+    // Create Text from string
+    let greeting: Text = Text::from("Hello")
+
+    // Modify in place
+    greeting.push_str(", World!")
+
+    println(greeting.as_str())  // Hello, World!
+
+    // Required: free memory when done
+    greeting.drop()
+}
+```
+
+### Template Literals
+
+Template literals use backticks and automatically produce `Text` type:
+
+```tml
+use std::text::Text
+
+func main() {
+    let name: Str = "Alice"
+    let age: I32 = 30
+
+    // Template literals produce Text type
+    let greeting: Text = `Hello, {name}!`
+    let info: Text = `{name} is {age} years old`
+
+    println(greeting.as_str())  // Hello, Alice!
+    println(info.as_str())      // Alice is 30 years old
+
+    // Multi-line templates
+    let poem: Text = `Roses are red,
+Violets are blue,
+TML is great!`
+
+    greeting.drop()
+    info.drop()
+    poem.drop()
+}
+```
+
+### When to Use Text vs Str
+
+| Use `Str` when... | Use `Text` when... |
+|-------------------|-------------------|
+| Content is known at compile time | Content is built at runtime |
+| No modifications needed | Need to modify/grow the string |
+| Passing string literals | Building strings dynamically |
+| Function parameters | Concatenating multiple strings |
+
+### Text Methods
+
+```tml
+use std::text::Text
+
+func main() {
+    let t: Text = Text::from("  Hello World  ")
+
+    // Search
+    let has_hello: Bool = t.contains("Hello")     // true
+    let starts: Bool = t.starts_with("  H")       // true
+    let idx: I64 = t.index_of("World")            // 8
+
+    // Transform (returns new Text)
+    let upper: Text = t.to_upper_case()           // "  HELLO WORLD  "
+    let trimmed: Text = t.trim()                  // "Hello World"
+    let replaced: Text = t.replace("World", "TML") // "  Hello TML  "
+
+    // Clean up
+    t.drop()
+    upper.drop()
+    trimmed.drop()
+    replaced.drop()
+}
+```
+
 ## Type Annotations
 
 While TML can often infer types, you can add explicit annotations:

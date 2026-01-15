@@ -1,0 +1,327 @@
+//! Dynamic string type with heap allocation and rich manipulation API.
+//!
+//! This module provides `Text`, a growable, heap-allocated string type
+//! for dynamic string building and manipulation.
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Text`] | Dynamic string with automatic growth |
+//!
+//! # When to Use Text
+//!
+//! Use `Text` when you need:
+//! - Dynamic string building and manipulation
+//! - Mutable strings that grow and shrink
+//! - Rich string operations (split, replace, trim, etc.)
+//!
+//! For static, immutable strings use `Str` instead.
+//!
+//! # Small String Optimization (SSO)
+//!
+//! Strings <= 23 bytes are stored inline without heap allocation,
+//! making short strings very efficient.
+//!
+//! # Example
+//!
+//! ```tml
+//! let greeting = Text::from("Hello, ")
+//! greeting.push_str("World!")
+//! println(greeting.as_str())  // "Hello, World!"
+//!
+//! let upper = greeting.to_upper_case()
+//! println(upper.as_str())  // "HELLO, WORLD!"
+//! ```
+
+// ============================================================================
+// Text Type Definition
+// ============================================================================
+
+/// Dynamic string with heap allocation and automatic growth.
+///
+/// Text provides JavaScript-like string manipulation methods and supports
+/// Small String Optimization (SSO) for strings <= 23 bytes.
+pub type Text {
+    handle: *Unit  // Opaque pointer to TmlText struct
+}
+
+impl Text {
+    // ========================================================================
+    // Constructors
+    // ========================================================================
+
+    /// Create a new empty Text
+    pub func new() -> Text {
+        let h: *Unit = lowlevel { text_new() }
+        Text { handle: h }
+    }
+
+    /// Create Text from a string literal
+    pub func from(s: Str) -> Text {
+        let h: *Unit = lowlevel { text_from_str(s) }
+        Text { handle: h }
+    }
+
+    /// Create Text with pre-allocated capacity
+    pub func with_capacity(cap: I64) -> Text {
+        let h: *Unit = lowlevel { text_with_capacity(cap) }
+        Text { handle: h }
+    }
+
+    /// Create Text from a number
+    pub func from_i64(value: I64) -> Text {
+        let h: *Unit = lowlevel { text_from_i64(value) }
+        Text { handle: h }
+    }
+
+    /// Create Text from a floating-point number
+    pub func from_f64(value: F64) -> Text {
+        let h: *Unit = lowlevel { text_from_f64(value, -1) }
+        Text { handle: h }
+    }
+
+    /// Create Text from a floating-point number with precision
+    pub func from_f64_precision(value: F64, precision: I32) -> Text {
+        let h: *Unit = lowlevel { text_from_f64(value, precision) }
+        Text { handle: h }
+    }
+
+    /// Create Text from a boolean
+    pub func from_bool(value: Bool) -> Text {
+        let h: *Unit = lowlevel { text_from_bool(value) }
+        Text { handle: h }
+    }
+
+    // ========================================================================
+    // Conversion
+    // ========================================================================
+
+    /// Get the string data as a Str (borrows from Text)
+    pub func as_str(this) -> Str {
+        lowlevel { text_as_cstr(this.handle) }
+    }
+
+    /// Clone this Text (deep copy)
+    pub func clone(this) -> Text {
+        let h: *Unit = lowlevel { text_clone(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Free the Text memory
+    pub func drop(this) {
+        lowlevel { text_drop(this.handle) }
+    }
+
+    // ========================================================================
+    // Properties
+    // ========================================================================
+
+    /// Get the length in bytes
+    pub func len(this) -> I64 {
+        lowlevel { text_len(this.handle) }
+    }
+
+    /// Get the current capacity
+    pub func capacity(this) -> I64 {
+        lowlevel { text_capacity(this.handle) }
+    }
+
+    /// Check if the Text is empty
+    pub func is_empty(this) -> Bool {
+        let result: I32 = lowlevel { text_is_empty(this.handle) }
+        result != 0
+    }
+
+    /// Get byte at index (returns -1 if out of bounds)
+    pub func byte_at(this, index: I64) -> I32 {
+        lowlevel { text_byte_at(this.handle, index) }
+    }
+
+    // ========================================================================
+    // Modification (mutates this Text)
+    // ========================================================================
+
+    /// Clear the content
+    pub func clear(this) {
+        lowlevel { text_clear(this.handle) }
+    }
+
+    /// Push a single byte
+    pub func push(this, byte: I32) {
+        lowlevel { text_push(this.handle, byte) }
+    }
+
+    /// Append a string
+    pub func push_str(this, s: Str) {
+        lowlevel { text_push_str(this.handle, s) }
+    }
+
+    /// Reserve additional capacity
+    pub func reserve(this, additional: I64) {
+        lowlevel { text_reserve(this.handle, additional) }
+    }
+
+    // ========================================================================
+    // Search Methods
+    // ========================================================================
+
+    /// Find the index of a substring (returns -1 if not found)
+    pub func index_of(this, search: Str) -> I64 {
+        lowlevel { text_index_of(this.handle, search) }
+    }
+
+    /// Find the last index of a substring (returns -1 if not found)
+    pub func last_index_of(this, search: Str) -> I64 {
+        lowlevel { text_last_index_of(this.handle, search) }
+    }
+
+    /// Check if this Text starts with the given prefix
+    pub func starts_with(this, prefix: Str) -> Bool {
+        let result: I32 = lowlevel { text_starts_with(this.handle, prefix) }
+        result != 0
+    }
+
+    /// Check if this Text ends with the given suffix
+    pub func ends_with(this, suffix: Str) -> Bool {
+        let result: I32 = lowlevel { text_ends_with(this.handle, suffix) }
+        result != 0
+    }
+
+    /// Check if this Text contains a substring
+    pub func includes(this, search: Str) -> Bool {
+        let result: I32 = lowlevel { text_contains(this.handle, search) }
+        result != 0
+    }
+
+    /// Alias for includes (JavaScript compatibility)
+    pub func contains(this, search: Str) -> Bool {
+        this.includes(search)
+    }
+
+    // ========================================================================
+    // Transformation Methods (return new Text)
+    // ========================================================================
+
+    /// Convert to uppercase
+    pub func to_upper_case(this) -> Text {
+        let h: *Unit = lowlevel { text_to_upper(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Convert to lowercase
+    pub func to_lower_case(this) -> Text {
+        let h: *Unit = lowlevel { text_to_lower(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Remove whitespace from both ends
+    pub func trim(this) -> Text {
+        let h: *Unit = lowlevel { text_trim(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Remove whitespace from the start
+    pub func trim_start(this) -> Text {
+        let h: *Unit = lowlevel { text_trim_start(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Remove whitespace from the end
+    pub func trim_end(this) -> Text {
+        let h: *Unit = lowlevel { text_trim_end(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Get a substring from start to end (exclusive)
+    pub func substring(this, start: I64, end: I64) -> Text {
+        let h: *Unit = lowlevel { text_substring(this.handle, start, end) }
+        Text { handle: h }
+    }
+
+    /// Alias for substring (JavaScript compatibility)
+    pub func slice(this, start: I64, end: I64) -> Text {
+        this.substring(start, end)
+    }
+
+    /// Repeat this Text n times
+    pub func repeat(this, count: I64) -> Text {
+        let h: *Unit = lowlevel { text_repeat(this.handle, count) }
+        Text { handle: h }
+    }
+
+    /// Replace first occurrence of search with replacement
+    pub func replace(this, search: Str, replacement: Str) -> Text {
+        let h: *Unit = lowlevel { text_replace(this.handle, search, replacement) }
+        Text { handle: h }
+    }
+
+    /// Replace all occurrences of search with replacement
+    pub func replace_all(this, search: Str, replacement: Str) -> Text {
+        let h: *Unit = lowlevel { text_replace_all(this.handle, search, replacement) }
+        Text { handle: h }
+    }
+
+    /// Reverse the string
+    pub func reverse(this) -> Text {
+        let h: *Unit = lowlevel { text_reverse(this.handle) }
+        Text { handle: h }
+    }
+
+    /// Pad the start to reach target length
+    pub func pad_start(this, target_len: I64, pad_char: I32) -> Text {
+        let h: *Unit = lowlevel { text_pad_start(this.handle, target_len, pad_char) }
+        Text { handle: h }
+    }
+
+    /// Pad the end to reach target length
+    pub func pad_end(this, target_len: I64, pad_char: I32) -> Text {
+        let h: *Unit = lowlevel { text_pad_end(this.handle, target_len, pad_char) }
+        Text { handle: h }
+    }
+
+    // ========================================================================
+    // Concatenation
+    // ========================================================================
+
+    /// Concatenate with another Text
+    pub func concat(this, other: ref Text) -> Text {
+        let h: *Unit = lowlevel { text_concat(this.handle, other.handle) }
+        Text { handle: h }
+    }
+
+    /// Concatenate with a string
+    pub func concat_str(this, s: Str) -> Text {
+        let h: *Unit = lowlevel { text_concat_str(this.handle, s) }
+        Text { handle: h }
+    }
+
+    // ========================================================================
+    // Comparison
+    // ========================================================================
+
+    /// Compare with another Text (-1, 0, or 1)
+    pub func compare(this, other: ref Text) -> I32 {
+        lowlevel { text_compare(this.handle, other.handle) }
+    }
+
+    /// Check equality with another Text
+    pub func equals(this, other: ref Text) -> Bool {
+        let result: I32 = lowlevel { text_equals(this.handle, other.handle) }
+        result != 0
+    }
+
+    // ========================================================================
+    // Output
+    // ========================================================================
+
+    /// Print the Text to stdout (no newline)
+    pub func print(this) {
+        lowlevel { text_print(this.handle) }
+    }
+
+    /// Print the Text to stdout with a newline
+    pub func println(this) {
+        lowlevel { text_println(this.handle) }
+    }
+}

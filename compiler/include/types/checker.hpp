@@ -175,6 +175,7 @@ private:
     auto check_range(const parser::RangeExpr& range) -> TypePtr;
     auto check_lowlevel(const parser::LowlevelExpr& lowlevel) -> TypePtr;
     auto check_interp_string(const parser::InterpolatedStringExpr& interp) -> TypePtr;
+    auto check_template_literal(const parser::TemplateLiteralExpr& tpl) -> TypePtr;
     auto check_cast(const parser::CastExpr& cast) -> TypePtr;
     auto check_is(const parser::IsExpr& is_expr) -> TypePtr;
     auto check_await(const parser::AwaitExpr& await_expr, SourceSpan span) -> TypePtr;

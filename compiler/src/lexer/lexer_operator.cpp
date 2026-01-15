@@ -55,6 +55,10 @@ auto Lexer::lex_operator() -> Token {
         if (interp_depth_ > 0) {
             return lex_interp_string_continue();
         }
+        // When inside a template literal, continue lexing the template
+        if (template_depth_ > 0) {
+            return lex_template_literal_continue();
+        }
         return make_token(TokenKind::RBrace);
     case ',':
         return make_token(TokenKind::Comma);

@@ -11,6 +11,7 @@ std/
 ├── option.tml          - Maybe[T] type for optional values
 ├── result.tml          - Outcome[T, E] for error handling
 ├── string.tml          - String manipulation
+├── text.tml            - Text type (dynamic strings with SSO)
 ├── prelude.tml         - Auto-imported common types
 ├── collections/        - Vec, List, Map, Set
 ├── io/                 - Input/output operations
@@ -259,6 +260,106 @@ s.trim()                     // Remove whitespace
 s.replace("World", "TML")    // "Hello, TML!!"
 s.split(",")                 // Iterator of substrings
 ```
+
+## Text Type
+
+The `Text` type is a dynamic, growable string with Small String Optimization (SSO):
+
+```tml
+use std::text::Text
+
+// Construction
+let t1: Text = Text::new()               // Empty text
+let t2: Text = Text::from("Hello")       // From string literal
+let t3: Text = Text::with_capacity(100)  // Pre-allocated
+
+// Template literals (backticks) produce Text
+let name: Str = "World"
+let greeting: Text = `Hello, {name}!`    // "Hello, World!"
+
+// Modification (in-place)
+t1.push('H')              // Push single character
+t1.push_str("ello")       // Push string
+t1.clear()                // Empty the text
+t1.reserve(50)            // Pre-allocate capacity
+
+// Properties
+t2.len()                  // 5
+t2.capacity()             // >= 5
+t2.is_empty()             // false
+
+// Search methods
+t2.contains("ell")        // true
+t2.starts_with("He")      // true
+t2.ends_with("lo")        // true
+t2.index_of("l")          // 2 (first occurrence)
+t2.last_index_of("l")     // 3 (last occurrence)
+
+// Transformation (returns new Text)
+t2.to_upper_case()        // "HELLO"
+t2.to_lower_case()        // "hello"
+t2.trim()                 // Remove whitespace
+t2.trim_start()           // Remove leading whitespace
+t2.trim_end()             // Remove trailing whitespace
+t2.substring(0, 3)        // "Hel"
+t2.replace("l", "L")      // "HeLlo" (first match)
+t2.replace_all("l", "L")  // "HeLLo" (all matches)
+t2.repeat(3)              // "HelloHelloHello"
+t2.reverse()              // "olleH"
+t2.pad_start(10, ' ')     // "     Hello"
+t2.pad_end(10, ' ')       // "Hello     "
+
+// Concatenation
+let t4: Text = t2.concat(" World")  // "Hello World"
+
+// Comparison
+t2.equals(t4)             // false
+t2.compare(t4)            // negative (t2 < t4)
+
+// Conversion
+t2.as_str()               // Borrow as Str
+t2.clone()                // Deep copy
+
+// Memory management (required!)
+t2.drop()                 // Free memory
+```
+
+**Template Literals:**
+
+Template literals use backticks and support expression interpolation:
+
+```tml
+use std::text::Text
+
+let name: Str = "Alice"
+let age: I32 = 30
+let score: F64 = 95.5
+
+// Variable interpolation
+let msg1: Text = `Hello, {name}!`
+
+// Expression interpolation
+let msg2: Text = `{name} is {age} years old`
+
+// Multi-line templates
+let poem: Text = `Roses are red,
+Violets are blue,
+{name} scored {score}!`
+
+// Escaped braces
+let json: Text = `\{"name": "{name}"\}`
+
+// Clean up
+msg1.drop()
+msg2.drop()
+poem.drop()
+json.drop()
+```
+
+**SSO (Small String Optimization):**
+- Strings ≤23 bytes are stored inline without heap allocation
+- Improves performance for short strings (most common case)
+- Growth strategy: 2x capacity until 4KB, then 1.5x
 
 ## Error Handling
 

@@ -23,6 +23,8 @@ ItemKind = FuncDef
          / ConstDef
          / BehaviorDef
          / ImplBlock
+         / ClassDef
+         / InterfaceDef
          / ModDef
          / DecoratorDef
          / Use
@@ -48,6 +50,63 @@ ImplBlock = "impl" ~ GenericParams? ~ Type ~ ("for" ~ Type)?
           ~ "{" ~ ImplItem* ~ "}"
 
 ImplItem = Decorator* ~ Visibility? ~ FuncDef
+
+// =============================================================================
+// OOP - CLASSES AND INTERFACES (C#-style)
+// =============================================================================
+
+ClassDef = ClassModifiers? ~ "class" ~ Ident ~ GenericParams?
+         ~ ClassInheritance? ~ "{" ~ ClassMember* ~ "}"
+
+ClassModifiers = ("abstract" / "sealed")*
+
+ClassInheritance = "extends" ~ Type ~ ("implements" ~ TypeList)?
+                 / "implements" ~ TypeList
+
+ClassMember = Decorator* ~ MemberVisibility? ~ ClassMemberKind
+
+MemberVisibility = "public" / "protected" / "private"
+
+ClassMemberKind = FieldDef
+                / MethodDef
+                / PropertyDef
+                / ConstructorDef
+
+FieldDef = "static"? ~ Ident ~ ":" ~ Type ~ ("=" ~ Expr)? ~ ";"?
+
+MethodDef = MethodModifiers? ~ "func" ~ Ident ~ GenericParams?
+          ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)? ~ (Block / ";")
+
+MethodModifiers = ("static" / "virtual" / "override" / "abstract")*
+
+PropertyDef = "prop" ~ Ident ~ ":" ~ Type ~ PropertyAccessors
+
+PropertyAccessors = "{" ~ PropertyGetter? ~ PropertySetter? ~ "}"
+
+PropertyGetter = "get" ~ (Block / ";")
+
+PropertySetter = "set" ~ (Block / ";")
+
+ConstructorDef = "new" ~ "(" ~ Params? ~ ")" ~ (":" ~ "base" ~ "(" ~ Args? ~ ")")? ~ Block
+
+InterfaceDef = "interface" ~ Ident ~ GenericParams?
+             ~ InterfaceInheritance? ~ "{" ~ InterfaceMember* ~ "}"
+
+InterfaceInheritance = "extends" ~ TypeList
+
+InterfaceMember = Decorator* ~ InterfaceMemberKind
+
+InterfaceMemberKind = InterfaceMethodDef
+                    / InterfacePropertyDef
+
+InterfaceMethodDef = "func" ~ Ident ~ GenericParams?
+                   ~ "(" ~ Params? ~ ")" ~ ("->" ~ Type)? ~ ";"
+
+InterfacePropertyDef = "prop" ~ Ident ~ ":" ~ Type ~ ";"
+
+// =============================================================================
+// MODULES
+// =============================================================================
 
 ModDef = "mod" ~ Ident ~ ("{" ~ Item* ~ "}" / ";")
 
@@ -351,22 +410,45 @@ QuoteToken = ~(!("${" / "$" ~ Ident / "}") ~ ANY)+
 // LITERALS
 // =============================================================================
 
-Literal = StringLiteral
+Literal = TemplateLiteral
+        / StringLiteral
         / CharLiteral
         / NumberLiteral
         / BoolLiteral
         / UnitLiteral
 
-StringLiteral = RawString / BasicString
+// Template Literals (backticks) - produce Text type
+TemplateLiteral = "`" ~ TemplateContent* ~ "`"
+
+TemplateContent = TemplateChar
+                / TemplateInterpolation
+
+TemplateChar = !("`" / "\\" / "{") ~ ANY
+             / "\\" ~ TemplateEscapeSeq
+
+TemplateInterpolation = "{" ~ Expr ~ "}"
+
+TemplateEscapeSeq = EscapeSeq / "{" / "}" / "`"
+
+// String Literals (double quotes) - produce Str type
+StringLiteral = RawString / InterpString / BasicString
 
 BasicString = "\"" ~ StringChar* ~ "\""
+
+InterpString = "\"" ~ InterpStringContent* ~ "\""
+
+InterpStringContent = InterpStringChar
+                    / "{" ~ Expr ~ "}"
+
+InterpStringChar = !("\"" / "\\" / "{") ~ ANY
+                 / "\\" ~ EscapeSeq
 
 StringChar = !("\"" / "\\") ~ ANY
            / "\\" ~ EscapeSeq
 
 RawString = "\"\"\"" ~ (!("\"\"\"") ~ ANY)* ~ "\"\"\""
 
-EscapeSeq = "n" / "r" / "t" / "\\" / "\"" / "0"
+EscapeSeq = "n" / "r" / "t" / "\\" / "\"" / "'" / "0" / "{" / "}"
           / "x" ~ HexDigit ~ HexDigit
           / "u" ~ "{" ~ HexDigit+ ~ "}"
 
@@ -435,14 +517,15 @@ IdentContinue = IdentStart / '0'..'9'
 // KEYWORDS
 // =============================================================================
 
-Keyword = "and" / "as" / "async" / "await" / "behavior"
-        / "break" / "const" / "continue" / "crate" / "decorator"
-        / "do" / "else" / "false" / "for" / "func"
-        / "if" / "impl" / "in" / "let" / "loop"
-        / "mod" / "mut" / "not" / "or" / "pub"
-        / "quote" / "ref" / "return" / "self" / "super"
+Keyword = "abstract" / "and" / "as" / "async" / "await" / "base" / "behavior"
+        / "break" / "class" / "const" / "continue" / "crate" / "decorator"
+        / "do" / "else" / "extends" / "false" / "for" / "func"
+        / "get" / "if" / "impl" / "implements" / "in" / "interface"
+        / "let" / "loop" / "mod" / "mut" / "new" / "not" / "or"
+        / "override" / "private" / "prop" / "protected" / "pub" / "public"
+        / "quote" / "ref" / "return" / "sealed" / "self" / "set" / "static" / "super"
         / "then" / "this" / "This" / "through" / "to"
-        / "true" / "type" / "use" / "when" / "with"
+        / "true" / "type" / "use" / "virtual" / "when" / "with"
 
 // =============================================================================
 // WHITESPACE & COMMENTS

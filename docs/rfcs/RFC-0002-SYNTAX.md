@@ -96,13 +96,21 @@ Separators:   , : ; |
 1e10        // Scientific
 1.5e-3      // Negative exponent
 
-// Strings
+// Strings (Str type - static, immutable)
 "hello"             // Basic string
 "line1\nline2"      // Escape sequences
+"Hello, {name}!"    // Interpolated string
 """
 multiline
 string
 """                 // Raw multiline
+
+// Template Literals (Text type - dynamic, growable)
+`hello`             // Simple template literal
+`Hello, {name}!`    // Template with interpolation
+`Multi-line
+template literal`   // Multi-line supported
+`x={x}, y={y}`      // Multiple interpolations
 
 // Characters
 'a'
@@ -357,7 +365,7 @@ for item in list {
 ### 3.5 String Interpolation
 
 ```tml
-// Surface
+// Surface (produces Str type)
 "Hello, {name}! You have {count} messages."
 
 // Desugars to
@@ -370,7 +378,48 @@ String::concat([
 ])
 ```
 
-### 3.6 Decorator Application
+### 3.6 Template Literals
+
+Template literals use backticks and produce `Text` type (dynamic, growable):
+
+```tml
+// Surface (produces Text type)
+`Hello, {name}! You have {count} messages.`
+
+// Desugars to
+{
+    let __text = tml_text_from_str("Hello, ")
+    tml_text_push_str(__text, name)
+    tml_text_push_str(__text, "! You have ")
+    tml_text_push_str(__text, i32_to_str(count))
+    tml_text_push_str(__text, " messages.")
+    __text
+}
+```
+
+**Key differences from interpolated strings:**
+
+| Feature | Interpolated Strings | Template Literals |
+|---------|---------------------|-------------------|
+| Syntax | `"..."` | `` `...` `` |
+| Result type | `Str` (static) | `Text` (dynamic) |
+| Multi-line | No | Yes |
+| Heap allocation | No | Yes (with SSO) |
+| Growable | No | Yes |
+
+**Supported interpolation types:**
+- `Str` - Directly embedded
+- `I32`, `I64` - Converted via runtime functions
+- `F64` - Converted via `f64_to_str`
+- `Bool` - Converted to `"true"` or `"false"`
+
+**Escape sequences:**
+- `\{` - Literal open brace
+- `\}` - Literal close brace
+- `\`` - Literal backtick
+- `\n`, `\t`, `\\` - Standard escapes
+
+### 3.7 Decorator Application
 
 ```tml
 // Surface

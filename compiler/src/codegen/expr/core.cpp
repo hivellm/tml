@@ -462,4 +462,131 @@ auto LLVMIRGen::gen_interp_string(const parser::InterpolatedStringExpr& interp) 
     return result;
 }
 
+auto LLVMIRGen::gen_template_literal(const parser::TemplateLiteralExpr& tpl) -> std::string {
+    // Generate code for template literal: `Hello {name}!`
+    // Strategy: Create a Text object and build it by pushing string segments
+    // This produces Text type instead of Str
+
+    if (tpl.segments.empty()) {
+        // Empty template literal - create empty Text
+        std::string text_ptr = fresh_reg();
+        emit_line("  " + text_ptr + " = call ptr @tml_text_new()");
+        // Wrap the ptr in a %struct.Text structure
+        std::string struct_result = fresh_reg();
+        emit_line("  " + struct_result + " = insertvalue %struct.Text undef, ptr " + text_ptr +
+                  ", 0");
+        last_expr_type_ = "%struct.Text";
+        return struct_result;
+    }
+
+    // Helper lambda to convert expression to string pointer
+    auto convert_expr_to_str = [this](const parser::ExprPtr& expr_ptr) -> std::string {
+        std::string expr_val = gen_expr(*expr_ptr);
+        std::string expr_type = last_expr_type_;
+
+        // If the expression is already a string (ptr), use it directly
+        if (expr_type == "ptr") {
+            return expr_val;
+        } else if (expr_type == "i8" || expr_type == "i16" || expr_type == "i32" ||
+                   expr_type == "i64") {
+            // Convert integer to string using i64_to_str
+            std::string int_val = expr_val;
+            if (expr_type == "i8") {
+                std::string ext_reg = fresh_reg();
+                if (last_expr_is_unsigned_) {
+                    emit_line("  " + ext_reg + " = zext i8 " + expr_val + " to i64");
+                } else {
+                    emit_line("  " + ext_reg + " = sext i8 " + expr_val + " to i64");
+                }
+                int_val = ext_reg;
+            } else if (expr_type == "i16") {
+                std::string ext_reg = fresh_reg();
+                if (last_expr_is_unsigned_) {
+                    emit_line("  " + ext_reg + " = zext i16 " + expr_val + " to i64");
+                } else {
+                    emit_line("  " + ext_reg + " = sext i16 " + expr_val + " to i64");
+                }
+                int_val = ext_reg;
+            } else if (expr_type == "i32") {
+                std::string ext_reg = fresh_reg();
+                if (last_expr_is_unsigned_) {
+                    emit_line("  " + ext_reg + " = zext i32 " + expr_val + " to i64");
+                } else {
+                    emit_line("  " + ext_reg + " = sext i32 " + expr_val + " to i64");
+                }
+                int_val = ext_reg;
+            }
+            std::string str_result = fresh_reg();
+            emit_line("  " + str_result + " = call ptr @i64_to_str(i64 " + int_val + ")");
+            return str_result;
+        } else if (expr_type == "double" || expr_type == "float") {
+            // Convert float to string using f64_to_str
+            std::string float_val = expr_val;
+            if (expr_type == "float") {
+                std::string ext_reg = fresh_reg();
+                emit_line("  " + ext_reg + " = fpext float " + expr_val + " to double");
+                float_val = ext_reg;
+            }
+            std::string str_result = fresh_reg();
+            emit_line("  " + str_result + " = call ptr @f64_to_str(double " + float_val + ")");
+            return str_result;
+        } else if (expr_type == "i1") {
+            // Convert bool to string
+            std::string str_result = fresh_reg();
+            emit_line("  " + str_result + " = select i1 " + expr_val +
+                      ", ptr @.str.true, ptr @.str.false");
+            return str_result;
+        } else {
+            // For unknown types, use the value as-is (assume it's a string ptr)
+            return expr_val;
+        }
+    };
+
+    // Create Text from first segment
+    std::string text_ptr;
+    size_t start_idx = 0;
+
+    const auto& first_segment = tpl.segments[0];
+    if (std::holds_alternative<std::string>(first_segment.content)) {
+        // First segment is literal text - create Text from it
+        const std::string& text = std::get<std::string>(first_segment.content);
+        std::string const_name = add_string_literal(text);
+        text_ptr = fresh_reg();
+        emit_line("  " + text_ptr + " = call ptr @tml_text_from_str(ptr " + const_name + ")");
+        start_idx = 1;
+    } else {
+        // First segment is expression - convert to string and create Text from it
+        const auto& expr_ptr = std::get<parser::ExprPtr>(first_segment.content);
+        std::string str_val = convert_expr_to_str(expr_ptr);
+        text_ptr = fresh_reg();
+        emit_line("  " + text_ptr + " = call ptr @tml_text_from_str(ptr " + str_val + ")");
+        start_idx = 1;
+    }
+
+    // Append remaining segments using text_push_str
+    for (size_t i = start_idx; i < tpl.segments.size(); ++i) {
+        const auto& segment = tpl.segments[i];
+        if (std::holds_alternative<std::string>(segment.content)) {
+            // Literal text segment
+            const std::string& text = std::get<std::string>(segment.content);
+            std::string const_name = add_string_literal(text);
+            emit_line("  call void @tml_text_push_str(ptr " + text_ptr + ", ptr " + const_name +
+                      ")");
+        } else {
+            // Expression segment
+            const auto& expr_ptr = std::get<parser::ExprPtr>(segment.content);
+            std::string str_val = convert_expr_to_str(expr_ptr);
+            emit_line("  call void @tml_text_push_str(ptr " + text_ptr + ", ptr " + str_val + ")");
+        }
+    }
+
+    // Wrap the ptr in a %struct.Text structure
+    // Text is struct { ptr } where ptr is the handle to the runtime Text object
+    std::string struct_result = fresh_reg();
+    emit_line("  " + struct_result + " = insertvalue %struct.Text undef, ptr " + text_ptr + ", 0");
+
+    last_expr_type_ = "%struct.Text";
+    return struct_result;
+}
+
 } // namespace tml::codegen
