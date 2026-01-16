@@ -20,6 +20,8 @@ This directory contains example TML code files demonstrating the language syntax
 | [12-memory.tml](12-memory.tml) | Ownership, borrowing, smart pointers (`Heap`, `Shared`, `Sync`) |
 | [13-caps-effects.tml](13-caps-effects.tml) | Capabilities system (`with io, net`), effects, contracts |
 | [14-stable-ids.tml](14-stable-ids.tml) | `@id` annotations for LLM integration and precise patches |
+| [15-namespaces.tml](15-namespaces.tml) | Namespace organization, classes, interfaces |
+| [16-oop-benchmark.tml](16-oop-benchmark.tml) | Virtual dispatch benchmarks, sealed/@value classes |
 
 ## Key Syntax Differences from Rust
 

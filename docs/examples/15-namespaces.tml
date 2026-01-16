@@ -1,0 +1,158 @@
+//! Example 15: Namespaces and Class Organization
+//!
+//! This example demonstrates how to organize code using namespaces,
+//! classes, and interfaces in a C#-style architecture.
+
+// ============================================================================
+// Namespace Declaration
+// ============================================================================
+
+// Namespaces organize related code into logical groups
+namespace MyApp.Models {
+    /// A user model representing an application user
+    pub class User {
+        pub id: I64
+        pub name: Str
+        pub email: Str
+
+        static func create(id: I64, name: Str, email: Str) -> User {
+            return User { id: id, name: name, email: email }
+        }
+
+        virtual func display_name(this) -> Str {
+            return this.name
+        }
+    }
+
+    /// An admin user with additional privileges
+    pub class AdminUser extends User {
+        pub role: Str
+
+        static func create(id: I64, name: Str, email: Str, role: Str) -> AdminUser {
+            return AdminUser { id: id, name: name, email: email, role: role }
+        }
+
+        override func display_name(this) -> Str {
+            return "[" + this.role + "] " + this.name
+        }
+    }
+}
+
+namespace MyApp.Services {
+    use MyApp.Models.*
+
+    /// Interface for user repositories
+    pub interface IUserRepository {
+        func find_by_id(this, id: I64) -> Maybe[User]
+        func save(mut this, user: User) -> Bool
+        func delete(mut this, id: I64) -> Bool
+    }
+
+    /// In-memory implementation of user repository
+    pub class MemoryUserRepository implements IUserRepository {
+        users: List[User]
+
+        static func create() -> MemoryUserRepository {
+            return MemoryUserRepository { users: List::new() }
+        }
+
+        func find_by_id(this, id: I64) -> Maybe[User] {
+            // Search through users
+            return Nothing
+        }
+
+        func save(mut this, user: User) -> Bool {
+            return true
+        }
+
+        func delete(mut this, id: I64) -> Bool {
+            return true
+        }
+    }
+
+    /// User service that handles business logic
+    pub class UserService {
+        repo: dyn IUserRepository
+
+        static func create(repo: dyn IUserRepository) -> UserService {
+            return UserService { repo: repo }
+        }
+
+        func get_display_name(this, id: I64) -> Str {
+            let user_opt = this.repo.find_by_id(id)
+            when user_opt {
+                Just(user) => return user.display_name()
+                Nothing => return "Unknown"
+            }
+        }
+    }
+}
+
+namespace MyApp.Utils {
+    /// String formatting utilities
+    pub class StringUtils {
+        static func capitalize(s: Str) -> Str {
+            if s.len() == 0 {
+                return s
+            }
+            return s
+        }
+
+        static func truncate(s: Str, max_len: I64) -> Str {
+            if s.len() <= max_len {
+                return s
+            }
+            return s
+        }
+    }
+
+    /// Validation utilities
+    pub class Validators {
+        static func is_valid_email(email: Str) -> Bool {
+            return email.len() > 0
+        }
+
+        static func is_valid_id(id: I64) -> Bool {
+            return id > 0
+        }
+    }
+}
+
+// ============================================================================
+// Using Namespaces
+// ============================================================================
+
+// Import all from a namespace
+use MyApp.Models.*
+use MyApp.Services.*
+use MyApp.Utils.*
+
+@test
+func test_namespace_organization() {
+    // Create a user using fully qualified name
+    let user = User::create(1, "Alice", "alice@example.com")
+
+    // Create admin user
+    let admin = AdminUser::create(2, "Bob", "bob@example.com", "Admin")
+
+    // Virtual dispatch works across namespace boundaries
+    assert_eq(user.display_name(), "Alice")
+    assert_eq(admin.display_name(), "[Admin] Bob")
+
+    // Use utilities
+    assert(Validators::is_valid_email("test@example.com"))
+    assert(Validators::is_valid_id(42))
+}
+
+@test
+func test_interface_polymorphism() {
+    // Create repository implementation
+    let repo = MemoryUserRepository::create()
+
+    // Use through interface
+    let service = UserService::create(repo as dyn IUserRepository)
+
+    // Service works with any IUserRepository implementation
+    let name = service.get_display_name(1)
+    assert_eq(name, "Unknown")
+}
