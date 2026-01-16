@@ -202,6 +202,14 @@ int run_tests_suite_mode(const std::vector<std::string>& test_files, const TestO
 
                 if (!result.passed) {
                     result.error_message = "Exit code: " + std::to_string(result.exit_code);
+                    // Include detailed error message from run_suite_test
+                    if (!run_result.error.empty()) {
+                        result.error_message += "\n" + run_result.error;
+                    }
+                    // Include captured output which may contain panic/crash info
+                    if (!run_result.output.empty()) {
+                        result.error_message += "\n" + run_result.output;
+                    }
                 }
 
                 collector.add(std::move(result));

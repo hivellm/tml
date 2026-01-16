@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `compiler/src/codegen/expr/struct.cpp` - Set expected type for struct field initializers
 
 ### Fixed
+- **Test Crash/Failure Error Visibility** (2026-01-16) - Test errors now display without --verbose flag
+  - Fixed suite mode test runner to capture detailed error messages from `run_suite_test`
+  - Previously only showed "Exit code: -2" for crashes, now shows full message like "Exit code: -2\nTest crashed: ACCESS_VIOLATION (Segmentation fault)"
+  - Includes captured output which may contain panic/crash diagnostic info
+  - Files modified:
+    - `compiler/src/cli/tester/suite_execution.cpp` - Added error message and output capture from run_result
+
 - **MIR Codegen Class Type Resolution** (2026-01-15) - Fixed class instance method calls with -O3 optimization
   - Class variables (e.g., `let p: Point = ...`) now correctly resolve to `ClassType` instead of `NamedType`
   - Method calls like `p.get_x()` now generate correct IR: `@Point__get_x` instead of `@Ptr__get_x`
