@@ -1,11 +1,11 @@
 # TML Language Support for Visual Studio Code
 
-Syntax highlighting and language support for TML (To Machine Language).
+Syntax highlighting, autocompletion, and language support for TML (To Machine Language).
 
 ## Features
 
 - **Syntax Highlighting**: Full syntax highlighting for TML language
-  - Keywords (func, type, behavior, impl, dyn, etc.)
+  - Keywords (func, type, behavior, impl, dyn, class, interface, etc.)
   - Types (I32, U64, F64, Str, Bool, Instant, Duration, etc.)
   - Builtin enums: `Maybe[T]` (Just/Nothing), `Outcome[T,E]` (Ok/Err), `Ordering`
   - Operators (and, or, not, +, -, *, /, etc.)
@@ -14,6 +14,50 @@ Syntax highlighting and language support for TML (To Machine Language).
   - Directives (@test, @bench, @stable, @deprecated, @extern, @link, etc.)
   - Builtin methods (hash, duplicate, to_string, is_just, unwrap, etc.)
   - Static type methods (Type::from, Type::default)
+  - Markdown code blocks (```tml)
+
+- **IntelliSense / Autocompletion**:
+  - All TML keywords (50+ including OOP keywords)
+  - Primitive and collection types
+  - Wrapper types (Maybe, Outcome, Heap, Shared, Sync)
+  - Builtin functions (print, println, panic, assert, etc.)
+  - Code snippets for common patterns (func, class, interface, when, etc.)
+  - OOP snippets (override, virtual, abstract, extends, implements)
+  - Import statement completion (`use std::io::*`)
+  - Effects (pure, io, async, throws, unsafe, alloc, diverges, nondet)
+  - Capabilities (Read, Write, Fs, Net, Env, Time, Random, Exec)
+  - Contracts (requires, ensures, invariant, assert, assume)
+
+- **Hover Information**:
+  - Keyword descriptions
+  - Type documentation
+  - Function signatures
+  - Variant documentation
+  - Effect and capability documentation with usage examples
+  - Contract syntax examples
+  - Module exports
+
+- **Semantic Highlighting** (via LSP):
+  - Function declarations and calls
+  - Type declarations and references
+  - Decorators (@test, @bench, etc.)
+  - Effects in `with` clauses
+  - Capabilities and contracts
+
+- **Build Integration**:
+  - `TML: Build` command (Ctrl+Shift+B)
+  - `TML: Run` command (F5)
+  - `TML: Test` command
+  - `TML: Clean` command
+  - Problem matchers for compiler errors
+  - Context menu integration
+
+- **Diagnostics & Error Reporting**:
+  - Real-time syntax validation using the TML compiler
+  - Errors and warnings displayed in the Problems panel
+  - Configurable via `tml.enableDiagnostics` setting
+  - Debounced validation for better performance
+  - Support for compiler JSON error format
 
 - **Language Configuration**:
   - Auto-closing brackets, quotes, and parentheses
@@ -112,6 +156,74 @@ func pointer_example() {
 }
 ```
 
+### OOP - Classes and Interfaces
+```tml
+interface Drawable {
+    func draw(this)
+    prop color: Color { get }
+}
+
+class Shape {
+    color: Color
+
+    virtual func area(this) -> F64 {
+        return 0.0
+    }
+}
+
+class Circle extends Shape implements Drawable {
+    radius: F64
+
+    func new(r: F64, c: Color) -> This {
+        return This {
+            base: Shape::new(c),
+            radius: r,
+        }
+    }
+
+    override func area(this) -> F64 {
+        return 3.14159 * this.radius * this.radius
+    }
+
+    func draw(this) {
+        // Draw the circle
+    }
+}
+```
+
+### Effects and Capabilities
+```tml
+// Effects declare side effects
+func read_file(path: Str) -> Str with io {
+    // Function may perform I/O
+}
+
+func pure_add(a: I32, b: I32) -> I32 with pure {
+    return a + b
+}
+
+// Capabilities grant specific permissions
+func process_data(fs: Fs, net: Net) -> Outcome[Data, Error] {
+    // Has file system and network access
+}
+```
+
+### Contracts
+```tml
+func divide(a: I32, b: I32) -> I32
+    requires b != 0
+    ensures result * b == a
+{
+    return a / b
+}
+
+func binary_search[T](list: List[T], target: T) -> Maybe[I32]
+    requires list.is_sorted()
+{
+    // Implementation
+}
+```
+
 ## Installation
 
 ### From Source
@@ -134,9 +246,38 @@ func pointer_example() {
 
 ## Known Issues
 
-None at this time.
+- Syntax validation requires the TML compiler (`tml`) to be installed and available in PATH
+- Diagnostics are disabled if the compiler is not found
 
 ## Release Notes
+
+### 0.13.0
+
+- **Syntax Validation** - Real-time error reporting using the TML compiler
+- **Diagnostics Integration** - Errors and warnings in the Problems panel
+- **Configurable Validation** - Enable/disable with `tml.enableDiagnostics` setting
+
+### 0.12.0
+
+- **Import Statement Completion** - Smart completions for `use` statements
+- **Effect & Capability Support** - Completions, hover, and highlighting for effects and capabilities
+- **Contract Support** - Completions and documentation for requires, ensures, invariant
+- **Module Hover** - See module documentation and exports on hover
+
+### 0.11.0
+
+- **Build Integration** - Commands for build, run, test, clean with keybindings
+- **Semantic Highlighting** - Enhanced syntax highlighting via LSP
+- **Problem Matchers** - Compiler error parsing in Problems panel
+- **Context Menu** - Build and Run options in editor context menu
+
+### 0.10.0
+
+- **Language Server Protocol (LSP)** - Full LSP implementation
+- **IntelliSense** - Autocompletion for keywords, types, builtins, and snippets
+- **Hover Information** - Documentation on hover for all TML constructs
+- **Markdown Support** - Syntax highlighting in ```tml code blocks
+- **OOP Support** - Class, interface, extends, implements keywords
 
 ### 0.6.0
 

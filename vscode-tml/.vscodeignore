@@ -1,7 +1,15 @@
 .vscode/**
 .vscode-test/**
 node_modules/**
+src/**
 .gitignore
 .git/**
 examples/**
 *.vsix
+*.map
+tsconfig.json
+.eslintrc.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+**/*.ts
+!out/**

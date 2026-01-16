@@ -2,6 +2,126 @@
 
 All notable changes to the "tml-language" extension will be documented in this file.
 
+## [0.13.0] - 2026-01-15
+
+### Added
+- **Syntax Validation & Diagnostics** - Real-time error reporting using the TML compiler
+  - Syntax errors displayed in the Problems panel
+  - Type errors with location information
+  - Compiler warnings as diagnostics
+  - JSON error format parsing from compiler output
+  - Debounced validation to avoid excessive compiler calls
+  - Configurable with `tml.enableDiagnostics` setting
+
+### Configuration
+- New setting: `tml.enableDiagnostics` - Enable/disable real-time syntax validation (default: true)
+
+### Changed
+- Enhanced LSP server with document validation on open/change
+- Improved error handling and cleanup for temporary files
+- Added support for configuration change notifications
+
+### Technical
+- Added `validateTextDocument()` function for compiler integration
+- Implemented debounced validation queue (500ms delay)
+- Added support for JSON diagnostic format from compiler (`--error-format=json`)
+
+## [0.12.0] - 2026-01-15
+
+### Added
+- **Import Statement Completion** - Smart completions for `use` statements
+  - Module path completion (std::, core::, test::)
+  - Submodule navigation with auto-trigger
+  - Member completions for each module
+  - Wildcard import suggestions (`*`)
+  - Import snippets (use, use wildcard, use alias)
+
+- **Effect & Capability System Support**
+  - Effect completions: pure, io, throws, async, unsafe, diverges, alloc, nondet
+  - Capability completions: Read, Write, Exec, Net, Fs, Env, Time, Random
+  - Hover documentation for all effects and capabilities
+  - Semantic highlighting for effects in `with` clauses
+
+- **Contract Support**
+  - Contract keyword completions: requires, ensures, invariant, assert, assume
+  - Hover documentation with syntax examples
+  - Semantic highlighting for contract keywords
+
+- **Module Hover Information**
+  - Hover over module names to see documentation and exports
+
+### Changed
+- Enhanced `src/server/server.ts` with import context detection and effect/capability support
+- Improved semantic tokens provider to highlight effects, capabilities, and contracts
+
+## [0.11.0] - 2026-01-15
+
+### Added
+- **Build Integration** - Commands and tasks for TML compilation
+  - `TML: Build` command (Ctrl+Shift+B)
+  - `TML: Build (Release)` command
+  - `TML: Run` command (F5)
+  - `TML: Test` command
+  - `TML: Clean` command
+  - Task provider for automatic task discovery
+  - Problem matchers for compiler error parsing
+
+- **Semantic Highlighting** - Enhanced syntax highlighting via LSP
+  - Function declarations and calls
+  - Type declarations and references
+  - Builtin types with special highlighting
+  - Decorators (@test, @bench, etc.)
+  - Enum variants
+
+- **Editor Integration**
+  - Context menu with Build/Run options
+  - Editor title run button
+  - Configurable compiler path (`tml.compilerPath`)
+  - Additional build arguments (`tml.buildArgs`)
+
+### Changed
+- Updated `package.json` with commands, keybindings, and menus
+- Added `src/client/commands.ts` for command implementations
+- Added `src/client/taskProvider.ts` for task provider
+- Enhanced `src/server/server.ts` with semantic tokens
+
+## [0.10.0] - 2026-01-15
+
+### Added
+- **Language Server Protocol (LSP)** - Full LSP implementation for enhanced IDE features
+  - `src/client/extension.ts` - LSP client implementation
+  - `src/server/server.ts` - LSP server with completion and hover providers
+
+- **Autocompletion** - IntelliSense support for TML
+  - All TML keywords (50+ including OOP keywords)
+  - Primitive types (Bool, I8-I128, U8-U128, F32, F64, etc.)
+  - Collection types (List, Map, Set, Vec, Buffer)
+  - Wrapper types (Maybe, Outcome, Result, Option, Heap, Shared, Sync)
+  - Enum variants (Just, Nothing, Ok, Err, Less, Equal, Greater)
+  - Builtin functions (print, println, panic, assert, size_of, etc.)
+  - Code snippets for common patterns (func, if, for, while, when, type, impl, class, interface)
+
+- **Hover Information** - Documentation on hover
+  - Keyword descriptions
+  - Type documentation with details
+  - Builtin function signatures
+  - Variant documentation
+
+- **Markdown Code Block Support** - Syntax highlighting in markdown files
+  - ```tml code blocks now have proper syntax highlighting
+  - `syntaxes/tml.markdown.tmLanguage.json` - Markdown injection grammar
+
+### Changed
+- Updated to TypeScript-based extension architecture
+- Added `tsconfig.json` for TypeScript compilation
+- Updated `package.json` with LSP dependencies and build scripts
+- Updated `.vscodeignore` for proper packaging
+
+### Development
+- Run `npm install` to install dependencies
+- Run `npm run compile` to build the extension
+- Run `npm run watch` for development with auto-rebuild
+
 ## [0.6.0] - 2025-12-27
 
 ### Added
@@ -108,12 +228,13 @@ All notable changes to the "tml-language" extension will be documented in this f
 ## [Unreleased]
 
 ### Planned Features
-- IntelliSense/autocomplete support
 - Go to definition
 - Find references
 - Symbol search
-- Code snippets for common patterns
+- Context-aware completions
+- Semantic highlighting
 - Refactoring support
-- Error diagnostics
+- Error diagnostics (requires compiler integration)
 - Formatting provider
 - Debugger support
+- Build task integration

@@ -1,8 +1,8 @@
 {
   "name": "tml-language",
   "displayName": "TML Language Support",
-  "description": "Syntax highlighting and language support for TML (To Machine Language)",
-  "version": "0.9.0",
+  "description": "Syntax highlighting, autocompletion, and language support for TML (To Machine Language)",
+  "version": "0.13.0",
   "publisher": "tml-lang",
   "engines": {
     "vscode": "^1.75.0"
@@ -14,13 +14,15 @@
     "tml",
     "to-machine-language",
     "syntax",
-    "highlighting"
+    "highlighting",
+    "intellisense"
   ],
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/hivellm/tml"
   },
+  "main": "./out/client/extension.js",
   "contributes": {
     "languages": [
       {
@@ -44,13 +46,203 @@
         "language": "tml",
         "scopeName": "source.tml",
         "path": "./syntaxes/tml.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.tml.codeblock",
+        "path": "./syntaxes/tml.markdown.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.tml": "tml"
+        }
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "TML Language Server",
+      "properties": {
+        "tml.maxNumberOfProblems": {
+          "scope": "resource",
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of problems reported by the server."
+        },
+        "tml.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        },
+        "tml.compilerPath": {
+          "scope": "machine",
+          "type": "string",
+          "default": "tml",
+          "description": "Path to the TML compiler executable."
+        },
+        "tml.buildArgs": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional arguments to pass to the TML compiler."
+        },
+        "tml.enableDiagnostics": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time syntax validation using the TML compiler."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "tml.build",
+        "title": "TML: Build",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "tml.buildRelease",
+        "title": "TML: Build (Release)",
+        "icon": "$(package)"
+      },
+      {
+        "command": "tml.run",
+        "title": "TML: Run",
+        "icon": "$(play)"
+      },
+      {
+        "command": "tml.test",
+        "title": "TML: Test",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "tml.clean",
+        "title": "TML: Clean",
+        "icon": "$(trash)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "tml.build",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "editorLangId == tml"
+      },
+      {
+        "command": "tml.run",
+        "key": "f5",
+        "when": "editorLangId == tml && !inDebugMode"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "tml",
+        "required": ["task"],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "The TML task to run: build, run, test, clean"
+          },
+          "file": {
+            "type": "string",
+            "description": "The TML file to compile"
+          },
+          "release": {
+            "type": "boolean",
+            "description": "Build in release mode"
+          },
+          "args": {
+            "type": "array",
+            "description": "Additional compiler arguments"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "tml",
+        "owner": "tml",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^error\\[E(\\d+)\\]:\\s+(.+)$\\n\\s+-->\\s+(.+):(\\d+):(\\d+)",
+          "code": 1,
+          "message": 2,
+          "file": 3,
+          "line": 4,
+          "column": 5,
+          "severity": "error"
+        }
+      },
+      {
+        "name": "tml-simple",
+        "owner": "tml",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "tml.run",
+          "when": "editorLangId == tml",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "tml.build",
+          "when": "editorLangId == tml",
+          "group": "tml@1"
+        },
+        {
+          "command": "tml.run",
+          "when": "editorLangId == tml",
+          "group": "tml@2"
+        }
+      ]
+    }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "lint": "eslint src --ext ts",
+    "pretest": "npm run compile && npm run lint",
+    "test": "node ./out/test/runTest.js",
     "package": "vsce package"
   },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
+  },
   "devDependencies": {
-    "@vscode/vsce": "^2.19.0"
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.19.0",
+    "eslint": "^8.54.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.2"
   }
 }
