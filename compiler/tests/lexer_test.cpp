@@ -29,6 +29,7 @@ protected:
 TEST_F(LexerTest, Keywords) {
     EXPECT_EQ(lex_one("func").kind, TokenKind::KwFunc);
     EXPECT_EQ(lex_one("type").kind, TokenKind::KwType);
+    EXPECT_EQ(lex_one("enum").kind, TokenKind::KwType); // 'enum' is alias for 'type'
     EXPECT_EQ(lex_one("behavior").kind, TokenKind::KwBehavior);
     EXPECT_EQ(lex_one("impl").kind, TokenKind::KwImpl);
     EXPECT_EQ(lex_one("let").kind, TokenKind::KwLet);
@@ -47,6 +48,7 @@ TEST_F(LexerTest, Keywords) {
     EXPECT_EQ(lex_one("to").kind, TokenKind::KwTo);
     EXPECT_EQ(lex_one("through").kind, TokenKind::KwThrough);
     EXPECT_EQ(lex_one("lowlevel").kind, TokenKind::KwLowlevel);
+    EXPECT_EQ(lex_one("unsafe").kind, TokenKind::KwLowlevel); // 'unsafe' is alias for 'lowlevel'
 }
 
 // Identifiers

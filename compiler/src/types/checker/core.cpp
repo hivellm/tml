@@ -114,6 +114,79 @@ bool is_float_type(const TypePtr& type);
 std::string extract_ffi_module_name(const std::string& link_path);
 bool types_compatible(const TypePtr& expected, const TypePtr& actual);
 
+// ============================================================================
+// Size Estimation for Stack Allocation Eligibility
+// ============================================================================
+
+/// Maximum class size for stack allocation eligibility (in bytes).
+/// Classes larger than this are always heap-allocated.
+static constexpr size_t MAX_STACK_CLASS_SIZE = 256;
+
+/// Estimate the size of a type in bytes (for stack allocation eligibility).
+/// Returns 0 for unsized types (slices, dyn, etc.).
+static size_t estimate_type_size(const TypePtr& type) {
+    if (!type)
+        return 8; // Default pointer size
+
+    return std::visit(
+        [](const auto& kind) -> size_t {
+            using T = std::decay_t<decltype(kind)>;
+
+            if constexpr (std::is_same_v<T, PrimitiveType>) {
+                switch (kind.kind) {
+                case PrimitiveKind::Bool:
+                case PrimitiveKind::I8:
+                case PrimitiveKind::U8:
+                    return 1;
+                case PrimitiveKind::I16:
+                case PrimitiveKind::U16:
+                    return 2;
+                case PrimitiveKind::I32:
+                case PrimitiveKind::U32:
+                case PrimitiveKind::F32:
+                case PrimitiveKind::Char:
+                    return 4;
+                case PrimitiveKind::I64:
+                case PrimitiveKind::U64:
+                case PrimitiveKind::F64:
+                    return 8;
+                case PrimitiveKind::I128:
+                case PrimitiveKind::U128:
+                    return 16;
+                case PrimitiveKind::Unit:
+                    return 0;
+                case PrimitiveKind::Never:
+                    return 0;
+                case PrimitiveKind::Str:
+                    return 24; // Str is typically ptr + len + capacity
+                }
+                return 8; // Default for any unknown primitives
+            } else if constexpr (std::is_same_v<T, PtrType> || std::is_same_v<T, RefType>) {
+                return 8; // Pointer size
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                return 8; // Class instances are stored by reference (pointer)
+            } else if constexpr (std::is_same_v<T, NamedType>) {
+                return 8; // Conservative estimate - actual size computed during codegen
+            } else if constexpr (std::is_same_v<T, TupleType>) {
+                size_t total = 0;
+                for (const auto& elem : kind.elements) {
+                    total += estimate_type_size(elem);
+                }
+                return total;
+            } else if constexpr (std::is_same_v<T, ArrayType>) {
+                return estimate_type_size(kind.element) * kind.size;
+            } else if constexpr (std::is_same_v<T, SliceType> ||
+                                 std::is_same_v<T, DynBehaviorType>) {
+                return 16; // Fat pointer (ptr + vtable/len)
+            } else if constexpr (std::is_same_v<T, GenericType>) {
+                return 8; // Conservative - treat as pointer-sized
+            } else {
+                return 8; // Default to pointer size
+            }
+        },
+        type->kind);
+}
+
 TypeChecker::TypeChecker() = default;
 
 auto TypeChecker::check_module(const parser::Module& module)
@@ -796,10 +869,10 @@ void TypeChecker::check_const_decl(const parser::ConstDecl& const_decl) {
     // Resolve the declared type
     TypePtr declared_type = resolve_type(*const_decl.type);
 
-    // Type-check the initializer expression
-    TypePtr init_type = check_expr(*const_decl.value);
+    // Type-check the initializer expression with expected type for literal inference
+    TypePtr init_type = check_expr(*const_decl.value, declared_type);
 
-    // Verify the types match
+    // Verify the types match (should always match now due to literal type inference)
     if (!types_equal(init_type, declared_type)) {
         error("Type mismatch in const initializer: expected " + type_to_string(declared_type) +
                   ", found " + type_to_string(init_type),
@@ -1197,6 +1270,77 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
         }
 
         def.constructors.push_back(ctor_def);
+    }
+
+    // ========================================================================
+    // Compute stack allocation eligibility metadata
+    // ========================================================================
+
+    // Calculate inheritance depth
+    def.inheritance_depth = 0;
+    if (def.base_class.has_value()) {
+        std::string current_base = *def.base_class;
+        while (!current_base.empty()) {
+            def.inheritance_depth++;
+            auto base_def = env_.lookup_class(current_base);
+            if (base_def.has_value() && base_def->base_class.has_value()) {
+                current_base = *base_def->base_class;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Calculate estimated size:
+    // - vtable pointer (8 bytes) for non-@value classes
+    // - inherited fields (from base class)
+    // - own fields
+    def.estimated_size = 0;
+
+    // vtable pointer (8 bytes) for non-@value classes
+    if (!def.is_value) {
+        def.estimated_size += 8;
+    }
+
+    // Add inherited field sizes
+    if (def.base_class.has_value()) {
+        auto base_def = env_.lookup_class(*def.base_class);
+        if (base_def.has_value()) {
+            // Include base class size (minus vtable since we already counted it)
+            def.estimated_size += base_def->estimated_size;
+            if (!base_def->is_value) {
+                // Don't double-count vtable pointer
+                def.estimated_size -= 8;
+            }
+        }
+    }
+
+    // Add own field sizes
+    for (const auto& field : def.fields) {
+        if (!field.is_static) {
+            def.estimated_size += estimate_type_size(field.type);
+        }
+    }
+
+    // Determine stack allocation eligibility:
+    // A class is stack-allocatable if:
+    // 1. It's a @value class (no vtable, no virtual methods), OR
+    // 2. It's sealed (no subclasses) and small enough
+    // AND:
+    // 3. It's not abstract
+    // 4. Its estimated size is within the threshold
+    // 5. It doesn't contain unsized types
+    def.stack_allocatable = false;
+
+    if (!def.is_abstract && def.estimated_size <= MAX_STACK_CLASS_SIZE) {
+        if (def.is_value) {
+            // @value classes are always eligible if small enough
+            def.stack_allocatable = true;
+        } else if (def.is_sealed) {
+            // Sealed classes with known type can be stack-allocated
+            // (escape analysis determines actual placement at call sites)
+            def.stack_allocatable = true;
+        }
     }
 
     env_.define_class(std::move(def));

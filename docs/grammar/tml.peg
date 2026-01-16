@@ -36,7 +36,7 @@ ItemKind = FuncDef
 FuncDef = "func" ~ Ident ~ GenericParams? ~ "(" ~ Params? ~ ")"
         ~ ("->" ~ Type)? ~ Effects? ~ (Block / ";")
 
-TypeDef = "type" ~ Ident ~ GenericParams? ~ "=" ~ TypeBody
+TypeDef = ("type" / "enum") ~ Ident ~ GenericParams? ~ "=" ~ TypeBody
 
 ConstDef = "const" ~ Ident ~ ":" ~ Type ~ "=" ~ Expr ~ ";"?
 

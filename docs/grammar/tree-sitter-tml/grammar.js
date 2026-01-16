@@ -79,7 +79,7 @@ module.exports = grammar({
     ),
 
     type_def: $ => seq(
-      'type',
+      choice('type', 'enum'),  // 'enum' is alias for 'type'
       field('name', $.ident),
       optional($.generic_params),
       '=',

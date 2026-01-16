@@ -205,7 +205,7 @@
         },
         {
           "name": "keyword.declaration.tml",
-          "match": "\\b(module|import|public|private|func|type|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator|namespace)\\b"
+          "match": "\\b(module|import|public|private|func|type|enum|behavior|extend|impl|const|let|var|where|use|mod|crate|super|pub|decorator|namespace)\\b"
         },
         {
           "name": "keyword.control.oop.tml",
@@ -225,7 +225,7 @@
         },
         {
           "name": "keyword.other.tml",
-          "match": "\\b(this|This|ref|mut|dyn|lowlevel|async|await|with|quote|as|is)\\b"
+          "match": "\\b(this|This|ref|mut|dyn|lowlevel|unsafe|async|await|with|quote|as|is)\\b"
         },
         {
           "name": "keyword.control.range.tml",

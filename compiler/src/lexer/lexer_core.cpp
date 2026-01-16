@@ -31,6 +31,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     // Declarations
     {"func", TokenKind::KwFunc},
     {"type", TokenKind::KwType},
+    {"enum", TokenKind::KwType}, // Alias for 'type' (enum declaration syntax)
     {"behavior", TokenKind::KwBehavior},
     {"impl", TokenKind::KwImpl},
     {"mod", TokenKind::KwMod},
@@ -90,6 +91,7 @@ const std::unordered_map<std::string_view, TokenKind> KEYWORDS = {
     {"where", TokenKind::KwWhere},
     {"dyn", TokenKind::KwDyn},
     {"lowlevel", TokenKind::KwLowlevel},
+    {"unsafe", TokenKind::KwLowlevel}, // Alias for 'lowlevel' (Rust-style)
     {"quote", TokenKind::KwQuote},
 
     // Booleans (special - become BoolLiteral)

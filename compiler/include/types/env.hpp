@@ -306,6 +306,11 @@ struct ClassDef {
     bool is_value;                               ///< True for @value classes (no vtable).
     bool is_pooled;                              ///< True for @pool classes (uses object pool).
     SourceSpan span;                             ///< Declaration location.
+
+    // Stack allocation eligibility metadata
+    bool stack_allocatable = false; ///< True if class instances can be stack-allocated.
+    size_t estimated_size = 0;      ///< Estimated size in bytes (includes vtable ptr + fields).
+    size_t inheritance_depth = 0;   ///< Depth in inheritance hierarchy (0 = no base class).
 };
 
 /// Interface method definition.
@@ -662,7 +667,7 @@ private:
     std::string source_directory_;                    ///< Source directory for local imports.
     std::unordered_map<std::string, ImportedSymbol> imported_symbols_; ///< Imported symbols.
     std::unordered_map<std::string, std::set<std::string>>
-        import_conflicts_; ///< Tracks import name conflicts for error reporting.
+        import_conflicts_;              ///< Tracks import name conflicts for error reporting.
     bool abort_on_module_error_ = true; ///< Abort on module load errors.
     std::unordered_set<std::string>
         loading_modules_; ///< Modules currently being loaded (cycle detection).
