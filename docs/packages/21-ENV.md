@@ -11,8 +11,8 @@ The env package provides access to environment variables, command-line arguments
 ## Import
 
 ```tml
-import std.env
-import std.env.{var, args, current_dir}
+use std::env
+use std::env.{var, args, current_dir}
 ```
 
 ---
@@ -23,43 +23,43 @@ import std.env.{var, args, current_dir}
 
 ```tml
 /// Gets an environment variable
-public func var(key: ref String) -> Outcome[String, VarError]
+pub func var(key: ref String) -> Outcome[String, VarError]
     caps: [io.process.env]
 
 /// Gets an environment variable or returns a default
-public func var_or(key: ref String, default: ref String) -> String
+pub func var_or(key: ref String, default: ref String) -> String
     caps: [io.process.env]
 {
     var(key).unwrap_or_else(|_| default.duplicate())
 }
 
 /// Gets an environment variable as Option
-public func var_opt(key: ref String) -> Maybe[String]
+pub func var_opt(key: ref String) -> Maybe[String]
     caps: [io.process.env]
 {
     var(key).ok()
 }
 
 /// Returns true if the variable is set
-public func var_exists(key: ref String) -> Bool
+pub func var_exists(key: ref String) -> Bool
     caps: [io.process.env]
 {
     var(key).is_ok()
 }
 
 /// Error when reading environment variable
-public type VarError = NotPresent | NotUnicode(String)
+pub type VarError = NotPresent | NotUnicode(String)
 ```
 
 ### Setting Variables
 
 ```tml
 /// Sets an environment variable
-public func set_var(key: ref String, value: ref String)
+pub func set_var(key: ref String, value: ref String)
     caps: [io.process.env]
 
 /// Removes an environment variable
-public func remove_var(key: ref String)
+pub func remove_var(key: ref String)
     caps: [io.process.env]
 ```
 
@@ -67,11 +67,11 @@ public func remove_var(key: ref String)
 
 ```tml
 /// Returns an iterator over all environment variables
-public func vars() -> Vars
+pub func vars() -> Vars
     caps: [io.process.env]
 
 /// Iterator over environment variables
-public type Vars {
+pub type Vars {
     // Internal
 }
 
@@ -93,18 +93,18 @@ loop (key, value) in env.vars() {
 
 ```tml
 /// Returns an iterator over command-line arguments
-public func args() -> Args
+pub func args() -> Args
     caps: [io.process.env]
 
 /// Returns command-line arguments as a Vec
-public func args_vec() -> Vec[String]
+pub func args_vec() -> Vec[String]
     caps: [io.process.env]
 {
     args().collect()
 }
 
 /// Iterator over command-line arguments
-public type Args {
+pub type Args {
     // Internal
 }
 
@@ -128,11 +128,11 @@ let arguments = args[1 to args.len()].to_vec()
 
 ```tml
 /// Returns arguments as OsStrings (platform encoding)
-public func args_os() -> ArgsOs
+pub func args_os() -> ArgsOs
     caps: [io.process.env]
 
 /// Iterator over OsString arguments
-public type ArgsOs {
+pub type ArgsOs {
     // Internal
 }
 
@@ -151,11 +151,11 @@ implement Iterator for ArgsOs {
 
 ```tml
 /// Returns the current working directory
-public func current_dir() -> Outcome[PathBuf, IoError]
+pub func current_dir() -> Outcome[PathBuf, IoError]
     caps: [io.process.env]
 
 /// Sets the current working directory
-public func set_current_dir(path: ref Path) -> Outcome[Unit, IoError]
+pub func set_current_dir(path: ref Path) -> Outcome[Unit, IoError]
     caps: [io.process.env]
 ```
 
@@ -163,15 +163,15 @@ public func set_current_dir(path: ref Path) -> Outcome[Unit, IoError]
 
 ```tml
 /// Returns the home directory
-public func home_dir() -> Maybe[PathBuf]
+pub func home_dir() -> Maybe[PathBuf]
     caps: [io.process.env]
 
 /// Returns the temporary directory
-public func temp_dir() -> PathBuf
+pub func temp_dir() -> PathBuf
     caps: [io.process.env]
 
 /// Returns the executable path
-public func current_exe() -> Outcome[PathBuf, IoError]
+pub func current_exe() -> Outcome[PathBuf, IoError]
     caps: [io.process.env]
 ```
 
@@ -181,66 +181,66 @@ public func current_exe() -> Outcome[PathBuf, IoError]
 /// Standard directories for the platform
 public module dirs {
     /// User's home directory
-    public func home() -> Maybe[PathBuf]
+    pub func home() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's config directory
     /// - Linux: $XDG_CONFIG_HOME or ~/.config
     /// - macOS: ~/Library/Application Support
     /// - Windows: %APPDATA%
-    public func config() -> Maybe[PathBuf]
+    pub func config() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's data directory
     /// - Linux: $XDG_DATA_HOME or ~/.local/share
     /// - macOS: ~/Library/Application Support
     /// - Windows: %APPDATA%
-    public func data() -> Maybe[PathBuf]
+    pub func data() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's local data directory
     /// - Linux: $XDG_DATA_HOME or ~/.local/share
     /// - macOS: ~/Library/Application Support
     /// - Windows: %LOCALAPPDATA%
-    public func data_local() -> Maybe[PathBuf]
+    pub func data_local() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's cache directory
     /// - Linux: $XDG_CACHE_HOME or ~/.cache
     /// - macOS: ~/Library/Caches
     /// - Windows: %LOCALAPPDATA%
-    public func cache() -> Maybe[PathBuf]
+    pub func cache() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's downloads directory
-    public func downloads() -> Maybe[PathBuf]
+    pub func downloads() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's documents directory
-    public func documents() -> Maybe[PathBuf]
+    pub func documents() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's desktop directory
-    public func desktop() -> Maybe[PathBuf]
+    pub func desktop() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's pictures directory
-    public func pictures() -> Maybe[PathBuf]
+    pub func pictures() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's music directory
-    public func music() -> Maybe[PathBuf]
+    pub func music() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// User's videos directory
-    public func videos() -> Maybe[PathBuf]
+    pub func videos() -> Maybe[PathBuf]
         caps: [io.process.env]
 
     /// System's runtime directory
     /// - Linux: $XDG_RUNTIME_DIR
     /// - macOS: None
     /// - Windows: None
-    public func runtime() -> Maybe[PathBuf]
+    pub func runtime() -> Maybe[PathBuf]
         caps: [io.process.env]
 }
 ```
@@ -251,43 +251,43 @@ public module dirs {
 
 ```tml
 /// Target operating system
-public const OS: String = // "linux", "macos", "windows", etc.
+pub const OS: String = // "linux", "macos", "windows", etc.
 
 /// Target architecture
-public const ARCH: String = // "x86_64", "aarch64", "arm", etc.
+pub const ARCH: String = // "x86_64", "aarch64", "arm", etc.
 
 /// Target pointer width in bits
-public const POINTER_WIDTH: U32 = // 32 or 64
+pub const POINTER_WIDTH: U32 = // 32 or 64
 
 /// Target endianness
-public const ENDIAN: String = // "little" or "big"
+pub const ENDIAN: String = // "little" or "big"
 
 /// Target family
-public const FAMILY: String = // "unix" or "windows"
+pub const FAMILY: String = // "unix" or "windows"
 ```
 
 ### Runtime Checks
 
 ```tml
 /// Returns the number of logical CPUs
-public func num_cpus() -> U64
+pub func num_cpus() -> U64
     caps: [io.process.env]
 
 /// Returns the page size
-public func page_size() -> U64
+pub func page_size() -> U64
     caps: [io.process.env]
 
 /// Returns the hostname
-public func hostname() -> Outcome[String, IoError]
+pub func hostname() -> Outcome[String, IoError]
     caps: [io.process.env]
 
 /// Returns the OS type
-public func os_type() -> String
+pub func os_type() -> String
     caps: [io.process.env]
 // "Linux", "Darwin", "Windows", etc.
 
 /// Returns the OS release version
-public func os_release() -> Outcome[String, IoError]
+pub func os_release() -> Outcome[String, IoError]
     caps: [io.process.env]
 ```
 
@@ -299,14 +299,14 @@ public func os_release() -> Outcome[String, IoError]
 
 ```tml
 /// Joins paths with the platform path separator
-public func join_paths[I](paths: I) -> Outcome[OsString, JoinPathsError]
+pub func join_paths[I](paths: I) -> Outcome[OsString, JoinPathsError]
     where I: Iterator[Item = impl AsRef[Path]]
 
 /// Splits the PATH variable into paths
-public func split_paths(path: ref OsStr) -> SplitPaths
+pub func split_paths(path: ref OsStr) -> SplitPaths
 
 /// Iterator over PATH components
-public type SplitPaths {
+pub type SplitPaths {
     // Internal
 }
 
@@ -329,7 +329,7 @@ loop dir in env.split_paths(ref path) {
 
 ```tml
 /// Finds an executable in PATH
-public func which(name: ref String) -> Maybe[PathBuf]
+pub func which(name: ref String) -> Maybe[PathBuf]
     caps: [io.process.env]
 {
     let path = var("PATH").ok()?
@@ -343,7 +343,7 @@ public func which(name: ref String) -> Maybe[PathBuf]
 }
 
 /// Finds all matching executables in PATH
-public func which_all(name: ref String) -> Vec[PathBuf]
+pub func which_all(name: ref String) -> Vec[PathBuf]
     caps: [io.process.env]
 ```
 
@@ -354,7 +354,7 @@ public func which_all(name: ref String) -> Vec[PathBuf]
 ### Reading Configuration from Environment
 
 ```tml
-import std.env
+use std::env
 
 type Config {
     database_url: String,
@@ -383,8 +383,8 @@ func load_config() -> Outcome[Config, ConfigError]
 ### Application Directories
 
 ```tml
-import std.env.dirs
-import std.fs
+use std::env.dirs
+use std::fs
 
 type AppDirs {
     config: PathBuf,
@@ -393,7 +393,7 @@ type AppDirs {
 }
 
 func get_app_dirs(app_name: ref String) -> Outcome[AppDirs, IoError]
-    caps: [io.process.env, io.file]
+    caps: [io.process.env, io::file]
 {
     let config = dirs.config()
         .ok_or(IoError.NotFound)?
@@ -419,7 +419,7 @@ func get_app_dirs(app_name: ref String) -> Outcome[AppDirs, IoError]
 ### Platform-Specific Behavior
 
 ```tml
-import std.env
+use std::env
 
 func get_config_path() -> PathBuf
     caps: [io.process.env]
@@ -448,7 +448,7 @@ func get_config_path() -> PathBuf
 ### Setting Up Test Environment
 
 ```tml
-import std.env
+use std::env
 
 func with_env[T](vars: ref [(String, String)], f: func() -> T) -> T
     caps: [io.process.env]

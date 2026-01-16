@@ -1,9 +1,9 @@
 // TML Example 01: Hello World
 // Demonstrates the basic structure of a TML program
 
-module hello
+mod hello
 
 // Main function - entry point
-public func main() {
+pub func main() {
     println("Hello, TML!")
 }

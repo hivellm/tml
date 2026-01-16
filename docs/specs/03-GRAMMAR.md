@@ -16,26 +16,26 @@ X       non-terminal
 ## 2. Program
 
 ```ebnf
-Program = ModuleDecl? Import* Item*
+Program = ModDecl? Use* Item*
 
-ModuleDecl = 'module' ModulePath
+ModDecl = 'mod' ModulePath
 
-Import = 'import' ImportPath ('as' Ident)?
-       | 'public' 'import' ImportPath
+Use = 'use' UsePath ('as' Ident)?
+    | 'pub' 'use' UsePath
 
-ModulePath = Ident ('.' Ident)*
-ImportPath = ModulePath ('.' '{' Ident (',' Ident)* '}')?
-           | ModulePath '.' '*'
+ModulePath = Ident ('::' Ident)*
+UsePath = ModulePath ('::' '{' Ident (',' Ident)* '}')?
+        | ModulePath '::' '*'
 ```
 
 **Examples:**
 ```tml
-module http.client
+mod http::client
 
-import std.io
-import std.collections.{List, Map}
-import utils as u
-public import types.*
+use std::io
+use std::collections::{List, Map}
+use utils as u
+pub use types::*
 ```
 
 ## 3. Items
@@ -50,7 +50,7 @@ Item = Function
      | InterfaceDecl
      | NamespaceDecl
 
-Visibility = 'public' | 'private' | 'protected'
+Visibility = 'pub' | 'private' | 'protected'
 ```
 
 ### 3.1 Functions
@@ -76,7 +76,7 @@ PreCond    = 'pre' ':' Expr
 PostCond   = 'post' ('(' Ident ')')? ':' Expr
 
 EffectDecl = 'effects' ':' '[' Effect (',' Effect)* ']'
-Effect     = Ident ('.' Ident)*
+Effect     = Ident ('::' Ident)*
 ```
 
 **Examples:**
@@ -85,7 +85,7 @@ func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-public func first[T](list: List[T]) -> Maybe[T] {
+pub func first[T](list: List[T]) -> Maybe[T] {
     return list.get(0)
 }
 
@@ -97,7 +97,7 @@ post(r): r >= 0.0
 }
 
 func read_file(path: String) -> Outcome[String, IoError]
-effects: [io.file.read]
+effects: [io::file::read]
 {
     // ...
 }
@@ -253,7 +253,7 @@ ConstDecl = Visibility? 'const' Ident (':' Type)? '=' Expr
 ```tml
 const PI: F64 = 3.14159265359
 const MAX_SIZE: I32 = 1024
-public const VERSION: String = "1.0.0"
+pub const VERSION: String = "1.0.0"
 ```
 
 ### 3.6 Classes (OOP)
@@ -374,12 +374,12 @@ interface Drawable {
 ```ebnf
 NamespaceDecl = 'namespace' NamespacePath '{' Item* '}'
 
-NamespacePath = Ident ('.' Ident)*
+NamespacePath = Ident ('::' Ident)*
 ```
 
 **Examples:**
 ```tml
-namespace graphics.shapes {
+namespace graphics::shapes {
     class Circle {
         radius: F64
     }
@@ -790,7 +790,7 @@ for Point { x, y } in points {
 
 ```ebnf
 PropagateExpr = Expr '!'
-ElseExpr      = Expr '!' 'else' (Expr | '|' Ident '|' Expr)
+ElseExpr      = Expr '!' 'else' (Expr | 'do' '(' Ident ')' Expr)
 ```
 
 Propagates errors automatically or recovers with else.
@@ -804,7 +804,7 @@ let data: Outcome[String, Error] = file.read()!
 let port: Outcome[String, Error] = env.get("PORT")!.parse[U16]()! else 8080
 
 // With error binding
-let data: Outcome[Data, Error] = fetch(url)! else |err| {
+let data: Outcome[Data, Error] = fetch(url)! else do(err) {
     log.warn(err.to_string())
     Data.default()
 }
@@ -813,7 +813,7 @@ let data: Outcome[Data, Error] = fetch(url)! else |err| {
 ### 5.7 Catch Expression
 
 ```ebnf
-CatchExpr = 'catch' Block 'else' ('|' Ident '|')? Block
+CatchExpr = 'catch' Block 'else' ('do' '(' Ident ')')? Block
 ```
 
 **Examples:**
@@ -822,7 +822,7 @@ catch {
     let local: Data = load_local()!
     let remote: Outcome[Data, Error] = fetch_remote()!
     return Ok(merge(local, remote)!)
-} else |err| {
+} else do(err) {
     log.error(err.to_string())
     return Err(err)
 }
@@ -1018,9 +1018,9 @@ DirectiveArg  = Ident (':' Value)?
 
 | Token | Production |
 |-------|------------|
-| `module` | ModuleDecl |
-| `import` | Import |
-| `public` | Visibility + Item or Import |
+| `mod` | ModDecl |
+| `use` | Use |
+| `pub` | Visibility + Item or Use |
 | `private` | Visibility + Item |
 | `func` | Function |
 | `type` | TypeDecl (struct or enum) |
@@ -1078,30 +1078,30 @@ a & b           // & always bitwise AND
 ## 9. Complete Example
 
 ```tml
-module math.geometry
+mod math::geometry
 
-import std.math.{sqrt, PI}
+use std::math::{sqrt, PI}
 
-public type Point {
+pub type Point {
     x: F64,
     y: F64,
 }
 
-public type Circle {
+pub type Circle {
     center: Point,
     radius: F64,
 }
 
 extend Point {
-    public func new(x: F64, y: F64) -> This {
+    pub func new(x: F64, y: F64) -> This {
         return This { x, y }
     }
 
-    public func origin() -> This {
+    pub func origin() -> This {
         return This.new(0.0, 0.0)
     }
 
-    public func distance(this, other: Point) -> F64 {
+    pub func distance(this, other: Point) -> F64 {
         let dx: F64 = this.x - other.x
         let dy: F64 = this.y - other.y
         return sqrt(dx**2 + dy**2)
@@ -1109,17 +1109,17 @@ extend Point {
 }
 
 extend Circle {
-    public func new(center: Point, radius: F64) -> This
+    pub func new(center: Point, radius: F64) -> This
     pre: radius >= 0.0
     {
         return This { center, radius }
     }
 
-    public func area(this) -> F64 {
+    pub func area(this) -> F64 {
         return PI * this.radius**2
     }
 
-    public func contains(this, point: Point) -> Bool {
+    pub func contains(this, point: Point) -> Bool {
         return this.center.distance(point) <= this.radius
     }
 }

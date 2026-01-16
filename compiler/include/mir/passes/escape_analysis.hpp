@@ -56,6 +56,8 @@ struct EscapeInfo {
     bool may_alias_heap = false;              ///< May alias heap-allocated memory.
     bool may_alias_global = false;            ///< May alias global variables.
     bool is_stack_promotable = false;         ///< Can be promoted to stack allocation.
+    bool is_class_instance = false;           ///< Is this a class instance allocation?
+    std::string class_name;                   ///< Class name if is_class_instance is true.
 
     /// Returns true if the value escapes the function.
     [[nodiscard]] auto escapes() const -> bool {
@@ -92,6 +94,13 @@ public:
         size_t return_escape = 0;     ///< Allocations escaping via return.
         size_t global_escape = 0;     ///< Allocations escaping to globals.
         size_t stack_promotable = 0;  ///< Allocations eligible for stack promotion.
+
+        // Class instance statistics
+        size_t class_instances = 0;          ///< Total class instance allocations.
+        size_t class_instances_no_escape = 0; ///< Class instances that don't escape.
+        size_t class_instances_promotable = 0; ///< Class instances eligible for stack.
+        size_t method_call_escapes = 0;       ///< Escapes via method calls.
+        size_t field_store_escapes = 0;       ///< Escapes via field stores.
     };
 
     /// Returns analysis statistics.
@@ -110,11 +119,18 @@ private:
     void analyze_function(Function& func);
     void analyze_instruction(const InstructionData& inst, Function& func);
     void analyze_call(const CallInst& call, ValueId result_id);
+    void analyze_method_call(const MethodCallInst& call, ValueId result_id);
     void analyze_store(const StoreInst& store);
+    void analyze_gep(const GetElementPtrInst& gep, ValueId result_id);
     void analyze_return(const ReturnTerm& ret);
     void mark_escape(ValueId value, EscapeState state);
     void propagate_escapes(Function& func);
     [[nodiscard]] auto is_allocation(const Instruction& inst) const -> bool;
+
+    // Class instance tracking helpers
+    [[nodiscard]] auto is_constructor_call(const std::string& func_name) const -> bool;
+    [[nodiscard]] auto extract_class_name(const std::string& func_name) const -> std::string;
+    void track_this_parameter(const Function& func);
 };
 
 /// Stack promotion pass.

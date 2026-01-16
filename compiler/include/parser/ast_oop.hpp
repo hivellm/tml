@@ -122,6 +122,7 @@ struct ClassMethod {
     bool is_virtual;                         ///< True for `virtual` methods.
     bool is_override;                        ///< True for `override` methods.
     bool is_abstract;                        ///< True for `abstract` methods.
+    bool is_final;                           ///< True for `final` methods.
     std::string name;                        ///< Method name.
     std::vector<GenericParam> generics;      ///< Generic parameters.
     std::vector<FuncParam> params;           ///< Parameters.

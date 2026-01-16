@@ -6,30 +6,30 @@
 // ============================================
 
 // Every file starts with a module declaration
-module my_app
+mod my_app
 
 // ============================================
 // IMPORTS
 // ============================================
 
-// Import entire module
-import std.io
-import std.collections
+// use entire module
+use std::io
+use std::collections
 
-// Import specific items
-import std.fs { read_file, write_file }
-import std.math { sin, cos, PI }
+// use specific items
+use std::fs { read_file, write_file }
+use std::math { sin, cos, PI }
 
-// Import with alias
-import std.collections.HashMap as Map
-import std.time as t
+// use with alias
+use std::collections.HashMap as Map
+use std::time as t
 
-// Import all public items (use sparingly)
-import std.string.*
+// use all public items (use sparingly)
+use std::string.*
 
 // Relative imports (within same package)
-import .utils           // sibling module
-import ..common.types   // parent's sibling
+use .utils           // sibling module
+use ..common.types   // parent's sibling
 
 // ============================================
 // VISIBILITY
@@ -41,19 +41,19 @@ func helper() -> I32 {
 }
 
 // Public - accessible from other modules
-public func process() -> String {
+pub func process() -> String {
     return "processed"
 }
 
-// Public type
-public type Config {
+// pub type
+pub type Config {
     public name: String,        // public field
     private secret: String,     // private field
     public max_size: U64,
 }
 
-// Public behavior
-public behavior Processor {
+// pub behavior
+pub behavior Processor {
     func process(this, data: String) -> String
 }
 
@@ -62,19 +62,19 @@ public behavior Processor {
 // ============================================
 
 // File: src/lib.tml (root module)
-module mylib
+mod mylib
 
-public import .math      // re-export submodule
-public import .utils
+public use .math      // re-export submodule
+public use .utils
 
 // File: src/math.tml
-module mylib.math
+mod mylib.math
 
-public func add(a: I32, b: I32) -> I32 {
+pub func add(a: I32, b: I32) -> I32 {
     return a + b
 }
 
-public func multiply(a: I32, b: I32) -> I32 {
+pub func multiply(a: I32, b: I32) -> I32 {
     return a * b
 }
 
@@ -84,9 +84,9 @@ func validate(n: I32) -> Bool {
 }
 
 // File: src/utils.tml
-module mylib.utils
+mod mylib.utils
 
-public func format_number(n: I32) -> String {
+pub func format_number(n: I32) -> String {
     return n.to_string()
 }
 
@@ -135,27 +135,27 @@ func log(msg: String) {
 // ============================================
 
 // Nested modules for organization
-module my_app.database
+mod my_app.database
 
-public type Connection {
+pub type Connection {
     host: String,
     port: U16,
 }
 
-public func connect(host: String, port: U16) -> Outcome[Connection, String] {
+pub func connect(host: String, port: U16) -> Outcome[Connection, String] {
     return Ok(Connection { host, port })
 }
 
-module my_app.database.queries
+mod my_app.database.queries
 
-import ..Connection
+use ..Connection
 
-public func execute(conn: ref Connection, sql: String) -> Outcome[List[Row], String] {
+pub func execute(conn: ref Connection, sql: String) -> Outcome[List[Row], String] {
     // ...
     return Ok([])
 }
 
-public type Row {
+pub type Row {
     data: Map[String, String],
 }
 
@@ -163,12 +163,12 @@ public type Row {
 // MAIN MODULE EXAMPLE
 // ============================================
 
-module main
+mod main
 
-import my_app.database { connect }
-import my_app.database.queries { execute }
+use my_app.database { connect }
+use my_app.database.queries { execute }
 
-public func main() {
+pub func main() {
     // Using imported items
     let conn = connect("localhost", 5432)
 

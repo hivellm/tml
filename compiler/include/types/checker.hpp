@@ -134,6 +134,8 @@ private:
     void validate_override(const parser::ClassDecl& cls, const parser::ClassMethod& method);
     void validate_interface_impl(const parser::ClassDecl& cls);
     void validate_abstract_methods(const parser::ClassDecl& cls);
+    void validate_value_class(const parser::ClassDecl& cls);
+    void validate_pool_class(const parser::ClassDecl& cls);
 
     // Visibility checking helpers
     bool check_member_visibility(MemberVisibility vis, const std::string& defining_class,

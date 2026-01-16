@@ -6,13 +6,13 @@
 
 The log package provides a flexible, structured logging framework with support for multiple outputs, log levels, and formatting options.
 
-**Capability**: `io.file` (optional, for file output)
+**Capability**: `io::file` (optional, for file output)
 
 ## Import
 
 ```tml
-import std.log
-import std.log.{Logger, Level, info, warn, error}
+use std::log
+use std::log.{Logger, Level, info, warn, error}
 ```
 
 ---
@@ -20,7 +20,7 @@ import std.log.{Logger, Level, info, warn, error}
 ## Quick Start
 
 ```tml
-import std.log.{info, warn, error, debug, trace}
+use std::log.{info, warn, error, debug, trace}
 
 func main() {
     info("Application started")
@@ -36,7 +36,7 @@ func main() {
 
 ```tml
 /// Log severity levels
-public type Level =
+pub type Level =
     | Trace   // Most verbose
     | Debug   // Development information
     | Info    // General information
@@ -45,7 +45,7 @@ public type Level =
 
 extend Level {
     /// Returns the numeric value (higher = more severe)
-    public func as_u8(this) -> U8 {
+    pub func as_u8(this) -> U8 {
         when this {
             Trace -> 0,
             Debug -> 1,
@@ -56,7 +56,7 @@ extend Level {
     }
 
     /// Creates from string
-    public func from_str(s: ref String) -> Maybe[Level] {
+    pub func from_str(s: ref String) -> Maybe[Level] {
         when s.to_lowercase().as_str() {
             "trace" -> Just(Trace),
             "debug" -> Just(Debug),
@@ -143,17 +143,17 @@ public macro log! {
 public static LOGGER: Logger = Logger.default()
 
 /// Sets the global logger
-public func set_logger(logger: Logger) {
+pub func set_logger(logger: Logger) {
     LOGGER = logger
 }
 
 /// Sets the global log level
-public func set_level(level: Level) {
+pub func set_level(level: Level) {
     LOGGER.set_level(level)
 }
 
 /// Initializes logging from environment
-public func init()
+pub func init()
     caps: [io.process.env]
 {
     let level = env.var("TML_LOG")
@@ -169,7 +169,7 @@ public func init()
 
 ```tml
 /// Logger configuration
-public type Logger {
+pub type Logger {
     level: AtomicU8,
     outputs: Vec[Heap[dyn Output]],
     format: Format,
@@ -177,7 +177,7 @@ public type Logger {
 
 extend Logger {
     /// Creates a default logger (stderr, text format)
-    public func default() -> Logger {
+    pub func default() -> Logger {
         Logger {
             level: AtomicU8.new(Level.Info.as_u8()),
             outputs: vec![Box.new(StderrOutput.new())],
@@ -186,27 +186,27 @@ extend Logger {
     }
 
     /// Creates a logger builder
-    public func builder() -> LoggerBuilder {
+    pub func builder() -> LoggerBuilder {
         LoggerBuilder.new()
     }
 
     /// Returns the current log level
-    public func level(this) -> Level {
+    pub func level(this) -> Level {
         Level.from_u8(this.level.load(Ordering.Relaxed)).unwrap()
     }
 
     /// Sets the log level
-    public func set_level(this, level: Level) {
+    pub func set_level(this, level: Level) {
         this.level.store(level.as_u8(), Ordering.Relaxed)
     }
 
     /// Returns true if the level is enabled
-    public func is_enabled(this, level: Level) -> Bool {
+    pub func is_enabled(this, level: Level) -> Bool {
         level >= this.level()
     }
 
     /// Logs a record
-    public func log(this, record: Record) {
+    pub func log(this, record: Record) {
         if not this.is_enabled(record.level) then return
 
         let formatted = this.format.format(&record)
@@ -217,7 +217,7 @@ extend Logger {
     }
 
     /// Flushes all outputs
-    public func flush(this) {
+    pub func flush(this) {
         loop output in this.outputs.iter() {
             output.flush()
         }
@@ -229,7 +229,7 @@ extend Logger {
 
 ```tml
 /// Builder for configuring a logger
-public type LoggerBuilder {
+pub type LoggerBuilder {
     level: Level,
     outputs: Vec[Heap[dyn Output]],
     format: Format,
@@ -237,7 +237,7 @@ public type LoggerBuilder {
 
 extend LoggerBuilder {
     /// Creates a new builder
-    public func new() -> LoggerBuilder {
+    pub func new() -> LoggerBuilder {
         LoggerBuilder {
             level: Level.Info,
             outputs: Vec.new(),
@@ -246,58 +246,58 @@ extend LoggerBuilder {
     }
 
     /// Sets the minimum log level
-    public func level(mut this, level: Level) -> LoggerBuilder {
+    pub func level(mut this, level: Level) -> LoggerBuilder {
         this.level = level
         return this
     }
 
     /// Sets the format
-    public func format(mut this, format: Format) -> LoggerBuilder {
+    pub func format(mut this, format: Format) -> LoggerBuilder {
         this.format = format
         return this
     }
 
     /// Adds stderr output
-    public func stderr(mut this) -> LoggerBuilder {
+    pub func stderr(mut this) -> LoggerBuilder {
         this.outputs.push(Box.new(StderrOutput.new()))
         return this
     }
 
     /// Adds stdout output
-    public func stdout(mut this) -> LoggerBuilder {
+    pub func stdout(mut this) -> LoggerBuilder {
         this.outputs.push(Box.new(StdoutOutput.new()))
         return this
     }
 
     /// Adds file output
-    public func file(mut this, path: ref String) -> LoggerBuilder
-        caps: [io.file]
+    pub func file(mut this, path: ref String) -> LoggerBuilder
+        caps: [io::file]
     {
         this.outputs.push(Box.new(FileOutput.new(path).unwrap()))
         return this
     }
 
     /// Adds rotating file output
-    public func rotating_file(
+    pub func rotating_file(
         mut this,
         path: ref String,
         max_size: U64,
         max_files: U64,
     ) -> LoggerBuilder
-        caps: [io.file]
+        caps: [io::file]
     {
         this.outputs.push(Box.new(RotatingFileOutput.new(path, max_size, max_files).unwrap()))
         return this
     }
 
     /// Adds a custom output
-    public func output(mut this, output: Heap[dyn Output]) -> LoggerBuilder {
+    pub func output(mut this, output: Heap[dyn Output]) -> LoggerBuilder {
         this.outputs.push(output)
         return this
     }
 
     /// Builds the logger
-    public func build(this) -> Logger {
+    pub func build(this) -> Logger {
         Logger {
             level: AtomicU8.new(this.level.as_u8()),
             outputs: this.outputs,
@@ -306,7 +306,7 @@ extend LoggerBuilder {
     }
 
     /// Builds and sets as global logger
-    public func install(this) {
+    pub func install(this) {
         set_logger(this.build())
     }
 }
@@ -318,7 +318,7 @@ extend LoggerBuilder {
 
 ```tml
 /// A log record
-public type Record {
+pub type Record {
     level: Level,
     message: String,
     target: String,    // Module path
@@ -329,7 +329,7 @@ public type Record {
 
 extend Record {
     /// Returns a field value by key
-    public func field(this, key: ref String) -> Maybe[ref String] {
+    pub func field(this, key: ref String) -> Maybe[ref String] {
         this.fields.iter()
             .find(do((k, _)) k == key)
             .map(do((_, v)) v)
@@ -343,11 +343,11 @@ extend Record {
 
 ```tml
 /// Log output format
-public type Format = Text | Json | Pretty | Compact
+pub type Format = Text | Json | Pretty | Compact
 
 extend Format {
     /// Formats a record
-    public func format(this, record: ref Record) -> String {
+    pub func format(this, record: ref Record) -> String {
         when this {
             Text -> this.format_text(record),
             Json -> this.format_json(record),
@@ -433,7 +433,7 @@ extend Format {
 
 ```tml
 /// Log output destination
-public behavior Output {
+pub behavior Output {
     /// Writes a formatted log line
     func write(this, line: ref String, level: Level)
 
@@ -446,7 +446,7 @@ public behavior Output {
 
 ```tml
 /// Stderr output
-public type StderrOutput {}
+pub type StderrOutput {}
 
 implement Output for StderrOutput {
     func write(this, line: ref String, level: Level) {
@@ -459,7 +459,7 @@ implement Output for StderrOutput {
 }
 
 /// Stdout output
-public type StdoutOutput {}
+pub type StdoutOutput {}
 
 implement Output for StdoutOutput {
     func write(this, line: ref String, level: Level) {
@@ -476,13 +476,13 @@ implement Output for StdoutOutput {
 
 ```tml
 /// File output
-public type FileOutput {
+pub type FileOutput {
     file: Mutex[File],
 }
 
 extend FileOutput {
-    public func new(path: ref String) -> Outcome[FileOutput, IoError]
-        caps: [io.file]
+    pub func new(path: ref String) -> Outcome[FileOutput, IoError]
+        caps: [io::file]
     {
         let file = File.create(path)?
         return Ok(FileOutput { file: Mutex.new(file) })
@@ -502,7 +502,7 @@ implement Output for FileOutput {
 }
 
 /// Rotating file output
-public type RotatingFileOutput {
+pub type RotatingFileOutput {
     path: String,
     max_size: U64,
     max_files: U64,
@@ -511,11 +511,11 @@ public type RotatingFileOutput {
 }
 
 extend RotatingFileOutput {
-    public func new(path: ref String, max_size: U64, max_files: U64) -> Outcome[RotatingFileOutput, IoError]
-        caps: [io.file]
+    pub func new(path: ref String, max_size: U64, max_files: U64) -> Outcome[RotatingFileOutput, IoError]
+        caps: [io::file]
 
     func rotate(mut this)
-        caps: [io.file]
+        caps: [io::file]
 }
 
 implement Output for RotatingFileOutput {
@@ -542,14 +542,14 @@ implement Output for RotatingFileOutput {
 
 ```tml
 /// Filter for log records
-public type Filter {
+pub type Filter {
     targets: HashMap[String, Level],
     default_level: Level,
 }
 
 extend Filter {
     /// Creates a new filter
-    public func new() -> Filter {
+    pub func new() -> Filter {
         Filter {
             targets: HashMap.new(),
             default_level: Level.Info,
@@ -557,19 +557,19 @@ extend Filter {
     }
 
     /// Sets the default level
-    public func default_level(mut this, level: Level) -> Filter {
+    pub func default_level(mut this, level: Level) -> Filter {
         this.default_level = level
         return this
     }
 
     /// Sets level for a specific target
-    public func target(mut this, target: ref String, level: Level) -> Filter {
+    pub func target(mut this, target: ref String, level: Level) -> Filter {
         this.targets.insert(target.duplicate(), level)
         return this
     }
 
     /// Returns true if the record should be logged
-    public func is_enabled(this, record: ref Record) -> Bool {
+    pub func is_enabled(this, record: ref Record) -> Bool {
         // Check specific target
         loop (prefix, level) in this.targets.iter() {
             if record.target.starts_with(prefix) then {
@@ -587,7 +587,7 @@ extend Filter {
 
 ```tml
 /// A logging span for structured context
-public type Span {
+pub type Span {
     name: String,
     fields: Vec[(String, String)],
     start: Instant,
@@ -595,7 +595,7 @@ public type Span {
 
 extend Span {
     /// Enters a new span
-    public func enter(name: ref String) -> Span
+    pub func enter(name: ref String) -> Span
         caps: [io.time]
     {
         Span {
@@ -606,13 +606,13 @@ extend Span {
     }
 
     /// Adds a field to the span
-    public func field(mut this, key: ref String, value: impl ToString) -> Span {
+    pub func field(mut this, key: ref String, value: impl ToString) -> Span {
         this.fields.push((key.duplicate(), value.to_string()))
         return this
     }
 
     /// Logs when the span ends
-    public func exit(this)
+    pub func exit(this)
         caps: [io.time]
     {
         let duration = this.start.elapsed()
@@ -624,7 +624,7 @@ extend Span {
 }
 
 /// Guard that exits span on drop
-public type SpanGuard {
+pub type SpanGuard {
     span: Maybe[Span],
 }
 
@@ -654,7 +654,7 @@ public macro span! {
 ### Basic Setup
 
 ```tml
-import std.log.{Logger, Level, info, error}
+use std::log.{Logger, Level, info, error}
 
 func main() {
     // Simple setup
@@ -677,7 +677,7 @@ func main() {
 ### Structured Logging
 
 ```tml
-import std.log.{info, warn, error}
+use std::log.{info, warn, error}
 
 func process_request(request: ref Request)
     caps: [io.time]
@@ -709,10 +709,10 @@ func process_request(request: ref Request)
 ### JSON Logging
 
 ```tml
-import std.log.{Logger, Level, Format, info}
+use std::log.{Logger, Level, Format, info}
 
 func setup_json_logging()
-    caps: [io.file]
+    caps: [io::file]
 {
     Logger.builder()
         .level(Level.Info)
@@ -728,7 +728,7 @@ func setup_json_logging()
 ### Filtering by Module
 
 ```tml
-import std.log.{Logger, Level, Filter}
+use std::log.{Logger, Level, Filter}
 
 func setup_filtered_logging() {
     let filter = Filter.new()

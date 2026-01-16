@@ -1,7 +1,7 @@
 // TML Example 12: Memory and Ownership
 // Demonstrates ownership, borrowing, and smart pointers
 
-module memory
+mod memory
 
 // ============================================
 // OWNERSHIP BASICS
@@ -108,9 +108,9 @@ func lifetime_demo() {
 // SMART POINTERS
 // ============================================
 
-import std.shared { Shared }
-import std.cell { RefCell }
-import std.sync { Sync, Mutex }
+use std::shared { Shared }
+use std::cell { RefCell }
+use std::sync { Sync, Mutex }
 
 func smart_pointer_demo() {
     // Heap: heap allocation with single owner
@@ -243,7 +243,7 @@ type RawHandle = U64
 func open_raw(path: String) -> RawHandle { return 0 }
 func close_raw_handle(h: RawHandle) {}
 
-public func main() {
+pub func main() {
     ownership_demo()
     borrowing_demo()
     borrow_rules_demo()

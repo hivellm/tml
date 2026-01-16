@@ -380,9 +380,83 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
         const auto& field = expr.as<parser::FieldExpr>();
         // Get the type of the object
         types::TypePtr obj_type = infer_expr_type(*field.object);
+
         if (obj_type && obj_type->is<types::NamedType>()) {
             const auto& named = obj_type->as<types::NamedType>();
-            // Look up field type in struct definition
+
+            // First, try to look up the struct definition to get the semantic field type
+            // This preserves complex types like Maybe[ref dyn Error]
+            auto struct_def = env_.lookup_struct(named.name);
+
+            // If not found locally, search all modules in the registry
+            if (!struct_def && env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto mod_struct_it = mod.structs.find(named.name);
+                    if (mod_struct_it != mod.structs.end()) {
+                        struct_def = mod_struct_it->second;
+                        break;
+                    }
+                }
+            }
+
+            // Also try searching by full module path prefix
+            if (!struct_def && env_.module_registry()) {
+                // Structs might be registered with module prefix (e.g., "core::error::ErrorChain")
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    // Try: mod_name::named.name (e.g., "core::error::ErrorChain")
+                    std::string full_name = named.name;
+                    auto mod_struct_it = mod.structs.find(full_name);
+                    if (mod_struct_it == mod.structs.end()) {
+                        // Try without module prefix - struct might be stored with just name
+                        for (const auto& [struct_name, sdef] : mod.structs) {
+                            // Check if struct_name ends with "::named.name" or equals named.name
+                            if (struct_name == named.name ||
+                                (struct_name.size() > named.name.size() + 2 &&
+                                 struct_name.substr(struct_name.size() - named.name.size()) ==
+                                     named.name &&
+                                 struct_name[struct_name.size() - named.name.size() - 2] == ':')) {
+                                struct_def = sdef;
+                                break;
+                            }
+                        }
+                    } else {
+                        struct_def = mod_struct_it->second;
+                    }
+                    if (struct_def)
+                        break;
+                }
+            }
+
+            if (struct_def) {
+                TML_DEBUG_LN("[INFER] struct_def found, searching for field: " << field.field);
+                for (const auto& [field_name, field_type] : struct_def->fields) {
+                    TML_DEBUG_LN("[INFER]   field: " << field_name << " type: "
+                                                    << (field_type
+                                                            ? types::type_to_string(field_type)
+                                                            : "null"));
+                    if (field_name == field.field && field_type) {
+                        TML_DEBUG_LN("[INFER] Returning field type: "
+                                     << types::type_to_string(field_type));
+                        // If the struct is generic, substitute type arguments
+                        if (!named.type_args.empty() && !struct_def->type_params.empty()) {
+                            std::unordered_map<std::string, types::TypePtr> subs;
+                            for (size_t i = 0;
+                                 i < struct_def->type_params.size() && i < named.type_args.size();
+                                 ++i) {
+                                subs[struct_def->type_params[i]] = named.type_args[i];
+                            }
+                            return types::substitute_type(field_type, subs);
+                        }
+                        return field_type;
+                    }
+                }
+            } else {
+                TML_DEBUG_LN("[INFER] struct_def NOT found for: " << named.name);
+            }
+
+            // Fallback: look up field type in struct_fields_ registry
             // For generic types, use the mangled name (e.g., Take__RangeIterI64)
             std::string lookup_name = named.name;
             if (!named.type_args.empty()) {

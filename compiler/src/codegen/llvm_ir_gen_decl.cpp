@@ -33,6 +33,7 @@
 #include "types/type.hpp"
 
 #include <functional>
+#include <iostream>
 #include <sstream>
 
 namespace tml::codegen {
@@ -66,6 +67,13 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         return;
     }
 
+    // First pass: ensure all field types are defined
+    // This handles cases where a struct references types from other modules
+    // that haven't been processed yet
+    for (size_t i = 0; i < s.fields.size(); ++i) {
+        ensure_type_defined(s.fields[i].type);
+    }
+
     // Collect field types and register field info
     std::vector<std::string> field_types;
     std::vector<FieldInfo> fields;
@@ -82,7 +90,7 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
     struct_types_[s.name] = type_name;
     struct_fields_[s.name] = fields;
 
-    // Emit struct type definition
+    // Emit struct type definition to type_defs_buffer_ (ensures types before functions)
     std::string def = type_name + " = type { ";
     for (size_t i = 0; i < field_types.size(); ++i) {
         if (i > 0)
@@ -90,7 +98,7 @@ void LLVMIRGen::gen_struct_decl(const parser::StructDecl& s) {
         def += field_types[i];
     }
     def += " }";
-    emit_line(def);
+    type_defs_buffer_ << def << "\n";
 }
 
 // Generate a specialized version of a generic struct
@@ -229,8 +237,9 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
 
     if (!has_data) {
         // Simple enum - represented as struct with single i32 tag field
+        // Emit to type_defs_buffer_ (ensures types before functions)
         std::string type_name = "%struct." + e.name;
-        emit_line(type_name + " = type { i32 }");
+        type_defs_buffer_ << type_name << " = type { i32 }\n";
         struct_types_[e.name] = type_name;
 
         // Register variant values
@@ -279,10 +288,10 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
             max_size = std::max(max_size, size);
         }
 
-        // Emit the enum type
+        // Emit the enum type to type_defs_buffer_ (ensures types before functions)
         std::string type_name = "%struct." + e.name;
         // { i32 tag, [N x i8] data }
-        emit_line(type_name + " = type { i32, [" + std::to_string(max_size) + " x i8] }");
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size) << " x i8] }\n";
         struct_types_[e.name] = type_name;
 
         // Register variant values

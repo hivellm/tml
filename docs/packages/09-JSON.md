@@ -5,9 +5,21 @@
 The `std.json` package provides JSON parsing, serialization, and a dynamic value type.
 
 ```tml
-import std.json
-import std.json.{Json, parse, stringify}
+use std::json
+use std::json::{Json, parse, stringify}
 ```
+
+> **Implementation Status**: The C++ native implementation is complete in `compiler/src/json/`.
+> See [RFC-0015](../rfcs/RFC-0015-JSON.md) for the full specification.
+> The TML stdlib bindings (Phase 8 in tasks) are pending.
+
+### Key Features
+
+- **Integer Precision** - Int64/Uint64 preserved without floating-point loss
+- **Zero-Copy Parsing** - Uses `string_view` where possible
+- **JSON-RPC 2.0** - Full support for MCP integration
+- **Schema Validation** - Type checking, required/optional fields
+- **Fluent Builder** - Chainable API for constructing JSON
 
 ## 2. Capabilities
 
@@ -17,13 +29,24 @@ import std.json.{Json, parse, stringify}
 
 ## 3. JSON Value Type
 
-### 3.1 Json Type
+### 3.1 JsonNumber Type
+
+To preserve integer precision, numbers are stored as a discriminated union:
 
 ```tml
-public type Json =
+pub type JsonNumber =
+    | Int(I64)      // Integers without decimal point
+    | Uint(U64)     // Large unsigned integers
+    | Float(F64)    // Numbers with decimal or exponent
+```
+
+### 3.2 Json Type
+
+```tml
+pub type Json =
     | Null
     | Bool(Bool)
-    | Number(F64)
+    | Number(JsonNumber)
     | String(String)
     | Array(List[Json])
     | Object(Map[String, Json])
@@ -34,28 +57,28 @@ public type Json =
 ```tml
 extend Json {
     /// Create null value
-    public func null() -> This { Null }
+    pub func null() -> This { Null }
 
     /// Create from boolean
-    public func bool(v: Bool) -> This { Bool(v) }
+    pub func bool(v: Bool) -> This { Bool(v) }
 
     /// Create from number
-    public func number(v: impl Into[F64]) -> This { Number(v.into()) }
+    pub func number(v: impl Into[F64]) -> This { Number(v.into()) }
 
     /// Create from string
-    public func string(v: impl Into[String]) -> This { String(v.into()) }
+    pub func string(v: impl Into[String]) -> This { String(v.into()) }
 
     /// Create empty array
-    public func array() -> This { Array(List.new()) }
+    pub func array() -> This { Array(List.new()) }
 
     /// Create from array
-    public func from_array(arr: List[Json]) -> This { Array(arr) }
+    pub func from_array(arr: List[Json]) -> This { Array(arr) }
 
     /// Create empty object
-    public func object() -> This { Object(Map.new()) }
+    pub func object() -> This { Object(Map.new()) }
 
     /// Create from map
-    public func from_object(map: Map[String, Json]) -> This { Object(map) }
+    pub func from_object(map: Map[String, Json]) -> This { Object(map) }
 }
 ```
 
@@ -63,38 +86,38 @@ extend Json {
 
 ```tml
 extend Json {
-    public func is_null(this) -> Bool {
+    pub func is_null(this) -> Bool {
         when this { Null -> true, _ -> false }
     }
 
-    public func is_bool(this) -> Bool {
+    pub func is_bool(this) -> Bool {
         when this { Bool(_) -> true, _ -> false }
     }
 
-    public func is_number(this) -> Bool {
+    pub func is_number(this) -> Bool {
         when this { Number(_) -> true, _ -> false }
     }
 
-    public func is_string(this) -> Bool {
+    pub func is_string(this) -> Bool {
         when this { String(_) -> true, _ -> false }
     }
 
-    public func is_array(this) -> Bool {
+    pub func is_array(this) -> Bool {
         when this { Array(_) -> true, _ -> false }
     }
 
-    public func is_object(this) -> Bool {
+    pub func is_object(this) -> Bool {
         when this { Object(_) -> true, _ -> false }
     }
 
-    public func is_i64(this) -> Bool {
+    pub func is_i64(this) -> Bool {
         when this {
             Number(n) -> n.fract() == 0.0 and n >= I64.MIN as F64 and n <= I64.MAX as F64,
             _ -> false,
         }
     }
 
-    public func is_u64(this) -> Bool {
+    pub func is_u64(this) -> Bool {
         when this {
             Number(n) -> n.fract() == 0.0 and n >= 0.0 and n <= U64.MAX as F64,
             _ -> false,
@@ -108,17 +131,17 @@ extend Json {
 ```tml
 extend Json {
     /// Get as boolean
-    public func as_bool(this) -> Maybe[Bool] {
+    pub func as_bool(this) -> Maybe[Bool] {
         when this { Bool(v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as f64
-    public func as_f64(this) -> Maybe[F64] {
+    pub func as_f64(this) -> Maybe[F64] {
         when this { Number(v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as i64
-    public func as_i64(this) -> Maybe[I64] {
+    pub func as_i64(this) -> Maybe[I64] {
         when this {
             Number(v) -> if v.fract() == 0.0 { Just(v as I64) } else { None },
             _ -> Nothing,
@@ -126,7 +149,7 @@ extend Json {
     }
 
     /// Get as u64
-    public func as_u64(this) -> Maybe[U64] {
+    pub func as_u64(this) -> Maybe[U64] {
         when this {
             Number(v) -> if v.fract() == 0.0 and v >= 0.0 { Just(v as U64) } else { None },
             _ -> Nothing,
@@ -134,27 +157,27 @@ extend Json {
     }
 
     /// Get as string
-    public func as_str(this) -> Maybe[ref str] {
+    pub func as_str(this) -> Maybe[ref str] {
         when this { String(ref v) -> Just(v.as_str()), _ -> Nothing }
     }
 
     /// Get as array
-    public func as_array(this) -> Maybe[ref List[Json]] {
+    pub func as_array(this) -> Maybe[ref List[Json]] {
         when this { Array(ref v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as mutable array
-    public func as_array_mut(this) -> Maybe[mut refList[Json]] {
+    pub func as_array_mut(this) -> Maybe[mut refList[Json]] {
         when this { Array(ref mut v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as object
-    public func as_object(this) -> Maybe[ref Map[String, Json]] {
+    pub func as_object(this) -> Maybe[ref Map[String, Json]] {
         when this { Object(ref v) -> Just(v), _ -> Nothing }
     }
 
     /// Get as mutable object
-    public func as_object_mut(this) -> Maybe[mut refMap[String, Json]] {
+    pub func as_object_mut(this) -> Maybe[mut refMap[String, Json]] {
         when this { Object(ref mut v) -> Just(v), _ -> Nothing }
     }
 }
@@ -165,7 +188,7 @@ extend Json {
 ```tml
 extend Json {
     /// Get value by key (for objects)
-    public func get(this, key: ref str) -> Maybe[ref Json] {
+    pub func get(this, key: ref str) -> Maybe[ref Json] {
         when this {
             Object(ref map) -> map.get(key),
             _ -> Nothing,
@@ -173,7 +196,7 @@ extend Json {
     }
 
     /// Get value by index (for arrays)
-    public func get_index(this, index: U64) -> Maybe[ref Json] {
+    pub func get_index(this, index: U64) -> Maybe[ref Json] {
         when this {
             Array(ref arr) -> arr.get(index),
             _ -> Nothing,
@@ -181,7 +204,7 @@ extend Json {
     }
 
     /// Get mutable value by key
-    public func get_mut(this, key: ref str) -> Maybe[mut refJson] {
+    pub func get_mut(this, key: ref str) -> Maybe[mut refJson] {
         when this {
             Object(ref mut map) -> map.get_mut(key),
             _ -> Nothing,
@@ -189,7 +212,7 @@ extend Json {
     }
 
     /// Get nested value by path
-    public func pointer(this, path: ref str) -> Maybe[ref Json] {
+    pub func pointer(this, path: ref str) -> Maybe[ref Json] {
         if path.is_empty() {
             return Just(this)
         }
@@ -233,7 +256,7 @@ extend Json with Index[U64] {
 ```tml
 extend Json {
     /// Set object key
-    public func set(this, key: impl Into[String], value: impl Into[Json]) {
+    pub func set(this, key: impl Into[String], value: impl Into[Json]) {
         when this {
             Object(ref mut map) -> { map.insert(key.into(), value.into()); },
             _ -> panic("set called on non-object"),
@@ -241,7 +264,7 @@ extend Json {
     }
 
     /// Push to array
-    public func push(this, value: impl Into[Json]) {
+    pub func push(this, value: impl Into[Json]) {
         when this {
             Array(ref mut arr) -> arr.push(value.into()),
             _ -> panic("push called on non-array"),
@@ -249,7 +272,7 @@ extend Json {
     }
 
     /// Remove object key
-    public func remove(this, key: ref str) -> Maybe[Json] {
+    pub func remove(this, key: ref str) -> Maybe[Json] {
         when this {
             Object(ref mut map) -> map.remove(key),
             _ -> Nothing,
@@ -257,7 +280,7 @@ extend Json {
     }
 
     /// Take value, replacing with null
-    public func take(this) -> Json {
+    pub func take(this) -> Json {
         std.mem.replace(this, Null)
     }
 }
@@ -269,26 +292,26 @@ extend Json {
 
 ```tml
 /// Parse JSON string
-public func parse(s: ref str) -> Outcome[Json, ParseError]
+pub func parse(s: ref str) -> Outcome[Json, ParseError]
 
 /// Parse JSON bytes
-public func parse_bytes(bytes: ref [U8]) -> Outcome[Json, ParseError]
+pub func parse_bytes(bytes: ref [U8]) -> Outcome[Json, ParseError]
 
 /// Parse from reader
-public func parse_reader[R: Read](reader: R) -> Outcome[Json, ParseError]
+pub func parse_reader[R: Read](reader: R) -> Outcome[Json, ParseError]
 ```
 
 ### 4.2 ParseError
 
 ```tml
-public type ParseError {
+pub type ParseError {
     kind: ParseErrorKind,
     line: U64,
     column: U64,
     context: String,
 }
 
-public type ParseErrorKind =
+pub type ParseErrorKind =
     | UnexpectedToken(String)
     | UnexpectedEof
     | InvalidNumber
@@ -299,23 +322,23 @@ public type ParseErrorKind =
     | NumberOutOfRange
 
 extend ParseError {
-    public func kind(this) -> &ParseErrorKind
-    public func line(this) -> U64
-    public func column(this) -> U64
+    pub func kind(this) -> &ParseErrorKind
+    pub func line(this) -> U64
+    pub func column(this) -> U64
 }
 ```
 
 ### 4.3 Parser Options
 
 ```tml
-public type ParserOptions {
+pub type ParserOptions {
     max_depth: U32,
     allow_trailing_comma: Bool,
     allow_comments: Bool,
 }
 
 extend ParserOptions {
-    public func default() -> This {
+    pub func default() -> This {
         return This {
             max_depth: 128,
             allow_trailing_comma: false,
@@ -325,7 +348,7 @@ extend ParserOptions {
 }
 
 /// Parse with options
-public func parse_with_options(s: ref str, opts: ParserOptions) -> Outcome[Json, ParseError]
+pub func parse_with_options(s: ref str, opts: ParserOptions) -> Outcome[Json, ParseError]
 ```
 
 ## 5. Serialization
@@ -334,29 +357,29 @@ public func parse_with_options(s: ref str, opts: ParserOptions) -> Outcome[Json,
 
 ```tml
 /// Serialize to compact JSON string
-public func stringify(value: ref Json) -> String
+pub func stringify(value: ref Json) -> String
 
 /// Serialize to pretty-printed JSON string
-public func stringify_pretty(value: ref Json) -> String
+pub func stringify_pretty(value: ref Json) -> String
 
 /// Serialize with options
-public func stringify_with_options(value: ref Json, opts: StringifyOptions) -> String
+pub func stringify_with_options(value: ref Json, opts: StringifyOptions) -> String
 
 /// Serialize to writer
-public func stringify_to[W: Write](value: ref Json, writer: mut refW) -> Outcome[Unit, IoError]
+pub func stringify_to[W: Write](value: ref Json, writer: mut refW) -> Outcome[Unit, IoError]
 ```
 
 ### 5.2 StringifyOptions
 
 ```tml
-public type StringifyOptions {
+pub type StringifyOptions {
     pretty: Bool,
     indent: String,
     sort_keys: Bool,
 }
 
 extend StringifyOptions {
-    public func default() -> This {
+    pub func default() -> This {
         return This {
             pretty: false,
             indent: "  ",
@@ -364,9 +387,9 @@ extend StringifyOptions {
         }
     }
 
-    public func pretty(this) -> This { this.pretty = true; this }
-    public func indent(this, indent: ref str) -> This { this.indent = indent.into(); this }
-    public func sort_keys(this) -> This { this.sort_keys = true; this }
+    pub func pretty(this) -> This { this.pretty = true; this }
+    pub func indent(this, indent: ref str) -> This { this.indent = indent.into(); this }
+    pub func sort_keys(this) -> This { this.sort_keys = true; this }
 }
 ```
 
@@ -415,7 +438,7 @@ extend Maybe[T: Serialize] with Serialize {
 
 extend List[T: Serialize] with Serialize {
     func serialize(this) -> Json {
-        let arr = this.iter().map(|v| v.serialize()).collect()
+        let arr = this.iter().map(do(v) v.serialize()).collect()
         return Json.from_array(arr)
     }
 }
@@ -438,12 +461,12 @@ public behaviorDeserialize {
     func deserialize(json: ref Json) -> Outcome[This, DeserializeError]
 }
 
-public type DeserializeError {
+pub type DeserializeError {
     kind: DeserializeErrorKind,
     path: String,
 }
 
-public type DeserializeErrorKind =
+pub type DeserializeErrorKind =
     | TypeMismatch { expected: String, found: String }
     | MissingField(String)
     | InvalidValue(String)
@@ -482,7 +505,7 @@ extend List[T: Deserialize] with Deserialize {
         let arr = json.as_array().ok_or(DeserializeError.type_mismatch("array", json.type_name()))!
         var result = List.with_capacity(arr.len())
         loop (i, item) in arr.iter().enumerate() {
-            result.push(T.deserialize(item).map_err(|e| e.with_path(i.to_string()))!)
+            result.push(T.deserialize(item).map_err(do(e) e.with_path(i.to_string()))!)
         }
         return Ok(result)
     }
@@ -529,24 +552,24 @@ type Config {
 ## 7. JSON Builder
 
 ```tml
-module builder
+mod builder
 
 /// Build JSON object
-public func object() -> ObjectBuilder {
+pub func object() -> ObjectBuilder {
     return ObjectBuilder { map: Map.new() }
 }
 
-public type ObjectBuilder {
+pub type ObjectBuilder {
     map: Map[String, Json],
 }
 
 extend ObjectBuilder {
-    public func set(this, key: impl Into[String], value: impl Serialize) -> This {
+    pub func set(this, key: impl Into[String], value: impl Serialize) -> This {
         this.map.insert(key.into(), value.serialize())
         this
     }
 
-    public func set_if(this, condition: Bool, key: impl Into[String], value: impl Serialize) -> This {
+    pub func set_if(this, condition: Bool, key: impl Into[String], value: impl Serialize) -> This {
         if condition {
             this.set(key, value)
         } else {
@@ -554,7 +577,7 @@ extend ObjectBuilder {
         }
     }
 
-    public func merge(this, other: ref Json) -> This {
+    pub func merge(this, other: ref Json) -> This {
         when other {
             Object(ref map) -> {
                 loop (k, v) in map.entries() {
@@ -566,34 +589,34 @@ extend ObjectBuilder {
         this
     }
 
-    public func build(this) -> Json {
+    pub func build(this) -> Json {
         return Json.from_object(this.map)
     }
 }
 
 /// Build JSON array
-public func array() -> ArrayBuilder {
+pub func array() -> ArrayBuilder {
     return ArrayBuilder { arr: List.new() }
 }
 
-public type ArrayBuilder {
+pub type ArrayBuilder {
     arr: List[Json],
 }
 
 extend ArrayBuilder {
-    public func push(this, value: impl Serialize) -> This {
+    pub func push(this, value: impl Serialize) -> This {
         this.arr.push(value.serialize())
         this
     }
 
-    public func extend(this, values: impl IntoIterator[Item = impl Serialize]) -> This {
+    pub func extend(this, values: impl IntoIterator[Item = impl Serialize]) -> This {
         loop v in values {
             this.arr.push(v.serialize())
         }
         this
     }
 
-    public func build(this) -> Json {
+    pub func build(this) -> Json {
         return Json.from_array(this.arr)
     }
 }
@@ -602,43 +625,43 @@ extend ArrayBuilder {
 ## 8. Streaming Parser
 
 ```tml
-module stream
+mod stream
 
-public type JsonReader[R: Read] {
+pub type JsonReader[R: Read] {
     reader: R,
     buffer: List[U8],
 }
 
 extend JsonReader[R: Read] {
-    public func new(reader: R) -> This
+    pub func new(reader: R) -> This
 
     /// Read next JSON value
-    public func read(this) -> Outcome[Maybe[Json], ParseError]
+    pub func read(this) -> Outcome[Maybe[Json], ParseError]
 
     /// Read all values (for JSON Lines / NDJSON)
-    public func read_all(this) -> JsonValues[R]
+    pub func read_all(this) -> JsonValues[R]
 }
 
-public type JsonValues[R: Read] { ... }
+pub type JsonValues[R: Read] { ... }
 
 extend JsonValues[R: Read] with Iterator {
     type Item = Outcome[Json, ParseError]
 }
 
-public type JsonWriter[W: Write] {
+pub type JsonWriter[W: Write] {
     writer: W,
 }
 
 extend JsonWriter[W: Write] {
-    public func new(writer: W) -> This
+    pub func new(writer: W) -> This
 
     /// Write JSON value with newline (NDJSON)
-    public func write(this, value: ref Json) -> Outcome[Unit, IoError]
+    pub func write(this, value: ref Json) -> Outcome[Unit, IoError]
 
     /// Write with custom separator
-    public func write_sep(this, value: ref Json, sep: ref str) -> Outcome[Unit, IoError]
+    pub func write_sep(this, value: ref Json, sep: ref str) -> Outcome[Unit, IoError]
 
-    public func flush(this) -> Outcome[Unit, IoError]
+    pub func flush(this) -> Outcome[Unit, IoError]
 }
 ```
 
@@ -647,12 +670,12 @@ extend JsonWriter[W: Write] {
 ### 9.1 Basic Usage
 
 ```tml
-module json_example
-import std.json.{Json, parse, stringify, stringify_pretty}
+mod json_example
+use std::json::{Json, parse, stringify, stringify_pretty}
 
 func main() -> Outcome[Unit, Error] {
     // Parse JSON
-    let json = parse(r#"{"name": "Alice", "age": 30}"#)!
+    let json = parse("{\"name\": \"Alice\", \"age\": 30}")!
 
     // Access values
     let name = json["name"].as_str().unwrap()
@@ -675,8 +698,8 @@ func main() -> Outcome[Unit, Error] {
 ### 9.2 Typed Serialization
 
 ```tml
-module typed_json
-import std.json.{Json, Serialize, Deserialize}
+mod typed_json
+use std::json::{Json, Serialize, Deserialize}
 
 @derive(Serialize, Deserialize)]
 type User {
@@ -699,7 +722,7 @@ func main() -> Outcome[Unit, Error] {
     println(stringify_pretty(&json))
 
     // Deserialize
-    let json_str = r#"{"id": 2, "name": "Bob", "email": "bob@example.com", "roles": ["user"]}"#
+    let json_str = "{\"id\": 2, \"name\": \"Bob\", \"email\": \"bob@example.com\", \"roles\": [\"user\"]}"
     let parsed = parse(json_str)!
     let user: User = User.deserialize(ref parsed)!
 
@@ -712,29 +735,89 @@ func main() -> Outcome[Unit, Error] {
 ### 9.3 JSON Pointer
 
 ```tml
-module pointer_example
-import std.json.parse
+mod pointer_example
+use std::json::parse
 
 func main() -> Outcome[Unit, Error] {
-    let json = parse(r#"
-    {
-        "users": [
-            {"name": "Alice", "address": {"city": "NYC"}},
-            {"name": "Bob", "address": {"city": "LA"}}
-        ]
-    }
-    "#)!
+    let json = parse("{\"users\": [{\"name\": \"Alice\", \"address\": {\"city\": \"NYC\"}}, {\"name\": \"Bob\", \"address\": {\"city\": \"LA\"}}]}")!
 
     // Access nested value
-    let city = json.pointer("/users/0/address/city")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
+    let city_val = json.pointer("/users/0/address/city")
+    let city = city_val.and_then(do(v) v.as_str()).unwrap_or("unknown")
 
     println("First user's city: " + city)
 
     return Ok(unit)
 }
 ```
+
+## 10. C++ Native Implementation
+
+The compiler includes a native C++ JSON library used internally. This implementation:
+
+### 10.1 Files
+
+| Location | File | Purpose |
+|----------|------|---------|
+| `compiler/include/json/` | `json.hpp` | Main public header |
+| | `json_value.hpp` | JsonNumber, JsonValue, JsonArray, JsonObject |
+| | `json_parser.hpp` | Lexer and parser |
+| | `json_builder.hpp` | Fluent builder API |
+| | `json_rpc.hpp` | JSON-RPC 2.0 structs |
+| | `json_schema.hpp` | Schema validation |
+| `compiler/src/json/` | `json_parser.cpp` | Lexer + recursive descent parser |
+| | `json_serializer.cpp` | to_string(), write_to() |
+| | `json_builder.cpp` | Builder implementation |
+| | `json_rpc.cpp` | JSON-RPC helpers |
+| | `json_schema.cpp` | Schema validation |
+
+### 10.2 C++ Usage Example
+
+```cpp
+#include "json/json.hpp"
+using namespace tml::json;
+
+// Parse JSON
+auto result = parse_json(R"({"name": "Alice", "age": 30})");
+if (auto* json = std::get_if<JsonValue>(&result)) {
+    auto name = json->get("name")->as_string();  // "Alice"
+    auto age = json->get("age")->as_i64();       // 30 (integer preserved!)
+}
+
+// Build JSON
+auto user = JsonBuilder()
+    .object()
+        .field("name", "Bob")
+        .field("active", true)
+    .end()
+    .build();
+
+std::cout << user.to_string_pretty();
+
+// Schema validation
+auto schema = JsonSchema::object()
+    .required("name", JsonSchema::string())
+    .required("age", JsonSchema::integer());
+
+auto validation = schema.validate(some_json);
+if (!validation.valid) {
+    std::cerr << "Error: " << validation.error << std::endl;
+}
+```
+
+### 10.3 JSON-RPC Example
+
+```cpp
+// Parse JSON-RPC request
+auto req = JsonRpcRequest::from_json(parsed);
+if (auto* request = std::get_if<JsonRpcRequest>(&req)) {
+    // Handle method...
+    auto response = JsonRpcResponse::success(JsonValue(42), *request->id);
+    std::cout << response.to_json().to_string();
+}
+```
+
+See [RFC-0015](../rfcs/RFC-0015-JSON.md) for the complete specification.
 
 ---
 

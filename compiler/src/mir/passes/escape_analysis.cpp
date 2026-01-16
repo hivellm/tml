@@ -18,18 +18,80 @@
 //! - Eliminates heap allocation overhead
 //! - Automatic deallocation on function return
 //!
+//! ## Class Instance Tracking
+//!
+//! For OOP support, we track class instances created via constructors:
+//! - Constructor calls (`ClassName_new`) create class instances
+//! - Method calls may cause `this` to escape
+//! - Field stores may cause referenced objects to escape
+//!
 //! ## Analysis Process
 //!
 //! 1. Initialize all values as NoEscape
-//! 2. Analyze stores, calls, returns for escapes
-//! 3. Propagate escape info through data flow
-//! 4. Mark non-escaping allocations as stack-promotable
+//! 2. Track `this` parameter for methods
+//! 3. Analyze stores, calls, returns for escapes
+//! 4. Propagate escape info through data flow
+//! 5. Mark non-escaping allocations as stack-promotable
 
 #include "mir/passes/escape_analysis.hpp"
 
 #include <algorithm>
 
 namespace tml::mir {
+
+// ============================================================================
+// Class Instance Detection Helpers
+// ============================================================================
+
+auto EscapeAnalysisPass::is_constructor_call(const std::string& func_name) const -> bool {
+    // Constructor pattern: ClassName_new or ClassName_new_variant
+    auto pos = func_name.rfind("_new");
+    if (pos == std::string::npos) {
+        return false;
+    }
+    // Must be at end or followed by underscore (variant)
+    return pos + 4 == func_name.length() || func_name[pos + 4] == '_';
+}
+
+auto EscapeAnalysisPass::extract_class_name(const std::string& func_name) const -> std::string {
+    // Extract class name from constructor pattern: ClassName_new -> ClassName
+    auto pos = func_name.rfind("_new");
+    if (pos == std::string::npos) {
+        return "";
+    }
+    return func_name.substr(0, pos);
+}
+
+void EscapeAnalysisPass::track_this_parameter(const Function& func) {
+    // Check if this is a method (has implicit this parameter)
+    // Method pattern: ClassName_methodName
+    // The first parameter is typically `this` for instance methods
+    if (func.params.empty()) {
+        return;
+    }
+
+    // Check if this looks like a method by examining the function name
+    // Methods typically have format: ClassName_methodName
+    auto underscore_pos = func.name.find('_');
+    if (underscore_pos == std::string::npos || underscore_pos == 0) {
+        return; // Not a method
+    }
+
+    // Don't track constructors - they create new instances
+    if (is_constructor_call(func.name)) {
+        return;
+    }
+
+    // First parameter is `this` - mark it as potentially escaping through return
+    // since we can't track what happens to it precisely
+    const auto& first_param = func.params[0];
+    if (first_param.value_id != INVALID_VALUE) {
+        auto& info = escape_info_[first_param.value_id];
+        info.state = EscapeState::NoEscape; // Start as no escape
+        info.is_class_instance = true;
+        info.class_name = func.name.substr(0, underscore_pos);
+    }
+}
 
 // ============================================================================
 // EscapeAnalysisPass Implementation
@@ -44,10 +106,14 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
     for (const auto& block : func.blocks) {
         for (const auto& inst : block.instructions) {
             if (inst.result != INVALID_VALUE) {
-                escape_info_[inst.result] = EscapeInfo{EscapeState::NoEscape, false, false, false};
+                escape_info_[inst.result] = EscapeInfo{EscapeState::NoEscape, false, false, false,
+                                                        false, ""};
             }
         }
     }
+
+    // Track `this` parameter for class methods
+    track_this_parameter(func);
 
     // Analyze the function
     analyze_function(func);
@@ -57,6 +123,17 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
 
     // Update statistics
     for (const auto& [value_id, info] : escape_info_) {
+        // Track class instance statistics
+        if (info.is_class_instance) {
+            stats_.class_instances++;
+            if (info.state == EscapeState::NoEscape) {
+                stats_.class_instances_no_escape++;
+            }
+            if (info.is_stack_promotable) {
+                stats_.class_instances_promotable++;
+            }
+        }
+
         switch (info.state) {
         case EscapeState::NoEscape:
             stats_.no_escape++;
@@ -132,8 +209,12 @@ void EscapeAnalysisPass::analyze_instruction(const InstructionData& inst,
 
             if constexpr (std::is_same_v<T, CallInst>) {
                 analyze_call(i, inst.result);
+            } else if constexpr (std::is_same_v<T, MethodCallInst>) {
+                analyze_method_call(i, inst.result);
             } else if constexpr (std::is_same_v<T, StoreInst>) {
                 analyze_store(i);
+            } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
+                analyze_gep(i, inst.result);
             } else if constexpr (std::is_same_v<T, AllocaInst>) {
                 // Mark as allocation and potential stack promotable
                 stats_.total_allocations++;
@@ -160,11 +241,83 @@ void EscapeAnalysisPass::analyze_call(const CallInst& call, ValueId result_id) {
         info.is_stack_promotable = true;
     }
 
+    // Check if this is a class constructor call
+    if (is_constructor_call(call.func_name) && result_id != INVALID_VALUE) {
+        stats_.total_allocations++;
+        auto& info = escape_info_[result_id];
+        info.may_alias_heap = true;
+        info.state = EscapeState::NoEscape;
+        info.is_stack_promotable = true;
+        info.is_class_instance = true;
+        info.class_name = extract_class_name(call.func_name);
+    }
+
+    // Determine escape severity based on devirtualization info
+    // Devirtualized calls are less conservative since we know the exact target
+    EscapeState arg_escape_state = EscapeState::ArgEscape;
+
+    if (call.devirt_info.has_value()) {
+        // This call was devirtualized - we know the exact method being called
+        // We can use less conservative escape analysis since we know the target
+        // Still mark as ArgEscape but not GlobalEscape
+        arg_escape_state = EscapeState::ArgEscape;
+    }
+
     // Arguments passed to function calls may escape
+    for (size_t i = 0; i < call.args.size(); ++i) {
+        const auto& arg = call.args[i];
+        if (arg.id != INVALID_VALUE) {
+            auto arg_info = get_escape_info(arg.id);
+
+            // For method calls on class instances, track more precisely
+            // First argument to a method is typically `this`
+            if (i == 0 && !is_heap_alloc && !is_constructor_call(call.func_name)) {
+                // Check if function name looks like a method (ClassName_method)
+                auto underscore = call.func_name.find('_');
+                if (underscore != std::string::npos && underscore > 0) {
+                    // This is a method call, `this` parameter might escape
+                    if (arg_info.is_class_instance) {
+                        stats_.method_call_escapes++;
+                    }
+                }
+            }
+
+            mark_escape(arg.id, arg_escape_state);
+        }
+    }
+}
+
+void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId result_id) {
+    // Virtual method calls require conservative escape analysis
+    // since we don't know the exact method that will be called.
+    // This is especially important for inheritance hierarchies.
+
+    // The receiver (`this`) may escape through the method call
+    if (call.receiver.id != INVALID_VALUE) {
+        auto receiver_info = get_escape_info(call.receiver.id);
+        if (receiver_info.is_class_instance) {
+            stats_.method_call_escapes++;
+        }
+
+        // Virtual method calls are conservative - the receiver may be stored
+        // or returned by any override in the inheritance hierarchy.
+        // Mark as GlobalEscape since we can't track what the virtual method does.
+        mark_escape(call.receiver.id, EscapeState::GlobalEscape);
+    }
+
+    // Arguments passed to method calls may escape globally through virtual dispatch
     for (const auto& arg : call.args) {
         if (arg.id != INVALID_VALUE) {
-            mark_escape(arg.id, EscapeState::ArgEscape);
+            mark_escape(arg.id, EscapeState::GlobalEscape);
         }
+    }
+
+    // Result of virtual method call may alias any object in the hierarchy
+    // Mark as potentially aliasing heap and global
+    if (result_id != INVALID_VALUE) {
+        auto& info = escape_info_[result_id];
+        info.may_alias_heap = true;
+        info.may_alias_global = true;
     }
 }
 
@@ -179,6 +332,37 @@ void EscapeAnalysisPass::analyze_store(const StoreInst& store) {
     if (store.value.type && std::holds_alternative<MirPointerType>(store.value.type->kind)) {
         // The pointer value being stored may now escape
         mark_escape(store.value.id, EscapeState::GlobalEscape);
+    }
+
+    // If storing to a class instance field, check if the stored value is a pointer
+    // that could escape through the field
+    if (ptr_info.is_class_instance) {
+        // Storing to a field of a class instance
+        // If the stored value is a pointer, it may escape through the instance
+        auto value_info = get_escape_info(store.value.id);
+        if (value_info.may_alias_heap || store.value.type &&
+            std::holds_alternative<MirPointerType>(store.value.type->kind)) {
+            stats_.field_store_escapes++;
+            mark_escape(store.value.id, EscapeState::GlobalEscape);
+        }
+    }
+}
+
+void EscapeAnalysisPass::analyze_gep(const GetElementPtrInst& gep, ValueId result_id) {
+    // GetElementPtr derives a pointer to a field from a base pointer
+    // The result may alias the base and inherits its escape state
+    auto base_info = get_escape_info(gep.base.id);
+
+    if (result_id != INVALID_VALUE) {
+        auto& info = escape_info_[result_id];
+        info.may_alias_heap = base_info.may_alias_heap;
+        info.may_alias_global = base_info.may_alias_global;
+
+        // If base is a class instance, the GEP result is a field pointer
+        if (base_info.is_class_instance) {
+            info.is_class_instance = true;
+            info.class_name = base_info.class_name;
+        }
     }
 }
 
@@ -204,10 +388,13 @@ void EscapeAnalysisPass::mark_escape(ValueId value, EscapeState state) {
                 it->second.is_stack_promotable = false;
             }
         }
+        // Preserve class instance information
     } else {
         EscapeInfo info;
         info.state = state;
         info.is_stack_promotable = (state == EscapeState::NoEscape);
+        info.is_class_instance = false;
+        info.class_name = "";
         escape_info_[value] = info;
     }
 }

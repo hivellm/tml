@@ -1,7 +1,7 @@
 // TML Example 03: Functions
 // Demonstrates function definition and calling
 
-module functions
+mod functions
 
 // Simple function
 func greet(name: String) -> String {
@@ -53,7 +53,7 @@ func append(s: mut ref String, suffix: String) {
     s.push(suffix)
 }
 
-public func main() {
+pub func main() {
     // Simple calls
     let msg = greet("World")
     println(msg)

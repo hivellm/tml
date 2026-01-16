@@ -108,7 +108,7 @@ use core::ops::{Deref, DerefMut}
 /// let poll: Poll[I32] = Poll::Ready(10)
 /// let mapped: Poll[Str] = poll.map(do(n) { n.to_string() })
 /// ```
-pub enum Poll[T] {
+pub type Poll[T] {
     /// The operation completed and produced a value.
     Ready(T),
 

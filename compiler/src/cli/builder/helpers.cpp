@@ -481,6 +481,17 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::cout << "Including math runtime: " << math_obj << "\n";
             }
         }
+
+        // Include text.c for Text type (used by template literals $"...")
+        fs::path text_c = runtime_dir / "text.c";
+        if (fs::exists(text_c)) {
+            std::string text_obj =
+                ensure_c_compiled(to_forward_slashes(text_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(text_obj));
+            if (verbose) {
+                std::cout << "Including text runtime: " << text_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported

@@ -13,7 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 
-**IMPORTANT**: Always use the build scripts, not cmake directly!
+**CRITICAL: NEVER BUILD MANUALLY!**
+
+Do NOT use `cmake --build` or any direct cmake commands. This causes silent failures and incomplete test execution. ALWAYS use the provided scripts:
 
 ```bash
 # Windows - from project root (f:\Node\hivellm\tml)
@@ -28,6 +30,8 @@ scripts\test.bat
 # Clean
 scripts\clean.bat
 ```
+
+**Why scripts only?** The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss. Using cmake directly can result in tests that appear to pass but actually fail silently or hang indefinitely.
 
 Output directories:
 - `build/debug/tml.exe` - Debug compiler

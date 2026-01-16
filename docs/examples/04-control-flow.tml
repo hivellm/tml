@@ -1,9 +1,9 @@
 // TML Example 04: Control Flow
 // Demonstrates if/then/else, when (match), loop
 
-module control_flow
+mod control_flow
 
-public func main() {
+pub func main() {
     // ============================================
     // IF-THEN-ELSE (note: 'then' is required!)
     // ============================================

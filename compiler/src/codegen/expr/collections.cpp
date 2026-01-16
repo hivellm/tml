@@ -368,6 +368,52 @@ auto LLVMIRGen::gen_path(const parser::PathExpr& path) -> std::string {
 
     // Look up in enum variants
     auto it = enum_variants_.find(full_path);
+
+    // If not found directly, try resolving the type name through module registry
+    // This handles enums from imported modules (e.g., Alignment::Left from core::fmt::traits)
+    // when the codegen env doesn't have the import (since env is from test file, not from
+    // the module currently being generated)
+    if (it == enum_variants_.end() && path.path.segments.size() == 2) {
+        std::string type_name = path.path.segments[0];
+        std::string variant_name = path.path.segments[1];
+
+        // First try env_.lookup_enum which handles local and imported enums
+        auto enum_def = env_.lookup_enum(type_name);
+
+        // If not found, search all modules in the registry
+        if (!enum_def.has_value() && env_.module_registry()) {
+            const auto& all_modules = env_.module_registry()->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                auto mod_enum_it = mod.enums.find(type_name);
+                if (mod_enum_it != mod.enums.end()) {
+                    enum_def = mod_enum_it->second;
+                    break;
+                }
+            }
+        }
+
+        if (enum_def.has_value() && !enum_def->variants.empty()) {
+            // Register enum variants if not already done
+            // variants is vector of pairs: (variant_name, payload_types)
+            std::string first_key = type_name + "::" + enum_def->variants[0].first;
+            if (enum_variants_.find(first_key) == enum_variants_.end()) {
+                int tag = 0;
+                for (const auto& variant : enum_def->variants) {
+                    std::string key = type_name + "::" + variant.first;
+                    enum_variants_[key] = tag++;
+                }
+                // Also register the struct type if not done
+                if (struct_types_.find(type_name) == struct_types_.end()) {
+                    std::string struct_type_name = "%struct." + type_name;
+                    emit_line(struct_type_name + " = type { i32 }");
+                    struct_types_[type_name] = struct_type_name;
+                }
+            }
+            // Try lookup again
+            it = enum_variants_.find(full_path);
+        }
+    }
+
     if (it != enum_variants_.end()) {
         // For enum variants, we need to create a struct { i32 } value
         // Extract the enum type name (first segment)

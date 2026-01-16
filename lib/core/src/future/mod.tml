@@ -316,7 +316,7 @@ pub type AndThen[Fut, F] {
 }
 
 /// Internal state for AndThen.
-enum AndThenState[Fut, F] {
+type AndThenState[Fut, F] {
     First { future: Fut, f: F },
     Second { future: F }  // F here is actually the output of calling f
 }
@@ -332,7 +332,7 @@ pub type Flatten[Fut] {
     state: FlattenState[Fut]
 }
 
-enum FlattenState[Fut] {
+type FlattenState[Fut] {
     First { future: Fut },
     Second { future: Fut }  // The inner future
 }

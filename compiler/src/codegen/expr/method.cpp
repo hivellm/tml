@@ -274,6 +274,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             type_name == "U64" || type_name == "U128" || type_name == "F32" || type_name == "F64" ||
             type_name == "Bool" || type_name == "Str";
 
+        // Also check for imported structs from module registry
+        if (!is_type_name && env_.module_registry()) {
+            const auto& all_modules = env_.module_registry()->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                if (mod.structs.count(type_name) > 0) {
+                    is_type_name = true;
+                    break;
+                }
+            }
+        }
+
         if (is_type_name && locals_.count(type_name) == 0) {
             auto result = gen_static_method_call(call, type_name);
             if (result) {
@@ -1323,12 +1334,72 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
     if (call.receiver->is<parser::IdentExpr>()) {
         const auto& ident = call.receiver->as<parser::IdentExpr>();
         auto it = locals_.find(ident.name);
-        if (it != locals_.end() && it->second.type.starts_with("%dyn.")) {
-            std::string dyn_type = it->second.type;
-            std::string behavior_name = dyn_type.substr(5);
-            std::string dyn_ptr = it->second.reg;
 
+        // Check for dyn dispatch - handles both:
+        // 1. Direct dyn type: LLVM type is %dyn.Error
+        // 2. Reference to dyn: LLVM type is ptr, semantic type is ref dyn Error
+        bool is_dyn_dispatch = false;
+        std::string behavior_name;
+        std::string dyn_type;
+        std::string dyn_ptr;
+
+        if (it != locals_.end()) {
+            if (it->second.type.starts_with("%dyn.")) {
+                // Direct dyn type: %dyn.Error
+                is_dyn_dispatch = true;
+                dyn_type = it->second.type;
+                behavior_name = dyn_type.substr(5);
+                dyn_ptr = it->second.reg;
+                // Ensure the dyn type is defined before use
+                emit_dyn_type(behavior_name);
+            } else if (it->second.semantic_type) {
+                // Check for ref dyn Error: semantic type is RefType with inner DynBehaviorType
+                auto sem_type = it->second.semantic_type;
+                if (sem_type->is<types::RefType>()) {
+                    auto inner = sem_type->as<types::RefType>().inner;
+                    if (inner && inner->is<types::DynBehaviorType>()) {
+                        is_dyn_dispatch = true;
+                        behavior_name = inner->as<types::DynBehaviorType>().behavior_name;
+                        dyn_type = "%dyn." + behavior_name;
+                        dyn_ptr = it->second.reg;
+                        // Ensure the dyn type is defined before use
+                        emit_dyn_type(behavior_name);
+                    }
+                }
+            }
+        }
+
+        if (is_dyn_dispatch) {
+            TML_DEBUG_LN("[DYN] Dyn dispatch detected for behavior: " << behavior_name << " method: " << method);
             auto behavior_methods_it = behavior_method_order_.find(behavior_name);
+
+            // If behavior not registered yet, try to look it up and register dynamically
+            // This handles behaviors defined in imported modules (like core::error::Error)
+            if (behavior_methods_it == behavior_method_order_.end()) {
+                auto behavior_def = env_.lookup_behavior(behavior_name);
+
+                // If not found, search all modules in the registry
+                if (!behavior_def && env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto mod_behavior_it = mod.behaviors.find(behavior_name);
+                        if (mod_behavior_it != mod.behaviors.end()) {
+                            behavior_def = mod_behavior_it->second;
+                            break;
+                        }
+                    }
+                }
+
+                if (behavior_def) {
+                    std::vector<std::string> methods;
+                    for (const auto& m : behavior_def->methods) {
+                        methods.push_back(m.name);
+                    }
+                    behavior_method_order_[behavior_name] = methods;
+                    behavior_methods_it = behavior_method_order_.find(behavior_name);
+                }
+            }
+
             if (behavior_methods_it != behavior_method_order_.end()) {
                 const auto& methods = behavior_methods_it->second;
                 int method_idx = -1;
@@ -1370,17 +1441,46 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                     // Get method signature from behavior definition
                     std::string return_llvm_type = "i32"; // default fallback
                     auto behavior_def = env_.lookup_behavior(behavior_name);
+
+                    // If not found, search all modules in the registry
+                    // This handles behaviors defined in imported modules (like core::error::Error)
+                    if (!behavior_def && env_.module_registry()) {
+                        const auto& all_modules = env_.module_registry()->get_all_modules();
+                        for (const auto& [mod_name, mod] : all_modules) {
+                            auto mod_behavior_it = mod.behaviors.find(behavior_name);
+                            if (mod_behavior_it != mod.behaviors.end()) {
+                                behavior_def = mod_behavior_it->second;
+                                TML_DEBUG_LN("[DYN] Found behavior " << behavior_name << " in module " << mod_name);
+                                break;
+                            }
+                        }
+                    }
+
+                    TML_DEBUG_LN("[DYN] Looking up behavior: " << behavior_name << " found: " << (behavior_def ? "yes" : "no"));
                     if (behavior_def) {
                         // Build substitution map from behavior's type params to dyn's type args
                         std::unordered_map<std::string, types::TypePtr> type_subs;
-                        if (it->second.semantic_type &&
-                            it->second.semantic_type->is<types::DynBehaviorType>()) {
-                            const auto& dyn_sem =
-                                it->second.semantic_type->as<types::DynBehaviorType>();
-                            for (size_t i = 0; i < behavior_def->type_params.size() &&
-                                               i < dyn_sem.type_args.size();
-                                 ++i) {
-                                type_subs[behavior_def->type_params[i]] = dyn_sem.type_args[i];
+                        if (it->second.semantic_type) {
+                            // Handle both direct dyn and ref dyn
+                            types::TypePtr dyn_sem_type = nullptr;
+                            if (it->second.semantic_type->is<types::DynBehaviorType>()) {
+                                dyn_sem_type = it->second.semantic_type;
+                            } else if (it->second.semantic_type->is<types::RefType>()) {
+                                auto inner =
+                                    it->second.semantic_type->as<types::RefType>().inner;
+                                if (inner && inner->is<types::DynBehaviorType>()) {
+                                    dyn_sem_type = inner;
+                                }
+                            }
+                            if (dyn_sem_type) {
+                                const auto& dyn_sem =
+                                    dyn_sem_type->as<types::DynBehaviorType>();
+                                for (size_t i = 0; i < behavior_def->type_params.size() &&
+                                                   i < dyn_sem.type_args.size();
+                                     ++i) {
+                                    type_subs[behavior_def->type_params[i]] =
+                                        dyn_sem.type_args[i];
+                                }
                             }
                         }
 
@@ -1390,8 +1490,12 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 auto substituted_ret =
                                     types::substitute_type(m.return_type, type_subs);
                                 return_llvm_type = llvm_type_from_semantic(substituted_ret);
+                                TML_DEBUG_LN("[DYN] Method " << method << " return type: " << return_llvm_type);
                                 break;
                             }
+                        }
+                        if (return_llvm_type == "i32") {
+                            TML_DEBUG_LN("[DYN] WARNING: Method " << method << " in behavior " << behavior_name << " has fallback return type i32");
                         }
                     }
 

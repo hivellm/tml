@@ -59,9 +59,9 @@ maybe.is_some()              // true
 maybe.is_none()              // false
 maybe.unwrap()               // 42 (panics if Nothing)
 maybe.unwrap_or(0)           // 42
-maybe.unwrap_or_else(|| 0)   // 42
-maybe.map(|x| x * 2)         // Just(84)
-maybe.and_then(|x| Just(x + 1))  // Just(43)
+maybe.unwrap_or_else(do() 0)   // 42
+maybe.map(do(x) x * 2)         // Just(84)
+maybe.and_then(do(x) Just(x + 1))  // Just(43)
 ```
 
 ### Outcome[T, E] - Error Handling
@@ -95,8 +95,8 @@ result.is_ok()               // true
 result.is_err()              // false
 result.unwrap()              // 42 (panics if Err)
 result.unwrap_or(0)          // 42
-result.map(|x| x * 2)        // Ok(84)
-result.map_err(|e| e + "!")  // Ok(42)
+result.map(do(x) x * 2)        // Ok(84)
+result.map_err(do(e) e + "!")  // Ok(42)
 ```
 
 ## Collections

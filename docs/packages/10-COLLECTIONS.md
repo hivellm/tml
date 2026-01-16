@@ -1,6 +1,6 @@
 # TML Standard Library: Collections
 
-> `std.collections` — Data structures for storing and organizing data.
+> `std::collections` — Data structures for storing and organizing data.
 
 ## Overview
 
@@ -9,8 +9,8 @@ The collections package provides efficient, generic data structures for common p
 ## Import
 
 ```tml
-import std.collections
-import std.collections.{HashMap, Vec, HashSet}
+use std::collections
+use std::collections.{HashMap, Vec, HashSet}
 ```
 
 ---
@@ -20,7 +20,7 @@ import std.collections.{HashMap, Vec, HashSet}
 A contiguous growable array type with heap-allocated contents.
 
 ```tml
-public type Vec[T] {
+pub type Vec[T] {
     ptr: *mut T,
     len: U64,
     cap: U64,
@@ -32,17 +32,17 @@ public type Vec[T] {
 ```tml
 extend Vec[T] {
     /// Creates an empty Vec
-    public func new() -> Vec[T]
+    pub func new() -> Vec[T]
 
     /// Creates a Vec with pre-allocated capacity
-    public func with_capacity(capacity: U64) -> Vec[T]
+    pub func with_capacity(capacity: U64) -> Vec[T]
 
     /// Creates a Vec from a slice
-    public func from_slice(slice: ref [T]) -> Vec[T]
+    pub func from_slice(slice: ref [T]) -> Vec[T]
         where T: Duplicate
 
     /// Creates a Vec with n copies of value
-    public func repeat(value: T, n: U64) -> Vec[T]
+    pub func repeat(value: T, n: U64) -> Vec[T]
         where T: Duplicate
 }
 ```
@@ -52,34 +52,34 @@ extend Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns the number of elements
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Returns true if empty
-    public func is_empty(this) -> Bool
+    pub func is_empty(this) -> Bool
 
     /// Returns the capacity
-    public func capacity(this) -> U64
+    pub func capacity(this) -> U64
 
     /// Appends an element to the back
-    public func push(mut this, value: T)
+    pub func push(mut this, value: T)
 
     /// Removes and returns the last element
-    public func pop(mut this) -> Maybe[T]
+    pub func pop(mut this) -> Maybe[T]
 
     /// Inserts an element at index
-    public func insert(mut this, index: U64, value: T)
+    pub func insert(mut this, index: U64, value: T)
 
     /// Removes and returns the element at index
-    public func remove(mut this, index: U64) -> T
+    pub func remove(mut this, index: U64) -> T
 
     /// Clears all elements
-    public func clear(mut this)
+    pub func clear(mut this)
 
     /// Reserves capacity for at least `additional` more elements
-    public func reserve(mut this, additional: U64)
+    pub func reserve(mut this, additional: U64)
 
     /// Shrinks capacity to fit the length
-    public func shrink_to_fit(mut this)
+    pub func shrink_to_fit(mut this)
 }
 ```
 
@@ -88,22 +88,22 @@ extend Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns a reference to the element at index
-    public func get(this, index: U64) -> Maybe[ref T]
+    pub func get(this, index: U64) -> Maybe[ref T]
 
     /// Returns a mutable reference to the element at index
-    public func get_mut(mut this, index: U64) -> Maybe[mut ref T]
+    pub func get_mut(mut this, index: U64) -> Maybe[mut ref T]
 
     /// Returns a reference to the first element
-    public func first(this) -> Maybe[ref T]
+    pub func first(this) -> Maybe[ref T]
 
     /// Returns a reference to the last element
-    public func last(this) -> Maybe[ref T]
+    pub func last(this) -> Maybe[ref T]
 
     /// Returns a slice of the entire vector
-    public func as_slice(this) -> ref [T]
+    pub func as_slice(this) -> ref [T]
 
     /// Returns a mutable slice of the entire vector
-    public func as_mut_slice(mut this) -> mut ref [T]
+    pub func as_mut_slice(mut this) -> mut ref [T]
 }
 
 /// Index operator
@@ -127,13 +127,13 @@ implement IndexMut[U64] for Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns an iterator over references
-    public func iter(this) -> VecIter[T]
+    pub func iter(this) -> VecIter[T]
 
     /// Returns an iterator over mutable references
-    public func iter_mut(mut this) -> VecIterMut[T]
+    pub func iter_mut(mut this) -> VecIterMut[T]
 
     /// Consumes the Vec and returns an iterator over owned values
-    public func into_iter(this) -> VecIntoIter[T]
+    pub func into_iter(this) -> VecIntoIter[T]
 }
 
 implement IntoIterator for Vec[T] {
@@ -149,30 +149,30 @@ implement IntoIterator for Vec[T] {
 ```tml
 extend Vec[T] {
     /// Retains only elements matching the predicate
-    public func retain(mut this, predicate: func(ref T) -> Bool)
+    pub func retain(mut this, predicate: func(ref T) -> Bool)
 
     /// Removes consecutive duplicates
-    public func dedup(mut this)
+    pub func dedup(mut this)
         where T: Eq
 
     /// Sorts the vector in place
-    public func sort(mut this)
+    pub func sort(mut this)
         where T: Ord
 
     /// Sorts with a custom comparator
-    public func sort_by(mut this, compare: func(ref T, ref T) -> Ordering)
+    pub func sort_by(mut this, compare: func(ref T, ref T) -> Ordering)
 
     /// Reverses the order of elements
-    public func reverse(mut this)
+    pub func reverse(mut this)
 
     /// Appends all elements from another Vec
-    public func append(mut this, other: mut Vec[T])
+    pub func append(mut this, other: mut Vec[T])
 
     /// Splits off elements from index onwards
-    public func split_off(mut this, at: U64) -> Vec[T]
+    pub func split_off(mut this, at: U64) -> Vec[T]
 
     /// Resizes the Vec to new_len, filling with value if growing
-    public func resize(mut this, new_len: U64, value: T)
+    pub func resize(mut this, new_len: U64, value: T)
         where T: Duplicate
 }
 ```
@@ -182,15 +182,15 @@ extend Vec[T] {
 ```tml
 extend Vec[T] {
     /// Returns true if the Vec contains the value
-    public func contains(this, value: ref T) -> Bool
+    pub func contains(this, value: ref T) -> Bool
         where T: Eq
 
     /// Binary search for a value
-    public func binary_search(this, value: ref T) -> Outcome[U64, U64]
+    pub func binary_search(this, value: ref T) -> Outcome[U64, U64]
         where T: Ord
 
     /// Finds the first index of a value
-    public func position(this, predicate: func(ref T) -> Bool) -> Maybe[U64]
+    pub func position(this, predicate: func(ref T) -> Bool) -> Maybe[U64]
 }
 ```
 
@@ -201,7 +201,7 @@ extend Vec[T] {
 A hash table providing O(1) average-case lookups.
 
 ```tml
-public type HashMap[K, V] {
+pub type HashMap[K, V] {
     buckets: Vec[Bucket[K, V]],
     len: U64,
 }
@@ -220,13 +220,13 @@ type Entry[K, V] {
 ```tml
 extend HashMap[K, V] where K: Hash + Eq {
     /// Creates an empty HashMap
-    public func new() -> HashMap[K, V]
+    pub func new() -> HashMap[K, V]
 
     /// Creates a HashMap with pre-allocated capacity
-    public func with_capacity(capacity: U64) -> HashMap[K, V]
+    pub func with_capacity(capacity: U64) -> HashMap[K, V]
 
     /// Creates a HashMap from an iterator of key-value pairs
-    public func from_iter[I](iter: I) -> HashMap[K, V]
+    pub func from_iter[I](iter: I) -> HashMap[K, V]
         where I: Iterator[Item = (K, V)]
 }
 ```
@@ -236,22 +236,22 @@ extend HashMap[K, V] where K: Hash + Eq {
 ```tml
 extend HashMap[K, V] where K: Hash + Eq {
     /// Returns the number of entries
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Returns true if empty
-    public func is_empty(this) -> Bool
+    pub func is_empty(this) -> Bool
 
     /// Inserts a key-value pair, returning the old value if present
-    public func insert(mut this, key: K, value: V) -> Maybe[V]
+    pub func insert(mut this, key: K, value: V) -> Maybe[V]
 
     /// Removes a key, returning the value if present
-    public func remove(mut this, key: ref K) -> Maybe[V]
+    pub func remove(mut this, key: ref K) -> Maybe[V]
 
     /// Clears all entries
-    public func clear(mut this)
+    pub func clear(mut this)
 
     /// Returns true if the key is present
-    public func contains_key(this, key: ref K) -> Bool
+    pub func contains_key(this, key: ref K) -> Bool
 }
 ```
 
@@ -260,33 +260,33 @@ extend HashMap[K, V] where K: Hash + Eq {
 ```tml
 extend HashMap[K, V] where K: Hash + Eq {
     /// Returns a reference to the value for the key
-    public func get(this, key: ref K) -> Maybe[ref V]
+    pub func get(this, key: ref K) -> Maybe[ref V]
 
     /// Returns a mutable reference to the value for the key
-    public func get_mut(mut this, key: ref K) -> Maybe[mut ref V]
+    pub func get_mut(mut this, key: ref K) -> Maybe[mut ref V]
 
     /// Returns the value for the key, or inserts a default
-    public func get_or_insert(mut this, key: K, default: V) -> mut ref V
+    pub func get_or_insert(mut this, key: K, default: V) -> mut ref V
 
     /// Returns the value for the key, or inserts using a function
-    public func get_or_insert_with(mut this, key: K, f: func() -> V) -> mut ref V
+    pub func get_or_insert_with(mut this, key: K, f: func() -> V) -> mut ref V
 
     /// Gets a mutable reference or inserts a default
-    public func entry(mut this, key: K) -> Entry[K, V]
+    pub func entry(mut this, key: K) -> Entry[K, V]
 }
 
 /// Entry API for in-place manipulation
-public type Entry[K, V] = Occupied[K, V] | Vacant[K, V]
+pub type Entry[K, V] = Occupied[K, V] | Vacant[K, V]
 
 extend Entry[K, V] {
     /// Returns a mutable reference to the value, inserting if vacant
-    public func or_insert(this, default: V) -> mut ref V
+    pub func or_insert(this, default: V) -> mut ref V
 
     /// Returns a mutable reference, inserting using function if vacant
-    public func or_insert_with(this, f: func() -> V) -> mut ref V
+    pub func or_insert_with(this, f: func() -> V) -> mut ref V
 
     /// Modifies the value if occupied
-    public func and_modify(this, f: func(mut ref V)) -> Entry[K, V]
+    pub func and_modify(this, f: func(mut ref V)) -> Entry[K, V]
 }
 ```
 
@@ -295,16 +295,16 @@ extend Entry[K, V] {
 ```tml
 extend HashMap[K, V] where K: Hash + Eq {
     /// Iterator over key-value pairs
-    public func iter(this) -> HashMapIter[K, V]
+    pub func iter(this) -> HashMapIter[K, V]
 
     /// Iterator over keys
-    public func keys(this) -> HashMapKeys[K, V]
+    pub func keys(this) -> HashMapKeys[K, V]
 
     /// Iterator over values
-    public func values(this) -> HashMapValues[K, V]
+    pub func values(this) -> HashMapValues[K, V]
 
     /// Mutable iterator over values
-    public func values_mut(mut this) -> HashMapValuesMut[K, V]
+    pub func values_mut(mut this) -> HashMapValuesMut[K, V]
 }
 ```
 
@@ -315,7 +315,7 @@ extend HashMap[K, V] where K: Hash + Eq {
 A set implemented as a HashMap with unit values.
 
 ```tml
-public type HashSet[T] {
+pub type HashSet[T] {
     map: HashMap[T, Unit],
 }
 ```
@@ -325,13 +325,13 @@ public type HashSet[T] {
 ```tml
 extend HashSet[T] where T: Hash + Eq {
     /// Creates an empty HashSet
-    public func new() -> HashSet[T]
+    pub func new() -> HashSet[T]
 
     /// Creates a HashSet with pre-allocated capacity
-    public func with_capacity(capacity: U64) -> HashSet[T]
+    pub func with_capacity(capacity: U64) -> HashSet[T]
 
     /// Creates a HashSet from an iterator
-    public func from_iter[I](iter: I) -> HashSet[T]
+    pub func from_iter[I](iter: I) -> HashSet[T]
         where I: Iterator[Item = T]
 }
 ```
@@ -341,22 +341,22 @@ extend HashSet[T] where T: Hash + Eq {
 ```tml
 extend HashSet[T] where T: Hash + Eq {
     /// Returns the number of elements
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Returns true if empty
-    public func is_empty(this) -> Bool
+    pub func is_empty(this) -> Bool
 
     /// Inserts a value, returning true if it was new
-    public func insert(mut this, value: T) -> Bool
+    pub func insert(mut this, value: T) -> Bool
 
     /// Removes a value, returning true if it was present
-    public func remove(mut this, value: ref T) -> Bool
+    pub func remove(mut this, value: ref T) -> Bool
 
     /// Returns true if the value is present
-    public func contains(this, value: ref T) -> Bool
+    pub func contains(this, value: ref T) -> Bool
 
     /// Clears all elements
-    public func clear(mut this)
+    pub func clear(mut this)
 }
 ```
 
@@ -365,25 +365,25 @@ extend HashSet[T] where T: Hash + Eq {
 ```tml
 extend HashSet[T] where T: Hash + Eq + Duplicate {
     /// Returns the union of two sets
-    public func union(this, other: ref HashSet[T]) -> HashSet[T]
+    pub func union(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the intersection of two sets
-    public func intersection(this, other: ref HashSet[T]) -> HashSet[T]
+    pub func intersection(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the difference (self - other)
-    public func difference(this, other: ref HashSet[T]) -> HashSet[T]
+    pub func difference(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns the symmetric difference
-    public func symmetric_difference(this, other: ref HashSet[T]) -> HashSet[T]
+    pub func symmetric_difference(this, other: ref HashSet[T]) -> HashSet[T]
 
     /// Returns true if self is a subset of other
-    public func is_subset(this, other: ref HashSet[T]) -> Bool
+    pub func is_subset(this, other: ref HashSet[T]) -> Bool
 
     /// Returns true if self is a superset of other
-    public func is_superset(this, other: ref HashSet[T]) -> Bool
+    pub func is_superset(this, other: ref HashSet[T]) -> Bool
 
     /// Returns true if sets have no common elements
-    public func is_disjoint(this, other: ref HashSet[T]) -> Bool
+    pub func is_disjoint(this, other: ref HashSet[T]) -> Bool
 }
 ```
 
@@ -394,7 +394,7 @@ extend HashSet[T] where T: Hash + Eq + Duplicate {
 A map based on a B-tree, providing O(log n) operations with sorted keys.
 
 ```tml
-public type BTreeMap[K, V] {
+pub type BTreeMap[K, V] {
     root: Maybe[Heap[Node[K, V]]],
     len: U64,
 }
@@ -411,10 +411,10 @@ type Node[K, V] {
 ```tml
 extend BTreeMap[K, V] where K: Ord {
     /// Creates an empty BTreeMap
-    public func new() -> BTreeMap[K, V]
+    pub func new() -> BTreeMap[K, V]
 
     /// Creates from an iterator of key-value pairs
-    public func from_iter[I](iter: I) -> BTreeMap[K, V]
+    pub func from_iter[I](iter: I) -> BTreeMap[K, V]
         where I: Iterator[Item = (K, V)]
 }
 ```
@@ -424,28 +424,28 @@ extend BTreeMap[K, V] where K: Ord {
 ```tml
 extend BTreeMap[K, V] where K: Ord {
     /// Returns the number of entries
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Inserts a key-value pair
-    public func insert(mut this, key: K, value: V) -> Maybe[V]
+    pub func insert(mut this, key: K, value: V) -> Maybe[V]
 
     /// Removes a key
-    public func remove(mut this, key: ref K) -> Maybe[V]
+    pub func remove(mut this, key: ref K) -> Maybe[V]
 
     /// Returns a reference to the value
-    public func get(this, key: ref K) -> Maybe[ref V]
+    pub func get(this, key: ref K) -> Maybe[ref V]
 
     /// Returns true if the key exists
-    public func contains_key(this, key: ref K) -> Bool
+    pub func contains_key(this, key: ref K) -> Bool
 
     /// Returns the first (minimum) key-value pair
-    public func first(this) -> Maybe[(ref K, ref V)]
+    pub func first(this) -> Maybe[(ref K, ref V)]
 
     /// Returns the last (maximum) key-value pair
-    public func last(this) -> Maybe[(ref K, ref V)]
+    pub func last(this) -> Maybe[(ref K, ref V)]
 
     /// Returns a range iterator
-    public func range(this, range: Range[K]) -> BTreeMapRange[K, V]
+    pub func range(this, range: Range[K]) -> BTreeMapRange[K, V]
 }
 ```
 
@@ -456,7 +456,7 @@ extend BTreeMap[K, V] where K: Ord {
 A set based on a B-tree, providing O(log n) operations with sorted elements.
 
 ```tml
-public type BTreeSet[T] {
+pub type BTreeSet[T] {
     map: BTreeMap[T, Unit],
 }
 ```
@@ -466,25 +466,25 @@ public type BTreeSet[T] {
 ```tml
 extend BTreeSet[T] where T: Ord {
     /// Creates an empty BTreeSet
-    public func new() -> BTreeSet[T]
+    pub func new() -> BTreeSet[T]
 
     /// Inserts a value
-    public func insert(mut this, value: T) -> Bool
+    pub func insert(mut this, value: T) -> Bool
 
     /// Removes a value
-    public func remove(mut this, value: ref T) -> Bool
+    pub func remove(mut this, value: ref T) -> Bool
 
     /// Returns true if the value exists
-    public func contains(this, value: ref T) -> Bool
+    pub func contains(this, value: ref T) -> Bool
 
     /// Returns the first (minimum) element
-    public func first(this) -> Maybe[ref T]
+    pub func first(this) -> Maybe[ref T]
 
     /// Returns the last (maximum) element
-    public func last(this) -> Maybe[ref T]
+    pub func last(this) -> Maybe[ref T]
 
     /// Returns a range iterator
-    public func range(this, range: Range[T]) -> BTreeSetRange[T]
+    pub func range(this, range: Range[T]) -> BTreeSetRange[T]
 }
 ```
 
@@ -495,7 +495,7 @@ extend BTreeSet[T] where T: Ord {
 A doubly-linked list with O(1) insertion at both ends.
 
 ```tml
-public type LinkedList[T] {
+pub type LinkedList[T] {
     head: Maybe[Heap[Node[T]]],
     tail: *mut Node[T],
     len: U64,
@@ -513,34 +513,34 @@ type Node[T] {
 ```tml
 extend LinkedList[T] {
     /// Creates an empty LinkedList
-    public func new() -> LinkedList[T]
+    pub func new() -> LinkedList[T]
 
     /// Returns the number of elements
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Adds an element to the front
-    public func push_front(mut this, value: T)
+    pub func push_front(mut this, value: T)
 
     /// Adds an element to the back
-    public func push_back(mut this, value: T)
+    pub func push_back(mut this, value: T)
 
     /// Removes and returns the front element
-    public func pop_front(mut this) -> Maybe[T]
+    pub func pop_front(mut this) -> Maybe[T]
 
     /// Removes and returns the back element
-    public func pop_back(mut this) -> Maybe[T]
+    pub func pop_back(mut this) -> Maybe[T]
 
     /// Returns a reference to the front element
-    public func front(this) -> Maybe[ref T]
+    pub func front(this) -> Maybe[ref T]
 
     /// Returns a reference to the back element
-    public func back(this) -> Maybe[ref T]
+    pub func back(this) -> Maybe[ref T]
 
     /// Appends another list to the back
-    public func append(mut this, other: mut LinkedList[T])
+    pub func append(mut this, other: mut LinkedList[T])
 
     /// Splits the list at the given index
-    public func split_off(mut this, at: U64) -> LinkedList[T]
+    pub func split_off(mut this, at: U64) -> LinkedList[T]
 }
 ```
 
@@ -551,7 +551,7 @@ extend LinkedList[T] {
 A ring buffer providing O(1) operations at both ends.
 
 ```tml
-public type VecDeque[T] {
+pub type VecDeque[T] {
     buf: Vec[T],
     head: U64,
     len: U64,
@@ -563,37 +563,37 @@ public type VecDeque[T] {
 ```tml
 extend VecDeque[T] {
     /// Creates an empty VecDeque
-    public func new() -> VecDeque[T]
+    pub func new() -> VecDeque[T]
 
     /// Creates with pre-allocated capacity
-    public func with_capacity(capacity: U64) -> VecDeque[T]
+    pub func with_capacity(capacity: U64) -> VecDeque[T]
 
     /// Returns the number of elements
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Adds an element to the front
-    public func push_front(mut this, value: T)
+    pub func push_front(mut this, value: T)
 
     /// Adds an element to the back
-    public func push_back(mut this, value: T)
+    pub func push_back(mut this, value: T)
 
     /// Removes and returns the front element
-    public func pop_front(mut this) -> Maybe[T]
+    pub func pop_front(mut this) -> Maybe[T]
 
     /// Removes and returns the back element
-    public func pop_back(mut this) -> Maybe[T]
+    pub func pop_back(mut this) -> Maybe[T]
 
     /// Returns a reference to the element at index
-    public func get(this, index: U64) -> Maybe[ref T]
+    pub func get(this, index: U64) -> Maybe[ref T]
 
     /// Rotates elements left by n positions
-    public func rotate_left(mut this, n: U64)
+    pub func rotate_left(mut this, n: U64)
 
     /// Rotates elements right by n positions
-    public func rotate_right(mut this, n: U64)
+    pub func rotate_right(mut this, n: U64)
 
     /// Makes the deque contiguous
-    public func make_contiguous(mut this) -> mut ref [T]
+    pub func make_contiguous(mut this) -> mut ref [T]
 }
 ```
 
@@ -604,7 +604,7 @@ extend VecDeque[T] {
 A max-heap providing O(log n) push and O(1) peek of the maximum.
 
 ```tml
-public type BinaryHeap[T] {
+pub type BinaryHeap[T] {
     data: Vec[T],
 }
 ```
@@ -614,31 +614,31 @@ public type BinaryHeap[T] {
 ```tml
 extend BinaryHeap[T] where T: Ord {
     /// Creates an empty BinaryHeap
-    public func new() -> BinaryHeap[T]
+    pub func new() -> BinaryHeap[T]
 
     /// Creates from a Vec
-    public func from_vec(vec: Vec[T]) -> BinaryHeap[T]
+    pub func from_vec(vec: Vec[T]) -> BinaryHeap[T]
 
     /// Returns the number of elements
-    public func len(this) -> U64
+    pub func len(this) -> U64
 
     /// Pushes an element onto the heap
-    public func push(mut this, value: T)
+    pub func push(mut this, value: T)
 
     /// Removes and returns the maximum element
-    public func pop(mut this) -> Maybe[T]
+    pub func pop(mut this) -> Maybe[T]
 
     /// Returns a reference to the maximum element
-    public func peek(this) -> Maybe[ref T]
+    pub func peek(this) -> Maybe[ref T]
 
     /// Pushes a value and pops the maximum
-    public func push_pop(mut this, value: T) -> T
+    pub func push_pop(mut this, value: T) -> T
 
     /// Pops the maximum and pushes a value
-    public func replace(mut this, value: T) -> Maybe[T]
+    pub func replace(mut this, value: T) -> Maybe[T]
 
     /// Consumes the heap and returns a sorted Vec
-    public func into_sorted_vec(this) -> Vec[T]
+    pub func into_sorted_vec(this) -> Vec[T]
 }
 ```
 
@@ -650,18 +650,18 @@ extend BinaryHeap[T] where T: Ord {
 
 ```tml
 /// Trait for types that can be hashed
-public behaviorHash {
+pub behaviorHash {
     func hash(this, hasher: mut ref Hasher)
 }
 
 /// Standard hasher interface
-public behaviorHasher {
+pub behaviorHasher {
     func write(mut this, bytes: ref [U8])
     func finish(this) -> U64
 }
 
 /// Default hasher using SipHash
-public type DefaultHasher {
+pub type DefaultHasher {
     // SipHash state
 }
 
@@ -675,7 +675,7 @@ implement Hasher for DefaultHasher {
 
 ```tml
 /// Trait for creating a collection from an iterator
-public behaviorFromIterator[A] {
+pub behaviorFromIterator[A] {
     func from_iter[I](iter: I) -> This
         where I: IntoIterator[Item = A]
 }
@@ -697,7 +697,7 @@ implement FromIterator[T] for Vec[T] {
 
 ```tml
 /// Trait for extending a collection with an iterator
-public behaviorExtend[A] {
+pub behaviorExtend[A] {
     func extend[I](mut this, iter: I)
         where I: IntoIterator[Item = A]
 }
@@ -720,7 +720,7 @@ implement Extend[T] for Vec[T] {
 ### Using Vec
 
 ```tml
-import std.collections.Vec
+use std::collections.Vec
 
 func example_vec() {
     // Create and populate
@@ -753,7 +753,7 @@ func example_vec() {
 ### Using HashMap
 
 ```tml
-import std.collections.HashMap
+use std::collections.HashMap
 
 func example_hashmap() {
     var scores: HashMap[String, I32] = HashMap.new()
@@ -784,7 +784,7 @@ func example_hashmap() {
 ### Using BTreeMap for Ranges
 
 ```tml
-import std.collections.BTreeMap
+use std::collections.BTreeMap
 
 func example_btreemap() {
     var events: BTreeMap[DateTime, String] = BTreeMap.new()
@@ -806,7 +806,7 @@ func example_btreemap() {
 ### Using BinaryHeap
 
 ```tml
-import std.collections.BinaryHeap
+use std::collections.BinaryHeap
 
 func example_heap() {
     var heap: BinaryHeap[I32] = BinaryHeap.new()
@@ -834,7 +834,7 @@ func example_heap() {
 All collections use the global allocator by default. Custom allocators can be specified:
 
 ```tml
-import std.alloc.Arena
+use std::alloc.Arena
 
 let arena = Arena.new(1024 * 1024)  // 1MB arena
 var vec: Vec[I32, Arena] = Vec.new_in(ref arena)
@@ -845,7 +845,7 @@ var vec: Vec[I32, Arena] = Vec.new_in(ref arena)
 Collections are not thread-safe by default. For concurrent access, use:
 - `Arc[Mutex[HashMap[K, V]]]` for exclusive access
 - `Arc[RwLock[HashMap[K, V]]]` for read-heavy workloads
-- Concurrent collections from `std.sync.concurrent`
+- Concurrent collections from `std::sync.concurrent`
 
 ### Capacity Growth
 

@@ -1,8 +1,62 @@
+//! Core algebraic types for error handling and optional values.
+//!
+//! This module provides `Maybe[T]` and `Outcome[T, E]`, TML's equivalents
+//! to Rust's `Option` and `Result` types.
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Maybe[T]`] | Optional value (Rust's `Option`) |
+//! | [`Outcome[T, E]`] | Result with error (Rust's `Result`) |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::types::*
+//!
+//! func divide(a: I32, b: I32) -> Maybe[I32] {
+//!     if b == 0 {
+//!         return Nothing
+//!     }
+//!     return Just(a / b)
+//! }
+//!
+//! func safe_parse(s: Str) -> Outcome[I32, Str] {
+//!     // ... parsing logic
+//!     return Ok(42)
+//! }
+//! ```
+
+/// An optional value that may or may not be present.
+///
+/// `Maybe[T]` is TML's equivalent to Rust's `Option<T>`.
+/// Use it when a value might not exist.
+///
+/// # Variants
+///
+/// - `Just(T)` - Contains a value
+/// - `Nothing` - Contains no value
+///
+/// # Example
+///
+/// ```tml
+/// let x: Maybe[I32] = Just(5)
+/// let y: Maybe[I32] = Nothing
+///
+/// when x {
+///     Just(n) => print(n),
+///     Nothing => print("no value")
+/// }
+/// ```
 pub type Maybe[T] {
+    /// Contains a value of type T.
     Just(T),
+    /// Contains no value.
     Nothing,
 }
 
+/// Returns `true` if the maybe contains a value.
 pub func is_just[T](m: Maybe[T]) -> Bool {
     when m {
         Just(_) => return true,
@@ -11,6 +65,7 @@ pub func is_just[T](m: Maybe[T]) -> Bool {
     return false
 }
 
+/// Returns `true` if the maybe contains no value.
 pub func is_nothing[T](m: Maybe[T]) -> Bool {
     when m {
         Just(_) => return false,
@@ -19,6 +74,11 @@ pub func is_nothing[T](m: Maybe[T]) -> Bool {
     return true
 }
 
+/// Extracts the contained value, panicking if `Nothing`.
+///
+/// # Panics
+///
+/// Panics with "called unwrap() on Nothing" if the value is `Nothing`.
 pub func unwrap[T](m: Maybe[T]) -> T {
     when m {
         Just(val) => return val,
@@ -27,6 +87,11 @@ pub func unwrap[T](m: Maybe[T]) -> T {
     panic("unreachable")
 }
 
+/// Extracts the contained value, panicking with a custom message if `Nothing`.
+///
+/// # Panics
+///
+/// Panics with the provided message if the value is `Nothing`.
 pub func expect[T](m: Maybe[T], msg: Str) -> T {
     when m {
         Just(val) => return val,
@@ -35,6 +100,7 @@ pub func expect[T](m: Maybe[T], msg: Str) -> T {
     panic("unreachable")
 }
 
+/// Returns the contained value or a default.
 pub func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
     when m {
         Just(val) => return val,
@@ -43,6 +109,7 @@ pub func unwrap_or[T](m: Maybe[T], default_val: T) -> T {
     return default_val
 }
 
+/// Maps a `Maybe[T]` to `Maybe[U]` by applying a function to the contained value.
 pub func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
     when m {
         Just(val) => return Just(f(val)),
@@ -51,6 +118,7 @@ pub func map[T, U](m: Maybe[T], f: func(T) -> U) -> Maybe[U] {
     return Nothing
 }
 
+/// Returns `Nothing` if the maybe is `Nothing`, otherwise calls `f` with the value.
 pub func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
     when m {
         Just(val) => return f(val),
@@ -59,19 +127,21 @@ pub func and_then[T, U](m: Maybe[T], f: func(T) -> Maybe[U]) -> Maybe[U] {
     return Nothing
 }
 
+/// Returns `Nothing` if the maybe is `Nothing`, or if the predicate returns false.
 pub func filter[T](m: Maybe[T], predicate: func(T) -> Bool) -> Maybe[T] {
     when m {
         Just(val) => {
-        if predicate(val) {
-        return Just(val)
-    }
-        return Nothing
-    },
+            if predicate(val) {
+                return Just(val)
+            }
+            return Nothing
+        },
         Nothing => return Nothing,
     }
     return Nothing
 }
 
+/// Returns the maybe if it contains a value, otherwise calls `f`.
 pub func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
     when m {
         Just(val) => return Just(val),
@@ -80,6 +150,7 @@ pub func or_else[T](m: Maybe[T], f: func() -> Maybe[T]) -> Maybe[T] {
     return f()
 }
 
+/// Transforms `Maybe[T]` into `Outcome[T, E]`, mapping `Just(v)` to `Ok(v)` and `Nothing` to `Err(err)`.
 pub func ok_or[T, E](m: Maybe[T], err: E) -> Outcome[T, E] {
     when m {
         Just(val) => return Ok(val),
@@ -88,6 +159,7 @@ pub func ok_or[T, E](m: Maybe[T], err: E) -> Outcome[T, E] {
     return Err(err)
 }
 
+/// Transforms `Maybe[T]` into `Outcome[T, E]`, mapping `Just(v)` to `Ok(v)` and `Nothing` to `Err(f())`.
 pub func ok_or_else[T, E](m: Maybe[T], f: func() -> E) -> Outcome[T, E] {
     when m {
         Just(val) => return Ok(val),
@@ -96,11 +168,39 @@ pub func ok_or_else[T, E](m: Maybe[T], f: func() -> E) -> Outcome[T, E] {
     return Err(f())
 }
 
+/// A result type that represents either success or failure.
+///
+/// `Outcome[T, E]` is TML's equivalent to Rust's `Result<T, E>`.
+/// Use it for operations that can fail.
+///
+/// # Variants
+///
+/// - `Ok(T)` - Operation succeeded with value
+/// - `Err(E)` - Operation failed with error
+///
+/// # Example
+///
+/// ```tml
+/// func divide(a: I32, b: I32) -> Outcome[I32, Str] {
+///     if b == 0 {
+///         return Err("division by zero")
+///     }
+///     return Ok(a / b)
+/// }
+///
+/// when divide(10, 2) {
+///     Ok(n) => print(n),
+///     Err(e) => print(e)
+/// }
+/// ```
 pub type Outcome[T, E] {
+    /// Contains the success value.
     Ok(T),
+    /// Contains the error value.
     Err(E),
 }
 
+/// Returns `true` if the outcome is `Ok`.
 pub func is_ok[T, E](o: Outcome[T, E]) -> Bool {
     when o {
         Ok(_) => return true,
@@ -109,6 +209,7 @@ pub func is_ok[T, E](o: Outcome[T, E]) -> Bool {
     return false
 }
 
+/// Returns `true` if the outcome is `Err`.
 pub func is_err[T, E](o: Outcome[T, E]) -> Bool {
     when o {
         Ok(_) => return false,
@@ -117,6 +218,11 @@ pub func is_err[T, E](o: Outcome[T, E]) -> Bool {
     return true
 }
 
+/// Extracts the contained `Ok` value, panicking if `Err`.
+///
+/// # Panics
+///
+/// Panics with "called unwrap_ok() on Err" if the value is `Err`.
 pub func unwrap_ok[T, E](o: Outcome[T, E]) -> T {
     when o {
         Ok(val) => return val,
@@ -125,6 +231,11 @@ pub func unwrap_ok[T, E](o: Outcome[T, E]) -> T {
     panic("unreachable")
 }
 
+/// Extracts the contained `Ok` value, panicking with a custom message if `Err`.
+///
+/// # Panics
+///
+/// Panics with the provided message if the value is `Err`.
 pub func expect_ok[T, E](o: Outcome[T, E], msg: Str) -> T {
     when o {
         Ok(val) => return val,
@@ -133,6 +244,11 @@ pub func expect_ok[T, E](o: Outcome[T, E], msg: Str) -> T {
     panic("unreachable")
 }
 
+/// Extracts the contained `Err` value, panicking if `Ok`.
+///
+/// # Panics
+///
+/// Panics with "called unwrap_err() on Ok" if the value is `Ok`.
 pub func unwrap_err[T, E](o: Outcome[T, E]) -> E {
     when o {
         Ok(_) => panic("called unwrap_err() on Ok"),
@@ -141,6 +257,11 @@ pub func unwrap_err[T, E](o: Outcome[T, E]) -> E {
     panic("unreachable")
 }
 
+/// Extracts the contained `Err` value, panicking with a custom message if `Ok`.
+///
+/// # Panics
+///
+/// Panics with the provided message if the value is `Ok`.
 pub func expect_err[T, E](o: Outcome[T, E], msg: Str) -> E {
     when o {
         Ok(_) => panic(msg),
@@ -149,6 +270,7 @@ pub func expect_err[T, E](o: Outcome[T, E], msg: Str) -> E {
     panic("unreachable")
 }
 
+/// Returns the contained `Ok` value or a default.
 pub func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
     when o {
         Ok(val) => return val,
@@ -157,6 +279,7 @@ pub func unwrap_or_ok[T, E](o: Outcome[T, E], default_val: T) -> T {
     return default_val
 }
 
+/// Returns the contained `Err` value or a default.
 pub func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
     when o {
         Ok(_) => return default_val,
@@ -165,6 +288,7 @@ pub func unwrap_or_err[T, E](o: Outcome[T, E], default_val: E) -> E {
     return default_val
 }
 
+/// Maps an `Outcome[T, E]` to `Outcome[U, E]` by applying a function to the `Ok` value.
 pub func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
     when o {
         Ok(val) => return Ok(f(val)),
@@ -172,6 +296,7 @@ pub func map_ok[T, U, E](o: Outcome[T, E], f: func(T) -> U) -> Outcome[U, E] {
     }
 }
 
+/// Maps an `Outcome[T, E]` to `Outcome[T, F]` by applying a function to the `Err` value.
 pub func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
     when o {
         Ok(val) => return Ok(val),
@@ -179,6 +304,7 @@ pub func map_err[T, E, F](o: Outcome[T, E], f: func(E) -> F) -> Outcome[T, F] {
     }
 }
 
+/// Returns `Err` if the outcome is `Err`, otherwise calls `f` with the `Ok` value.
 pub func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> Outcome[U, E] {
     when o {
         Ok(val) => return f(val),
@@ -186,6 +312,7 @@ pub func and_then_ok[T, U, E](o: Outcome[T, E], f: func(T) -> Outcome[U, E]) -> 
     }
 }
 
+/// Returns `Ok` if the outcome is `Ok`, otherwise calls `f` with the `Err` value.
 pub func or_else_ok[T, E](o: Outcome[T, E], f: func(E) -> Outcome[T, E]) -> Outcome[T, E] {
     when o {
         Ok(val) => return Ok(val),

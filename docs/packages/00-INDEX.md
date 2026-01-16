@@ -10,61 +10,61 @@ This directory contains specifications for TML's standard library packages. Thes
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.collections](./10-COLLECTIONS.md) | Data structures (Vec, HashMap, etc.) | None |
-| [std.iter](./11-ITER.md) | Iterators and adapters | None |
-| [std.alloc](./12-ALLOC.md) | Memory allocators | None |
-| [std.fmt](./20-FMT.md) | String formatting | None |
+| [std::collections](./10-COLLECTIONS.md) | Data structures (Vec, HashMap, etc.) | None |
+| [std::iter](./11-ITER.md) | Iterators and adapters | None |
+| [std::alloc](./12-ALLOC.md) | Memory allocators | None |
+| [std::fmt](./20-FMT.md) | String formatting | None |
 
 ### I/O Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.fs](./01-FS.md) | File system operations | `io.file` |
-| [std.net](./02-NET.md) | Low-level networking (TCP/UDP) | `io.network` |
-| [std.buffer](./03-BUFFER.md) | Binary buffers and streams | None |
-| [std.tls](./06-TLS.md) | TLS/SSL connections | `io.network.tls` |
-| [std.http](./07-HTTP.md) | HTTP client and server | `io.network.http` |
+| [std::fs](./01-FS.md) | File system operations | `io::file` |
+| [std::net](./02-NET.md) | Low-level networking (TCP/UDP) | `io::network` |
+| [std::buffer](./03-BUFFER.md) | Binary buffers and streams | None |
+| [std::tls](./06-TLS.md) | TLS/SSL connections | `io::network.tls` |
+| [std::http](./07-HTTP.md) | HTTP client and server | `io::network.http` |
 
 ### Concurrency Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.sync](./13-SYNC.md) | Channels and synchronization | None |
-| [std.async](./14-ASYNC.md) | Async runtime and futures | `io.time` (for timers) |
+| [std::sync](./13-SYNC.md) | Channels and synchronization | None |
+| [std::async](./14-ASYNC.md) | Async runtime and futures | `io::time` (for timers) |
 
 ### Data Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.encoding](./04-ENCODING.md) | Text and binary encodings | None |
-| [std.json](./09-JSON.md) | JSON parsing and serialization | None |
-| [std.compress](./08-COMPRESS.md) | Compression algorithms | None |
-| [std.regex](./15-REGEX.md) | Regular expressions | None |
+| [std::encoding](./04-ENCODING.md) | Text and binary encodings | None |
+| [std::json](./09-JSON.md) | JSON parsing and serialization | None |
+| [std::compress](./08-COMPRESS.md) | Compression algorithms | None |
+| [std::regex](./15-REGEX.md) | Regular expressions | None |
 
 ### Security Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.crypto](./05-CRYPTO.md) | Cryptographic primitives | None |
-| [std.uuid](./17-UUID.md) | UUID generation | `io.random` |
+| [std::crypto](./05-CRYPTO.md) | Cryptographic primitives | None |
+| [std::uuid](./17-UUID.md) | UUID generation | `io::random` |
 
 ### Utility Packages
 
 | Package | Description | Capabilities Required |
 |---------|-------------|----------------------|
-| [std.datetime](./16-DATETIME.md) | Date and time handling | `io.time` |
-| [std.log](./18-LOG.md) | Logging framework | `io.file` (optional) |
-| [std.args](./19-ARGS.md) | Command-line argument parsing | `io.process.env` |
-| [std.env](./21-ENV.md) | Environment variables | `io.process.env` |
+| [std::datetime](./16-DATETIME.md) | Date and time handling | `io::time` |
+| [std::log](./18-LOG.md) | Logging framework | `io::file` (optional) |
+| [std::args](./19-ARGS.md) | Command-line argument parsing | `io::process.env` |
+| [std::env](./21-ENV.md) | Environment variables | `io::process.env` |
 
 ## Dependency Graph
 
 ```
                               ┌─────────────────────────────────────────┐
                               │            Core Packages                │
-                              │  std.collections ← std.iter ← std.alloc │
+                              │  std::collections ← std::iter ← std::alloc │
                               │           ↑                             │
-                              │       std.fmt                           │
+                              │       std::fmt                           │
                               └─────────────────────────────────────────┘
                                               │
         ┌─────────────────────────────────────┼─────────────────────────────────────┐
@@ -73,13 +73,13 @@ This directory contains specifications for TML's standard library packages. Thes
 ┌───────────────────┐               ┌───────────────────┐               ┌───────────────────┐
 │   I/O Packages    │               │ Concurrency       │               │  Data Packages    │
 │                   │               │                   │               │                   │
-│ std.http          │               │ std.async         │               │ std.json          │
-│   ├── std.tls     │               │   └── std.sync    │               │   └── std.encoding│
+│ std::http          │               │ std::async         │               │ std::json          │
+│   ├── std::tls     │               │   └── std::sync    │               │   └── std::encoding│
 │   │     └── crypto│               │                   │               │                   │
-│   └── std.net     │               │                   │               │ std.compress      │
-│         └── buffer│               │                   │               │   └── std.buffer  │
+│   └── std::net     │               │                   │               │ std::compress      │
+│         └── buffer│               │                   │               │   └── std::buffer  │
 │               │   │               │                   │               │                   │
-│           std.fs  │               │                   │               │ std.regex         │
+│           std::fs  │               │                   │               │ std::regex         │
 └───────────────────┘               └───────────────────┘               └───────────────────┘
         │                                     │
         └─────────────────┬───────────────────┘
@@ -88,11 +88,11 @@ This directory contains specifications for TML's standard library packages. Thes
                 ┌───────────────────┐
                 │ Utility Packages  │
                 │                   │
-                │ std.log ──────────┼──> std.datetime
-                │   └── std.fs      │         │
+                │ std::log ──────────┼──> std::datetime
+                │   └── std::fs      │         │
                 │                   │         ▼
-                │ std.args          │    std.uuid ──> std.crypto
-                │   └── std.env     │
+                │ std::args          │    std::uuid ──> std::crypto
+                │   └── std::env     │
                 └───────────────────┘
 ```
 
@@ -129,18 +129,18 @@ All standard packages follow TML's version:
 
 ```tml
 // Import entire package
-import std.fs
+use std::fs
 
 // Import specific items
-import std.fs.{File, read_to_string}
+use std::fs::{File, read_to_string}
 
 // Import with alias
-import std.http as http
+use std::http as http
 
 // Import multiple packages
-import std.collections.{Vec, HashMap}
-import std.iter.Iterator
-import std.fmt.{format, Display}
+use std::collections::{Vec, HashMap}
+use std::iter::Iterator
+use std::fmt::{format, Display}
 ```
 
 ## Quick Reference
@@ -149,24 +149,24 @@ import std.fmt.{format, Display}
 
 | Type | Package | Description |
 |------|---------|-------------|
-| `Vec[T]` | std.collections | Dynamic array |
-| `HashMap[K, V]` | std.collections | Hash table |
+| `Vec[T]` | std::collections | Dynamic array |
+| `HashMap[K, V]` | std::collections | Hash table |
 | `String` | builtin | UTF-8 string |
 | `Maybe[T]` | builtin | Optional value |
 | `Outcome[T, E]` | builtin | Success or error |
-| `Box[T]` | std.alloc | Heap allocation |
-| `Arc[T]` | std.sync | Atomic reference counted |
-| `Mutex[T]` | std.sync | Mutual exclusion lock |
+| `Box[T]` | std::alloc | Heap allocation |
+| `Arc[T]` | std::sync | Atomic reference counted |
+| `Mutex[T]` | std::sync | Mutual exclusion lock |
 
 ### Most Used Functions
 
 | Function | Package | Description |
 |----------|---------|-------------|
-| `println!()` | std.fmt | Print with newline |
-| `format!()` | std.fmt | Format string |
-| `spawn()` | std.async | Spawn async task |
-| `channel()` | std.sync | Create channel |
-| `File.open()` | std.fs | Open file |
-| `Regex.new()` | std.regex | Compile regex |
-| `DateTime.now()` | std.datetime | Current time |
-| `Uuid.v4()` | std.uuid | Random UUID |
+| `println!()` | std::fmt | Print with newline |
+| `format!()` | std::fmt | Format string |
+| `spawn()` | std::async | Spawn async task |
+| `channel()` | std::sync | Create channel |
+| `File.open()` | std::fs | Open file |
+| `Regex.new()` | std::regex | Compile regex |
+| `DateTime.now()` | std::datetime | Current time |
+| `Uuid.v4()` | std::uuid | Random UUID |

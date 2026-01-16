@@ -1,9 +1,9 @@
 // TML Example 02: Variables and Types
 // Demonstrates variable declarations and basic types
 
-module variables
+mod variables
 
-public func main() {
+pub func main() {
     // Immutable with type inference
     let x = 42
     let name = "Alice"

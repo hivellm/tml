@@ -9,8 +9,8 @@ The fmt package provides traits and utilities for formatting values as strings. 
 ## Import
 
 ```tml
-import std.fmt
-import std.fmt.{format, Display, Debug, Formatter}
+use std::fmt
+use std::fmt.{format, Display, Debug, Formatter}
 ```
 
 ---
@@ -134,7 +134,7 @@ Human-readable formatting.
 
 ```tml
 /// Format a value for display
-public behavior Display {
+pub behavior Display {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
@@ -151,7 +151,7 @@ Programmer-readable formatting.
 
 ```tml
 /// Format a value for debugging
-public behavior Debug {
+pub behavior Debug {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
@@ -168,37 +168,37 @@ type Point {
 
 ```tml
 /// Binary formatting
-public behavior Binary {
+pub behavior Binary {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Octal formatting
-public behavior Octal {
+pub behavior Octal {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Lowercase hex formatting
-public behavior LowerHex {
+pub behavior LowerHex {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Uppercase hex formatting
-public behavior UpperHex {
+pub behavior UpperHex {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Lowercase exponential formatting
-public behavior LowerExp {
+pub behavior LowerExp {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Uppercase exponential formatting
-public behavior UpperExp {
+pub behavior UpperExp {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 
 /// Pointer formatting
-public behavior Pointer {
+pub behavior Pointer {
     func fmt(this, f: mut ref Formatter) -> FmtResult
 }
 ```
@@ -209,7 +209,7 @@ public behavior Pointer {
 
 ```tml
 /// Formatter configuration and output buffer
-public type Formatter {
+pub type Formatter {
     buf: mut ref dyn Write,
     flags: FormatFlags,
     width: Maybe[U64],
@@ -218,9 +218,9 @@ public type Formatter {
     align: Alignment,
 }
 
-public type Alignment = Left | Center | Right
+pub type Alignment = Left | Center | Right
 
-public type FormatFlags {
+pub type FormatFlags {
     alternate: Bool,      // #
     sign_plus: Bool,      // +
     sign_minus: Bool,     // -
@@ -229,37 +229,37 @@ public type FormatFlags {
 
 extend Formatter {
     /// Writes a string
-    public func write_str(mut this, s: ref String) -> FmtResult
+    pub func write_str(mut this, s: ref String) -> FmtResult
 
     /// Writes a single character
-    public func write_char(mut this, c: Char) -> FmtResult
+    pub func write_char(mut this, c: Char) -> FmtResult
 
     /// Writes formatted arguments
-    public func write_fmt(mut this, args: Arguments) -> FmtResult
+    pub func write_fmt(mut this, args: Arguments) -> FmtResult
 
     /// Returns the width, if specified
-    public func width(this) -> Maybe[U64] { this.width }
+    pub func width(this) -> Maybe[U64] { this.width }
 
     /// Returns the precision, if specified
-    public func precision(this) -> Maybe[U64] { this.precision }
+    pub func precision(this) -> Maybe[U64] { this.precision }
 
     /// Returns true if alternate format was requested
-    public func alternate(this) -> Bool { this.flags.alternate }
+    pub func alternate(this) -> Bool { this.flags.alternate }
 
     /// Returns true if sign should always be shown
-    public func sign_plus(this) -> Bool { this.flags.sign_plus }
+    pub func sign_plus(this) -> Bool { this.flags.sign_plus }
 
     /// Returns true if zero-padding was requested
-    public func zero_pad(this) -> Bool { this.flags.zero_pad }
+    pub func zero_pad(this) -> Bool { this.flags.zero_pad }
 
     /// Returns the fill character
-    public func fill(this) -> Char { this.fill }
+    pub func fill(this) -> Char { this.fill }
 
     /// Returns the alignment
-    public func align(this) -> Alignment { this.align }
+    pub func align(this) -> Alignment { this.align }
 
     /// Pads the output to the specified width
-    public func pad(mut this, s: ref String) -> FmtResult {
+    pub func pad(mut this, s: ref String) -> FmtResult {
         when this.width {
             Just(width) if s.len() < width -> {
                 let padding = width - s.len()
@@ -294,36 +294,36 @@ extend Formatter {
     }
 
     /// Helper for debug formatting
-    public func debug_struct(mut this, name: ref String) -> DebugStruct {
+    pub func debug_struct(mut this, name: ref String) -> DebugStruct {
         DebugStruct.new(this, name)
     }
 
     /// Helper for debug tuple
-    public func debug_tuple(mut this, name: ref String) -> DebugTuple {
+    pub func debug_tuple(mut this, name: ref String) -> DebugTuple {
         DebugTuple.new(this, name)
     }
 
     /// Helper for debug list
-    public func debug_list(mut this) -> DebugList {
+    pub func debug_list(mut this) -> DebugList {
         DebugList.new(this)
     }
 
     /// Helper for debug map
-    public func debug_map(mut this) -> DebugMap {
+    pub func debug_map(mut this) -> DebugMap {
         DebugMap.new(this)
     }
 
     /// Helper for debug set
-    public func debug_set(mut this) -> DebugSet {
+    pub func debug_set(mut this) -> DebugSet {
         DebugSet.new(this)
     }
 }
 
 /// Format result
-public type FmtResult = Outcome[Unit, FmtError]
+pub type FmtResult = Outcome[Unit, FmtError]
 
 /// Format error
-public type FmtError
+pub type FmtError
 ```
 
 ---
@@ -334,7 +334,7 @@ public type FmtError
 
 ```tml
 /// Helper for formatting structs
-public type DebugStruct {
+pub type DebugStruct {
     formatter: mut ref Formatter,
     name: String,
     has_fields: Bool,
@@ -342,10 +342,10 @@ public type DebugStruct {
 
 extend DebugStruct {
     /// Adds a field
-    public func field(mut this, name: ref String, value: ref impl Debug) -> mut ref DebugStruct
+    pub func field(mut this, name: ref String, value: ref impl Debug) -> mut ref DebugStruct
 
     /// Finishes the struct
-    public func finish(mut this) -> FmtResult
+    pub func finish(mut this) -> FmtResult
 }
 
 // Usage in Debug implementation
@@ -368,7 +368,7 @@ implement Debug for Point {
 
 ```tml
 /// Helper for formatting tuple structs
-public type DebugTuple {
+pub type DebugTuple {
     formatter: mut ref Formatter,
     name: String,
     has_fields: Bool,
@@ -376,10 +376,10 @@ public type DebugTuple {
 
 extend DebugTuple {
     /// Adds a field
-    public func field(mut this, value: ref impl Debug) -> mut ref DebugTuple
+    pub func field(mut this, value: ref impl Debug) -> mut ref DebugTuple
 
     /// Finishes the tuple
-    public func finish(mut this) -> FmtResult
+    pub func finish(mut this) -> FmtResult
 }
 
 // Usage
@@ -401,21 +401,21 @@ implement Debug for Color {
 
 ```tml
 /// Helper for formatting lists
-public type DebugList {
+pub type DebugList {
     formatter: mut ref Formatter,
     has_entries: Bool,
 }
 
 extend DebugList {
     /// Adds an entry
-    public func entry(mut this, value: ref impl Debug) -> mut ref DebugList
+    pub func entry(mut this, value: ref impl Debug) -> mut ref DebugList
 
     /// Adds multiple entries
-    public func entries[I](mut this, entries: I) -> mut ref DebugList
+    pub func entries[I](mut this, entries: I) -> mut ref DebugList
         where I: Iterator, I.Item: Debug
 
     /// Finishes the list
-    public func finish(mut this) -> FmtResult
+    pub func finish(mut this) -> FmtResult
 }
 
 // Usage
@@ -431,21 +431,21 @@ implement Debug for Vec[T] where T: Debug {
 
 ```tml
 /// Helper for formatting maps
-public type DebugMap {
+pub type DebugMap {
     formatter: mut ref Formatter,
     has_entries: Bool,
 }
 
 extend DebugMap {
     /// Adds an entry
-    public func entry(mut this, key: ref impl Debug, value: ref impl Debug) -> mut ref DebugMap
+    pub func entry(mut this, key: ref impl Debug, value: ref impl Debug) -> mut ref DebugMap
 
     /// Adds multiple entries
-    public func entries[I, K, V](mut this, entries: I) -> mut ref DebugMap
+    pub func entries[I, K, V](mut this, entries: I) -> mut ref DebugMap
         where I: Iterator[Item = (K, V)], K: Debug, V: Debug
 
     /// Finishes the map
-    public func finish(mut this) -> FmtResult
+    pub func finish(mut this) -> FmtResult
 }
 
 // Usage
@@ -551,7 +551,7 @@ println!("{:.3}", price)   // $12.340
 
 ```tml
 /// Trait for types that can receive formatted output
-public behavior Write {
+pub behavior Write {
     /// Writes a string
     func write_str(mut this, s: ref String) -> FmtResult
 

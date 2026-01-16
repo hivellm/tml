@@ -258,6 +258,12 @@ private:
     // Dyn type definitions (emitted once per behavior)
     std::set<std::string> emitted_dyn_types_;
 
+    // Vtables already emitted (to prevent duplicates in test suites)
+    std::set<std::string> emitted_vtables_;
+
+    // External function declarations already emitted (for default implementations)
+    std::set<std::string> declared_externals_;
+
     // Register an impl block for vtable generation
     void register_impl(const parser::ImplDecl* impl);
 
@@ -292,6 +298,9 @@ private:
     // Class type mapping (class_name -> LLVM type name)
     std::unordered_map<std::string, std::string> class_types_;
 
+    // Value classes (classes with @value decorator - no vtable, direct dispatch)
+    std::unordered_set<std::string> value_classes_;
+
     // Class field info (class_name -> field info list)
     std::unordered_map<std::string, std::vector<ClassFieldInfo>> class_fields_;
 
@@ -323,6 +332,118 @@ private:
 
     // Interface vtables for class implementations (ClassName::InterfaceName -> vtable name)
     std::unordered_map<std::string, std::string> interface_vtables_;
+
+    // ============ Vtable Deduplication (Phase 6.1) ============
+    // Tracks vtable content for deduplication - identical vtables share storage
+
+    // Vtable content key: sorted list of method pointers as string
+    // Maps content key -> vtable global name
+    std::unordered_map<std::string, std::string> vtable_content_to_name_;
+
+    // Maps class name -> shared vtable name (when deduplicated)
+    std::unordered_map<std::string, std::string> class_to_shared_vtable_;
+
+    // Vtable deduplication statistics
+    struct VtableDeduplicationStats {
+        size_t total_vtables = 0;      ///< Total vtables generated
+        size_t unique_vtables = 0;     ///< Unique vtable layouts
+        size_t deduplicated = 0;       ///< Vtables sharing storage with another
+        size_t bytes_saved = 0;        ///< Estimated bytes saved
+    };
+    VtableDeduplicationStats vtable_dedup_stats_;
+
+    // Interface vtable optimization statistics
+    struct InterfaceVtableStats {
+        size_t total_interface_vtables = 0;   ///< Total interface vtables generated
+        size_t deduplicated_interface = 0;    ///< Interface vtables sharing storage
+        size_t compacted_slots = 0;           ///< Slots removed by compaction
+    };
+    InterfaceVtableStats interface_vtable_stats_;
+
+    // Interface vtable content to name mapping (for deduplication)
+    std::unordered_map<std::string, std::string> interface_vtable_content_to_name_;
+
+    // Helper to compute vtable content key for deduplication
+    auto compute_vtable_content_key(const std::vector<VirtualMethodInfo>& methods) -> std::string;
+
+    // Helper to compute interface vtable content key
+    auto compute_interface_vtable_key(const std::string& iface_name,
+                                      const std::vector<std::pair<std::string, std::string>>& impls)
+        -> std::string;
+
+    // ============ Phase 6.2: Vtable Splitting (Hot/Cold) ============
+    // Splits vtables into primary (hot) and secondary (cold) parts
+    // to improve cache locality for frequently-called methods
+
+    struct VtableSplitInfo {
+        std::vector<std::string> hot_methods;   // Methods in primary vtable
+        std::vector<std::string> cold_methods;  // Methods in secondary vtable
+        std::string primary_vtable_name;        // Name of hot vtable
+        std::string secondary_vtable_name;      // Name of cold vtable (nullptr if empty)
+    };
+
+    // Method heat tracking: method_key -> call_count (heuristic-based)
+    std::unordered_map<std::string, int> method_heat_;
+
+    // Split vtable info per class
+    std::unordered_map<std::string, VtableSplitInfo> vtable_splits_;
+
+    // Vtable splitting statistics
+    struct VtableSplitStats {
+        size_t classes_with_split = 0;     // Classes with split vtables
+        size_t hot_methods_total = 0;      // Total methods in hot vtables
+        size_t cold_methods_total = 0;     // Total methods in cold vtables
+    };
+    VtableSplitStats vtable_split_stats_;
+
+    // Analyze class methods and decide split
+    void analyze_vtable_split(const parser::ClassDecl& c);
+
+    // Generate split vtables (hot + cold)
+    void gen_split_vtables(const parser::ClassDecl& c);
+
+    // Check if a method is in the hot set
+    bool is_hot_method(const std::string& class_name, const std::string& method_name) const;
+
+    // Get vtable index for method (handles split vtables)
+    auto get_split_vtable_index(const std::string& class_name, const std::string& method_name)
+        -> std::pair<bool, size_t>;  // (is_in_hot, index)
+
+    // ============ Phase 3: Speculative Devirtualization ============
+    // Inserts type guards for likely receiver types, enabling direct calls
+    // with fallback to vtable dispatch for unexpected types
+
+    struct SpeculativeDevirtInfo {
+        std::string expected_type;       // Most likely concrete type
+        std::string direct_call_target;  // Direct function name for expected type
+        float confidence;                // Probability estimate (0.0-1.0)
+    };
+
+    // Type frequency hints (class_name -> estimated frequency 0.0-1.0)
+    // Used heuristically based on: sealed/final, leaf in hierarchy, @hot decorator
+    std::unordered_map<std::string, float> type_frequency_hints_;
+
+    // Speculative devirtualization statistics
+    struct SpecDevirtStats {
+        size_t guarded_calls = 0;        // Calls with type guards inserted
+        size_t direct_calls = 0;         // Calls converted to direct (no guard needed)
+        size_t virtual_calls = 0;        // Calls remaining as virtual dispatch
+    };
+    SpecDevirtStats spec_devirt_stats_;
+
+    // Analyze if speculative devirtualization is profitable for a call
+    auto analyze_spec_devirt(const std::string& receiver_class, const std::string& method_name)
+        -> std::optional<SpeculativeDevirtInfo>;
+
+    // Generate guarded call with fast path (direct) and slow path (vtable)
+    auto gen_guarded_virtual_call(const std::string& obj_reg, const std::string& receiver_class,
+                                  const SpeculativeDevirtInfo& spec_info,
+                                  const std::string& method_name,
+                                  const std::vector<std::string>& args,
+                                  const std::vector<std::string>& arg_types) -> std::string;
+
+    // Initialize type frequency hints from class hierarchy
+    void init_type_frequency_hints();
 
     // Generate class declaration (type + vtable + methods)
     void gen_class_decl(const parser::ClassDecl& c);
@@ -497,6 +618,8 @@ private:
     // for_data=true: use "{}" for Unit (when used as data field), false: use "void" (for return
     // types)
     auto llvm_type_from_semantic(const types::TypePtr& type, bool for_data = false) -> std::string;
+    /// Ensures a type is defined in the LLVM IR output (emits type definition if needed)
+    void ensure_type_defined(const parser::TypePtr& type);
 
     // Generic type mangling
     auto mangle_type(const types::TypePtr& type) -> std::string;

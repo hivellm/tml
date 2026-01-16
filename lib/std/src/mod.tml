@@ -1,11 +1,28 @@
-// TML Standard Library
-// Re-exports all standard library modules
+//! The TML Standard Library.
+//!
+//! This library provides common functionality for TML programs, including
+//! collections, I/O, string manipulation, and error handling.
+//!
+//! # Modules
+//!
+//! | Module | Description |
+//! |--------|-------------|
+//! | [`traits`] | Core behaviors (Copy, Eq, Ord, Hash) |
+//! | [`interfaces`] | C#-style OOP interfaces |
+//! | [`object`] | Object base class |
+//! | [`exception`] | Exception class hierarchy |
+//! | [`types`] | Maybe[T], Outcome[T, E] |
+//! | [`collections`] | List, HashMap, Buffer |
+//! | [`text`] | Dynamic string type |
+//! | [`file`] | File I/O operations |
+//! | [`iter`] | Iterator and Range |
 
-pub mod traits      // Core behaviors (Copy, Eq, Ord, Hash, etc.)
-pub mod interfaces  // C#-style OOP interfaces (IEquatable, IComparable, etc.)
-pub mod object      // Object base class
-pub mod exception   // Exception class hierarchy
-pub mod types       // Maybe[T], Outcome[T, E]
-pub mod collections // List, HashMap, Buffer
-pub mod file        // File I/O
-pub mod iter        // Iterator, Range
+pub mod traits
+pub mod interfaces
+pub mod object
+pub mod exception
+pub mod types
+pub mod collections
+pub mod text
+pub mod file
+pub mod iter

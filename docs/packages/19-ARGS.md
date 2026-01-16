@@ -11,8 +11,8 @@ The args package provides a declarative, type-safe way to parse command-line arg
 ## Import
 
 ```tml
-import std.args
-import std.args.{Command, Arg, parse}
+use std::args
+use std::args.{Command, Arg, parse}
 ```
 
 ---
@@ -20,7 +20,7 @@ import std.args.{Command, Arg, parse}
 ## Quick Start
 
 ```tml
-import std.args.{Command, Arg, parse}
+use std::args.{Command, Arg, parse}
 
 /// Command-line arguments
 type Args {
@@ -63,7 +63,7 @@ func main()
 
 ```tml
 /// Argument configuration attribute
-public type Arg {
+pub type Arg {
     /// Short flag (-v)
     short: Maybe[Char],
 
@@ -139,7 +139,7 @@ type Args {
 
 ```tml
 /// Command configuration attribute
-public type Command {
+pub type Command {
     /// Command name
     name: Maybe[String],
 
@@ -220,7 +220,7 @@ type TestArgs {
 
 ```tml
 /// Parses command-line arguments into a type
-public func parse[T: FromArgs]() -> Outcome[T, ParseError]
+pub func parse[T: FromArgs]() -> Outcome[T, ParseError]
     caps: [io.process.env]
 {
     let args = env.args().collect()
@@ -228,14 +228,14 @@ public func parse[T: FromArgs]() -> Outcome[T, ParseError]
 }
 
 /// Parses from a custom argument list
-public func parse_from[T: FromArgs](args: Vec[String]) -> Outcome[T, ParseError]
+pub func parse_from[T: FromArgs](args: Vec[String]) -> Outcome[T, ParseError]
 
 /// Tries to parse, returns None on error
-public func try_parse[T: FromArgs]() -> Maybe[T]
+pub func try_parse[T: FromArgs]() -> Maybe[T]
     caps: [io.process.env]
 
 /// Trait for types that can be parsed from arguments
-public behavior FromArgs {
+pub behavior FromArgs {
     func from_args(args: ref ArgMatches) -> Outcome[This, ParseError]
 }
 ```
@@ -246,7 +246,7 @@ public behavior FromArgs {
 
 ```tml
 /// Parsed argument matches
-public type ArgMatches {
+pub type ArgMatches {
     values: HashMap[String, Vec[String]],
     flags: HashSet[String],
     subcommand: Maybe[(String, Box[ArgMatches])],
@@ -254,22 +254,22 @@ public type ArgMatches {
 
 extend ArgMatches {
     /// Gets a single value
-    public func get_one[T: FromStr](this, id: ref String) -> Maybe[T]
+    pub func get_one[T: FromStr](this, id: ref String) -> Maybe[T]
 
     /// Gets multiple values
-    public func get_many[T: FromStr](this, id: ref String) -> Maybe[Vec[T]]
+    pub func get_many[T: FromStr](this, id: ref String) -> Maybe[Vec[T]]
 
     /// Returns true if flag is present
-    public func get_flag(this, id: ref String) -> Bool
+    pub func get_flag(this, id: ref String) -> Bool
 
     /// Returns the number of occurrences
-    public func get_count(this, id: ref String) -> U64
+    pub func get_count(this, id: ref String) -> U64
 
     /// Gets the subcommand name and matches
-    public func subcommand(this) -> Maybe[(ref String, ref ArgMatches)]
+    pub func subcommand(this) -> Maybe[(ref String, ref ArgMatches)]
 
     /// Returns true if a subcommand was used
-    public func subcommand_name(this) -> Maybe[ref String]
+    pub func subcommand_name(this) -> Maybe[ref String]
 }
 ```
 
@@ -279,7 +279,7 @@ extend ArgMatches {
 
 ```tml
 /// Parse error
-public type ParseError =
+pub type ParseError =
     | MissingRequired(String)
     | InvalidValue { arg: String, value: String, expected: String }
     | UnknownArgument(String)
@@ -293,7 +293,7 @@ public type ParseError =
 
 extend ParseError {
     /// Returns user-friendly error message
-    public func to_string(this) -> String {
+    pub func to_string(this) -> String {
         when this {
             MissingRequired(arg) ->
                 "error: required argument '" + arg + "' not provided",
@@ -317,7 +317,7 @@ extend ParseError {
     }
 
     /// Prints error and exits
-    public func exit(this) -> ! {
+    pub func exit(this) -> ! {
         when this {
             HelpRequested -> {
                 // Help already printed
@@ -443,12 +443,12 @@ type Args {
 
 ```tml
 /// Validator trait
-public behavior Validator {
+pub behavior Validator {
     func validate(value: ref String) -> Outcome[Unit, String]
 }
 
 /// File exists validator
-public type FileExists {}
+pub type FileExists {}
 
 implement Validator for FileExists {
     func validate(value: ref String) -> Outcome[Unit, String] {
@@ -461,7 +461,7 @@ implement Validator for FileExists {
 }
 
 /// Range validator
-public type InRange[T: Ord] {
+pub type InRange[T: Ord] {
     min: T,
     max: T,
 }

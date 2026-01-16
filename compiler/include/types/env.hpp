@@ -256,6 +256,7 @@ struct ClassMethodDef {
     bool is_virtual;      ///< True for virtual methods.
     bool is_override;     ///< True for override methods.
     bool is_abstract;     ///< True for abstract methods.
+    bool is_final;        ///< True for final methods (cannot be overridden).
     size_t vtable_index;  ///< Index in vtable (for virtual methods).
 };
 
@@ -302,6 +303,8 @@ struct ClassDef {
     std::vector<ConstructorDef> constructors;    ///< Constructors.
     bool is_abstract;                            ///< True for abstract classes.
     bool is_sealed;                              ///< True for sealed classes.
+    bool is_value;                               ///< True for @value classes (no vtable).
+    bool is_pooled;                              ///< True for @pool classes (uses object pool).
     SourceSpan span;                             ///< Declaration location.
 };
 
@@ -483,6 +486,29 @@ public:
 
     /// Returns true if the type implements Drop.
     [[nodiscard]] bool type_needs_drop(const TypePtr& type) const;
+
+    /// Returns true if the type is trivially destructible.
+    /// A type is trivially destructible if:
+    /// - It doesn't implement a custom Drop
+    /// - All its fields (if any) are trivially destructible
+    /// This allows eliding destructor calls for such types.
+    [[nodiscard]] bool is_trivially_destructible(const std::string& type_name) const;
+
+    /// Returns true if the type is trivially destructible (TypePtr overload).
+    [[nodiscard]] bool is_trivially_destructible(const TypePtr& type) const;
+
+    /// Returns true if a class can be treated as a value class (no vtable needed).
+    ///
+    /// A class is a value class candidate if:
+    /// - It is sealed (no subclasses)
+    /// - It has no virtual methods
+    /// - It does not extend an abstract class
+    /// - Its base class (if any) is also a value class candidate
+    ///
+    /// Value classes can be optimized by:
+    /// - Omitting the vtable pointer
+    /// - Using direct method calls instead of virtual dispatch
+    [[nodiscard]] bool is_value_class_candidate(const std::string& class_name) const;
 
     // ========================================================================
     // Definition Enumeration

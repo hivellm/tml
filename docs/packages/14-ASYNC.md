@@ -1,6 +1,6 @@
 # TML Standard Library: Async Runtime
 
-> `std.async` — Asynchronous programming with futures and async/await.
+> `std::async` — Asynchronous programming with futures and async/await.
 
 ## Overview
 
@@ -9,8 +9,8 @@ The async package provides an asynchronous runtime for concurrent programming. I
 ## Import
 
 ```tml
-import std.async
-import std.async.{spawn, block_on, timeout, sleep}
+use std::async
+use std::async.{spawn, block_on, timeout, sleep}
 ```
 
 ---
@@ -23,7 +23,7 @@ The fundamental trait for asynchronous computation.
 
 ```tml
 /// An asynchronous computation that may not have completed yet
-public behaviorFuture {
+pub behaviorFuture {
     /// The type of value produced on completion
     type Output
 
@@ -32,11 +32,11 @@ public behaviorFuture {
 }
 
 /// The result of polling a future
-public type Poll[T] = Ready(T) | Pending
+pub type Poll[T] = Ready(T) | Pending
 
 extend Poll[T] {
     /// Returns true if the future is ready
-    public func is_ready(this) -> Bool {
+    pub func is_ready(this) -> Bool {
         when this {
             Ready(_) -> true,
             Pending -> false,
@@ -44,7 +44,7 @@ extend Poll[T] {
     }
 
     /// Returns true if the future is pending
-    public func is_pending(this) -> Bool {
+    pub func is_pending(this) -> Bool {
         when this {
             Pending -> true,
             Ready(_) -> false,
@@ -52,7 +52,7 @@ extend Poll[T] {
     }
 
     /// Maps the ready value
-    public func map[U](this, f: func(T) -> U) -> Poll[U] {
+    pub func map[U](this, f: func(T) -> U) -> Poll[U] {
         when this {
             Ready(t) -> Ready(f(t)),
             Pending -> Pending,
@@ -65,24 +65,24 @@ extend Poll[T] {
 
 ```tml
 /// Context for polling a future
-public type Context {
+pub type Context {
     waker: Waker,
 }
 
 extend Context {
     /// Returns a reference to the waker
-    public func waker(this) -> ref Waker {
+    pub func waker(this) -> ref Waker {
         return ref this.waker
     }
 
     /// Creates a new context from a waker
-    public func from_waker(waker: Waker) -> Context {
+    pub func from_waker(waker: Waker) -> Context {
         return Context { waker: waker }
     }
 }
 
 /// Handle to wake up a task
-public type Waker {
+pub type Waker {
     data: *const Unit,
     vtable: &'static WakerVTable,
 }
@@ -96,12 +96,12 @@ type WakerVTable {
 
 extend Waker {
     /// Wakes up the task associated with this waker
-    public func wake(this) {
+    pub func wake(this) {
         (this.vtable.wake)(this.data)
     }
 
     /// Wakes up without consuming the waker
-    public func wake_by_ref(this) {
+    pub func wake_by_ref(this) {
         (this.vtable.wake_by_ref)(this.data)
     }
 }
@@ -162,7 +162,7 @@ let data = fetch_data(url).await else default_data()
 
 ```tml
 /// Async runtime builder
-public type RuntimeBuilder {
+pub type RuntimeBuilder {
     worker_threads: Maybe[U64],
     thread_name: Maybe[String],
     on_thread_start: Maybe[func()],
@@ -173,7 +173,7 @@ public type RuntimeBuilder {
 
 extend RuntimeBuilder {
     /// Creates a new runtime builder
-    public func new() -> RuntimeBuilder {
+    pub func new() -> RuntimeBuilder {
         return RuntimeBuilder {
             worker_threads: None,
             thread_name: None,
@@ -185,67 +185,67 @@ extend RuntimeBuilder {
     }
 
     /// Sets the number of worker threads
-    public func worker_threads(mut this, count: U64) -> RuntimeBuilder {
+    pub func worker_threads(mut this, count: U64) -> RuntimeBuilder {
         this.worker_threads = Just(count)
         return this
     }
 
     /// Sets the thread name prefix
-    public func thread_name(mut this, name: String) -> RuntimeBuilder {
+    pub func thread_name(mut this, name: String) -> RuntimeBuilder {
         this.thread_name = Just(name)
         return this
     }
 
     /// Sets callback for thread start
-    public func on_thread_start(mut this, f: func()) -> RuntimeBuilder {
+    pub func on_thread_start(mut this, f: func()) -> RuntimeBuilder {
         this.on_thread_start = Just(f)
         return this
     }
 
     /// Builds a multi-threaded runtime
-    public func build(this) -> Outcome[Runtime, RuntimeError] {
+    pub func build(this) -> Outcome[Runtime, RuntimeError] {
         Runtime.new(this)
     }
 
     /// Builds a single-threaded runtime
-    public func build_current_thread(this) -> Outcome[Runtime, RuntimeError] {
+    pub func build_current_thread(this) -> Outcome[Runtime, RuntimeError] {
         Runtime.new_current_thread(this)
     }
 }
 
 /// The async runtime
-public type Runtime {
+pub type Runtime {
     // Internal state
 }
 
 extend Runtime {
     /// Creates a new multi-threaded runtime
-    public func new(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
+    pub func new(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
 
     /// Creates a new single-threaded runtime
-    public func new_current_thread(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
+    pub func new_current_thread(config: RuntimeBuilder) -> Outcome[Runtime, RuntimeError]
 
     /// Blocks on a future
-    public func block_on[F: Future](this, future: F) -> F.Output {
+    pub func block_on[F: Future](this, future: F) -> F.Output {
         // Enter runtime context and poll until complete
     }
 
     /// Spawns a task on the runtime
-    public func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
+    pub func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
         where F: Send + 'static, F.Output: Send + 'static
 
     /// Spawns a blocking task
-    public func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
+    pub func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
         where F: FnOnce() -> F.Output + Send + 'static, F.Output: Send + 'static
 
     /// Returns a handle to the runtime
-    public func handle(this) -> RuntimeHandle
+    pub func handle(this) -> RuntimeHandle
 
     /// Shuts down the runtime
-    public func shutdown_timeout(this, timeout: Duration)
+    pub func shutdown_timeout(this, timeout: Duration)
 
     /// Shuts down the runtime, waiting for all tasks
-    public func shutdown_background(this)
+    pub func shutdown_background(this)
 }
 ```
 
@@ -253,27 +253,27 @@ extend Runtime {
 
 ```tml
 /// Handle to the runtime for spawning tasks
-public type RuntimeHandle {
+pub type RuntimeHandle {
     // Internal
 }
 
 extend RuntimeHandle {
     /// Returns the current runtime handle
-    public func current() -> RuntimeHandle
+    pub func current() -> RuntimeHandle
 
     /// Tries to get the current runtime handle
-    public func try_current() -> Maybe[RuntimeHandle]
+    pub func try_current() -> Maybe[RuntimeHandle]
 
     /// Spawns a task
-    public func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
+    pub func spawn[F: Future](this, future: F) -> JoinHandle[F.Output]
         where F: Send + 'static, F.Output: Send + 'static
 
     /// Spawns a blocking task
-    public func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
+    pub func spawn_blocking[F](this, f: F) -> JoinHandle[F.Output]
         where F: FnOnce() -> F.Output + Send + 'static, F.Output: Send + 'static
 
     /// Blocks on a future within the runtime
-    public func block_on[F: Future](this, future: F) -> F.Output
+    pub func block_on[F: Future](this, future: F) -> F.Output
 }
 ```
 
@@ -285,14 +285,14 @@ extend RuntimeHandle {
 
 ```tml
 /// Spawns a task on the current runtime
-public func spawn[F: Future](future: F) -> JoinHandle[F.Output]
+pub func spawn[F: Future](future: F) -> JoinHandle[F.Output]
     where F: Send + 'static, F.Output: Send + 'static
 {
     RuntimeHandle.current().spawn(future)
 }
 
 /// Spawns a task with a name
-public func spawn_named[F: Future](name: String, future: F) -> JoinHandle[F.Output]
+pub func spawn_named[F: Future](name: String, future: F) -> JoinHandle[F.Output]
     where F: Send + 'static, F.Output: Send + 'static
 ```
 
@@ -300,7 +300,7 @@ public func spawn_named[F: Future](name: String, future: F) -> JoinHandle[F.Outp
 
 ```tml
 /// Handle to a spawned task
-public type JoinHandle[T] {
+pub type JoinHandle[T] {
     // Internal
 }
 
@@ -309,24 +309,24 @@ extend JoinHandle[T] {
     public async func await(this) -> Outcome[T, JoinError]
 
     /// Aborts the task
-    public func abort(this)
+    pub func abort(this)
 
     /// Returns true if the task is finished
-    public func is_finished(this) -> Bool
+    pub func is_finished(this) -> Bool
 
     /// Returns the task ID
-    public func id(this) -> TaskId
+    pub func id(this) -> TaskId
 }
 
 /// Error when joining a task
-public type JoinError = Cancelled | Panicked
+pub type JoinError = Cancelled | Panicked
 ```
 
 ### spawn_blocking
 
 ```tml
 /// Spawns a blocking operation on a dedicated thread pool
-public func spawn_blocking[F, R](f: F) -> JoinHandle[R]
+pub func spawn_blocking[F, R](f: F) -> JoinHandle[R]
     where F: FnOnce() -> R + Send + 'static, R: Send + 'static
 {
     RuntimeHandle.current().spawn_blocking(f)
@@ -347,22 +347,22 @@ async func process_file(path: String) -> Outcome[Data, Error] {
 
 ```tml
 /// Spawns a !Send task on the local task set
-public func spawn_local[F: Future](future: F) -> JoinHandle[F.Output]
+pub func spawn_local[F: Future](future: F) -> JoinHandle[F.Output]
     where F: 'static, F.Output: 'static
 
 /// Local task set for !Send futures
-public type LocalSet {
+pub type LocalSet {
     // Internal
 }
 
 extend LocalSet {
-    public func new() -> LocalSet
+    pub func new() -> LocalSet
 
     /// Runs the local set until all tasks complete
     public async func run_until[F: Future](this, future: F) -> F.Output
 
     /// Spawns a local task
-    public func spawn_local[F: Future](this, future: F) -> JoinHandle[F.Output]
+    pub func spawn_local[F: Future](this, future: F) -> JoinHandle[F.Output]
         where F: 'static, F.Output: 'static
 }
 ```
@@ -400,7 +400,7 @@ public async func select[A, B](a: A, b: B) -> Either[A.Output, B.Output]
     where A: Future, B: Future
 
 /// Either type for select results
-public type Either[L, R] = Left(L) | Right(R)
+pub type Either[L, R] = Left(L) | Right(R)
 
 /// Select from multiple futures, returning the first result and remaining futures
 public macro select! {
@@ -450,7 +450,7 @@ public async func sleep_until(deadline: Instant) {
 }
 
 /// Sleep future
-public type Sleep {
+pub type Sleep {
     deadline: Instant,
 }
 
@@ -480,16 +480,16 @@ public async func timeout[F: Future](duration: Duration, future: F) -> Outcome[F
 }
 
 /// Timeout error
-public type TimeoutError
+pub type TimeoutError
 
 extend TimeoutError {
-    public func elapsed() -> TimeoutError {
+    pub func elapsed() -> TimeoutError {
         return TimeoutError
     }
 }
 
 /// Timeout wrapper type
-public type Timeout[F: Future] {
+pub type Timeout[F: Future] {
     future: F,
     deadline: Instant,
 }
@@ -520,17 +520,17 @@ implement Future for Timeout[F] where F: Future {
 
 ```tml
 /// Creates an interval that yields at a fixed rate
-public func interval(period: Duration) -> Interval {
+pub func interval(period: Duration) -> Interval {
     Interval.new(period)
 }
 
 /// Creates an interval starting at a specific time
-public func interval_at(start: Instant, period: Duration) -> Interval {
+pub func interval_at(start: Instant, period: Duration) -> Interval {
     Interval.at(start, period)
 }
 
 /// Interval stream
-public type Interval {
+pub type Interval {
     period: Duration,
     next: Instant,
 }
@@ -545,7 +545,7 @@ extend Interval {
     }
 
     /// Resets the interval
-    public func reset(mut this) {
+    pub func reset(mut this) {
         this.next = Instant.now() + this.period
     }
 }
@@ -559,7 +559,7 @@ extend Interval {
 
 ```tml
 /// Async reading from a source
-public behaviorAsyncRead {
+pub behaviorAsyncRead {
     /// Attempts to read data into buf
     func poll_read(
         mut this,
@@ -616,7 +616,7 @@ extend AsyncRead {
 
 ```tml
 /// Async writing to a sink
-public behaviorAsyncWrite {
+pub behaviorAsyncWrite {
     /// Attempts to write data from buf
     func poll_write(
         mut this,
@@ -673,7 +673,7 @@ extend AsyncWrite {
 
 ```tml
 /// Async iterator (stream)
-public behaviorAsyncIterator {
+pub behaviorAsyncIterator {
     type Item
 
     /// Polls for the next item
@@ -702,22 +702,22 @@ extend AsyncIterator {
     }
 
     /// Maps each item
-    public func map[B](this, f: func(This.Item) -> B) -> Map[This, B] {
+    pub func map[B](this, f: func(This.Item) -> B) -> Map[This, B] {
         Map { stream: this, f: f }
     }
 
     /// Filters items
-    public func filter(this, f: func(ref This.Item) -> Bool) -> Filter[This] {
+    pub func filter(this, f: func(ref This.Item) -> Bool) -> Filter[This] {
         Filter { stream: this, predicate: f }
     }
 
     /// Takes n items
-    public func take(this, n: U64) -> Take[This] {
+    pub func take(this, n: U64) -> Take[This] {
         Take { stream: this, remaining: n }
     }
 
     /// Buffers items
-    public func buffered(this, n: U64) -> Buffered[This]
+    pub func buffered(this, n: U64) -> Buffered[This]
         where This.Item: Future
     {
         Buffered { stream: this, buffer_size: n, pending: Vec.new() }
@@ -733,13 +733,13 @@ extend AsyncIterator {
 
 ```tml
 /// Creates a future from a poll function
-public func poll_fn[T, F](f: F) -> PollFn[F]
+pub func poll_fn[T, F](f: F) -> PollFn[F]
     where F: FnMut(mut ref Context) -> Poll[T]
 {
     return PollFn { f: f }
 }
 
-public type PollFn[F] {
+pub type PollFn[F] {
     f: F,
 }
 
@@ -807,8 +807,8 @@ implement Future for YieldNow {
 ### Basic Async/Await
 
 ```tml
-import std.async.{spawn, block_on, sleep}
-import std.time.Duration
+use std::async.{spawn, block_on, sleep}
+use std::time.Duration
 
 async func async_main() {
     print("Starting...")
@@ -840,9 +840,9 @@ func main() {
 ### HTTP Server
 
 ```tml
-import std.async.{spawn, Runtime}
-import std.net.TcpListener
-import std.http.{Request, Response}
+use std::async.{spawn, Runtime}
+use std::net.TcpListener
+use std::http.{Request, Response}
 
 async func handle_connection(stream: TcpStream) -> Outcome[Unit, Error] {
     let request = Request.parse(mut ref stream).await!
@@ -875,7 +875,7 @@ async func server_main() -> Outcome[Unit, Error] {
 ### Parallel Processing
 
 ```tml
-import std.async.{spawn, join_all}
+use std::async.{spawn, join_all}
 
 async func process_items(items: Vec[Item]) -> Vec[Result] {
     // Process all items concurrently
@@ -900,8 +900,8 @@ async func process_one(item: Item) -> Result {
 ### Timeout and Retry
 
 ```tml
-import std.async.{timeout, sleep}
-import std.time.Duration
+use std::async.{timeout, sleep}
+use std::time.Duration
 
 async func fetch_with_retry[T](
     url: String,

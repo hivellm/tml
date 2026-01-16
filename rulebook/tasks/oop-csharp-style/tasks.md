@@ -247,10 +247,10 @@
 - [ ] 7.2.4 Show class hierarchy
 
 ### 7.3 Code Completion
-- [ ] 7.3.1 Complete override methods
-- [ ] 7.3.2 Complete interface implementations
-- [ ] 7.3.3 Complete base. members
-- [ ] 7.3.4 Complete namespace members
+- [x] 7.3.1 Complete override methods (snippets: override func, override func with base call)
+- [x] 7.3.2 Complete interface implementations (snippets: implement interface, context-aware)
+- [x] 7.3.3 Complete base. members (triggered on "base.", shows common methods)
+- [ ] 7.3.4 Complete namespace members (requires compiler integration)
 
 ## Phase 8: Testing
 
@@ -293,18 +293,18 @@
 - [x] 9.1.3 Document namespace syntax
 - [x] 9.1.4 Document inheritance rules
 - [x] 9.1.5 Document visibility modifiers
+- [x] 9.1.6 Add user documentation chapter (ch15-00-oop.md)
 
-### 9.2 Migration Guide
-- [ ] 9.2.1 C# to TML class migration
-- [ ] 9.2.2 Java to TML class migration
-- [ ] 9.2.3 Behavior vs Interface comparison
+### 9.2 Examples
+- [x] 9.2.1 Simple class hierarchy example
+- [x] 9.2.2 Interface implementation example
+- [x] 9.2.3 Abstract class example
+- [ ] 9.2.4 Namespace organization example
+- [x] 9.2.5 Mixed behavior/class example (in ch15-00-oop.md)
 
-### 9.3 Examples
-- [x] 9.3.1 Simple class hierarchy example
-- [x] 9.3.2 Interface implementation example
-- [x] 9.3.3 Abstract class example
-- [ ] 9.3.4 Namespace organization example
-- [ ] 9.3.5 Mixed behavior/class example
+### 9.3 Grammar Documentation
+- [x] 9.3.1 Update tml.peg with OOP grammar
+- [x] 9.3.2 Update tree-sitter grammar with OOP rules
 
 ## Phase 10: Performance Considerations
 
@@ -369,12 +369,12 @@
 | 4 | Codegen | Complete | 32/32 |
 | 5 | MIR/HIR Optimizations | Complete | 6/9 |
 | 6 | Standard Library | Not Started | 0/19 |
-| 7 | IDE/Tooling | Partial | 3/11 |
+| 7 | IDE/Tooling | Partial | 6/11 |
 | 8 | Testing | Complete | 16/18 |
-| 9 | Documentation | Partial | 7/13 |
+| 9 | Documentation | Mostly Complete | 12/14 |
 | 10 | Performance | Partial | 4/14 |
 | 11 | Integration | Partial | 5/7 |
-| **Total** | | **~98% Core Complete** | **~146/193** |
+| **Total** | | **~98% Core Complete** | **~150/196** |
 
 ## Files Added/Modified
 
@@ -387,6 +387,7 @@
 - `compiler/tests/oop_test.cpp` - OOP C++ unit tests
 - `compiler/tests/compiler/oop.test.tml` - OOP TML integration tests
 - `docs/rfcs/RFC-0014-OOP-CLASSES.md` - OOP specification
+- `docs/user/ch15-00-oop.md` - OOP user documentation chapter
 
 ### Modified Files
 - `compiler/include/lexer/token.hpp` - OOP keywords
@@ -408,6 +409,8 @@
 - `compiler/src/codegen/expr/cast.cpp` - Safe `as` operator for class casting
 - `compiler/CMakeLists.txt` - New source files
 - `vscode-tml/syntaxes/tml.tmLanguage.json` - OOP syntax highlighting
+- `docs/grammar/tml.peg` - OOP grammar rules (ClassDef, InterfaceDef, etc.)
+- `docs/grammar/tree-sitter-tml/grammar.js` - Tree-sitter OOP rules for editor support
 
 ## Recent Fixes (Generic Type Parameters)
 

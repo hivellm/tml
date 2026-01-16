@@ -11,8 +11,8 @@ The datetime package provides types for representing and manipulating dates, tim
 ## Import
 
 ```tml
-import std.datetime
-import std.datetime.{DateTime, Date, Time, Duration, Timezone}
+use std::datetime
+use std::datetime.{DateTime, Date, Time, Duration, Timezone}
 ```
 
 ---
@@ -23,63 +23,63 @@ Time span represented as seconds and nanoseconds.
 
 ```tml
 /// A duration of time
-public type Duration {
+pub type Duration {
     secs: I64,
     nanos: U32,  // 0..999_999_999
 }
 
 extend Duration {
     /// Zero duration
-    public const ZERO: Duration = Duration { secs: 0, nanos: 0 }
+    pub const ZERO: Duration = Duration { secs: 0, nanos: 0 }
 
     /// Maximum duration
-    public const MAX: Duration = Duration { secs: I64.MAX, nanos: 999_999_999 }
+    pub const MAX: Duration = Duration { secs: I64.MAX, nanos: 999_999_999 }
 
     // Constructors
-    public func from_secs(secs: I64) -> Duration
-    public func from_millis(millis: I64) -> Duration
-    public func from_micros(micros: I64) -> Duration
-    public func from_nanos(nanos: I64) -> Duration
+    pub func from_secs(secs: I64) -> Duration
+    pub func from_millis(millis: I64) -> Duration
+    pub func from_micros(micros: I64) -> Duration
+    pub func from_nanos(nanos: I64) -> Duration
 
-    public func from_secs_f64(secs: F64) -> Duration
-    public func from_secs_f32(secs: F32) -> Duration
+    pub func from_secs_f64(secs: F64) -> Duration
+    pub func from_secs_f32(secs: F32) -> Duration
 
     // Named constructors
-    public func seconds(n: I64) -> Duration { Duration.from_secs(n) }
-    public func milliseconds(n: I64) -> Duration { Duration.from_millis(n) }
-    public func microseconds(n: I64) -> Duration { Duration.from_micros(n) }
-    public func nanoseconds(n: I64) -> Duration { Duration.from_nanos(n) }
-    public func minutes(n: I64) -> Duration { Duration.from_secs(n * 60) }
-    public func hours(n: I64) -> Duration { Duration.from_secs(n * 3600) }
-    public func days(n: I64) -> Duration { Duration.from_secs(n * 86400) }
-    public func weeks(n: I64) -> Duration { Duration.from_secs(n * 604800) }
+    pub func seconds(n: I64) -> Duration { Duration.from_secs(n) }
+    pub func milliseconds(n: I64) -> Duration { Duration.from_millis(n) }
+    pub func microseconds(n: I64) -> Duration { Duration.from_micros(n) }
+    pub func nanoseconds(n: I64) -> Duration { Duration.from_nanos(n) }
+    pub func minutes(n: I64) -> Duration { Duration.from_secs(n * 60) }
+    pub func hours(n: I64) -> Duration { Duration.from_secs(n * 3600) }
+    pub func days(n: I64) -> Duration { Duration.from_secs(n * 86400) }
+    pub func weeks(n: I64) -> Duration { Duration.from_secs(n * 604800) }
 
     // Accessors
-    public func as_secs(this) -> I64
-    public func as_millis(this) -> I128
-    public func as_micros(this) -> I128
-    public func as_nanos(this) -> I128
-    public func as_secs_f64(this) -> F64
-    public func as_secs_f32(this) -> F32
+    pub func as_secs(this) -> I64
+    pub func as_millis(this) -> I128
+    pub func as_micros(this) -> I128
+    pub func as_nanos(this) -> I128
+    pub func as_secs_f64(this) -> F64
+    pub func as_secs_f32(this) -> F32
 
-    public func subsec_millis(this) -> U32
-    public func subsec_micros(this) -> U32
-    public func subsec_nanos(this) -> U32
+    pub func subsec_millis(this) -> U32
+    pub func subsec_micros(this) -> U32
+    pub func subsec_nanos(this) -> U32
 
     // Predicates
-    public func is_zero(this) -> Bool
-    public func is_positive(this) -> Bool
-    public func is_negative(this) -> Bool
+    pub func is_zero(this) -> Bool
+    pub func is_positive(this) -> Bool
+    pub func is_negative(this) -> Bool
 
     // Arithmetic
-    public func abs(this) -> Duration
-    public func saturating_add(this, other: Duration) -> Duration
-    public func saturating_sub(this, other: Duration) -> Duration
-    public func saturating_mul(this, n: I64) -> Duration
-    public func checked_add(this, other: Duration) -> Maybe[Duration]
-    public func checked_sub(this, other: Duration) -> Maybe[Duration]
-    public func checked_mul(this, n: I64) -> Maybe[Duration]
-    public func checked_div(this, n: I64) -> Maybe[Duration]
+    pub func abs(this) -> Duration
+    pub func saturating_add(this, other: Duration) -> Duration
+    pub func saturating_sub(this, other: Duration) -> Duration
+    pub func saturating_mul(this, n: I64) -> Duration
+    pub func checked_add(this, other: Duration) -> Maybe[Duration]
+    pub func checked_sub(this, other: Duration) -> Maybe[Duration]
+    pub func checked_mul(this, n: I64) -> Maybe[Duration]
+    pub func checked_div(this, n: I64) -> Maybe[Duration]
 }
 
 implement Add for Duration {
@@ -116,38 +116,38 @@ Monotonic clock for measuring elapsed time.
 
 ```tml
 /// A point in time from a monotonic clock
-public type Instant {
+pub type Instant {
     secs: U64,
     nanos: U32,
 }
 
 extend Instant {
     /// Returns the current instant
-    public func now() -> Instant
+    pub func now() -> Instant
         caps: [io.time]
 
     /// Returns the elapsed time since this instant
-    public func elapsed(this) -> Duration
+    pub func elapsed(this) -> Duration
         caps: [io.time]
     {
         Instant.now() - this
     }
 
     /// Returns the duration since an earlier instant
-    public func duration_since(this, earlier: Instant) -> Duration {
+    pub func duration_since(this, earlier: Instant) -> Duration {
         this - earlier
     }
 
     /// Returns the duration until a later instant
-    public func duration_until(this, later: Instant) -> Duration {
+    pub func duration_until(this, later: Instant) -> Duration {
         later - this
     }
 
     /// Adds a duration to this instant
-    public func checked_add(this, duration: Duration) -> Maybe[Instant]
+    pub func checked_add(this, duration: Duration) -> Maybe[Instant]
 
     /// Subtracts a duration from this instant
-    public func checked_sub(this, duration: Duration) -> Maybe[Instant]
+    pub func checked_sub(this, duration: Duration) -> Maybe[Instant]
 }
 
 implement Add[Duration] for Instant {
@@ -174,7 +174,7 @@ Calendar date (year, month, day).
 
 ```tml
 /// A calendar date
-public type Date {
+pub type Date {
     year: I32,
     month: U8,   // 1..12
     day: U8,     // 1..31
@@ -182,97 +182,97 @@ public type Date {
 
 extend Date {
     /// Creates a date from year, month, day
-    public func new(year: I32, month: U8, day: U8) -> Maybe[Date] {
+    pub func new(year: I32, month: U8, day: U8) -> Maybe[Date] {
         if not Date.is_valid(year, month, day) then return Nothing
         return Just(Date { year, month, day })
     }
 
     /// Creates a date, panicking on invalid input
-    public func ymd(year: I32, month: U8, day: U8) -> Date {
+    pub func ymd(year: I32, month: U8, day: U8) -> Date {
         Date.new(year, month, day).expect("invalid date")
     }
 
     /// Returns today's date in UTC
-    public func today_utc() -> Date
+    pub func today_utc() -> Date
         caps: [io.time]
 
     /// Returns today's date in local timezone
-    public func today_local() -> Date
+    pub func today_local() -> Date
         caps: [io.time]
 
     /// Creates a date from ordinal day of year
-    public func from_ordinal(year: I32, day: U16) -> Maybe[Date]
+    pub func from_ordinal(year: I32, day: U16) -> Maybe[Date]
 
     /// Creates a date from ISO week date
-    public func from_iso_week(year: I32, week: U8, weekday: Weekday) -> Maybe[Date]
+    pub func from_iso_week(year: I32, week: U8, weekday: Weekday) -> Maybe[Date]
 
     /// Creates a date from Unix timestamp (days since 1970-01-01)
-    public func from_unix_days(days: I64) -> Date
+    pub func from_unix_days(days: I64) -> Date
 
     // Accessors
-    public func year(this) -> I32 { this.year }
-    public func month(this) -> U8 { this.month }
-    public func day(this) -> U8 { this.day }
+    pub func year(this) -> I32 { this.year }
+    pub func month(this) -> U8 { this.month }
+    pub func day(this) -> U8 { this.day }
 
     /// Returns the day of year (1..366)
-    public func ordinal(this) -> U16
+    pub func ordinal(this) -> U16
 
     /// Returns the weekday
-    public func weekday(this) -> Weekday
+    pub func weekday(this) -> Weekday
 
     /// Returns the ISO week number (1..53)
-    public func iso_week(this) -> U8
+    pub func iso_week(this) -> U8
 
     /// Returns the ISO year (may differ from calendar year)
-    public func iso_year(this) -> I32
+    pub func iso_year(this) -> I32
 
     /// Returns the quarter (1..4)
-    public func quarter(this) -> U8
+    pub func quarter(this) -> U8
 
     /// Returns true if this is a leap year
-    public func is_leap_year(this) -> Bool {
+    pub func is_leap_year(this) -> Bool {
         Date.is_leap_year_for(this.year)
     }
 
     /// Returns the number of days in this month
-    public func days_in_month(this) -> U8
+    pub func days_in_month(this) -> U8
 
     /// Returns the number of days in this year
-    public func days_in_year(this) -> U16 {
+    pub func days_in_year(this) -> U16 {
         if this.is_leap_year() then 366 else 365
     }
 
     // Arithmetic
-    public func add_days(this, days: I64) -> Date
-    public func add_months(this, months: I32) -> Date
-    public func add_years(this, years: I32) -> Date
+    pub func add_days(this, days: I64) -> Date
+    pub func add_months(this, months: I32) -> Date
+    pub func add_years(this, years: I32) -> Date
 
-    public func sub_days(this, days: I64) -> Date
-    public func sub_months(this, months: I32) -> Date
-    public func sub_years(this, years: I32) -> Date
+    pub func sub_days(this, days: I64) -> Date
+    pub func sub_months(this, months: I32) -> Date
+    pub func sub_years(this, years: I32) -> Date
 
     /// Returns the number of days between two dates
-    public func days_until(this, other: Date) -> I64
+    pub func days_until(this, other: Date) -> I64
 
     // Predicates
-    public func is_weekend(this) -> Bool
-    public func is_weekday(this) -> Bool
+    pub func is_weekend(this) -> Bool
+    pub func is_weekday(this) -> Bool
 
     // Validation
-    public func is_valid(year: I32, month: U8, day: U8) -> Bool
-    public func is_leap_year_for(year: I32) -> Bool {
+    pub func is_valid(year: I32, month: U8, day: U8) -> Bool
+    pub func is_leap_year_for(year: I32) -> Bool {
         (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
     }
 
     // Formatting
-    public func format(this, fmt: ref String) -> String
-    public func to_iso_string(this) -> String {
+    pub func format(this, fmt: ref String) -> String
+    pub func to_iso_string(this) -> String {
         this.format("%Y-%m-%d")
     }
 
     // Parsing
-    public func parse(s: ref String, fmt: ref String) -> Outcome[Date, ParseError]
-    public func parse_iso(s: ref String) -> Outcome[Date, ParseError] {
+    pub func parse(s: ref String, fmt: ref String) -> Outcome[Date, ParseError]
+    pub func parse_iso(s: ref String) -> Outcome[Date, ParseError] {
         Date.parse(s, "%Y-%m-%d")
     }
 }
@@ -296,32 +296,32 @@ implement Sub for Date {
 
 ```tml
 /// Day of the week
-public type Weekday = Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday
+pub type Weekday = Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday
 
 extend Weekday {
     /// Returns the weekday from ISO number (1 = Monday, 7 = Sunday)
-    public func from_iso(n: U8) -> Maybe[Weekday]
+    pub func from_iso(n: U8) -> Maybe[Weekday]
 
     /// Returns the weekday from Sunday-based number (0 = Sunday, 6 = Saturday)
-    public func from_sunday_based(n: U8) -> Maybe[Weekday]
+    pub func from_sunday_based(n: U8) -> Maybe[Weekday]
 
     /// Returns the ISO number (1..7)
-    public func iso_number(this) -> U8
+    pub func iso_number(this) -> U8
 
     /// Returns the Sunday-based number (0..6)
-    public func sunday_based_number(this) -> U8
+    pub func sunday_based_number(this) -> U8
 
     /// Returns the next weekday
-    public func succ(this) -> Weekday
+    pub func succ(this) -> Weekday
 
     /// Returns the previous weekday
-    public func pred(this) -> Weekday
+    pub func pred(this) -> Weekday
 
     /// Returns the number of days until the given weekday
-    public func days_until(this, target: Weekday) -> U8
+    pub func days_until(this, target: Weekday) -> U8
 
     /// Returns the number of days since the given weekday
-    public func days_since(this, target: Weekday) -> U8
+    pub func days_since(this, target: Weekday) -> U8
 }
 ```
 
@@ -329,24 +329,24 @@ extend Weekday {
 
 ```tml
 /// Month of the year
-public type Month = January | February | March | April | May | June |
+pub type Month = January | February | March | April | May | June |
                     July | August | September | October | November | December
 
 extend Month {
     /// Returns the month from number (1..12)
-    public func from_number(n: U8) -> Maybe[Month]
+    pub func from_number(n: U8) -> Maybe[Month]
 
     /// Returns the month number (1..12)
-    public func number(this) -> U8
+    pub func number(this) -> U8
 
     /// Returns the next month
-    public func succ(this) -> Month
+    pub func succ(this) -> Month
 
     /// Returns the previous month
-    public func pred(this) -> Month
+    pub func pred(this) -> Month
 
     /// Returns the number of days in this month for the given year
-    public func days(this, year: I32) -> U8
+    pub func days(this, year: I32) -> U8
 }
 ```
 
@@ -358,7 +358,7 @@ Time of day.
 
 ```tml
 /// A time of day
-public type Time {
+pub type Time {
     hour: U8,     // 0..23
     minute: U8,   // 0..59
     second: U8,   // 0..59
@@ -367,67 +367,67 @@ public type Time {
 
 extend Time {
     /// Creates a time from hours, minutes, seconds
-    public func new(hour: U8, minute: U8, second: U8) -> Maybe[Time] {
+    pub func new(hour: U8, minute: U8, second: U8) -> Maybe[Time] {
         Time.new_nano(hour, minute, second, 0)
     }
 
     /// Creates a time with nanoseconds
-    public func new_nano(hour: U8, minute: U8, second: U8, nano: U32) -> Maybe[Time]
+    pub func new_nano(hour: U8, minute: U8, second: U8, nano: U32) -> Maybe[Time]
 
     /// Creates a time, panicking on invalid input
-    public func hms(hour: U8, minute: U8, second: U8) -> Time
+    pub func hms(hour: U8, minute: U8, second: U8) -> Time
 
     /// Returns midnight (00:00:00)
-    public const MIDNIGHT: Time = Time { hour: 0, minute: 0, second: 0, nano: 0 }
+    pub const MIDNIGHT: Time = Time { hour: 0, minute: 0, second: 0, nano: 0 }
 
     /// Returns noon (12:00:00)
-    public const NOON: Time = Time { hour: 12, minute: 0, second: 0, nano: 0 }
+    pub const NOON: Time = Time { hour: 12, minute: 0, second: 0, nano: 0 }
 
     /// Returns the current time in UTC
-    public func now_utc() -> Time
+    pub func now_utc() -> Time
         caps: [io.time]
 
     /// Returns the current time in local timezone
-    public func now_local() -> Time
+    pub func now_local() -> Time
         caps: [io.time]
 
     /// Creates a time from seconds since midnight
-    public func from_secs(secs: U32) -> Maybe[Time]
+    pub func from_secs(secs: U32) -> Maybe[Time]
 
     /// Creates a time from nanoseconds since midnight
-    public func from_nanos(nanos: U64) -> Maybe[Time]
+    pub func from_nanos(nanos: U64) -> Maybe[Time]
 
     // Accessors
-    public func hour(this) -> U8 { this.hour }
-    public func minute(this) -> U8 { this.minute }
-    public func second(this) -> U8 { this.second }
-    public func nanosecond(this) -> U32 { this.nano }
-    public func millisecond(this) -> U16 { (this.nano / 1_000_000) as U16 }
-    public func microsecond(this) -> U32 { this.nano / 1_000 }
+    pub func hour(this) -> U8 { this.hour }
+    pub func minute(this) -> U8 { this.minute }
+    pub func second(this) -> U8 { this.second }
+    pub func nanosecond(this) -> U32 { this.nano }
+    pub func millisecond(this) -> U16 { (this.nano / 1_000_000) as U16 }
+    pub func microsecond(this) -> U32 { this.nano / 1_000 }
 
     /// Returns seconds since midnight
-    public func as_secs(this) -> U32 {
+    pub func as_secs(this) -> U32 {
         this.hour as U32 * 3600 + this.minute as U32 * 60 + this.second as U32
     }
 
     /// Returns nanoseconds since midnight
-    public func as_nanos(this) -> U64
+    pub func as_nanos(this) -> U64
 
     // Arithmetic
-    public func add(this, duration: Duration) -> Time
-    public func sub(this, duration: Duration) -> Time
+    pub func add(this, duration: Duration) -> Time
+    pub func sub(this, duration: Duration) -> Time
 
     /// Returns the duration until another time (wraps at midnight)
-    public func until(this, other: Time) -> Duration
+    pub func until(this, other: Time) -> Duration
 
     // Formatting
-    public func format(this, fmt: ref String) -> String
-    public func to_iso_string(this) -> String {
+    pub func format(this, fmt: ref String) -> String
+    pub func to_iso_string(this) -> String {
         this.format("%H:%M:%S")
     }
 
     // Parsing
-    public func parse(s: ref String, fmt: ref String) -> Outcome[Time, ParseError]
+    pub func parse(s: ref String, fmt: ref String) -> Outcome[Time, ParseError]
 }
 ```
 
@@ -439,7 +439,7 @@ Combined date and time with optional timezone.
 
 ```tml
 /// A date and time, optionally with timezone
-public type DateTime {
+pub type DateTime {
     date: Date,
     time: Time,
     offset: Maybe[UtcOffset],
@@ -447,89 +447,89 @@ public type DateTime {
 
 extend DateTime {
     /// Creates a DateTime from date and time
-    public func new(date: Date, time: Time) -> DateTime {
+    pub func new(date: Date, time: Time) -> DateTime {
         DateTime { date, time, offset: None }
     }
 
     /// Creates a DateTime with UTC offset
-    public func with_offset(date: Date, time: Time, offset: UtcOffset) -> DateTime {
+    pub func with_offset(date: Date, time: Time, offset: UtcOffset) -> DateTime {
         DateTime { date, time, offset: Just(offset) }
     }
 
     /// Returns the current UTC datetime
-    public func now_utc() -> DateTime
+    pub func now_utc() -> DateTime
         caps: [io.time]
 
     /// Returns the current local datetime
-    public func now_local() -> DateTime
+    pub func now_local() -> DateTime
         caps: [io.time]
 
     /// Creates from Unix timestamp (seconds since 1970-01-01 00:00:00 UTC)
-    public func from_unix_timestamp(secs: I64) -> DateTime
+    pub func from_unix_timestamp(secs: I64) -> DateTime
 
     /// Creates from Unix timestamp with nanoseconds
-    public func from_unix_timestamp_nanos(nanos: I128) -> DateTime
+    pub func from_unix_timestamp_nanos(nanos: I128) -> DateTime
 
     /// Creates from Unix timestamp in milliseconds
-    public func from_unix_timestamp_millis(millis: I64) -> DateTime
+    pub func from_unix_timestamp_millis(millis: I64) -> DateTime
 
     // Accessors
-    public func date(this) -> Date { this.date }
-    public func time(this) -> Time { this.time }
-    public func offset(this) -> Maybe[UtcOffset] { this.offset }
+    pub func date(this) -> Date { this.date }
+    pub func time(this) -> Time { this.time }
+    pub func offset(this) -> Maybe[UtcOffset] { this.offset }
 
-    public func year(this) -> I32 { this.date.year }
-    public func month(this) -> U8 { this.date.month }
-    public func day(this) -> U8 { this.date.day }
-    public func hour(this) -> U8 { this.time.hour }
-    public func minute(this) -> U8 { this.time.minute }
-    public func second(this) -> U8 { this.time.second }
-    public func nanosecond(this) -> U32 { this.time.nano }
-    public func weekday(this) -> Weekday { this.date.weekday() }
+    pub func year(this) -> I32 { this.date.year }
+    pub func month(this) -> U8 { this.date.month }
+    pub func day(this) -> U8 { this.date.day }
+    pub func hour(this) -> U8 { this.time.hour }
+    pub func minute(this) -> U8 { this.time.minute }
+    pub func second(this) -> U8 { this.time.second }
+    pub func nanosecond(this) -> U32 { this.time.nano }
+    pub func weekday(this) -> Weekday { this.date.weekday() }
 
     /// Returns the Unix timestamp
-    public func unix_timestamp(this) -> I64
+    pub func unix_timestamp(this) -> I64
 
     /// Returns the Unix timestamp in milliseconds
-    public func unix_timestamp_millis(this) -> I64
+    pub func unix_timestamp_millis(this) -> I64
 
     /// Returns the Unix timestamp in nanoseconds
-    public func unix_timestamp_nanos(this) -> I128
+    pub func unix_timestamp_nanos(this) -> I128
 
     // Timezone conversion
     /// Converts to UTC
-    public func to_utc(this) -> DateTime
+    pub func to_utc(this) -> DateTime
 
     /// Converts to a specific timezone
-    public func to_timezone(this, tz: ref Timezone) -> DateTime
+    pub func to_timezone(this, tz: ref Timezone) -> DateTime
         caps: [io.time]
 
     /// Converts to local timezone
-    public func to_local(this) -> DateTime
+    pub func to_local(this) -> DateTime
         caps: [io.time]
 
     /// Replaces the offset without adjusting time
-    public func with_offset_unchecked(this, offset: UtcOffset) -> DateTime
+    pub func with_offset_unchecked(this, offset: UtcOffset) -> DateTime
 
     // Arithmetic
-    public func add(this, duration: Duration) -> DateTime
-    public func sub(this, duration: Duration) -> DateTime
-    public func duration_since(this, other: DateTime) -> Duration
+    pub func add(this, duration: Duration) -> DateTime
+    pub func sub(this, duration: Duration) -> DateTime
+    pub func duration_since(this, other: DateTime) -> Duration
 
-    public func add_days(this, days: I64) -> DateTime
-    public func add_months(this, months: I32) -> DateTime
-    public func add_years(this, years: I32) -> DateTime
+    pub func add_days(this, days: I64) -> DateTime
+    pub func add_months(this, months: I32) -> DateTime
+    pub func add_years(this, years: I32) -> DateTime
 
     // Formatting
-    public func format(this, fmt: ref String) -> String
-    public func to_rfc2822(this) -> String
-    public func to_rfc3339(this) -> String
-    public func to_iso_string(this) -> String
+    pub func format(this, fmt: ref String) -> String
+    pub func to_rfc2822(this) -> String
+    pub func to_rfc3339(this) -> String
+    pub func to_iso_string(this) -> String
 
     // Parsing
-    public func parse(s: ref String, fmt: ref String) -> Outcome[DateTime, ParseError]
-    public func parse_rfc2822(s: ref String) -> Outcome[DateTime, ParseError]
-    public func parse_rfc3339(s: ref String) -> Outcome[DateTime, ParseError]
+    pub func parse(s: ref String, fmt: ref String) -> Outcome[DateTime, ParseError]
+    pub func parse_rfc2822(s: ref String) -> Outcome[DateTime, ParseError]
+    pub func parse_rfc3339(s: ref String) -> Outcome[DateTime, ParseError]
 }
 
 implement Add[Duration] for DateTime {
@@ -556,38 +556,38 @@ Fixed UTC offset.
 
 ```tml
 /// A fixed offset from UTC
-public type UtcOffset {
+pub type UtcOffset {
     seconds: I32,  // -86400 < seconds < 86400
 }
 
 extend UtcOffset {
     /// UTC offset (0)
-    public const UTC: UtcOffset = UtcOffset { seconds: 0 }
+    pub const UTC: UtcOffset = UtcOffset { seconds: 0 }
 
     /// Creates an offset from hours
-    public func from_hours(hours: I8) -> Maybe[UtcOffset]
+    pub func from_hours(hours: I8) -> Maybe[UtcOffset]
 
     /// Creates an offset from hours and minutes
-    public func from_hms(hours: I8, minutes: I8, seconds: I8) -> Maybe[UtcOffset]
+    pub func from_hms(hours: I8, minutes: I8, seconds: I8) -> Maybe[UtcOffset]
 
     /// Creates an offset from total seconds
-    public func from_whole_seconds(seconds: I32) -> Maybe[UtcOffset]
+    pub func from_whole_seconds(seconds: I32) -> Maybe[UtcOffset]
 
     /// Returns the local system offset
-    public func local() -> UtcOffset
+    pub func local() -> UtcOffset
         caps: [io.time]
 
     // Accessors
-    public func whole_hours(this) -> I8
-    public func whole_minutes(this) -> I8
-    public func whole_seconds(this) -> I32 { this.seconds }
+    pub func whole_hours(this) -> I8
+    pub func whole_minutes(this) -> I8
+    pub func whole_seconds(this) -> I32 { this.seconds }
 
-    public func is_utc(this) -> Bool { this.seconds == 0 }
-    public func is_positive(this) -> Bool { this.seconds > 0 }
-    public func is_negative(this) -> Bool { this.seconds < 0 }
+    pub func is_utc(this) -> Bool { this.seconds == 0 }
+    pub func is_positive(this) -> Bool { this.seconds > 0 }
+    pub func is_negative(this) -> Bool { this.seconds < 0 }
 
     // Formatting
-    public func format(this) -> String  // "+05:30" or "-08:00"
+    pub func format(this) -> String  // "+05:30" or "-08:00"
 }
 
 implement Neg for UtcOffset {
@@ -606,42 +606,42 @@ Full timezone with DST support.
 
 ```tml
 /// A timezone with full DST rules
-public type Timezone {
+pub type Timezone {
     // Internal: IANA timezone database
 }
 
 extend Timezone {
     /// UTC timezone
-    public const UTC: Timezone = Timezone.from_str("UTC").unwrap()
+    pub const UTC: Timezone = Timezone.from_str("UTC").unwrap()
 
     /// Local system timezone
-    public func local() -> Timezone
+    pub func local() -> Timezone
         caps: [io.time]
 
     /// Creates a timezone from IANA name
-    public func from_str(name: ref String) -> Outcome[Timezone, TimezoneError]
+    pub func from_str(name: ref String) -> Outcome[Timezone, TimezoneError]
 
     /// Creates a timezone from fixed offset
-    public func from_offset(offset: UtcOffset) -> Timezone
+    pub func from_offset(offset: UtcOffset) -> Timezone
 
     /// Returns the timezone name
-    public func name(this) -> ref String
+    pub func name(this) -> ref String
 
     /// Returns the offset at a given UTC datetime
-    public func offset_at(this, dt: DateTime) -> UtcOffset
+    pub func offset_at(this, dt: DateTime) -> UtcOffset
 
     /// Returns the abbreviation at a given datetime (e.g., "PST", "PDT")
-    public func abbreviation_at(this, dt: DateTime) -> String
+    pub func abbreviation_at(this, dt: DateTime) -> String
 
     /// Returns true if DST is in effect at the given datetime
-    public func is_dst_at(this, dt: DateTime) -> Bool
+    pub func is_dst_at(this, dt: DateTime) -> Bool
 
     /// Lists all available timezone names
-    public func available() -> Vec[String]
+    pub func available() -> Vec[String]
 }
 
 /// Timezone error
-public type TimezoneError = Unknown(String) | Ambiguous | NonExistent
+pub type TimezoneError = Unknown(String) | Ambiguous | NonExistent
 ```
 
 ---
@@ -689,7 +689,7 @@ public type TimezoneError = Unknown(String) | Ambiguous | NonExistent
 ### Current Time
 
 ```tml
-import std.datetime.{DateTime, Date, Time, Duration}
+use std::datetime.{DateTime, Date, Time, Duration}
 
 func show_current_time()
     caps: [io.time]
@@ -707,7 +707,7 @@ func show_current_time()
 ### Duration Calculations
 
 ```tml
-import std.datetime.{DateTime, Duration}
+use std::datetime.{DateTime, Duration}
 
 func time_operations() {
     let start = DateTime.now_utc()
@@ -726,7 +726,7 @@ func time_operations() {
 ### Date Arithmetic
 
 ```tml
-import std.datetime.{Date, Weekday}
+use std::datetime.{Date, Weekday}
 
 func date_calculations() {
     let today = Date.ymd(2024, 3, 15)
@@ -752,7 +752,7 @@ func date_calculations() {
 ### Timezone Handling
 
 ```tml
-import std.datetime.{DateTime, Timezone, UtcOffset}
+use std::datetime.{DateTime, Timezone, UtcOffset}
 
 func timezone_example()
     caps: [io.time]
@@ -778,7 +778,7 @@ func timezone_example()
 ### Parsing and Formatting
 
 ```tml
-import std.datetime.{DateTime, Date}
+use std::datetime.{DateTime, Date}
 
 func parsing_example() {
     // Parse ISO 8601

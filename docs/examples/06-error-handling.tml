@@ -1,7 +1,7 @@
 // TML Example 06: Error Handling
 // Demonstrates the ! operator, else recovery, and catch blocks
 
-module error_handling
+mod error_handling
 
 // ============================================
 // THE ! OPERATOR (PROPAGATE OR PANIC)
@@ -40,7 +40,7 @@ func load_user_data(id: U64) -> Outcome[UserData, Error] {
     }
 
     // Recovery with error binding
-    let preferences = fetch_preferences(id)! else |err| {
+    let preferences = fetch_preferences(id)! else do(err) {
         log.debug("No preferences: " + err.to_string())
         Preferences.default()
     }
@@ -82,7 +82,7 @@ func sync_data() -> Outcome[Unit, SyncError] {
         let merged = merge(local, remote)!
         save(merged)!
         return Ok(())
-    } else |err| {
+    } else do(err) {
         log.error("Sync failed: " + err.to_string())
         return Err(SyncError.from(err))
     }
@@ -239,12 +239,12 @@ func handle_state(state: State) -> Action {
 
 func handle_create_user(request: Request) -> Outcome[Response, ApiError] {
     // Parse request body
-    let body = request.json[CreateUserRequest]()! else |e| {
+    let body = request.json[CreateUserRequest]()! else do(e) {
         return Err(ApiError.BadRequest(e.to_string()))
     }
 
     // Validate
-    validate_email(body.email)! else |e| {
+    validate_email(body.email)! else do(e) {
         return Err(ApiError.Validation(e))
     }
 
@@ -263,7 +263,7 @@ func handle_create_user(request: Request) -> Outcome[Response, ApiError] {
             created_at: now(),
         }
         db.insert(user)!
-    } else |e| {
+    } else do(e) {
         log.error("Failed to create user: " + e.to_string())
         return Err(ApiError.Internal)
     }
@@ -335,7 +335,7 @@ func default[T]() -> T { panic("not implemented") }
 
 const API_URL = "https://api.example.com"
 
-public func main() {
+pub func main() {
     // Simple usage
     let config = read_config("app.json")! else {
         println("Using default config")

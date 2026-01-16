@@ -41,9 +41,9 @@ This directory contains example TML code files demonstrating the language syntax
 
 ```tml
 // hello.tml
-module hello
+mod hello
 
-public func main() {
+pub func main() {
     println("Hello, TML!")
 }
 ```

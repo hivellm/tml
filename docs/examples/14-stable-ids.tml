@@ -1,7 +1,7 @@
 // TML Example 14: Stable IDs for LLM Integration
 // Demonstrates @id annotations for precise code references
 
-module stable_ids
+mod stable_ids
 
 // ============================================
 // STABLE ID BASICS
@@ -142,7 +142,7 @@ extend User with Printable {
 // ============================================
 
 @id("api")
-module api {
+mod api {
     @id("api.handlers")
     module handlers {
         @id("api.handlers.user-create")
@@ -231,7 +231,7 @@ func calculate_discount(item: ref OrderItem) -> F64 {
     return 0.0
 }
 
-public func main() {
+pub func main() {
     let user = User {
         name: "Alice",
         email: "alice@example.com",

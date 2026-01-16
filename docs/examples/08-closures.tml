@@ -1,9 +1,9 @@
 // TML Example 08: Closures
 // Demonstrates the do() closure syntax
 
-module closures
+mod closures
 
-public func main() {
+pub func main() {
     // ============================================
     // BASIC CLOSURE SYNTAX
     // ============================================

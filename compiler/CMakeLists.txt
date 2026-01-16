@@ -264,6 +264,7 @@ add_library(tml_mir STATIC
     src/mir/passes/simplify_select.cpp
     src/mir/passes/merge_returns.cpp
     src/mir/passes/devirtualization.cpp
+    src/mir/passes/dead_method_elimination.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
 target_include_directories(tml_mir PUBLIC include src)
@@ -336,6 +337,17 @@ add_library(tml_format STATIC
 )
 target_link_libraries(tml_format PUBLIC tml_parser)
 target_include_directories(tml_format PUBLIC include src)
+
+# JSON library (native JSON implementation)
+add_library(tml_json STATIC
+    src/json/json_value.cpp
+    src/json/json_serializer.cpp
+    src/json/json_parser.cpp
+    src/json/json_builder.cpp
+    src/json/json_rpc.cpp
+    src/json/json_schema.cpp
+)
+target_include_directories(tml_json PUBLIC include src)
 
 # Documentation library
 add_library(tml_doc STATIC
@@ -437,6 +449,7 @@ if(TML_BUILD_TESTS)
         tests/codegen_test.cpp
         tests/codegen_builtins_test.cpp
         tests/oop_test.cpp
+        tests/json_test.cpp
         tests/cli/object_compiler_test.cpp
         tests/cli/parallel_build_test.cpp
         tests/integration/cache_test.cpp
@@ -445,6 +458,7 @@ if(TML_BUILD_TESTS)
     )
     target_link_libraries(tml_tests PRIVATE
         tml_cli
+        tml_json
         GTest::gtest_main
     )
 

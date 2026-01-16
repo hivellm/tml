@@ -60,7 +60,7 @@ let user: User = db.find_user(id)! else {
 Access the error in the recovery block:
 
 ```tml
-let data: Data = fetch_remote(url)! else |err| {
+let data: Data = fetch_remote(url)! else do(err) {
     log.error("Fetch failed: " + err.to_string())
     load_from_cache(url)! else Data.empty()
 }
@@ -78,7 +78,7 @@ func sync_data() -> Outcome[Unit, SyncError] {
         let merged: Data = merge(local, remote)!
         save(merged)!
         return Ok(())
-    } else |err| {
+    } else do(err) {
         log.error("Sync failed: " + err.to_string())
         return Err(SyncError.from(err))
     }
@@ -287,7 +287,7 @@ func process(x: I32) -> String {
 func safe_handler(request: Request) -> Response {
     catch_panic {
         return handle(request)!
-    } else |panic_info| {
+    } else do(panic_info) {
         log.error("Handler panicked: " + panic_info.message())
         return Response.internal_error()
     }
@@ -343,12 +343,12 @@ func process() -> Outcome[Output, Error] {
 @id("fetch-data")
 func fetch_data(url: String) -> Outcome[Data, FetchError] {
     @id("http-get")
-    let response: Response = http.get(url)! else |e| {
+    let response: Response = http.get(url)! else do(e) {
         return Err(FetchError.Network(e))
     }
 
     @id("parse-json")
-    let data: Data = response.json[Data]()! else |e| {
+    let data: Data = response.json[Data]()! else do(e) {
         return Err(FetchError.Parse(e))
     }
 
@@ -370,7 +370,7 @@ An LLM can analyze:
 |--------|---------|----------|
 | `expr!` | Propagate error or panic | Most common, clear exit point |
 | `expr! else default` | Recover with default | Fallback value needed |
-| `expr! else \|e\| { }` | Recover with error access | Need to log/transform error |
+| `expr! else do(e) { }` | Recover with error access | Need to log/transform error |
 | `catch { } else { }` | Block-level error handling | Multiple related operations |
 | `panic(msg)` | Unrecoverable error | Bug, invariant violation |
 | `assert(cond)` | Debug check | Verify assumptions |

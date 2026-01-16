@@ -54,6 +54,16 @@ static std::string get_class_param_name(const parser::FuncParam& param) {
     return "_anon";
 }
 
+// Helper to check if a class has a specific decorator
+static bool has_decorator(const parser::ClassDecl& c, const std::string& name) {
+    for (const auto& deco : c.decorators) {
+        if (deco.name == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ============================================================================
 // Class Type Generation
 // ============================================================================
@@ -73,10 +83,17 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     // Generate LLVM type name
     std::string type_name = "%class." + c.name;
 
+    // Check if this is a @value class (no vtable, value semantics)
+    bool is_value_class = has_decorator(c, "value");
+
     // Collect field types
-    // Class layout: { vtable_ptr, base_class_fields..., own_fields... }
+    // Regular class layout: { vtable_ptr, base_class_fields..., own_fields... }
+    // Value class layout: { base_class_fields..., own_fields... } (no vtable)
     std::vector<std::string> field_types;
-    field_types.push_back("ptr"); // Vtable pointer is always first
+
+    if (!is_value_class) {
+        field_types.push_back("ptr"); // Vtable pointer is always first for regular classes
+    }
 
     // If class extends another, include base class as embedded struct
     if (c.extends) {
@@ -96,7 +113,7 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
 
     // Add own instance fields (non-static)
     std::vector<ClassFieldInfo> field_info;
-    size_t field_offset = field_types.size(); // Start after vtable and base
+    size_t field_offset = field_types.size(); // Start after vtable (if present) and base
 
     for (const auto& field : c.fields) {
         if (field.is_static)
@@ -123,6 +140,11 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     // Register class type
     class_types_[c.name] = type_name;
     class_fields_[c.name] = field_info;
+
+    // Track value classes for direct dispatch
+    if (is_value_class) {
+        value_classes_.insert(c.name);
+    }
 
     // Generate static fields as global variables
     for (const auto& field : c.fields) {
@@ -252,8 +274,10 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
                                        prop.is_static};
     }
 
-    // Generate vtable
-    gen_class_vtable(c);
+    // Generate vtable (skip for @value classes - they use direct dispatch)
+    if (!is_value_class) {
+        gen_class_vtable(c);
+    }
 
     // Generate constructors
     for (const auto& ctor : c.constructors) {
@@ -325,16 +349,10 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
             emitted_interface_vtable_types_.insert(iface_name);
         }
 
-        // Generate vtable global for this class implementing the interface
-        // Name format: @vtable.<ClassName>.<InterfaceName>
-        std::string vtable_name = "@vtable." + c.name + "." + iface_name;
-        std::string vtable_value = "{ ";
+        // Collect method implementations for this interface
+        std::vector<std::pair<std::string, std::string>> impl_info; // (method_name, impl_func)
 
         for (size_t i = 0; i < iface_methods.size(); ++i) {
-            if (i > 0)
-                vtable_value += ", ";
-
-            // Find the method implementation in the class
             std::string method_name = iface_methods[i];
             std::string impl_class = c.name;
 
@@ -362,25 +380,89 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
             }
 
             if (found) {
-                vtable_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + method_name;
+                std::string impl_func = "@tml_" + get_suite_prefix() + impl_class + "_" + method_name;
+                impl_info.push_back({method_name, impl_func});
             } else {
-                // Method not found - emit null (should be caught by type checker)
+                impl_info.push_back({method_name, "null"});
+            }
+        }
+
+        // Track statistics
+        interface_vtable_stats_.total_interface_vtables++;
+
+        // Compute content key for deduplication
+        std::string content_key = compute_interface_vtable_key(iface_name, impl_info);
+
+        // Check if an identical interface vtable already exists
+        auto existing_it = interface_vtable_content_to_name_.find(content_key);
+        if (existing_it != interface_vtable_content_to_name_.end()) {
+            // Interface vtable deduplication: reuse existing vtable via alias
+            std::string vtable_name = "@vtable." + c.name + "." + iface_name;
+            std::string existing_vtable = existing_it->second;
+
+            emit_line(vtable_name + " = internal alias " + vtable_type_name + ", ptr " +
+                      existing_vtable);
+
+            interface_vtables_[c.name + "::" + iface_name] = vtable_name;
+            interface_vtable_stats_.deduplicated_interface++;
+            continue;
+        }
+
+        // Generate new vtable global
+        std::string vtable_name = "@vtable." + c.name + "." + iface_name;
+        std::string vtable_value = "{ ";
+
+        for (size_t i = 0; i < impl_info.size(); ++i) {
+            if (i > 0)
+                vtable_value += ", ";
+
+            if (impl_info[i].second == "null") {
                 vtable_value += "ptr null";
+            } else {
+                vtable_value += "ptr " + impl_info[i].second;
             }
         }
 
         vtable_value += " }";
         emit_line(vtable_name + " = internal constant " + vtable_type_name + " " + vtable_value);
 
+        // Record this interface vtable content for future deduplication
+        interface_vtable_content_to_name_[content_key] = vtable_name;
+
         // Store interface vtable offset for casting
-        // This maps (ClassName, InterfaceName) -> vtable global name
         interface_vtables_[c.name + "::" + iface_name] = vtable_name;
     }
+}
+
+// Helper to compute interface vtable content key for deduplication
+auto LLVMIRGen::compute_interface_vtable_key(
+    const std::string& iface_name,
+    const std::vector<std::pair<std::string, std::string>>& impls) -> std::string {
+    std::string key = iface_name + ":";
+    for (const auto& impl : impls) {
+        key += impl.second + ";";
+    }
+    return key;
 }
 
 // ============================================================================
 // Vtable Generation
 // ============================================================================
+
+// Helper to compute vtable content key for deduplication
+auto LLVMIRGen::compute_vtable_content_key(const std::vector<VirtualMethodInfo>& methods)
+    -> std::string {
+    std::string key;
+    for (const auto& vm : methods) {
+        if (!key.empty()) {
+            key += ";";
+        }
+        // The key is based on the actual implementation class and method name
+        // Two vtables are identical if they point to the same implementations
+        key += vm.impl_class + "::" + vm.name;
+    }
+    return key;
+}
 
 void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
     // Collect all virtual methods (inherited + own)
@@ -446,7 +528,36 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
         return;
     }
 
-    // Emit vtable global constant
+    // Track statistics
+    vtable_dedup_stats_.total_vtables++;
+
+    // Compute vtable content key for deduplication
+    std::string content_key = compute_vtable_content_key(vtable_methods);
+
+    // Check if an identical vtable already exists
+    auto existing_it = vtable_content_to_name_.find(content_key);
+    if (existing_it != vtable_content_to_name_.end()) {
+        // Vtable deduplication: reuse existing vtable via alias
+        std::string vtable_name = "@vtable." + c.name;
+        std::string existing_vtable = existing_it->second;
+
+        // Emit an alias to the existing vtable
+        // Note: We need to cast the type since vtable types differ by name
+        emit_line(vtable_name + " = internal alias " + vtable_type_name + ", ptr " +
+                  existing_vtable);
+
+        // Track the shared vtable
+        class_to_shared_vtable_[c.name] = existing_vtable;
+        vtable_dedup_stats_.deduplicated++;
+
+        // Estimate bytes saved: sizeof(ptr) * num_methods
+        vtable_dedup_stats_.bytes_saved += vtable_methods.size() * 8;
+        return;
+    }
+
+    // No existing vtable found - emit new vtable global constant
+    vtable_dedup_stats_.unique_vtables++;
+
     std::string vtable_name = "@vtable." + c.name;
     std::string vtable_value = "{ ";
 
@@ -469,6 +580,9 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
     vtable_value += " }";
 
     emit_line(vtable_name + " = internal constant " + vtable_type_name + " " + vtable_value);
+
+    // Record this vtable content for future deduplication
+    vtable_content_to_name_[content_key] = vtable_name;
 }
 
 // ============================================================================
@@ -544,11 +658,14 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
     emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type + "* getelementptr (" +
               class_type + ", " + class_type + "* null, i32 1) to i64))");
 
-    // Initialize vtable pointer (field 0)
-    std::string vtable_ptr = fresh_reg();
-    emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
-              ", i32 0, i32 0");
-    emit_line("  store ptr @vtable." + c.name + ", ptr " + vtable_ptr);
+    // Initialize vtable pointer (field 0) - skip for @value classes
+    bool is_value_class = has_decorator(c, "value");
+    if (!is_value_class) {
+        std::string vtable_ptr = fresh_reg();
+        emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
+                  ", i32 0, i32 0");
+        emit_line("  store ptr @vtable." + c.name + ", ptr " + vtable_ptr);
+    }
 
     // Call base constructor if specified
     if (ctor.base_args && c.extends) {
@@ -1092,6 +1209,45 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
                                  const std::vector<std::string>& args,
                                  const std::vector<std::string>& arg_types) -> std::string {
 
+    // Check if this is a @value class - use direct dispatch instead of virtual
+    bool is_value = value_classes_.count(class_name) > 0;
+
+    // Get actual return type from method signature
+    std::string ret_type = "void";
+    auto class_def = env_.lookup_class(class_name);
+    if (class_def) {
+        for (const auto& m : class_def->methods) {
+            if (m.sig.name == method_name) {
+                ret_type = llvm_type_from_semantic(m.sig.return_type);
+                break;
+            }
+        }
+    }
+
+    if (is_value) {
+        // Direct dispatch for @value classes - no vtable lookup
+        std::string func_name = "@tml_" + get_suite_prefix() + class_name + "_" + method_name;
+
+        // Call the method directly
+        std::string result = fresh_reg();
+        std::string call;
+        if (ret_type == "void") {
+            call = "  call void " + func_name + "(ptr " + obj_reg;
+        } else {
+            call = "  " + result + " = call " + ret_type + " " + func_name + "(ptr " + obj_reg;
+        }
+        for (size_t i = 0; i < args.size(); ++i) {
+            call += ", " + arg_types[i] + " " + args[i];
+        }
+        call += ")";
+        emit_line(call);
+
+        last_expr_type_ = ret_type;
+        return ret_type == "void" ? "void" : result;
+    }
+
+    // Virtual dispatch for regular classes
+
     // Look up vtable slot for this method
     auto it = class_vtable_layout_.find(class_name);
     if (it == class_vtable_layout_.end()) {
@@ -1130,18 +1286,6 @@ auto LLVMIRGen::gen_virtual_call(const std::string& obj_reg, const std::string& 
 
     std::string func_ptr = fresh_reg();
     emit_line("  " + func_ptr + " = load ptr, ptr " + func_ptr_ptr);
-
-    // Get actual return type from method signature
-    std::string ret_type = "void";
-    auto class_def = env_.lookup_class(class_name);
-    if (class_def) {
-        for (const auto& m : class_def->methods) {
-            if (m.sig.name == method_name) {
-                ret_type = llvm_type_from_semantic(m.sig.return_type);
-                break;
-            }
-        }
-    }
 
     // Build function type for indirect call
     std::string func_type = ret_type + " (ptr";
@@ -1590,6 +1734,463 @@ void LLVMIRGen::gen_class_property(const parser::ClassDecl& c, const parser::Pro
 
     // Clear locals after property generation
     locals_.clear();
+}
+
+// ============================================================================
+// Phase 6.2: Vtable Splitting (Hot/Cold)
+// ============================================================================
+
+void LLVMIRGen::analyze_vtable_split(const parser::ClassDecl& c) {
+    // Analyze methods and decide which should be in hot vs cold vtable
+    // Heuristics for hot methods:
+    // 1. Methods with @hot decorator
+    // 2. Methods with "simple" names (get, set, is, has, do, on)
+    // 3. Destructor is always cold (rarely called in tight loops)
+    // 4. Abstract methods are cold (they have no implementation here)
+
+    VtableSplitInfo split;
+    split.primary_vtable_name = "@vtable." + c.name;
+    split.secondary_vtable_name = "@vtable." + c.name + ".cold";
+
+    // Get vtable layout if it exists
+    auto it = class_vtable_layout_.find(c.name);
+    if (it == class_vtable_layout_.end()) {
+        return; // No vtable for this class
+    }
+
+    const auto& vtable_methods = it->second;
+
+    // Analyze each method
+    for (const auto& vm : vtable_methods) {
+        bool is_hot = false;
+
+        // Check heuristics
+        const std::string& name = vm.name;
+
+        // Hot patterns: common accessor patterns
+        if (name.find("get") == 0 || name.find("set") == 0 ||
+            name.find("is") == 0 || name.find("has") == 0 ||
+            name.find("do") == 0 || name.find("on") == 0 ||
+            name == "size" || name == "len" || name == "length" ||
+            name == "empty" || name == "count" || name == "value" ||
+            name == "next" || name == "prev" || name == "item") {
+            is_hot = true;
+        }
+
+        // Check for @hot decorator on the method
+        for (const auto& method : c.methods) {
+            if (method.name == name) {
+                for (const auto& deco : method.decorators) {
+                    if (deco.name == "hot") {
+                        is_hot = true;
+                        break;
+                    }
+                    if (deco.name == "cold") {
+                        is_hot = false;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        // Destructor is typically cold
+        if (name == "drop" || name == "destroy" || name == "finalize") {
+            is_hot = false;
+        }
+
+        // Abstract methods are cold
+        if (vm.impl_class.empty()) {
+            is_hot = false;
+        }
+
+        if (is_hot) {
+            split.hot_methods.push_back(name);
+        } else {
+            split.cold_methods.push_back(name);
+        }
+    }
+
+    // Only split if we have both hot and cold methods and enough of each
+    // to make splitting worthwhile (at least 2 cold methods)
+    if (!split.hot_methods.empty() && split.cold_methods.size() >= 2) {
+        vtable_splits_[c.name] = split;
+        vtable_split_stats_.classes_with_split++;
+        vtable_split_stats_.hot_methods_total += split.hot_methods.size();
+        vtable_split_stats_.cold_methods_total += split.cold_methods.size();
+    }
+}
+
+void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
+    auto split_it = vtable_splits_.find(c.name);
+    if (split_it == vtable_splits_.end()) {
+        return; // No split for this class
+    }
+
+    const auto& split = split_it->second;
+    auto layout_it = class_vtable_layout_.find(c.name);
+    if (layout_it == class_vtable_layout_.end()) {
+        return;
+    }
+
+    const auto& vtable_methods = layout_it->second;
+
+    // Generate hot vtable type and value
+    std::string hot_type_name = "%vtable." + c.name + ".hot";
+    std::string hot_type = hot_type_name + " = type { ";
+    for (size_t i = 0; i < split.hot_methods.size(); ++i) {
+        if (i > 0) hot_type += ", ";
+        hot_type += "ptr";
+    }
+    if (split.hot_methods.empty()) {
+        hot_type += "ptr"; // At least one slot
+    }
+    hot_type += " }";
+    emit_line(hot_type);
+
+    // Generate cold vtable type and value
+    if (!split.cold_methods.empty()) {
+        std::string cold_type_name = "%vtable." + c.name + ".cold";
+        std::string cold_type = cold_type_name + " = type { ";
+        for (size_t i = 0; i < split.cold_methods.size(); ++i) {
+            if (i > 0) cold_type += ", ";
+            cold_type += "ptr";
+        }
+        cold_type += " }";
+        emit_line(cold_type);
+    }
+
+    // Generate hot vtable global
+    std::string hot_value = "{ ";
+    for (size_t i = 0; i < split.hot_methods.size(); ++i) {
+        if (i > 0) hot_value += ", ";
+
+        // Find the method implementation
+        std::string impl_class;
+        for (const auto& vm : vtable_methods) {
+            if (vm.name == split.hot_methods[i]) {
+                impl_class = vm.impl_class;
+                break;
+            }
+        }
+
+        if (impl_class.empty()) {
+            hot_value += "ptr null";
+        } else {
+            hot_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.hot_methods[i];
+        }
+    }
+    if (split.hot_methods.empty()) {
+        hot_value += "ptr null";
+    }
+    hot_value += " }";
+    emit_line("@vtable." + c.name + ".hot = internal constant " + hot_type_name + " " + hot_value);
+
+    // Generate cold vtable global
+    if (!split.cold_methods.empty()) {
+        std::string cold_value = "{ ";
+        for (size_t i = 0; i < split.cold_methods.size(); ++i) {
+            if (i > 0) cold_value += ", ";
+
+            std::string impl_class;
+            for (const auto& vm : vtable_methods) {
+                if (vm.name == split.cold_methods[i]) {
+                    impl_class = vm.impl_class;
+                    break;
+                }
+            }
+
+            if (impl_class.empty()) {
+                cold_value += "ptr null";
+            } else {
+                cold_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.cold_methods[i];
+            }
+        }
+        cold_value += " }";
+        std::string cold_type_name = "%vtable." + c.name + ".cold";
+        emit_line("@vtable." + c.name + ".cold = internal constant " + cold_type_name + " " + cold_value);
+    }
+}
+
+bool LLVMIRGen::is_hot_method(const std::string& class_name, const std::string& method_name) const {
+    auto it = vtable_splits_.find(class_name);
+    if (it == vtable_splits_.end()) {
+        return true; // No split, all methods are in primary vtable
+    }
+
+    const auto& split = it->second;
+    for (const auto& hot : split.hot_methods) {
+        if (hot == method_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+auto LLVMIRGen::get_split_vtable_index(const std::string& class_name, const std::string& method_name)
+    -> std::pair<bool, size_t> {
+
+    auto split_it = vtable_splits_.find(class_name);
+    if (split_it == vtable_splits_.end()) {
+        // No split - use original vtable layout
+        auto layout_it = class_vtable_layout_.find(class_name);
+        if (layout_it == class_vtable_layout_.end()) {
+            return {true, SIZE_MAX};
+        }
+
+        for (const auto& vm : layout_it->second) {
+            if (vm.name == method_name) {
+                return {true, vm.vtable_index};
+            }
+        }
+        return {true, SIZE_MAX};
+    }
+
+    const auto& split = split_it->second;
+
+    // Check hot methods
+    for (size_t i = 0; i < split.hot_methods.size(); ++i) {
+        if (split.hot_methods[i] == method_name) {
+            return {true, i};
+        }
+    }
+
+    // Check cold methods
+    for (size_t i = 0; i < split.cold_methods.size(); ++i) {
+        if (split.cold_methods[i] == method_name) {
+            return {false, i};
+        }
+    }
+
+    return {true, SIZE_MAX};
+}
+
+// ============================================================================
+// Phase 3: Speculative Devirtualization
+// ============================================================================
+
+void LLVMIRGen::init_type_frequency_hints() {
+    // Initialize type frequency hints based on class hierarchy analysis
+    // Higher frequency for:
+    // - Sealed classes (most specific type)
+    // - Leaf classes (no subclasses)
+    // - Classes with @hot decorator
+
+    for (const auto& [name, type] : class_types_) {
+        float frequency = 0.5f; // Default
+
+        auto class_def = env_.lookup_class(name);
+        if (!class_def) continue;
+
+        // Sealed classes are very likely to be the concrete type
+        if (class_def->is_sealed) {
+            frequency = 0.95f;
+        }
+
+        // Check if this is a leaf class (no known subclasses)
+        bool is_leaf = true;
+        for (const auto& [other_name, other_type] : class_types_) {
+            auto other_def = env_.lookup_class(other_name);
+            if (other_def && other_def->base_class && *other_def->base_class == name) {
+                is_leaf = false;
+                break;
+            }
+        }
+
+        if (is_leaf && !class_def->is_abstract) {
+            frequency = std::max(frequency, 0.85f);
+        }
+
+        // Abstract classes are never the concrete type
+        if (class_def->is_abstract) {
+            frequency = 0.0f;
+        }
+
+        type_frequency_hints_[name] = frequency;
+    }
+}
+
+auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class, const std::string& method_name)
+    -> std::optional<SpeculativeDevirtInfo> {
+
+    // Get frequency hint for the receiver class
+    auto freq_it = type_frequency_hints_.find(receiver_class);
+    float frequency = (freq_it != type_frequency_hints_.end()) ? freq_it->second : 0.5f;
+
+    // If frequency is too low, speculative devirtualization is not profitable
+    // Threshold: 70% - we want at least 70% probability of correct guess
+    if (frequency < 0.70f) {
+        return std::nullopt;
+    }
+
+    // Check if the method exists in this class
+    auto class_def = env_.lookup_class(receiver_class);
+    if (!class_def) {
+        return std::nullopt;
+    }
+
+    bool has_method = false;
+    for (const auto& m : class_def->methods) {
+        if (m.sig.name == method_name) {
+            has_method = true;
+            break;
+        }
+    }
+
+    // If method not found, check base classes
+    if (!has_method && class_def->base_class) {
+        std::string current = *class_def->base_class;
+        while (!current.empty() && !has_method) {
+            auto base_def = env_.lookup_class(current);
+            if (!base_def) break;
+
+            for (const auto& m : base_def->methods) {
+                if (m.sig.name == method_name) {
+                    has_method = true;
+                    break;
+                }
+            }
+
+            current = base_def->base_class.value_or("");
+        }
+    }
+
+    if (!has_method) {
+        return std::nullopt;
+    }
+
+    SpeculativeDevirtInfo info;
+    info.expected_type = receiver_class;
+    info.direct_call_target = "@tml_" + get_suite_prefix() + receiver_class + "_" + method_name;
+    info.confidence = frequency;
+
+    return info;
+}
+
+auto LLVMIRGen::gen_guarded_virtual_call(const std::string& obj_reg, const std::string& receiver_class,
+                                         const SpeculativeDevirtInfo& spec_info,
+                                         const std::string& method_name,
+                                         const std::vector<std::string>& args,
+                                         const std::vector<std::string>& arg_types) -> std::string {
+
+    // Generate a type guard with fast path (direct call) and slow path (virtual dispatch)
+    //
+    // Code pattern:
+    //   %vtable = load ptr, ptr %obj
+    //   %expected_vtable = @vtable.ExpectedClass
+    //   %is_expected = icmp eq ptr %vtable, %expected_vtable
+    //   br i1 %is_expected, label %fast_path, label %slow_path
+    // fast_path:
+    //   %result_fast = call <ret> @direct_function(%obj, args...)
+    //   br label %merge
+    // slow_path:
+    //   %result_slow = <virtual dispatch code>
+    //   br label %merge
+    // merge:
+    //   %result = phi <ret> [ %result_fast, %fast_path ], [ %result_slow, %slow_path ]
+
+    spec_devirt_stats_.guarded_calls++;
+
+    std::string class_type = "%class." + receiver_class;
+
+    // Look up return type
+    std::string ret_type = "void";
+    auto class_def = env_.lookup_class(receiver_class);
+    if (class_def) {
+        for (const auto& m : class_def->methods) {
+            if (m.sig.name == method_name) {
+                ret_type = llvm_type_from_semantic(m.sig.return_type);
+                break;
+            }
+        }
+    }
+
+    // Load actual vtable pointer
+    std::string vtable_ptr_ptr = fresh_reg();
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr " + class_type + ", ptr " + obj_reg +
+              ", i32 0, i32 0");
+
+    std::string actual_vtable = fresh_reg();
+    emit_line("  " + actual_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
+
+    // Compare with expected vtable
+    std::string expected_vtable = "@vtable." + spec_info.expected_type;
+    std::string cmp_result = fresh_reg();
+    emit_line("  " + cmp_result + " = icmp eq ptr " + actual_vtable + ", " + expected_vtable);
+
+    // Generate labels
+    std::string fast_path = fresh_label("spec_fast");
+    std::string slow_path = fresh_label("spec_slow");
+    std::string merge = fresh_label("spec_merge");
+
+    emit_line("  br i1 " + cmp_result + ", label %" + fast_path + ", label %" + slow_path);
+
+    // Fast path: direct call
+    emit_line(fast_path + ":");
+    std::string result_fast;
+    std::string call_fast = "  ";
+    if (ret_type != "void") {
+        result_fast = fresh_reg();
+        call_fast += result_fast + " = ";
+    }
+    call_fast += "call " + ret_type + " " + spec_info.direct_call_target + "(ptr " + obj_reg;
+    for (size_t i = 0; i < args.size(); ++i) {
+        call_fast += ", " + arg_types[i] + " " + args[i];
+    }
+    call_fast += ")";
+    emit_line(call_fast);
+    emit_line("  br label %" + merge);
+
+    // Slow path: virtual dispatch
+    emit_line(slow_path + ":");
+
+    // Get vtable slot for this method
+    auto layout_it = class_vtable_layout_.find(receiver_class);
+    size_t vtable_slot = 0;
+    if (layout_it != class_vtable_layout_.end()) {
+        for (const auto& vm : layout_it->second) {
+            if (vm.name == method_name) {
+                vtable_slot = vm.vtable_index;
+                break;
+            }
+        }
+    }
+
+    std::string vtable_type = "%vtable." + receiver_class;
+
+    std::string func_ptr_ptr = fresh_reg();
+    emit_line("  " + func_ptr_ptr + " = getelementptr " + vtable_type + ", ptr " + actual_vtable +
+              ", i32 0, i32 " + std::to_string(vtable_slot));
+
+    std::string func_ptr = fresh_reg();
+    emit_line("  " + func_ptr + " = load ptr, ptr " + func_ptr_ptr);
+
+    std::string result_slow;
+    std::string call_slow = "  ";
+    if (ret_type != "void") {
+        result_slow = fresh_reg();
+        call_slow += result_slow + " = ";
+    }
+    call_slow += "call " + ret_type + " " + func_ptr + "(ptr " + obj_reg;
+    for (size_t i = 0; i < args.size(); ++i) {
+        call_slow += ", " + arg_types[i] + " " + args[i];
+    }
+    call_slow += ")";
+    emit_line(call_slow);
+    emit_line("  br label %" + merge);
+
+    // Merge
+    emit_line(merge + ":");
+
+    std::string result;
+    if (ret_type != "void") {
+        result = fresh_reg();
+        emit_line("  " + result + " = phi " + ret_type + " [ " + result_fast + ", %" + fast_path +
+                  " ], [ " + result_slow + ", %" + slow_path + " ]");
+    }
+
+    last_expr_type_ = ret_type;
+    return ret_type == "void" ? "void" : result;
 }
 
 } // namespace tml::codegen

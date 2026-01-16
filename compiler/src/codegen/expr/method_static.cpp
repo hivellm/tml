@@ -395,6 +395,54 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
         }
     }
 
+    // Handle static methods from imported structs (like FormatSpec::new())
+    if (env_.module_registry()) {
+        std::string qualified_name = type_name + "::" + method;
+        const auto& all_modules = env_.module_registry()->get_all_modules();
+        for (const auto& [mod_name, mod] : all_modules) {
+            auto func_it = mod.functions.find(qualified_name);
+            if (func_it != mod.functions.end()) {
+                const auto& func_sig = func_it->second;
+
+                // Get return type - ensure struct type is defined
+                std::string ret_type = llvm_type_from_semantic(func_sig.return_type);
+
+                // Generate function name
+                std::string fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+
+                // Generate arguments
+                std::vector<std::pair<std::string, std::string>> typed_args;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string val = gen_expr(*call.args[i]);
+                    std::string arg_type = last_expr_type_;
+                    if (i < func_sig.params.size()) {
+                        arg_type = llvm_type_from_semantic(func_sig.params[i]);
+                    }
+                    typed_args.push_back({arg_type, val});
+                }
+
+                std::string args_str;
+                for (size_t i = 0; i < typed_args.size(); ++i) {
+                    if (i > 0)
+                        args_str += ", ";
+                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                }
+
+                std::string result = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return std::string("void");
+                } else {
+                    emit_line("  " + result + " = call " + ret_type + " " + fn_name + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result;
+                }
+            }
+        }
+    }
+
     return std::nullopt;
 }
 

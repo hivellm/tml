@@ -1,48 +1,73 @@
-// TML Standard Library - Iterator Module
-// Provides: Iterator behavior and Range type
+//! Iterator behaviors and types for TML.
+//!
+//! This module provides the core iteration infrastructure, including
+//! the `Iterator` behavior and the `Range` type.
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Iterator`] | Core iteration behavior |
+//! | [`IntoIterator`] | Conversion to iterator |
+//! | [`Range`] | Integer range iterator |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::iter::*
+//!
+//! // Iterate over a range
+//! let mut sum: I32 = 0
+//! let r = range(1, 10)
+//! loop {
+//!     when r.next() {
+//!         Just(n) => sum = sum + n,
+//!         Nothing => break
+//!     }
+//! }
+//! ```
 
-// ============================================================================
-// Maybe Type (until core types are available via imports)
-// ============================================================================
-
-/// Optional value type
+/// Optional value type for iterator results.
 pub type Maybe[T] {
+    /// Contains a value.
     Just(T),
+    /// Contains no value.
     Nothing
 }
 
-// ============================================================================
-// Iterator Behavior
-// ============================================================================
-
-/// The core iteration trait. Types that implement Iterator can be used in for-in loops.
+/// The core iteration behavior.
+///
+/// Types implementing `Iterator` can be used in loops and
+/// with iterator combinators like `map`, `filter`, etc.
 pub behavior Iterator {
-    /// The type of elements being iterated
+    /// The type of elements being iterated.
     type Item
 
     /// Advances the iterator and returns the next value.
-    /// Returns Nothing when iteration is complete.
+    ///
+    /// Returns `Nothing` when iteration is complete.
     func next(mut this) -> Maybe[This::Item]
 }
 
-// ============================================================================
-// IntoIterator Behavior
-// ============================================================================
-
-/// Types that can be converted into an Iterator.
+/// Behavior for types that can be converted into an iterator.
 pub behavior IntoIterator {
-    /// The type of iterator this converts into
+    /// The type of iterator this converts into.
     type Iter
 
-    /// Converts this value into an iterator
+    /// Converts this value into an iterator.
     func into_iter(this) -> This::Iter
 }
 
-// ============================================================================
-// Range Iterator
-// ============================================================================
-
-/// An iterator over a range of integers
+/// An iterator over a range of integers.
+///
+/// Created with [`range`], [`range_inclusive`], or [`range_step`].
+///
+/// # Example
+///
+/// ```tml
+/// let r = range(0, 5)  // 0, 1, 2, 3, 4
+/// let r = range_inclusive(0, 5)  // 0, 1, 2, 3, 4, 5
+/// ```
 pub type Range {
     current: I32,
     end: I32,
@@ -88,10 +113,6 @@ pub func range_inclusive(start: I32, end: I32) -> Range {
 pub func range_step(start: I32, end: I32, step: I32) -> Range {
     return Range { current: start, end: end, step: step, inclusive: false }
 }
-
-// ============================================================================
-// Simple Range Helpers (don't call other methods)
-// ============================================================================
 
 impl Range {
     /// Takes the first n elements from the iterator.

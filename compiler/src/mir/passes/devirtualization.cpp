@@ -13,7 +13,7 @@ namespace tml::mir {
 // Class Hierarchy Analysis
 // ============================================================================
 
-void DevirtualizationPass::build_class_hierarchy() {
+void DevirtualizationPass::build_class_hierarchy() const {
     if (hierarchy_built_)
         return;
 
@@ -25,6 +25,14 @@ void DevirtualizationPass::build_class_hierarchy() {
         info.interfaces = class_def.interfaces;
         info.is_sealed = class_def.is_sealed;
         info.is_abstract = class_def.is_abstract;
+
+        // Collect final methods
+        for (const auto& method : class_def.methods) {
+            if (method.is_final) {
+                info.final_methods.insert(method.sig.name);
+            }
+        }
+
         class_hierarchy_[name] = std::move(info);
     }
 
@@ -44,7 +52,7 @@ void DevirtualizationPass::build_class_hierarchy() {
     hierarchy_built_ = true;
 }
 
-void DevirtualizationPass::compute_transitive_subclasses() {
+void DevirtualizationPass::compute_transitive_subclasses() const {
     // Use BFS from each class to find all transitive subclasses
     for (auto& [name, info] : class_hierarchy_) {
         std::queue<std::string> to_visit;
@@ -71,6 +79,9 @@ void DevirtualizationPass::compute_transitive_subclasses() {
 
 auto DevirtualizationPass::get_class_info(const std::string& class_name) const
     -> const ClassHierarchyInfo* {
+    // Build class hierarchy if not already done
+    build_class_hierarchy();
+
     auto it = class_hierarchy_.find(class_name);
     return it != class_hierarchy_.end() ? &it->second : nullptr;
 }
@@ -92,13 +103,37 @@ auto DevirtualizationPass::is_virtual_method(const std::string& class_name,
 
     for (const auto& method : class_def->methods) {
         if (method.sig.name == method_name) {
-            return method.is_virtual;
+            // A method is virtual if explicitly marked virtual OR if it's an override
+            // (override methods participate in virtual dispatch)
+            if (method.is_virtual || method.is_override) {
+                return true;
+            }
+            // If we found the method but it's neither virtual nor override,
+            // it's a non-virtual method that shadows a potential parent method
+            return false;
         }
     }
 
-    // Check parent class
+    // Check parent class if method not found in this class
     if (class_def->base_class) {
         return is_virtual_method(*class_def->base_class, method_name);
+    }
+
+    return false;
+}
+
+auto DevirtualizationPass::is_final_method(const std::string& class_name,
+                                           const std::string& method_name) const -> bool {
+    // Check if the method is marked final in this class
+    auto info = get_class_info(class_name);
+    if (info && info->is_method_final(method_name)) {
+        return true;
+    }
+
+    // Check parent class - final methods are inherited
+    auto class_def = env_.lookup_class(class_name);
+    if (class_def && class_def->base_class) {
+        return is_final_method(*class_def->base_class, method_name);
     }
 
     return false;
@@ -166,6 +201,9 @@ auto DevirtualizationPass::get_single_implementation(const std::string& class_na
 
 auto DevirtualizationPass::can_devirtualize(const std::string& receiver_type,
                                             const std::string& method_name) const -> DevirtReason {
+    // Build class hierarchy if not already done
+    build_class_hierarchy();
+
     // Check if it's even a class type
     auto class_def = env_.lookup_class(receiver_type);
     if (!class_def) {
@@ -175,6 +213,11 @@ auto DevirtualizationPass::can_devirtualize(const std::string& receiver_type,
     // Check if method is virtual at all
     if (!is_virtual_method(receiver_type, method_name)) {
         return DevirtReason::NoOverride;
+    }
+
+    // Final method: can always devirtualize (cannot be overridden)
+    if (is_final_method(receiver_type, method_name)) {
+        return DevirtReason::FinalMethod;
     }
 
     // Sealed class: always devirtualizable
@@ -278,6 +321,9 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         case DevirtReason::SingleImpl:
             stats_.devirtualized_single++;
             break;
+        case DevirtReason::FinalMethod:
+            stats_.devirtualized_final++;
+            break;
         case DevirtReason::NoOverride:
             stats_.devirtualized_nonvirtual++;
             break;
@@ -304,6 +350,16 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         }
 
         direct_call.return_type = method_call.return_type;
+
+        // Set devirtualization info for inlining pass
+        DevirtInfo info;
+        info.original_class = method_call.receiver_type;
+        info.method_name = method_call.method_name;
+        info.from_sealed_class = (reason == DevirtReason::SealedClass);
+        info.from_exact_type = (reason == DevirtReason::ExactType);
+        info.from_single_impl = (reason == DevirtReason::SingleImpl);
+        info.from_final_method = (reason == DevirtReason::FinalMethod);
+        direct_call.devirt_info = info;
 
         // Replace instruction
         inst_data.inst = direct_call;

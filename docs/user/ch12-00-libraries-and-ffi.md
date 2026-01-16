@@ -14,7 +14,7 @@ TML can compile your code into libraries that other programs can use. There are 
 Let's create a simple math library. Create a file called `math.tml`:
 
 ```tml
-module math
+mod math
 
 // Public functions are automatically exported
 pub func add(a: I32, b: I32) -> I32 {
@@ -235,7 +235,7 @@ Let's create a slightly more complex library that works with strings:
 
 **stringutils.tml:**
 ```tml
-module stringutils
+mod stringutils
 
 pub func string_length(s: Str) -> I32 {
     var len: I32 = 0

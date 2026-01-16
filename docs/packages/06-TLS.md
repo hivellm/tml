@@ -1,19 +1,19 @@
-# std.tls — TLS/SSL Connections
+# std::tls — TLS/SSL Connections
 
 ## 1. Overview
 
-The `std.tls` package provides TLS (Transport Layer Security) for secure network communication.
+The \x60std::tls` package provides TLS (Transport Layer Security) for secure network communication.
 
 ```tml
-import std.tls
-import std.tls.{TlsConnector, TlsAcceptor, TlsStream}
+use std::tls
+use std::tls.{TlsConnector, TlsAcceptor, TlsStream}
 ```
 
 ## 2. Capabilities
 
 ```tml
-caps: [io.network.tls]      // TLS connections
-caps: [io.file.read]        // For loading certificates (optional)
+caps: [io::network.tls]      // TLS connections
+caps: [io::file.read]        // For loading certificates (optional)
 ```
 
 ## 3. Client Connections
@@ -21,38 +21,38 @@ caps: [io.file.read]        // For loading certificates (optional)
 ### 3.1 TlsConnector
 
 ```tml
-public type TlsConnector {
+pub type TlsConnector {
     config: TlsConfig,
 }
 
 extend TlsConnector {
     /// Create with default system roots
-    public func new() -> Outcome[This, TlsError]
+    pub func new() -> Outcome[This, TlsError]
 
     /// Create with custom configuration
-    public func with_config(config: TlsConfig) -> Outcome[This, TlsError]
+    pub func with_config(config: TlsConfig) -> Outcome[This, TlsError]
 
     /// Connect to server
-    public func connect[S: Read + Write](
+    pub func connect[S: Read + Write](
         this,
         domain: ref str,
         stream: S
     ) -> Outcome[TlsStream[S], TlsError]
-    effects: [io.network.tls]
+    effects: [io::network.tls]
 
     /// Connect without hostname verification (dangerous!)
-    public func connect_without_verification[S: Read + Write](
+    pub func connect_without_verification[S: Read + Write](
         this,
         stream: S
     ) -> Outcome[TlsStream[S], TlsError]
-    effects: [io.network.tls]
+    effects: [io::network.tls]
 }
 ```
 
 ### 3.2 TlsConnectorBuilder
 
 ```tml
-public type TlsConnectorBuilder {
+pub type TlsConnectorBuilder {
     min_version: Maybe[TlsVersion],
     max_version: Maybe[TlsVersion],
     root_certs: List[Certificate],
@@ -63,38 +63,38 @@ public type TlsConnectorBuilder {
 }
 
 extend TlsConnectorBuilder {
-    public func new() -> This
+    pub func new() -> This
 
     /// Set minimum TLS version
-    public func min_version(this, version: TlsVersion) -> This
+    pub func min_version(this, version: TlsVersion) -> This
 
     /// Set maximum TLS version
-    public func max_version(this, version: TlsVersion) -> This
+    pub func max_version(this, version: TlsVersion) -> This
 
     /// Add root certificate
-    public func add_root_cert(this, cert: Certificate) -> This
+    pub func add_root_cert(this, cert: Certificate) -> This
 
     /// Load root certificates from file
-    public func load_root_certs(this, path: ref Path) -> Outcome[This, TlsError]
-    effects: [io.file.read]
+    pub func load_root_certs(this, path: ref Path) -> Outcome[This, TlsError]
+    effects: [io::file.read]
 
     /// Use system root certificates
-    public func use_system_roots(this) -> Outcome[This, TlsError]
+    pub func use_system_roots(this) -> Outcome[This, TlsError]
 
     /// Set client certificate for mutual TLS
-    public func client_cert(this, cert: Certificate, key: PrivateKey) -> This
+    pub func client_cert(this, cert: Certificate, key: PrivateKey) -> This
 
     /// Set ALPN protocols
-    public func alpn_protocols(this, protocols: ref [ref str]) -> This
+    pub func alpn_protocols(this, protocols: ref [ref str]) -> This
 
     /// Disable hostname verification (dangerous!)
-    public func danger_disable_hostname_verification(this) -> This
+    pub func danger_disable_hostname_verification(this) -> This
 
     /// Disable certificate verification (dangerous!)
-    public func danger_disable_cert_verification(this) -> This
+    pub func danger_disable_cert_verification(this) -> This
 
     /// Build connector
-    public func build(this) -> Outcome[TlsConnector, TlsError]
+    pub func build(this) -> Outcome[TlsConnector, TlsError]
 }
 ```
 
@@ -103,33 +103,33 @@ extend TlsConnectorBuilder {
 ### 4.1 TlsAcceptor
 
 ```tml
-public type TlsAcceptor {
+pub type TlsAcceptor {
     config: TlsConfig,
 }
 
 extend TlsAcceptor {
     /// Create with certificate and key
-    public func new(cert: Certificate, key: PrivateKey) -> Outcome[This, TlsError]
+    pub func new(cert: Certificate, key: PrivateKey) -> Outcome[This, TlsError]
 
     /// Create with certificate chain
-    public func with_chain(
+    pub func with_chain(
         certs: ref [Certificate],
         key: PrivateKey
     ) -> Outcome[This, TlsError]
 
     /// Create with custom configuration
-    public func with_config(config: TlsConfig) -> Outcome[This, TlsError]
+    pub func with_config(config: TlsConfig) -> Outcome[This, TlsError]
 
     /// Accept TLS connection
-    public func accept[S: Read + Write](this, stream: S) -> Outcome[TlsStream[S], TlsError]
-    effects: [io.network.tls]
+    pub func accept[S: Read + Write](this, stream: S) -> Outcome[TlsStream[S], TlsError]
+    effects: [io::network.tls]
 }
 ```
 
 ### 4.2 TlsAcceptorBuilder
 
 ```tml
-public type TlsAcceptorBuilder {
+pub type TlsAcceptorBuilder {
     cert_chain: List[Certificate],
     private_key: Maybe[PrivateKey],
     min_version: Maybe[TlsVersion],
@@ -138,42 +138,42 @@ public type TlsAcceptorBuilder {
     alpn_protocols: List[String],
 }
 
-public type ClientAuth =
+pub type ClientAuth =
     | NoClientAuth
     | RequestClientCert
     | RequireClientCert
     | RequireAndVerifyClientCert(List[Certificate])
 
 extend TlsAcceptorBuilder {
-    public func new() -> This
+    pub func new() -> This
 
     /// Set certificate and key
-    public func identity(this, cert: Certificate, key: PrivateKey) -> This
+    pub func identity(this, cert: Certificate, key: PrivateKey) -> This
 
     /// Set certificate chain
-    public func cert_chain(this, certs: ref [Certificate]) -> This
+    pub func cert_chain(this, certs: ref [Certificate]) -> This
 
     /// Set private key
-    public func private_key(this, key: PrivateKey) -> This
+    pub func private_key(this, key: PrivateKey) -> This
 
     /// Load from PKCS#12/PFX file
-    public func load_pkcs12(this, path: ref Path, password: ref str) -> Outcome[This, TlsError]
-    effects: [io.file.read]
+    pub func load_pkcs12(this, path: ref Path, password: ref str) -> Outcome[This, TlsError]
+    effects: [io::file.read]
 
     /// Set minimum TLS version
-    public func min_version(this, version: TlsVersion) -> This
+    pub func min_version(this, version: TlsVersion) -> This
 
     /// Set maximum TLS version
-    public func max_version(this, version: TlsVersion) -> This
+    pub func max_version(this, version: TlsVersion) -> This
 
     /// Set client authentication mode
-    public func client_auth(this, auth: ClientAuth) -> This
+    pub func client_auth(this, auth: ClientAuth) -> This
 
     /// Set ALPN protocols
-    public func alpn_protocols(this, protocols: ref [ref str]) -> This
+    pub func alpn_protocols(this, protocols: ref [ref str]) -> This
 
     /// Build acceptor
-    public func build(this) -> Outcome[TlsAcceptor, TlsError]
+    pub func build(this) -> Outcome[TlsAcceptor, TlsError]
 }
 ```
 
@@ -182,58 +182,58 @@ extend TlsAcceptorBuilder {
 ### 5.1 TlsStream
 
 ```tml
-public type TlsStream[S] {
+pub type TlsStream[S] {
     inner: S,
     session: TlsSession,
 }
 
 extend TlsStream[S: Read + Write] {
     /// Get peer certificate
-    public func peer_certificate(this) -> Maybe[ref Certificate]
+    pub func peer_certificate(this) -> Maybe[ref Certificate]
 
     /// Get peer certificate chain
-    public func peer_certificates(this) -> ref [Certificate]
+    pub func peer_certificates(this) -> ref [Certificate]
 
     /// Get negotiated ALPN protocol
-    public func alpn_protocol(this) -> Maybe[ref str]
+    pub func alpn_protocol(this) -> Maybe[ref str]
 
     /// Get negotiated TLS version
-    public func tls_version(this) -> TlsVersion
+    pub func tls_version(this) -> TlsVersion
 
     /// Get negotiated cipher suite
-    public func cipher_suite(this) -> CipherSuite
+    pub func cipher_suite(this) -> CipherSuite
 
     /// Get SNI hostname (server only)
-    public func sni_hostname(this) -> Maybe[ref str]
+    pub func sni_hostname(this) -> Maybe[ref str]
 
     /// Check if handshake is complete
-    public func is_handshake_complete(this) -> Bool
+    pub func is_handshake_complete(this) -> Bool
 
     /// Get underlying stream
-    public func get_ref(this) -> ref S
+    pub func get_ref(this) -> ref S
 
     /// Get mutable reference to underlying stream
-    public func get_mut(this) -> mut ref S
+    pub func get_mut(this) -> mut ref S
 
     /// Unwrap to underlying stream
-    public func into_inner(this) -> S
+    pub func into_inner(this) -> S
 
     /// Initiate graceful shutdown
-    public func shutdown(this) -> Outcome[Unit, TlsError]
-    effects: [io.network.tls]
+    pub func shutdown(this) -> Outcome[Unit, TlsError]
+    effects: [io::network.tls]
 }
 
 extend TlsStream[S: Read + Write] with Read {
     func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tls]
+    effects: [io::network.tls]
 }
 
 extend TlsStream[S: Read + Write] with Write {
     func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tls]
+    effects: [io::network.tls]
 
     func flush(this) -> Outcome[Unit, IoError]
-    effects: [io.network.tls]
+    effects: [io::network.tls]
 }
 ```
 
@@ -242,104 +242,104 @@ extend TlsStream[S: Read + Write] with Write {
 ### 6.1 Certificate
 
 ```tml
-public type Certificate {
+pub type Certificate {
     der: List[U8],
 }
 
 extend Certificate {
     /// Parse from DER bytes
-    public func from_der(der: ref [U8]) -> Outcome[This, CertError]
+    pub func from_der(der: ref [U8]) -> Outcome[This, CertError]
 
     /// Parse from PEM string
-    public func from_pem(pem: ref str) -> Outcome[This, CertError]
+    pub func from_pem(pem: ref str) -> Outcome[This, CertError]
 
     /// Parse multiple from PEM string
-    public func from_pem_multiple(pem: ref str) -> Outcome[List[This], CertError]
+    pub func from_pem_multiple(pem: ref str) -> Outcome[List[This], CertError]
 
     /// Load from DER file
-    public func load_der(path: ref Path) -> Outcome[This, CertError]
-    effects: [io.file.read]
+    pub func load_der(path: ref Path) -> Outcome[This, CertError]
+    effects: [io::file.read]
 
     /// Load from PEM file
-    public func load_pem(path: ref Path) -> Outcome[This, CertError]
-    effects: [io.file.read]
+    pub func load_pem(path: ref Path) -> Outcome[This, CertError]
+    effects: [io::file.read]
 
     /// Load multiple from PEM file
-    public func load_pem_multiple(path: ref Path) -> Outcome[List[This], CertError]
-    effects: [io.file.read]
+    pub func load_pem_multiple(path: ref Path) -> Outcome[List[This], CertError]
+    effects: [io::file.read]
 
     /// Get DER bytes
-    public func to_der(this) -> ref [U8]
+    pub func to_der(this) -> ref [U8]
 
     /// Get PEM string
-    public func to_pem(this) -> String
+    pub func to_pem(this) -> String
 
     /// Get subject name
-    public func subject(this) -> Outcome[Name, CertError]
+    pub func subject(this) -> Outcome[Name, CertError]
 
     /// Get issuer name
-    public func issuer(this) -> Outcome[Name, CertError]
+    pub func issuer(this) -> Outcome[Name, CertError]
 
     /// Get validity period
-    public func validity(this) -> Outcome[(SystemTime, SystemTime), CertError]
+    pub func validity(this) -> Outcome[(SystemTime, SystemTime), CertError]
 
     /// Get serial number
-    public func serial_number(this) -> Outcome[List[U8], CertError]
+    pub func serial_number(this) -> Outcome[List[U8], CertError]
 
     /// Check if self-signed
-    public func is_self_signed(this) -> Bool
+    pub func is_self_signed(this) -> Bool
 
     /// Get public key
-    public func public_key(this) -> Outcome[PublicKey, CertError]
+    pub func public_key(this) -> Outcome[PublicKey, CertError]
 }
 ```
 
 ### 6.2 PrivateKey
 
 ```tml
-public type PrivateKey {
+pub type PrivateKey {
     kind: KeyKind,
     der: List[U8],
 }
 
-public type KeyKind = Rsa | Ecdsa | Ed25519
+pub type KeyKind = Rsa | Ecdsa | Ed25519
 
 extend PrivateKey {
     /// Parse from DER bytes (PKCS#8)
-    public func from_der(der: ref [U8]) -> Outcome[This, KeyError]
+    pub func from_der(der: ref [U8]) -> Outcome[This, KeyError]
 
     /// Parse from PEM string
-    public func from_pem(pem: ref str) -> Outcome[This, KeyError]
+    pub func from_pem(pem: ref str) -> Outcome[This, KeyError]
 
     /// Load from DER file
-    public func load_der(path: ref Path) -> Outcome[This, KeyError]
-    effects: [io.file.read]
+    pub func load_der(path: ref Path) -> Outcome[This, KeyError]
+    effects: [io::file.read]
 
     /// Load from PEM file
-    public func load_pem(path: ref Path) -> Outcome[This, KeyError>
-    effects: [io.file.read]
+    pub func load_pem(path: ref Path) -> Outcome[This, KeyError>
+    effects: [io::file.read]
 
     /// Load from encrypted PEM file
-    public func load_encrypted_pem(path: ref Path, password: ref str) -> Outcome[This, KeyError]
-    effects: [io.file.read]
+    pub func load_encrypted_pem(path: ref Path, password: ref str) -> Outcome[This, KeyError]
+    effects: [io::file.read]
 
     /// Get DER bytes
-    public func to_der(this) -> ref [U8]
+    pub func to_der(this) -> ref [U8]
 
     /// Get PEM string
-    public func to_pem(this) -> String
+    pub func to_pem(this) -> String
 
     /// Get key type
-    public func kind(this) -> KeyKind
+    pub func kind(this) -> KeyKind
 }
 ```
 
 ### 6.3 PKCS#12
 
 ```tml
-module pkcs12
+mod pkcs12
 
-public type Pkcs12 {
+pub type Pkcs12 {
     cert: Certificate,
     chain: List[Certificate],
     key: PrivateKey,
@@ -347,14 +347,14 @@ public type Pkcs12 {
 
 extend Pkcs12 {
     /// Parse from DER bytes
-    public func from_der(der: ref [U8], password: ref str) -> Outcome[This, Pkcs12Error]
+    pub func from_der(der: ref [U8], password: ref str) -> Outcome[This, Pkcs12Error]
 
     /// Load from file
-    public func load(path: ref Path, password: ref str) -> Outcome[This, Pkcs12Error]
-    effects: [io.file.read]
+    pub func load(path: ref Path, password: ref str) -> Outcome[This, Pkcs12Error]
+    effects: [io::file.read]
 
     /// Create PKCS#12 bundle
-    public func create(
+    pub func create(
         cert: Certificate,
         key: PrivateKey,
         chain: ref [Certificate],
@@ -368,38 +368,38 @@ extend Pkcs12 {
 ### 7.1 TlsVersion
 
 ```tml
-public type TlsVersion = Tls10 | Tls11 | Tls12 | Tls13
+pub type TlsVersion = Tls10 | Tls11 | Tls12 | Tls13
 
 extend TlsVersion {
-    public const LATEST: This = Tls13
-    public const MIN_SECURE: This = Tls12
+    pub const LATEST: This = Tls13
+    pub const MIN_SECURE: This = Tls12
 }
 ```
 
 ### 7.2 CipherSuite
 
 ```tml
-public type CipherSuite {
+pub type CipherSuite {
     id: U16,
     name: String,
 }
 
 // TLS 1.3 cipher suites
-public const TLS_AES_128_GCM_SHA256: CipherSuite = ...
-public const TLS_AES_256_GCM_SHA384: CipherSuite = ...
-public const TLS_CHACHA20_POLY1305_SHA256: CipherSuite = ...
+pub const TLS_AES_128_GCM_SHA256: CipherSuite = ...
+pub const TLS_AES_256_GCM_SHA384: CipherSuite = ...
+pub const TLS_CHACHA20_POLY1305_SHA256: CipherSuite = ...
 
 // TLS 1.2 cipher suites
-public const TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: CipherSuite = ...
-public const TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: CipherSuite = ...
-public const TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: CipherSuite = ...
-public const TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: CipherSuite = ...
+pub const TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: CipherSuite = ...
+pub const TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: CipherSuite = ...
+pub const TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: CipherSuite = ...
+pub const TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: CipherSuite = ...
 ```
 
 ### 7.3 TlsConfig
 
 ```tml
-public type TlsConfig {
+pub type TlsConfig {
     min_version: TlsVersion,
     max_version: TlsVersion,
     cipher_suites: List[CipherSuite],
@@ -416,13 +416,13 @@ public type TlsConfig {
 ## 8. Error Types
 
 ```tml
-public type TlsError {
+pub type TlsError {
     kind: TlsErrorKind,
     message: String,
     source: Maybe[Heap[dyn Error]],
 }
 
-public type TlsErrorKind =
+pub type TlsErrorKind =
     | HandshakeFailed
     | CertificateError(CertError)
     | KeyError(KeyError)
@@ -434,7 +434,7 @@ public type TlsErrorKind =
     | DecryptError
     | IoError(IoError)
 
-public type AlertDescription =
+pub type AlertDescription =
     | CloseNotify
     | UnexpectedMessage
     | BadRecordMac
@@ -467,14 +467,14 @@ public type AlertDescription =
 ### 9.1 HTTPS Client
 
 ```tml
-module https_client
-caps: [io.network.tcp, io.network.tls]
+mod https_client
+caps: [io::network.tcp, io::network.tls]
 
-import std.net.TcpStream
-import std.tls.{TlsConnector, TlsStream}
-import std.io.{BufReader, BufWriter, Write}
+use std::net.TcpStream
+use std::tls.{TlsConnector, TlsStream}
+use std::io.{BufReader, BufWriter, Write}
 
-public func https_get(host: ref str, path: ref str) -> Outcome[String, Error] {
+pub func https_get(host: ref str, path: ref str) -> Outcome[String, Error] {
     // TCP connection
     let tcp = TcpStream.connect((host, 443))!
 
@@ -502,14 +502,14 @@ public func https_get(host: ref str, path: ref str) -> Outcome[String, Error] {
 ### 9.2 TLS Server
 
 ```tml
-module tls_server
-caps: [io.network.tcp, io.network.tls, io.file.read]
+mod tls_server
+caps: [io::network.tcp, io::network.tls, io::file.read]
 
-import std.net.TcpListener
-import std.tls.{TlsAcceptor, Certificate, PrivateKey}
-import std.thread
+use std::net.TcpListener
+use std::tls.{TlsAcceptor, Certificate, PrivateKey}
+use std::thread
 
-public func main() -> Outcome[Unit, Error] {
+pub func main() -> Outcome[Unit, Error] {
     // Load certificate and key
     let cert = Certificate.load_pem("server.crt")!
     let key = PrivateKey.load_pem("server.key")!
@@ -557,10 +557,10 @@ func handle_connection[S: Read + Write](stream: TlsStream[S]) -> Outcome[Unit, E
 ### 9.3 Mutual TLS
 
 ```tml
-module mtls
-caps: [io.network.tls, io.file.read]
+mod mtls
+caps: [io::network.tls, io::file.read]
 
-import std.tls.{TlsConnectorBuilder, TlsAcceptorBuilder, Certificate, PrivateKey, ClientAuth}
+use std::tls.{TlsConnectorBuilder, TlsAcceptorBuilder, Certificate, PrivateKey, ClientAuth}
 
 // Client with certificate
 func create_mtls_client() -> Outcome[TlsConnector, Error] {

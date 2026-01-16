@@ -1369,7 +1369,7 @@ func test_template_literal_returns_text_type() {
 func test_template_literal_concat_with_text() {
     let t1: Text = `Hello`
     let t2: Text = `, World`
-    let t3: Text = t1.concat(t2.as_str())
+    let t3: Text = t1.concat_str(t2.as_str())
     assert_eq(t3.as_str(), "Hello, World", "template concatenation should work")
     t1.drop()
     t2.drop()

@@ -1062,6 +1062,19 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
     def.is_sealed = decl.is_sealed;
     def.span = decl.span;
 
+    // Check for @value and @pool decorators
+    def.is_value = false;
+    def.is_pooled = false;
+    for (const auto& deco : decl.decorators) {
+        if (deco.name == "value") {
+            def.is_value = true;
+            // @value implies sealed
+            def.is_sealed = true;
+        } else if (deco.name == "pool") {
+            def.is_pooled = true;
+        }
+    }
+
     // Collect type parameters
     for (const auto& param : decl.generics) {
         if (!param.is_const) {
@@ -1106,6 +1119,7 @@ void TypeChecker::register_class_decl(const parser::ClassDecl& decl) {
         method_def.is_virtual = method.is_virtual;
         method_def.is_override = method.is_override;
         method_def.is_abstract = method.is_abstract;
+        method_def.is_final = method.is_final;
         method_def.vis = static_cast<MemberVisibility>(method.vis);
         method_def.vtable_index = 0; // Will be assigned during codegen
 
@@ -1224,6 +1238,89 @@ void TypeChecker::check_class_decl(const parser::ClassDecl& cls) {
     if (!cls.is_abstract && cls.extends.has_value()) {
         validate_abstract_methods(cls);
     }
+
+    // Validate @value class constraints
+    validate_value_class(cls);
+
+    // Validate @pool class constraints
+    validate_pool_class(cls);
+}
+
+void TypeChecker::validate_value_class(const parser::ClassDecl& cls) {
+    // Check if class has @value decorator
+    bool is_value = false;
+    for (const auto& deco : cls.decorators) {
+        if (deco.name == "value") {
+            is_value = true;
+            break;
+        }
+    }
+
+    if (!is_value) {
+        return; // Not a value class, no validation needed
+    }
+
+    // @value classes cannot be abstract
+    if (cls.is_abstract) {
+        error("@value class '" + cls.name + "' cannot be abstract", cls.span);
+    }
+
+    // @value classes cannot have virtual methods
+    for (const auto& method : cls.methods) {
+        if (method.is_virtual || method.is_abstract) {
+            error("@value class '" + cls.name + "' cannot have virtual method '" + method.name +
+                      "'. Value classes use direct dispatch only.",
+                  method.span);
+        }
+    }
+
+    // @value classes cannot extend non-value classes
+    if (cls.extends.has_value()) {
+        const auto& base_path = cls.extends.value();
+        if (!base_path.segments.empty()) {
+            const auto& base_name = base_path.segments.back();
+            auto base_def = env_.lookup_class(base_name);
+            if (base_def.has_value() && !base_def->is_value) {
+                error("@value class '" + cls.name + "' cannot extend non-value class '" +
+                          base_name + "'. Base class must also be @value.",
+                      cls.span);
+            }
+        }
+    }
+
+    // Note: @value classes CAN implement interfaces, so no check needed there
+}
+
+void TypeChecker::validate_pool_class(const parser::ClassDecl& cls) {
+    // Check if class has @pool decorator
+    bool is_pooled = false;
+    bool is_value = false;
+    for (const auto& deco : cls.decorators) {
+        if (deco.name == "pool") {
+            is_pooled = true;
+        } else if (deco.name == "value") {
+            is_value = true;
+        }
+    }
+
+    if (!is_pooled) {
+        return; // Not a pooled class, no validation needed
+    }
+
+    // @pool and @value are mutually exclusive
+    if (is_value) {
+        error("@pool and @value are mutually exclusive on class '" + cls.name +
+                  "'. Use one or the other.",
+              cls.span);
+    }
+
+    // @pool classes cannot be abstract
+    if (cls.is_abstract) {
+        error("@pool class '" + cls.name + "' cannot be abstract", cls.span);
+    }
+
+    // @pool classes should not be sealed (pooling benefits from inheritance)
+    // But we don't enforce this - just a note that sealed pools are unusual
 }
 
 void TypeChecker::validate_abstract_methods(const parser::ClassDecl& cls) {
@@ -1315,10 +1412,21 @@ void TypeChecker::validate_inheritance(const parser::ClassDecl& cls) {
         return;
     }
 
-    // Check sealed class not extended
+    // Check sealed class not extended (unless both are @value classes)
     if (base_def->is_sealed) {
-        error("Cannot extend sealed class '" + base_name + "'", cls.span);
-        return;
+        // @value classes can extend other @value classes
+        bool this_is_value = false;
+        for (const auto& deco : cls.decorators) {
+            if (deco.name == "value") {
+                this_is_value = true;
+                break;
+            }
+        }
+        // Only allow if both classes are @value
+        if (!this_is_value || !base_def->is_value) {
+            error("Cannot extend sealed class '" + base_name + "'", cls.span);
+            return;
+        }
     }
 
     // Check for circular inheritance

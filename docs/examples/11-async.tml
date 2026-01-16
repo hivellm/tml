@@ -1,11 +1,11 @@
 // TML Example 11: Async Programming
 // Demonstrates async/await and concurrent operations
 
-module async_example
+mod async_example
 
-import std.async { spawn, sleep, select }
-import std.net.http { get, post, Response }
-import std.time { Duration }
+use std::async { spawn, sleep, select }
+use std::net.http { get, post, Response }
+use std::time { Duration }
 
 // ============================================
 // ASYNC FUNCTIONS
@@ -95,7 +95,7 @@ async func handle_events() {
 // CHANNELS
 // ============================================
 
-import std.sync { channel, Sender, Receiver }
+use std::sync { channel, Sender, Receiver }
 
 async func producer_consumer_example() {
     // Create a channel

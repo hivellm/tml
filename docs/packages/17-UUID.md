@@ -11,8 +11,8 @@ The uuid package provides types and functions for generating and parsing UUIDs (
 ## Import
 
 ```tml
-import std.uuid
-import std.uuid.{Uuid, UuidVersion}
+use std::uuid
+use std::uuid.{Uuid, UuidVersion}
 ```
 
 ---
@@ -21,56 +21,56 @@ import std.uuid.{Uuid, UuidVersion}
 
 ```tml
 /// A 128-bit universally unique identifier
-public type Uuid {
+pub type Uuid {
     bytes: [U8; 16],
 }
 
 extend Uuid {
     /// The nil UUID (all zeros)
-    public const NIL: Uuid = Uuid { bytes: [0; 16] }
+    pub const NIL: Uuid = Uuid { bytes: [0; 16] }
 
     /// The max UUID (all ones)
-    public const MAX: Uuid = Uuid { bytes: [255; 16] }
+    pub const MAX: Uuid = Uuid { bytes: [255; 16] }
 
     // Constructors
 
     /// Creates a nil UUID
-    public func nil() -> Uuid {
+    pub func nil() -> Uuid {
         Uuid.NIL
     }
 
     /// Creates a random UUID (version 4)
-    public func v4() -> Uuid
+    pub func v4() -> Uuid
         caps: [io.random]
 
     /// Creates a time-based UUID (version 1)
-    public func v1(node: ref [U8; 6]) -> Uuid
+    pub func v1(node: ref [U8; 6]) -> Uuid
         caps: [io.time, io.random]
 
     /// Creates a name-based UUID using SHA-1 (version 5)
-    public func v5(namespace: ref Uuid, name: ref [U8]) -> Uuid
+    pub func v5(namespace: ref Uuid, name: ref [U8]) -> Uuid
 
     /// Creates a name-based UUID using MD5 (version 3)
-    public func v3(namespace: ref Uuid, name: ref [U8]) -> Uuid
+    pub func v3(namespace: ref Uuid, name: ref [U8]) -> Uuid
 
     /// Creates a time-ordered UUID (version 6)
-    public func v6(node: ref [U8; 6]) -> Uuid
+    pub func v6(node: ref [U8; 6]) -> Uuid
         caps: [io.time, io.random]
 
     /// Creates a Unix timestamp UUID (version 7)
-    public func v7() -> Uuid
+    pub func v7() -> Uuid
         caps: [io.time, io.random]
 
     /// Creates a custom UUID (version 8)
-    public func v8(custom_a: U48, custom_b: U12, custom_c: U62) -> Uuid
+    pub func v8(custom_a: U48, custom_b: U12, custom_c: U62) -> Uuid
 
     /// Creates from raw bytes
-    public func from_bytes(bytes: [U8; 16]) -> Uuid {
+    pub func from_bytes(bytes: [U8; 16]) -> Uuid {
         Uuid { bytes }
     }
 
     /// Creates from byte slice
-    public func from_slice(slice: ref [U8]) -> Outcome[Uuid, UuidError] {
+    pub func from_slice(slice: ref [U8]) -> Outcome[Uuid, UuidError] {
         if slice.len() != 16 then {
             return Err(UuidError.InvalidLength)
         }
@@ -80,32 +80,32 @@ extend Uuid {
     }
 
     /// Parses from string
-    public func parse(s: ref String) -> Outcome[Uuid, UuidError]
+    pub func parse(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from hyphenated format
-    public func parse_hyphenated(s: ref String) -> Outcome[Uuid, UuidError]
+    pub func parse_hyphenated(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from simple (no hyphens) format
-    public func parse_simple(s: ref String) -> Outcome[Uuid, UuidError]
+    pub func parse_simple(s: ref String) -> Outcome[Uuid, UuidError]
 
     /// Parses from URN format
-    public func parse_urn(s: ref String) -> Outcome[Uuid, UuidError]
+    pub func parse_urn(s: ref String) -> Outcome[Uuid, UuidError]
 
     // Accessors
 
     /// Returns the raw bytes
-    public func as_bytes(this) -> ref [U8; 16] {
+    pub func as_bytes(this) -> ref [U8; 16] {
         ref this.bytes
     }
 
     /// Returns the UUID version
-    public func version(this) -> UuidVersion {
+    pub func version(this) -> UuidVersion {
         let v = (this.bytes[6] >> 4) & 0x0F
         UuidVersion.from_u8(v).unwrap_or(UuidVersion.Unknown)
     }
 
     /// Returns the UUID variant
-    public func variant(this) -> UuidVariant {
+    pub func variant(this) -> UuidVariant {
         let v = this.bytes[8]
         if (v & 0x80) == 0 then {
             return UuidVariant.Ncs
@@ -119,65 +119,65 @@ extend Uuid {
     }
 
     /// Returns true if this is the nil UUID
-    public func is_nil(this) -> Bool {
+    pub func is_nil(this) -> Bool {
         this.bytes == [0; 16]
     }
 
     /// Returns true if this is the max UUID
-    public func is_max(this) -> Bool {
+    pub func is_max(this) -> Bool {
         this.bytes == [255; 16]
     }
 
     /// Returns the timestamp for time-based UUIDs (v1, v6, v7)
-    public func timestamp(this) -> Maybe[I64]
+    pub func timestamp(this) -> Maybe[I64]
 
     // Formatting
 
     /// Formats as hyphenated lowercase (standard format)
-    public func to_string(this) -> String {
+    pub func to_string(this) -> String {
         this.to_hyphenated_lower()
     }
 
     /// Formats as hyphenated lowercase
-    public func to_hyphenated_lower(this) -> String
+    pub func to_hyphenated_lower(this) -> String
     // "550e8400-e29b-41d4-a716-446655440000"
 
     /// Formats as hyphenated uppercase
-    public func to_hyphenated_upper(this) -> String
+    pub func to_hyphenated_upper(this) -> String
     // "550E8400-E29B-41D4-A716-446655440000"
 
     /// Formats as simple lowercase (no hyphens)
-    public func to_simple_lower(this) -> String
+    pub func to_simple_lower(this) -> String
     // "550e8400e29b41d4a716446655440000"
 
     /// Formats as simple uppercase
-    public func to_simple_upper(this) -> String
+    pub func to_simple_upper(this) -> String
 
     /// Formats as URN
-    public func to_urn(this) -> String
+    pub func to_urn(this) -> String
     // "urn:uuid:550e8400-e29b-41d4-a716-446655440000"
 
     /// Formats as braced (Microsoft style)
-    public func to_braced(this) -> String
+    pub func to_braced(this) -> String
     // "{550e8400-e29b-41d4-a716-446655440000}"
 
     // Conversion
 
     /// Converts to u128
-    public func to_u128(this) -> U128
+    pub func to_u128(this) -> U128
 
     /// Creates from u128
-    public func from_u128(value: U128) -> Uuid
+    pub func from_u128(value: U128) -> Uuid
 
     /// Returns the high and low 64-bit parts
-    public func to_u64_pair(this) -> (U64, U64)
+    pub func to_u64_pair(this) -> (U64, U64)
 
     /// Creates from high and low 64-bit parts
-    public func from_u64_pair(high: U64, low: U64) -> Uuid
+    pub func from_u64_pair(high: U64, low: U64) -> Uuid
 }
 
 /// UUID version
-public type UuidVersion =
+pub type UuidVersion =
     | V1    // Time-based
     | V2    // DCE Security
     | V3    // Name-based (MD5)
@@ -189,7 +189,7 @@ public type UuidVersion =
     | Unknown
 
 extend UuidVersion {
-    public func from_u8(v: U8) -> Maybe[UuidVersion] {
+    pub func from_u8(v: U8) -> Maybe[UuidVersion] {
         when v {
             1 -> Just(V1),
             2 -> Just(V2),
@@ -203,7 +203,7 @@ extend UuidVersion {
         }
     }
 
-    public func as_u8(this) -> U8 {
+    pub func as_u8(this) -> U8 {
         when this {
             V1 -> 1,
             V2 -> 2,
@@ -219,10 +219,10 @@ extend UuidVersion {
 }
 
 /// UUID variant
-public type UuidVariant = Ncs | Rfc4122 | Microsoft | Future
+pub type UuidVariant = Ncs | Rfc4122 | Microsoft | Future
 
 /// UUID error
-public type UuidError =
+pub type UuidError =
     | InvalidLength
     | InvalidCharacter(Char, U64)
     | InvalidFormat
@@ -239,16 +239,16 @@ Standard namespaces for name-based UUIDs.
 /// Standard UUID namespaces
 public module namespace {
     /// DNS namespace
-    public const DNS: Uuid = Uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap()
+    pub const DNS: Uuid = Uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap()
 
     /// URL namespace
-    public const URL: Uuid = Uuid.parse("6ba7b811-9dad-11d1-80b4-00c04fd430c8").unwrap()
+    pub const URL: Uuid = Uuid.parse("6ba7b811-9dad-11d1-80b4-00c04fd430c8").unwrap()
 
     /// OID namespace
-    public const OID: Uuid = Uuid.parse("6ba7b812-9dad-11d1-80b4-00c04fd430c8").unwrap()
+    pub const OID: Uuid = Uuid.parse("6ba7b812-9dad-11d1-80b4-00c04fd430c8").unwrap()
 
     /// X.500 DN namespace
-    public const X500: Uuid = Uuid.parse("6ba7b814-9dad-11d1-80b4-00c04fd430c8").unwrap()
+    pub const X500: Uuid = Uuid.parse("6ba7b814-9dad-11d1-80b4-00c04fd430c8").unwrap()
 }
 ```
 
@@ -260,7 +260,7 @@ Stateful UUID generator for high-performance scenarios.
 
 ```tml
 /// UUID generator with state
-public type UuidGenerator {
+pub type UuidGenerator {
     counter: AtomicU64,
     node: [U8; 6],
     clock_seq: U16,
@@ -268,31 +268,31 @@ public type UuidGenerator {
 
 extend UuidGenerator {
     /// Creates a new generator
-    public func new() -> UuidGenerator
+    pub func new() -> UuidGenerator
         caps: [io.random]
 
     /// Creates a generator with specific node ID
-    public func with_node(node: [U8; 6]) -> UuidGenerator
+    pub func with_node(node: [U8; 6]) -> UuidGenerator
         caps: [io.random]
 
     /// Generates a v1 UUID
-    public func generate_v1(mut this) -> Uuid
+    pub func generate_v1(mut this) -> Uuid
         caps: [io.time]
 
     /// Generates a v4 UUID
-    public func generate_v4(this) -> Uuid
+    pub func generate_v4(this) -> Uuid
         caps: [io.random]
 
     /// Generates a v6 UUID
-    public func generate_v6(mut this) -> Uuid
+    pub func generate_v6(mut this) -> Uuid
         caps: [io.time]
 
     /// Generates a v7 UUID
-    public func generate_v7(mut this) -> Uuid
+    pub func generate_v7(mut this) -> Uuid
         caps: [io.time, io.random]
 
     /// Generates multiple v4 UUIDs efficiently
-    public func generate_v4_batch(this, count: U64) -> Vec[Uuid]
+    pub func generate_v4_batch(this, count: U64) -> Vec[Uuid]
         caps: [io.random]
 }
 ```
@@ -350,7 +350,7 @@ implement FromStr for Uuid {
 ### Generate UUIDs
 
 ```tml
-import std.uuid.{Uuid, namespace}
+use std::uuid.{Uuid, namespace}
 
 func uuid_examples()
     caps: [io.random, io.time]
@@ -377,7 +377,7 @@ func uuid_examples()
 ### Parse and Format
 
 ```tml
-import std.uuid.Uuid
+use std::uuid.Uuid
 
 func parse_format_examples() {
     // Parse various formats
@@ -401,8 +401,8 @@ func parse_format_examples() {
 ### UUID as Database Key
 
 ```tml
-import std.uuid.Uuid
-import std.collections.HashMap
+use std::uuid.Uuid
+use std::collections.HashMap
 
 type User {
     id: Uuid,
@@ -437,7 +437,7 @@ extend UserStore {
 ### Batch Generation
 
 ```tml
-import std.uuid.{Uuid, UuidGenerator}
+use std::uuid.{Uuid, UuidGenerator}
 
 func batch_example()
     caps: [io.random]

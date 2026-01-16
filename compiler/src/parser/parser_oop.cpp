@@ -214,11 +214,12 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
     // Parse visibility
     auto vis = parse_member_visibility();
 
-    // Parse modifiers: static, virtual, override, abstract
+    // Parse modifiers: static, virtual, override, abstract, sealed (final)
     bool is_static = false;
     bool is_virtual = false;
     bool is_override = false;
     bool is_abstract = false;
+    bool is_final = false; // sealed for methods means "cannot be overridden"
 
     while (true) {
         if (match(lexer::TokenKind::KwStatic)) {
@@ -229,6 +230,8 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
             is_override = true;
         } else if (match(lexer::TokenKind::KwAbstract)) {
             is_abstract = true;
+        } else if (match(lexer::TokenKind::KwSealed)) {
+            is_final = true; // sealed on a method = final (cannot be overridden)
         } else {
             break;
         }
@@ -447,6 +450,7 @@ auto Parser::parse_class_member([[maybe_unused]] const std::string& class_name)
                            .is_virtual = is_virtual,
                            .is_override = is_override,
                            .is_abstract = is_abstract,
+                           .is_final = is_final,
                            .name = std::move(method_name),
                            .generics = std::move(generics),
                            .params = std::move(params),

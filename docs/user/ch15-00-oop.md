@@ -37,13 +37,13 @@ Classes support three visibility levels:
 |----------|--------|
 | `private` | Only within the class |
 | `protected` | Class and subclasses |
-| `public` | Everywhere |
+| `pub` | Everywhere |
 
 ```tml
 class Account {
     private balance: F64
     protected owner: Str
-    public id: I64
+    pub id: I64
 
     func new(owner: Str, initial: F64) -> Account {
         return Account {
@@ -53,11 +53,11 @@ class Account {
         }
     }
 
-    public func deposit(mut this, amount: F64) {
+    pub func deposit(mut this, amount: F64) {
         this.balance += amount
     }
 
-    public func get_balance(this) -> F64 {
+    pub func get_balance(this) -> F64 {
         return this.balance
     }
 }

@@ -316,12 +316,28 @@ struct InsertValueInst {
     MirTypePtr value_type;     // Type of value being inserted
 };
 
+/// Devirtualization info for calls that were converted from virtual to direct.
+struct DevirtInfo {
+    std::string original_class;  ///< Original receiver class type.
+    std::string method_name;     ///< Original method name.
+    bool from_sealed_class;      ///< Was devirtualized due to sealed class.
+    bool from_exact_type;        ///< Was devirtualized due to exact type known.
+    bool from_single_impl;       ///< Was devirtualized due to single implementation.
+    bool from_final_method;      ///< Was devirtualized due to final method.
+};
+
 // Function call: result = func(args...)
 struct CallInst {
     std::string func_name;
     std::vector<Value> args;
     std::vector<MirTypePtr> arg_types; // Types of arguments
     MirTypePtr return_type;
+    std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
+
+    /// Returns true if this call was devirtualized from a virtual method call.
+    [[nodiscard]] auto is_devirtualized() const -> bool {
+        return devirt_info.has_value();
+    }
 };
 
 // Method call (resolved to function call with self)

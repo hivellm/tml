@@ -1,76 +1,131 @@
-// TML Standard Library - Core Traits (Behaviors)
-// Fundamental behaviors for types
+//! Core traits (behaviors) for TML types.
+//!
+//! This module provides the fundamental behaviors that types can implement
+//! for common operations like copying, comparison, hashing, and conversion.
+//!
+//! # Core Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Copy`] | Trivial bitwise copying |
+//! | [`Duplicate`] | Explicit deep copying |
+//! | [`Drop`] | Resource cleanup |
+//!
+//! # Equality and Ordering
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`PartialEq`] | Partial equality comparison |
+//! | [`Eq`] | Full equality (reflexive) |
+//! | [`PartialOrd`] | Partial ordering |
+//! | [`Ord`] | Total ordering |
+//!
+//! # Other Behaviors
+//!
+//! | Behavior | Description |
+//! |----------|-------------|
+//! | [`Hash`] | Hash code generation |
+//! | [`Display`] | Human-readable formatting |
+//! | [`Debug`] | Debug formatting |
+//! | [`Default`] | Default value creation |
+//! | [`From[T]`] | Conversion from type T |
+//! | [`Into[T]`] | Conversion into type T |
 
-// ============================================================================
-// Copy Behavior
-// ============================================================================
-// Types that can be trivially copied (bitwise copy).
-// All primitive types (I32, F64, Bool, etc.) implicitly implement Copy.
-// Copy types don't need explicit cloning - assignment copies the value.
-
+/// Marker behavior for types that can be trivially copied (bitwise copy).
+///
+/// All primitive types (I32, F64, Bool, etc.) implicitly implement Copy.
+/// Copy types don't need explicit cloning - assignment copies the value.
+///
+/// # Example
+///
+/// ```tml
+/// // I32 is Copy, so this works:
+/// let x: I32 = 5
+/// let y: I32 = x  // x is copied, both are usable
+/// ```
 pub behavior Copy {
-    // No methods - this is a marker behavior
-    // The compiler uses this to enable implicit copying
+    // Marker behavior - no methods
 }
 
-// ============================================================================
-// Duplicate Behavior (Clone in Rust)
-// ============================================================================
-// Types that can create an explicit copy of themselves.
-// Required for non-Copy types that need explicit duplication.
-
+/// Behavior for types that can create an explicit deep copy.
+///
+/// Required for non-Copy types that need explicit duplication.
+/// Unlike Copy, Duplicate allows complex copying logic.
+///
+/// # Example
+///
+/// ```tml
+/// impl Duplicate for MyList {
+///     func duplicate(this) -> Self {
+///         // Deep copy all elements
+///     }
+/// }
+/// ```
 pub behavior Duplicate {
-    // Create a copy of this value
+    /// Creates and returns a copy of this value.
     func duplicate(this) -> Self
 }
 
-// ============================================================================
-// Drop Behavior
-// ============================================================================
-// Types that need cleanup when they go out of scope.
-// Called automatically by the runtime when value is dropped.
-
+/// Behavior for types that need cleanup when going out of scope.
+///
+/// Called automatically by the runtime when a value is dropped.
+/// Use for releasing resources like file handles, memory, etc.
+///
+/// # Example
+///
+/// ```tml
+/// impl Drop for FileHandle {
+///     func drop(mut this) {
+///         this.close()
+///     }
+/// }
+/// ```
 pub behavior Drop {
-    // Called when value is dropped
+    /// Called when the value is dropped.
     func drop(mut this)
 }
 
-// ============================================================================
-// Equality Behaviors
-// ============================================================================
-
-// Partial equality - may not be reflexive (e.g., NaN != NaN for floats)
+/// Behavior for partial equality comparison.
+///
+/// May not be reflexive (e.g., `NaN != NaN` for floats).
+/// Implement this to enable `==` and `!=` operators.
 pub behavior PartialEq {
+    /// Returns `true` if `this` equals `other`.
     func eq(this, other: ref Self) -> Bool
 
-    // Default implementation of not-equal
+    /// Returns `true` if `this` does not equal `other`.
     func ne(this, other: ref Self) -> Bool {
         return not this.eq(other)
     }
 }
 
-// Full equality - reflexive, symmetric, transitive
+/// Behavior for full equality (reflexive, symmetric, transitive).
+///
+/// Types implementing `Eq` guarantee that `a == a` is always true.
+/// Required for use as keys in hash-based collections.
 pub behavior Eq: PartialEq {
     // Inherits eq and ne from PartialEq
-    // Types implementing Eq guarantee that a == a is always true
 }
 
-// ============================================================================
-// Ordering Behaviors
-// ============================================================================
-
-// Represents ordering result
-pub enum Ordering {
+/// Represents the result of a comparison.
+pub type Ordering {
+    /// Less than.
     Less,
+    /// Equal.
     Equal,
+    /// Greater than.
     Greater,
 }
 
-// Partial ordering - may have incomparable values (e.g., floats with NaN)
+/// Behavior for partial ordering comparison.
+///
+/// May have incomparable values (e.g., floats with NaN).
+/// Implement this to enable `<`, `<=`, `>`, `>=` operators.
 pub behavior PartialOrd: PartialEq {
+    /// Compares and returns ordering, or `Nothing` if not comparable.
     func partial_cmp(this, other: ref Self) -> Maybe[Ordering]
 
-    // Default implementations
+    /// Returns `true` if `this < other`.
     func lt(this, other: ref Self) -> Bool {
         return when this.partial_cmp(other) {
             Just(Ordering::Less) => true,
@@ -78,6 +133,7 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
+    /// Returns `true` if `this <= other`.
     func le(this, other: ref Self) -> Bool {
         return when this.partial_cmp(other) {
             Just(Ordering::Less) => true,
@@ -86,6 +142,7 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
+    /// Returns `true` if `this > other`.
     func gt(this, other: ref Self) -> Bool {
         return when this.partial_cmp(other) {
             Just(Ordering::Greater) => true,
@@ -93,6 +150,7 @@ pub behavior PartialOrd: PartialEq {
         }
     }
 
+    /// Returns `true` if `this >= other`.
     func ge(this, other: ref Self) -> Bool {
         return when this.partial_cmp(other) {
             Just(Ordering::Greater) => true,
@@ -102,15 +160,19 @@ pub behavior PartialOrd: PartialEq {
     }
 }
 
-// Total ordering - all values are comparable
+/// Behavior for total ordering (all values are comparable).
+///
+/// Required for sorting and binary search operations.
 pub behavior Ord: Eq + PartialOrd {
+    /// Compares and returns ordering.
     func cmp(this, other: ref Self) -> Ordering
 
-    // Override partial_cmp with guaranteed Some result
+    /// Returns ordering wrapped in `Just`.
     func partial_cmp(this, other: ref Self) -> Maybe[Ordering] {
         return Just(this.cmp(other))
     }
 
+    /// Returns the maximum of two values.
     func max(this, other: Self) -> Self {
         return when this.cmp(ref other) {
             Ordering::Greater => this,
@@ -119,6 +181,7 @@ pub behavior Ord: Eq + PartialOrd {
         }
     }
 
+    /// Returns the minimum of two values.
     func min(this, other: Self) -> Self {
         return when this.cmp(ref other) {
             Ordering::Less => this,
@@ -128,102 +191,115 @@ pub behavior Ord: Eq + PartialOrd {
     }
 }
 
-// ============================================================================
-// Hash Behavior
-// ============================================================================
-// Types that can be hashed for use in hash-based collections.
-
+/// Behavior for types that can be hashed.
+///
+/// Required for use in hash-based collections like `HashMap`.
+/// Types implementing `Hash` must also implement `Eq`.
 pub behavior Hash {
-    // Compute hash value
+    /// Computes and returns a hash value.
     func hash(this) -> I64
 }
 
-// ============================================================================
-// Display Behaviors
-// ============================================================================
-
-// Human-readable string representation
+/// Behavior for human-readable string representation.
+///
+/// Implement this for user-facing output.
 pub behavior Display {
+    /// Returns a human-readable string representation.
     func to_string(this) -> Str
 }
 
-// Debug string representation (more verbose, for debugging)
+/// Behavior for debug string representation.
+///
+/// Implement this for debugging and logging output.
+/// Typically more verbose than `Display`.
 pub behavior Debug {
+    /// Returns a debug string representation.
     func debug_string(this) -> Str
 }
 
-// ============================================================================
-// Default Behavior
-// ============================================================================
-// Types that have a meaningful default value.
-
+/// Behavior for types with a meaningful default value.
+///
+/// # Example
+///
+/// ```tml
+/// impl Default for Counter {
+///     func default() -> Self {
+///         Counter { count: 0 }
+///     }
+/// }
+/// ```
 pub behavior Default {
-    // Create a default value
-    // Note: This is a static method, not an instance method
+    /// Creates and returns a default value.
     func default() -> Self
 }
 
-// ============================================================================
-// Conversion Behaviors
-// ============================================================================
-
-// Convert from another type
+/// Behavior for infallible conversion from another type.
+///
+/// # Example
+///
+/// ```tml
+/// impl From[I32] for I64 {
+///     func from(value: I32) -> Self {
+///         value as I64
+///     }
+/// }
+/// ```
 pub behavior From[T] {
+    /// Converts from type T to Self.
     func from(value: T) -> Self
 }
 
-// Convert into another type (automatically derived from From)
+/// Behavior for infallible conversion into another type.
+///
+/// Automatically derived from `From`.
 pub behavior Into[T] {
+    /// Converts self into type T.
     func into(this) -> T
 }
 
-// Fallible conversion from another type
+/// Behavior for fallible conversion from another type.
 pub behavior TryFrom[T] {
+    /// The error type returned on conversion failure.
     type Error
 
+    /// Attempts to convert, returning `Err` on failure.
     func try_from(value: T) -> Outcome[Self, This::Error]
 }
 
-// Fallible conversion into another type
+/// Behavior for fallible conversion into another type.
 pub behavior TryInto[T] {
+    /// The error type returned on conversion failure.
     type Error
 
+    /// Attempts to convert, returning `Err` on failure.
     func try_into(this) -> Outcome[T, This::Error]
 }
 
-// ============================================================================
-// AsRef and AsMut Behaviors
-// ============================================================================
-// Cheap reference-to-reference conversions
-
+/// Behavior for cheap reference-to-reference conversion.
 pub behavior AsRef[T] {
+    /// Returns a reference to the inner type.
     func as_ref(this) -> ref T
 }
 
+/// Behavior for cheap mutable reference-to-reference conversion.
 pub behavior AsMut[T] {
+    /// Returns a mutable reference to the inner type.
     func as_mut(mut this) -> mut ref T
 }
 
-// ============================================================================
-// Sized Behavior (Marker)
-// ============================================================================
-// Types with a known size at compile time.
-// Most types are Sized; only trait objects are !Sized.
-
+/// Marker behavior for types with known size at compile time.
+///
+/// Most types are `Sized`; only trait objects are `!Sized`.
 pub behavior Sized {
     // Marker behavior - no methods
 }
 
-// ============================================================================
-// Send and Sync Behaviors (Markers for Concurrency)
-// ============================================================================
-
-// Types that can be safely sent between threads
+/// Marker behavior for types that can be safely sent between threads.
 pub behavior Send {
     // Marker behavior - no methods
 }
 
-// Types that can be safely shared between threads via references
+/// Marker behavior for types that can be safely shared between threads.
 pub behavior Sync {
     // Marker behavior - no methods
 }

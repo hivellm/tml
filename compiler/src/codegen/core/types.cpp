@@ -205,6 +205,8 @@ auto LLVMIRGen::llvm_type(const parser::Type& type) -> std::string {
         if (!dyn.behavior.segments.empty()) {
             behavior_name = dyn.behavior.segments.back();
         }
+        // Ensure the dyn type is defined before use
+        emit_dyn_type(behavior_name);
         return "%dyn." + behavior_name;
     } else if (type.is<parser::TupleType>()) {
         // Tuple types are anonymous structs: { type1, type2, ... }
@@ -310,6 +312,42 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
             return "%struct." + mangled;
         }
 
+        // For non-generic structs, ensure the type is defined before use
+        // This handles structs from imported modules
+        if (struct_types_.find(named.name) == struct_types_.end()) {
+            // Try to find struct definition from module registry
+            if (env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto struct_it = mod.structs.find(named.name);
+                    if (struct_it != mod.structs.end()) {
+                        const auto& struct_def = struct_it->second;
+                        // Emit the struct type definition
+                        std::string type_name = "%struct." + named.name;
+                        std::string def = type_name + " = type { ";
+                        bool first = true;
+                        for (const auto& [field_name, field_type] : struct_def.fields) {
+                            if (!first)
+                                def += ", ";
+                            first = false;
+                            def += llvm_type_from_semantic(field_type, true);
+                        }
+                        def += " }";
+                        type_defs_buffer_ << def << "\n";
+                        struct_types_[named.name] = type_name;
+
+                        // Also register fields
+                        std::vector<FieldInfo> fields;
+                        for (size_t i = 0; i < struct_def.fields.size(); ++i) {
+                            std::string ft = llvm_type_from_semantic(struct_def.fields[i].second, true);
+                            fields.push_back({struct_def.fields[i].first, static_cast<int>(i), ft});
+                        }
+                        struct_fields_[named.name] = fields;
+                        break;
+                    }
+                }
+            }
+        }
         return "%struct." + named.name;
     } else if (type->is<types::GenericType>()) {
         // Uninstantiated generic type - this shouldn't happen in codegen normally
@@ -338,6 +376,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
         // Trait objects are fat pointers: { data_ptr, vtable_ptr }
         // We use a struct type: %dyn.BehaviorName
         const auto& dyn = type->as<types::DynBehaviorType>();
+        // Ensure the dyn type is defined before use
+        emit_dyn_type(dyn.behavior_name);
         return "%dyn." + dyn.behavior_name;
     } else if (type->is<types::ArrayType>()) {
         // Fixed-size arrays: [T; N] -> [N x llvm_type(T)]
@@ -354,6 +394,97 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
     }
 
     return "i32"; // Default
+}
+
+// ============ Type Definition Ensuring ============
+// Ensures that a type is defined in the LLVM IR output before it's used
+
+void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
+    if (!type)
+        return;
+
+    if (type->is<parser::NamedType>()) {
+        const auto& named = type->as<parser::NamedType>();
+        std::string base_name;
+        if (!named.path.segments.empty()) {
+            base_name = named.path.segments.back();
+        } else {
+            return;
+        }
+
+        // Skip primitive types
+        if (base_name == "I8" || base_name == "I16" || base_name == "I32" || base_name == "I64" ||
+            base_name == "I128" || base_name == "U8" || base_name == "U16" || base_name == "U32" ||
+            base_name == "U64" || base_name == "U128" || base_name == "F32" || base_name == "F64" ||
+            base_name == "Bool" || base_name == "Char" || base_name == "Str" || base_name == "Unit" ||
+            base_name == "Never" || base_name == "Ptr") {
+            return;
+        }
+
+        // Skip if already defined
+        if (struct_types_.find(base_name) != struct_types_.end()) {
+            return;
+        }
+
+        // Try to find and emit the type from the module registry
+        if (env_.module_registry()) {
+            const auto& all_modules = env_.module_registry()->get_all_modules();
+            for (const auto& [mod_name, mod] : all_modules) {
+                // Check for struct
+                auto struct_it = mod.structs.find(base_name);
+                if (struct_it != mod.structs.end()) {
+                    // For structs with type params (generic), skip - will be instantiated later
+                    if (!struct_it->second.type_params.empty()) {
+                        return;
+                    }
+                    // Emit non-generic struct type
+                    std::string type_name = "%struct." + base_name;
+                    std::string def = type_name + " = type { ";
+                    bool first = true;
+                    for (const auto& [field_name, field_type] : struct_it->second.fields) {
+                        if (!first)
+                            def += ", ";
+                        first = false;
+                        def += llvm_type_from_semantic(field_type, true);
+                    }
+                    def += " }";
+                    type_defs_buffer_ << def << "\n";
+                    struct_types_[base_name] = type_name;
+
+                    // Register fields
+                    std::vector<FieldInfo> fields;
+                    for (size_t i = 0; i < struct_it->second.fields.size(); ++i) {
+                        std::string ft =
+                            llvm_type_from_semantic(struct_it->second.fields[i].second, true);
+                        fields.push_back({struct_it->second.fields[i].first, static_cast<int>(i), ft});
+                    }
+                    struct_fields_[base_name] = fields;
+                    return;
+                }
+
+                // Check for enum
+                auto enum_it = mod.enums.find(base_name);
+                if (enum_it != mod.enums.end()) {
+                    // For enums with type params (generic), skip - will be instantiated later
+                    if (!enum_it->second.type_params.empty()) {
+                        return;
+                    }
+                    // Emit non-generic enum type (simple enum = struct { i32 })
+                    std::string type_name = "%struct." + base_name;
+                    type_defs_buffer_ << type_name << " = type { i32 }\n";
+                    struct_types_[base_name] = type_name;
+
+                    // Register variant values
+                    int tag = 0;
+                    for (const auto& [variant_name, _payload] : enum_it->second.variants) {
+                        std::string key = base_name + "::" + variant_name;
+                        enum_variants_[key] = tag++;
+                    }
+                    return;
+                }
+            }
+        }
+    }
 }
 
 // ============ Generic Type Mangling ============

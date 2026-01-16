@@ -38,6 +38,7 @@ TML uses a **layered architecture**:
 | [RFC-0012](./RFC-0012-MIR.md) | Mid-level IR | **Active** | SSA-form MIR for optimization |
 | [RFC-0013](./RFC-0013-HIR.md) | High-level IR | **Active** | Type-resolved AST representation |
 | [RFC-0014](./RFC-0014-OOP-CLASSES.md) | C#-Style OOP | **Active** | Classes, interfaces, inheritance, polymorphism |
+| [RFC-0015](./RFC-0015-JSON.md) | Native JSON | **Active** | JSON parsing, serialization, JSON-RPC 2.0, schema validation |
 
 ## Tooling Specifications
 
@@ -108,3 +109,9 @@ Related work, inspiration, prior art.
    - ✅ Vtable generation and dispatch
    - 🔄 Namespace support (in progress)
    - 📋 OOP optimizations (planned)
+10. **RFC-0015** (JSON) - ✅ Implemented in v0.6.0 - Native JSON for MCP
+    - ✅ Parser with integer precision preservation
+    - ✅ Serializer with streaming output
+    - ✅ Fluent builder API
+    - ✅ JSON-RPC 2.0 support
+    - ✅ Schema validation

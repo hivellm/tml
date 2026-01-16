@@ -1,22 +1,22 @@
-# std.net — Networking
+# std::net — Networking
 
 ## 1. Overview
 
-The `std.net` package provides low-level networking primitives: TCP streams, UDP sockets, and IP address handling.
+The `std::net` package provides low-level networking primitives: TCP streams, UDP sockets, and IP address handling.
 
 ```tml
-import std.net
-import std.net.{TcpStream, TcpListener, UdpSocket}
+use std::net
+use std::net.{TcpStream, TcpListener, UdpSocket}
 ```
 
 ## 2. Capabilities
 
 ```tml
-caps: [io.network]           // Full network access
-caps: [io.network.tcp]       // TCP only
-caps: [io.network.udp]       // UDP only
-caps: [io.network.connect]   // Outbound connections only
-caps: [io.network.listen]    // Accept incoming connections
+caps: [io::network]           // Full network access
+caps: [io::network.tcp]       // TCP only
+caps: [io::network.udp]       // UDP only
+caps: [io::network.connect]   // Outbound connections only
+caps: [io::network.listen]    // Accept incoming connections
 ```
 
 ## 3. IP Addresses
@@ -24,22 +24,22 @@ caps: [io.network.listen]    // Accept incoming connections
 ### 3.1 IpAddr
 
 ```tml
-public type IpAddr = V4(Ipv4Addr) | V6(Ipv6Addr)
+pub type IpAddr = V4(Ipv4Addr) | V6(Ipv6Addr)
 
 extend IpAddr {
-    public func parse(s: ref str) -> Outcome[This, AddrParseError]
-    public func is_loopback(this) -> Bool
-    public func is_multicast(this) -> Bool
-    public func is_unspecified(this) -> Bool
-    public func is_ipv4(this) -> Bool
-    public func is_ipv6(this) -> Bool
+    pub func parse(s: ref str) -> Outcome[This, AddrParseError]
+    pub func is_loopback(this) -> Bool
+    pub func is_multicast(this) -> Bool
+    pub func is_unspecified(this) -> Bool
+    pub func is_ipv4(this) -> Bool
+    pub func is_ipv6(this) -> Bool
 }
 ```
 
 ### 3.2 Ipv4Addr
 
 ```tml
-public type Ipv4Addr {
+pub type Ipv4Addr {
     octets: [U8; 4],
 }
 
@@ -48,23 +48,23 @@ extend Ipv4Addr {
     public const UNSPECIFIED: This = This { octets: [0, 0, 0, 0] }
     public const BROADCAST: This = This { octets: [255, 255, 255, 255] }
 
-    public func new(a: U8, b: U8, c: U8, d: U8) -> This
-    public func parse(s: ref str) -> Outcome[This, AddrParseError]
-    public func octets(this) -> [U8; 4]
-    public func is_loopback(this) -> Bool
-    public func is_private(this) -> Bool
-    public func is_multicast(this) -> Bool
-    public func is_broadcast(this) -> Bool
-    public func is_unspecified(this) -> Bool
-    public func to_ipv6_compatible(this) -> Ipv6Addr
-    public func to_ipv6_mapped(this) -> Ipv6Addr
+    pub func new(a: U8, b: U8, c: U8, d: U8) -> This
+    pub func parse(s: ref str) -> Outcome[This, AddrParseError]
+    pub func octets(this) -> [U8; 4]
+    pub func is_loopback(this) -> Bool
+    pub func is_private(this) -> Bool
+    pub func is_multicast(this) -> Bool
+    pub func is_broadcast(this) -> Bool
+    pub func is_unspecified(this) -> Bool
+    pub func to_ipv6_compatible(this) -> Ipv6Addr
+    pub func to_ipv6_mapped(this) -> Ipv6Addr
 }
 ```
 
 ### 3.3 Ipv6Addr
 
 ```tml
-public type Ipv6Addr {
+pub type Ipv6Addr {
     segments: [U16; 8],
 }
 
@@ -72,36 +72,36 @@ extend Ipv6Addr {
     public const LOCALHOST: This = This { segments: [0, 0, 0, 0, 0, 0, 0, 1] }
     public const UNSPECIFIED: This = This { segments: [0, 0, 0, 0, 0, 0, 0, 0] }
 
-    public func new(a: U16, b: U16, c: U16, d: U16, e: U16, f: U16, g: U16, h: U16) -> This
-    public func parse(s: ref str) -> Outcome[This, AddrParseError]
-    public func segments(this) -> [U16; 8]
-    public func is_loopback(this) -> Bool
-    public func is_multicast(this) -> Bool
-    public func is_unspecified(this) -> Bool
-    public func to_ipv4(this) -> Maybe[Ipv4Addr]
+    pub func new(a: U16, b: U16, c: U16, d: U16, e: U16, f: U16, g: U16, h: U16) -> This
+    pub func parse(s: ref str) -> Outcome[This, AddrParseError]
+    pub func segments(this) -> [U16; 8]
+    pub func is_loopback(this) -> Bool
+    pub func is_multicast(this) -> Bool
+    pub func is_unspecified(this) -> Bool
+    pub func to_ipv4(this) -> Maybe[Ipv4Addr]
 }
 ```
 
 ### 3.4 SocketAddr
 
 ```tml
-public type SocketAddr = V4(SocketAddrV4) | V6(SocketAddrV6)
+pub type SocketAddr = V4(SocketAddrV4) | V6(SocketAddrV6)
 
 extend SocketAddr {
-    public func new(ip: IpAddr, port: U16) -> This
-    public func parse(s: ref str) -> Outcome[This, AddrParseError]
-    public func ip(this) -> IpAddr
-    public func port(this) -> U16
-    public func set_ip(this, ip: IpAddr)
-    public func set_port(this, port: U16)
+    pub func new(ip: IpAddr, port: U16) -> This
+    pub func parse(s: ref str) -> Outcome[This, AddrParseError]
+    pub func ip(this) -> IpAddr
+    pub func port(this) -> U16
+    pub func set_ip(this, ip: IpAddr)
+    pub func set_port(this, port: U16)
 }
 
-public type SocketAddrV4 {
+pub type SocketAddrV4 {
     ip: Ipv4Addr,
     port: U16,
 }
 
-public type SocketAddrV6 {
+pub type SocketAddrV6 {
     ip: Ipv6Addr,
     port: U16,
     flowinfo: U32,
@@ -114,111 +114,111 @@ public type SocketAddrV6 {
 ### 4.1 TcpStream
 
 ```tml
-public type TcpStream {
+pub type TcpStream {
     handle: RawSocket,
 }
 
 extend TcpStream {
     /// Connect to remote address
-    public func connect(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
-    effects: [io.network.tcp, io.network.connect]
+    pub func connect(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
+    effects: [io::network.tcp, io::network.connect]
 
     /// Connect with timeout
-    public func connect_timeout(addr: ref SocketAddr, timeout: Duration) -> Outcome[This, IoError]
-    effects: [io.network.tcp, io.network.connect]
+    pub func connect_timeout(addr: ref SocketAddr, timeout: Duration) -> Outcome[This, IoError]
+    effects: [io::network.tcp, io::network.connect]
 
     /// Get local address
-    public func local_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Get peer address
-    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func peer_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Shutdown read, write, or both
-    public func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
+    pub func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
 
     /// Set read timeout
-    public func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
+    pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set write timeout
-    public func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
+    pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Get read timeout
-    public func read_timeout(this) -> Outcome[Maybe[Duration], IoError]
+    pub func read_timeout(this) -> Outcome[Maybe[Duration], IoError]
 
     /// Get write timeout
-    public func write_timeout(this) -> Outcome[Maybe[Duration], IoError]
+    pub func write_timeout(this) -> Outcome[Maybe[Duration], IoError]
 
     /// Set TCP_NODELAY (disable Nagle's algorithm)
-    public func set_nodelay(this, nodelay: Bool) -> Outcome[Unit, IoError]
+    pub func set_nodelay(this, nodelay: Bool) -> Outcome[Unit, IoError]
 
     /// Get TCP_NODELAY
-    public func nodelay(this) -> Outcome[Bool, IoError]
+    pub func nodelay(this) -> Outcome[Bool, IoError]
 
     /// Set TTL
-    public func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
+    pub func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Get TTL
-    public func ttl(this) -> Outcome[U32, IoError]
+    pub func ttl(this) -> Outcome[U32, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Outcome[This, IoError]
+    pub func try_clone(this) -> Outcome[This, IoError]
 
     /// Take read half
-    public func take_read(this) -> Outcome[ReadHalf, IoError]
+    pub func take_read(this) -> Outcome[ReadHalf, IoError]
 
     /// Take write half
-    public func take_write(this) -> Outcome[WriteHalf, IoError]
+    pub func take_write(this) -> Outcome[WriteHalf, IoError]
 
     /// Peek at incoming data without consuming
-    public func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tcp]
+    pub func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
+    effects: [io::network.tcp]
 }
 
 extend TcpStream with Read {
     func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 }
 
 extend TcpStream with Write {
     func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 
     func flush(this) -> Outcome[Unit, IoError]
 }
 
-public type Shutdown = Read | Write | Both
+pub type Shutdown = Read | Write | Both
 ```
 
 ### 4.2 TcpListener
 
 ```tml
-public type TcpListener {
+pub type TcpListener {
     handle: RawSocket,
 }
 
 extend TcpListener {
     /// Bind to address and listen
-    public func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
-    effects: [io.network.tcp, io.network.listen]
+    pub func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
+    effects: [io::network.tcp, io::network.listen]
 
     /// Accept incoming connection
-    public func accept(this) -> Outcome[(TcpStream, SocketAddr), IoError]
-    effects: [io.network.tcp, io.network.listen]
+    pub func accept(this) -> Outcome[(TcpStream, SocketAddr), IoError]
+    effects: [io::network.tcp, io::network.listen]
 
     /// Get local address
-    public func local_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Set non-blocking mode
-    public func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
+    pub func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Outcome[This, IoError]
+    pub func try_clone(this) -> Outcome[This, IoError]
 
     /// Iterator over incoming connections
-    public func incoming(this) -> Incoming
+    pub func incoming(this) -> Incoming
 }
 
-public type Incoming {
+pub type Incoming {
     listener: ref TcpListener,
 }
 
@@ -226,7 +226,7 @@ extend Incoming with Iterator {
     type Item = Outcome[TcpStream, IoError]
 
     func next(this) -> Maybe[Outcome[TcpStream, IoError]]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 }
 ```
 
@@ -235,81 +235,81 @@ extend Incoming with Iterator {
 ### 5.1 UdpSocket
 
 ```tml
-public type UdpSocket {
+pub type UdpSocket {
     handle: RawSocket,
 }
 
 extend UdpSocket {
     /// Bind to local address
-    public func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
-    effects: [io.network.udp]
+    pub func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
+    effects: [io::network.udp]
 
     /// Connect to remote (for send/recv instead of send_to/recv_from)
-    public func connect(this, addr: impl ToSocketAddrs) -> Outcome[Unit, IoError]
-    effects: [io.network.udp]
+    pub func connect(this, addr: impl ToSocketAddrs) -> Outcome[Unit, IoError]
+    effects: [io::network.udp]
 
     /// Send data to connected peer
-    public func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.udp]
+    pub func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
+    effects: [io::network.udp]
 
     /// Receive data from connected peer
-    public func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.udp]
+    pub func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
+    effects: [io::network.udp]
 
     /// Send data to specific address
-    public func send_to(this, buf: ref [U8], addr: impl ToSocketAddrs) -> Outcome[U64, IoError]
-    effects: [io.network.udp]
+    pub func send_to(this, buf: ref [U8], addr: impl ToSocketAddrs) -> Outcome[U64, IoError]
+    effects: [io::network.udp]
 
     /// Receive data and sender address
-    public func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
-    effects: [io.network.udp]
+    pub func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
+    effects: [io::network.udp]
 
     /// Peek at incoming data
-    public func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.udp]
+    pub func peek(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
+    effects: [io::network.udp]
 
     /// Peek with sender address
-    public func peek_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
-    effects: [io.network.udp]
+    pub func peek_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
+    effects: [io::network.udp]
 
     /// Get local address
-    public func local_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func local_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Get peer address (if connected)
-    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func peer_addr(this) -> Outcome[SocketAddr, IoError]
 
     /// Set read timeout
-    public func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
+    pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set write timeout
-    public func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
+    pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[Unit, IoError]
 
     /// Set broadcast permission
-    public func set_broadcast(this, broadcast: Bool) -> Outcome[Unit, IoError]
+    pub func set_broadcast(this, broadcast: Bool) -> Outcome[Unit, IoError]
 
     /// Get broadcast permission
-    public func broadcast(this) -> Outcome[Bool, IoError]
+    pub func broadcast(this) -> Outcome[Bool, IoError]
 
     /// Set TTL
-    public func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
+    pub func set_ttl(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Get TTL
-    public func ttl(this) -> Outcome[U32, IoError]
+    pub func ttl(this) -> Outcome[U32, IoError]
 
     /// Set multicast TTL
-    public func set_multicast_ttl_v4(this, ttl: U32) -> Outcome[Unit, IoError]
+    pub func set_multicast_ttl_v4(this, ttl: U32) -> Outcome[Unit, IoError]
 
     /// Join multicast group
-    public func join_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
+    pub func join_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
 
     /// Leave multicast group
-    public func leave_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
+    pub func leave_multicast_v4(this, multiaddr: ref Ipv4Addr, interface: ref Ipv4Addr) -> Outcome[Unit, IoError]
 
     /// Set non-blocking mode
-    public func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
+    pub func set_nonblocking(this, nonblocking: Bool) -> Outcome[Unit, IoError]
 
     /// Clone as new handle
-    public func try_clone(this) -> Outcome[This, IoError]
+    pub func try_clone(this) -> Outcome[This, IoError]
 }
 ```
 
@@ -318,11 +318,11 @@ extend UdpSocket {
 ### 6.1 ToSocketAddrs Trait
 
 ```tml
-public behaviorToSocketAddrs {
+pub behaviorToSocketAddrs {
     type Iter: Iterator[Item = SocketAddr]
 
     func to_socket_addrs(this) -> Outcome[This.Iter, IoError]
-    effects: [io.network]
+    effects: [io::network]
 }
 
 // Implementations
@@ -337,10 +337,10 @@ extend String with ToSocketAddrs { ... }
 
 ```tml
 /// Resolve hostname to IP addresses
-public func lookup_host(host: ref str) -> Outcome[LookupHost, IoError]
-effects: [io.network]
+pub func lookup_host(host: ref str) -> Outcome[LookupHost, IoError]
+effects: [io::network]
 
-public type LookupHost {
+pub type LookupHost {
     inner: List[IpAddr],
     pos: U64,
 }
@@ -360,53 +360,53 @@ loop addr in addrs {
 
 ```tml
 @when(unix)
-module unix
+mod unix
 
-public type UnixStream {
+pub type UnixStream {
     handle: RawFd,
 }
 
 extend UnixStream {
-    public func connect(path: impl AsRef[Path]) -> Outcome[This, IoError]
-    effects: [io.network]
+    pub func connect(path: impl AsRef[Path]) -> Outcome[This, IoError]
+    effects: [io::network]
 
-    public func pair() -> Outcome[(This, This), IoError]
-    effects: [io.network]
+    pub func pair() -> Outcome[(This, This), IoError]
+    effects: [io::network]
 
-    public func local_addr(this) -> Outcome[SocketAddr, IoError]
-    public func peer_addr(this) -> Outcome[SocketAddr, IoError]
-    public func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
+    pub func local_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func peer_addr(this) -> Outcome[SocketAddr, IoError]
+    pub func shutdown(this, how: Shutdown) -> Outcome[Unit, IoError]
 }
 
 extend UnixStream with Read { ... }
 extend UnixStream with Write { ... }
 
-public type UnixListener {
+pub type UnixListener {
     handle: RawFd,
 }
 
 extend UnixListener {
-    public func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
-    effects: [io.network]
+    pub func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
+    effects: [io::network]
 
-    public func accept(this) -> Outcome[(UnixStream, SocketAddr), IoError]
-    effects: [io.network]
+    pub func accept(this) -> Outcome[(UnixStream, SocketAddr), IoError]
+    effects: [io::network]
 
-    public func incoming(this) -> Incoming
+    pub func incoming(this) -> Incoming
 }
 
-public type UnixDatagram {
+pub type UnixDatagram {
     handle: RawFd,
 }
 
 extend UnixDatagram {
-    public func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
-    public func connect(this, path: impl AsRef[Path]) -> Outcome[Unit, IoError]
-    public func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
-    public func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    public func send_to(this, buf: ref [U8], path: impl AsRef[Path]) -> Outcome[U64, IoError]
-    public func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
-    public func pair() -> Outcome[(This, This), IoError]
+    pub func bind(path: impl AsRef[Path]) -> Outcome[This, IoError]
+    pub func connect(this, path: impl AsRef[Path]) -> Outcome[Unit, IoError]
+    pub func send(this, buf: ref [U8]) -> Outcome[U64, IoError]
+    pub func recv(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
+    pub func send_to(this, buf: ref [U8], path: impl AsRef[Path]) -> Outcome[U64, IoError]
+    pub func recv_from(this, buf: mut ref [U8]) -> Outcome[(U64, SocketAddr), IoError]
+    pub func pair() -> Outcome[(This, This), IoError]
 }
 ```
 
@@ -415,47 +415,47 @@ extend UnixDatagram {
 ### 8.1 Async TCP
 
 ```tml
-module async
+mod async
 
-public type AsyncTcpStream {
+pub type AsyncTcpStream {
     inner: TcpStream,
 }
 
 extend AsyncTcpStream {
     public async func connect(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 
     public async func read(this, buf: mut ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 
     public async func write(this, buf: ref [U8]) -> Outcome[U64, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 
     public async func write_all(this, buf: ref [U8]) -> Outcome[Unit, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 }
 
-public type AsyncTcpListener {
+pub type AsyncTcpListener {
     inner: TcpListener,
 }
 
 extend AsyncTcpListener {
     public async func bind(addr: impl ToSocketAddrs) -> Outcome[This, IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 
     public async func accept(this) -> Outcome[(AsyncTcpStream, SocketAddr), IoError]
-    effects: [io.network.tcp]
+    effects: [io::network.tcp]
 }
 ```
 
 ## 9. Error Types
 
 ```tml
-public type AddrParseError {
+pub type AddrParseError {
     kind: AddrParseErrorKind,
 }
 
-public type AddrParseErrorKind =
+pub type AddrParseErrorKind =
     | Empty
     | InvalidIpv4
     | InvalidIpv6
@@ -468,13 +468,13 @@ public type AddrParseErrorKind =
 ### 10.1 TCP Client
 
 ```tml
-module tcp_client
-caps: [io.network.tcp]
+mod tcp_client
+caps: [io::network.tcp]
 
-import std.net.TcpStream
-import std.io.{BufReader, BufWriter, BufRead, Write}
+use std::net.TcpStream
+use std::io.{BufReader, BufWriter, BufRead, Write}
 
-public func main() -> Outcome[Unit, Error] {
+pub func main() -> Outcome[Unit, Error] {
     // Connect to server
     let stream = TcpStream.connect("127.0.0.1:8080")!
 
@@ -498,13 +498,13 @@ public func main() -> Outcome[Unit, Error] {
 ### 10.2 TCP Server
 
 ```tml
-module tcp_server
-caps: [io.network.tcp]
+mod tcp_server
+caps: [io::network.tcp]
 
-import std.net.{TcpListener, TcpStream}
-import std.thread
+use std::net.{TcpListener, TcpStream}
+use std::thread
 
-public func main() -> Outcome[Unit, Error] {
+pub func main() -> Outcome[Unit, Error] {
     let listener = TcpListener.bind("127.0.0.1:8080")!
     println("Listening on port 8080")
 
@@ -534,12 +534,12 @@ func handle_client(stream: TcpStream) -> Outcome[Unit, IoError] {
 ### 10.3 UDP Echo Server
 
 ```tml
-module udp_echo
-caps: [io.network.udp]
+mod udp_echo
+caps: [io::network.udp]
 
-import std.net.UdpSocket
+use std::net.UdpSocket
 
-public func main() -> Outcome[Unit, Error] {
+pub func main() -> Outcome[Unit, Error] {
     let socket = UdpSocket.bind("127.0.0.1:9000")!
     println("UDP server on port 9000")
 

@@ -1,12 +1,12 @@
-# std.encoding — Text and Binary Encodings
+# std::encoding — Text and Binary Encodings
 
 ## 1. Overview
 
-The `std.encoding` package provides text encoding/decoding (UTF-8, UTF-16, ASCII, Latin-1) and binary encoding (Base64, Hex).
+The \x60std::encoding` package provides text encoding/decoding (UTF-8, UTF-16, ASCII, Latin-1) and binary encoding (Base64, Hex).
 
 ```tml
-import std.encoding
-import std.encoding.{base64, hex, utf8, utf16}
+use std::encoding
+use std::encoding.{base64, hex, utf8, utf16}
 ```
 
 ## 2. Capabilities
@@ -20,27 +20,27 @@ import std.encoding.{base64, hex, utf8, utf16}
 ### 3.1 UTF-8
 
 ```tml
-module utf8
+mod utf8
 
 /// Check if bytes are valid UTF-8
-public func is_valid(bytes: ref [U8]) -> Bool
+pub func is_valid(bytes: ref [U8]) -> Bool
 
 /// Decode bytes to string
-public func decode(bytes: ref [U8]) -> Outcome[String, Utf8Error]
+pub func decode(bytes: ref [U8]) -> Outcome[String, Utf8Error]
 
 /// Decode bytes, replacing invalid sequences with replacement char
-public func decode_lossy(bytes: ref [U8]) -> String
+pub func decode_lossy(bytes: ref [U8]) -> String
 
 /// Encode string to bytes (always succeeds - String is UTF-8)
-public func encode(s: ref str) -> ref [U8] {
+pub func encode(s: ref str) -> ref [U8] {
     return s.as_bytes()
 }
 
 /// Count characters (not bytes)
-public func char_count(s: ref str) -> U64
+pub func char_count(s: ref str) -> U64
 
 /// Get byte length of char at position
-public func char_len(byte: U8) -> U64 {
+pub func char_len(byte: U8) -> U64 {
     if (byte & 0x80) == 0 { return 1 }
     if (byte & 0xE0) == 0xC0 { return 2 }
     if (byte & 0xF0) == 0xE0 { return 3 }
@@ -48,48 +48,48 @@ public func char_len(byte: U8) -> U64 {
     return 1  // Invalid, treat as single byte
 }
 
-public type Utf8Error {
+pub type Utf8Error {
     valid_up_to: U64,
     error_len: Maybe[U64],
 }
 
 extend Utf8Error {
-    public func valid_up_to(this) -> U64 { this.valid_up_to }
-    public func error_len(this) -> Maybe[U64] { this.error_len }
+    pub func valid_up_to(this) -> U64 { this.valid_up_to }
+    pub func error_len(this) -> Maybe[U64] { this.error_len }
 }
 ```
 
 ### 3.2 UTF-16
 
 ```tml
-module utf16
+mod utf16
 
 /// Decode UTF-16 LE bytes to string
-public func decode_le(bytes: ref [U8]) -> Outcome[String, DecodeError]
+pub func decode_le(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Decode UTF-16 BE bytes to string
-public func decode_be(bytes: ref [U8]) -> Outcome[String, DecodeError]
+pub func decode_be(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Decode with BOM detection
-public func decode(bytes: ref [U8]) -> Outcome[String, DecodeError]
+pub func decode(bytes: ref [U8]) -> Outcome[String, DecodeError]
 
 /// Encode string to UTF-16 LE
-public func encode_le(s: ref str) -> List[U8]
+pub func encode_le(s: ref str) -> List[U8]
 
 /// Encode string to UTF-16 BE
-public func encode_be(s: ref str) -> List[U8]
+pub func encode_be(s: ref str) -> List[U8]
 
 /// Encode with BOM
-public func encode_with_bom(s: ref str, endian: Endian) -> List[U8]
+pub func encode_with_bom(s: ref str, endian: Endian) -> List[U8]
 
-public type Endian = Little | Big
+pub type Endian = Little | Big
 
-public type DecodeError {
+pub type DecodeError {
     kind: DecodeErrorKind,
     position: U64,
 }
 
-public type DecodeErrorKind =
+pub type DecodeErrorKind =
     | InvalidLength      // Odd number of bytes
     | InvalidSurrogate   // Unpaired surrogate
     | InvalidCodePoint   // Code point out of range
@@ -98,30 +98,30 @@ public type DecodeErrorKind =
 ### 3.3 ASCII
 
 ```tml
-module ascii
+mod ascii
 
 /// Check if all bytes are ASCII (< 128)
-public func is_ascii(bytes: ref [U8]) -> Bool
+pub func is_ascii(bytes: ref [U8]) -> Bool
 
 /// Check if string is ASCII
-public func is_ascii_str(s: ref str) -> Bool
+pub func is_ascii_str(s: ref str) -> Bool
 
 /// Decode ASCII bytes to string
-public func decode(bytes: ref [U8]) -> Outcome[String, AsciiError]
+pub func decode(bytes: ref [U8]) -> Outcome[String, AsciiError]
 
 /// Decode, replacing non-ASCII with '?'
-public func decode_lossy(bytes: ref [U8]) -> String
+pub func decode_lossy(bytes: ref [U8]) -> String
 
 /// Encode string to ASCII (fails if non-ASCII chars)
-public func encode(s: ref str) -> Outcome[List[U8], AsciiError]
+pub func encode(s: ref str) -> Outcome[List[U8], AsciiError]
 
 /// Convert to uppercase ASCII
-public func to_uppercase(bytes: mut ref [U8])
+pub func to_uppercase(bytes: mut ref [U8])
 
 /// Convert to lowercase ASCII
-public func to_lowercase(bytes: mut ref [U8])
+pub func to_lowercase(bytes: mut ref [U8])
 
-public type AsciiError {
+pub type AsciiError {
     position: U64,
     byte: U8,
 }
@@ -130,18 +130,18 @@ public type AsciiError {
 ### 3.4 Latin-1 (ISO-8859-1)
 
 ```tml
-module latin1
+mod latin1
 
 /// Decode Latin-1 bytes to string
-public func decode(bytes: ref [U8]) -> String  // Always succeeds
+pub func decode(bytes: ref [U8]) -> String  // Always succeeds
 
 /// Encode string to Latin-1
-public func encode(s: ref str) -> Outcome[List[U8], EncodeError]
+pub func encode(s: ref str) -> Outcome[List[U8], EncodeError]
 
 /// Encode, replacing unencodable chars
-public func encode_lossy(s: ref str) -> List[U8]
+pub func encode_lossy(s: ref str) -> List[U8]
 
-public type EncodeError {
+pub type EncodeError {
     position: U64,
     char: Char,
 }
@@ -152,35 +152,35 @@ public type EncodeError {
 ### 4.1 Base64
 
 ```tml
-module base64
+mod base64
 
-public type Config {
+pub type Config {
     alphabet: Alphabet,
     padding: Bool,
 }
 
-public type Alphabet = Standard | UrlSafe
+pub type Alphabet = Standard | UrlSafe
 
-public const STANDARD: Config = Config { alphabet: Standard, padding: true }
-public const URL_SAFE: Config = Config { alphabet: UrlSafe, padding: false }
-public const URL_SAFE_PADDED: Config = Config { alphabet: UrlSafe, padding: true }
+pub const STANDARD: Config = Config { alphabet: Standard, padding: true }
+pub const URL_SAFE: Config = Config { alphabet: UrlSafe, padding: false }
+pub const URL_SAFE_PADDED: Config = Config { alphabet: UrlSafe, padding: true }
 
 /// Encode bytes to base64 string
-public func encode(bytes: ref [U8]) -> String {
+pub func encode(bytes: ref [U8]) -> String {
     return encode_config(bytes, STANDARD)
 }
 
 /// Encode with custom config
-public func encode_config(bytes: ref [U8], config: Config) -> String
+pub func encode_config(bytes: ref [U8], config: Config) -> String
 
 /// Decode base64 string to bytes
-public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
+pub func decode(s: ref str) -> Outcome[List[U8], DecodeError]
 
 /// Decode with custom config
-public func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
+pub func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
 
 /// Calculate encoded length
-public func encoded_len(input_len: U64, padding: Bool) -> U64 {
+pub func encoded_len(input_len: U64, padding: Bool) -> U64 {
     let base_len = (input_len + 2) / 3 * 4
     if padding {
         base_len
@@ -190,16 +190,16 @@ public func encoded_len(input_len: U64, padding: Bool) -> U64 {
 }
 
 /// Calculate decoded length
-public func decoded_len(input_len: U64) -> U64 {
+pub func decoded_len(input_len: U64) -> U64 {
     return input_len / 4 * 3
 }
 
-public type DecodeError {
+pub type DecodeError {
     kind: DecodeErrorKind,
     position: U64,
 }
 
-public type DecodeErrorKind =
+pub type DecodeErrorKind =
     | InvalidChar(Char)
     | InvalidLength
     | InvalidPadding
@@ -208,50 +208,50 @@ public type DecodeErrorKind =
 ### 4.2 Base32
 
 ```tml
-module base32
+mod base32
 
-public type Config {
+pub type Config {
     alphabet: Alphabet,
     padding: Bool,
 }
 
-public type Alphabet = Standard | Hex
+pub type Alphabet = Standard | Hex
 
-public const STANDARD: Config = Config { alphabet: Standard, padding: true }
-public const HEX: Config = Config { alphabet: Hex, padding: true }
+pub const STANDARD: Config = Config { alphabet: Standard, padding: true }
+pub const HEX: Config = Config { alphabet: Hex, padding: true }
 
-public func encode(bytes: ref [U8]) -> String
-public func encode_config(bytes: ref [U8], config: Config) -> String
-public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
-public func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
+pub func encode(bytes: ref [U8]) -> String
+pub func encode_config(bytes: ref [U8], config: Config) -> String
+pub func decode(s: ref str) -> Outcome[List[U8], DecodeError]
+pub func decode_config(s: ref str, config: Config) -> Outcome[List[U8], DecodeError]
 ```
 
 ### 4.3 Hexadecimal
 
 ```tml
-module hex
+mod hex
 
 /// Encode bytes to lowercase hex string
-public func encode(bytes: ref [U8]) -> String
+pub func encode(bytes: ref [U8]) -> String
 
 /// Encode bytes to uppercase hex string
-public func encode_upper(bytes: ref [U8]) -> String
+pub func encode_upper(bytes: ref [U8]) -> String
 
 /// Decode hex string to bytes
-public func decode(s: ref str) -> Outcome[List[U8], DecodeError]
+pub func decode(s: ref str) -> Outcome[List[U8], DecodeError]
 
 /// Encode single byte to hex chars
-public func encode_byte(b: U8) -> (Char, Char)
+pub func encode_byte(b: U8) -> (Char, Char)
 
 /// Decode two hex chars to byte
-public func decode_byte(high: Char, low: Char) -> Outcome[U8, DecodeError]
+pub func decode_byte(high: Char, low: Char) -> Outcome[U8, DecodeError]
 
-public type DecodeError {
+pub type DecodeError {
     kind: DecodeErrorKind,
     position: U64,
 }
 
-public type DecodeErrorKind =
+pub type DecodeErrorKind =
     | InvalidChar(Char)
     | InvalidLength
 ```
@@ -259,9 +259,9 @@ public type DecodeErrorKind =
 ## 5. Percent Encoding (URL)
 
 ```tml
-module percent
+mod percent
 
-public type EncodeSet =
+pub type EncodeSet =
     | Path          // Encode except unreserved + /
     | Query         // Encode except unreserved + ?&=
     | Fragment      // Encode except unreserved
@@ -270,34 +270,34 @@ public type EncodeSet =
     | Custom(func(U8) -> Bool)
 
 /// Percent-encode string
-public func encode(s: ref str, set: EncodeSet) -> String
+pub func encode(s: ref str, set: EncodeSet) -> String
 
 /// Percent-decode string
-public func decode(s: ref str) -> Outcome[String, DecodeError]
+pub func decode(s: ref str) -> Outcome[String, DecodeError]
 
 /// Encode for URL path
-public func encode_path(s: ref str) -> String {
+pub func encode_path(s: ref str) -> String {
     return encode(s, Path)
 }
 
 /// Encode for URL query
-public func encode_query(s: ref str) -> String {
+pub func encode_query(s: ref str) -> String {
     return encode(s, Query)
 }
 
 /// Encode for form data (space as +)
-public func encode_form(s: ref str) -> String
+pub func encode_form(s: ref str) -> String
 
 /// Decode form data
-public func decode_form(s: ref str) -> Outcome[String, DecodeError]
+pub func decode_form(s: ref str) -> Outcome[String, DecodeError]
 ```
 
 ## 6. Charset Detection
 
 ```tml
-module detect
+mod detect
 
-public type Encoding =
+pub type Encoding =
     | Utf8
     | Utf16Le
     | Utf16Be
@@ -308,13 +308,13 @@ public type Encoding =
     | Unknown
 
 /// Detect encoding from BOM
-public func from_bom(bytes: ref [U8]) -> Maybe[Encoding]
+pub func from_bom(bytes: ref [U8]) -> Maybe[Encoding]
 
 /// Detect encoding heuristically
-public func detect(bytes: ref [U8]) -> Encoding
+pub func detect(bytes: ref [U8]) -> Encoding
 
 /// Confidence-based detection
-public func detect_with_confidence(bytes: ref [U8]) -> (Encoding, F64)
+pub func detect_with_confidence(bytes: ref [U8]) -> (Encoding, F64)
 ```
 
 ## 7. Streaming Encoder/Decoder
@@ -322,9 +322,9 @@ public func detect_with_confidence(bytes: ref [U8]) -> (Encoding, F64)
 ### 7.1 Streaming Base64
 
 ```tml
-module base64.stream
+mod base64.stream
 
-public type Encoder[W: Write] {
+pub type Encoder[W: Write] {
     writer: W,
     config: Config,
     buffer: [U8; 3],
@@ -332,11 +332,11 @@ public type Encoder[W: Write] {
 }
 
 extend Encoder[W: Write] {
-    public func new(writer: W) -> This {
+    pub func new(writer: W) -> This {
         return This.with_config(writer, STANDARD)
     }
 
-    public func with_config(writer: W, config: Config) -> This {
+    pub func with_config(writer: W, config: Config) -> This {
         return This {
             writer: writer,
             config: config,
@@ -345,13 +345,13 @@ extend Encoder[W: Write] {
         }
     }
 
-    public func write(this, data: ref [U8]) -> Outcome[Unit, IoError]
-    public func finish(this) -> Outcome[W, IoError]
+    pub func write(this, data: ref [U8]) -> Outcome[Unit, IoError]
+    pub func finish(this) -> Outcome[W, IoError]
 }
 
 extend Encoder[W: Write] with Write { ... }
 
-public type Decoder[R: Read] {
+pub type Decoder[R: Read] {
     reader: R,
     config: Config,
     buffer: [U8; 4],
@@ -359,8 +359,8 @@ public type Decoder[R: Read] {
 }
 
 extend Decoder[R: Read] {
-    public func new(reader: R) -> This
-    public func with_config(reader: R, config: Config) -> This
+    pub func new(reader: R) -> This
+    pub func with_config(reader: R, config: Config) -> This
 }
 
 extend Decoder[R: Read] with Read { ... }
@@ -369,40 +369,40 @@ extend Decoder[R: Read] with Read { ... }
 ## 8. Unicode Normalization
 
 ```tml
-module unicode
+mod unicode
 
-public type NormalizationForm =
+pub type NormalizationForm =
     | Nfd   // Canonical Decomposition
     | Nfc   // Canonical Decomposition + Composition
     | Nfkd  // Compatibility Decomposition
     | Nfkc  // Compatibility Decomposition + Composition
 
 /// Normalize string
-public func normalize(s: ref str, form: NormalizationForm) -> String
+pub func normalize(s: ref str, form: NormalizationForm) -> String
 
 /// Check if string is normalized
-public func is_normalized(s: ref str, form: NormalizationForm) -> Bool
+pub func is_normalized(s: ref str, form: NormalizationForm) -> Bool
 
 /// Iterator over grapheme clusters
-public func graphemes(s: ref str) -> Graphemes
+pub func graphemes(s: ref str) -> Graphemes
 
 /// Iterator over words
-public func words(s: ref str) -> Words
+pub func words(s: ref str) -> Words
 
-public type Graphemes { ... }
+pub type Graphemes { ... }
 extend Graphemes with Iterator { type Item = ref str }
 
-public type Words { ... }
+pub type Words { ... }
 extend Words with Iterator { type Item = ref str }
 ```
 
 ## 9. Character Properties
 
 ```tml
-module unicode.props
+mod unicode.props
 
 /// Unicode general category
-public type Category =
+pub type Category =
     | Letter(LetterCategory)
     | Mark(MarkCategory)
     | Number(NumberCategory)
@@ -411,21 +411,21 @@ public type Category =
     | Separator(SeparatorCategory)
     | Other(OtherCategory)
 
-public func category(c: Char) -> Category
-public func is_alphabetic(c: Char) -> Bool
-public func is_numeric(c: Char) -> Bool
-public func is_alphanumeric(c: Char) -> Bool
-public func is_whitespace(c: Char) -> Bool
-public func is_control(c: Char) -> Bool
-public func is_uppercase(c: Char) -> Bool
-public func is_lowercase(c: Char) -> Bool
-public func to_uppercase(c: Char) -> Chars
-public func to_lowercase(c: Char) -> Chars
-public func to_titlecase(c: Char) -> Chars
+pub func category(c: Char) -> Category
+pub func is_alphabetic(c: Char) -> Bool
+pub func is_numeric(c: Char) -> Bool
+pub func is_alphanumeric(c: Char) -> Bool
+pub func is_whitespace(c: Char) -> Bool
+pub func is_control(c: Char) -> Bool
+pub func is_uppercase(c: Char) -> Bool
+pub func is_lowercase(c: Char) -> Bool
+pub func to_uppercase(c: Char) -> Chars
+pub func to_lowercase(c: Char) -> Chars
+pub func to_titlecase(c: Char) -> Chars
 
 /// Script detection
-public type Script = Latin | Cyrillic | Greek | Arabic | Hebrew | Han | Hiragana | ...
-public func script(c: Char) -> Script
+pub type Script = Latin | Cyrillic | Greek | Arabic | Hebrew | Han | Hiragana | ...
+pub func script(c: Char) -> Script
 ```
 
 ## 10. Examples
@@ -433,8 +433,8 @@ public func script(c: Char) -> Script
 ### 10.1 Base64 Encoding
 
 ```tml
-module example
-import std.encoding.base64
+mod example
+use std::encoding.base64
 
 func main() {
     // Encode
@@ -454,8 +454,8 @@ func main() {
 ### 10.2 URL Encoding
 
 ```tml
-module url_example
-import std.encoding.percent
+mod url_example
+use std::encoding.percent
 
 func build_url(base: ref str, params: Map[String, String]) -> String {
     var url = String.from(base)
@@ -478,8 +478,8 @@ func build_url(base: ref str, params: Map[String, String]) -> String {
 ### 10.3 Character Set Conversion
 
 ```tml
-module charset
-import std.encoding.{utf8, utf16, latin1}
+mod charset
+use std::encoding.{utf8, utf16, latin1}
 
 func convert_to_utf8(data: ref [U8], source_encoding: ref str) -> Outcome[String, Error] {
     when source_encoding {

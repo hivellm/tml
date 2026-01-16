@@ -78,6 +78,18 @@ struct InliningStats {
     size_t too_large = 0;                  ///< Calls blocked by size limit.
     size_t no_definition = 0;              ///< Calls with no available definition.
     size_t total_instructions_inlined = 0; ///< Total instructions copied.
+
+    // Devirtualized call statistics
+    size_t devirt_calls_analyzed = 0;      ///< Devirtualized calls examined.
+    size_t devirt_calls_inlined = 0;       ///< Devirtualized calls that were inlined.
+    size_t devirt_sealed_inlined = 0;      ///< Inlined from sealed class devirt.
+    size_t devirt_exact_inlined = 0;       ///< Inlined from exact type devirt.
+    size_t devirt_single_inlined = 0;      ///< Inlined from single impl devirt.
+
+    // Constructor inlining statistics
+    size_t constructor_calls_analyzed = 0; ///< Constructor calls examined.
+    size_t constructor_calls_inlined = 0;  ///< Constructor calls that were inlined.
+    size_t base_constructor_inlined = 0;   ///< Base constructor calls inlined.
 };
 
 /// Configuration options for the inlining pass.
@@ -90,6 +102,17 @@ struct InliningOptions {
     bool inline_cold = false;   ///< Whether to inline cold (rarely executed) code.
     bool inline_hot = true;     ///< Whether to prioritize hot (frequently executed) code.
     int optimization_level = 2; ///< Optimization level (affects thresholds).
+
+    // Devirtualized call options
+    int devirt_bonus = 100;         ///< Threshold bonus for devirtualized calls.
+    int devirt_exact_bonus = 150;   ///< Extra bonus for exact type devirtualization.
+    int devirt_sealed_bonus = 120;  ///< Extra bonus for sealed class devirtualization.
+    bool prioritize_devirt = true;  ///< Whether to prioritize devirtualized calls.
+
+    // Constructor inlining options
+    int constructor_bonus = 200;       ///< Threshold bonus for constructor calls.
+    int base_constructor_bonus = 250;  ///< Extra bonus for base constructor chains.
+    bool prioritize_constructors = true; ///< Whether to prioritize constructor inlining.
 };
 
 /// Function inlining pass.

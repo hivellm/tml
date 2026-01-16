@@ -284,6 +284,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     generate_pending_instantiations();
 
     // Emit dyn types for all registered behaviors before function generation
+    // This must happen BEFORE saving output_ to ensure dyn types appear before functions
     for (const auto& [key, vtable_name] : vtables_) {
         // key is "TypeName::BehaviorName", extract behavior name
         size_t pos = key.find("::");
@@ -293,10 +294,19 @@ auto LLVMIRGen::generate(const parser::Module& module)
         }
     }
 
+    // Emit dyn types from type_defs_buffer_ to output_ NOW, before saving
+    // This ensures dyn types appear before imported module functions that use them
+    std::string dyn_type_defs = type_defs_buffer_.str();
+    if (!dyn_type_defs.empty()) {
+        emit_line("; Dynamic dispatch types");
+        output_ << dyn_type_defs;
+        type_defs_buffer_.str("");  // Clear so we don't emit them twice later
+    }
+
     // Buffer function code separately so we can emit type instantiations before functions
     std::stringstream func_output;
     std::stringstream saved_output;
-    saved_output.str(output_.str()); // Save current output (headers, type defs)
+    saved_output.str(output_.str()); // Save current output (headers, type defs, dyn types)
     output_.str("");                 // Clear for function code
 
     // Pre-pass: register all function return types for type inference
@@ -511,9 +521,14 @@ auto LLVMIRGen::generate(const parser::Module& module)
                                 continue;
 
                             // Generate default implementation with type substitution
-                            // Use suite_prefix from the enclosing scope
-                            std::string method_name =
-                                suite_prefix + type_name + "_" + trait_method.name;
+                            // Default implementations DON'T use suite_prefix - they're shared
+                            std::string method_name = type_name + "_" + trait_method.name;
+
+                            // Skip if this default implementation was already generated
+                            if (functions_.find(method_name) != functions_.end()) {
+                                continue;
+                            }
+
                             current_func_ = method_name;
                             current_impl_type_ = type_name;
                             locals_.clear();

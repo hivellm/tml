@@ -1,11 +1,43 @@
-// TML Standard Library - Collections Module
-// Provides: List[T], HashMap[K, V], Buffer
+//! Collection types for TML programs.
+//!
+//! This module provides generic collection types for storing and
+//! manipulating groups of elements.
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`List[T]`] | Dynamic array that grows automatically |
+//! | [`HashMap[K, V]`] | Hash-based key-value storage |
+//! | [`Buffer`] | Byte buffer for binary data |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::collections::*
+//!
+//! let list = List[I32]::new(10)
+//! list.push(1)
+//! list.push(2)
+//! list.push(3)
+//! print(list.len())  // 3
+//! list.destroy()
+//! ```
 
-// ============================================================================
-// List[T] - Generic dynamic array
-// ============================================================================
-
-/// Dynamic list that grows automatically
+/// A dynamic array that grows automatically.
+///
+/// `List[T]` is a generic collection that stores elements of type `T`
+/// contiguously in memory and grows as needed.
+///
+/// # Example
+///
+/// ```tml
+/// let nums = List[I32]::new(8)
+/// nums.push(10)
+/// nums.push(20)
+/// let first = nums.get(0)  // 10
+/// nums.destroy()
+/// ```
 pub type List[T] {
     handle: *Unit
 }
@@ -78,11 +110,20 @@ impl[T] List[T] {
     }
 }
 
-// ============================================================================
-// HashMap[K, V] - Generic key-value store
-// ============================================================================
-
-/// Hash map with generic keys and values
+/// A hash-based key-value collection.
+///
+/// `HashMap[K, V]` stores key-value pairs with O(1) average lookup time.
+/// Keys must be hashable and comparable.
+///
+/// # Example
+///
+/// ```tml
+/// let scores = HashMap[Str, I32]::new(16)
+/// scores.set("Alice", 100)
+/// scores.set("Bob", 85)
+/// let alice_score = scores.get("Alice")  // 100
+/// scores.destroy()
+/// ```
 pub type HashMap[K, V] {
     handle: *Unit
 }
@@ -135,11 +176,21 @@ impl[K, V] HashMap[K, V] {
     }
 }
 
-// ============================================================================
-// Buffer - Byte buffer for binary data
-// ============================================================================
-
-/// Byte buffer for reading and writing binary data
+/// A byte buffer for reading and writing binary data.
+///
+/// `Buffer` provides efficient byte-level I/O operations for
+/// serialization and network protocols.
+///
+/// # Example
+///
+/// ```tml
+/// let buf = Buffer::new(64)
+/// buf.write_i32(42)
+/// buf.write_i64(123456789)
+/// buf.reset_read()
+/// let num = buf.read_i32()  // 42
+/// buf.destroy()
+/// ```
 pub type Buffer {
     handle: *Unit
 }

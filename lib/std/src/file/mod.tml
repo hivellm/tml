@@ -1,11 +1,44 @@
-// TML Standard Library - File I/O Module
-// Provides: File handle and Path utilities
+//! File I/O operations for TML programs.
+//!
+//! This module provides types for reading and writing files,
+//! as well as path manipulation utilities.
+//!
+//! # Main Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`File`] | Handle for reading and writing files |
+//! | [`Path`] | Path manipulation utilities |
+//!
+//! # Example
+//!
+//! ```tml
+//! use std::file::*
+//!
+//! // Read entire file
+//! let content = File::read_all("config.txt")
+//!
+//! // Write to file
+//! File::write_all("output.txt", "Hello, World!")
+//!
+//! // Check if path exists
+//! if Path::exists("data.json") {
+//!     print("File exists!")
+//! }
+//! ```
 
-// ============================================================================
-// File Handle
-// ============================================================================
-
-/// File handle for reading and writing
+/// A file handle for reading and writing operations.
+///
+/// `File` provides both instance methods for streaming I/O
+/// and static methods for simple read/write operations.
+///
+/// # Example
+///
+/// ```tml
+/// let file = File::open_read("data.txt")
+/// let line = file.read_line()
+/// file.close()
+/// ```
 pub type File {
     handle: *Unit
 }
@@ -79,11 +112,22 @@ impl File {
     }
 }
 
-// ============================================================================
-// Path - Path manipulation utilities
-// ============================================================================
-
-/// Path utilities (all static functions)
+/// Path manipulation utilities.
+///
+/// `Path` provides static methods for working with file system paths:
+/// checking existence, creating directories, joining paths, etc.
+///
+/// # Example
+///
+/// ```tml
+/// // Check and create directory
+/// if not Path::exists("output") {
+///     Path::create_dir("output")
+/// }
+///
+/// // Join paths
+/// let full_path = Path::join("output", "data.txt")
+/// ```
 pub type Path {
     dummy: I32
 }

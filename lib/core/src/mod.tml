@@ -57,6 +57,7 @@ pub mod array    // Array, ArrayIter, from_fn, repeat, TryFromSliceError
 pub mod ptr      // RawPtr, RawMutPtr, NonNull
 pub mod error    // Error behavior, SimpleError, IoError
 pub mod alloc    // Layout, Allocator, GlobalAlloc, AllocError
+pub mod pool     // Pool[T] for object pooling with lock-free free list
 pub mod collections  // List, HashMap behavior implementations
 pub mod net      // IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, NetError
 pub mod range    // Range, RangeInclusive, RangeFrom, RangeTo, RangeFull

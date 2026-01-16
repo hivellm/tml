@@ -441,6 +441,25 @@ bool TypeEnv::type_needs_drop(const std::string& type_name) const {
         return false;
     }
 
+    // Check if it's a class with fields that need drop
+    auto class_def = lookup_class(type_name);
+    if (class_def) {
+        // Check if base class needs drop
+        if (class_def->base_class) {
+            if (type_needs_drop(*class_def->base_class)) {
+                return true;
+            }
+        }
+
+        // Check if any field needs drop
+        for (const auto& field : class_def->fields) {
+            if (type_needs_drop(field.type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Check if it's an enum with variants that need drop
     auto enum_def = lookup_enum(type_name);
     if (enum_def) {
@@ -529,6 +548,184 @@ bool TypeEnv::type_needs_drop(const TypePtr& type) const {
             }
         },
         type->kind);
+}
+
+// ============================================================================
+// Trivial Destructor Detection
+// ============================================================================
+
+bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
+    // Primitive types are trivially destructible
+    if (type_name == "I8" || type_name == "I16" || type_name == "I32" || type_name == "I64" ||
+        type_name == "I128" || type_name == "U8" || type_name == "U16" || type_name == "U32" ||
+        type_name == "U64" || type_name == "U128" || type_name == "F32" || type_name == "F64" ||
+        type_name == "Bool" || type_name == "Unit" || type_name == "Char") {
+        return true;
+    }
+
+    // If type explicitly implements Drop, it's NOT trivially destructible
+    if (type_implements(type_name, "Drop")) {
+        return false;
+    }
+
+    // Check if it's a struct - all fields must be trivially destructible
+    auto struct_def = lookup_struct(type_name);
+    if (struct_def) {
+        for (const auto& [field_name, field_type_ptr] : struct_def->fields) {
+            if (!is_trivially_destructible(field_type_ptr)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Check if it's a class - all fields must be trivially destructible
+    // AND no custom destructor logic (no Drop implementation)
+    auto class_def = lookup_class(type_name);
+    if (class_def) {
+        // Classes with base classes need to check base class too
+        if (class_def->base_class) {
+            if (!is_trivially_destructible(*class_def->base_class)) {
+                return false;
+            }
+        }
+
+        // Check all fields
+        for (const auto& field : class_def->fields) {
+            if (!is_trivially_destructible(field.type)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Check if it's an enum - all variants must be trivially destructible
+    auto enum_def = lookup_enum(type_name);
+    if (enum_def) {
+        for (const auto& [variant_name, variant_type_ptrs] : enum_def->variants) {
+            for (const auto& variant_type_ptr : variant_type_ptrs) {
+                if (!is_trivially_destructible(variant_type_ptr)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    // Unknown types are conservatively NOT trivially destructible
+    return false;
+}
+
+bool TypeEnv::is_trivially_destructible(const TypePtr& type) const {
+    if (!type) {
+        return true; // No type = no destructor needed
+    }
+
+    return std::visit(
+        [this](const auto& t) -> bool {
+            using T = std::decay_t<decltype(t)>;
+
+            if constexpr (std::is_same_v<T, PrimitiveType>) {
+                // Primitives are always trivially destructible
+                return true;
+            } else if constexpr (std::is_same_v<T, NamedType>) {
+                // Check the named type
+                return is_trivially_destructible(t.name);
+            } else if constexpr (std::is_same_v<T, RefType>) {
+                // References don't own data - trivially destructible
+                return true;
+            } else if constexpr (std::is_same_v<T, PtrType>) {
+                // Raw pointers don't own data - trivially destructible
+                return true;
+            } else if constexpr (std::is_same_v<T, TupleType>) {
+                // Tuple is trivially destructible if all elements are
+                for (const auto& elem : t.elements) {
+                    if (!is_trivially_destructible(elem)) {
+                        return false;
+                    }
+                }
+                return true;
+            } else if constexpr (std::is_same_v<T, ArrayType>) {
+                // Array is trivially destructible if element type is
+                return is_trivially_destructible(t.element);
+            } else if constexpr (std::is_same_v<T, SliceType>) {
+                // Slices don't own data - trivially destructible
+                return true;
+            } else if constexpr (std::is_same_v<T, FuncType>) {
+                // Function types are trivially destructible
+                return true;
+            } else if constexpr (std::is_same_v<T, GenericType>) {
+                // Generic types are conservatively NOT trivially destructible
+                return false;
+            } else if constexpr (std::is_same_v<T, ClosureType>) {
+                // Closures may capture non-trivial values
+                for (const auto& capture : t.captures) {
+                    if (!is_trivially_destructible(capture.type)) {
+                        return false;
+                    }
+                }
+                return true;
+            } else if constexpr (std::is_same_v<T, ClassType>) {
+                // Check the class definition
+                return is_trivially_destructible(t.name);
+            } else if constexpr (std::is_same_v<T, InterfaceType>) {
+                // Interface types are abstract - conservatively NOT trivially destructible
+                // (the actual implementing type may not be trivial)
+                return false;
+            } else {
+                // Default: NOT trivially destructible
+                return false;
+            }
+        },
+        type->kind);
+}
+
+bool TypeEnv::is_value_class_candidate(const std::string& class_name) const {
+    auto class_def = lookup_class(class_name);
+    if (!class_def) {
+        return false; // Not a class
+    }
+
+    // Abstract classes cannot be value classes
+    if (class_def->is_abstract) {
+        return false;
+    }
+
+    // Must be sealed (no subclasses) to ensure no dynamic dispatch needed
+    if (!class_def->is_sealed) {
+        return false;
+    }
+
+    // Check for virtual methods
+    for (const auto& method : class_def->methods) {
+        if (method.is_virtual || method.is_abstract) {
+            return false; // Has virtual methods, needs vtable
+        }
+    }
+
+    // Check base class (if any)
+    if (class_def->base_class) {
+        // Base class must also be a value class candidate
+        // Or the class doesn't override any virtual methods from base
+        auto base_def = lookup_class(*class_def->base_class);
+        if (base_def) {
+            // If base has virtual methods, we still need a vtable
+            // even if this class doesn't add new virtual methods
+            for (const auto& method : base_def->methods) {
+                if (method.is_virtual || method.is_abstract) {
+                    return false; // Base has virtual methods
+                }
+            }
+
+            // Recursively check if base is also a value class candidate
+            if (!is_value_class_candidate(*class_def->base_class)) {
+                return false;
+            }
+        }
+    }
+
+    // All checks passed - this class can be treated as a value class
+    return true;
 }
 
 } // namespace tml::types

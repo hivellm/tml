@@ -1,0 +1,457 @@
+//! Object Pool for efficient memory reuse.
+//!
+//! This module provides `Pool[T]`, a high-performance object pool that
+//! reduces allocation overhead by reusing objects.
+//!
+//! # Overview
+//!
+//! Object pools are useful when:
+//! - Objects are frequently allocated and deallocated
+//! - Object construction is expensive
+//! - Memory fragmentation is a concern
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::pool::{Pool, GrowthPolicy}
+//!
+//! // Create a pool with initial capacity of 16, doubling when exhausted
+//! let pool: Pool[Connection] = Pool::new(16, GrowthPolicy::Doubling)
+//!
+//! // Acquire an object from the pool
+//! let conn = pool.acquire()
+//!
+//! // Use the connection...
+//! conn.send(data)
+//!
+//! // Return the object to the pool for reuse
+//! pool.release(conn)
+//! ```
+//!
+//! # Thread Safety
+//!
+//! The pool uses a lock-free free list for thread-safe acquire/release
+//! operations with minimal contention.
+
+use core::alloc::{Layout, AllocError}
+use core::sync::{atomic_load, atomic_store, atomic_cas, atomic_cas_val, fence_acquire, fence_release}
+use core::mem::size_of
+
+// ============================================================================
+// Growth Policy
+// ============================================================================
+
+/// Defines how the pool grows when all objects are in use.
+pub type GrowthPolicy {
+    /// Pool does not grow - acquire returns Nothing when exhausted
+    Fixed,
+    /// Pool capacity doubles when exhausted
+    Doubling,
+    /// Pool grows by a fixed amount
+    Linear(I32),
+}
+
+impl GrowthPolicy {
+    /// Calculate the new capacity based on current capacity.
+    pub func next_capacity(this, current: I32) -> I32 {
+        when this {
+            Fixed => current
+            Doubling => current * 2
+            Linear(step) => current + step
+        }
+    }
+
+    /// Returns true if this policy allows growth.
+    pub func can_grow(this) -> Bool {
+        when this {
+            Fixed => false
+            _ => true
+        }
+    }
+}
+
+// ============================================================================
+// Pool Statistics
+// ============================================================================
+
+/// Statistics about pool usage.
+pub type PoolStats {
+    /// Number of objects currently in the pool (available)
+    pub available: I32,
+    /// Number of objects currently in use (acquired)
+    pub in_use: I32,
+    /// Total capacity of the pool
+    pub capacity: I32,
+    /// Number of times acquire() found an available object
+    pub hits: I64,
+    /// Number of times acquire() had to allocate new object
+    pub misses: I64,
+    /// Number of times the pool was grown
+    pub grows: I32,
+}
+
+impl PoolStats {
+    /// Creates empty statistics.
+    pub func new() -> PoolStats {
+        PoolStats {
+            available: 0,
+            in_use: 0,
+            capacity: 0,
+            hits: 0,
+            misses: 0,
+            grows: 0,
+        }
+    }
+
+    /// Returns the hit rate as a percentage (0-100).
+    pub func hit_rate(this) -> F64 {
+        let total = this.hits + this.misses
+        if total == 0 {
+            return 100.0
+        }
+        (this.hits as F64 / total as F64) * 100.0
+    }
+}
+
+// ============================================================================
+// PoolNode - Internal free list node
+// ============================================================================
+
+/// Internal node in the free list. Each node contains:
+/// - A pointer to the next free node (or null)
+/// - The object data follows after this header
+type PoolNode {
+    /// Pointer to the next free node, stored as I64 for atomic operations
+    next: I64,
+}
+
+impl PoolNode {
+    /// Create a node pointing to the given next node.
+    func new(next_ptr: I64) -> PoolNode {
+        PoolNode { next: next_ptr }
+    }
+}
+
+// ============================================================================
+// Pool[T] - The main pool type
+// ============================================================================
+
+/// A high-performance object pool for type T.
+///
+/// The pool maintains a lock-free free list of available objects.
+/// When `acquire()` is called, it pops an object from the free list.
+/// When `release()` is called, it pushes the object back onto the free list.
+///
+/// # Type Parameters
+///
+/// - `T`: The type of objects to pool. Should be a class type.
+///
+/// # Memory Layout
+///
+/// Each pooled object has a PoolNode header followed by the object data.
+/// When in the free list, the node's `next` pointer points to the next free object.
+/// When in use, the header is ignored and the object data follows immediately.
+pub type Pool[T] {
+    /// Head of the free list (pointer to first free PoolNode), as I64 for atomics
+    free_list_head: I64,
+    /// Growth policy
+    policy: GrowthPolicy,
+    /// Current statistics (not atomic - approximate under contention)
+    stats: PoolStats,
+    /// Size of each object including header
+    object_size: I64,
+    /// Alignment requirement
+    alignment: I64,
+    /// All allocated blocks (for cleanup)
+    blocks: List[I64],
+    /// Lock for block list modifications
+    blocks_lock: I32,
+}
+
+impl[T] Pool[T] {
+    /// Creates a new pool with the specified initial capacity and growth policy.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_capacity` - Number of objects to pre-allocate
+    /// * `policy` - How the pool should grow when exhausted
+    ///
+    /// # Example
+    ///
+    /// ```tml
+    /// let pool: Pool[MyClass] = Pool::new(32, GrowthPolicy::Doubling)
+    /// ```
+    pub func new(initial_capacity: I32, policy: GrowthPolicy) -> Pool[T] {
+        // Calculate object size: PoolNode header + sizeof(T)
+        let node_size = 8 // size of next pointer
+        let obj_size = 8  // Placeholder - should use size_of[T]() when available
+        let total_size = node_size + obj_size
+        let align = 8 // Default alignment
+
+        var pool = Pool {
+            free_list_head: 0, // null
+            policy: policy,
+            stats: PoolStats::new(),
+            object_size: total_size,
+            alignment: align,
+            blocks: [],
+            blocks_lock: 0,
+        }
+
+        // Pre-allocate initial capacity
+        if initial_capacity > 0 {
+            pool.grow_by(initial_capacity)
+        }
+
+        pool
+    }
+
+    /// Creates a pool with fixed capacity (no growth).
+    pub func fixed(capacity: I32) -> Pool[T] {
+        Pool::new(capacity, GrowthPolicy::Fixed)
+    }
+
+    /// Creates a pool with doubling growth policy.
+    pub func with_doubling(initial_capacity: I32) -> Pool[T] {
+        Pool::new(initial_capacity, GrowthPolicy::Doubling)
+    }
+
+    /// Acquires an object from the pool.
+    ///
+    /// If the pool has available objects, one is removed from the free list
+    /// and returned. If the pool is exhausted, it may grow according to the
+    /// growth policy.
+    ///
+    /// # Returns
+    ///
+    /// - `Just(ptr)` - A pointer to the acquired object
+    /// - `Nothing` - Pool is exhausted and cannot grow
+    ///
+    /// # Thread Safety
+    ///
+    /// This operation is lock-free using compare-and-swap.
+    pub func acquire(mut this) -> Maybe[Ptr[T]] {
+        loop {
+            // Load current head
+            let head = atomic_load(ref this.free_list_head as ref I32) as I64
+
+            if head == 0 {
+                // Free list is empty, try to grow
+                if not this.policy.can_grow() {
+                    this.stats.misses = this.stats.misses + 1
+                    return Nothing
+                }
+
+                // Grow the pool
+                let current_cap = this.stats.capacity
+                let grow_amount = if current_cap == 0 { 8 } else {
+                    this.policy.next_capacity(current_cap) - current_cap
+                }
+                this.grow_by(grow_amount)
+
+                // Try again
+                continue
+            }
+
+            // Try to pop from free list using CAS
+            // Read the next pointer from the node at head
+            let node_ptr = head as Ptr[PoolNode]
+            let next = lowlevel { (*node_ptr).next }
+
+            // CAS: if head hasn't changed, update to next
+            let old = atomic_cas_val(
+                mut ref this.free_list_head as mut ref I32,
+                head as I32,
+                next as I32
+            )
+
+            if old as I64 == head {
+                // Success! We popped the node
+                fence_acquire()
+                this.stats.available = this.stats.available - 1
+                this.stats.in_use = this.stats.in_use + 1
+                this.stats.hits = this.stats.hits + 1
+
+                // Return pointer to the object (after the node header)
+                let obj_ptr = (head + 8) as Ptr[T]
+                return Just(obj_ptr)
+            }
+
+            // CAS failed, another thread modified the list, retry
+        }
+    }
+
+    /// Releases an object back to the pool for reuse.
+    ///
+    /// The object is pushed onto the free list and can be acquired again.
+    ///
+    /// # Arguments
+    ///
+    /// * `obj` - Pointer to the object to release
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - The object was acquired from this pool
+    /// - The object is not used after release
+    ///
+    /// # Thread Safety
+    ///
+    /// This operation is lock-free using compare-and-swap.
+    pub func release(mut this, obj: Ptr[T]) {
+        // Get the node header (8 bytes before the object)
+        let node_ptr = ((obj as I64) - 8) as Ptr[PoolNode]
+
+        fence_release()
+
+        loop {
+            // Load current head
+            let head = atomic_load(ref this.free_list_head as ref I32) as I64
+
+            // Set node's next to current head
+            lowlevel { (*node_ptr).next = head }
+
+            // CAS: try to make this node the new head
+            let old = atomic_cas_val(
+                mut ref this.free_list_head as mut ref I32,
+                head as I32,
+                node_ptr as I64 as I32
+            )
+
+            if old as I64 == head {
+                // Success!
+                this.stats.available = this.stats.available + 1
+                this.stats.in_use = this.stats.in_use - 1
+                return
+            }
+
+            // CAS failed, retry
+        }
+    }
+
+    /// Grows the pool by allocating additional objects.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - Number of objects to add
+    func grow_by(mut this, count: I32) {
+        if count <= 0 {
+            return
+        }
+
+        // Allocate a block for all new objects
+        let block_size = this.object_size * (count as I64)
+        let block = lowlevel { malloc(block_size) } as I64
+
+        if block == 0 {
+            return // Allocation failed
+        }
+
+        // Add block to our list for cleanup
+        // Note: This part needs locking for thread safety
+        spin_lock(mut ref this.blocks_lock)
+        this.blocks.push(block)
+        spin_unlock(mut ref this.blocks_lock)
+
+        // Add all objects to the free list
+        var i = 0
+        loop {
+            if i >= count {
+                break
+            }
+
+            let node_addr = block + (i as I64 * this.object_size)
+            let node_ptr = node_addr as Ptr[PoolNode]
+
+            // Push onto free list
+            loop {
+                let head = atomic_load(ref this.free_list_head as ref I32) as I64
+                lowlevel { (*node_ptr).next = head }
+
+                let old = atomic_cas_val(
+                    mut ref this.free_list_head as mut ref I32,
+                    head as I32,
+                    node_addr as I32
+                )
+
+                if old as I64 == head {
+                    break
+                }
+            }
+
+            i = i + 1
+        }
+
+        this.stats.capacity = this.stats.capacity + count
+        this.stats.available = this.stats.available + count
+        this.stats.grows = this.stats.grows + 1
+    }
+
+    /// Returns current pool statistics.
+    pub func stats(this) -> PoolStats {
+        this.stats
+    }
+
+    /// Returns the current capacity of the pool.
+    pub func capacity(this) -> I32 {
+        this.stats.capacity
+    }
+
+    /// Returns the number of available objects.
+    pub func available(this) -> I32 {
+        this.stats.available
+    }
+
+    /// Returns the number of objects currently in use.
+    pub func in_use(this) -> I32 {
+        this.stats.in_use
+    }
+
+    /// Clears the pool and releases all memory.
+    ///
+    /// All objects must be released before calling this.
+    pub func clear(mut this) {
+        // Free all allocated blocks
+        spin_lock(mut ref this.blocks_lock)
+        loop {
+            when this.blocks.pop() {
+                Just(block) => lowlevel { free(block as Ptr[U8]) }
+                Nothing => break
+            }
+        }
+        spin_unlock(mut ref this.blocks_lock)
+
+        this.free_list_head = 0
+        this.stats = PoolStats::new()
+    }
+}
+
+// ============================================================================
+// Drop implementation
+// ============================================================================
+
+impl[T] Drop for Pool[T] {
+    func drop(mut this) {
+        this.clear()
+    }
+}
+
+// ============================================================================
+// Helper functions for spinlock (using sync module)
+// ============================================================================
+
+func spin_lock(lock: mut ref I32) {
+    loop {
+        let old = atomic_cas_val(lock, 0, 1)
+        if old == 0 {
+            fence_acquire()
+            return
+        }
+        // Spin
+    }
+}
+
+func spin_unlock(lock: mut ref I32) {
+    fence_release()
+    atomic_store(lock, 0)
+}

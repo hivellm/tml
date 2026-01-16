@@ -1,7 +1,7 @@
 // TML Example 13: Capabilities and Effects
 // Demonstrates the caps system for explicit side effects
 
-module caps_effects
+mod caps_effects
 
 // ============================================
 // CAPABILITY DECLARATIONS

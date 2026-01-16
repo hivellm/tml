@@ -1,6 +1,6 @@
 # TML Standard Library: Synchronization
 
-> `std.sync` — Channels, synchronization primitives, and concurrent data structures.
+> `std::sync` — Channels, synchronization primitives, and concurrent data structures.
 
 ## Overview
 
@@ -9,8 +9,8 @@ The sync package provides high-level synchronization primitives for communicatio
 ## Import
 
 ```tml
-import std.sync
-import std.sync.{channel, mpsc, broadcast, Barrier, Once}
+use std::sync
+use std::sync.{channel, mpsc, broadcast, Barrier, Once}
 ```
 
 ---
@@ -23,7 +23,7 @@ Single-producer, single-consumer channel.
 
 ```tml
 /// Creates a bounded SPSC channel
-public func channel[T](capacity: U64) -> (Sender[T], Receiver[T]) {
+pub func channel[T](capacity: U64) -> (Sender[T], Receiver[T]) {
     let inner = Arc.new(ChannelInner[T].new(capacity))
     return (
         Sender { inner: inner.duplicate() },
@@ -32,7 +32,7 @@ public func channel[T](capacity: U64) -> (Sender[T], Receiver[T]) {
 }
 
 /// Creates an unbounded SPSC channel
-public func unbounded[T]() -> (Sender[T], Receiver[T]) {
+pub func unbounded[T]() -> (Sender[T], Receiver[T]) {
     let inner = Arc.new(ChannelInner[T].unbounded())
     return (
         Sender { inner: inner.duplicate() },
@@ -45,43 +45,43 @@ public func unbounded[T]() -> (Sender[T], Receiver[T]) {
 
 ```tml
 /// Sending half of a channel
-public type Sender[T] {
+pub type Sender[T] {
     inner: Arc[ChannelInner[T]],
 }
 
 extend Sender[T] {
     /// Sends a value, blocking if the channel is full
-    public func send(this, value: T) -> Outcome[Unit, SendError[T]] {
+    pub func send(this, value: T) -> Outcome[Unit, SendError[T]] {
         this.inner.send(value)
     }
 
     /// Tries to send without blocking
-    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]] {
+    pub func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]] {
         this.inner.try_send(value)
     }
 
     /// Sends with timeout
-    public func send_timeout(this, value: T, timeout: Duration) -> Outcome[Unit, SendTimeoutError[T]] {
+    pub func send_timeout(this, value: T, timeout: Duration) -> Outcome[Unit, SendTimeoutError[T]] {
         this.inner.send_timeout(value, timeout)
     }
 
     /// Returns true if the receiver is still connected
-    public func is_connected(this) -> Bool {
+    pub func is_connected(this) -> Bool {
         Arc.strong_count(ref this.inner) > 1
     }
 
     /// Returns the number of messages in the channel
-    public func len(this) -> U64 {
+    pub func len(this) -> U64 {
         this.inner.len()
     }
 
     /// Returns true if the channel is empty
-    public func is_empty(this) -> Bool {
+    pub func is_empty(this) -> Bool {
         this.inner.is_empty()
     }
 
     /// Returns true if the channel is full
-    public func is_full(this) -> Bool {
+    pub func is_full(this) -> Bool {
         this.inner.is_full()
     }
 }
@@ -97,33 +97,33 @@ implement Duplicate for Sender[T] {
 
 ```tml
 /// Receiving half of a channel
-public type Receiver[T] {
+pub type Receiver[T] {
     inner: Arc[ChannelInner[T]],
 }
 
 extend Receiver[T] {
     /// Receives a value, blocking if the channel is empty
-    public func recv(this) -> Outcome[T, RecvError] {
+    pub func recv(this) -> Outcome[T, RecvError] {
         this.inner.recv()
     }
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Outcome[T, TryRecvError] {
+    pub func try_recv(this) -> Outcome[T, TryRecvError] {
         this.inner.try_recv()
     }
 
     /// Receives with timeout
-    public func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError] {
+    pub func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError] {
         this.inner.recv_timeout(timeout)
     }
 
     /// Returns an iterator over received values
-    public func iter(this) -> RecvIter[T] {
+    pub func iter(this) -> RecvIter[T] {
         return RecvIter { receiver: this }
     }
 
     /// Tries to receive all available values
-    public func try_recv_all(this) -> Vec[T] {
+    pub func try_recv_all(this) -> Vec[T] {
         var result = Vec.new()
         loop {
             when this.try_recv() {
@@ -145,7 +145,7 @@ implement IntoIterator for Receiver[T] {
 }
 
 /// Iterator over received values
-public type RecvIter[T] {
+pub type RecvIter[T] {
     receiver: Receiver[T],
 }
 
@@ -162,24 +162,24 @@ implement Iterator for RecvIter[T] {
 
 ```tml
 /// Error when sending to a disconnected channel
-public type SendError[T] {
+pub type SendError[T] {
     value: T,
 }
 
 /// Error when try_send fails
-public type TrySendError[T] = Full(T) | Disconnected(T)
+pub type TrySendError[T] = Full(T) | Disconnected(T)
 
 /// Error when send_timeout fails
-public type SendTimeoutError[T] = Timeout(T) | Disconnected(T)
+pub type SendTimeoutError[T] = Timeout(T) | Disconnected(T)
 
 /// Error when receiving from a disconnected channel
-public type RecvError = Disconnected
+pub type RecvError = Disconnected
 
 /// Error when try_recv fails
-public type TryRecvError = Empty | Disconnected
+pub type TryRecvError = Empty | Disconnected
 
 /// Error when recv_timeout fails
-public type RecvTimeoutError = Timeout | Disconnected
+pub type RecvTimeoutError = Timeout | Disconnected
 ```
 
 ---
@@ -188,7 +188,7 @@ public type RecvTimeoutError = Timeout | Disconnected
 
 ```tml
 /// Creates a bounded MPSC channel
-public func mpsc[T](capacity: U64) -> (MpscSender[T], MpscReceiver[T]) {
+pub func mpsc[T](capacity: U64) -> (MpscSender[T], MpscReceiver[T]) {
     let inner = Arc.new(MpscInner[T].new(capacity))
     return (
         MpscSender { inner: inner.duplicate() },
@@ -197,7 +197,7 @@ public func mpsc[T](capacity: U64) -> (MpscSender[T], MpscReceiver[T]) {
 }
 
 /// Creates an unbounded MPSC channel
-public func mpsc_unbounded[T]() -> (MpscSender[T], MpscReceiver[T]) {
+pub func mpsc_unbounded[T]() -> (MpscSender[T], MpscReceiver[T]) {
     let inner = Arc.new(MpscInner[T].unbounded())
     return (
         MpscSender { inner: inner.duplicate() },
@@ -210,32 +210,32 @@ public func mpsc_unbounded[T]() -> (MpscSender[T], MpscReceiver[T]) {
 
 ```tml
 /// Duplicateable sender for MPSC channel
-public type MpscSender[T] {
+pub type MpscSender[T] {
     inner: Arc[MpscInner[T]],
 }
 
 extend MpscSender[T] {
     /// Sends a value
-    public func send(this, value: T) -> Outcome[Unit, SendError[T]]
+    pub func send(this, value: T) -> Outcome[Unit, SendError[T]]
 
     /// Tries to send without blocking
-    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
+    pub func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 
     /// Creates a permit to send
     public async func reserve(this) -> Outcome[Permit[T], SendError[Unit]]
 
     /// Blocks until there's capacity
-    public func blocking_send(this, value: T) -> Outcome[Unit, SendError[T]]
+    pub func blocking_send(this, value: T) -> Outcome[Unit, SendError[T]]
 }
 
 /// A permit to send one value
-public type Permit[T] {
+pub type Permit[T] {
     sender: MpscSender[T],
 }
 
 extend Permit[T] {
     /// Sends a value using this permit
-    public func send(this, value: T)
+    pub func send(this, value: T)
 }
 
 implement Duplicate for MpscSender[T] {
@@ -259,25 +259,25 @@ implement Disposable for MpscSender[T] {
 
 ```tml
 /// Receiver for MPSC channel
-public type MpscReceiver[T] {
+pub type MpscReceiver[T] {
     inner: Arc[MpscInner[T]],
 }
 
 extend MpscReceiver[T] {
     /// Receives a value
-    public func recv(this) -> Maybe[T]
+    pub func recv(this) -> Maybe[T]
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Outcome[T, TryRecvError]
+    pub func try_recv(this) -> Outcome[T, TryRecvError]
 
     /// Receives with timeout
-    public func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError]
+    pub func recv_timeout(this, timeout: Duration) -> Outcome[T, RecvTimeoutError]
 
     /// Async receive
     public async func recv_async(this) -> Maybe[T]
 
     /// Closes the channel
-    public func close(this)
+    pub func close(this)
 }
 ```
 
@@ -287,7 +287,7 @@ extend MpscReceiver[T] {
 
 ```tml
 /// Creates a bounded MPMC channel
-public func mpmc[T](capacity: U64) -> (MpmcSender[T], MpmcReceiver[T]) {
+pub func mpmc[T](capacity: U64) -> (MpmcSender[T], MpmcReceiver[T]) {
     let inner = Arc.new(MpmcInner[T].new(capacity))
     return (
         MpmcSender { inner: inner.duplicate() },
@@ -296,13 +296,13 @@ public func mpmc[T](capacity: U64) -> (MpmcSender[T], MpmcReceiver[T]) {
 }
 
 /// MPMC sender (cloneable)
-public type MpmcSender[T] {
+pub type MpmcSender[T] {
     inner: Arc[MpmcInner[T]],
 }
 
 extend MpmcSender[T] {
-    public func send(this, value: T) -> Outcome[Unit, SendError[T]]
-    public func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
+    pub func send(this, value: T) -> Outcome[Unit, SendError[T]]
+    pub func try_send(this, value: T) -> Outcome[Unit, TrySendError[T]]
 }
 
 implement Duplicate for MpmcSender[T] {
@@ -312,13 +312,13 @@ implement Duplicate for MpmcSender[T] {
 }
 
 /// MPMC receiver (cloneable)
-public type MpmcReceiver[T] {
+pub type MpmcReceiver[T] {
     inner: Arc[MpmcInner[T]],
 }
 
 extend MpmcReceiver[T] {
-    public func recv(this) -> Outcome[T, RecvError]
-    public func try_recv(this) -> Outcome[T, TryRecvError]
+    pub func recv(this) -> Outcome[T, RecvError]
+    pub func try_recv(this) -> Outcome[T, TryRecvError]
 }
 
 implement Duplicate for MpmcReceiver[T] {
@@ -336,7 +336,7 @@ Sends to multiple receivers, each receiving all messages.
 
 ```tml
 /// Creates a broadcast channel
-public func broadcast[T](capacity: U64) -> (BroadcastSender[T], BroadcastReceiver[T])
+pub func broadcast[T](capacity: U64) -> (BroadcastSender[T], BroadcastReceiver[T])
     where T: Duplicate
 {
     let inner = Arc.new(BroadcastInner[T].new(capacity))
@@ -347,23 +347,23 @@ public func broadcast[T](capacity: U64) -> (BroadcastSender[T], BroadcastReceive
 }
 
 /// Broadcast sender
-public type BroadcastSender[T] {
+pub type BroadcastSender[T] {
     inner: Arc[BroadcastInner[T]],
 }
 
 extend BroadcastSender[T] where T: Duplicate {
     /// Sends a value to all receivers
-    public func send(this, value: T) -> Outcome[U64, SendError[T]] {
+    pub func send(this, value: T) -> Outcome[U64, SendError[T]] {
         this.inner.send(value)
     }
 
     /// Returns the number of active receivers
-    public func receiver_count(this) -> U64 {
+    pub func receiver_count(this) -> U64 {
         this.inner.receiver_count.load(Ordering.Relaxed)
     }
 
     /// Creates a new receiver
-    public func subscribe(this) -> BroadcastReceiver[T] {
+    pub func subscribe(this) -> BroadcastReceiver[T] {
         let pos = this.inner.tail.load(Ordering.Relaxed)
         this.inner.receiver_count.fetch_add(1, Ordering.Relaxed)
         return BroadcastReceiver { inner: this.inner.duplicate(), pos: pos }
@@ -371,24 +371,24 @@ extend BroadcastSender[T] where T: Duplicate {
 }
 
 /// Broadcast receiver
-public type BroadcastReceiver[T] {
+pub type BroadcastReceiver[T] {
     inner: Arc[BroadcastInner[T]],
     pos: U64,
 }
 
 extend BroadcastReceiver[T] where T: Duplicate {
     /// Receives the next value
-    public func recv(mut this) -> Outcome[T, RecvError] {
+    pub func recv(mut this) -> Outcome[T, RecvError] {
         this.inner.recv(mut ref this.pos)
     }
 
     /// Tries to receive without blocking
-    public func try_recv(mut this) -> Outcome[T, TryRecvError] {
+    pub func try_recv(mut this) -> Outcome[T, TryRecvError] {
         this.inner.try_recv(mut ref this.pos)
     }
 
     /// Returns the number of messages lagging behind
-    public func lag(this) -> U64 {
+    pub func lag(this) -> U64 {
         let tail = this.inner.tail.load(Ordering.Relaxed)
         tail.saturating_sub(this.pos)
     }
@@ -416,7 +416,7 @@ Single value that notifies receivers on change.
 
 ```tml
 /// Creates a watch channel
-public func watch[T](initial: T) -> (WatchSender[T], WatchReceiver[T])
+pub func watch[T](initial: T) -> (WatchSender[T], WatchReceiver[T])
     where T: Duplicate
 {
     let inner = Arc.new(WatchInner[T].new(initial))
@@ -427,47 +427,47 @@ public func watch[T](initial: T) -> (WatchSender[T], WatchReceiver[T])
 }
 
 /// Watch sender
-public type WatchSender[T] {
+pub type WatchSender[T] {
     inner: Arc[WatchInner[T]],
 }
 
 extend WatchSender[T] where T: Duplicate {
     /// Sends a new value
-    public func send(this, value: T) -> Outcome[Unit, SendError[T]] {
+    pub func send(this, value: T) -> Outcome[Unit, SendError[T]] {
         this.inner.send(value)
     }
 
     /// Modifies the value in place
-    public func send_modify(this, f: func(mut ref T)) {
+    pub func send_modify(this, f: func(mut ref T)) {
         this.inner.send_modify(f)
     }
 
     /// Returns a reference to the current value
-    public func borrow(this) -> WatchRef[T] {
+    pub func borrow(this) -> WatchRef[T] {
         this.inner.borrow()
     }
 
     /// Creates a new receiver
-    public func subscribe(this) -> WatchReceiver[T] {
+    pub func subscribe(this) -> WatchReceiver[T] {
         let version = this.inner.version.load(Ordering.Relaxed)
         return WatchReceiver { inner: this.inner.duplicate(), version: version }
     }
 
     /// Returns the number of receivers
-    public func receiver_count(this) -> U64 {
+    pub func receiver_count(this) -> U64 {
         Arc.strong_count(ref this.inner) - 1
     }
 }
 
 /// Watch receiver
-public type WatchReceiver[T] {
+pub type WatchReceiver[T] {
     inner: Arc[WatchInner[T]],
     version: U64,
 }
 
 extend WatchReceiver[T] where T: Duplicate {
     /// Returns a reference to the current value
-    public func borrow(this) -> WatchRef[T] {
+    pub func borrow(this) -> WatchRef[T] {
         this.inner.borrow()
     }
 
@@ -477,12 +477,12 @@ extend WatchReceiver[T] where T: Duplicate {
     }
 
     /// Marks the current value as seen
-    public func mark_seen(mut this) {
+    pub func mark_seen(mut this) {
         this.version = this.inner.version.load(Ordering.Relaxed)
     }
 
     /// Returns true if the value has changed since last seen
-    public func has_changed(this) -> Bool {
+    pub func has_changed(this) -> Bool {
         this.version != this.inner.version.load(Ordering.Relaxed)
     }
 }
@@ -502,7 +502,7 @@ Single-use channel for one value.
 
 ```tml
 /// Creates a oneshot channel
-public func oneshot[T]() -> (OneshotSender[T], OneshotReceiver[T]) {
+pub func oneshot[T]() -> (OneshotSender[T], OneshotReceiver[T]) {
     let inner = Arc.new(OneshotInner[T].new())
     return (
         OneshotSender { inner: Just(inner.duplicate()) },
@@ -511,13 +511,13 @@ public func oneshot[T]() -> (OneshotSender[T], OneshotReceiver[T]) {
 }
 
 /// Oneshot sender
-public type OneshotSender[T] {
+pub type OneshotSender[T] {
     inner: Maybe[Arc[OneshotInner[T]]],
 }
 
 extend OneshotSender[T] {
     /// Sends a value, consuming the sender
-    public func send(mut this, value: T) -> Outcome[Unit, T] {
+    pub func send(mut this, value: T) -> Outcome[Unit, T] {
         when this.inner.take() {
             Just(inner) -> inner.send(value),
             Nothing -> Err(value),
@@ -525,13 +525,13 @@ extend OneshotSender[T] {
     }
 
     /// Returns true if the receiver is still waiting
-    public func is_connected(this) -> Bool {
+    pub func is_connected(this) -> Bool {
         this.inner.as_ref().map(|i| Arc.strong_count(i) > 1).unwrap_or(false)
     }
 }
 
 /// Oneshot receiver
-public type OneshotReceiver[T] {
+pub type OneshotReceiver[T] {
     inner: Arc[OneshotInner[T]],
 }
 
@@ -542,12 +542,12 @@ extend OneshotReceiver[T] {
     }
 
     /// Tries to receive without blocking
-    public func try_recv(this) -> Outcome[T, TryRecvError] {
+    pub func try_recv(this) -> Outcome[T, TryRecvError] {
         this.inner.try_recv()
     }
 
     /// Blocks waiting for the value
-    public func blocking_recv(this) -> Outcome[T, RecvError] {
+    pub func blocking_recv(this) -> Outcome[T, RecvError] {
         this.inner.blocking_recv()
     }
 }
@@ -600,7 +600,7 @@ Synchronization point for multiple threads.
 
 ```tml
 /// A barrier for synchronizing threads
-public type Barrier {
+pub type Barrier {
     count: U64,
     waiting: AtomicU64,
     generation: AtomicU64,
@@ -610,7 +610,7 @@ public type Barrier {
 
 extend Barrier {
     /// Creates a barrier for n threads
-    public func new(count: U64) -> Barrier {
+    pub func new(count: U64) -> Barrier {
         return Barrier {
             count: count,
             waiting: AtomicU64.new(0),
@@ -621,7 +621,7 @@ extend Barrier {
     }
 
     /// Waits at the barrier
-    public func wait(this) -> BarrierWaitResult {
+    pub func wait(this) -> BarrierWaitResult {
         let guard = this.mutex.lock()
         let gen = this.generation.load(Ordering.Relaxed)
 
@@ -645,13 +645,13 @@ extend Barrier {
 }
 
 /// Result of waiting at a barrier
-public type BarrierWaitResult {
+pub type BarrierWaitResult {
     is_leader: Bool,
 }
 
 extend BarrierWaitResult {
     /// Returns true if this thread was the last to arrive
-    public func is_leader(this) -> Bool {
+    pub func is_leader(this) -> Bool {
         this.is_leader
     }
 }
@@ -665,7 +665,7 @@ One-time initialization.
 
 ```tml
 /// Ensures code runs exactly once
-public type Once {
+pub type Once {
     state: AtomicU8,
 }
 
@@ -675,12 +675,12 @@ const COMPLETE: U8 = 2
 
 extend Once {
     /// Creates a new Once
-    public const func new() -> Once {
+    pub const func new() -> Once {
         return Once { state: AtomicU8.new(INCOMPLETE) }
     }
 
     /// Calls the function if not already called
-    public func call_once(this, f: func()) {
+    pub func call_once(this, f: func()) {
         if this.state.load(Ordering.Acquire) == COMPLETE then {
             return
         }
@@ -704,7 +704,7 @@ extend Once {
     }
 
     /// Returns true if initialization is complete
-    public func is_completed(this) -> Bool {
+    pub func is_completed(this) -> Bool {
         this.state.load(Ordering.Acquire) == COMPLETE
     }
 }
@@ -716,14 +716,14 @@ Lazy initialization container.
 
 ```tml
 /// A cell that can be written to once
-public type OnceCell[T] {
+pub type OnceCell[T] {
     once: Once,
     value: UnsafeCell[Maybe[T]],
 }
 
 extend OnceCell[T] {
     /// Creates an empty OnceCell
-    public const func new() -> OnceCell[T] {
+    pub const func new() -> OnceCell[T] {
         return OnceCell {
             once: Once.new(),
             value: UnsafeCell.new(Nothing),
@@ -731,7 +731,7 @@ extend OnceCell[T] {
     }
 
     /// Gets or initializes the value
-    public func get_or_init(this, f: func() -> T) -> ref T {
+    pub func get_or_init(this, f: func() -> T) -> ref T {
         this.once.call_once(do() {
             unsafe {
                 *this.value.get() = Just(f())
@@ -741,7 +741,7 @@ extend OnceCell[T] {
     }
 
     /// Gets the value if initialized
-    public func get(this) -> Maybe[ref T] {
+    pub func get(this) -> Maybe[ref T] {
         if this.once.is_completed() then {
             return unsafe { (*this.value.get()).as_ref() }
         }
@@ -749,7 +749,7 @@ extend OnceCell[T] {
     }
 
     /// Sets the value if not initialized
-    public func set(this, value: T) -> Outcome[Unit, T] {
+    pub func set(this, value: T) -> Outcome[Unit, T] {
         var stored = false
         this.once.call_once(do() {
             unsafe {
@@ -771,14 +771,14 @@ Lazy evaluation with memoization.
 
 ```tml
 /// Lazy value computed on first access
-public type Lazy[T] {
+pub type Lazy[T] {
     cell: OnceCell[T],
     init: Cell[Maybe[func() -> T]],
 }
 
 extend Lazy[T] {
     /// Creates a lazy value
-    public const func new(f: func() -> T) -> Lazy[T] {
+    pub const func new(f: func() -> T) -> Lazy[T] {
         return Lazy {
             cell: OnceCell.new(),
             init: Cell.new(Just(f)),
@@ -786,7 +786,7 @@ extend Lazy[T] {
     }
 
     /// Forces evaluation and returns a reference
-    public func force(this) -> ref T {
+    pub func force(this) -> ref T {
         this.cell.get_or_init(do() {
             let f = this.init.take().expect("Lazy already initialized")
             f()
@@ -811,22 +811,22 @@ implement Deref for Lazy[T] {
 
 ```tml
 /// Thread-safe hash map
-public type ConcurrentHashMap[K, V] {
+pub type ConcurrentHashMap[K, V] {
     shards: [RwLock[HashMap[K, V]]; 16],
 }
 
 extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     /// Creates a new concurrent hash map
-    public func new() -> ConcurrentHashMap[K, V]
+    pub func new() -> ConcurrentHashMap[K, V]
 
     /// Inserts a key-value pair
-    public func insert(this, key: K, value: V) -> Maybe[V] {
+    pub func insert(this, key: K, value: V) -> Maybe[V] {
         let shard = this.get_shard(ref key)
         shard.write().insert(key, value)
     }
 
     /// Gets a value by key
-    public func get[Q](this, key: ref Q) -> Maybe[V]
+    pub func get[Q](this, key: ref Q) -> Maybe[V]
         where K: Borrow[Q], Q: Hash + Eq, V: Duplicate
     {
         let shard = this.get_shard(key)
@@ -834,7 +834,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     }
 
     /// Removes a key
-    public func remove[Q](this, key: ref Q) -> Maybe[V]
+    pub func remove[Q](this, key: ref Q) -> Maybe[V]
         where K: Borrow[Q], Q: Hash + Eq
     {
         let shard = this.get_shard(key)
@@ -842,7 +842,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     }
 
     /// Returns true if the key exists
-    public func contains_key[Q](this, key: ref Q) -> Bool
+    pub func contains_key[Q](this, key: ref Q) -> Bool
         where K: Borrow[Q], Q: Hash + Eq
     {
         let shard = this.get_shard(key)
@@ -850,7 +850,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
     }
 
     /// Gets or inserts a value
-    public func get_or_insert(this, key: K, value: V) -> V
+    pub func get_or_insert(this, key: K, value: V) -> V
         where V: Duplicate
     {
         let shard = this.get_shard(ref key)
@@ -872,7 +872,7 @@ extend ConcurrentHashMap[K, V] where K: Hash + Eq {
 
 ```tml
 /// Lock-free concurrent queue
-public type ConcurrentQueue[T] {
+pub type ConcurrentQueue[T] {
     head: AtomicPtr[Node[T]],
     tail: AtomicPtr[Node[T]],
 }
@@ -884,16 +884,16 @@ type Node[T] {
 
 extend ConcurrentQueue[T] {
     /// Creates a new concurrent queue
-    public func new() -> ConcurrentQueue[T]
+    pub func new() -> ConcurrentQueue[T]
 
     /// Pushes a value to the back
-    public func push(this, value: T)
+    pub func push(this, value: T)
 
     /// Pops a value from the front
-    public func pop(this) -> Maybe[T]
+    pub func pop(this) -> Maybe[T]
 
     /// Returns true if the queue is empty
-    public func is_empty(this) -> Bool
+    pub func is_empty(this) -> Bool
 }
 ```
 
@@ -904,8 +904,8 @@ extend ConcurrentQueue[T] {
 ### Worker Pool with Channels
 
 ```tml
-import std.sync.{mpsc, channel}
-import std.thread
+use std::sync.{mpsc, channel}
+use std::thread
 
 type Task = func() -> I32
 
@@ -943,7 +943,7 @@ func worker_pool(num_workers: U64) {
 ### Broadcast Updates
 
 ```tml
-import std.sync.broadcast
+use std::sync.broadcast
 
 type Update = DataUpdate { data: String } | Shutdown
 
@@ -974,7 +974,7 @@ func broadcast_example() {
 ### Barrier for Parallel Computation
 
 ```tml
-import std.sync.Barrier
+use std::sync.Barrier
 
 func parallel_compute() {
     let barrier = Arc.new(Barrier.new(4))

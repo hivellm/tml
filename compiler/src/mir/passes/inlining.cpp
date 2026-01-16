@@ -73,6 +73,27 @@ static auto is_directly_recursive(const Function& func) -> bool {
     return false;
 }
 
+// Check if a function name is a constructor (ends with _new or _new_*)
+static auto is_constructor_name(const std::string& name) -> bool {
+    // Pattern: ClassName_new or ClassName_new_variant
+    auto pos = name.rfind("_new");
+    if (pos == std::string::npos) {
+        return false;
+    }
+    // Must be at end or followed by underscore (for variants like _new_default)
+    return pos + 4 == name.length() || name[pos + 4] == '_';
+}
+
+// Check if a call is to a base class constructor (for constructor chaining)
+static auto is_base_constructor_call(const CallInst& call, const Function& caller) -> bool {
+    // If caller is a constructor and callee is also a constructor
+    // This indicates base constructor call in inheritance chain
+    if (!is_constructor_name(caller.name)) {
+        return false;
+    }
+    return is_constructor_name(call.func_name);
+}
+
 // ============================================================================
 // InliningPass Implementation
 // ============================================================================
@@ -135,6 +156,20 @@ auto InliningPass::run(Module& module) -> bool {
 
                     stats_.calls_analyzed++;
 
+                    // Track devirtualized calls
+                    bool is_devirt = call->is_devirtualized();
+                    if (is_devirt) {
+                        stats_.devirt_calls_analyzed++;
+                    }
+
+                    // Track constructor calls
+                    bool is_ctor = is_constructor_name(call->func_name);
+                    bool is_base_ctor = false;
+                    if (is_ctor) {
+                        stats_.constructor_calls_analyzed++;
+                        is_base_ctor = is_base_constructor_call(*call, func);
+                    }
+
                     // Find the callee
                     auto callee_it = function_map_.find(call->func_name);
                     if (callee_it == function_map_.end()) {
@@ -151,6 +186,8 @@ auto InliningPass::run(Module& module) -> bool {
                     }
 
                     // Skip directly recursive functions (causes code explosion)
+                    // For devirtualized calls, also check the original method name
+                    // to prevent recursive virtual method inlining
                     if (is_directly_recursive(*callee)) {
                         stats_.recursive_limit_hit++;
                         continue;
@@ -174,6 +211,28 @@ auto InliningPass::run(Module& module) -> bool {
                             stats_.calls_inlined++;
                             stats_.always_inline++;
                             stats_.total_instructions_inlined += static_cast<size_t>(callee_size);
+
+                            // Track devirtualized call inlining statistics
+                            if (is_devirt) {
+                                stats_.devirt_calls_inlined++;
+                                const auto& devirt = *call->devirt_info;
+                                if (devirt.from_sealed_class) {
+                                    stats_.devirt_sealed_inlined++;
+                                } else if (devirt.from_exact_type) {
+                                    stats_.devirt_exact_inlined++;
+                                } else if (devirt.from_single_impl) {
+                                    stats_.devirt_single_inlined++;
+                                }
+                            }
+
+                            // Track constructor call inlining statistics
+                            if (is_ctor) {
+                                stats_.constructor_calls_inlined++;
+                                if (is_base_ctor) {
+                                    stats_.base_constructor_inlined++;
+                                }
+                            }
+
                             i = static_cast<size_t>(-1);
                         }
                         continue;
@@ -205,6 +264,28 @@ auto InliningPass::run(Module& module) -> bool {
                             made_progress = true;
                             stats_.calls_inlined++;
                             stats_.total_instructions_inlined += static_cast<size_t>(callee_size);
+
+                            // Track devirtualized call inlining statistics
+                            if (is_devirt) {
+                                stats_.devirt_calls_inlined++;
+                                const auto& devirt = *call->devirt_info;
+                                if (devirt.from_sealed_class) {
+                                    stats_.devirt_sealed_inlined++;
+                                } else if (devirt.from_exact_type) {
+                                    stats_.devirt_exact_inlined++;
+                                } else if (devirt.from_single_impl) {
+                                    stats_.devirt_single_inlined++;
+                                }
+                            }
+
+                            // Track constructor call inlining statistics
+                            if (is_ctor) {
+                                stats_.constructor_calls_inlined++;
+                                if (is_base_ctor) {
+                                    stats_.base_constructor_inlined++;
+                                }
+                            }
+
                             // Restart block processing
                             i = static_cast<size_t>(-1);
                         }
@@ -256,6 +337,33 @@ auto InliningPass::calculate_threshold([[maybe_unused]] const Function& caller,
         }
     }
 
+    // Bonus for devirtualized calls - inlining eliminates vtable overhead
+    if (call.is_devirtualized() && options_.prioritize_devirt) {
+        const auto& devirt = *call.devirt_info;
+        threshold += options_.devirt_bonus;
+
+        // Extra bonus based on devirtualization reason
+        if (devirt.from_exact_type) {
+            threshold += options_.devirt_exact_bonus;
+        } else if (devirt.from_sealed_class) {
+            threshold += options_.devirt_sealed_bonus;
+        }
+    }
+
+    // Bonus for constructor calls - inlining constructors:
+    // - Enables field initialization optimization (SROA can break up struct)
+    // - Allows vtable pointer store elimination for stack-allocated objects
+    // - Enables constant propagation of initial values
+    if (options_.prioritize_constructors && is_constructor_name(call.func_name)) {
+        threshold += options_.constructor_bonus;
+
+        // Extra bonus for base constructor calls (inheritance chains)
+        // Inlining entire chain exposes optimization opportunities
+        if (is_base_constructor_call(call, caller)) {
+            threshold += options_.base_constructor_bonus;
+        }
+    }
+
     return threshold;
 }
 
@@ -270,7 +378,7 @@ auto InliningPass::count_instructions(const Function& func) const -> int {
     return count;
 }
 
-auto InliningPass::analyze_cost([[maybe_unused]] const CallInst& call, const Function& callee) const
+auto InliningPass::analyze_cost(const CallInst& call, const Function& callee) const
     -> InlineCost {
     InlineCost cost;
 
@@ -279,6 +387,29 @@ auto InliningPass::analyze_cost([[maybe_unused]] const CallInst& call, const Fun
 
     // Call overhead saved
     cost.call_overhead_saved = options_.call_penalty;
+
+    // Additional savings for devirtualized calls (vtable lookup overhead)
+    // Inlining devirtualized calls eliminates:
+    // - Load vtable pointer from object
+    // - Load function pointer from vtable
+    // - Indirect call (harder to predict)
+    if (call.is_devirtualized()) {
+        constexpr int vtable_load_cost = 5;    // Loading vtable pointer
+        constexpr int func_ptr_load_cost = 5;  // Loading function from vtable
+        constexpr int indirect_call_cost = 10; // Branch prediction penalty
+        cost.call_overhead_saved += vtable_load_cost + func_ptr_load_cost + indirect_call_cost;
+    }
+
+    // Additional savings for constructor inlining
+    // Inlining constructors exposes field initialization to optimization:
+    // - SROA can decompose struct into scalars
+    // - Constant propagation can optimize initial values
+    // - Dead store elimination can remove unused fields
+    if (is_constructor_name(call.func_name)) {
+        constexpr int field_init_exposure = 15;  // Benefit from exposing field inits
+        constexpr int alloca_exposure = 10;      // Potential stack allocation optimization
+        cost.call_overhead_saved += field_init_exposure + alloca_exposure;
+    }
 
     // Size increase estimate
     cost.size_increase = cost.instruction_cost;

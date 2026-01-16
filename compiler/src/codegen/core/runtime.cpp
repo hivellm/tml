@@ -356,6 +356,20 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i64 @tml_random_seed()");
     emit_line("");
 
+    // Register random_seed in functions_ map for lowlevel calls
+    functions_["random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
+    // Also register with tml_ prefix for when called as tml_random_seed()
+    functions_["tml_random_seed"] = FuncInfo{"@tml_random_seed", "i64 ()", "i64", {}};
+
+    // Register UTF-8 encoding functions for lowlevel calls
+    functions_["char_to_string"] = FuncInfo{"@char_to_string", "ptr (i8)", "ptr", {"i8"}};
+    functions_["utf8_2byte_to_string"] =
+        FuncInfo{"@utf8_2byte_to_string", "ptr (i8, i8)", "ptr", {"i8", "i8"}};
+    functions_["utf8_3byte_to_string"] =
+        FuncInfo{"@utf8_3byte_to_string", "ptr (i8, i8, i8)", "ptr", {"i8", "i8", "i8"}};
+    functions_["utf8_4byte_to_string"] =
+        FuncInfo{"@utf8_4byte_to_string", "ptr (i8, i8, i8, i8)", "ptr", {"i8", "i8", "i8", "i8"}};
+
     // StringBuilder utilities (matches runtime/string.c)
     emit_line("; StringBuilder utilities");
     emit_line("declare ptr @strbuilder_create(i64)");
@@ -722,6 +736,9 @@ void LLVMIRGen::emit_module_pure_tml_functions() {
             // Also handle impl blocks - generate methods for imported types
             else if (decl->is<parser::ImplDecl>()) {
                 const auto& impl = decl->as<parser::ImplDecl>();
+
+                // Register impl block for vtable generation (enables dyn dispatch)
+                register_impl(&impl);
 
                 // Skip generic impls - they need to be instantiated on demand
                 // Generic impls have type parameters like impl[T] or impl[I: Iterator]

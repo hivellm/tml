@@ -14,14 +14,13 @@ The TML (To Machine Language) bootstrap compiler, written in C++20.
 ### Build Steps
 
 ```bash
-# Configure
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-
-# Build
-cmake --build build --config Debug
+# From project root (recommended)
+scripts/build.bat              # Windows - Debug build
+scripts/build.bat release      # Windows - Release build
+scripts/build.bat --no-tests   # Skip tests
 
 # Run tests
-./build/Debug/tml.exe test
+scripts/test.bat
 ```
 
 ### Build Options
@@ -47,136 +46,234 @@ cmake --build build --config Debug
 # Run all tests
 ./tml test
 
-# Debug a file
-./tml debug file.tml
+# Debug commands
+./tml debug lex file.tml    # Show tokens
+./tml debug parse file.tml  # Show AST
+./tml debug check file.tml  # Show type info
 ```
 
 ## Project Structure
 
 ```
-packages/compiler/
-├── include/tml/        # Public headers
+compiler/
+├── include/            # Header files
 │   ├── common.hpp      # Common types and utilities
 │   ├── lexer/          # Lexer headers
-│   ├── parser/         # Parser headers
+│   ├── parser/         # Parser headers (AST, OOP)
 │   ├── types/          # Type system headers
 │   ├── borrow/         # Borrow checker headers
-│   ├── ir/             # IR headers
-│   └── codegen/        # Codegen headers
+│   ├── hir/            # High-level IR
+│   ├── mir/            # Mid-level IR (SSA, passes)
+│   └── codegen/        # LLVM codegen headers
 ├── src/
 │   ├── lexer/          # Tokenizer
 │   ├── parser/         # AST generation
+│   ├── preprocessor/   # Conditional compilation
 │   ├── types/          # Type checker with module system
 │   ├── borrow/         # Borrow checker
-│   ├── ir/             # Intermediate representation
-│   ├── codegen/        # LLVM backend
+│   ├── hir/            # HIR generation
+│   ├── mir/            # MIR passes (devirtualization, etc.)
+│   ├── codegen/        # LLVM IR backend
+│   │   └── core/       # Core codegen (classes, generics)
 │   ├── cli/            # Command line interface
+│   │   ├── commands/   # CLI commands (build, test, etc.)
+│   │   ├── builder/    # Build system
+│   │   └── tester/     # Test runner
 │   └── main.cpp        # Entry point
-├── tests/              # Test files
-│   └── tml/
-│       ├── compiler/   # Compiler tests
-│       └── runtime/    # Runtime tests
-├── runtime/            # C runtime library
-└── CMakeLists.txt      # Build configuration
+├── tests/              # C++ unit tests (GoogleTest)
+└── runtime/            # C runtime library (essential.c)
 ```
 
 ## Development Status
 
 | Component | Status |
 |-----------|--------|
-| Lexer | ✅ Complete |
-| Parser | ✅ Complete |
-| Type Checker | ✅ Complete |
-| Module System | ✅ Complete |
-| Pattern Matching | ✅ Complete |
-| Enum Support | ✅ Complete |
-| Trait Objects | ✅ Complete |
-| Borrow Checker | 🟡 Basic |
-| IR Generator | ✅ Complete |
-| LLVM Backend | ✅ Complete |
-| CLI | ✅ Complete |
-| Test Framework | ✅ Complete |
+| Lexer | Complete |
+| Parser | Complete |
+| Type Checker | Complete |
+| Module System | Complete |
+| Pattern Matching | Complete |
+| Enum Support | Complete |
+| Trait Objects | Complete |
+| **OOP (Classes/Interfaces)** | Complete |
+| **@value Classes** | Complete |
+| **@pool Classes** | Validation Complete |
+| Borrow Checker | Basic |
+| HIR Generator | Complete |
+| MIR Passes | Complete |
+| LLVM Backend | Complete |
+| CLI | Complete |
+| Test Framework | Complete |
 
 ## Features
 
 ### Language Features
-- ✅ Basic types (I32, I64, Bool, Str, F64, etc.)
-- ✅ Functions with type parameters
-- ✅ Structs with generics (monomorphization)
-- ✅ Enums (simple and with data variants)
-- ✅ Pattern matching (when expressions)
-- ✅ Trait objects (`dyn Behavior`) with vtables
-- ✅ Closures (basic, without capture)
-- ✅ Operators (arithmetic, comparison, logical, bitwise)
-- ✅ Control flow (if/else, loop, for, while)
-- ✅ Module system (use declarations)
-- ✅ Time API (Instant::now(), Duration)
+- Basic types (I8-I128, U8-U128, F32, F64, Bool, Char, Str)
+- Functions with type parameters
+- Structs with generics (monomorphization)
+- Enums (simple and with data variants)
+- Pattern matching (when expressions)
+- Trait objects (`dyn Behavior`) with vtables
+- Closures with capture
+- Operators (arithmetic, comparison, logical, bitwise)
+- Control flow (if/else, loop, for, while)
+- Module system (use declarations)
+- Async/await support
+- **C#-style OOP**:
+  - Classes with single inheritance (`extends`)
+  - Interfaces with multiple implementation (`implements`)
+  - Abstract and sealed classes
+  - Virtual, override, and abstract methods
+  - Constructors with base calls
+  - Properties (get/set)
+  - Member visibility (public, private, protected, internal)
+  - Namespaces
+- **@value classes** (no vtable, direct dispatch)
+- **@pool classes** (object pooling - validation only)
 
 ### Compiler Features
-- ✅ Full lexical analysis
-- ✅ Complete parser (all constructs)
-- ✅ Type checking with inference
-- ✅ Module registry and imports
-- ✅ LLVM IR code generation
-- ✅ Enum codegen (struct-based tagged unions)
-- ✅ Pattern matching codegen
-- ✅ Trait object vtable generation
-- ✅ Test framework integration (@test, @bench)
-- ✅ Parallel test execution
+- Full lexical analysis
+- Complete parser (all constructs including OOP)
+- Type checking with inference
+- Module registry and imports
+- **Class Hierarchy Analysis (CHA)**
+- **Devirtualization pass**
+- **Dead method elimination**
+- **Escape analysis**
+- LLVM IR code generation
+- Enum codegen (struct-based tagged unions)
+- Pattern matching codegen
+- Trait object vtable generation
+- Class vtable generation
+- Interface vtable generation
+- Test framework integration (@test, @bench)
+- Parallel test execution
+- Code coverage instrumentation
+- Debug info (DWARF)
 
-### Test Results
+### MIR Optimization Passes
+- Devirtualization (final methods, sealed classes)
+- Virtual call inlining
+- Dead method elimination
+- Escape analysis (stack promotion)
+- Vtable deduplication
+- Trivial destructor detection
 
-Current status: **34/34 tests passing (100%)**
+## OOP Features
 
-All compiler and test framework tests pass with polymorphic assertions.
+### Classes and Interfaces
+
+```tml
+interface IDrawable {
+    func draw(this) -> Unit
+}
+
+abstract class Shape implements IDrawable {
+    protected x: I32
+    protected y: I32
+
+    abstract func area(this) -> F64
+}
+
+class Circle extends Shape {
+    private radius: F64
+
+    func new(x: I32, y: I32, r: F64) : base(x, y) {
+        this.radius = r
+    }
+
+    override func area(this) -> F64 {
+        3.14159 * this.radius * this.radius
+    }
+
+    override func draw(this) -> Unit {
+        print("Drawing circle at ({this.x}, {this.y})")
+    }
+}
+```
+
+### Value Classes
+
+```tml
+@value
+class Point {
+    private x: I32
+    private y: I32
+
+    func new(x: I32, y: I32) {
+        this.x = x
+        this.y = y
+    }
+
+    func distance(this, other: ref Point) -> F64 {
+        // Direct dispatch, no vtable overhead
+        let dx = (this.x - other.x) as F64
+        let dy = (this.y - other.y) as F64
+        (dx * dx + dy * dy).sqrt()
+    }
+}
+```
+
+Value classes:
+- No vtable pointer (smaller memory footprint)
+- Direct method dispatch (faster calls)
+- Cannot have virtual methods
+- Can only extend other @value classes
+- Can implement interfaces
 
 ## Module System
 
 The compiler supports a module system with `use` declarations:
 
 ```tml
-use test  // Import test module
+use core::io
+use test
 
 @test
 func my_test() -> I32 {
     assert_eq(2 + 2, 4, "math works")
-    return 0
+    0
 }
 ```
 
-Modules are registered in the `ModuleRegistry` and resolved during type checking.
-
 ## Recent Updates
 
-### v0.5.0 (2025-12-24)
+### v0.6.0 (2026-01)
+- **@value classes** - Value semantics with no vtable
+- **@pool classes** - Object pooling directive (validation)
+- Direct dispatch for value class methods
+- Value class codegen (no vtable pointer)
+
+### v0.5.5 (2025-12)
+- **C#-style OOP** - Classes, interfaces, inheritance
+- Virtual dispatch with vtables
+- Interface vtables for multiple implementation
+- Namespace support
+- Memory leak detection system
+
+### v0.5.0 (2025-12)
 - **Trait Objects** - `dyn Behavior` syntax for dynamic dispatch
 - Vtable generation for behavior implementations
 - Method resolution through generated vtables
 
-### v0.4.0 (2025-12-23)
-- **Build System** - Cross-platform build scripts
-- Target triple-based build directories (like Rust)
-- Linux/GCC compatibility fixes
-- Vitest-like test output with colors
+### v0.4.0 (2025-12)
+- **MIR Passes** - Devirtualization, escape analysis
+- Dead method elimination
+- Stack promotion for non-escaping objects
 
-### v0.3.0 (2025-12-23)
-- Full module system with `use test` support
-- Fixed enum pattern matching in `when` expressions
-- Parallel test execution with thread pool
-- Test timeout support (default 20s)
-- Benchmarking with `@bench` decorator
+## Test Status
 
-### v0.2.0 (2025-12-23)
-- Complete test framework with @test decorator
-- Auto-generated test runner
-- Type-specific assertion functions
-- Test discovery and execution
+Run tests with:
+```bash
+# All C++ unit tests
+./build/debug/tml_tests.exe
 
-## Known Issues
+# Specific test suite
+./build/debug/tml_tests.exe --gtest_filter="*ValueClass*"
 
-- **I64 comparisons** - Type mismatch in LLVM IR (blocks string operations)
-- **Pointer references** - `mut ref I32` codegen issue (blocks memory/atomic operations)
-- **Closure capture** - Basic closures work, environment capture not implemented
+# TML integration tests
+./build/debug/tml.exe test
+```
 
 ## License
 

@@ -1,6 +1,6 @@
 # TML Standard Library: Regular Expressions
 
-> `std.regex` — Pattern matching with regular expressions.
+> `std::regex` — Pattern matching with regular expressions.
 
 ## Overview
 
@@ -9,8 +9,8 @@ The regex package provides regular expression support for pattern matching, sear
 ## Import
 
 ```tml
-import std.regex
-import std.regex.{Regex, Captures, Match}
+use std::regex
+use std::regex.{Regex, Captures, Match}
 ```
 
 ---
@@ -21,33 +21,33 @@ import std.regex.{Regex, Captures, Match}
 
 ```tml
 /// A compiled regular expression
-public type Regex {
+pub type Regex {
     // Internal compiled representation
 }
 
 extend Regex {
     /// Compiles a regex pattern
-    public func new(pattern: String) -> Outcome[Regex, RegexError] {
+    pub func new(pattern: String) -> Outcome[Regex, RegexError] {
         Regex.with_options(pattern, RegexOptions.default())
     }
 
     /// Compiles with options
-    public func with_options(pattern: String, options: RegexOptions) -> Outcome[Regex, RegexError]
+    pub func with_options(pattern: String, options: RegexOptions) -> Outcome[Regex, RegexError]
 
     /// Returns the original pattern
-    public func as_str(this) -> ref String {
+    pub func as_str(this) -> ref String {
         ref this.pattern
     }
 
     /// Returns the number of capture groups
-    public func captures_len(this) -> U64
+    pub func captures_len(this) -> U64
 
     /// Returns the names of capture groups
-    public func capture_names(this) -> Vec[Maybe[String]]
+    pub func capture_names(this) -> Vec[Maybe[String]]
 }
 
 /// Regex compilation options
-public type RegexOptions {
+pub type RegexOptions {
     case_insensitive: Bool,
     multi_line: Bool,
     dot_matches_newline: Bool,
@@ -57,7 +57,7 @@ public type RegexOptions {
 
 extend RegexOptions {
     /// Default options
-    public func default() -> RegexOptions {
+    pub func default() -> RegexOptions {
         return RegexOptions {
             case_insensitive: false,
             multi_line: false,
@@ -68,38 +68,38 @@ extend RegexOptions {
     }
 
     /// Case insensitive matching
-    public func case_insensitive(mut this, value: Bool) -> RegexOptions {
+    pub func case_insensitive(mut this, value: Bool) -> RegexOptions {
         this.case_insensitive = value
         return this
     }
 
     /// ^ and $ match line boundaries
-    public func multi_line(mut this, value: Bool) -> RegexOptions {
+    pub func multi_line(mut this, value: Bool) -> RegexOptions {
         this.multi_line = value
         return this
     }
 
     /// . matches newline
-    public func dot_matches_newline(mut this, value: Bool) -> RegexOptions {
+    pub func dot_matches_newline(mut this, value: Bool) -> RegexOptions {
         this.dot_matches_newline = value
         return this
     }
 
     /// Enable Unicode support
-    public func unicode(mut this, value: Bool) -> RegexOptions {
+    pub func unicode(mut this, value: Bool) -> RegexOptions {
         this.unicode = value
         return this
     }
 
     /// Ignore whitespace and allow comments
-    public func ignore_whitespace(mut this, value: Bool) -> RegexOptions {
+    pub func ignore_whitespace(mut this, value: Bool) -> RegexOptions {
         this.ignore_whitespace = value
         return this
     }
 }
 
 /// Regex compilation error
-public type RegexError {
+pub type RegexError {
     message: String,
     position: U64,
 }
@@ -114,10 +114,10 @@ public type RegexError {
 ```tml
 extend Regex {
     /// Returns true if the pattern matches anywhere in the text
-    public func is_match(this, text: ref String) -> Bool
+    pub func is_match(this, text: ref String) -> Bool
 
     /// Returns true if the pattern matches at the start of text
-    public func is_match_at(this, text: ref String, start: U64) -> Bool
+    pub func is_match_at(this, text: ref String, start: U64) -> Bool
 }
 
 // Example:
@@ -131,17 +131,17 @@ assert(not re.is_match("12-345"))
 ```tml
 extend Regex {
     /// Finds the first match in the text
-    public func find(this, text: ref String) -> Maybe[Match]
+    pub func find(this, text: ref String) -> Maybe[Match]
 
     /// Finds the first match starting at position
-    public func find_at(this, text: ref String, start: U64) -> Maybe[Match]
+    pub func find_at(this, text: ref String, start: U64) -> Maybe[Match]
 
     /// Finds all non-overlapping matches
-    public func find_all(this, text: ref String) -> Matches
+    pub func find_all(this, text: ref String) -> Matches
 }
 
 /// A single match
-public type Match {
+pub type Match {
     text: String,
     start: U64,
     end: U64,
@@ -149,33 +149,33 @@ public type Match {
 
 extend Match {
     /// Returns the matched text
-    public func as_str(this) -> ref String {
+    pub func as_str(this) -> ref String {
         ref this.text
     }
 
     /// Returns the start byte position
-    public func start(this) -> U64 {
+    pub func start(this) -> U64 {
         this.start
     }
 
     /// Returns the end byte position
-    public func end(this) -> U64 {
+    pub func end(this) -> U64 {
         this.end
     }
 
     /// Returns the length in bytes
-    public func len(this) -> U64 {
+    pub func len(this) -> U64 {
         this.end - this.start
     }
 
     /// Returns the byte range
-    public func range(this) -> Range[U64] {
+    pub func range(this) -> Range[U64] {
         this.start to this.end
     }
 }
 
 /// Iterator over matches
-public type Matches {
+pub type Matches {
     regex: Regex,
     text: String,
     pos: U64,
@@ -205,52 +205,52 @@ implement Iterator for Matches {
 ```tml
 extend Regex {
     /// Captures the first match and all groups
-    public func captures(this, text: ref String) -> Maybe[Captures]
+    pub func captures(this, text: ref String) -> Maybe[Captures]
 
     /// Captures all matches and their groups
-    public func captures_all(this, text: ref String) -> CapturesIter
+    pub func captures_all(this, text: ref String) -> CapturesIter
 }
 
 /// All capture groups from a single match
-public type Captures {
+pub type Captures {
     groups: Vec[Maybe[Match]],
     names: HashMap[String, U64],
 }
 
 extend Captures {
     /// Returns the full match (group 0)
-    public func get_match(this) -> ref Match {
+    pub func get_match(this) -> ref Match {
         this.groups[0].as_ref().unwrap()
     }
 
     /// Returns capture group by index
-    public func get(this, index: U64) -> Maybe[ref Match] {
+    pub func get(this, index: U64) -> Maybe[ref Match] {
         this.groups.get(index).and_then(|g| g.as_ref())
     }
 
     /// Returns capture group by name
-    public func name(this, name: ref String) -> Maybe[ref Match] {
+    pub func name(this, name: ref String) -> Maybe[ref Match] {
         this.names.get(name).and_then(|i| this.get(*i))
     }
 
     /// Returns the number of groups
-    public func len(this) -> U64 {
+    pub func len(this) -> U64 {
         this.groups.len()
     }
 
     /// Iterates over all groups
-    public func iter(this) -> CaptureGroupIter {
+    pub func iter(this) -> CaptureGroupIter {
         CaptureGroupIter { captures: this, index: 0 }
     }
 
     /// Expands a replacement template
-    public func expand(this, template: ref String, dest: mut ref String) {
+    pub func expand(this, template: ref String, dest: mut ref String) {
         // $0 = full match, $1 = group 1, $name = named group
     }
 }
 
 /// Iterator over captures
-public type CapturesIter {
+pub type CapturesIter {
     regex: Regex,
     text: String,
     pos: U64,
@@ -297,21 +297,21 @@ when re.captures("2024-03-15") {
 ```tml
 extend Regex {
     /// Replaces the first match
-    public func replace(this, text: ref String, rep: ref String) -> String
+    pub func replace(this, text: ref String, rep: ref String) -> String
 
     /// Replaces all matches
-    public func replace_all(this, text: ref String, rep: ref String) -> String
+    pub func replace_all(this, text: ref String, rep: ref String) -> String
 
     /// Replaces the first match using a function
-    public func replace_fn[F](this, text: ref String, f: F) -> String
+    pub func replace_fn[F](this, text: ref String, f: F) -> String
         where F: Fn(ref Captures) -> String
 
     /// Replaces all matches using a function
-    public func replace_all_fn[F](this, text: ref String, f: F) -> String
+    pub func replace_all_fn[F](this, text: ref String, f: F) -> String
         where F: Fn(ref Captures) -> String
 
     /// Replaces with limit
-    public func replacen(this, text: ref String, limit: U64, rep: ref String) -> String
+    pub func replacen(this, text: ref String, limit: U64, rep: ref String) -> String
 }
 
 // Replacement syntax:
@@ -346,14 +346,14 @@ let result = re.replace_fn("hello world", do(caps) {
 ```tml
 extend Regex {
     /// Splits text by the pattern
-    public func split(this, text: ref String) -> Split
+    pub func split(this, text: ref String) -> Split
 
     /// Splits with limit
-    public func splitn(this, text: ref String, limit: U64) -> SplitN
+    pub func splitn(this, text: ref String, limit: U64) -> SplitN
 }
 
 /// Iterator over split segments
-public type Split {
+pub type Split {
     regex: Regex,
     text: String,
     pos: U64,
@@ -480,37 +480,37 @@ Match multiple patterns efficiently.
 
 ```tml
 /// A set of compiled regexes
-public type RegexSet {
+pub type RegexSet {
     patterns: Vec[Regex],
 }
 
 extend RegexSet {
     /// Creates a regex set from patterns
-    public func new(patterns: ref [String]) -> Outcome[RegexSet, RegexError]
+    pub func new(patterns: ref [String]) -> Outcome[RegexSet, RegexError]
 
     /// Returns true if any pattern matches
-    public func is_match(this, text: ref String) -> Bool
+    pub func is_match(this, text: ref String) -> Bool
 
     /// Returns indices of matching patterns
-    public func matches(this, text: ref String) -> RegexSetMatches
+    pub func matches(this, text: ref String) -> RegexSetMatches
 
     /// Returns the number of patterns
-    public func len(this) -> U64
+    pub func len(this) -> U64
 }
 
 /// Set match results
-public type RegexSetMatches {
+pub type RegexSetMatches {
     matches: Vec[Bool],
 }
 
 extend RegexSetMatches {
     /// Returns true if pattern at index matched
-    public func matched(this, index: U64) -> Bool {
+    pub func matched(this, index: U64) -> Bool {
         this.matches.get(index).copied().unwrap_or(false)
     }
 
     /// Iterates over matching indices
-    public func iter(this) -> impl Iterator[Item = U64] {
+    pub func iter(this) -> impl Iterator[Item = U64] {
         this.matches.iter()
             .enumerate()
             .filter(do((_, m)) *m)
@@ -518,7 +518,7 @@ extend RegexSetMatches {
     }
 
     /// Returns the number of matches
-    public func len(this) -> U64 {
+    pub func len(this) -> U64 {
         this.matches.iter().filter(do(m) *m).count()
     }
 }
@@ -546,14 +546,14 @@ Build complex regexes programmatically.
 
 ```tml
 /// Builder for complex regex patterns
-public type RegexBuilder {
+pub type RegexBuilder {
     pattern: String,
     options: RegexOptions,
 }
 
 extend RegexBuilder {
     /// Creates a new builder
-    public func new(pattern: String) -> RegexBuilder {
+    pub func new(pattern: String) -> RegexBuilder {
         return RegexBuilder {
             pattern: pattern,
             options: RegexOptions.default(),
@@ -561,40 +561,40 @@ extend RegexBuilder {
     }
 
     /// Sets case insensitive
-    public func case_insensitive(mut this, value: Bool) -> RegexBuilder {
+    pub func case_insensitive(mut this, value: Bool) -> RegexBuilder {
         this.options.case_insensitive = value
         return this
     }
 
     /// Sets multi-line mode
-    public func multi_line(mut this, value: Bool) -> RegexBuilder {
+    pub func multi_line(mut this, value: Bool) -> RegexBuilder {
         this.options.multi_line = value
         return this
     }
 
     /// Sets dot-matches-newline
-    public func dot_matches_newline(mut this, value: Bool) -> RegexBuilder {
+    pub func dot_matches_newline(mut this, value: Bool) -> RegexBuilder {
         this.options.dot_matches_newline = value
         return this
     }
 
     /// Sets unicode mode
-    public func unicode(mut this, value: Bool) -> RegexBuilder {
+    pub func unicode(mut this, value: Bool) -> RegexBuilder {
         this.options.unicode = value
         return this
     }
 
     /// Sets ignore-whitespace mode
-    public func ignore_whitespace(mut this, value: Bool) -> RegexBuilder {
+    pub func ignore_whitespace(mut this, value: Bool) -> RegexBuilder {
         this.options.ignore_whitespace = value
         return this
     }
 
     /// Sets size limit for compiled regex
-    public func size_limit(mut this, limit: U64) -> RegexBuilder
+    pub func size_limit(mut this, limit: U64) -> RegexBuilder
 
     /// Builds the regex
-    public func build(this) -> Outcome[Regex, RegexError] {
+    pub func build(this) -> Outcome[Regex, RegexError] {
         Regex.with_options(this.pattern, this.options)
     }
 }
@@ -606,7 +606,7 @@ extend RegexBuilder {
 
 ```tml
 /// Escapes special regex characters in a string
-public func escape(text: ref String) -> String {
+pub func escape(text: ref String) -> String {
     var result = String.new()
     loop c in text.chars() {
         when c {
@@ -637,7 +637,7 @@ assert(re.is_match("hello (world)"))
 ### Email Validation
 
 ```tml
-import std.regex.Regex
+use std::regex.Regex
 
 func validate_email(email: ref String) -> Bool {
     let re = Regex.new(
@@ -650,7 +650,7 @@ func validate_email(email: ref String) -> Bool {
 ### Parse Log File
 
 ```tml
-import std.regex.{Regex, Captures}
+use std::regex.{Regex, Captures}
 
 type LogEntry {
     timestamp: String,
@@ -676,7 +676,7 @@ func parse_log_line(line: ref String) -> Maybe[LogEntry] {
 ### Extract URLs
 
 ```tml
-import std.regex.Regex
+use std::regex.Regex
 
 func extract_urls(text: ref String) -> Vec[String] {
     let re = Regex.new(
@@ -692,7 +692,7 @@ func extract_urls(text: ref String) -> Vec[String] {
 ### Template Processing
 
 ```tml
-import std.regex.Regex
+use std::regex.Regex
 
 func process_template(template: ref String, vars: ref HashMap[String, String]) -> String {
     let re = Regex.new(r"\{\{(\w+)\}\}").unwrap()

@@ -1,7 +1,7 @@
 // TML Example 05: Custom Types
 // Demonstrates structs, enums, and type aliases
 
-module types
+mod types
 
 // ============================================
 // STRUCTS
@@ -67,7 +67,7 @@ type StringMap[V] = Map[String, V]
 // USAGE
 // ============================================
 
-public func main() {
+pub func main() {
     // Struct construction
     let origin = Point { x: 0.0, y: 0.0 }
     let p = Point { x: 3.0, y: 4.0 }

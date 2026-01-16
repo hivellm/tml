@@ -75,6 +75,11 @@ auto LLVMIRGen::gen_literal(const parser::LiteralExpr& lit) -> std::string {
         if (!expected_literal_type_.empty()) {
             last_expr_type_ = expected_literal_type_;
             last_expr_is_unsigned_ = expected_literal_is_unsigned_;
+            // If expected type is float/double, format as floating point literal
+            // LLVM requires "3.0" not "3" for float constants
+            if (expected_literal_type_ == "double" || expected_literal_type_ == "float") {
+                return std::to_string(static_cast<double>(val));
+            }
             return std::to_string(val);
         }
 

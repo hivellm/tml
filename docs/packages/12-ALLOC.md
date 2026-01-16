@@ -1,6 +1,6 @@
 # TML Standard Library: Memory Allocation
 
-> `std.alloc` — Memory allocators and allocation strategies.
+> `std::alloc` — Memory allocators and allocation strategies.
 
 ## Overview
 
@@ -9,8 +9,8 @@ The alloc package provides memory allocation primitives and allocator implementa
 ## Import
 
 ```tml
-import std.alloc
-import std.alloc.{GlobalAlloc, Arena, Pool}
+use std::alloc
+use std::alloc.{GlobalAlloc, Arena, Pool}
 ```
 
 ---
@@ -23,7 +23,7 @@ The fundamental trait for memory allocators.
 
 ```tml
 /// Memory allocator trait
-public behaviorAllocator {
+pub behaviorAllocator {
     /// Allocates memory for the given layout
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError]
 
@@ -64,14 +64,14 @@ Describes the memory layout requirements.
 
 ```tml
 /// Memory layout descriptor
-public type Layout {
+pub type Layout {
     size: U64,
     align: U64,
 }
 
 extend Layout {
     /// Creates a layout for a type
-    public func of[T]() -> Layout {
+    pub func of[T]() -> Layout {
         return Layout {
             size: size_of[T](),
             align: align_of[T](),
@@ -79,7 +79,7 @@ extend Layout {
     }
 
     /// Creates a layout from size and alignment
-    public func from_size_align(size: U64, align: U64) -> Outcome[Layout, LayoutError] {
+    pub func from_size_align(size: U64, align: U64) -> Outcome[Layout, LayoutError] {
         // Alignment must be a power of 2
         if align == 0 or (align & (align - 1)) != 0 then {
             return Err(LayoutError.InvalidAlignment)
@@ -92,14 +92,14 @@ extend Layout {
     }
 
     /// Creates a layout for an array
-    public func array[T](n: U64) -> Outcome[Layout, LayoutError] {
+    pub func array[T](n: U64) -> Outcome[Layout, LayoutError] {
         let elem_layout = Layout.of[T]()
         let size = elem_layout.size.checked_mul(n)!
         return Ok(Layout { size: size, align: elem_layout.align })
     }
 
     /// Extends this layout with another, returning combined layout and offset
-    public func extend(this, next: Layout) -> Outcome[(Layout, U64), LayoutError] {
+    pub func extend(this, next: Layout) -> Outcome[(Layout, U64), LayoutError] {
         let padding = this.padding_needed_for(next.align)
         let offset = this.size + padding
         let new_size = offset + next.size
@@ -107,13 +107,13 @@ extend Layout {
     }
 
     /// Returns padding needed to align to the given alignment
-    public func padding_needed_for(this, align: U64) -> U64 {
+    pub func padding_needed_for(this, align: U64) -> U64 {
         let misalign = this.size % align
         if misalign == 0 then 0 else align - misalign
     }
 
     /// Pads layout to its alignment
-    public func pad_to_align(this) -> Layout {
+    pub func pad_to_align(this) -> Layout {
         let padding = this.padding_needed_for(this.align)
         Layout { size: this.size + padding, align: this.align }
     }
@@ -124,10 +124,10 @@ extend Layout {
 
 ```tml
 /// Allocation error
-public type AllocError = OutOfMemory | InvalidLayout
+pub type AllocError = OutOfMemory | InvalidLayout
 
 /// Layout error
-public type LayoutError = InvalidAlignment | SizeNotAligned | Overflow
+pub type LayoutError = InvalidAlignment | SizeNotAligned | Overflow
 ```
 
 ---
@@ -141,7 +141,7 @@ The default allocator used by all standard collections.
 public static GLOBAL: GlobalAlloc = GlobalAlloc {}
 
 /// Global allocator type (wraps system allocator)
-public type GlobalAlloc {}
+pub type GlobalAlloc {}
 
 implement Allocator for GlobalAlloc {
     func allocate(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
@@ -184,12 +184,12 @@ implement Allocator for GlobalAlloc {
 
 ```tml
 /// Allocates memory using the global allocator
-public func alloc(layout: Layout) -> Outcome[*mut U8, AllocError] {
+pub func alloc(layout: Layout) -> Outcome[*mut U8, AllocError] {
     return GLOBAL.allocate(layout)
 }
 
 /// Allocates zeroed memory using the global allocator
-public func alloc_zeroed(layout: Layout) -> Outcome[*mut U8, AllocError] {
+pub func alloc_zeroed(layout: Layout) -> Outcome[*mut U8, AllocError] {
     return GLOBAL.allocate_zeroed(layout)
 }
 
@@ -200,7 +200,7 @@ public unsafe func dealloc(ptr: *mut U8, layout: Layout) {
 }
 
 /// Reallocates memory using the global allocator
-public func realloc(
+pub func realloc(
     ptr: *mut U8,
     old_layout: Layout,
     new_layout: Layout,
@@ -217,7 +217,7 @@ A bump allocator that deallocates all memory at once.
 
 ```tml
 /// Arena allocator - fast bump allocation, bulk deallocation
-public type Arena {
+pub type Arena {
     chunks: Vec[ArenaChunk],
     current: U64,       // Index of current chunk
     offset: U64,        // Offset within current chunk
@@ -232,12 +232,12 @@ const DEFAULT_CHUNK_SIZE: U64 = 4096
 
 extend Arena {
     /// Creates a new arena with default chunk size
-    public func new() -> Arena {
+    pub func new() -> Arena {
         return Arena.with_capacity(DEFAULT_CHUNK_SIZE)
     }
 
     /// Creates an arena with specified initial capacity
-    public func with_capacity(capacity: U64) -> Arena {
+    pub func with_capacity(capacity: U64) -> Arena {
         var arena = Arena {
             chunks: Vec.new(),
             current: 0,
@@ -248,14 +248,14 @@ extend Arena {
     }
 
     /// Allocates memory from the arena
-    public func alloc[T](mut this) -> mut ref T {
+    pub func alloc[T](mut this) -> mut ref T {
         let layout = Layout.of[T]()
         let ptr = this.alloc_layout(layout)
         return unsafe { mut ref *(ptr as *mut T) }
     }
 
     /// Allocates memory with specific layout
-    public func alloc_layout(mut this, layout: Layout) -> *mut U8 {
+    pub func alloc_layout(mut this, layout: Layout) -> *mut U8 {
         // Align the offset
         let aligned = self.align_offset(layout.align)
 
@@ -275,20 +275,20 @@ extend Arena {
     }
 
     /// Allocates a slice of elements
-    public func alloc_slice[T](mut this, len: U64) -> mut ref [T] {
+    pub func alloc_slice[T](mut this, len: U64) -> mut ref [T] {
         let layout = Layout.array[T](len).unwrap()
         let ptr = this.alloc_layout(layout)
         return unsafe { slice.from_raw_parts_mut(ptr as *mut T, len) }
     }
 
     /// Resets the arena, keeping allocated chunks
-    public func reset(mut this) {
+    pub func reset(mut this) {
         this.current = 0
         this.offset = 0
     }
 
     /// Returns total allocated bytes
-    public func allocated(this) -> U64 {
+    pub func allocated(this) -> U64 {
         var total: U64 = 0
         loop i in 0 to this.current {
             total = total + this.chunks[i].size
@@ -341,7 +341,7 @@ A fixed-size block allocator for same-sized objects.
 
 ```tml
 /// Pool allocator for fixed-size objects
-public type Pool[T] {
+pub type Pool[T] {
     blocks: Vec[*mut T],
     free_list: *mut FreeNode,
     block_size: U64,
@@ -355,12 +355,12 @@ const DEFAULT_BLOCK_SIZE: U64 = 64
 
 extend Pool[T] {
     /// Creates a new pool
-    public func new() -> Pool[T] {
+    pub func new() -> Pool[T] {
         return Pool.with_block_size(DEFAULT_BLOCK_SIZE)
     }
 
     /// Creates a pool with specified block size
-    public func with_block_size(block_size: U64) -> Pool[T] {
+    pub func with_block_size(block_size: U64) -> Pool[T] {
         var pool = Pool[T] {
             blocks: Vec.new(),
             free_list: null,
@@ -371,7 +371,7 @@ extend Pool[T] {
     }
 
     /// Allocates an object from the pool
-    public func alloc(mut this) -> *mut T {
+    pub func alloc(mut this) -> *mut T {
         if this.free_list.is_null() then {
             this.grow()
         }
@@ -390,7 +390,7 @@ extend Pool[T] {
     }
 
     /// Creates and initializes an object
-    public func create(mut this, value: T) -> mut ref T {
+    pub func create(mut this, value: T) -> mut ref T {
         let ptr = this.alloc()
         unsafe {
             ptr.write(value)
@@ -442,7 +442,7 @@ A LIFO allocator for temporary allocations.
 
 ```tml
 /// Stack allocator - LIFO allocation pattern
-public type StackAlloc {
+pub type StackAlloc {
     buffer: *mut U8,
     size: U64,
     offset: U64,
@@ -451,7 +451,7 @@ public type StackAlloc {
 
 extend StackAlloc {
     /// Creates a stack allocator with given size
-    public func new(size: U64) -> StackAlloc {
+    pub func new(size: U64) -> StackAlloc {
         let ptr = alloc(Layout { size: size, align: 16 }).unwrap()
         return StackAlloc {
             buffer: ptr,
@@ -462,7 +462,7 @@ extend StackAlloc {
     }
 
     /// Allocates memory from the stack
-    public func alloc(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
+    pub func alloc(mut this, layout: Layout) -> Outcome[*mut U8, AllocError] {
         let aligned = this.align_offset(layout.align)
         if aligned + layout.size > this.size then {
             return Err(AllocError.OutOfMemory)
@@ -473,14 +473,14 @@ extend StackAlloc {
     }
 
     /// Pushes a marker for later rollback
-    public func push_marker(mut this) -> StackMarker {
+    pub func push_marker(mut this) -> StackMarker {
         let marker = this.offset
         this.markers.push(marker)
         return StackMarker { offset: marker }
     }
 
     /// Pops to the last marker
-    public func pop_marker(mut this) {
+    pub func pop_marker(mut this) {
         when this.markers.pop() {
             Just(offset) -> this.offset = offset,
             Nothing -> this.offset = 0,
@@ -488,7 +488,7 @@ extend StackAlloc {
     }
 
     /// Resets to a specific marker
-    public func reset_to(mut this, marker: StackMarker) {
+    pub func reset_to(mut this, marker: StackMarker) {
         assert(marker.offset <= this.offset, "invalid marker")
         this.offset = marker.offset
 
@@ -499,13 +499,13 @@ extend StackAlloc {
     }
 
     /// Resets the entire stack
-    public func reset(mut this) {
+    pub func reset(mut this) {
         this.offset = 0
         this.markers.clear()
     }
 
     /// Returns remaining capacity
-    public func remaining(this) -> U64 {
+    pub func remaining(this) -> U64 {
         this.size - this.offset
     }
 
@@ -516,7 +516,7 @@ extend StackAlloc {
 }
 
 /// Marker for stack rollback
-public type StackMarker {
+pub type StackMarker {
     offset: U64,
 }
 
@@ -537,7 +537,7 @@ Manages multiple pools for different size classes.
 
 ```tml
 /// Slab allocator with multiple size classes
-public type Slab {
+pub type Slab {
     small: Pool[Block64],     // 1-64 bytes
     medium: Pool[Block256],   // 65-256 bytes
     large: Pool[Block1024],   // 257-1024 bytes
@@ -555,7 +555,7 @@ type HugeAlloc {
 
 extend Slab {
     /// Creates a new slab allocator
-    public func new() -> Slab {
+    pub func new() -> Slab {
         return Slab {
             small: Pool.new(),
             medium: Pool.new(),
@@ -613,13 +613,13 @@ implement Allocator for Slab {
 
 ```tml
 /// Tries primary allocator, falls back to secondary on failure
-public type Fallback[P: Allocator, S: Allocator] {
+pub type Fallback[P: Allocator, S: Allocator] {
     primary: P,
     secondary: S,
 }
 
 extend Fallback[P, S] where P: Allocator, S: Allocator {
-    public func new(primary: P, secondary: S) -> Fallback[P, S] {
+    pub func new(primary: P, secondary: S) -> Fallback[P, S] {
         return Fallback { primary: primary, secondary: secondary }
     }
 }
@@ -644,7 +644,7 @@ implement Allocator for Fallback[P, S] where P: Allocator, S: Allocator {
 
 ```tml
 /// Wraps an allocator and tracks statistics
-public type Stats[A: Allocator] {
+pub type Stats[A: Allocator] {
     inner: A,
     allocated: AtomicU64,
     deallocated: AtomicU64,
@@ -653,7 +653,7 @@ public type Stats[A: Allocator] {
 }
 
 extend Stats[A] where A: Allocator {
-    public func new(inner: A) -> Stats[A] {
+    pub func new(inner: A) -> Stats[A] {
         return Stats {
             inner: inner,
             allocated: AtomicU64.new(0),
@@ -663,7 +663,7 @@ extend Stats[A] where A: Allocator {
         }
     }
 
-    public func stats(this) -> AllocStats {
+    pub func stats(this) -> AllocStats {
         return AllocStats {
             allocated: this.allocated.load(Ordering.Relaxed),
             deallocated: this.deallocated.load(Ordering.Relaxed),
@@ -672,14 +672,14 @@ extend Stats[A] where A: Allocator {
         }
     }
 
-    public func current_usage(this) -> U64 {
+    pub func current_usage(this) -> U64 {
         let alloc = this.allocated.load(Ordering.Relaxed)
         let dealloc = this.deallocated.load(Ordering.Relaxed)
         return alloc - dealloc
     }
 }
 
-public type AllocStats {
+pub type AllocStats {
     allocated: U64,
     deallocated: U64,
     peak: U64,
@@ -724,21 +724,21 @@ Heap-allocated value with single ownership.
 
 ```tml
 /// Owned heap allocation
-public type Box[T, A: Allocator = GlobalAlloc] {
+pub type Box[T, A: Allocator = GlobalAlloc] {
     ptr: *mut T,
     alloc: A,
 }
 
 extend Box[T] {
     /// Allocates a value on the heap
-    public func new(value: T) -> Box[T] {
+    pub func new(value: T) -> Box[T] {
         return Box.new_in(value, GLOBAL)
     }
 }
 
 extend Box[T, A] where A: Allocator {
     /// Allocates with a specific allocator
-    public func new_in(value: T, alloc: A) -> Box[T, A] {
+    pub func new_in(value: T, alloc: A) -> Box[T, A] {
         let layout = Layout.of[T]()
         let ptr = alloc.allocate(layout).unwrap() as *mut T
         unsafe {
@@ -748,7 +748,7 @@ extend Box[T, A] where A: Allocator {
     }
 
     /// Returns the inner value, consuming the Box
-    public func into_inner(this) -> T {
+    pub func into_inner(this) -> T {
         unsafe {
             let value = this.ptr.read()
             let layout = Layout.of[T]()
@@ -759,7 +759,7 @@ extend Box[T, A] where A: Allocator {
     }
 
     /// Leaks the Box, returning a static reference
-    public func leak(this) -> &'static mut T {
+    pub func leak(this) -> &'static mut T {
         let ptr = this.ptr
         mem.forget(this)
         return unsafe { mut ref *ptr }
@@ -798,7 +798,7 @@ implement Disposable for Box[T, A] where A: Allocator {
 ### Using Arena for Temporary Allocations
 
 ```tml
-import std.alloc.Arena
+use std::alloc.Arena
 
 func process_data(data: ref [U8]) -> Outcome[Output, Error] {
     // Arena for temporary allocations during processing
@@ -822,7 +822,7 @@ func process_data(data: ref [U8]) -> Outcome[Output, Error] {
 ### Using Pool for Game Objects
 
 ```tml
-import std.alloc.Pool
+use std::alloc.Pool
 
 type Entity {
     id: U64,
@@ -873,8 +873,8 @@ extend EntityManager {
 ### Custom Allocator for Collections
 
 ```tml
-import std.alloc.{Arena, Allocator}
-import std.collections.Vec
+use std::alloc.{Arena, Allocator}
+use std::collections.Vec
 
 func with_custom_allocator() {
     let arena = Arena.with_capacity(1024 * 1024)  // 1MB
@@ -893,7 +893,7 @@ func with_custom_allocator() {
 ### Tracking Allocations
 
 ```tml
-import std.alloc.{Stats, GlobalAlloc, GLOBAL}
+use std::alloc.{Stats, GlobalAlloc, GLOBAL}
 
 func track_allocations() {
     var tracked = Stats.new(GLOBAL)

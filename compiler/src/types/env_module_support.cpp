@@ -577,6 +577,24 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
             const auto& slice = type.as<parser::SliceType>();
             auto element = resolve_simple_type(*slice.element);
             return make_slice(element);
+        } else if (type.is<parser::DynType>()) {
+            // Handle dyn behavior types (e.g., dyn Error)
+            const auto& dyn = type.as<parser::DynType>();
+            std::string behavior_name;
+            if (!dyn.behavior.segments.empty()) {
+                behavior_name = dyn.behavior.segments.back();
+            }
+            // Resolve type args if any
+            std::vector<TypePtr> type_args;
+            if (dyn.generics.has_value()) {
+                for (const auto& arg : dyn.generics->args) {
+                    if (arg.is_type()) {
+                        type_args.push_back(resolve_simple_type(*arg.as_type()));
+                    }
+                }
+            }
+            return std::make_shared<Type>(
+                Type{DynBehaviorType{behavior_name, std::move(type_args), dyn.is_mut}});
         }
 
         // Fallback: return I32 for unknown types
@@ -1052,6 +1070,7 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     method_def.is_virtual = method.is_virtual;
                     method_def.is_override = method.is_override;
                     method_def.is_abstract = method.is_abstract;
+                    method_def.is_final = method.is_final;
                     method_def.vis = MemberVisibility::Public; // Default to public
 
                     // Build signature
@@ -1170,6 +1189,166 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                     mod.re_exports.push_back(std::move(re_export));
                     TML_DEBUG_LN("[MODULE] Registered re-export: "
                                  << use_path << (use_decl.is_glob ? "::*" : ""));
+                }
+            } else if (decl->is<parser::TraitDecl>()) {
+                const auto& trait_decl = decl->as<parser::TraitDecl>();
+
+                // Only include public behaviors
+                if (trait_decl.vis != parser::Visibility::Public) {
+                    continue;
+                }
+
+                // Extract type params
+                std::vector<std::string> type_params;
+                for (const auto& param : trait_decl.generics) {
+                    type_params.push_back(param.name);
+                }
+
+                // Extract method signatures and track default implementations
+                std::vector<FuncSig> methods;
+                std::set<std::string> methods_with_defaults;
+                for (const auto& method : trait_decl.methods) {
+                    FuncSig sig;
+                    sig.name = method.name;
+                    sig.is_async = false;
+                    sig.span = method.span;
+
+                    // Convert param types (skip 'this')
+                    for (const auto& param : method.params) {
+                        if (param.pattern && param.pattern->is<parser::IdentPattern>() &&
+                            param.pattern->as<parser::IdentPattern>().name == "this") {
+                            continue;
+                        }
+                        if (param.type) {
+                            sig.params.push_back(resolve_simple_type(*param.type));
+                        }
+                    }
+
+                    // Return type
+                    if (method.return_type.has_value()) {
+                        sig.return_type = resolve_simple_type(*method.return_type.value());
+                    } else {
+                        sig.return_type = make_unit();
+                    }
+
+                    methods.push_back(sig);
+
+                    // Track methods with default implementations
+                    if (method.body.has_value()) {
+                        methods_with_defaults.insert(method.name);
+                    }
+                }
+
+                // Extract super behaviors (called super_traits in parser)
+                std::vector<std::string> super_behaviors;
+                for (const auto& super : trait_decl.super_traits) {
+                    if (super && super->is<parser::NamedType>()) {
+                        const auto& named = super->as<parser::NamedType>();
+                        if (!named.path.segments.empty()) {
+                            super_behaviors.push_back(named.path.segments.back());
+                        }
+                    }
+                }
+
+                // Create behavior definition
+                BehaviorDef behavior_def{.name = trait_decl.name,
+                                         .type_params = std::move(type_params),
+                                         .const_params = {},
+                                         .associated_types = {},
+                                         .methods = std::move(methods),
+                                         .super_behaviors = std::move(super_behaviors),
+                                         .methods_with_defaults = std::move(methods_with_defaults),
+                                         .span = trait_decl.span};
+
+                mod.behaviors[trait_decl.name] = std::move(behavior_def);
+                TML_DEBUG_LN("[MODULE] Registered behavior: " << trait_decl.name << " in module "
+                                                              << module_path);
+            }
+        }
+    }
+
+    // Second pass: Register default behavior methods for impl blocks
+    // This is done after behaviors are registered so we can look them up
+    for (const auto& [decls, _src] : all_parsed) {
+        for (const auto& decl : decls) {
+            if (decl->is<parser::ImplDecl>()) {
+                const auto& impl_decl = decl->as<parser::ImplDecl>();
+
+                // Get the type name being implemented from self_type
+                std::string type_name;
+                if (impl_decl.self_type && impl_decl.self_type->is<parser::NamedType>()) {
+                    const auto& named = impl_decl.self_type->as<parser::NamedType>();
+                    if (!named.path.segments.empty()) {
+                        type_name = named.path.segments.back();
+                    }
+                }
+
+                if (type_name.empty() || !impl_decl.trait_type)
+                    continue;
+
+                // Get the behavior name
+                if (!impl_decl.trait_type->is<parser::NamedType>())
+                    continue;
+                const auto& trait_named = impl_decl.trait_type->as<parser::NamedType>();
+                std::string behavior_name;
+                if (!trait_named.path.segments.empty()) {
+                    behavior_name = trait_named.path.segments.back();
+                }
+                if (behavior_name.empty())
+                    continue;
+
+                // Look up the behavior definition - search current module first, then all modules
+                std::optional<BehaviorDef> behavior_def_opt;
+                auto behavior_it = mod.behaviors.find(behavior_name);
+                if (behavior_it != mod.behaviors.end()) {
+                    behavior_def_opt = behavior_it->second;
+                } else {
+                    // Search all registered modules for the behavior
+                    for (const auto& [mod_name, mod_def] : module_registry_->get_all_modules()) {
+                        auto it = mod_def.behaviors.find(behavior_name);
+                        if (it != mod_def.behaviors.end()) {
+                            behavior_def_opt = it->second;
+                            TML_DEBUG_LN("[MODULE] Found behavior " << behavior_name << " in module "
+                                                                    << mod_name);
+                            break;
+                        }
+                    }
+                }
+
+                if (!behavior_def_opt)
+                    continue;
+
+                const auto& behavior_def = *behavior_def_opt;
+
+                // Collect method names already provided by impl block
+                std::set<std::string> impl_method_names;
+                for (const auto& func : impl_decl.methods) {
+                    impl_method_names.insert(func.name);
+                }
+
+                // Register default methods not overridden by impl
+                for (const auto& bmethod : behavior_def.methods) {
+                    if (impl_method_names.count(bmethod.name) == 0) {
+                        // Register Type::method with behavior's method signature
+                        std::string qualified_name = type_name + "::" + bmethod.name;
+                        // Only register if not already registered
+                        if (mod.functions.find(qualified_name) == mod.functions.end()) {
+                            FuncSig sig{.name = qualified_name,
+                                        .params = bmethod.params,
+                                        .return_type = bmethod.return_type,
+                                        .type_params = bmethod.type_params,
+                                        .is_async = bmethod.is_async,
+                                        .span = builtin_span,
+                                        .stability = StabilityLevel::Stable,
+                                        .deprecated_message = "",
+                                        .since_version = "1.0",
+                                        .where_constraints = bmethod.where_constraints,
+                                        .is_lowlevel = bmethod.is_lowlevel};
+                            mod.functions[qualified_name] = sig;
+                            TML_DEBUG_LN("[MODULE] Registered default behavior method: "
+                                         << qualified_name << " from " << behavior_name);
+                        }
+                    }
                 }
             }
         }

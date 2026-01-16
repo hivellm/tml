@@ -1,7 +1,7 @@
 // TML Example 07: Behaviors and Extensions
 // Demonstrates behavior definition and implementation with 'extend'
 
-module behaviors
+mod behaviors
 
 // ============================================
 // BEHAVIOR DEFINITION
@@ -177,7 +177,7 @@ func print_all_shapes(shapes: List[dyn Shape]) {
     }
 }
 
-public func main() {
+pub func main() {
     // Create instances
     let alice = Person { name: "Alice", age: 30 }
     let circle = Circle { radius: 5.0 }

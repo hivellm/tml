@@ -1,11 +1,11 @@
 // TML Example 10: Collections
 // Demonstrates List, Map, Set, and other collection types
 
-module collections
+mod collections
 
-import std.collections { HashMap, HashSet, VecDeque }
+use std::collections { HashMap, HashSet, VecDeque }
 
-public func main() {
+pub func main() {
     // ============================================
     // ARRAYS (FIXED SIZE)
     // ============================================
