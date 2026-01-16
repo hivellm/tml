@@ -18,7 +18,15 @@ import {
     DiagnosticSeverity,
     DidChangeConfigurationNotification,
     DidChangeConfigurationParams,
-    TextDocumentChangeEvent
+    TextDocumentChangeEvent,
+    Location,
+    Range,
+    Position,
+    SymbolKind,
+    TypeHierarchyItem,
+    TypeHierarchyPrepareParams,
+    TypeHierarchySupertypesParams,
+    TypeHierarchySubtypesParams
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -465,6 +473,232 @@ const TML_OOP_SNIPPETS: { label: string; insertText: string; doc: string; sortTe
     },
 ];
 
+// ============================================================================
+// Class/Interface Tracking for IDE Navigation
+// ============================================================================
+
+interface ClassInfo {
+    name: string;
+    uri: string;
+    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+    baseClass: string | null;
+    interfaces: string[];
+    isAbstract: boolean;
+    isSealed: boolean;
+    methods: MethodInfo[];
+}
+
+interface InterfaceInfo {
+    name: string;
+    uri: string;
+    range: { start: { line: number; character: number }; end: { line: number; character: number } };
+    extends: string[];
+    methods: MethodInfo[];
+}
+
+interface MethodInfo {
+    name: string;
+    line: number;
+    isVirtual: boolean;
+    isOverride: boolean;
+    isAbstract: boolean;
+    isStatic: boolean;
+}
+
+// Global symbol index - maps symbol names to their definitions
+const classIndex: Map<string, ClassInfo> = new Map();
+const interfaceIndex: Map<string, InterfaceInfo> = new Map();
+// Map from uri to symbols defined in that document
+const documentSymbols: Map<string, { classes: string[]; interfaces: string[] }> = new Map();
+
+// Parse a document and extract class/interface definitions
+function indexDocument(document: TextDocument): void {
+    const uri = document.uri;
+    const text = document.getText();
+    const lines = text.split('\n');
+
+    // Clear old symbols from this document
+    const oldSymbols = documentSymbols.get(uri);
+    if (oldSymbols) {
+        for (const cls of oldSymbols.classes) {
+            classIndex.delete(cls);
+        }
+        for (const iface of oldSymbols.interfaces) {
+            interfaceIndex.delete(iface);
+        }
+    }
+
+    const newClasses: string[] = [];
+    const newInterfaces: string[] = [];
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        const line = lines[lineNum];
+
+        // Match class declaration
+        const classMatch = line.match(/^\s*(abstract\s+|sealed\s+)?class\s+(\w+)(?:\s*\[[\w,\s]+\])?(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/);
+        if (classMatch) {
+            const isAbstract = !!classMatch[1]?.includes('abstract');
+            const isSealed = !!classMatch[1]?.includes('sealed');
+            const className = classMatch[2];
+            const baseClass = classMatch[3] || null;
+            const interfaces = classMatch[4] ? classMatch[4].split(',').map(s => s.trim()) : [];
+
+            // Find the end of the class (matching brace)
+            let braceDepth = 0;
+            let endLine = lineNum;
+            let foundOpen = false;
+            for (let i = lineNum; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') {
+                        braceDepth++;
+                        foundOpen = true;
+                    } else if (ch === '}') {
+                        braceDepth--;
+                        if (foundOpen && braceDepth === 0) {
+                            endLine = i;
+                            break;
+                        }
+                    }
+                }
+                if (foundOpen && braceDepth === 0) break;
+            }
+
+            // Extract methods
+            const methods: MethodInfo[] = [];
+            for (let i = lineNum + 1; i <= endLine; i++) {
+                const methodMatch = lines[i].match(/^\s*(virtual\s+|override\s+|abstract\s+|static\s+)*func\s+(\w+)/);
+                if (methodMatch) {
+                    const modifiers = methodMatch[1] || '';
+                    methods.push({
+                        name: methodMatch[2],
+                        line: i,
+                        isVirtual: modifiers.includes('virtual'),
+                        isOverride: modifiers.includes('override'),
+                        isAbstract: modifiers.includes('abstract'),
+                        isStatic: modifiers.includes('static')
+                    });
+                }
+            }
+
+            classIndex.set(className, {
+                name: className,
+                uri,
+                range: {
+                    start: { line: lineNum, character: 0 },
+                    end: { line: endLine, character: lines[endLine]?.length || 0 }
+                },
+                baseClass,
+                interfaces,
+                isAbstract,
+                isSealed,
+                methods
+            });
+            newClasses.push(className);
+        }
+
+        // Match interface declaration
+        const interfaceMatch = line.match(/^\s*interface\s+(\w+)(?:\s*\[[\w,\s]+\])?(?:\s+extends\s+([\w,\s]+))?/);
+        if (interfaceMatch) {
+            const interfaceName = interfaceMatch[1];
+            const extendsInterfaces = interfaceMatch[2] ? interfaceMatch[2].split(',').map(s => s.trim()) : [];
+
+            // Find the end of the interface
+            let braceDepth = 0;
+            let endLine = lineNum;
+            let foundOpen = false;
+            for (let i = lineNum; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') {
+                        braceDepth++;
+                        foundOpen = true;
+                    } else if (ch === '}') {
+                        braceDepth--;
+                        if (foundOpen && braceDepth === 0) {
+                            endLine = i;
+                            break;
+                        }
+                    }
+                }
+                if (foundOpen && braceDepth === 0) break;
+            }
+
+            // Extract methods
+            const methods: MethodInfo[] = [];
+            for (let i = lineNum + 1; i <= endLine; i++) {
+                const methodMatch = lines[i].match(/^\s*func\s+(\w+)/);
+                if (methodMatch) {
+                    methods.push({
+                        name: methodMatch[1],
+                        line: i,
+                        isVirtual: false,
+                        isOverride: false,
+                        isAbstract: true, // Interface methods are implicitly abstract
+                        isStatic: false
+                    });
+                }
+            }
+
+            interfaceIndex.set(interfaceName, {
+                name: interfaceName,
+                uri,
+                range: {
+                    start: { line: lineNum, character: 0 },
+                    end: { line: endLine, character: lines[endLine]?.length || 0 }
+                },
+                extends: extendsInterfaces,
+                methods
+            });
+            newInterfaces.push(interfaceName);
+        }
+    }
+
+    documentSymbols.set(uri, { classes: newClasses, interfaces: newInterfaces });
+}
+
+// Find all classes that extend a given base class
+function findSubclasses(baseName: string): ClassInfo[] {
+    const result: ClassInfo[] = [];
+    for (const [, cls] of classIndex) {
+        if (cls.baseClass === baseName) {
+            result.push(cls);
+        }
+    }
+    return result;
+}
+
+// Find all classes that implement a given interface
+function findImplementations(interfaceName: string): ClassInfo[] {
+    const result: ClassInfo[] = [];
+    for (const [, cls] of classIndex) {
+        if (cls.interfaces.includes(interfaceName)) {
+            result.push(cls);
+        }
+    }
+    return result;
+}
+
+// Get full inheritance chain for a class (going up)
+function getInheritanceChain(className: string): string[] {
+    const chain: string[] = [];
+    let current = classIndex.get(className);
+    while (current && current.baseClass) {
+        chain.push(current.baseClass);
+        current = classIndex.get(current.baseClass);
+    }
+    return chain;
+}
+
+// Get all transitive subclasses
+function getAllSubclasses(baseName: string): ClassInfo[] {
+    const result: ClassInfo[] = [];
+    const directSubs = findSubclasses(baseName);
+    for (const sub of directSubs) {
+        result.push(sub);
+        result.push(...getAllSubclasses(sub.name));
+    }
+    return result;
+}
+
 // Common base class methods for base. completion
 const BASE_COMPLETIONS: { name: string; signature: string; doc: string }[] = [
     { name: 'new', signature: 'func new(...) -> Base', doc: 'Call base class constructor' },
@@ -721,7 +955,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
                 legend,
                 full: true,
                 range: false
-            }
+            },
+            definitionProvider: true,
+            implementationProvider: true,
+            typeHierarchyProvider: true
         }
     };
 });
@@ -1286,6 +1523,57 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
         return null;
     }
 
+    // Check indexed classes
+    const classInfo = classIndex.get(word);
+    if (classInfo) {
+        const chain = getInheritanceChain(word);
+        const subclasses = findSubclasses(word);
+        let value = `**${classInfo.name}** (class)`;
+        if (classInfo.isAbstract) value = `**${classInfo.name}** (abstract class)`;
+        if (classInfo.isSealed) value = `**${classInfo.name}** (sealed class)`;
+
+        if (classInfo.baseClass) {
+            value += `\n\nExtends: \`${classInfo.baseClass}\``;
+        }
+        if (classInfo.interfaces.length > 0) {
+            value += `\n\nImplements: ${classInfo.interfaces.map(i => `\`${i}\``).join(', ')}`;
+        }
+        if (chain.length > 1) {
+            value += `\n\nInheritance chain: ${chain.map(c => `\`${c}\``).join(' → ')}`;
+        }
+        if (subclasses.length > 0) {
+            value += `\n\nDirect subclasses: ${subclasses.map(s => `\`${s.name}\``).join(', ')}`;
+        }
+        if (classInfo.methods.length > 0) {
+            const publicMethods = classInfo.methods.filter(m => !m.isStatic).slice(0, 5);
+            if (publicMethods.length > 0) {
+                value += `\n\nMethods: ${publicMethods.map(m => `\`${m.name}()\``).join(', ')}`;
+                if (classInfo.methods.length > 5) value += '...';
+            }
+        }
+        return { contents: { kind: MarkupKind.Markdown, value } };
+    }
+
+    // Check indexed interfaces
+    const ifaceInfo = interfaceIndex.get(word);
+    if (ifaceInfo) {
+        const implementations = findImplementations(word);
+        let value = `**${ifaceInfo.name}** (interface)`;
+
+        if (ifaceInfo.extends.length > 0) {
+            value += `\n\nExtends: ${ifaceInfo.extends.map(i => `\`${i}\``).join(', ')}`;
+        }
+        if (implementations.length > 0) {
+            value += `\n\nImplemented by: ${implementations.slice(0, 5).map(c => `\`${c.name}\``).join(', ')}`;
+            if (implementations.length > 5) value += '...';
+        }
+        if (ifaceInfo.methods.length > 0) {
+            value += `\n\nMethods: ${ifaceInfo.methods.slice(0, 5).map(m => `\`${m.name}()\``).join(', ')}`;
+            if (ifaceInfo.methods.length > 5) value += '...';
+        }
+        return { contents: { kind: MarkupKind.Markdown, value } };
+    }
+
     // Check keywords
     const keyword = TML_KEYWORDS.find(k => k.name === word);
     if (keyword) {
@@ -1408,6 +1696,316 @@ function isWordChar(char: string): boolean {
 }
 
 // ============================================================================
+// Go to Definition
+// ============================================================================
+
+connection.onDefinition((params: TextDocumentPositionParams): Location | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return null;
+    }
+
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const word = getWordAtPosition(text, offset);
+
+    if (!word) {
+        return null;
+    }
+
+    // Check if it's a class
+    const classInfo = classIndex.get(word);
+    if (classInfo) {
+        return Location.create(classInfo.uri, Range.create(
+            Position.create(classInfo.range.start.line, classInfo.range.start.character),
+            Position.create(classInfo.range.start.line, classInfo.range.start.character + word.length)
+        ));
+    }
+
+    // Check if it's an interface
+    const interfaceInfo = interfaceIndex.get(word);
+    if (interfaceInfo) {
+        return Location.create(interfaceInfo.uri, Range.create(
+            Position.create(interfaceInfo.range.start.line, interfaceInfo.range.start.character),
+            Position.create(interfaceInfo.range.start.line, interfaceInfo.range.start.character + word.length)
+        ));
+    }
+
+    // Check if we're on "base" keyword - go to base class
+    if (word === 'base') {
+        const oopContext = getOOPContext(document, params.position);
+        if (oopContext.baseClass) {
+            const baseInfo = classIndex.get(oopContext.baseClass);
+            if (baseInfo) {
+                return Location.create(baseInfo.uri, Range.create(
+                    Position.create(baseInfo.range.start.line, baseInfo.range.start.character),
+                    Position.create(baseInfo.range.start.line, baseInfo.range.start.character + oopContext.baseClass.length)
+                ));
+            }
+        }
+    }
+
+    return null;
+});
+
+// ============================================================================
+// Find Implementations
+// ============================================================================
+
+connection.onImplementation((params: TextDocumentPositionParams): Location[] => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return [];
+    }
+
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const word = getWordAtPosition(text, offset);
+
+    if (!word) {
+        return [];
+    }
+
+    const locations: Location[] = [];
+
+    // If it's an interface, find all implementing classes
+    if (interfaceIndex.has(word)) {
+        const implementations = findImplementations(word);
+        for (const cls of implementations) {
+            locations.push(Location.create(cls.uri, Range.create(
+                Position.create(cls.range.start.line, cls.range.start.character),
+                Position.create(cls.range.start.line, cls.range.start.character + cls.name.length)
+            )));
+        }
+    }
+
+    // If it's a class, find all subclasses
+    if (classIndex.has(word)) {
+        const subclasses = getAllSubclasses(word);
+        for (const sub of subclasses) {
+            locations.push(Location.create(sub.uri, Range.create(
+                Position.create(sub.range.start.line, sub.range.start.character),
+                Position.create(sub.range.start.line, sub.range.start.character + sub.name.length)
+            )));
+        }
+    }
+
+    return locations;
+});
+
+// ============================================================================
+// Type Hierarchy
+// ============================================================================
+
+connection.languages.typeHierarchy.onPrepare((params: TypeHierarchyPrepareParams): TypeHierarchyItem[] | null => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) {
+        return null;
+    }
+
+    const text = document.getText();
+    const offset = document.offsetAt(params.position);
+    const word = getWordAtPosition(text, offset);
+
+    if (!word) {
+        return null;
+    }
+
+    // Check if it's a class
+    const classInfo = classIndex.get(word);
+    if (classInfo) {
+        return [{
+            name: classInfo.name,
+            kind: SymbolKind.Class,
+            uri: classInfo.uri,
+            range: Range.create(
+                Position.create(classInfo.range.start.line, classInfo.range.start.character),
+                Position.create(classInfo.range.end.line, classInfo.range.end.character)
+            ),
+            selectionRange: Range.create(
+                Position.create(classInfo.range.start.line, classInfo.range.start.character),
+                Position.create(classInfo.range.start.line, classInfo.range.start.character + classInfo.name.length)
+            ),
+            data: { type: 'class', name: classInfo.name }
+        }];
+    }
+
+    // Check if it's an interface
+    const interfaceInfo = interfaceIndex.get(word);
+    if (interfaceInfo) {
+        return [{
+            name: interfaceInfo.name,
+            kind: SymbolKind.Interface,
+            uri: interfaceInfo.uri,
+            range: Range.create(
+                Position.create(interfaceInfo.range.start.line, interfaceInfo.range.start.character),
+                Position.create(interfaceInfo.range.end.line, interfaceInfo.range.end.character)
+            ),
+            selectionRange: Range.create(
+                Position.create(interfaceInfo.range.start.line, interfaceInfo.range.start.character),
+                Position.create(interfaceInfo.range.start.line, interfaceInfo.range.start.character + interfaceInfo.name.length)
+            ),
+            data: { type: 'interface', name: interfaceInfo.name }
+        }];
+    }
+
+    return null;
+});
+
+connection.languages.typeHierarchy.onSupertypes((params: TypeHierarchySupertypesParams): TypeHierarchyItem[] => {
+    const data = params.item.data as { type: string; name: string } | undefined;
+    if (!data) {
+        return [];
+    }
+
+    const results: TypeHierarchyItem[] = [];
+
+    if (data.type === 'class') {
+        const classInfo = classIndex.get(data.name);
+        if (classInfo) {
+            // Add base class
+            if (classInfo.baseClass) {
+                const baseInfo = classIndex.get(classInfo.baseClass);
+                if (baseInfo) {
+                    results.push({
+                        name: baseInfo.name,
+                        kind: SymbolKind.Class,
+                        uri: baseInfo.uri,
+                        range: Range.create(
+                            Position.create(baseInfo.range.start.line, baseInfo.range.start.character),
+                            Position.create(baseInfo.range.end.line, baseInfo.range.end.character)
+                        ),
+                        selectionRange: Range.create(
+                            Position.create(baseInfo.range.start.line, baseInfo.range.start.character),
+                            Position.create(baseInfo.range.start.line, baseInfo.range.start.character + baseInfo.name.length)
+                        ),
+                        data: { type: 'class', name: baseInfo.name }
+                    });
+                }
+            }
+
+            // Add implemented interfaces
+            for (const ifaceName of classInfo.interfaces) {
+                const ifaceInfo = interfaceIndex.get(ifaceName);
+                if (ifaceInfo) {
+                    results.push({
+                        name: ifaceInfo.name,
+                        kind: SymbolKind.Interface,
+                        uri: ifaceInfo.uri,
+                        range: Range.create(
+                            Position.create(ifaceInfo.range.start.line, ifaceInfo.range.start.character),
+                            Position.create(ifaceInfo.range.end.line, ifaceInfo.range.end.character)
+                        ),
+                        selectionRange: Range.create(
+                            Position.create(ifaceInfo.range.start.line, ifaceInfo.range.start.character),
+                            Position.create(ifaceInfo.range.start.line, ifaceInfo.range.start.character + ifaceInfo.name.length)
+                        ),
+                        data: { type: 'interface', name: ifaceInfo.name }
+                    });
+                }
+            }
+        }
+    } else if (data.type === 'interface') {
+        const ifaceInfo = interfaceIndex.get(data.name);
+        if (ifaceInfo) {
+            // Add extended interfaces
+            for (const extName of ifaceInfo.extends) {
+                const extInfo = interfaceIndex.get(extName);
+                if (extInfo) {
+                    results.push({
+                        name: extInfo.name,
+                        kind: SymbolKind.Interface,
+                        uri: extInfo.uri,
+                        range: Range.create(
+                            Position.create(extInfo.range.start.line, extInfo.range.start.character),
+                            Position.create(extInfo.range.end.line, extInfo.range.end.character)
+                        ),
+                        selectionRange: Range.create(
+                            Position.create(extInfo.range.start.line, extInfo.range.start.character),
+                            Position.create(extInfo.range.start.line, extInfo.range.start.character + extInfo.name.length)
+                        ),
+                        data: { type: 'interface', name: extInfo.name }
+                    });
+                }
+            }
+        }
+    }
+
+    return results;
+});
+
+connection.languages.typeHierarchy.onSubtypes((params: TypeHierarchySubtypesParams): TypeHierarchyItem[] => {
+    const data = params.item.data as { type: string; name: string } | undefined;
+    if (!data) {
+        return [];
+    }
+
+    const results: TypeHierarchyItem[] = [];
+
+    if (data.type === 'class') {
+        // Find direct subclasses
+        const subclasses = findSubclasses(data.name);
+        for (const sub of subclasses) {
+            results.push({
+                name: sub.name,
+                kind: SymbolKind.Class,
+                uri: sub.uri,
+                range: Range.create(
+                    Position.create(sub.range.start.line, sub.range.start.character),
+                    Position.create(sub.range.end.line, sub.range.end.character)
+                ),
+                selectionRange: Range.create(
+                    Position.create(sub.range.start.line, sub.range.start.character),
+                    Position.create(sub.range.start.line, sub.range.start.character + sub.name.length)
+                ),
+                data: { type: 'class', name: sub.name }
+            });
+        }
+    } else if (data.type === 'interface') {
+        // Find implementing classes
+        const implementations = findImplementations(data.name);
+        for (const impl of implementations) {
+            results.push({
+                name: impl.name,
+                kind: SymbolKind.Class,
+                uri: impl.uri,
+                range: Range.create(
+                    Position.create(impl.range.start.line, impl.range.start.character),
+                    Position.create(impl.range.end.line, impl.range.end.character)
+                ),
+                selectionRange: Range.create(
+                    Position.create(impl.range.start.line, impl.range.start.character),
+                    Position.create(impl.range.start.line, impl.range.start.character + impl.name.length)
+                ),
+                data: { type: 'class', name: impl.name }
+            });
+        }
+
+        // Find extending interfaces
+        for (const [, iface] of interfaceIndex) {
+            if (iface.extends.includes(data.name)) {
+                results.push({
+                    name: iface.name,
+                    kind: SymbolKind.Interface,
+                    uri: iface.uri,
+                    range: Range.create(
+                        Position.create(iface.range.start.line, iface.range.start.character),
+                        Position.create(iface.range.end.line, iface.range.end.character)
+                    ),
+                    selectionRange: Range.create(
+                        Position.create(iface.range.start.line, iface.range.start.character),
+                        Position.create(iface.range.start.line, iface.range.start.character + iface.name.length)
+                    ),
+                    data: { type: 'interface', name: iface.name }
+                });
+            }
+        }
+    }
+
+    return results;
+});
+
+// ============================================================================
 // Document Event Handlers for Validation
 // ============================================================================
 
@@ -1439,11 +2037,13 @@ connection.onDidChangeConfiguration((change: DidChangeConfigurationParams) => {
 
 // Validate document when opened
 documents.onDidOpen((event: TextDocumentChangeEvent<TextDocument>) => {
+    indexDocument(event.document);  // Index for navigation
     queueValidation(event.document);
 });
 
 // Validate document when content changes
 documents.onDidChangeContent((event: TextDocumentChangeEvent<TextDocument>) => {
+    indexDocument(event.document);  // Re-index for navigation
     queueValidation(event.document);
 });
 
