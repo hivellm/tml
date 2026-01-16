@@ -278,9 +278,11 @@ std::string ensure_c_compiled(const std::string& c_path_str, const std::string& 
         }
         // Build compile command with appropriate flags
         // -fms-extensions: Enable MSVC extensions (SEH __try/__except) on Windows
+        // -D_CRT_SECURE_NO_WARNINGS: Suppress MSVC CRT deprecation warnings (strncpy, fopen, etc.)
         std::string compile_cmd = quote_command(clang) +
 #ifdef _WIN32
-                                  " -c -O3 -fms-extensions -march=native -mtune=native "
+                                  " -c -O3 -fms-extensions -D_CRT_SECURE_NO_WARNINGS "
+                                  "-march=native -mtune=native "
                                   "-fomit-frame-pointer -funroll-loops " +
 #else
                                   " -c -O3 -march=native -mtune=native -fomit-frame-pointer "

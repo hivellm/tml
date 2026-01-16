@@ -1,5 +1,6 @@
 // TML Code Coverage Runtime
 // Tracks test coverage data
+// Note: _CRT_SECURE_NO_WARNINGS is defined via compile flags for all C runtime files
 
 #include <stdint.h>
 #include <stdio.h>
