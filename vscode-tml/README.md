@@ -320,6 +320,33 @@ func binary_search[T](list: List[T], target: T) -> Maybe[I32]
 - Full syntax highlighting support
 - Language configuration (brackets, comments, folding)
 
+## Development
+
+### Building from Source
+
+```bash
+cd vscode-tml
+pnpm install
+pnpm compile
+```
+
+### Running Tests
+
+The integration tests require a GUI environment (they launch a VS Code instance):
+
+```bash
+# Compile and lint
+pnpm compile && pnpm lint
+
+# Run full integration tests (requires display/GUI)
+pnpm test
+
+# Package the extension
+pnpm package
+```
+
+**Note**: Tests will fail in headless environments (WSL without X server, CI without display). Use `xvfb-run` on Linux CI environments or run tests on Windows/macOS with a display.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

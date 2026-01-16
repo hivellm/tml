@@ -91,9 +91,9 @@ suite('Server Unit Tests', () => {
                 const l = lines[lineNum];
 
                 for (let i = l.length - 1; i >= 0; i--) {
-                    if (lineNum === line && i >= character) continue;
-                    if (l[i] === '}') braceDepth++;
-                    else if (l[i] === '{') braceDepth--;
+                    if (lineNum === line && i >= character) {continue;}
+                    if (l[i] === '}') {braceDepth++;}
+                    else if (l[i] === '{') {braceDepth--;}
                 }
 
                 if (braceDepth < 0 && !foundDecl) {

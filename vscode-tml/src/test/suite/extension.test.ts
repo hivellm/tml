@@ -196,8 +196,8 @@ suite('Language Server Tests', () => {
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Request semantic tokens
-        const tokens = await vscode.commands.executeCommand<vscode.SemanticTokens>(
+        // Request semantic tokens - verify the command completes without throwing
+        await vscode.commands.executeCommand<vscode.SemanticTokens>(
             'vscode.provideDocumentSemanticTokens',
             doc.uri
         );
@@ -284,8 +284,9 @@ func divide(a: I32, b: I32) -> I32
 
 suite('Task Provider Tests', () => {
     test('Task provider should be registered', async () => {
-        const tasks = await vscode.tasks.fetchTasks({ type: 'tml' });
         // Tasks may or may not be available depending on workspace state
+        // Just verify the fetch completes without throwing
+        await vscode.tasks.fetchTasks({ type: 'tml' });
         assert.ok(true, 'Task fetch completed without error');
     });
 });

@@ -961,9 +961,9 @@ function getOOPContext(document: TextDocument, position: { line: number; charact
 
         // Count braces (simplified - doesn't handle strings/comments perfectly)
         for (let i = line.length - 1; i >= 0; i--) {
-            if (lineNum === position.line && i >= position.character) continue;
-            if (line[i] === '}') braceDepth++;
-            else if (line[i] === '{') braceDepth--;
+            if (lineNum === position.line && i >= position.character) {continue;}
+            if (line[i] === '}') {braceDepth++;}
+            else if (line[i] === '{') {braceDepth--;}
         }
 
         // Look for class/interface declaration when we're at the opening brace level
