@@ -1,6 +1,6 @@
 # Tasks: Implement `tml doc` - Documentation Generation System
 
-**Status**: Mostly Complete - Refinements needed
+**Status**: Core Complete (85%) - Terminal viewer, serve mode, syntax highlighting remaining
 
 **Prerequisites**: None
 

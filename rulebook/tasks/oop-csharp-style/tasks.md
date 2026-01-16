@@ -1,6 +1,6 @@
 # Tasks: C#-Style Object-Oriented Programming
 
-**Status**: Complete (~98%)
+**Status**: Core Complete (98%) - Stdlib classes and benchmarks remaining
 
 **Priority**: High - Core language feature
 

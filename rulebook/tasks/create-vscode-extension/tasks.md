@@ -1,5 +1,7 @@
 # Tasks: Create VSCode Extension for TML
 
+**Status**: Core Complete (92%) - Go-to-definition requires compiler integration
+
 ## Progress: 92% (67/73 tasks complete)
 
 ## 1. Setup Phase ✅

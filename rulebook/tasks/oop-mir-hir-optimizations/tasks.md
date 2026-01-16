@@ -1,6 +1,6 @@
 # Tasks: OOP Optimizations for MIR and HIR
 
-**Status**: In Progress (~95% complete)
+**Status**: Core Complete (95%) - Arenas, SOO, benchmarks remaining
 
 **Note**: Phase 1 (CHA with final methods + unit tests), Phase 2 (Devirtualization including final methods), Phase 3 (Speculative Devirtualization with heuristic-based type frequency hints), Phase 4 (Virtual Call Inlining + tests), Phase 5 (Dead Method Elimination + tests), Phase 6.1 (Vtable Deduplication), Phase 6.2 (Vtable Splitting hot/cold), Phase 6.3 (Interface Vtable Optimization with deduplication), Phase 7 (Escape Analysis + tests), Phase 8.1 (@value directive with validation), Phase 8.2 (Value class codegen - no vtable, direct dispatch), Phase 8.3.1 (Value Class Detection), Phase 9.1 (Pool[T] type implementation in core library), Phase 9.2 (@pool directive validation), and Phase 12.2 (Trivial Destructor Detection with elision) are implemented. Parser supports `sealed` modifier for final methods. The devirtualization pass now lazily builds the class hierarchy in const query methods.
 See `compiler/include/mir/passes/devirtualization.hpp`, `compiler/include/mir/passes/inlining.hpp`, `compiler/include/mir/passes/dead_method_elimination.hpp`, `compiler/include/mir/passes/escape_analysis.hpp`, `compiler/src/codegen/core/class_codegen.cpp`, `compiler/include/codegen/llvm_ir_gen.hpp`, `compiler/src/types/env_lookups.cpp`, `compiler/src/types/checker/core.cpp`, `lib/core/src/pool.tml`, and `compiler/tests/oop_test.cpp` for implementations.
