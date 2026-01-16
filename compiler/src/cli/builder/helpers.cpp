@@ -377,17 +377,30 @@ bool has_bench_functions(const parser::Module& module) {
 
 // Check if module uses socket lowlevel functions (requires net.c runtime)
 bool has_socket_functions(const parser::Module& module) {
-    static const std::vector<std::string> socket_funcs = {
-        "sys_socket_raw",     "sys_bind_v4",
-        "sys_bind_v6",        "sys_listen_raw",
-        "sys_accept_v4",      "sys_connect_v4",
-        "sys_connect_v6",     "sys_send_raw",
-        "sys_recv_raw",       "sys_sendto_v4",
-        "sys_recvfrom_v4",    "sys_shutdown_raw",
-        "sys_close_raw",      "sys_set_nonblocking_raw",
-        "sys_setsockopt_raw", "sys_getsockname_v4",
-        "sys_getpeername_v4", "sys_get_last_error",
-        "sys_wsa_startup",    "sys_wsa_cleanup"};
+    // Names matching std::net::sys TML declarations (compiler adds tml_ prefix)
+    static const std::vector<std::string> socket_funcs = {"sys_socket",
+                                                          "sys_bind_v4",
+                                                          "sys_bind_v6",
+                                                          "sys_listen",
+                                                          "sys_accept_v4",
+                                                          "sys_connect_v4",
+                                                          "sys_connect_v6",
+                                                          "sys_send",
+                                                          "sys_recv",
+                                                          "sys_sendto_v4",
+                                                          "sys_recvfrom_v4",
+                                                          "sys_shutdown",
+                                                          "sys_close",
+                                                          "sys_set_nonblocking",
+                                                          "sys_setsockopt",
+                                                          "sys_getsockopt",
+                                                          "sys_setsockopt_timeout",
+                                                          "sys_getsockopt_timeout",
+                                                          "sys_getsockname_v4",
+                                                          "sys_getpeername_v4",
+                                                          "sys_get_last_error",
+                                                          "sys_wsa_startup",
+                                                          "sys_wsa_cleanup"};
 
     for (const auto& decl : module.decls) {
         if (decl->is<parser::FuncDecl>()) {
@@ -620,9 +633,25 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
     }
 
     // Link std::net runtime if imported OR if socket lowlevel functions are used
-    if (registry->has_module("std::net") || registry->has_module("std::net::sys") ||
-        registry->has_module("std::net::tcp") || registry->has_module("std::net::udp") ||
-        has_socket_functions(module)) {
+    // Check both exact module names and also iterate through all registered modules
+    // to catch cases where net modules are loaded with different path formats
+    bool needs_net_runtime = registry->has_module("std::net") ||
+                             registry->has_module("std::net::sys") ||
+                             registry->has_module("std::net::tcp") ||
+                             registry->has_module("std::net::udp") || has_socket_functions(module);
+
+    // Also check if any registered module contains "net" in the path
+    if (!needs_net_runtime) {
+        for (const auto& mod_name : registry->list_modules()) {
+            if (mod_name.find("::net") != std::string::npos ||
+                mod_name.find(".net") != std::string::npos) {
+                needs_net_runtime = true;
+                break;
+            }
+        }
+    }
+
+    if (needs_net_runtime) {
         add_runtime(
             {
                 "compiler/runtime/net.c",
