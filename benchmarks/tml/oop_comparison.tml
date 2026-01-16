@@ -1,0 +1,342 @@
+//! OOP Performance Comparison Benchmark
+//!
+//! Compares performance of:
+//! 1. Regular classes (virtual dispatch via vtable)
+//! 2. Sealed classes (devirtualized by compiler)
+//! 3. Deep inheritance hierarchy
+//!
+//! Expected Results:
+//! - Sealed Class: Fastest (compiler devirtualizes all calls)
+//! - Regular Class: Slight overhead from vtable lookup (~5-10%)
+//! - Deep Inheritance: Similar to regular class (vtable lookup is O(1))
+
+// ============================================================================
+// PART 1: Shape Classes - Regular OOP
+// ============================================================================
+
+/// Interface for shape calculations
+interface IShape {
+    func area(this) -> F64
+    func perimeter(this) -> F64
+}
+
+/// Base class for shapes
+class ShapeClass implements IShape {
+    id: I32
+
+    static func create(id: I32) -> ShapeClass {
+        ShapeClass { id: id }
+    }
+
+    func area(this) -> F64 { 0.0 }
+    func perimeter(this) -> F64 { 0.0 }
+}
+
+/// Circle as a class
+class CircleClass extends ShapeClass {
+    radius: F64
+
+    static func create(radius: F64) -> CircleClass {
+        CircleClass { id: 1, radius: radius }
+    }
+
+    func area(this) -> F64 {
+        3.14159265359 * this.radius * this.radius
+    }
+
+    func perimeter(this) -> F64 {
+        2.0 * 3.14159265359 * this.radius
+    }
+}
+
+/// Rectangle as a class
+class RectClass extends ShapeClass {
+    width: F64
+    height: F64
+
+    static func create(width: F64, height: F64) -> RectClass {
+        RectClass { id: 2, width: width, height: height }
+    }
+
+    func area(this) -> F64 {
+        this.width * this.height
+    }
+
+    func perimeter(this) -> F64 {
+        2.0 * (this.width + this.height)
+    }
+}
+
+// ============================================================================
+// PART 2: Sealed Classes (Compiler Devirtualizes)
+// ============================================================================
+
+/// Sealed circle - compiler can devirtualize all calls
+sealed class CircleSealed {
+    radius: F64
+
+    static func create(radius: F64) -> CircleSealed {
+        CircleSealed { radius: radius }
+    }
+
+    func area(this) -> F64 {
+        3.14159265359 * this.radius * this.radius
+    }
+
+    func perimeter(this) -> F64 {
+        2.0 * 3.14159265359 * this.radius
+    }
+}
+
+/// Sealed rectangle - compiler can devirtualize all calls
+sealed class RectSealed {
+    width: F64
+    height: F64
+
+    static func create(width: F64, height: F64) -> RectSealed {
+        RectSealed { width: width, height: height }
+    }
+
+    func area(this) -> F64 {
+        this.width * this.height
+    }
+
+    func perimeter(this) -> F64 {
+        2.0 * (this.width + this.height)
+    }
+}
+
+// ============================================================================
+// PART 3: Computation Hierarchy - Deep Inheritance
+// ============================================================================
+
+/// Level 0 - Base class
+class Level0 {
+    value: I64
+
+    static func create(v: I64) -> Level0 {
+        Level0 { value: v }
+    }
+
+    virtual func compute(this) -> I64 {
+        this.value
+    }
+}
+
+/// Level 1
+class Level1 extends Level0 {
+    multiplier: I64
+
+    static func create(v: I64) -> Level1 {
+        Level1 { value: v, multiplier: 2 }
+    }
+
+    override func compute(this) -> I64 {
+        this.value * this.multiplier
+    }
+}
+
+/// Level 2
+class Level2 extends Level1 {
+    offset: I64
+
+    static func create(v: I64) -> Level2 {
+        Level2 { value: v, multiplier: 2, offset: 10 }
+    }
+
+    override func compute(this) -> I64 {
+        this.value * this.multiplier + this.offset
+    }
+}
+
+/// Level 3
+class Level3 extends Level2 {
+    divisor: I64
+
+    static func create(v: I64) -> Level3 {
+        Level3 { value: v, multiplier: 2, offset: 10, divisor: 2 }
+    }
+
+    override func compute(this) -> I64 {
+        (this.value * this.multiplier + this.offset) / this.divisor
+    }
+}
+
+// ============================================================================
+// BENCHMARKS
+// ============================================================================
+
+const ITERATIONS: I32 = 100000
+
+/// Benchmark: Sealed class shape calculations
+/// Expected: Fastest - compiler devirtualizes sealed classes
+@bench
+func bench_sealed_shape() {
+    let circle: CircleSealed = CircleSealed::create(5.0)
+    let rect: RectSealed = RectSealed::create(3.0, 4.0)
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= ITERATIONS then { break }
+        total = total + circle.area()
+        total = total + circle.perimeter()
+        total = total + rect.area()
+        total = total + rect.perimeter()
+        i = i + 1
+    }
+
+    assert(total > 0.0)
+}
+
+/// Benchmark: Class (OOP) shape calculations - direct calls
+/// Expected: Slight overhead from vtable lookup
+@bench
+func bench_class_shape() {
+    let circle: CircleClass = CircleClass::create(5.0)
+    let rect: RectClass = RectClass::create(3.0, 4.0)
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= ITERATIONS then { break }
+        total = total + circle.area()
+        total = total + circle.perimeter()
+        total = total + rect.area()
+        total = total + rect.perimeter()
+        i = i + 1
+    }
+
+    assert(total > 0.0)
+}
+
+/// Benchmark: Deep inheritance compute
+/// Tests vtable lookup performance at different inheritance depths
+@bench
+func bench_deep_inheritance() {
+    let l0: Level0 = Level0::create(100)
+    let l1: Level1 = Level1::create(100)
+    let l2: Level2 = Level2::create(100)
+    let l3: Level3 = Level3::create(100)
+    var total: I64 = 0
+    var i: I32 = 0
+
+    loop {
+        if i >= ITERATIONS then { break }
+        total = total + l0.compute()
+        total = total + l1.compute()
+        total = total + l2.compute()
+        total = total + l3.compute()
+        i = i + 1
+    }
+
+    let zero_i64: I64 = 0
+    assert(total > zero_i64)
+}
+
+/// Benchmark: Sealed class creation (allocation)
+@bench
+func bench_sealed_creation() {
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= ITERATIONS then { break }
+        let circle: CircleSealed = CircleSealed::create(5.0)
+        let rect: RectSealed = RectSealed::create(3.0, 4.0)
+        total = total + circle.area() + rect.area()
+        i = i + 1
+    }
+
+    assert(total > 0.0)
+}
+
+/// Benchmark: Class creation (heap allocated with vtable)
+@bench
+func bench_class_creation() {
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= ITERATIONS then { break }
+        let circle: CircleClass = CircleClass::create(5.0)
+        let rect: RectClass = RectClass::create(3.0, 4.0)
+        total = total + circle.area() + rect.area()
+        i = i + 1
+    }
+
+    assert(total > 0.0)
+}
+
+// ============================================================================
+// TESTS: Verify correctness
+// ============================================================================
+
+@test
+func test_shape_equivalence() {
+    let cc: CircleClass = CircleClass::create(5.0)
+    let csl: CircleSealed = CircleSealed::create(5.0)
+
+    // Compare areas (should both be: pi * 25 = ~78.54)
+    let class_area: F64 = cc.area()
+    let sealed_area: F64 = csl.area()
+
+    // Allow small floating point tolerance
+    assert(class_area > 78.0)
+    assert(class_area < 79.0)
+    assert(sealed_area > 78.0)
+    assert(sealed_area < 79.0)
+}
+
+@test
+func test_deep_inheritance() {
+    let l0: Level0 = Level0::create(100)
+    let l1: Level1 = Level1::create(100)
+    let l2: Level2 = Level2::create(100)
+    let l3: Level3 = Level3::create(100)
+
+    let expected_l0: I64 = 100
+    let expected_l1: I64 = 200
+    let expected_l2: I64 = 210
+    let expected_l3: I64 = 105
+
+    assert_eq(l0.compute(), expected_l0)
+    assert_eq(l1.compute(), expected_l1)
+    assert_eq(l2.compute(), expected_l2)
+    assert_eq(l3.compute(), expected_l3)
+    ()
+}
+
+// ============================================================================
+// DOCUMENTATION: Performance Characteristics
+// ============================================================================
+//
+// ## Summary
+//
+// | Approach       | Method Call | Memory     | Polymorphism |
+// |----------------|-------------|------------|--------------|
+// | Sealed Class   | Direct*     | Heap       | None         |
+// | Regular Class  | VTable      | Heap       | Full OOP     |
+//
+// * Compiler devirtualizes sealed class method calls
+//
+// ## When to Use What
+//
+// ### Use Sealed Class when:
+// - OOP syntax is preferred
+// - You want constructor patterns
+// - No subclassing is needed
+// - Maximum performance is desired
+//
+// ### Use Regular Class when:
+// - Runtime polymorphism is needed
+// - Inheritance hierarchy makes sense
+// - Plugin/extension architecture
+// - Working with existing OOP codebase
+//
+// ## Performance Notes
+//
+// 1. Virtual dispatch overhead is typically 5-10% for method calls
+// 2. The overhead is often invisible due to CPU branch prediction
+// 3. Sealed classes get devirtualized at compile time
+// 4. Inlining eliminates most overhead for small methods

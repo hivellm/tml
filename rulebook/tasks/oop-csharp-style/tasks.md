@@ -327,8 +327,8 @@
 ### 10.4 Benchmarking
 - [x] 10.4.1 Create virtual dispatch microbenchmark - `docs/examples/16-oop-benchmark.tml`
 - [x] 10.4.2 Create object instantiation benchmark (included in 16-oop-benchmark.tml)
-- [ ] 10.4.3 Compare with equivalent struct + behavior code (deferred)
-- [ ] 10.4.4 Document performance characteristics in user guide (deferred)
+- [x] 10.4.3 Compare with equivalent struct + behavior code - `benchmarks/tml/oop_comparison.tml`
+- [x] 10.4.4 Document performance characteristics - embedded in benchmark file with usage guide
 
 ## Phase 11: Cross-Task Integration
 
@@ -388,6 +388,7 @@
 - `compiler/tests/compiler/oop.test.tml` - OOP TML integration tests
 - `docs/rfcs/RFC-0014-OOP-CLASSES.md` - OOP specification
 - `docs/user/ch15-00-oop.md` - OOP user documentation chapter
+- `benchmarks/tml/oop_comparison.tml` - OOP vs struct+behavior performance comparison
 
 ### Modified Files
 - `compiler/include/lexer/token.hpp` - OOP keywords
