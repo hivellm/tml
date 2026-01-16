@@ -54,13 +54,13 @@ protected:
 
 private:
     // Check if a call can be a tail call
-    auto is_tail_call_candidate(const Function& func, const BasicBlock& block,
-                                size_t inst_idx) -> bool;
+    auto is_tail_call_candidate(const Function& func, const BasicBlock& block, size_t inst_idx)
+        -> bool;
 
     // Check if the instruction at inst_idx is immediately followed by a return
     // of its result
-    auto is_followed_by_return(const BasicBlock& block, size_t inst_idx,
-                               ValueId call_result) -> bool;
+    auto is_followed_by_return(const BasicBlock& block, size_t inst_idx, ValueId call_result)
+        -> bool;
 
     // Mark a call as a tail call (for codegen)
     // Since we can't modify CallInst structure, we use function attributes

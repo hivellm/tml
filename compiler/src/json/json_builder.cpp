@@ -293,9 +293,8 @@ auto JsonBuilder::string(const std::string& value) -> JsonBuilder& {
 /// Throws if there are unclosed objects/arrays on the stack.
 auto JsonBuilder::build() -> JsonValue {
     if (!stack_.empty()) {
-        throw std::runtime_error(
-            "JsonBuilder::build() called with " + std::to_string(stack_.size()) +
-            " unclosed context(s)");
+        throw std::runtime_error("JsonBuilder::build() called with " +
+                                 std::to_string(stack_.size()) + " unclosed context(s)");
     }
     if (!has_result_) {
         return JsonValue(); // Return null if nothing was built

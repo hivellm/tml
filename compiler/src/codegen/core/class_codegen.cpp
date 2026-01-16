@@ -64,6 +64,60 @@ static bool has_decorator(const parser::ClassDecl& c, const std::string& name) {
     return false;
 }
 
+// Helper to check if a decorator has a specific boolean argument set to true
+// Supports multiple formats:
+// - @pool(thread_local = true) - BinaryExpr with Assign
+// - @pool(thread_local) - IdentExpr (presence implies true)
+// - @pool_tls - Alternative decorator name for thread-local
+static bool has_decorator_bool_arg(const parser::ClassDecl& c, const std::string& deco_name,
+                                   const std::string& arg_name) {
+    for (const auto& deco : c.decorators) {
+        if (deco.name != deco_name)
+            continue;
+
+        for (const auto& arg : deco.args) {
+            // Check for BinaryExpr with Assign op: thread_local = true
+            if (arg->is<parser::BinaryExpr>()) {
+                const auto& bin = arg->as<parser::BinaryExpr>();
+                if (bin.op == parser::BinaryOp::Assign && bin.left && bin.right) {
+                    // Left side should be an identifier
+                    if (bin.left->is<parser::IdentExpr>()) {
+                        const auto& ident = bin.left->as<parser::IdentExpr>();
+                        if (ident.name == arg_name) {
+                            // Right side should be true literal
+                            if (bin.right->is<parser::LiteralExpr>()) {
+                                const auto& lit = bin.right->as<parser::LiteralExpr>();
+                                if (lit.token.kind == lexer::TokenKind::BoolLiteral &&
+                                    lit.token.lexeme == "true") {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Check for just IdentExpr: @pool(thread_local) - presence implies true
+            else if (arg->is<parser::IdentExpr>()) {
+                const auto& ident = arg->as<parser::IdentExpr>();
+                if (ident.name == arg_name) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Also check for alternative decorator name: @pool_tls
+    if (deco_name == "pool" && arg_name == "thread_local") {
+        for (const auto& deco : c.decorators) {
+            if (deco.name == "pool_tls") {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 // ============================================================================
 // Class Type Generation
 // ============================================================================
@@ -84,7 +138,8 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     std::string type_name = "%class." + c.name;
 
     // Check if this is a @value class (no vtable, value semantics)
-    bool is_value_class = has_decorator(c, "value");
+    // Also auto-apply value class optimization to sealed classes with no virtual methods
+    bool is_value_class = has_decorator(c, "value") || env_.is_value_class_candidate(c.name);
 
     // Collect field types
     // Regular class layout: { vtable_ptr, base_class_fields..., own_fields... }
@@ -144,6 +199,27 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     // Track value classes for direct dispatch
     if (is_value_class) {
         value_classes_.insert(c.name);
+    }
+
+    // Track @pool classes and generate global pool instance (if not thread-local)
+    if (has_decorator(c, "pool")) {
+        bool is_thread_local = has_decorator_bool_arg(c, "pool", "thread_local");
+
+        if (is_thread_local) {
+            // Thread-local pool - no global pool, use TLS functions
+            tls_pool_classes_.insert(c.name);
+            // Generate a string constant for the class name (used by TLS pool lookup)
+            std::string name_const = "@pool.name." + c.name;
+            emit_line(name_const + " = private constant [" + std::to_string(c.name.size() + 1) +
+                      " x i8] c\"" + c.name + "\\00\"");
+        } else {
+            // Global pool - generate pool instance
+            pool_classes_.insert(c.name);
+            // Pool layout: { free_list_ptr, block_list_ptr, capacity, count }
+            std::string pool_type = "%pool." + c.name;
+            emit_line(pool_type + " = type { ptr, ptr, i64, i64 }");
+            emit_line("@pool." + c.name + " = global " + pool_type + " zeroinitializer");
+        }
     }
 
     // Generate static fields as global variables
@@ -279,6 +355,9 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
         gen_class_vtable(c);
     }
 
+    // Generate RTTI for runtime type checks
+    gen_class_rtti(c);
+
     // Generate constructors
     for (const auto& ctor : c.constructors) {
         gen_class_constructor(c, ctor);
@@ -380,7 +459,8 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
             }
 
             if (found) {
-                std::string impl_func = "@tml_" + get_suite_prefix() + impl_class + "_" + method_name;
+                std::string impl_func =
+                    "@tml_" + get_suite_prefix() + impl_class + "_" + method_name;
                 impl_info.push_back({method_name, impl_func});
             } else {
                 impl_info.push_back({method_name, "null"});
@@ -436,8 +516,8 @@ void LLVMIRGen::gen_interface_vtables(const parser::ClassDecl& c) {
 
 // Helper to compute interface vtable content key for deduplication
 auto LLVMIRGen::compute_interface_vtable_key(
-    const std::string& iface_name,
-    const std::vector<std::pair<std::string, std::string>>& impls) -> std::string {
+    const std::string& iface_name, const std::vector<std::pair<std::string, std::string>>& impls)
+    -> std::string {
     std::string key = iface_name + ":";
     for (const auto& impl : impls) {
         key += impl.second + ";";
@@ -586,6 +666,54 @@ void LLVMIRGen::gen_class_vtable(const parser::ClassDecl& c) {
 }
 
 // ============================================================================
+// RTTI (Runtime Type Information) Generation
+// ============================================================================
+
+void LLVMIRGen::gen_class_rtti(const parser::ClassDecl& c) {
+    // Skip if already emitted
+    if (emitted_rtti_.count(c.name) > 0) {
+        return;
+    }
+    emitted_rtti_.insert(c.name);
+
+    // Skip RTTI for @value classes (they use compile-time type info only)
+    if (has_decorator(c, "value")) {
+        return;
+    }
+
+    // TypeInfo structure: { ptr type_name, ptr base_typeinfo }
+    // - type_name: string constant with class name
+    // - base_typeinfo: pointer to base class RTTI (null if no base)
+
+    // Emit TypeInfo type if not already emitted in this compilation unit
+    if (!typeinfo_type_emitted_) {
+        emit_line("%TypeInfo = type { ptr, ptr }");
+        typeinfo_type_emitted_ = true;
+    }
+
+    // Generate type name string constant
+    std::string name_const = "@.str.typeinfo." + c.name;
+    emit_line(name_const + " = private unnamed_addr constant [" +
+              std::to_string(c.name.size() + 1) + " x i8] c\"" + c.name + "\\00\"");
+
+    // Get base class RTTI pointer
+    std::string base_rtti = "null";
+    if (c.extends) {
+        std::string base_name = c.extends->segments.back();
+        // Check if base is not a @value class
+        auto base_def = env_.lookup_class(base_name);
+        if (base_def && !base_def->is_value) {
+            base_rtti = "@typeinfo." + base_name;
+        }
+    }
+
+    // Emit TypeInfo global constant
+    std::string typeinfo_name = "@typeinfo." + c.name;
+    emit_line(typeinfo_name + " = internal constant %TypeInfo { ptr " + name_const + ", ptr " +
+              base_rtti + " }");
+}
+
+// ============================================================================
 // Constructor Generation
 // ============================================================================
 
@@ -655,11 +783,32 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
 
     // Allocate object
     std::string obj = fresh_reg();
-    emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type + "* getelementptr (" +
-              class_type + ", " + class_type + "* null, i32 1) to i64))");
+    bool is_value_class = has_decorator(c, "value") || env_.is_value_class_candidate(c.name);
+    bool is_pool_class = has_decorator(c, "pool");
+    bool is_tls_pool = has_decorator_bool_arg(c, "pool", "thread_local");
+
+    if (is_value_class) {
+        // Stack allocate for @value classes (value semantics)
+        emit_line("  " + obj + " = alloca " + class_type);
+    } else if (is_tls_pool) {
+        // Thread-local pool allocate for @pool(thread_local: true) classes
+        // Call tls_pool_acquire with class name string and object size
+        emit_line("  " + obj + " = call ptr @tls_pool_acquire(ptr @pool.name." + c.name +
+                  ", i64 ptrtoint (" + class_type + "* getelementptr (" + class_type + ", " +
+                  class_type + "* null, i32 1) to i64))");
+    } else if (is_pool_class) {
+        // Global pool allocate for @pool classes (pooled object reuse)
+        // Call pool_acquire with the global pool and object size
+        emit_line("  " + obj + " = call ptr @pool_acquire(ptr @pool." + c.name +
+                  ", i64 ptrtoint (" + class_type + "* getelementptr (" + class_type + ", " +
+                  class_type + "* null, i32 1) to i64))");
+    } else {
+        // Heap allocate for regular classes (reference semantics)
+        emit_line("  " + obj + " = call ptr @malloc(i64 ptrtoint (" + class_type +
+                  "* getelementptr (" + class_type + ", " + class_type + "* null, i32 1) to i64))");
+    }
 
     // Initialize vtable pointer (field 0) - skip for @value classes
-    bool is_value_class = has_decorator(c, "value");
     if (!is_value_class) {
         std::string vtable_ptr = fresh_reg();
         emit_line("  " + vtable_ptr + " = getelementptr " + class_type + ", ptr " + obj +
@@ -1768,12 +1917,11 @@ void LLVMIRGen::analyze_vtable_split(const parser::ClassDecl& c) {
         const std::string& name = vm.name;
 
         // Hot patterns: common accessor patterns
-        if (name.find("get") == 0 || name.find("set") == 0 ||
-            name.find("is") == 0 || name.find("has") == 0 ||
-            name.find("do") == 0 || name.find("on") == 0 ||
-            name == "size" || name == "len" || name == "length" ||
-            name == "empty" || name == "count" || name == "value" ||
-            name == "next" || name == "prev" || name == "item") {
+        if (name.find("get") == 0 || name.find("set") == 0 || name.find("is") == 0 ||
+            name.find("has") == 0 || name.find("do") == 0 || name.find("on") == 0 ||
+            name == "size" || name == "len" || name == "length" || name == "empty" ||
+            name == "count" || name == "value" || name == "next" || name == "prev" ||
+            name == "item") {
             is_hot = true;
         }
 
@@ -1839,7 +1987,8 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
     std::string hot_type_name = "%vtable." + c.name + ".hot";
     std::string hot_type = hot_type_name + " = type { ";
     for (size_t i = 0; i < split.hot_methods.size(); ++i) {
-        if (i > 0) hot_type += ", ";
+        if (i > 0)
+            hot_type += ", ";
         hot_type += "ptr";
     }
     if (split.hot_methods.empty()) {
@@ -1853,7 +2002,8 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
         std::string cold_type_name = "%vtable." + c.name + ".cold";
         std::string cold_type = cold_type_name + " = type { ";
         for (size_t i = 0; i < split.cold_methods.size(); ++i) {
-            if (i > 0) cold_type += ", ";
+            if (i > 0)
+                cold_type += ", ";
             cold_type += "ptr";
         }
         cold_type += " }";
@@ -1863,7 +2013,8 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
     // Generate hot vtable global
     std::string hot_value = "{ ";
     for (size_t i = 0; i < split.hot_methods.size(); ++i) {
-        if (i > 0) hot_value += ", ";
+        if (i > 0)
+            hot_value += ", ";
 
         // Find the method implementation
         std::string impl_class;
@@ -1890,7 +2041,8 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
     if (!split.cold_methods.empty()) {
         std::string cold_value = "{ ";
         for (size_t i = 0; i < split.cold_methods.size(); ++i) {
-            if (i > 0) cold_value += ", ";
+            if (i > 0)
+                cold_value += ", ";
 
             std::string impl_class;
             for (const auto& vm : vtable_methods) {
@@ -1903,12 +2055,14 @@ void LLVMIRGen::gen_split_vtables(const parser::ClassDecl& c) {
             if (impl_class.empty()) {
                 cold_value += "ptr null";
             } else {
-                cold_value += "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.cold_methods[i];
+                cold_value +=
+                    "ptr @tml_" + get_suite_prefix() + impl_class + "_" + split.cold_methods[i];
             }
         }
         cold_value += " }";
         std::string cold_type_name = "%vtable." + c.name + ".cold";
-        emit_line("@vtable." + c.name + ".cold = internal constant " + cold_type_name + " " + cold_value);
+        emit_line("@vtable." + c.name + ".cold = internal constant " + cold_type_name + " " +
+                  cold_value);
     }
 }
 
@@ -1927,8 +2081,8 @@ bool LLVMIRGen::is_hot_method(const std::string& class_name, const std::string& 
     return false;
 }
 
-auto LLVMIRGen::get_split_vtable_index(const std::string& class_name, const std::string& method_name)
-    -> std::pair<bool, size_t> {
+auto LLVMIRGen::get_split_vtable_index(const std::string& class_name,
+                                       const std::string& method_name) -> std::pair<bool, size_t> {
 
     auto split_it = vtable_splits_.find(class_name);
     if (split_it == vtable_splits_.end()) {
@@ -1980,7 +2134,8 @@ void LLVMIRGen::init_type_frequency_hints() {
         float frequency = 0.5f; // Default
 
         auto class_def = env_.lookup_class(name);
-        if (!class_def) continue;
+        if (!class_def)
+            continue;
 
         // Sealed classes are very likely to be the concrete type
         if (class_def->is_sealed) {
@@ -2010,7 +2165,8 @@ void LLVMIRGen::init_type_frequency_hints() {
     }
 }
 
-auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class, const std::string& method_name)
+auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class,
+                                    const std::string& method_name)
     -> std::optional<SpeculativeDevirtInfo> {
 
     // Get frequency hint for the receiver class
@@ -2042,7 +2198,8 @@ auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class, const std
         std::string current = *class_def->base_class;
         while (!current.empty() && !has_method) {
             auto base_def = env_.lookup_class(current);
-            if (!base_def) break;
+            if (!base_def)
+                break;
 
             for (const auto& m : base_def->methods) {
                 if (m.sig.name == method_name) {
@@ -2067,7 +2224,8 @@ auto LLVMIRGen::analyze_spec_devirt(const std::string& receiver_class, const std
     return info;
 }
 
-auto LLVMIRGen::gen_guarded_virtual_call(const std::string& obj_reg, const std::string& receiver_class,
+auto LLVMIRGen::gen_guarded_virtual_call(const std::string& obj_reg,
+                                         const std::string& receiver_class,
                                          const SpeculativeDevirtInfo& spec_info,
                                          const std::string& method_name,
                                          const std::vector<std::string>& args,

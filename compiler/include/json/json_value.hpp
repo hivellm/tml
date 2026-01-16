@@ -135,9 +135,9 @@ struct JsonNumber {
 
     /// The number value (only one field is active based on `kind`).
     union {
-        int64_t i64;   ///< Active when `kind == Kind::Int64`
-        uint64_t u64;  ///< Active when `kind == Kind::Uint64`
-        double f64;    ///< Active when `kind == Kind::Double`
+        int64_t i64;  ///< Active when `kind == Kind::Int64`
+        uint64_t u64; ///< Active when `kind == Kind::Uint64`
+        double f64;   ///< Active when `kind == Kind::Double`
     };
 
     // ========================================================================
@@ -176,16 +176,24 @@ struct JsonNumber {
     ///
     /// Use this to check if the number can be accessed without precision loss
     /// via `try_as_i64()` or `try_as_u64()`.
-    [[nodiscard]] auto is_integer() const -> bool { return kind != Kind::Double; }
+    [[nodiscard]] auto is_integer() const -> bool {
+        return kind != Kind::Double;
+    }
 
     /// Returns `true` if this is a signed integer (`Int64`).
-    [[nodiscard]] auto is_signed() const -> bool { return kind == Kind::Int64; }
+    [[nodiscard]] auto is_signed() const -> bool {
+        return kind == Kind::Int64;
+    }
 
     /// Returns `true` if this is an unsigned integer (`Uint64`).
-    [[nodiscard]] auto is_unsigned() const -> bool { return kind == Kind::Uint64; }
+    [[nodiscard]] auto is_unsigned() const -> bool {
+        return kind == Kind::Uint64;
+    }
 
     /// Returns `true` if this is a floating-point number (`Double`).
-    [[nodiscard]] auto is_float() const -> bool { return kind == Kind::Double; }
+    [[nodiscard]] auto is_float() const -> bool {
+        return kind == Kind::Double;
+    }
 
     // ========================================================================
     // Safe Accessors
@@ -377,12 +385,12 @@ struct JsonValue {
     using Null = std::monostate;
 
     /// The variant type holding all possible JSON values.
-    using ValueVariant = std::variant<Null,              // null
-                                      bool,              // boolean
-                                      JsonNumber,        // number
-                                      std::string,       // string
-                                      Box<JsonArray>,    // array (boxed)
-                                      Box<JsonObject>>;  // object (boxed)
+    using ValueVariant = std::variant<Null,             // null
+                                      bool,             // boolean
+                                      JsonNumber,       // number
+                                      std::string,      // string
+                                      Box<JsonArray>,   // array (boxed)
+                                      Box<JsonObject>>; // object (boxed)
 
     /// The underlying variant storage.
     ValueVariant data;
@@ -491,7 +499,9 @@ struct JsonValue {
     }
 
     /// Returns `true` if this value is a boolean.
-    [[nodiscard]] auto is_bool() const -> bool { return std::holds_alternative<bool>(data); }
+    [[nodiscard]] auto is_bool() const -> bool {
+        return std::holds_alternative<bool>(data);
+    }
 
     /// Returns `true` if this value is a number (integer or float).
     [[nodiscard]] auto is_number() const -> bool {
@@ -540,7 +550,9 @@ struct JsonValue {
     /// # Panics
     ///
     /// Throws `std::bad_variant_access` if this is not a boolean.
-    [[nodiscard]] auto as_bool() const -> bool { return std::get<bool>(data); }
+    [[nodiscard]] auto as_bool() const -> bool {
+        return std::get<bool>(data);
+    }
 
     /// Gets the number value.
     ///
@@ -637,7 +649,9 @@ struct JsonValue {
     /// # Panics
     ///
     /// Throws `std::bad_variant_access` if this is not a number.
-    [[nodiscard]] auto as_f64() const -> double { return as_number().as_f64(); }
+    [[nodiscard]] auto as_f64() const -> double {
+        return as_number().as_f64();
+    }
 
     /// Attempts to get the number as `int64_t`.
     ///
@@ -759,7 +773,9 @@ struct JsonValue {
     /// # Panics
     ///
     /// Throws `std::bad_variant_access` if this is not an array.
-    void push(JsonValue value) { as_array_mut().push_back(std::move(value)); }
+    void push(JsonValue value) {
+        as_array_mut().push_back(std::move(value));
+    }
 
     /// Sets a key-value pair in an object.
     ///
@@ -963,7 +979,9 @@ struct JsonValue {
 /// auto val = json_null();
 /// assert(val.is_null());
 /// ```
-inline auto json_null() -> JsonValue { return JsonValue(); }
+inline auto json_null() -> JsonValue {
+    return JsonValue();
+}
 
 /// Creates a boolean JSON value.
 ///
@@ -977,7 +995,9 @@ inline auto json_null() -> JsonValue { return JsonValue(); }
 /// auto val = json_bool(true);
 /// assert(val.as_bool() == true);
 /// ```
-inline auto json_bool(bool value) -> JsonValue { return JsonValue(value); }
+inline auto json_bool(bool value) -> JsonValue {
+    return JsonValue(value);
+}
 
 /// Creates an integer JSON value.
 ///
@@ -992,14 +1012,18 @@ inline auto json_bool(bool value) -> JsonValue { return JsonValue(value); }
 /// assert(val.is_integer());
 /// assert(val.as_i64() == 42);
 /// ```
-inline auto json_int(int64_t value) -> JsonValue { return JsonValue(value); }
+inline auto json_int(int64_t value) -> JsonValue {
+    return JsonValue(value);
+}
 
 /// Creates an unsigned integer JSON value.
 ///
 /// # Arguments
 ///
 /// * `value` - The unsigned integer value
-inline auto json_uint(uint64_t value) -> JsonValue { return JsonValue(value); }
+inline auto json_uint(uint64_t value) -> JsonValue {
+    return JsonValue(value);
+}
 
 /// Creates a floating-point JSON value.
 ///
@@ -1013,7 +1037,9 @@ inline auto json_uint(uint64_t value) -> JsonValue { return JsonValue(value); }
 /// auto val = json_float(3.14);
 /// assert(val.is_float());
 /// ```
-inline auto json_float(double value) -> JsonValue { return JsonValue(value); }
+inline auto json_float(double value) -> JsonValue {
+    return JsonValue(value);
+}
 
 /// Creates a string JSON value.
 ///
@@ -1040,7 +1066,9 @@ inline auto json_string(std::string value) -> JsonValue {
 /// arr.push(json_int(1));
 /// arr.push(json_int(2));
 /// ```
-inline auto json_array() -> JsonValue { return JsonValue(JsonArray{}); }
+inline auto json_array() -> JsonValue {
+    return JsonValue(JsonArray{});
+}
 
 /// Creates an empty object JSON value.
 ///
@@ -1050,6 +1078,8 @@ inline auto json_array() -> JsonValue { return JsonValue(JsonArray{}); }
 /// auto obj = json_object();
 /// obj.set("name", json_string("Alice"));
 /// ```
-inline auto json_object() -> JsonValue { return JsonValue(JsonObject{}); }
+inline auto json_object() -> JsonValue {
+    return JsonValue(JsonObject{});
+}
 
 } // namespace tml::json

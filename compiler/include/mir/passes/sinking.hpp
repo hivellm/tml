@@ -64,16 +64,15 @@ private:
     auto can_sink(const InstructionData& inst) -> bool;
 
     // Find the unique block where value is used, if any
-    auto find_single_use_block(const Function& func, ValueId value,
-                               uint32_t def_block) -> std::optional<uint32_t>;
+    auto find_single_use_block(const Function& func, ValueId value, uint32_t def_block)
+        -> std::optional<uint32_t>;
 
     // Check if all operands are available in the target block
     auto operands_available_in(const Function& func, const InstructionData& inst,
                                uint32_t target_block, uint32_t source_block) -> bool;
 
     // Check if instruction's operands dominate the target block
-    auto value_dominates_block(const Function& func, ValueId value,
-                               uint32_t target_block) -> bool;
+    auto value_dominates_block(const Function& func, ValueId value, uint32_t target_block) -> bool;
 
     // Get block index
     auto get_block_index(const Function& func, uint32_t id) -> int;

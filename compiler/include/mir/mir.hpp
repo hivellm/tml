@@ -318,12 +318,12 @@ struct InsertValueInst {
 
 /// Devirtualization info for calls that were converted from virtual to direct.
 struct DevirtInfo {
-    std::string original_class;  ///< Original receiver class type.
-    std::string method_name;     ///< Original method name.
-    bool from_sealed_class;      ///< Was devirtualized due to sealed class.
-    bool from_exact_type;        ///< Was devirtualized due to exact type known.
-    bool from_single_impl;       ///< Was devirtualized due to single implementation.
-    bool from_final_method;      ///< Was devirtualized due to final method.
+    std::string original_class; ///< Original receiver class type.
+    std::string method_name;    ///< Original method name.
+    bool from_sealed_class;     ///< Was devirtualized due to sealed class.
+    bool from_exact_type;       ///< Was devirtualized due to exact type known.
+    bool from_single_impl;      ///< Was devirtualized due to single implementation.
+    bool from_final_method;     ///< Was devirtualized due to final method.
 };
 
 // Function call: result = func(args...)
@@ -435,8 +435,8 @@ struct AwaitInst {
 // Closure construction: result = closure { func_ptr, captures... }
 // A closure is represented as a struct containing a function pointer and captured values.
 struct ClosureInitInst {
-    std::string func_name;                                    // Generated closure function name
-    std::vector<std::pair<std::string, Value>> captures;      // Captured variables (name, value)
+    std::string func_name;                                     // Generated closure function name
+    std::vector<std::pair<std::string, Value>> captures;       // Captured variables (name, value)
     std::vector<std::pair<std::string, MirTypePtr>> cap_types; // Types of captures
     MirTypePtr func_type;                                      // Function type of the closure
     MirTypePtr result_type;                                    // Closure struct type

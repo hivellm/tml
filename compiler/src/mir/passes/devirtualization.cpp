@@ -287,8 +287,30 @@ auto DevirtualizationPass::run(Module& module) -> bool {
 auto DevirtualizationPass::process_function(Function& func) -> bool {
     bool changed = false;
 
-    for (auto& block : func.blocks) {
-        if (process_block(block)) {
+    // Clear type narrowing state from previous functions
+    block_type_narrowing_.clear();
+    current_narrowing_.clear();
+
+    // First pass: analyze branch narrowing for all blocks
+    for (size_t i = 0; i < func.blocks.size(); ++i) {
+        analyze_branch_narrowing(func, i);
+    }
+
+    // Second pass: process blocks with narrowing info
+    for (size_t i = 0; i < func.blocks.size(); ++i) {
+        // Load narrowing info for this block
+        auto it = block_type_narrowing_.find(i);
+        if (it != block_type_narrowing_.end()) {
+            current_narrowing_ = it->second;
+        } else {
+            current_narrowing_.clear();
+        }
+
+        // Propagate narrowing to successors (for next iteration)
+        propagate_narrowing_to_successors(func.blocks[i], i);
+
+        // Process the block
+        if (process_block(func.blocks[i])) {
             changed = true;
         }
     }
@@ -308,24 +330,49 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         auto& method_call = std::get<MethodCallInst>(inst_data.inst);
         stats_.method_calls_analyzed++;
 
-        // Try to devirtualize
-        auto [direct_name, reason] = try_devirtualize(method_call);
+        // Check for type narrowing on the receiver
+        std::string effective_type = method_call.receiver_type;
+        bool has_narrowing = false;
+
+        auto narrowed = get_narrowed_type(method_call.receiver.id);
+        if (narrowed) {
+            effective_type = *narrowed;
+            has_narrowing = true;
+        }
+
+        // Try to devirtualize with effective type
+        auto [direct_name, reason] = try_devirtualize(
+            MethodCallInst{method_call.receiver, effective_type, method_call.method_name,
+                           method_call.args, method_call.arg_types, method_call.return_type});
+
+        // Track narrowing-enabled devirtualization separately
+        if (has_narrowing && reason != DevirtReason::NotDevirtualized) {
+            stats_.devirtualized_narrowing++;
+        }
 
         switch (reason) {
         case DevirtReason::SealedClass:
-            stats_.devirtualized_sealed++;
+            if (!has_narrowing)
+                stats_.devirtualized_sealed++;
             break;
         case DevirtReason::ExactType:
-            stats_.devirtualized_exact++;
+            if (!has_narrowing)
+                stats_.devirtualized_exact++;
             break;
         case DevirtReason::SingleImpl:
-            stats_.devirtualized_single++;
+            if (!has_narrowing)
+                stats_.devirtualized_single++;
             break;
         case DevirtReason::FinalMethod:
-            stats_.devirtualized_final++;
+            if (!has_narrowing)
+                stats_.devirtualized_final++;
             break;
         case DevirtReason::NoOverride:
-            stats_.devirtualized_nonvirtual++;
+            if (!has_narrowing)
+                stats_.devirtualized_nonvirtual++;
+            break;
+        case DevirtReason::TypeNarrowing:
+            // Already counted above
             break;
         case DevirtReason::NotDevirtualized:
             stats_.not_devirtualized++;
@@ -367,6 +414,277 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
     }
 
     return changed;
+}
+
+// ============================================================================
+// Type Narrowing Analysis
+// ============================================================================
+
+void DevirtualizationPass::analyze_branch_narrowing(const Function& func, size_t block_idx) {
+    if (block_idx >= func.blocks.size())
+        return;
+
+    const auto& block = func.blocks[block_idx];
+
+    // Track exact types from constructor calls within this block
+    // This enables devirtualization when we know the exact runtime type
+    for (const auto& inst : block.instructions) {
+        // Check for constructor calls (::create, ::new patterns in function names)
+        if (auto* call = std::get_if<CallInst>(&inst.inst)) {
+            const std::string& func_name = call->func_name;
+
+            // Look for constructor patterns: ClassName_create or ClassName_new
+            size_t separator_pos = func_name.rfind("_create");
+            if (separator_pos == std::string::npos) {
+                separator_pos = func_name.rfind("_new");
+            }
+
+            if (separator_pos != std::string::npos && separator_pos > 0) {
+                // Extract class name from function name
+                std::string class_name = func_name.substr(0, separator_pos);
+
+                // Remove potential module prefix (e.g., "tml_" or "module_")
+                size_t underscore_pos = class_name.find('_');
+                if (underscore_pos != std::string::npos &&
+                    underscore_pos < class_name.length() - 1) {
+                    // Check if what remains is a known class
+                    std::string potential_name = class_name.substr(underscore_pos + 1);
+                    if (get_class_info(potential_name)) {
+                        class_name = potential_name;
+                    }
+                }
+
+                // Check if this is a known class
+                if (get_class_info(class_name)) {
+                    TypeNarrowingInfo narrow_info;
+                    narrow_info.value = inst.result;
+                    narrow_info.original_type = class_name;
+                    narrow_info.narrowed_type = class_name;
+                    narrow_info.is_exact = true; // Constructor always creates exact type
+
+                    block_type_narrowing_[block_idx][inst.result] = narrow_info;
+                }
+            }
+        }
+
+        // Also track struct initialization that creates class instances
+        if (auto* struct_init = std::get_if<StructInitInst>(&inst.inst)) {
+            const std::string& struct_name = struct_init->struct_name;
+
+            // Remove "class." prefix if present
+            std::string class_name = struct_name;
+            if (class_name.find("class.") == 0) {
+                class_name = class_name.substr(6);
+            }
+
+            // Check if this is a class struct
+            if (get_class_info(class_name)) {
+                TypeNarrowingInfo narrow_info;
+                narrow_info.value = inst.result;
+                narrow_info.original_type = class_name;
+                narrow_info.narrowed_type = class_name;
+                narrow_info.is_exact = true;
+
+                block_type_narrowing_[block_idx][inst.result] = narrow_info;
+            }
+        }
+    }
+
+    // Note: More sophisticated narrowing from "is T" checks would require
+    // tracking vtable comparison patterns across blocks. This is deferred
+    // for now as the codegen directly emits boolean constants for many
+    // type checks when types are statically known.
+}
+
+void DevirtualizationPass::propagate_narrowing_to_successors(const BasicBlock& block,
+                                                             size_t block_idx) {
+    // Get successors from terminator
+    std::vector<size_t> successors;
+
+    // Extract successors based on terminator type
+    if (block.terminator.has_value()) {
+        const auto& term = *block.terminator;
+        if (auto* br = std::get_if<BranchTerm>(&term)) {
+            successors.push_back(br->target);
+        } else if (auto* cond_br = std::get_if<CondBranchTerm>(&term)) {
+            successors.push_back(cond_br->true_block);
+            successors.push_back(cond_br->false_block);
+        } else if (auto* sw = std::get_if<SwitchTerm>(&term)) {
+            successors.push_back(sw->default_block);
+            for (const auto& sw_case : sw->cases) {
+                successors.push_back(sw_case.second);
+            }
+        }
+        // ReturnTerm and UnreachableTerm have no successors
+    }
+
+    // Propagate current narrowing to successors that don't have their own narrowing
+    for (size_t succ : successors) {
+        auto& succ_narrowing = block_type_narrowing_[succ];
+        for (const auto& [value_id, info] : current_narrowing_) {
+            if (succ_narrowing.find(value_id) == succ_narrowing.end()) {
+                // Only propagate if successor doesn't already have narrowing
+                // (branch-specific narrowing takes priority)
+                succ_narrowing[value_id] = info;
+            }
+        }
+    }
+
+    (void)block_idx;
+}
+
+auto DevirtualizationPass::get_narrowed_type(ValueId value) const -> std::optional<std::string> {
+    auto it = current_narrowing_.find(value);
+    if (it != current_narrowing_.end()) {
+        return it->second.narrowed_type;
+    }
+    return std::nullopt;
+}
+
+auto DevirtualizationPass::is_exact_type(ValueId value) const -> bool {
+    auto it = current_narrowing_.find(value);
+    if (it != current_narrowing_.end()) {
+        return it->second.is_exact;
+    }
+    return false;
+}
+
+// ============================================================================
+// Whole-Program Analysis (Phase 2.4.3)
+// ============================================================================
+
+void DevirtualizationPass::build_whole_program_hierarchy() const {
+    if (!whole_program_config_.enabled) {
+        return;
+    }
+
+    // Build standard hierarchy first
+    build_class_hierarchy();
+
+    // Collect all classes from all modules
+    whole_program_classes_.clear();
+    for (const auto& [name, _] : class_hierarchy_) {
+        whole_program_classes_.insert(name);
+    }
+
+    // In whole-program mode, we can be more aggressive about devirtualization
+    // because we know all possible implementations
+    // This enables devirtualization for leaf classes even if they're not sealed
+}
+
+auto DevirtualizationPass::is_safe_for_whole_program(const std::string& class_name) const -> bool {
+    if (!whole_program_config_.enabled) {
+        return false;
+    }
+
+    // Check if class is excluded
+    for (const auto& excluded : whole_program_config_.excluded_classes) {
+        if (class_name == excluded) {
+            return false;
+        }
+    }
+
+    // Check if class is in our whole-program analysis
+    if (whole_program_classes_.count(class_name) == 0) {
+        return false;
+    }
+
+    // If dynamic loading invalidation is enabled, don't devirtualize
+    // non-sealed classes that could have subclasses loaded later
+    if (whole_program_config_.invalidate_on_dynamic_load) {
+        auto info = get_class_info(class_name);
+        if (info && !info->is_sealed && !info->is_leaf()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void DevirtualizationPass::invalidate_hierarchy() {
+    hierarchy_built_ = false;
+    class_hierarchy_.clear();
+    whole_program_classes_.clear();
+}
+
+// ============================================================================
+// Profile-Guided Optimization (Phase 3.1.5/3.1.6)
+// ============================================================================
+
+auto DevirtualizationPass::get_profile_for_call(const std::string& call_site,
+                                                const std::string& method_name) const
+    -> std::optional<TypeProfileData> {
+    if (!has_profile_data_) {
+        return std::nullopt;
+    }
+
+    for (const auto& data : profile_data_.call_sites) {
+        if (data.call_site == call_site && data.method_name == method_name) {
+            return data;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void DevirtualizationPass::record_type_observation(const std::string& call_site,
+                                                   const std::string& method_name,
+                                                   const std::string& receiver_type) {
+    if (!instrumentation_enabled_) {
+        return;
+    }
+
+    // Find or create the call site entry
+    TypeProfileData* entry = nullptr;
+    for (auto& data : instrumentation_data_.call_sites) {
+        if (data.call_site == call_site && data.method_name == method_name) {
+            entry = &data;
+            break;
+        }
+    }
+
+    if (!entry) {
+        instrumentation_data_.call_sites.push_back({call_site, method_name, {}});
+        entry = &instrumentation_data_.call_sites.back();
+    }
+
+    // Increment type count
+    entry->type_counts[receiver_type]++;
+}
+
+auto DevirtualizationPass::profile_guided_devirt(const std::string& call_site,
+                                                 const std::string& method_name) const
+    -> std::optional<std::pair<std::string, float>> {
+    auto profile = get_profile_for_call(call_site, method_name);
+    if (!profile) {
+        return std::nullopt;
+    }
+
+    auto [most_frequent, confidence] = profile->most_frequent_type();
+    if (most_frequent.empty() || confidence < 0.5f) {
+        // Need at least 50% confidence for speculative devirtualization
+        return std::nullopt;
+    }
+
+    return {{most_frequent, confidence}};
+}
+
+// ============================================================================
+// TypeProfileFile Implementation
+// ============================================================================
+
+auto TypeProfileFile::load(const std::string& path) -> std::optional<TypeProfileFile> {
+    // Simplified implementation - in production, use proper JSON parsing
+    (void)path;
+    // TODO: Implement JSON parsing for profile data
+    return std::nullopt;
+}
+
+auto TypeProfileFile::save(const std::string& path) const -> bool {
+    // Simplified implementation - in production, use proper JSON serialization
+    (void)path;
+    // TODO: Implement JSON serialization for profile data
+    return false;
 }
 
 } // namespace tml::mir

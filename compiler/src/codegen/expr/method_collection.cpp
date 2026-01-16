@@ -125,6 +125,22 @@ auto LLVMIRGen::gen_collection_method(const parser::MethodCallExpr& call,
             emit_line("  call void @list_destroy(ptr " + handle + ")");
             return "void";
         }
+        if (method == "remove") {
+            if (call.args.empty()) {
+                report_error("remove requires an index argument", call.span);
+                return "0";
+            }
+            std::string idx = gen_expr(*call.args[0]);
+            std::string idx_type = last_expr_type_;
+            std::string idx_i64 = idx;
+            if (idx_type == "i32") {
+                idx_i64 = fresh_reg();
+                emit_line("  " + idx_i64 + " = sext i32 " + idx + " to i64");
+            }
+            emit_line("  call void @list_remove(ptr " + handle + ", i64 " + idx_i64 + ")");
+            last_expr_type_ = "void";
+            return "void";
+        }
     }
 
     // HashMap methods

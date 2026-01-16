@@ -151,11 +151,21 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         }
     }
 
-    // Allocate struct - heap for classes, stack for structs
+    // Allocate struct - heap for classes (unless value class), stack for structs
     std::string ptr = fresh_reg();
     bool is_class = struct_type.starts_with("%class.");
+
+    // Check if this class is a value class candidate (sealed, no virtual methods)
+    bool is_value_class = false;
     if (is_class) {
-        // Heap allocate for classes (reference types)
+        auto class_def = env_.lookup_class(base_name);
+        if (class_def) {
+            is_value_class = env_.is_value_class_candidate(base_name);
+        }
+    }
+
+    if (is_class && !is_value_class) {
+        // Heap allocate for regular classes (reference types)
         // Calculate actual size of the class struct using LLVM GEP trick:
         // Get the address offset from element 0 to element 1, which equals the struct size
         std::string size_ptr = fresh_reg();
@@ -170,6 +180,7 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                   ", i32 0, i32 0");
         emit_line("  store ptr @vtable." + base_name + ", ptr " + vtable_ptr);
     } else {
+        // Stack allocate for structs and value classes
         emit_line("  " + ptr + " = alloca " + struct_type);
     }
 
@@ -258,6 +269,25 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             } else if (target_field_type == "i64") {
                 expected_literal_type_ = "i64";
                 expected_literal_is_unsigned_ = false;
+            }
+            // Handle array types like "[4 x i8]" - extract element type for coercion
+            else if (target_field_type.starts_with("[") &&
+                     target_field_type.find(" x ") != std::string::npos) {
+                // Parse "[N x elem_type]" to extract elem_type
+                size_t x_pos = target_field_type.find(" x ");
+                if (x_pos != std::string::npos) {
+                    std::string elem_type = target_field_type.substr(x_pos + 3);
+                    // Remove trailing "]"
+                    if (!elem_type.empty() && elem_type.back() == ']') {
+                        elem_type.pop_back();
+                    }
+                    // Set expected literal type for array elements
+                    if (elem_type == "i8" || elem_type == "i16" || elem_type == "i32" ||
+                        elem_type == "i64") {
+                        expected_literal_type_ = elem_type;
+                        expected_literal_is_unsigned_ = false;
+                    }
+                }
             }
 
             field_val = gen_expr(*s.fields[i].second);

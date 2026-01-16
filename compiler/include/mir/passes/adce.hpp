@@ -54,8 +54,8 @@ protected:
 
 private:
     // Mark an instruction as live and propagate to its operands
-    auto mark_live(const Function& func, ValueId value,
-                   std::unordered_set<ValueId>& live_values) -> void;
+    auto mark_live(const Function& func, ValueId value, std::unordered_set<ValueId>& live_values)
+        -> void;
 
     // Check if instruction has observable side effects
     auto has_side_effects(const InstructionData& inst) -> bool;

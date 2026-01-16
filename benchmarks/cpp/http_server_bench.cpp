@@ -1,7 +1,7 @@
 // HTTP Server Simulation Benchmark - C++ version
+#include <cstdint>
 #include <iostream>
 #include <string>
-#include <cstdint>
 
 constexpr int32_t METHOD_GET = 0;
 constexpr int32_t METHOD_POST = 1;
@@ -20,21 +20,44 @@ struct HttpRequest {
     int64_t request_id;
 
     static HttpRequest create(int32_t method, const std::string& path, int64_t request_id) {
-        return HttpRequest{method, path, "localhost:8080", "application/json", 0,
-            "CPP-Benchmark/1.0", "application/json", "keep-alive", "", request_id};
+        return HttpRequest{method,
+                           path,
+                           "localhost:8080",
+                           "application/json",
+                           0,
+                           "CPP-Benchmark/1.0",
+                           "application/json",
+                           "keep-alive",
+                           "",
+                           request_id};
     }
 
     static HttpRequest create_with_body(int32_t method, const std::string& path,
                                         const std::string& body, int64_t request_id) {
-        return HttpRequest{method, path, "localhost:8080", "application/json",
-            static_cast<int64_t>(body.length()), "CPP-Benchmark/1.0", "application/json",
-            "keep-alive", body, request_id};
+        return HttpRequest{method,
+                           path,
+                           "localhost:8080",
+                           "application/json",
+                           static_cast<int64_t>(body.length()),
+                           "CPP-Benchmark/1.0",
+                           "application/json",
+                           "keep-alive",
+                           body,
+                           request_id};
     }
 
-    bool is_get() const { return method == METHOD_GET; }
-    bool is_post() const { return method == METHOD_POST; }
-    int64_t get_request_id() const { return request_id; }
-    int64_t get_content_length() const { return content_length; }
+    bool is_get() const {
+        return method == METHOD_GET;
+    }
+    bool is_post() const {
+        return method == METHOD_POST;
+    }
+    int64_t get_request_id() const {
+        return request_id;
+    }
+    int64_t get_content_length() const {
+        return content_length;
+    }
 };
 
 struct HttpResponse {
@@ -48,35 +71,69 @@ struct HttpResponse {
     int64_t request_id;
 
     static HttpResponse ok(const std::string& body, int64_t request_id) {
-        return HttpResponse{200, "OK", "application/json", static_cast<int64_t>(body.length()),
-            "CPP-Server/1.0", "keep-alive", body, request_id};
+        return HttpResponse{200,
+                            "OK",
+                            "application/json",
+                            static_cast<int64_t>(body.length()),
+                            "CPP-Server/1.0",
+                            "keep-alive",
+                            body,
+                            request_id};
     }
 
     static HttpResponse created(const std::string& body, int64_t request_id) {
-        return HttpResponse{201, "Created", "application/json", static_cast<int64_t>(body.length()),
-            "CPP-Server/1.0", "keep-alive", body, request_id};
+        return HttpResponse{201,
+                            "Created",
+                            "application/json",
+                            static_cast<int64_t>(body.length()),
+                            "CPP-Server/1.0",
+                            "keep-alive",
+                            body,
+                            request_id};
     }
 
     static HttpResponse not_found(int64_t request_id) {
         std::string body = "{\"error\": \"Not Found\"}";
-        return HttpResponse{404, "Not Found", "application/json", static_cast<int64_t>(body.length()),
-            "CPP-Server/1.0", "close", body, request_id};
+        return HttpResponse{404,
+                            "Not Found",
+                            "application/json",
+                            static_cast<int64_t>(body.length()),
+                            "CPP-Server/1.0",
+                            "close",
+                            body,
+                            request_id};
     }
 
     static HttpResponse bad_request(const std::string&, int64_t request_id) {
         std::string body = "{\"error\": \"Bad Request\"}";
-        return HttpResponse{400, "Bad Request", "application/json", static_cast<int64_t>(body.length()),
-            "CPP-Server/1.0", "close", body, request_id};
+        return HttpResponse{400,
+                            "Bad Request",
+                            "application/json",
+                            static_cast<int64_t>(body.length()),
+                            "CPP-Server/1.0",
+                            "close",
+                            body,
+                            request_id};
     }
 
     static HttpResponse server_error(int64_t request_id) {
         std::string body = "{\"error\": \"Internal Server Error\"}";
-        return HttpResponse{500, "Internal Server Error", "application/json",
-            static_cast<int64_t>(body.length()), "CPP-Server/1.0", "close", body, request_id};
+        return HttpResponse{500,
+                            "Internal Server Error",
+                            "application/json",
+                            static_cast<int64_t>(body.length()),
+                            "CPP-Server/1.0",
+                            "close",
+                            body,
+                            request_id};
     }
 
-    bool is_success() const { return status_code >= 200 && status_code < 300; }
-    int64_t get_content_length() const { return content_length; }
+    bool is_success() const {
+        return status_code >= 200 && status_code < 300;
+    }
+    int64_t get_content_length() const {
+        return content_length;
+    }
 };
 
 struct ServerStats {
@@ -91,18 +148,23 @@ struct ServerStats {
     void record_request(const HttpRequest& req) {
         total_requests++;
         total_bytes_in += req.get_content_length();
-        if (req.is_get()) get_requests++;
-        if (req.is_post()) post_requests++;
+        if (req.is_get())
+            get_requests++;
+        if (req.is_post())
+            post_requests++;
     }
 
     void record_response(const HttpResponse& resp) {
         total_bytes_out += resp.get_content_length();
-        if (resp.is_success()) successful_responses++;
-        else error_responses++;
+        if (resp.is_success())
+            successful_responses++;
+        else
+            error_responses++;
     }
 
     int64_t get_success_rate() const {
-        if (total_requests == 0) return 0;
+        if (total_requests == 0)
+            return 0;
         return (successful_responses * 100) / total_requests;
     }
 };
@@ -114,16 +176,25 @@ HttpResponse handle_request(const HttpRequest& req, ServerStats& stats) {
 
     HttpResponse response = [&]() {
         switch (route) {
-            case 0: return HttpResponse::ok("{\"status\": \"healthy\"}", req_id);
-            case 1:
-                if (req.is_get()) return HttpResponse::ok("{\"users\": [{\"id\": 1, \"name\": \"Alice\"}]}", req_id);
-                else if (req.is_post()) return HttpResponse::created("{\"id\": 2, \"name\": \"Bob\"}", req_id);
-                else return HttpResponse::bad_request("Method not allowed", req_id);
-            case 2: return HttpResponse::ok("{\"products\": [{\"id\": 1, \"price\": 99.99}]}", req_id);
-            case 3: return HttpResponse::ok("{\"orders\": []}", req_id);
-            case 4: return HttpResponse::not_found(req_id);
-            case 5: return HttpResponse::server_error(req_id);
-            default: return HttpResponse::ok("{\"message\": \"OK\"}", req_id);
+        case 0:
+            return HttpResponse::ok("{\"status\": \"healthy\"}", req_id);
+        case 1:
+            if (req.is_get())
+                return HttpResponse::ok("{\"users\": [{\"id\": 1, \"name\": \"Alice\"}]}", req_id);
+            else if (req.is_post())
+                return HttpResponse::created("{\"id\": 2, \"name\": \"Bob\"}", req_id);
+            else
+                return HttpResponse::bad_request("Method not allowed", req_id);
+        case 2:
+            return HttpResponse::ok("{\"products\": [{\"id\": 1, \"price\": 99.99}]}", req_id);
+        case 3:
+            return HttpResponse::ok("{\"orders\": []}", req_id);
+        case 4:
+            return HttpResponse::not_found(req_id);
+        case 5:
+            return HttpResponse::server_error(req_id);
+        default:
+            return HttpResponse::ok("{\"message\": \"OK\"}", req_id);
         }
     }();
 
@@ -137,7 +208,8 @@ int64_t bench_get_requests(int64_t n) {
     for (int64_t i = 0; i < n; i++) {
         HttpRequest req = HttpRequest::create(METHOD_GET, "/api/users", i);
         HttpResponse resp = handle_request(req, stats);
-        if (resp.is_success()) successful++;
+        if (resp.is_success())
+            successful++;
     }
     return successful;
 }
@@ -149,7 +221,8 @@ int64_t bench_post_requests(int64_t n) {
     for (int64_t i = 0; i < n; i++) {
         HttpRequest req = HttpRequest::create_with_body(METHOD_POST, "/api/users", body, i);
         HttpResponse resp = handle_request(req, stats);
-        if (resp.is_success()) successful++;
+        if (resp.is_success())
+            successful++;
     }
     return successful;
 }
@@ -159,8 +232,8 @@ int64_t bench_mixed_workload(int64_t n) {
     std::string post_body = "{\"data\": \"payload\"}";
     for (int64_t i = 0; i < n; i++) {
         int64_t request_type = i % 10;
-        HttpRequest req = (request_type < 7)
-            ? HttpRequest::create(METHOD_GET, "/api/data", i)
+        HttpRequest req =
+            (request_type < 7) ? HttpRequest::create(METHOD_GET, "/api/data", i)
             : (request_type < 9)
                 ? HttpRequest::create_with_body(METHOD_POST, "/api/data", post_body, i)
                 : HttpRequest::create(METHOD_PUT, "/api/data", i);
@@ -172,9 +245,11 @@ int64_t bench_mixed_workload(int64_t n) {
 int64_t bench_object_creation(int64_t n) {
     int64_t count = 0;
     for (int64_t i = 0; i < n; i++) {
-        HttpRequest req = HttpRequest::create_with_body(METHOD_POST, "/api/test", "{\"key\": \"value\"}", i);
+        HttpRequest req =
+            HttpRequest::create_with_body(METHOD_POST, "/api/test", "{\"key\": \"value\"}", i);
         HttpResponse resp = HttpResponse::ok("{\"result\": \"success\", \"id\": 12345}", i);
-        if (resp.is_success()) count++;
+        if (resp.is_success())
+            count++;
     }
     return count;
 }

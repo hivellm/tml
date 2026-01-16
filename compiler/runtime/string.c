@@ -469,3 +469,184 @@ const char* char_to_string(uint8_t c) {
     char_to_string_buffer[0] = (char)c;
     return char_to_string_buffer;
 }
+
+// str_find(s: Str, pattern: Str) -> I64 (returns -1 if not found)
+int64_t str_find(const char* s, const char* pattern) {
+    if (!s || !pattern)
+        return -1;
+    const char* found = strstr(s, pattern);
+    if (!found)
+        return -1;
+    return (int64_t)(found - s);
+}
+
+// str_rfind(s: Str, pattern: Str) -> I64 (returns -1 if not found)
+int64_t str_rfind(const char* s, const char* pattern) {
+    if (!s || !pattern)
+        return -1;
+    size_t s_len = strlen(s);
+    size_t p_len = strlen(pattern);
+    if (p_len > s_len)
+        return -1;
+
+    // Search backwards
+    for (size_t i = s_len - p_len + 1; i > 0; i--) {
+        if (strncmp(s + i - 1, pattern, p_len) == 0) {
+            return (int64_t)(i - 1);
+        }
+    }
+    return -1;
+}
+
+// str_trim_start(s: Str) -> Str
+const char* str_trim_start(const char* s) {
+    if (!s)
+        return "";
+    while (isspace((unsigned char)*s))
+        s++;
+    size_t len = strlen(s);
+    if (len >= sizeof(str_buffer))
+        len = sizeof(str_buffer) - 1;
+    memcpy(str_buffer, s, len);
+    str_buffer[len] = '\0';
+    return str_buffer;
+}
+
+// str_trim_end(s: Str) -> Str
+const char* str_trim_end(const char* s) {
+    if (!s)
+        return "";
+    size_t len = strlen(s);
+    while (len > 0 && isspace((unsigned char)s[len - 1]))
+        len--;
+    if (len >= sizeof(str_buffer))
+        len = sizeof(str_buffer) - 1;
+    memcpy(str_buffer, s, len);
+    str_buffer[len] = '\0';
+    return str_buffer;
+}
+
+// str_parse_i64(s: Str) -> I64 (returns 0 on parse failure)
+int64_t str_parse_i64(const char* s) {
+    if (!s)
+        return 0;
+    char* endptr;
+    int64_t result = strtoll(s, &endptr, 10);
+    return result;
+}
+
+// str_replace(s: Str, from: Str, to: Str) -> Str
+const char* str_replace(const char* s, const char* from, const char* to) {
+    if (!s)
+        return "";
+    if (!from || !*from) {
+        size_t len = strlen(s);
+        if (len >= sizeof(str_buffer))
+            len = sizeof(str_buffer) - 1;
+        memcpy(str_buffer, s, len);
+        str_buffer[len] = '\0';
+        return str_buffer;
+    }
+    if (!to)
+        to = "";
+
+    size_t from_len = strlen(from);
+    size_t to_len = strlen(to);
+    size_t result_len = 0;
+    const char* p = s;
+
+    // First pass: calculate result length
+    while (*p) {
+        if (strncmp(p, from, from_len) == 0) {
+            result_len += to_len;
+            p += from_len;
+        } else {
+            result_len++;
+            p++;
+        }
+    }
+
+    if (result_len >= sizeof(str_buffer)) {
+        // Truncate if too long
+        result_len = sizeof(str_buffer) - 1;
+    }
+
+    // Second pass: build result
+    p = s;
+    char* out = str_buffer;
+    char* end = str_buffer + result_len;
+
+    while (*p && out < end) {
+        if (strncmp(p, from, from_len) == 0) {
+            size_t copy_len = to_len;
+            if (out + copy_len > end)
+                copy_len = end - out;
+            memcpy(out, to, copy_len);
+            out += copy_len;
+            p += from_len;
+        } else {
+            *out++ = *p++;
+        }
+    }
+    *out = '\0';
+    return str_buffer;
+}
+
+// str_split(s: Str, delimiter: Str) -> ptr (returns list of strings)
+// Note: Returns a TmlList* containing string pointers
+// Forward declaration of list functions from essential.c
+typedef struct TmlList TmlList;
+extern TmlList* list_create(int64_t initial_capacity);
+extern void list_push(TmlList* list, int64_t value);
+
+void* str_split(const char* s, const char* delimiter) {
+    TmlList* result = list_create(4);
+    if (!s || !delimiter || !*delimiter) {
+        if (s) {
+            list_push(result, (int64_t)s);
+        }
+        return result;
+    }
+
+    size_t delim_len = strlen(delimiter);
+    const char* start = s;
+    const char* found;
+
+    while ((found = strstr(start, delimiter)) != NULL) {
+        // Allocate and copy substring
+        size_t part_len = found - start;
+        char* part = (char*)malloc(part_len + 1);
+        if (part) {
+            memcpy(part, start, part_len);
+            part[part_len] = '\0';
+            list_push(result, (int64_t)part);
+        }
+        start = found + delim_len;
+    }
+
+    // Add remaining part
+    if (*start) {
+        size_t part_len = strlen(start);
+        char* part = (char*)malloc(part_len + 1);
+        if (part) {
+            memcpy(part, start, part_len);
+            part[part_len] = '\0';
+            list_push(result, (int64_t)part);
+        }
+    }
+
+    return result;
+}
+
+// str_chars(s: Str) -> ptr (returns list of character codes)
+void* str_chars(const char* s) {
+    TmlList* result = list_create(s ? strlen(s) : 0);
+    if (!s)
+        return result;
+
+    while (*s) {
+        list_push(result, (int64_t)(unsigned char)*s);
+        s++;
+    }
+    return result;
+}

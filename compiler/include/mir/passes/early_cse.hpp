@@ -19,13 +19,15 @@
 namespace tml::mir {
 
 class EarlyCSEPass : public FunctionPass {
-  public:
-    [[nodiscard]] auto name() const -> std::string override { return "EarlyCSE"; }
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "EarlyCSE";
+    }
 
-  protected:
+protected:
     auto run_on_function(Function& func) -> bool override;
 
-  private:
+private:
     // Expression key for hashing
     struct ExprKey {
         std::string op;

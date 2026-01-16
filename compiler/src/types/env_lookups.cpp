@@ -117,6 +117,11 @@ bool TypeEnv::types_match(const TypePtr& a, const TypePtr& b) {
 }
 
 auto TypeEnv::lookup_func(const std::string& name) const -> std::optional<FuncSig> {
+    // Debug: trace function lookups for impl methods
+    if (name.find("::") != std::string::npos) {
+        // Uncomment to debug: std::cerr << "[LOOKUP] Looking for " << name << " in functions_
+        // (size=" << functions_.size() << ")\n";
+    }
     auto it = functions_.find(name);
     if (it != functions_.end() && !it->second.empty()) {
         return it->second[0];

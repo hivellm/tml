@@ -388,6 +388,222 @@ auto LLVMIRGen::gen_primitive_method(const parser::MethodCallExpr& call,
             last_expr_type_ = "ptr";
             return receiver;
         }
+
+        // char_at(index: I64) -> I32
+        if (method == "char_at") {
+            if (call.args.empty()) {
+                report_error("char_at() requires an index argument", call.span);
+                return "0";
+            }
+            std::string idx = gen_expr(*call.args[0]);
+            std::string idx_type = last_expr_type_;
+            std::string idx_i32 = idx;
+            if (idx_type == "i64") {
+                idx_i32 = fresh_reg();
+                emit_line("  " + idx_i32 + " = trunc i64 " + idx + " to i32");
+            }
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i32 @str_char_at(ptr " + receiver + ", i32 " +
+                      idx_i32 + ")");
+            last_expr_type_ = "i32";
+            return result;
+        }
+
+        // slice_str(start: I64, end: I64) -> Str, also slice()
+        if (method == "slice_str" || method == "slice") {
+            if (call.args.size() < 2) {
+                report_error("slice_str() requires start and end arguments", call.span);
+                return "0";
+            }
+            std::string start = gen_expr(*call.args[0]);
+            std::string end = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_substring(ptr " + receiver + ", i64 " +
+                      start + ", i64 " + end + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // to_uppercase() -> Str
+        if (method == "to_uppercase") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_to_upper(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // to_lowercase() -> Str
+        if (method == "to_lowercase") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_to_lower(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // starts_with(prefix: Str) -> Bool
+        if (method == "starts_with") {
+            if (call.args.empty()) {
+                report_error("starts_with() requires a prefix argument", call.span);
+                return "0";
+            }
+            std::string prefix = gen_expr(*call.args[0]);
+            std::string result32 = fresh_reg();
+            emit_line("  " + result32 + " = call i32 @str_starts_with(ptr " + receiver + ", ptr " +
+                      prefix + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // ends_with(suffix: Str) -> Bool
+        if (method == "ends_with") {
+            if (call.args.empty()) {
+                report_error("ends_with() requires a suffix argument", call.span);
+                return "0";
+            }
+            std::string suffix = gen_expr(*call.args[0]);
+            std::string result32 = fresh_reg();
+            emit_line("  " + result32 + " = call i32 @str_ends_with(ptr " + receiver + ", ptr " +
+                      suffix + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // contains(pattern: Str) -> Bool
+        if (method == "contains") {
+            if (call.args.empty()) {
+                report_error("contains() requires a pattern argument", call.span);
+                return "0";
+            }
+            std::string pattern = gen_expr(*call.args[0]);
+            std::string result32 = fresh_reg();
+            emit_line("  " + result32 + " = call i32 @str_contains(ptr " + receiver + ", ptr " +
+                      pattern + ")");
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = icmp ne i32 " + result32 + ", 0");
+            last_expr_type_ = "i1";
+            return result;
+        }
+
+        // find(pattern: Str) -> I64 (returns -1 if not found)
+        if (method == "find") {
+            if (call.args.empty()) {
+                report_error("find() requires a pattern argument", call.span);
+                return "0";
+            }
+            std::string pattern = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @str_find(ptr " + receiver + ", ptr " + pattern +
+                      ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+
+        // rfind(pattern: Str) -> I64 (returns -1 if not found)
+        if (method == "rfind") {
+            if (call.args.empty()) {
+                report_error("rfind() requires a pattern argument", call.span);
+                return "0";
+            }
+            std::string pattern = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call i64 @str_rfind(ptr " + receiver + ", ptr " +
+                      pattern + ")");
+            last_expr_type_ = "i64";
+            return result;
+        }
+
+        // split(delimiter: Str) -> List[Str]
+        if (method == "split") {
+            if (call.args.empty()) {
+                report_error("split() requires a delimiter argument", call.span);
+                return "0";
+            }
+            std::string delim = gen_expr(*call.args[0]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_split(ptr " + receiver + ", ptr " + delim +
+                      ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // chars() -> List[I32]
+        if (method == "chars") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_chars(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // trim() -> Str
+        if (method == "trim") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_trim(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // trim_start() -> Str
+        if (method == "trim_start") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_trim_start(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // trim_end() -> Str
+        if (method == "trim_end") {
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_trim_end(ptr " + receiver + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
+
+        // parse_i64() -> Maybe[I64]
+        if (method == "parse_i64") {
+            std::string value = fresh_reg();
+            emit_line("  " + value + " = call i64 @str_parse_i64(ptr " + receiver + ")");
+            // Return Just(value) - create Maybe struct with tag=0 and value
+            std::string result = fresh_reg();
+            emit_line("  " + result +
+                      " = insertvalue %struct.Maybe__I64 { i32 0, i64 undef }, i64 " + value +
+                      ", 1");
+            last_expr_type_ = "%struct.Maybe__I64";
+            return result;
+        }
+
+        // parse_u16() -> Maybe[U16]
+        if (method == "parse_u16") {
+            std::string value64 = fresh_reg();
+            emit_line("  " + value64 + " = call i64 @str_parse_i64(ptr " + receiver + ")");
+            std::string value = fresh_reg();
+            emit_line("  " + value + " = trunc i64 " + value64 + " to i16");
+            // Return Just(value) - create Maybe struct with tag=0 and value
+            std::string result = fresh_reg();
+            emit_line("  " + result +
+                      " = insertvalue %struct.Maybe__U16 { i32 0, i16 undef }, i16 " + value +
+                      ", 1");
+            last_expr_type_ = "%struct.Maybe__U16";
+            return result;
+        }
+
+        // replace(from: Str, to: Str) -> Str
+        if (method == "replace") {
+            if (call.args.size() < 2) {
+                report_error("replace() requires 'from' and 'to' arguments", call.span);
+                return "0";
+            }
+            std::string from = gen_expr(*call.args[0]);
+            std::string to = gen_expr(*call.args[1]);
+            std::string result = fresh_reg();
+            emit_line("  " + result + " = call ptr @str_replace(ptr " + receiver + ", ptr " + from +
+                      ", ptr " + to + ")");
+            last_expr_type_ = "ptr";
+            return result;
+        }
     }
 
     // Try to look up user-defined impl methods for primitive types (e.g., I32::abs)

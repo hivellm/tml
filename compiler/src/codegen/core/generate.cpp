@@ -300,7 +300,7 @@ auto LLVMIRGen::generate(const parser::Module& module)
     if (!dyn_type_defs.empty()) {
         emit_line("; Dynamic dispatch types");
         output_ << dyn_type_defs;
-        type_defs_buffer_.str("");  // Clear so we don't emit them twice later
+        type_defs_buffer_.str(""); // Clear so we don't emit them twice later
     }
 
     // Buffer function code separately so we can emit type instantiations before functions

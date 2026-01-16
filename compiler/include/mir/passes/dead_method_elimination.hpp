@@ -47,30 +47,30 @@ namespace tml::mir {
 
 /// Statistics collected during dead method elimination.
 struct DeadMethodStats {
-    size_t total_methods = 0;          ///< Total methods in module.
-    size_t entry_points = 0;           ///< Number of entry points.
-    size_t reachable_methods = 0;      ///< Methods reachable from entry points.
-    size_t unreachable_methods = 0;    ///< Methods that are dead.
-    size_t methods_eliminated = 0;     ///< Methods actually removed.
-    size_t virtual_methods = 0;        ///< Virtual methods analyzed.
-    size_t dead_virtual_methods = 0;   ///< Dead virtual methods.
+    size_t total_methods = 0;        ///< Total methods in module.
+    size_t entry_points = 0;         ///< Number of entry points.
+    size_t reachable_methods = 0;    ///< Methods reachable from entry points.
+    size_t unreachable_methods = 0;  ///< Methods that are dead.
+    size_t methods_eliminated = 0;   ///< Methods actually removed.
+    size_t virtual_methods = 0;      ///< Virtual methods analyzed.
+    size_t dead_virtual_methods = 0; ///< Dead virtual methods.
 
     /// Elimination rate (0.0 to 1.0).
     [[nodiscard]] auto elimination_rate() const -> double {
-        if (total_methods == 0) return 0.0;
-        return static_cast<double>(methods_eliminated) /
-               static_cast<double>(total_methods);
+        if (total_methods == 0)
+            return 0.0;
+        return static_cast<double>(methods_eliminated) / static_cast<double>(total_methods);
     }
 };
 
 /// Information about a method for reachability analysis.
 struct MethodInfo {
-    std::string full_name;             ///< Full method name (Class_method).
-    std::string class_name;            ///< Owning class name.
-    std::string method_name;           ///< Method name without class prefix.
-    bool is_virtual = false;           ///< True if method can be overridden.
-    bool is_entry_point = false;       ///< True if this is an entry point.
-    bool is_reachable = false;         ///< True if reachable from entry points.
+    std::string full_name;                 ///< Full method name (Class_method).
+    std::string class_name;                ///< Owning class name.
+    std::string method_name;               ///< Method name without class prefix.
+    bool is_virtual = false;               ///< True if method can be overridden.
+    bool is_entry_point = false;           ///< True if this is an entry point.
+    bool is_reachable = false;             ///< True if reachable from entry points.
     std::unordered_set<std::string> calls; ///< Methods this method calls.
 };
 

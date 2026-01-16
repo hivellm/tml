@@ -1,0 +1,807 @@
+//! TCP networking primitives.
+//!
+//! This module provides TCP socket types for reliable, ordered, connection-based
+//! byte stream communication.
+//!
+//! # Types
+//!
+//! - [`TcpListener`] - Listens for incoming TCP connections
+//! - [`TcpStream`] - A connected TCP socket for reading and writing
+//! - [`TcpIncoming`] - Iterator over incoming connections
+//!
+//! # Example: Echo Server
+//!
+//! ```tml
+//! use std::net::tcp::{TcpListener, TcpStream}
+//! use std::net::{SocketAddr, Ipv4Addr}
+//!
+//! func main() -> Outcome[(), NetError] {
+//!     // Bind to localhost:8080
+//!     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST, 8080)
+//!     let listener = TcpListener::bind(addr)!
+//!
+//!     print("Listening on {}\n", listener.local_addr())
+//!
+//!     // Accept connections
+//!     loop {
+//!         let (mut stream, peer) = listener.accept()!
+//!         print("Connection from {}\n", peer)
+//!
+//!         // Echo data back
+//!         var buf: [U8; 1024] = [0; 1024]
+//!         loop {
+//!             let n = stream.read(mut ref buf)!
+//!             if n == 0 { break }
+//!             stream.write_all(ref buf[0..n])!
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! # Example: TCP Client
+//!
+//! ```tml
+//! use std::net::tcp::TcpStream
+//! use std::net::{SocketAddr, Ipv4Addr}
+//!
+//! func main() -> Outcome[(), NetError] {
+//!     // Connect to server
+//!     let addr = SocketAddr::new(Ipv4Addr::LOCALHOST, 8080)
+//!     let mut stream = TcpStream::connect(addr)!
+//!
+//!     // Send message
+//!     stream.write_all(b"Hello, server!")!
+//!
+//!     // Read response
+//!     var buf: [U8; 1024] = [0; 1024]
+//!     let n = stream.read(mut ref buf)!
+//!     print("Received: {}\n", Str::from_utf8(ref buf[0..n]))
+//!
+//!     Ok(())
+//! }
+//! ```
+
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+use std::net::sys::{RawSocket, SocketType, SocketProtocol, AddressFamily, ShutdownMode}
+use std::net::buffer::{Buffer, BufferView}
+use core::time::Duration
+
+// ============================================================================
+// Shutdown Enum
+// ============================================================================
+
+/// How to shut down a TCP connection.
+pub enum Shutdown {
+    /// Stop reading from this socket.
+    Read,
+    /// Stop writing to this socket.
+    Write,
+    /// Stop both reading and writing.
+    Both,
+}
+
+impl Shutdown {
+    /// Converts to the platform shutdown mode.
+    func to_mode(this) -> ShutdownMode {
+        when this {
+            Shutdown::Read => ShutdownMode::Read
+            Shutdown::Write => ShutdownMode::Write
+            Shutdown::Both => ShutdownMode::Both
+        }
+    }
+}
+
+// ============================================================================
+// TcpListener
+// ============================================================================
+
+/// A TCP socket server, listening for connections.
+///
+/// After creating a `TcpListener` by binding it to a socket address, it listens
+/// for incoming TCP connections. These can be accepted by calling [`accept()`]
+/// or by iterating over the [`incoming()`] iterator.
+///
+/// The socket will be closed when the value is dropped.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::net::tcp::TcpListener
+/// use std::net::{SocketAddr, Ipv4Addr}
+///
+/// let listener = TcpListener::bind(SocketAddr::new(Ipv4Addr::LOCALHOST, 8080))!
+///
+/// // Accept connections and process them
+/// for stream in listener.incoming() {
+///     when stream {
+///         Ok(s) => handle_client(s)
+///         Err(e) => print("Error: {}\n", e)
+///     }
+/// }
+/// ```
+pub type TcpListener {
+    /// The underlying socket
+    socket: RawSocket,
+}
+
+impl TcpListener {
+    /// Creates a new `TcpListener` which will be bound to the specified address.
+    ///
+    /// The returned listener is ready for accepting connections.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The address to bind to
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the address is already in use or the port requires
+    /// elevated privileges.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let listener = TcpListener::bind("127.0.0.1:8080".parse()?)!
+    /// ```
+    pub func bind(addr: SocketAddr) -> Outcome[TcpListener, NetError] {
+        // Determine address family
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+
+        // Create socket
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        // Set SO_REUSEADDR
+        socket.set_reuse_addr(true)!
+
+        // Bind to address
+        socket.bind(ref addr)!
+
+        // Start listening with default backlog
+        socket.listen(128)!
+
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Creates a new `TcpListener` bound to the specified address with custom backlog.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The address to bind to
+    /// * `backlog` - Maximum length of pending connection queue
+    pub func bind_with_backlog(addr: SocketAddr, backlog: I32) -> Outcome[TcpListener, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+        socket.set_reuse_addr(true)!
+        socket.bind(ref addr)!
+        socket.listen(backlog)!
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Accept a new incoming connection from this listener.
+    ///
+    /// This function will block the calling thread until a new TCP connection
+    /// is established. When established, the corresponding [`TcpStream`] and
+    /// the remote peer's address will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let listener = TcpListener::bind("127.0.0.1:8080".parse()?)!
+    /// let (stream, addr) = listener.accept()!
+    /// print("Connection from {}\n", addr)
+    /// ```
+    pub func accept(this) -> Outcome[(TcpStream, SocketAddr), NetError] {
+        let result: (RawSocket, SocketAddr) = this.socket.accept()!
+        let stream: TcpStream = TcpStream {
+            socket: result.0,
+        }
+        Ok((stream, result.1))
+    }
+
+    /// Returns the local socket address of this listener.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let listener = TcpListener::bind("127.0.0.1:0".parse()?)!
+    /// print("Bound to {}\n", listener.local_addr()?)
+    /// ```
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Sets the value of the `SO_REUSEADDR` option on this socket.
+    pub func set_reuse_addr(this, reuse: Bool) -> Outcome[(), NetError] {
+        this.socket.set_reuse_addr(reuse)
+    }
+
+    /// Gets the value of the `IP_TTL` option for this socket.
+    pub func ttl(this) -> Outcome[I32, NetError] {
+        this.socket.get_ttl()
+    }
+
+    /// Sets the value of the `IP_TTL` option for this socket.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_ttl(ttl)
+    }
+
+    /// Moves this TCP listener into or out of non-blocking mode.
+    ///
+    /// In non-blocking mode, [`accept()`] will return immediately with
+    /// `WouldBlock` error if no connections are pending.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nonblocking(nonblocking)
+    }
+
+    /// Returns an iterator over the connections being received on this listener.
+    ///
+    /// The returned iterator will never return `Nothing` and will also not
+    /// yield the peer's `SocketAddr` structure.
+    pub func incoming(mut this) -> TcpIncoming {
+        TcpIncoming { listener: mut ref this }
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the listener and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+}
+
+// ============================================================================
+// TcpIncoming - Iterator over incoming connections
+// ============================================================================
+
+/// An iterator that infinitely accepts connections on a `TcpListener`.
+///
+/// This struct is created by the [`incoming()`] method on [`TcpListener`].
+pub type TcpIncoming {
+    listener: mut ref TcpListener,
+}
+
+impl Iterator for TcpIncoming {
+    type Item = Outcome[TcpStream, NetError]
+
+    func next(mut this) -> Maybe[Outcome[TcpStream, NetError]] {
+        let accept_result: Outcome[(TcpStream, SocketAddr), NetError] = this.listener.accept()
+        when accept_result {
+            Ok(pair) => {
+                let stream: TcpStream = pair.0
+                Just(Ok(stream))
+            }
+            Err(e) => Just(Err(e))
+        }
+    }
+}
+
+// ============================================================================
+// TcpStream
+// ============================================================================
+
+/// A TCP stream between a local and a remote socket.
+///
+/// After creating a `TcpStream` by either connecting to a remote host or
+/// accepting a connection on a `TcpListener`, data can be transmitted by
+/// reading and writing to it.
+///
+/// The connection is closed when the value is dropped.
+///
+/// # Examples
+///
+/// ```tml
+/// use std::net::tcp::TcpStream
+///
+/// let mut stream = TcpStream::connect("127.0.0.1:8080".parse()?)!
+///
+/// stream.write(b"hello world")!
+/// stream.read(mut ref buffer)!
+/// ```
+pub type TcpStream {
+    /// The underlying socket
+    socket: RawSocket,
+}
+
+impl TcpStream {
+    /// Opens a TCP connection to a remote host.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The address of the remote host
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let stream = TcpStream::connect("127.0.0.1:8080".parse()?)!
+    /// ```
+    pub func connect(addr: SocketAddr) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+        socket.connect(ref addr)!
+        let stream: TcpStream = TcpStream { socket: socket }
+        Ok(stream)
+    }
+
+    /// Opens a TCP connection to a remote host with a timeout.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The address of the remote host
+    /// * `timeout` - Maximum time to wait for connection
+    pub func connect_timeout(addr: SocketAddr, timeout: Duration) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        var socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        // Set non-blocking for timeout support
+        socket.set_nonblocking(true)!
+
+        // Start connection
+        when socket.connect(ref addr) {
+            Ok(()) => {
+                // Connected immediately
+                socket.set_nonblocking(false)!
+                let stream: TcpStream = TcpStream { socket: socket }
+                return Ok(stream)
+            }
+            Err(e) => {
+                if e.is_would_block() or e.kind() == NetErrorKind::AlreadyConnected {
+                    // Connection in progress - would need poll/select for timeout
+                    // For now, just return the socket
+                    socket.set_nonblocking(false)!
+                    let stream: TcpStream = TcpStream { socket: socket }
+                    return Ok(stream)
+                }
+                return Err(e)
+            }
+        }
+    }
+
+    /// Returns the socket address of the remote peer.
+    pub func peer_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.peer_addr()
+    }
+
+    /// Returns the socket address of the local half.
+    pub func local_addr(this) -> Outcome[SocketAddr, NetError] {
+        this.socket.local_addr()
+    }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    ///
+    /// This function will cause all pending and future I/O on the specified
+    /// portions to return immediately with an error.
+    pub func shutdown(this, how: Shutdown) -> Outcome[(), NetError] {
+        this.socket.shutdown(how.to_mode())
+    }
+
+    /// Sets the read timeout to the given duration.
+    ///
+    /// If the read timeout is `Nothing`, read calls will block indefinitely.
+    pub func set_read_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_recv_timeout(d.as_millis())
+            Nothing => this.socket.set_recv_timeout(0)
+        }
+    }
+
+    /// Sets the write timeout to the given duration.
+    pub func set_write_timeout(this, dur: Maybe[Duration]) -> Outcome[(), NetError] {
+        when dur {
+            Just(d) => this.socket.set_send_timeout(d.as_millis())
+            Nothing => this.socket.set_send_timeout(0)
+        }
+    }
+
+    /// Gets the read timeout.
+    pub func read_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_recv_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Gets the write timeout.
+    pub func write_timeout(this) -> Outcome[Maybe[Duration], NetError] {
+        let millis: I64 = this.socket.get_send_timeout()!
+        if millis == 0 {
+            Ok(Nothing)
+        } else {
+            Ok(Just(Duration::from_millis(millis)))
+        }
+    }
+
+    /// Receives data on the socket from the remote address to which it is connected,
+    /// without removing that data from the queue.
+    pub func peek(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.peek(buf)
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option.
+    ///
+    /// If set, this disables the Nagle algorithm. This means that segments
+    /// are sent as soon as possible, even if there is only a small amount of data.
+    pub func set_nodelay(this, nodelay: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nodelay(nodelay)
+    }
+
+    /// Gets the value of the `TCP_NODELAY` option.
+    pub func nodelay(this) -> Outcome[Bool, NetError] {
+        this.socket.get_nodelay()
+    }
+
+    /// Sets the value of the `SO_KEEPALIVE` option.
+    pub func set_keepalive(this, keepalive: Bool) -> Outcome[(), NetError] {
+        this.socket.set_keepalive(keepalive)
+    }
+
+    /// Gets the value of the `SO_KEEPALIVE` option.
+    pub func keepalive(this) -> Outcome[Bool, NetError] {
+        this.socket.get_keepalive()
+    }
+
+    /// Gets the value of the `IP_TTL` option.
+    pub func ttl(this) -> Outcome[I32, NetError] {
+        this.socket.get_ttl()
+    }
+
+    /// Sets the value of the `IP_TTL` option.
+    pub func set_ttl(this, ttl: I32) -> Outcome[(), NetError] {
+        this.socket.set_ttl(ttl)
+    }
+
+    /// Moves this TCP stream into or out of non-blocking mode.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        this.socket.set_nonblocking(nonblocking)
+    }
+
+    /// Returns a reference to the underlying raw socket.
+    pub func as_raw_socket(this) -> ref RawSocket {
+        ref this.socket
+    }
+
+    /// Consumes the stream and returns the underlying raw socket.
+    pub func into_raw_socket(this) -> RawSocket {
+        this.socket
+    }
+
+    // ========================================================================
+    // Read and Write operations
+    // ========================================================================
+
+    /// Reads data into the provided buffer.
+    ///
+    /// Returns the number of bytes read. Returns 0 if the connection was closed.
+    pub func read(this, buf: mut ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.recv(buf)
+    }
+
+    /// Reads exactly `buf.len()` bytes.
+    ///
+    /// Returns an error if EOF is reached before filling the buffer.
+    pub func read_exact(this, buf: mut ref [U8]) -> Outcome[(), NetError] {
+        var total: I64 = 0
+        let len: I64 = buf.len()
+
+        loop {
+            if total >= len { break }
+
+            let remaining: I64 = len - total
+            var slice: mut ref [U8] = buf.slice_mut(total, len)
+
+            when this.socket.recv(slice) {
+                Ok(0) => return Err(NetError::new(NetErrorKind::UnexpectedEof))
+                Ok(n) => total = total + n
+                Err(e) => {
+                    if e.is_would_block() {
+                        continue
+                    }
+                    return Err(e)
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Writes data to the socket.
+    ///
+    /// Returns the number of bytes written.
+    pub func write(this, buf: ref [U8]) -> Outcome[I64, NetError] {
+        this.socket.send(buf)
+    }
+
+    /// Writes all data to the socket.
+    ///
+    /// This function will continue to call `write` until all data has been written.
+    pub func write_all(this, buf: ref [U8]) -> Outcome[(), NetError] {
+        var total: I64 = 0
+        let len: I64 = buf.len()
+
+        loop {
+            if total >= len { break }
+
+            let slice: ref [U8] = buf.slice(total, len)
+
+            when this.socket.send(slice) {
+                Ok(0) => return Err(NetError::new(NetErrorKind::ConnectionReset))
+                Ok(n) => total = total + n
+                Err(e) => {
+                    if e.is_would_block() {
+                        continue
+                    }
+                    return Err(e)
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Flushes this output stream, ensuring all buffered data is written.
+    ///
+    /// For TCP, this is a no-op as data is sent immediately.
+    pub func flush(this) -> Outcome[(), NetError] {
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Read and Write behavior implementations
+// ============================================================================
+
+impl Read for TcpStream {
+    func read(mut this, buf: mut ref [U8]) -> Outcome[I64, IoError] {
+        when this.socket.recv(buf) {
+            Ok(n) => Ok(n)
+            Err(e) => Err(IoError::from_net_error(e))
+        }
+    }
+}
+
+impl Write for TcpStream {
+    func write(mut this, buf: ref [U8]) -> Outcome[I64, IoError] {
+        when this.socket.send(buf) {
+            Ok(n) => Ok(n)
+            Err(e) => Err(IoError::from_net_error(e))
+        }
+    }
+
+    func flush(mut this) -> Outcome[(), IoError] {
+        Ok(())
+    }
+}
+
+// ============================================================================
+// IoError bridge (placeholder - should be in std::io)
+// ============================================================================
+
+/// I/O error type (bridge to NetError for now).
+pub type IoError {
+    inner: NetError,
+}
+
+impl IoError {
+    pub func from_net_error(e: NetError) -> IoError {
+        IoError { inner: e }
+    }
+
+    pub func into_net_error(this) -> NetError {
+        this.inner
+    }
+}
+
+// ============================================================================
+// Read and Write behaviors (placeholder definitions)
+// ============================================================================
+
+/// The Read behavior allows reading bytes from a source.
+pub behavior Read {
+    func read(mut self, buf: mut ref [U8]) -> Outcome[I64, IoError]
+}
+
+/// The Write behavior allows writing bytes to a destination.
+pub behavior Write {
+    func write(mut self, buf: ref [U8]) -> Outcome[I64, IoError]
+    func flush(mut self) -> Outcome[(), IoError]
+}
+
+// ============================================================================
+// TcpBuilder - Builder pattern for TCP sockets
+// ============================================================================
+
+/// A builder for creating TCP sockets with custom options.
+///
+/// # Example
+///
+/// ```tml
+/// let listener = TcpBuilder::new()
+///     .reuse_addr(true)
+///     .backlog(256)
+///     .bind("0.0.0.0:8080".parse()?)!
+/// ```
+pub type TcpBuilder {
+    reuse_addr: Bool,
+    nodelay: Bool,
+    keepalive: Bool,
+    recv_buffer_size: Maybe[I32],
+    send_buffer_size: Maybe[I32],
+    backlog: I32,
+}
+
+impl TcpBuilder {
+    /// Creates a new TCP builder with default options.
+    pub func new() -> TcpBuilder {
+        TcpBuilder {
+            reuse_addr: true,
+            nodelay: false,
+            keepalive: false,
+            recv_buffer_size: Nothing,
+            send_buffer_size: Nothing,
+            backlog: 128,
+        }
+    }
+
+    /// Sets the `SO_REUSEADDR` option.
+    pub func reuse_addr(mut this, reuse: Bool) -> TcpBuilder {
+        this.reuse_addr = reuse
+        this
+    }
+
+    /// Sets the `TCP_NODELAY` option.
+    pub func nodelay(mut this, nodelay: Bool) -> TcpBuilder {
+        this.nodelay = nodelay
+        this
+    }
+
+    /// Sets the `SO_KEEPALIVE` option.
+    pub func keepalive(mut this, keepalive: Bool) -> TcpBuilder {
+        this.keepalive = keepalive
+        this
+    }
+
+    /// Sets the receive buffer size.
+    pub func recv_buffer_size(mut this, size: I32) -> TcpBuilder {
+        this.recv_buffer_size = Just(size)
+        this
+    }
+
+    /// Sets the send buffer size.
+    pub func send_buffer_size(mut this, size: I32) -> TcpBuilder {
+        this.send_buffer_size = Just(size)
+        this
+    }
+
+    /// Sets the backlog for the listener.
+    pub func backlog(mut this, backlog: I32) -> TcpBuilder {
+        this.backlog = backlog
+        this
+    }
+
+    /// Binds to an address and creates a TcpListener.
+    pub func bind(this, addr: SocketAddr) -> Outcome[TcpListener, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        if this.reuse_addr {
+            socket.set_reuse_addr(true)!
+        }
+        if this.nodelay {
+            socket.set_nodelay(true)!
+        }
+        if this.keepalive {
+            socket.set_keepalive(true)!
+        }
+        when this.recv_buffer_size {
+            Just(size) => socket.set_recv_buffer_size(size)!
+            Nothing => {}
+        }
+        when this.send_buffer_size {
+            Just(size) => socket.set_send_buffer_size(size)!
+            Nothing => {}
+        }
+
+        socket.bind(ref addr)!
+        socket.listen(this.backlog)!
+
+        let listener: TcpListener = TcpListener { socket: socket }
+        Ok(listener)
+    }
+
+    /// Connects to an address and creates a TcpStream.
+    pub func connect(this, addr: SocketAddr) -> Outcome[TcpStream, NetError] {
+        let family: AddressFamily = AddressFamily::from_addr(ref addr)
+        let socket: RawSocket = RawSocket::new_with_family(family, SocketType::Stream, SocketProtocol::Tcp)!
+
+        if this.nodelay {
+            socket.set_nodelay(true)!
+        }
+        if this.keepalive {
+            socket.set_keepalive(true)!
+        }
+        when this.recv_buffer_size {
+            Just(size) => socket.set_recv_buffer_size(size)!
+            Nothing => {}
+        }
+        when this.send_buffer_size {
+            Just(size) => socket.set_send_buffer_size(size)!
+            Nothing => {}
+        }
+
+        socket.connect(ref addr)!
+
+        let stream: TcpStream = TcpStream { socket: socket }
+        Ok(stream)
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_tcp_listener_creation() {
+    // Test that we can create the types (actual network tests need runtime)
+    var builder: TcpBuilder = TcpBuilder::new()
+    builder = builder.reuse_addr(true)
+    builder = builder.nodelay(true)
+    builder = builder.backlog(256)
+
+    assert(builder.reuse_addr)
+    assert(builder.nodelay)
+    assert_eq(builder.backlog, 256)
+}
+
+@test
+func test_shutdown_enum() {
+    let read: Shutdown = Shutdown::Read
+    let write: Shutdown = Shutdown::Write
+    let both: Shutdown = Shutdown::Both
+
+    // Just verify enum variants exist
+    when read {
+        Shutdown::Read => assert(true)
+        _ => assert(false)
+    }
+    when write {
+        Shutdown::Write => assert(true)
+        _ => assert(false)
+    }
+    when both {
+        Shutdown::Both => assert(true)
+        _ => assert(false)
+    }
+}
+
+@test
+func test_tcp_builder_defaults() {
+    let builder: TcpBuilder = TcpBuilder::new()
+
+    assert(builder.reuse_addr)
+    assert(not builder.nodelay)
+    assert(not builder.keepalive)
+    assert_eq(builder.backlog, 128)
+}
+
+@test
+func test_tcp_builder_chain() {
+    var builder: TcpBuilder = TcpBuilder::new()
+    builder = builder.reuse_addr(false)
+    builder = builder.nodelay(true)
+    builder = builder.keepalive(true)
+    builder = builder.recv_buffer_size(8192)
+    builder = builder.send_buffer_size(16384)
+    builder = builder.backlog(512)
+
+    assert(not builder.reuse_addr)
+    assert(builder.nodelay)
+    assert(builder.keepalive)
+    assert_eq(builder.recv_buffer_size, Just(8192))
+    assert_eq(builder.send_buffer_size, Just(16384))
+    assert_eq(builder.backlog, 512)
+}

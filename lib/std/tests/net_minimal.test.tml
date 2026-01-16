@@ -1,0 +1,24 @@
+//! Minimal Network Tests - Just IP addresses
+use test::{assert, assert_eq}
+use std::net::{Ipv4Addr}
+
+@test
+func test_ipv4_localhost() {
+    let localhost: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    let bits: U32 = localhost.to_bits()
+    assert_eq(bits, 0x7F000001 as U32)
+}
+
+@test
+func test_ipv4_unspecified() {
+    let unspec: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+}
+
+@test
+func test_ipv4_from_bits() {
+    let ip: Ipv4Addr = Ipv4Addr::from_bits(0xC0A80101 as U32)
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)
+}

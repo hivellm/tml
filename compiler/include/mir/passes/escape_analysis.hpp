@@ -50,6 +50,13 @@ enum class EscapeState {
     Unknown       ///< Cannot determine escape state.
 };
 
+/// Conditional escape information for branch-dependent escapes.
+struct ConditionalEscape {
+    ValueId condition;       ///< Condition value that determines escape.
+    EscapeState true_state;  ///< Escape state when condition is true.
+    EscapeState false_state; ///< Escape state when condition is false.
+};
+
 /// Escape information for a single value.
 struct EscapeInfo {
     EscapeState state = EscapeState::Unknown; ///< Escape state.
@@ -58,10 +65,33 @@ struct EscapeInfo {
     bool is_stack_promotable = false;         ///< Can be promoted to stack allocation.
     bool is_class_instance = false;           ///< Is this a class instance allocation?
     std::string class_name;                   ///< Class name if is_class_instance is true.
+    bool is_arena_allocated = false;          ///< Allocated via arena (skip destructor).
+    bool free_can_be_removed = false;         ///< Corresponding free can be removed.
+    std::vector<ConditionalEscape> conditional_escapes; ///< Branch-dependent escapes.
 
     /// Returns true if the value escapes the function.
     [[nodiscard]] auto escapes() const -> bool {
         return state != EscapeState::NoEscape;
+    }
+
+    /// Returns true if the value only escapes conditionally.
+    [[nodiscard]] auto has_conditional_escape() const -> bool {
+        return !conditional_escapes.empty();
+    }
+
+    /// Returns the most optimistic escape state (considering conditions).
+    [[nodiscard]] auto optimistic_state() const -> EscapeState {
+        if (conditional_escapes.empty()) {
+            return state;
+        }
+        EscapeState min_state = state;
+        for (const auto& ce : conditional_escapes) {
+            if (ce.true_state < min_state)
+                min_state = ce.true_state;
+            if (ce.false_state < min_state)
+                min_state = ce.false_state;
+        }
+        return min_state;
     }
 };
 
@@ -96,11 +126,16 @@ public:
         size_t stack_promotable = 0;  ///< Allocations eligible for stack promotion.
 
         // Class instance statistics
-        size_t class_instances = 0;          ///< Total class instance allocations.
-        size_t class_instances_no_escape = 0; ///< Class instances that don't escape.
+        size_t class_instances = 0;            ///< Total class instance allocations.
+        size_t class_instances_no_escape = 0;  ///< Class instances that don't escape.
         size_t class_instances_promotable = 0; ///< Class instances eligible for stack.
-        size_t method_call_escapes = 0;       ///< Escapes via method calls.
-        size_t field_store_escapes = 0;       ///< Escapes via field stores.
+        size_t method_call_escapes = 0;        ///< Escapes via method calls.
+        size_t field_store_escapes = 0;        ///< Escapes via field stores.
+
+        // Advanced escape analysis statistics
+        size_t conditional_escapes = 0; ///< Values with conditional escapes.
+        size_t arena_allocations = 0;   ///< Allocations via arena.
+        size_t free_removals = 0;       ///< Free calls that can be removed.
     };
 
     /// Returns analysis statistics.
@@ -131,6 +166,14 @@ private:
     [[nodiscard]] auto is_constructor_call(const std::string& func_name) const -> bool;
     [[nodiscard]] auto extract_class_name(const std::string& func_name) const -> std::string;
     void track_this_parameter(const Function& func);
+
+    // Advanced escape analysis helpers
+    [[nodiscard]] auto is_arena_alloc_call(const std::string& func_name) const -> bool;
+    void analyze_conditional_branch(const CondBranchTerm& branch, Function& func);
+    void track_conditional_escape(ValueId value, ValueId condition, EscapeState true_state,
+                                  EscapeState false_state);
+    void analyze_free_removal(const CallInst& call, ValueId value);
+    [[nodiscard]] auto can_remove_free(ValueId value) const -> bool;
 };
 
 /// Stack promotion pass.

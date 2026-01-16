@@ -10,19 +10,33 @@ namespace tml::json {
 // Factory Methods
 // ============================================================================
 
-auto JsonSchema::any() -> JsonSchema { return JsonSchema(Type::Any); }
+auto JsonSchema::any() -> JsonSchema {
+    return JsonSchema(Type::Any);
+}
 
-auto JsonSchema::null() -> JsonSchema { return JsonSchema(Type::Null); }
+auto JsonSchema::null() -> JsonSchema {
+    return JsonSchema(Type::Null);
+}
 
-auto JsonSchema::boolean() -> JsonSchema { return JsonSchema(Type::Bool); }
+auto JsonSchema::boolean() -> JsonSchema {
+    return JsonSchema(Type::Bool);
+}
 
-auto JsonSchema::integer() -> JsonSchema { return JsonSchema(Type::Integer); }
+auto JsonSchema::integer() -> JsonSchema {
+    return JsonSchema(Type::Integer);
+}
 
-auto JsonSchema::number() -> JsonSchema { return JsonSchema(Type::Number); }
+auto JsonSchema::number() -> JsonSchema {
+    return JsonSchema(Type::Number);
+}
 
-auto JsonSchema::string() -> JsonSchema { return JsonSchema(Type::String); }
+auto JsonSchema::string() -> JsonSchema {
+    return JsonSchema(Type::String);
+}
 
-auto JsonSchema::array() -> JsonSchema { return JsonSchema(Type::Array); }
+auto JsonSchema::array() -> JsonSchema {
+    return JsonSchema(Type::Array);
+}
 
 auto JsonSchema::array_of(JsonSchema element_schema) -> JsonSchema {
     JsonSchema schema(Type::Array);
@@ -30,7 +44,9 @@ auto JsonSchema::array_of(JsonSchema element_schema) -> JsonSchema {
     return schema;
 }
 
-auto JsonSchema::object() -> JsonSchema { return JsonSchema(Type::Object); }
+auto JsonSchema::object() -> JsonSchema {
+    return JsonSchema(Type::Object);
+}
 
 // ============================================================================
 // Builder Methods
@@ -54,13 +70,20 @@ namespace {
 
 /// Returns a human-readable name for a JSON type.
 auto type_name(const JsonValue& value) -> std::string {
-    if (value.is_null()) return "null";
-    if (value.is_bool()) return "boolean";
-    if (value.is_integer()) return "integer";
-    if (value.is_number()) return "number";
-    if (value.is_string()) return "string";
-    if (value.is_array()) return "array";
-    if (value.is_object()) return "object";
+    if (value.is_null())
+        return "null";
+    if (value.is_bool())
+        return "boolean";
+    if (value.is_integer())
+        return "integer";
+    if (value.is_number())
+        return "number";
+    if (value.is_string())
+        return "string";
+    if (value.is_array())
+        return "array";
+    if (value.is_object())
+        return "object";
     return "unknown";
 }
 
@@ -126,17 +149,16 @@ auto JsonSchema::validate(const JsonValue& value, const std::string& path) const
     }
 
     if (!type_ok) {
-        return ValidationResult::fail("expected " + schema_type_name(type_) + ", got " +
-                                          type_name(value),
-                                      path);
+        return ValidationResult::fail(
+            "expected " + schema_type_name(type_) + ", got " + type_name(value), path);
     }
 
     // Array element validation
     if (type_ == Type::Array && element_schema_ && value.is_array()) {
         const auto& arr = value.as_array();
         for (size_t i = 0; i < arr.size(); ++i) {
-            std::string elem_path = path.empty() ? "[" + std::to_string(i) + "]"
-                                                 : path + "[" + std::to_string(i) + "]";
+            std::string elem_path =
+                path.empty() ? "[" + std::to_string(i) + "]" : path + "[" + std::to_string(i) + "]";
             auto result = element_schema_->validate(arr[i], elem_path);
             if (!result.valid) {
                 return result;
@@ -147,8 +169,7 @@ auto JsonSchema::validate(const JsonValue& value, const std::string& path) const
     // Object field validation
     if (type_ == Type::Object && !fields_.empty() && value.is_object()) {
         for (const auto& field : fields_) {
-            std::string field_path =
-                path.empty() ? field.name : path + "." + field.name;
+            std::string field_path = path.empty() ? field.name : path + "." + field.name;
 
             auto* field_value = value.get(field.name);
 

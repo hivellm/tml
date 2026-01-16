@@ -1,0 +1,220 @@
+//! Socket address types.
+//!
+//! This module provides socket address types that combine an IP address with
+//! a port number. These types are platform-independent and work in `no_std`
+//! environments.
+//!
+//! # Types
+//!
+//! - [`SocketAddrV4`] - IPv4 socket address (IP + port)
+//! - [`SocketAddr`] - Socket address wrapper (currently IPv4 only)
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::net::socket::{SocketAddr, SocketAddrV4}
+//! use std::net::ip::Ipv4Addr
+//!
+//! // Create socket addresses
+//! let v4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 8080)
+//!
+//! // Access components
+//! assert(v4.port() == 8080)
+//! assert(v4.ip().is_loopback())
+//!
+//! // Use the unified type
+//! let addr: SocketAddr = SocketAddr::V4(v4)
+//! ```
+
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
+use core::hash::{Hash, Hasher}
+// Note: Formatter and FormatResult would need real imports if used
+use core::option::Maybe::{Just, Nothing}
+
+use super::ip::{IpAddr, Ipv4Addr}
+
+// =============================================================================
+// SocketAddrV4 - IPv4 Socket Address
+// =============================================================================
+
+/// An IPv4 socket address.
+///
+/// Consists of an IPv4 address and a 16-bit port number.
+///
+/// # Examples
+///
+/// ```tml
+/// let addr: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 8080)
+/// assert_eq(addr.ip(), Ipv4Addr::LOCALHOST())
+/// assert_eq(addr.port(), 8080)
+/// ```
+pub type SocketAddrV4 {
+    ip: Ipv4Addr,
+    port: U16,
+}
+
+impl SocketAddrV4 {
+    /// Creates a new socket address from an IPv4 address and a port number.
+    pub func new(ip: Ipv4Addr, port: U16) -> SocketAddrV4 {
+        SocketAddrV4 { ip, port }
+    }
+
+    /// Returns the IP address associated with this socket address.
+    pub func ip(this) -> Ipv4Addr {
+        this.ip
+    }
+
+    /// Sets the IP address.
+    pub func set_ip(mut this, ip: Ipv4Addr) {
+        this.ip = ip
+    }
+
+    /// Returns the port number associated with this socket address.
+    pub func port(this) -> U16 {
+        this.port
+    }
+
+    /// Sets the port number.
+    pub func set_port(mut this, port: U16) {
+        this.port = port
+    }
+}
+
+// Behavior implementations for SocketAddrV4
+impl Copy for SocketAddrV4 {}
+impl Duplicate for SocketAddrV4 {
+    func duplicate(this) -> SocketAddrV4 {
+        SocketAddrV4 { ip: this.ip.duplicate(), port: this.port }
+    }
+}
+
+impl PartialEq for SocketAddrV4 {
+    func eq(this, other: ref SocketAddrV4) -> Bool {
+        this.ip == other.ip and this.port == other.port
+    }
+}
+
+impl Eq for SocketAddrV4 {}
+
+impl PartialOrd for SocketAddrV4 {
+    func partial_cmp(this, other: ref SocketAddrV4) -> Maybe[Ordering] {
+        Just(this.cmp(other))
+    }
+}
+
+impl Ord for SocketAddrV4 {
+    func cmp(this, other: ref SocketAddrV4) -> Ordering {
+        let ip_ord: Ordering = this.ip.cmp(ref other.ip)
+        if ip_ord != Ordering::Equal {
+            ip_ord
+        } else {
+            if this.port < other.port { Ordering::Less }
+            else if this.port > other.port { Ordering::Greater }
+            else { Ordering::Equal }
+        }
+    }
+}
+
+impl Hash for SocketAddrV4 {
+    func hash(this, hasher: mut ref Hasher) {
+        this.ip.hash(hasher)
+        hasher.write_u16(this.port)
+    }
+}
+
+impl Display for SocketAddrV4 {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        this.ip.fmt(f)
+        f.write_str(":")
+        f.write_str(this.port.to_string())
+    }
+}
+
+impl Debug for SocketAddrV4 {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}
+
+// =============================================================================
+// SocketAddr - Socket Address wrapper (IPv4 only for now)
+// =============================================================================
+
+/// An internet socket address (currently IPv4 only).
+///
+/// # Examples
+///
+/// ```tml
+/// let v4: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80))
+/// assert_eq(v4.port(), 80)
+/// ```
+pub type SocketAddr {
+    inner: SocketAddrV4,
+}
+
+impl SocketAddr {
+    /// Creates a SocketAddr from a SocketAddrV4.
+    pub func V4(addr: SocketAddrV4) -> SocketAddr {
+        SocketAddr { inner: addr }
+    }
+
+    /// Returns `true` if this is an IPv4 socket address.
+    pub func is_ipv4(this) -> Bool {
+        true
+    }
+
+    /// Returns `true` if this is an IPv6 socket address.
+    pub func is_ipv6(this) -> Bool {
+        false
+    }
+
+    /// Returns the IP address associated with this socket address.
+    pub func ip(this) -> IpAddr {
+        IpAddr::V4(this.inner.ip)
+    }
+
+    /// Returns the port number associated with this socket address.
+    pub func port(this) -> U16 {
+        this.inner.port
+    }
+
+    /// Sets the port number.
+    pub func set_port(mut this, port: U16) {
+        this.inner.port = port
+    }
+}
+
+// Behavior implementations for SocketAddr
+impl Copy for SocketAddr {}
+impl Duplicate for SocketAddr {
+    func duplicate(this) -> SocketAddr {
+        SocketAddr { inner: this.inner.duplicate() }
+    }
+}
+
+impl PartialEq for SocketAddr {
+    func eq(this, other: ref SocketAddr) -> Bool {
+        this.inner == other.inner
+    }
+}
+
+impl Eq for SocketAddr {}
+
+impl Hash for SocketAddr {
+    func hash(this, hasher: mut ref Hasher) {
+        hasher.write_u8(4)
+        this.inner.hash(hasher)
+    }
+}
+
+impl Display for SocketAddr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        this.inner.fmt(f)
+    }
+}
+
+impl Debug for SocketAddr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}

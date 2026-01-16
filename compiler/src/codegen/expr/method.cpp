@@ -290,6 +290,86 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
             if (result) {
                 return *result;
             }
+
+            // Try looking up user-defined static methods in the environment/modules
+            std::string qualified_name = type_name + "::" + method;
+            auto func_sig = env_.lookup_func(qualified_name);
+
+            // If not found locally, search all modules
+            if (!func_sig && env_.module_registry()) {
+                const auto& all_modules = env_.module_registry()->get_all_modules();
+                for (const auto& [mod_name, mod] : all_modules) {
+                    auto func_it = mod.functions.find(qualified_name);
+                    if (func_it != mod.functions.end()) {
+                        func_sig = func_it->second;
+                        break;
+                    }
+                }
+            }
+
+            if (func_sig) {
+                // Generate call to user-defined static method
+                std::string fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
+
+                // Look up in functions_ for the correct LLVM name
+                std::string method_lookup_key = type_name + "_" + method;
+                auto method_it = functions_.find(method_lookup_key);
+                if (method_it != functions_.end()) {
+                    fn_name = method_it->second.llvm_name;
+                }
+
+                std::vector<std::pair<std::string, std::string>> typed_args;
+                for (size_t i = 0; i < call.args.size(); ++i) {
+                    std::string val = gen_expr(*call.args[i]);
+                    std::string arg_type = last_expr_type_;
+                    std::string expected_type = arg_type;
+                    if (i < func_sig->params.size()) {
+                        expected_type = llvm_type_from_semantic(func_sig->params[i]);
+                        // Type coercion if needed
+                        if (arg_type != expected_type) {
+                            bool is_int_actual = (arg_type[0] == 'i' && arg_type != "i1");
+                            bool is_int_expected =
+                                (expected_type[0] == 'i' && expected_type != "i1");
+                            if (is_int_actual && is_int_expected) {
+                                int actual_bits = std::stoi(arg_type.substr(1));
+                                int expected_bits = std::stoi(expected_type.substr(1));
+                                std::string coerced = fresh_reg();
+                                if (expected_bits > actual_bits) {
+                                    emit_line("  " + coerced + " = sext " + arg_type + " " + val +
+                                              " to " + expected_type);
+                                } else {
+                                    emit_line("  " + coerced + " = trunc " + arg_type + " " + val +
+                                              " to " + expected_type);
+                                }
+                                val = coerced;
+                            }
+                        }
+                    }
+                    typed_args.push_back({expected_type, val});
+                }
+
+                std::string args_str;
+                for (size_t i = 0; i < typed_args.size(); ++i) {
+                    if (i > 0)
+                        args_str += ", ";
+                    args_str += typed_args[i].first + " " + typed_args[i].second;
+                }
+
+                std::string ret_type =
+                    func_sig->return_type ? llvm_type_from_semantic(func_sig->return_type) : "void";
+                std::string result_reg = fresh_reg();
+                if (ret_type == "void") {
+                    emit_line("  call void " + fn_name + "(" + args_str + ")");
+                    last_expr_type_ = "void";
+                    return "void";
+                } else {
+                    emit_line("  " + result_reg + " = call " + ret_type + " " + fn_name + "(" +
+                              args_str + ")");
+                    last_expr_type_ = ret_type;
+                    return result_reg;
+                }
+            }
+
             report_error("Unknown static method: " + type_name + "." + method, call.span);
             return "0";
         }
@@ -1370,7 +1450,8 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
         }
 
         if (is_dyn_dispatch) {
-            TML_DEBUG_LN("[DYN] Dyn dispatch detected for behavior: " << behavior_name << " method: " << method);
+            TML_DEBUG_LN("[DYN] Dyn dispatch detected for behavior: " << behavior_name
+                                                                      << " method: " << method);
             auto behavior_methods_it = behavior_method_order_.find(behavior_name);
 
             // If behavior not registered yet, try to look it up and register dynamically
@@ -1450,13 +1531,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             auto mod_behavior_it = mod.behaviors.find(behavior_name);
                             if (mod_behavior_it != mod.behaviors.end()) {
                                 behavior_def = mod_behavior_it->second;
-                                TML_DEBUG_LN("[DYN] Found behavior " << behavior_name << " in module " << mod_name);
+                                TML_DEBUG_LN("[DYN] Found behavior " << behavior_name
+                                                                     << " in module " << mod_name);
                                 break;
                             }
                         }
                     }
 
-                    TML_DEBUG_LN("[DYN] Looking up behavior: " << behavior_name << " found: " << (behavior_def ? "yes" : "no"));
+                    TML_DEBUG_LN("[DYN] Looking up behavior: " << behavior_name << " found: "
+                                                               << (behavior_def ? "yes" : "no"));
                     if (behavior_def) {
                         // Build substitution map from behavior's type params to dyn's type args
                         std::unordered_map<std::string, types::TypePtr> type_subs;
@@ -1466,20 +1549,17 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             if (it->second.semantic_type->is<types::DynBehaviorType>()) {
                                 dyn_sem_type = it->second.semantic_type;
                             } else if (it->second.semantic_type->is<types::RefType>()) {
-                                auto inner =
-                                    it->second.semantic_type->as<types::RefType>().inner;
+                                auto inner = it->second.semantic_type->as<types::RefType>().inner;
                                 if (inner && inner->is<types::DynBehaviorType>()) {
                                     dyn_sem_type = inner;
                                 }
                             }
                             if (dyn_sem_type) {
-                                const auto& dyn_sem =
-                                    dyn_sem_type->as<types::DynBehaviorType>();
+                                const auto& dyn_sem = dyn_sem_type->as<types::DynBehaviorType>();
                                 for (size_t i = 0; i < behavior_def->type_params.size() &&
                                                    i < dyn_sem.type_args.size();
                                      ++i) {
-                                    type_subs[behavior_def->type_params[i]] =
-                                        dyn_sem.type_args[i];
+                                    type_subs[behavior_def->type_params[i]] = dyn_sem.type_args[i];
                                 }
                             }
                         }
@@ -1490,12 +1570,15 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                                 auto substituted_ret =
                                     types::substitute_type(m.return_type, type_subs);
                                 return_llvm_type = llvm_type_from_semantic(substituted_ret);
-                                TML_DEBUG_LN("[DYN] Method " << method << " return type: " << return_llvm_type);
+                                TML_DEBUG_LN("[DYN] Method "
+                                             << method << " return type: " << return_llvm_type);
                                 break;
                             }
                         }
                         if (return_llvm_type == "i32") {
-                            TML_DEBUG_LN("[DYN] WARNING: Method " << method << " in behavior " << behavior_name << " has fallback return type i32");
+                            TML_DEBUG_LN("[DYN] WARNING: Method "
+                                         << method << " in behavior " << behavior_name
+                                         << " has fallback return type i32");
                         }
                     }
 

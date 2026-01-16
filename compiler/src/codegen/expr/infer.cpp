@@ -432,13 +432,12 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
             if (struct_def) {
                 TML_DEBUG_LN("[INFER] struct_def found, searching for field: " << field.field);
                 for (const auto& [field_name, field_type] : struct_def->fields) {
-                    TML_DEBUG_LN("[INFER]   field: " << field_name << " type: "
-                                                    << (field_type
-                                                            ? types::type_to_string(field_type)
-                                                            : "null"));
+                    TML_DEBUG_LN("[INFER]   field: "
+                                 << field_name << " type: "
+                                 << (field_type ? types::type_to_string(field_type) : "null"));
                     if (field_name == field.field && field_type) {
-                        TML_DEBUG_LN("[INFER] Returning field type: "
-                                     << types::type_to_string(field_type));
+                        TML_DEBUG_LN(
+                            "[INFER] Returning field type: " << types::type_to_string(field_type));
                         // If the struct is generic, substitute type arguments
                         if (!named.type_args.empty() && !struct_def->type_params.empty()) {
                             std::unordered_map<std::string, types::TypePtr> subs;
@@ -749,6 +748,31 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                     return types::make_bool();
                 if (type_name == "Str")
                     return types::make_str();
+            }
+
+            // Check for static method calls on user-defined types (e.g., Request::builder())
+            // First check if this type_name is a known struct/type (not a local variable)
+            if (locals_.find(type_name) == locals_.end()) {
+                std::string qualified_name = type_name + "::" + call.method;
+
+                // Look up the static method in the environment
+                auto func_sig = env_.lookup_func(qualified_name);
+
+                // If not found locally, search all modules
+                if (!func_sig && env_.module_registry()) {
+                    const auto& all_modules = env_.module_registry()->get_all_modules();
+                    for (const auto& [mod_name, mod] : all_modules) {
+                        auto func_it = mod.functions.find(qualified_name);
+                        if (func_it != mod.functions.end()) {
+                            func_sig = func_it->second;
+                            break;
+                        }
+                    }
+                }
+
+                if (func_sig && func_sig->return_type) {
+                    return func_sig->return_type;
+                }
             }
         }
 

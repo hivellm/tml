@@ -42,13 +42,13 @@
 //!     .end()
 //!     .build();
 //!
-//! // Result: {"address":{"city":"Seattle","zip":"98101"},"age":30,"name":"Alice","tags":["developer","rust"]}
+//! // Result:
+//! {"address":{"city":"Seattle","zip":"98101"},"age":30,"name":"Alice","tags":["developer","rust"]}
 //! ```
 
 #pragma once
 
 #include "json/json_value.hpp"
-
 #include <stack>
 #include <stdexcept>
 #include <string>

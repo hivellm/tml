@@ -54,12 +54,10 @@ protected:
 
 private:
     // Try to simplify a binary instruction
-    auto simplify_binary(Function& func, BasicBlock& block, size_t idx,
-                         BinaryInst& bin) -> bool;
+    auto simplify_binary(Function& func, BasicBlock& block, size_t idx, BinaryInst& bin) -> bool;
 
     // Try to simplify a unary instruction
-    auto simplify_unary(Function& func, BasicBlock& block, size_t idx,
-                        UnaryInst& unary) -> bool;
+    auto simplify_unary(Function& func, BasicBlock& block, size_t idx, UnaryInst& unary) -> bool;
 
     // Get constant value if instruction is a constant
     auto get_const_int(const Function& func, ValueId id) -> std::optional<int64_t>;

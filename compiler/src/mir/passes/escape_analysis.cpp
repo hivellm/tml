@@ -106,8 +106,8 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
     for (const auto& block : func.blocks) {
         for (const auto& inst : block.instructions) {
             if (inst.result != INVALID_VALUE) {
-                escape_info_[inst.result] = EscapeInfo{EscapeState::NoEscape, false, false, false,
-                                                        false, ""};
+                escape_info_[inst.result] =
+                    EscapeInfo{EscapeState::NoEscape, false, false, false, false, ""};
             }
         }
     }
@@ -232,7 +232,19 @@ void EscapeAnalysisPass::analyze_call(const CallInst& call, ValueId result_id) {
                          call.func_name == "malloc" || call.func_name == "Heap::new" ||
                          call.func_name == "tml_alloc";
 
-    if (is_heap_alloc && result_id != INVALID_VALUE) {
+    // Check if this is an arena allocation call
+    bool is_arena_alloc = is_arena_alloc_call(call.func_name);
+
+    if (is_arena_alloc && result_id != INVALID_VALUE) {
+        stats_.total_allocations++;
+        stats_.arena_allocations++;
+        auto& info = escape_info_[result_id];
+        info.may_alias_heap = false; // Arena memory, not standard heap
+        info.state = EscapeState::NoEscape;
+        info.is_stack_promotable = false; // Already arena-allocated, don't promote
+        info.is_arena_allocated = true;
+        info.free_can_be_removed = true; // Arena handles deallocation
+    } else if (is_heap_alloc && result_id != INVALID_VALUE) {
         stats_.total_allocations++;
         auto& info = escape_info_[result_id];
         info.may_alias_heap = true;
@@ -250,6 +262,11 @@ void EscapeAnalysisPass::analyze_call(const CallInst& call, ValueId result_id) {
         info.is_stack_promotable = true;
         info.is_class_instance = true;
         info.class_name = extract_class_name(call.func_name);
+    }
+
+    // Check if this is a free call that can be removed
+    if (!call.args.empty()) {
+        analyze_free_removal(call, call.args[0].id);
     }
 
     // Determine escape severity based on devirtualization info
@@ -340,8 +357,8 @@ void EscapeAnalysisPass::analyze_store(const StoreInst& store) {
         // Storing to a field of a class instance
         // If the stored value is a pointer, it may escape through the instance
         auto value_info = get_escape_info(store.value.id);
-        if (value_info.may_alias_heap || store.value.type &&
-            std::holds_alternative<MirPointerType>(store.value.type->kind)) {
+        if (value_info.may_alias_heap ||
+            store.value.type && std::holds_alternative<MirPointerType>(store.value.type->kind)) {
             stats_.field_store_escapes++;
             mark_escape(store.value.id, EscapeState::GlobalEscape);
         }
@@ -477,6 +494,95 @@ auto EscapeAnalysisPass::is_allocation(const Instruction& inst) const -> bool {
         return call->func_name == "alloc" || call->func_name == "heap_alloc" ||
                call->func_name == "malloc" || call->func_name == "Heap::new" ||
                call->func_name == "tml_alloc";
+    }
+    return false;
+}
+
+// ============================================================================
+// Advanced Escape Analysis Helpers
+// ============================================================================
+
+auto EscapeAnalysisPass::is_arena_alloc_call(const std::string& func_name) const -> bool {
+    // Arena allocation patterns:
+    // - Arena_alloc_raw
+    // - Arena_alloc
+    // - Arena_alloc_slice
+    // - ScopedArena_alloc
+    return func_name.find("Arena_alloc") != std::string::npos ||
+           func_name.find("ScopedArena_alloc") != std::string::npos;
+}
+
+void EscapeAnalysisPass::analyze_conditional_branch(const CondBranchTerm& branch,
+                                                    [[maybe_unused]] Function& func) {
+    // Analyze branch conditions for conditional escapes
+    // When a value escapes only in one branch, we can track it as conditional
+
+    // For now, just track that we analyzed a branch
+    // A full implementation would:
+    // 1. Track which values are used differently in true/false branches
+    // 2. Mark values with conditional escapes based on control flow
+
+    if (branch.condition.id == INVALID_VALUE) {
+        return;
+    }
+
+    // Mark the condition as potentially affecting escapes
+    auto& cond_info = escape_info_[branch.condition.id];
+    cond_info.state = EscapeState::NoEscape; // Condition itself doesn't escape
+}
+
+void EscapeAnalysisPass::track_conditional_escape(ValueId value, ValueId condition,
+                                                  EscapeState true_state, EscapeState false_state) {
+    if (value == INVALID_VALUE || condition == INVALID_VALUE) {
+        return;
+    }
+
+    auto it = escape_info_.find(value);
+    if (it == escape_info_.end()) {
+        return;
+    }
+
+    ConditionalEscape ce;
+    ce.condition = condition;
+    ce.true_state = true_state;
+    ce.false_state = false_state;
+
+    it->second.conditional_escapes.push_back(ce);
+    stats_.conditional_escapes++;
+}
+
+void EscapeAnalysisPass::analyze_free_removal(const CallInst& call, ValueId value) {
+    // Check if this is a free/dealloc call
+    if (call.func_name != "free" && call.func_name != "dealloc" && call.func_name != "heap_free" &&
+        call.func_name != "tml_free") {
+        return;
+    }
+
+    if (value == INVALID_VALUE) {
+        return;
+    }
+
+    auto it = escape_info_.find(value);
+    if (it == escape_info_.end()) {
+        return;
+    }
+
+    // If the value was arena-allocated, the free can be removed
+    if (it->second.is_arena_allocated) {
+        it->second.free_can_be_removed = true;
+        stats_.free_removals++;
+    }
+    // If the value doesn't escape and is stack-promotable, free can be removed
+    else if (it->second.state == EscapeState::NoEscape && it->second.is_stack_promotable) {
+        it->second.free_can_be_removed = true;
+        stats_.free_removals++;
+    }
+}
+
+auto EscapeAnalysisPass::can_remove_free(ValueId value) const -> bool {
+    auto it = escape_info_.find(value);
+    if (it != escape_info_.end()) {
+        return it->second.free_can_be_removed;
     }
     return false;
 }

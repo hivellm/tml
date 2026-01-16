@@ -76,7 +76,7 @@ private:
         int64_t start_value;
         int64_t end_value;
         int64_t step;
-        bool is_increment;  // true if step > 0
+        bool is_increment; // true if step > 0
     };
 
     // Find loops suitable for unrolling
@@ -93,8 +93,7 @@ private:
     auto fully_unroll(Function& func, const LoopInfo& loop) -> bool;
 
     // Helper to find back edges
-    auto find_back_edges(const Function& func)
-        -> std::vector<std::pair<uint32_t, uint32_t>>;
+    auto find_back_edges(const Function& func) -> std::vector<std::pair<uint32_t, uint32_t>>;
 
     // Get block by ID
     auto get_block(const Function& func, uint32_t id) -> const BasicBlock*;

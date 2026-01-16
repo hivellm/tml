@@ -74,6 +74,20 @@ void LLVMIRGen::emit_drop_call(const DropInfo& info) {
         drop_func = "@tml_" + get_suite_prefix() + info.type_name + "_drop";
     }
     emit_line("  call void " + drop_func + "(ptr " + info.var_reg + ")");
+
+    // For @pool(thread_local: true) classes, release to thread-local pool
+    if (tls_pool_classes_.count(info.type_name) > 0) {
+        // Get class type for size calculation
+        std::string class_type = "%class." + info.type_name;
+        emit_line("  call void @tls_pool_release(ptr @pool.name." + info.type_name + ", ptr " +
+                  info.var_reg + ", i64 ptrtoint (" + class_type + "* getelementptr (" +
+                  class_type + ", " + class_type + "* null, i32 1) to i64))");
+    }
+    // For @pool classes (non-thread-local), release to global pool
+    else if (pool_classes_.count(info.type_name) > 0) {
+        emit_line("  call void @pool_release(ptr @pool." + info.type_name + ", ptr " +
+                  info.var_reg + ")");
+    }
 }
 
 void LLVMIRGen::emit_scope_drops() {

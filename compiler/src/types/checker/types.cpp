@@ -39,23 +39,38 @@ auto TypeChecker::check_tuple(const parser::TupleExpr& tuple) -> TypePtr {
 }
 
 auto TypeChecker::check_array(const parser::ArrayExpr& array) -> TypePtr {
+    return check_array(array, nullptr);
+}
+
+auto TypeChecker::check_array(const parser::ArrayExpr& array, TypePtr expected_type) -> TypePtr {
+    // Extract element type from expected array type for literal coercion
+    TypePtr expected_elem_type = nullptr;
+    if (expected_type && expected_type->is<ArrayType>()) {
+        expected_elem_type = expected_type->as<ArrayType>().element;
+    }
+
     return std::visit(
-        [this](const auto& arr) -> TypePtr {
+        [this, expected_elem_type](const auto& arr) -> TypePtr {
             using T = std::decay_t<decltype(arr)>;
 
             if constexpr (std::is_same_v<T, std::vector<parser::ExprPtr>>) {
                 // [1, 2, 3] form
                 if (arr.empty()) {
+                    // Use expected element type if available for empty arrays
+                    if (expected_elem_type) {
+                        return make_array(expected_elem_type, 0);
+                    }
                     return make_array(env_.fresh_type_var(), 0);
                 }
-                auto first_type = check_expr(*arr[0]);
+                // Pass expected element type for numeric literal coercion
+                auto first_type = check_expr(*arr[0], expected_elem_type);
                 for (size_t i = 1; i < arr.size(); ++i) {
-                    check_expr(*arr[i]);
+                    check_expr(*arr[i], expected_elem_type ? expected_elem_type : first_type);
                 }
-                return make_array(first_type, arr.size());
+                return make_array(expected_elem_type ? expected_elem_type : first_type, arr.size());
             } else {
                 // [expr; count] form
-                auto elem_type = check_expr(*arr.first);
+                auto elem_type = check_expr(*arr.first, expected_elem_type);
                 check_expr(*arr.second); // The count expression
 
                 // Evaluate array size from count expression (must be compile-time constant)
@@ -67,7 +82,7 @@ auto TypeChecker::check_array(const parser::ArrayExpr& array) -> TypePtr {
                         arr_size = static_cast<size_t>(val.value);
                     }
                 }
-                return make_array(elem_type, arr_size);
+                return make_array(expected_elem_type ? expected_elem_type : elem_type, arr_size);
             }
         },
         array.kind);
@@ -77,12 +92,20 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
     std::string name = struct_expr.path.segments.empty() ? "" : struct_expr.path.segments.back();
     auto struct_def = env_.lookup_struct(name);
 
-    // Check field expressions
-    for (const auto& [field_name, field_expr] : struct_expr.fields) {
-        check_expr(*field_expr);
-    }
-
     if (struct_def) {
+        // Check field expressions with expected field types for coercion
+        for (const auto& [field_name, field_expr] : struct_expr.fields) {
+            // Look up the expected field type
+            TypePtr expected_field_type = nullptr;
+            for (const auto& [fname, ftype] : struct_def->fields) {
+                if (fname == field_name) {
+                    expected_field_type = ftype;
+                    break;
+                }
+            }
+            check_expr(*field_expr, expected_field_type);
+        }
+
         // Struct type
         auto type = std::make_shared<Type>();
         type->kind = NamedType{name, "", {}};
@@ -92,10 +115,28 @@ auto TypeChecker::check_struct_expr(const parser::StructExpr& struct_expr) -> Ty
     // Check if it's a class type
     auto class_def = env_.lookup_class(name);
     if (class_def) {
+        // Check field expressions with expected field types for coercion
+        for (const auto& [field_name, field_expr] : struct_expr.fields) {
+            // Look up the expected field type from class fields
+            TypePtr expected_field_type = nullptr;
+            for (const auto& class_field : class_def->fields) {
+                if (class_field.name == field_name) {
+                    expected_field_type = class_field.type;
+                    break;
+                }
+            }
+            check_expr(*field_expr, expected_field_type);
+        }
+
         // Class type - return ClassType
         auto type = std::make_shared<Type>();
         type->kind = ClassType{name};
         return type;
+    }
+
+    // Unknown type - still check expressions without expected types
+    for (const auto& [field_name, field_expr] : struct_expr.fields) {
+        check_expr(*field_expr);
     }
 
     error("Unknown struct or class: " + name, struct_expr.span);

@@ -715,4 +715,98 @@ impl Str {
     pub func as_bytes(this) -> ref [U8] {
         return lowlevel { str_as_bytes(this) }
     }
+
+    /// Returns the character at the given byte index.
+    pub func char_at(this, index: I64) -> I32 {
+        return lowlevel { str_char_at(this, index) }
+    }
+
+    /// Returns a substring from `start` to `end` (exclusive).
+    pub func slice_str(this, start: I64, end: I64) -> Str {
+        return lowlevel { str_substring(this, start, end) }
+    }
+
+    /// Alias for slice_str
+    pub func slice(this, start: I64, end: I64) -> Str {
+        return lowlevel { str_substring(this, start, end) }
+    }
+
+    /// Converts all characters to uppercase.
+    pub func to_uppercase(this) -> Str {
+        return lowlevel { str_to_uppercase(this) }
+    }
+
+    /// Converts all characters to lowercase.
+    pub func to_lowercase(this) -> Str {
+        return lowlevel { str_to_lowercase(this) }
+    }
+
+    /// Returns `true` if this string starts with the given prefix.
+    pub func starts_with(this, prefix: Str) -> Bool {
+        return lowlevel { str_starts_with(this, prefix) }
+    }
+
+    /// Returns `true` if this string ends with the given suffix.
+    pub func ends_with(this, suffix: Str) -> Bool {
+        return lowlevel { str_ends_with(this, suffix) }
+    }
+
+    /// Returns `true` if this string contains the given substring.
+    pub func contains(this, pattern: Str) -> Bool {
+        return lowlevel { str_contains(this, pattern) }
+    }
+
+    /// Returns the byte index of the first occurrence of the pattern.
+    /// Returns -1 if not found.
+    pub func find(this, pattern: Str) -> I64 {
+        return lowlevel { str_find(this, pattern) }
+    }
+
+    /// Returns the byte index of the last occurrence of the pattern.
+    /// Returns -1 if not found.
+    pub func rfind(this, pattern: Str) -> I64 {
+        return lowlevel { str_rfind(this, pattern) }
+    }
+
+    /// Splits this string by the given delimiter.
+    pub func split(this, delimiter: Str) -> List[Str] {
+        return lowlevel { str_split(this, delimiter) }
+    }
+
+    /// Returns an iterator over the characters of this string.
+    pub func chars(this) -> List[I32] {
+        return lowlevel { str_chars(this) }
+    }
+
+    /// Removes leading and trailing whitespace.
+    pub func trim(this) -> Str {
+        return lowlevel { str_trim(this) }
+    }
+
+    /// Removes leading whitespace.
+    pub func trim_start(this) -> Str {
+        return lowlevel { str_trim_start(this) }
+    }
+
+    /// Removes trailing whitespace.
+    pub func trim_end(this) -> Str {
+        return lowlevel { str_trim_end(this) }
+    }
+
+    /// Parses this string as an I64.
+    pub func parse_i64(this) -> Maybe[I64] {
+        let result: I64 = lowlevel { str_parse_i64(this) }
+        return Just(result)
+    }
+
+    /// Parses this string as a U16.
+    pub func parse_u16(this) -> Maybe[U16] {
+        let result: I64 = lowlevel { str_parse_i64(this) }
+        return Just(result as U16)
+    }
+
+    /// Replaces all occurrences of a substring.
+    pub func replace(this, from: Str, to: Str) -> Str {
+        return lowlevel { str_replace(this, from, to) }
+    }
 }

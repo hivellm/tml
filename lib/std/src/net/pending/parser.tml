@@ -10,7 +10,7 @@
 //! IPv4 addresses use dotted-decimal notation:
 //!
 //! ```tml
-//! use core::net::parser::parse_ipv4
+//! use std::net::parser::parse_ipv4
 //!
 //! let addr = parse_ipv4("192.168.1.1").unwrap()
 //! let localhost = parse_ipv4("127.0.0.1").unwrap()
@@ -25,7 +25,7 @@
 //! IPv6 addresses use colon-separated hex notation with optional `::` compression:
 //!
 //! ```tml
-//! use core::net::parser::parse_ipv6
+//! use std::net::parser::parse_ipv6
 //!
 //! let full = parse_ipv6("2001:0db8:85a3:0000:0000:8a2e:0370:7334").unwrap()
 //! let compressed = parse_ipv6("2001:db8::1").unwrap()
@@ -37,7 +37,7 @@
 //! Use `parse_ip` when you accept either format:
 //!
 //! ```tml
-//! use core::net::parser::parse_ip
+//! use std::net::parser::parse_ip
 //!
 //! let v4 = parse_ip("192.168.1.1").unwrap()  // IpAddr::V4
 //! let v6 = parse_ip("::1").unwrap()          // IpAddr::V6
@@ -48,7 +48,7 @@
 //! Socket addresses combine an IP with a port:
 //!
 //! ```tml
-//! use core::net::parser::parse_socket_addr
+//! use std::net::parser::parse_socket_addr
 //!
 //! // IPv4: ip:port
 //! let v4 = parse_socket_addr("127.0.0.1:8080").unwrap()

@@ -40,14 +40,22 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         size_t count = elements.size();
 
         if (count == 0) {
-            // Empty array - create empty struct as placeholder
-            last_expr_type_ = "[0 x i64]";
+            // Empty array - use expected type if available
+            std::string elem_type =
+                !expected_literal_type_.empty() ? expected_literal_type_ : "i64";
+            last_expr_type_ = "[0 x " + elem_type + "]";
             return "zeroinitializer";
         }
 
-        // Infer element type from first element
-        types::TypePtr elem_type = infer_expr_type(*elements[0]);
-        std::string llvm_elem_type = llvm_type_from_semantic(elem_type, true);
+        // Use expected_literal_type_ if set (from struct field context), otherwise infer from first
+        // element
+        std::string llvm_elem_type;
+        if (!expected_literal_type_.empty()) {
+            llvm_elem_type = expected_literal_type_;
+        } else {
+            types::TypePtr elem_type = infer_expr_type(*elements[0]);
+            llvm_elem_type = llvm_type_from_semantic(elem_type, true);
+        }
 
         // Generate array type [N x elem_type]
         std::string array_type = "[" + std::to_string(count) + " x " + llvm_elem_type + "]";
@@ -88,14 +96,21 @@ auto LLVMIRGen::gen_array(const parser::ArrayExpr& arr) -> std::string {
         }
 
         if (count == 0) {
-            // Runtime count or zero - fall back to empty array
-            last_expr_type_ = "[0 x i64]";
+            // Runtime count or zero - use expected type if available
+            std::string elem_type =
+                !expected_literal_type_.empty() ? expected_literal_type_ : "i64";
+            last_expr_type_ = "[0 x " + elem_type + "]";
             return "zeroinitializer";
         }
 
-        // Infer element type
-        types::TypePtr elem_type = infer_expr_type(*pair.first);
-        std::string llvm_elem_type = llvm_type_from_semantic(elem_type, true);
+        // Use expected_literal_type_ if set, otherwise infer from expression
+        std::string llvm_elem_type;
+        if (!expected_literal_type_.empty()) {
+            llvm_elem_type = expected_literal_type_;
+        } else {
+            types::TypePtr elem_type = infer_expr_type(*pair.first);
+            llvm_elem_type = llvm_type_from_semantic(elem_type, true);
+        }
         std::string array_type = "[" + std::to_string(count) + " x " + llvm_elem_type + "]";
 
         // Generate initial value once

@@ -250,6 +250,7 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare i64 @list_capacity(ptr)");
     emit_line("declare void @list_clear(ptr)");
     emit_line("declare i32 @list_is_empty(ptr)");
+    emit_line("declare void @list_remove(ptr, i64)");
     emit_line("");
 
     // HashMap runtime declarations
@@ -328,7 +329,15 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @str_to_upper(ptr)");
     emit_line("declare ptr @str_to_lower(ptr)");
     emit_line("declare ptr @str_trim(ptr)");
+    emit_line("declare ptr @str_trim_start(ptr)");
+    emit_line("declare ptr @str_trim_end(ptr)");
     emit_line("declare i32 @str_char_at(ptr, i32)");
+    emit_line("declare i64 @str_find(ptr, ptr)");
+    emit_line("declare i64 @str_rfind(ptr, ptr)");
+    emit_line("declare i64 @str_parse_i64(ptr)");
+    emit_line("declare ptr @str_replace(ptr, ptr, ptr)");
+    emit_line("declare ptr @str_split(ptr, ptr)");
+    emit_line("declare ptr @str_chars(ptr)");
     emit_line("declare ptr @i64_to_str(i64)");
     emit_line("declare ptr @f64_to_str(double)");
     emit_line("");
@@ -518,6 +527,69 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @mem_zero(ptr, i64)");
     emit_line("declare i32 @mem_compare(ptr, ptr, i64)");
     emit_line("declare i32 @mem_eq(ptr, ptr, i64)");
+    emit_line("");
+
+    // Object pool functions (for @pool classes)
+    emit_line("; Object pool functions");
+    emit_line("declare ptr @pool_acquire(ptr, i64)");
+    emit_line("declare void @pool_release(ptr, ptr)");
+    emit_line("declare void @pool_init(ptr, i64, i64)");
+    emit_line("declare void @pool_destroy(ptr)");
+    emit_line("declare i64 @pool_count(ptr)");
+    emit_line("declare i64 @pool_capacity(ptr)");
+    emit_line("");
+
+    // Thread-local pool functions (for @pool(thread_local: true) classes)
+    emit_line("; Thread-local pool functions");
+    emit_line("declare ptr @tls_pool_acquire(ptr, i64)");
+    emit_line("declare void @tls_pool_release(ptr, ptr, i64)");
+    emit_line("declare void @tls_pools_cleanup()");
+    emit_line("declare i32 @tls_pool_stats(ptr, ptr, ptr)");
+    emit_line("");
+
+    // Network socket functions (matches runtime/net.c)
+    // Track in declared_externals_ to prevent duplicate declarations from lowlevel funcs
+    emit_line("; Network socket functions");
+    emit_line("declare i64 @sys_socket_raw(i32, i32, i32)");
+    declared_externals_.insert("sys_socket_raw");
+    emit_line("declare i32 @sys_bind_v4(i64, i32, i16)");
+    declared_externals_.insert("sys_bind_v4");
+    emit_line("declare i32 @sys_bind_v6(i64, ptr, i16, i32, i32)");
+    declared_externals_.insert("sys_bind_v6");
+    emit_line("declare i32 @sys_listen_raw(i64, i32)");
+    declared_externals_.insert("sys_listen_raw");
+    emit_line("declare i64 @sys_accept_v4(i64, ptr, ptr)");
+    declared_externals_.insert("sys_accept_v4");
+    emit_line("declare i32 @sys_connect_v4(i64, i32, i16)");
+    declared_externals_.insert("sys_connect_v4");
+    emit_line("declare i32 @sys_connect_v6(i64, ptr, i16, i32, i32)");
+    declared_externals_.insert("sys_connect_v6");
+    emit_line("declare i64 @sys_send_raw(i64, ptr, i64, i32)");
+    declared_externals_.insert("sys_send_raw");
+    emit_line("declare i64 @sys_recv_raw(i64, ptr, i64, i32)");
+    declared_externals_.insert("sys_recv_raw");
+    emit_line("declare i64 @sys_sendto_v4(i64, ptr, i64, i32, i32, i16)");
+    declared_externals_.insert("sys_sendto_v4");
+    emit_line("declare i64 @sys_recvfrom_v4(i64, ptr, i64, i32, ptr, ptr)");
+    declared_externals_.insert("sys_recvfrom_v4");
+    emit_line("declare i32 @sys_shutdown_raw(i64, i32)");
+    declared_externals_.insert("sys_shutdown_raw");
+    emit_line("declare i32 @sys_close_raw(i64)");
+    declared_externals_.insert("sys_close_raw");
+    emit_line("declare i32 @sys_set_nonblocking_raw(i64, i32)");
+    declared_externals_.insert("sys_set_nonblocking_raw");
+    emit_line("declare i32 @sys_setsockopt_raw(i64, i32, i32, i32)");
+    declared_externals_.insert("sys_setsockopt_raw");
+    emit_line("declare i32 @sys_getsockname_v4(i64, ptr, ptr)");
+    declared_externals_.insert("sys_getsockname_v4");
+    emit_line("declare i32 @sys_getpeername_v4(i64, ptr, ptr)");
+    declared_externals_.insert("sys_getpeername_v4");
+    emit_line("declare i32 @sys_get_last_error()");
+    declared_externals_.insert("sys_get_last_error");
+    emit_line("declare i32 @sys_wsa_startup()");
+    declared_externals_.insert("sys_wsa_startup");
+    emit_line("declare void @sys_wsa_cleanup()");
+    declared_externals_.insert("sys_wsa_cleanup");
     emit_line("");
 
     // Format strings for print/println

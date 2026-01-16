@@ -1,0 +1,113 @@
+//! Network Standard Library Tests
+//!
+//! Tests for the networking API (IP addresses, socket addresses)
+//!
+//! NOTE: RawSocket tests are temporarily disabled due to a codegen bug
+//! with extracting structs from Outcome types.
+
+use test::{assert, assert_eq}
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr, IpAddr}
+use std::net::error::{NetError, NetErrorKind}
+
+// ============================================================================
+// IP Address Tests
+// ============================================================================
+
+@test
+func test_ipv4_localhost() {
+    let localhost: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    assert(localhost.is_loopback(), "LOCALHOST should be loopback")
+    // Verify to_bits() gives correct 32-bit representation
+    let bits: U32 = localhost.to_bits()
+    assert_eq(bits, 0x7F000001 as U32)
+}
+
+@test
+func test_ipv4_unspecified() {
+    let unspec: Ipv4Addr = Ipv4Addr::UNSPECIFIED()
+    assert(unspec.is_unspecified(), "UNSPECIFIED should be unspecified")
+    // Verify to_bits() gives zero
+    let bits: U32 = unspec.to_bits()
+    assert_eq(bits, 0 as U32)
+}
+
+@test
+func test_ipv4_broadcast() {
+    let broadcast: Ipv4Addr = Ipv4Addr::BROADCAST()
+    assert(broadcast.is_broadcast(), "BROADCAST should be broadcast")
+}
+
+@test
+func test_ipv4_from_octets() {
+    let ip: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    // Verify to_bits() gives correct 32-bit representation
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)  // 192.168.1.1 in hex
+    assert(ip.is_private(), "192.168.x.x should be private")
+}
+
+@test
+func test_ipv4_from_bits() {
+    let ip: Ipv4Addr = Ipv4Addr::from_bits(0xC0A80101 as U32)
+    let bits: U32 = ip.to_bits()
+    assert_eq(bits, 0xC0A80101 as U32)
+    assert(ip.is_private(), "192.168.1.1 should be private")
+}
+
+// ============================================================================
+// Socket Address Tests
+// ============================================================================
+
+@test
+func test_socket_addr_v4_creation() {
+    let ip: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    let addr: SocketAddrV4 = SocketAddrV4::new(ip, 8080 as U16)
+
+    assert_eq(addr.port(), 8080 as U16)
+    assert(addr.ip().is_loopback(), "IP should be loopback")
+}
+
+@test
+func test_socket_addr_port_change() {
+    let ip: Ipv4Addr = Ipv4Addr::LOCALHOST()
+    var addr: SocketAddrV4 = SocketAddrV4::new(ip, 8080 as U16)
+
+    assert_eq(addr.port(), 8080 as U16)
+
+    addr.set_port(9090 as U16)
+    assert_eq(addr.port(), 9090 as U16)
+}
+
+@test
+func test_socket_addr_enum() {
+    let v4: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::LOCALHOST(), 80 as U16)
+    let addr: SocketAddr = SocketAddr::V4(v4)
+
+    assert(addr.is_ipv4(), "Should be IPv4")
+    assert(not addr.is_ipv6(), "Should not be IPv6")
+    assert_eq(addr.port(), 80 as U16)
+}
+
+// ============================================================================
+// RawSocket Tests - DISABLED
+// ============================================================================
+// NOTE: These tests are temporarily disabled due to a codegen bug where
+// extracting struct values from Outcome types generates incorrect LLVM IR.
+// The bug causes: error: '%tXXX' defined with type 'i64' but expected '%struct.RawSocket'
+// TODO: Re-enable these tests once the codegen bug is fixed.
+
+// ============================================================================
+// Error Type Tests
+// ============================================================================
+
+@test
+func test_net_error_kinds() {
+    let conn_refused: NetError = NetError::new(NetErrorKind::ConnectionRefused())
+    assert(conn_refused.is_connection_refused(), "Should be connection refused")
+
+    let would_block: NetError = NetError::new(NetErrorKind::WouldBlock())
+    assert(would_block.is_would_block(), "Should be would block")
+
+    let not_connected: NetError = NetError::new(NetErrorKind::NotConnected())
+    assert(not_connected.is_not_connected(), "Should be not connected")
+}

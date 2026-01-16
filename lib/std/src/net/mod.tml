@@ -1,8 +1,7 @@
 //! Networking primitives for IP communication.
 //!
 //! This module provides platform-independent network types for working with
-//! IP addresses and socket addresses. These are pure data types with no I/O
-//! operations, making them suitable for `no_std` environments.
+//! IP addresses, socket addresses, and network I/O buffers.
 //!
 //! # IP Addresses
 //!
@@ -18,12 +17,28 @@
 //! - [`SocketAddrV6`] - IPv6 address + port + flow info + scope ID
 //! - [`SocketAddr`] - An enum that can hold either V4 or V6
 //!
+//! # Buffer Management
+//!
+//! Efficient buffer types for network I/O:
+//!
+//! - [`Buffer`] - A growable byte buffer with capacity management
+//! - [`BufferView`] - A zero-copy view into byte data
+//! - [`BufferPool`] - Pre-allocated buffer pool for reuse
+//!
+//! # Platform Abstraction
+//!
+//! Low-level socket operations (in [`sys`] module):
+//!
+//! - [`RawSocket`] - Platform-specific socket handle
+//! - Socket creation, binding, listening, connecting
+//! - Non-blocking I/O support
+//!
 //! # Examples
 //!
 //! ## Working with IP Addresses
 //!
 //! ```tml
-//! use core::net::{Ipv4Addr, Ipv6Addr, IpAddr}
+//! use std::net::{Ipv4Addr, Ipv6Addr, IpAddr}
 //!
 //! // Create IPv4 addresses
 //! let localhost = Ipv4Addr::new(127, 0, 0, 1)
@@ -41,7 +56,7 @@
 //! ## Working with Socket Addresses
 //!
 //! ```tml
-//! use core::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+//! use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
 //!
 //! // Create a socket address
 //! let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8080)
@@ -54,20 +69,53 @@
 //! let socket: SocketAddr = SocketAddr::V4(addr)
 //! ```
 //!
+//! ## Using Buffers
+//!
+//! ```tml
+//! use std::net::buffer::{Buffer, BufferPool}
+//!
+//! // Use a buffer pool for efficient allocation
+//! let pool = BufferPool::new(16, 4096)
+//! let mut buf = pool.get()
+//!
+//! // Write and read data
+//! buf.write_bytes(b"Hello")
+//! let view = buf.as_view()
+//!
+//! // Return to pool
+//! pool.put(buf)
+//! ```
+//!
+//! # TCP Networking
+//!
+//! TCP (Transmission Control Protocol) types for reliable connections:
+//!
+//! - [`TcpListener`] - Listens for incoming TCP connections
+//! - [`TcpStream`] - A connected TCP socket for reading and writing
+//! - [`TcpBuilder`] - Builder pattern for TCP socket configuration
+//!
+//! # UDP Networking
+//!
+//! UDP (User Datagram Protocol) types for connectionless communication:
+//!
+//! - [`UdpSocket`] - A UDP socket for sending and receiving datagrams
+//! - [`UdpBuilder`] - Builder pattern for UDP socket configuration
+//!
 //! # Module Structure
 //!
 //! - [`ip`] - IP address types (`Ipv4Addr`, `Ipv6Addr`, `IpAddr`)
 //! - [`socket`] - Socket address types (`SocketAddrV4`, `SocketAddrV6`, `SocketAddr`)
 //! - [`parser`] - Parsing utilities for addresses
 //! - [`error`] - Network error types (`NetError`, `NetErrorKind`)
-
+//! - [`buffer`] - Buffer management (`Buffer`, `BufferView`, `BufferPool`)
+//! - [`sys`] - Platform abstraction layer for sockets
 pub mod ip
 pub mod socket
-pub mod parser
 pub mod error
+pub mod sys
 
 // Re-export main types
 pub use ip::{IpAddr, Ipv4Addr, Ipv6Addr}
 pub use socket::{SocketAddr, SocketAddrV4, SocketAddrV6}
 pub use error::{NetError, NetErrorKind}
-pub use parser::AddrParseError
+pub use sys::{RawSocket, SocketType, SocketProtocol}

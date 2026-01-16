@@ -1,0 +1,106 @@
+//! Network error types.
+//!
+//! This module defines error types for network I/O operations.
+
+// =============================================================================
+// Network Error Kind
+// =============================================================================
+
+/// The kind of network error that occurred.
+pub type NetErrorKind {
+    /// Discriminant value for the error kind
+    value: I32,
+}
+
+impl NetErrorKind {
+    // Error kind constants
+    pub func ConnectionRefused() -> NetErrorKind { NetErrorKind { value: 1 } }
+    pub func ConnectionReset() -> NetErrorKind { NetErrorKind { value: 2 } }
+    pub func ConnectionAborted() -> NetErrorKind { NetErrorKind { value: 3 } }
+    pub func HostUnreachable() -> NetErrorKind { NetErrorKind { value: 4 } }
+    pub func NetworkUnreachable() -> NetErrorKind { NetErrorKind { value: 5 } }
+    pub func TimedOut() -> NetErrorKind { NetErrorKind { value: 6 } }
+    pub func AddrInUse() -> NetErrorKind { NetErrorKind { value: 7 } }
+    pub func AddrNotAvailable() -> NetErrorKind { NetErrorKind { value: 8 } }
+    pub func WouldBlock() -> NetErrorKind { NetErrorKind { value: 9 } }
+    pub func AlreadyConnected() -> NetErrorKind { NetErrorKind { value: 10 } }
+    pub func NotConnected() -> NetErrorKind { NetErrorKind { value: 11 } }
+    pub func PermissionDenied() -> NetErrorKind { NetErrorKind { value: 12 } }
+    pub func InvalidInput() -> NetErrorKind { NetErrorKind { value: 13 } }
+    pub func InvalidData() -> NetErrorKind { NetErrorKind { value: 14 } }
+    pub func Interrupted() -> NetErrorKind { NetErrorKind { value: 15 } }
+    pub func UnexpectedEof() -> NetErrorKind { NetErrorKind { value: 16 } }
+    pub func Other() -> NetErrorKind { NetErrorKind { value: 17 } }
+
+    /// Checks if this is a connection refused error.
+    pub func is_connection_refused(this) -> Bool {
+        this.value == 1
+    }
+
+    /// Checks if this is a would block error.
+    pub func is_would_block(this) -> Bool {
+        this.value == 9
+    }
+
+    /// Checks if this is a not connected error.
+    pub func is_not_connected(this) -> Bool {
+        this.value == 11
+    }
+
+    /// Returns the raw value.
+    pub func raw(this) -> I32 {
+        this.value
+    }
+}
+
+// =============================================================================
+// Network Error
+// =============================================================================
+
+/// An error from a network operation.
+pub type NetError {
+    error_kind: NetErrorKind,
+}
+
+impl NetError {
+    /// Creates a new network error with the given kind.
+    pub func new(kind: NetErrorKind) -> NetError {
+        NetError { error_kind: kind }
+    }
+
+    /// Returns the error kind.
+    pub func kind(this) -> NetErrorKind {
+        this.error_kind
+    }
+
+    /// Checks if this is a connection refused error.
+    pub func is_connection_refused(this) -> Bool {
+        this.error_kind.is_connection_refused()
+    }
+
+    /// Checks if this is a would block error.
+    pub func is_would_block(this) -> Bool {
+        this.error_kind.is_would_block()
+    }
+
+    /// Checks if this is a not connected error.
+    pub func is_not_connected(this) -> Bool {
+        this.error_kind.is_not_connected()
+    }
+
+    /// Creates a connection refused error.
+    pub func connection_refused() -> NetError {
+        NetError::new(NetErrorKind::ConnectionRefused())
+    }
+
+    /// Creates a would block error.
+    pub func would_block() -> NetError {
+        NetError::new(NetErrorKind::WouldBlock())
+    }
+
+    /// Creates an error from the last OS error.
+    pub func from_last_error() -> NetError {
+        // For now, return a generic error
+        NetError::new(NetErrorKind::Other())
+    }
+}

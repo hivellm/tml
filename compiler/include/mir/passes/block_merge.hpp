@@ -50,8 +50,7 @@ protected:
 
 private:
     // Check if two blocks can be merged
-    auto can_merge(const Function& func, const BasicBlock& pred,
-                   const BasicBlock& succ) -> bool;
+    auto can_merge(const Function& func, const BasicBlock& pred, const BasicBlock& succ) -> bool;
 
     // Merge successor into predecessor
     auto merge_blocks(Function& func, size_t pred_idx, size_t succ_idx) -> void;

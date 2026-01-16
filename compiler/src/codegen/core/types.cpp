@@ -339,7 +339,8 @@ auto LLVMIRGen::llvm_type_from_semantic(const types::TypePtr& type, bool for_dat
                         // Also register fields
                         std::vector<FieldInfo> fields;
                         for (size_t i = 0; i < struct_def.fields.size(); ++i) {
-                            std::string ft = llvm_type_from_semantic(struct_def.fields[i].second, true);
+                            std::string ft =
+                                llvm_type_from_semantic(struct_def.fields[i].second, true);
                             fields.push_back({struct_def.fields[i].first, static_cast<int>(i), ft});
                         }
                         struct_fields_[named.name] = fields;
@@ -416,8 +417,8 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
         if (base_name == "I8" || base_name == "I16" || base_name == "I32" || base_name == "I64" ||
             base_name == "I128" || base_name == "U8" || base_name == "U16" || base_name == "U32" ||
             base_name == "U64" || base_name == "U128" || base_name == "F32" || base_name == "F64" ||
-            base_name == "Bool" || base_name == "Char" || base_name == "Str" || base_name == "Unit" ||
-            base_name == "Never" || base_name == "Ptr") {
+            base_name == "Bool" || base_name == "Char" || base_name == "Str" ||
+            base_name == "Unit" || base_name == "Never" || base_name == "Ptr") {
             return;
         }
 
@@ -456,7 +457,8 @@ void LLVMIRGen::ensure_type_defined(const parser::TypePtr& type) {
                     for (size_t i = 0; i < struct_it->second.fields.size(); ++i) {
                         std::string ft =
                             llvm_type_from_semantic(struct_it->second.fields[i].second, true);
-                        fields.push_back({struct_it->second.fields[i].first, static_cast<int>(i), ft});
+                        fields.push_back(
+                            {struct_it->second.fields[i].first, static_cast<int>(i), ft});
                     }
                     struct_fields_[base_name] = fields;
                     return;

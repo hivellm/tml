@@ -526,6 +526,15 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             }
         }
 
+#ifdef _WIN32
+        // Add Windows system libraries for socket support
+        if (has_socket_functions(module) || registry->has_module("std::net") ||
+            registry->has_module("std::net::sys") || registry->has_module("std::net::tcp") ||
+            registry->has_module("std::net::udp")) {
+            link_options.link_flags.push_back("-lws2_32");
+        }
+#endif
+
         auto link_result = link_objects(object_files, final_output, clang, link_options);
         if (!link_result.success) {
             std::cerr << "error: " << link_result.error_message << "\n";

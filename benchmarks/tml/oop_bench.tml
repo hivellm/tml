@@ -1,0 +1,633 @@
+// OOP Benchmark - TML
+//
+// Benchmarks for Object-Oriented Programming features:
+// - Virtual dispatch performance
+// - Object creation throughput
+// - HTTP handler simulation
+// - Game loop simulation
+// - Deep inheritance chains
+// - Method chaining
+
+// ============================================================================
+// 1. Virtual Dispatch Benchmark - Shapes
+// ============================================================================
+
+/// Base class for shapes
+class Shape {
+    type_id: I32
+
+    static func create(id: I32) -> Shape {
+        return Shape { type_id: id }
+    }
+
+    virtual func area(this) -> F64 {
+        return 0.0
+    }
+
+    virtual func perimeter(this) -> F64 {
+        return 0.0
+    }
+}
+
+class Circle extends Shape {
+    radius: F64
+
+    static func create(r: F64) -> Circle {
+        return Circle { type_id: 1, radius: r }
+    }
+
+    override func area(this) -> F64 {
+        return 3.14159265 * this.radius * this.radius
+    }
+
+    override func perimeter(this) -> F64 {
+        return 2.0 * 3.14159265 * this.radius
+    }
+}
+
+class Rectangle extends Shape {
+    width: F64
+    height: F64
+
+    static func create(w: F64, h: F64) -> Rectangle {
+        return Rectangle { type_id: 2, width: w, height: h }
+    }
+
+    override func area(this) -> F64 {
+        return this.width * this.height
+    }
+
+    override func perimeter(this) -> F64 {
+        return 2.0 * (this.width + this.height)
+    }
+}
+
+class Triangle extends Shape {
+    base_len: F64
+    height: F64
+    side1: F64
+    side2: F64
+
+    static func create(b: F64, h: F64, s1: F64, s2: F64) -> Triangle {
+        return Triangle { type_id: 3, base_len: b, height: h, side1: s1, side2: s2 }
+    }
+
+    override func area(this) -> F64 {
+        return 0.5 * this.base_len * this.height
+    }
+
+    override func perimeter(this) -> F64 {
+        return this.base_len + this.side1 + this.side2
+    }
+}
+
+// Virtual dispatch benchmark - calls through base class
+func virtual_dispatch_bench(iterations: I32) -> F64 {
+    let c: Circle = Circle::create(5.0)
+    let r: Rectangle = Rectangle::create(4.0, 6.0)
+    let t: Triangle = Triangle::create(3.0, 4.0, 5.0, 5.0)
+
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        // Alternate between shapes to prevent branch prediction
+        let shape_idx: I32 = i % 3
+
+        if shape_idx == 0 then {
+            total = total + c.area() + c.perimeter()
+        } else if shape_idx == 1 then {
+            total = total + r.area() + r.perimeter()
+        } else {
+            total = total + t.area() + t.perimeter()
+        }
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// 2. Object Creation Benchmark
+// ============================================================================
+
+sealed class Point {
+    x: F64
+    y: F64
+
+    static func create(x: F64, y: F64) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    func distance(this, other: Point) -> F64 {
+        let dx: F64 = this.x - other.x
+        let dy: F64 = this.y - other.y
+        return sqrt_approx(dx * dx + dy * dy)
+    }
+}
+
+func sqrt_approx(x: F64) -> F64 {
+    // Newton's method for square root
+    if x <= 0.0 then {
+        return 0.0
+    }
+    var guess: F64 = x / 2.0
+    var iter: I32 = 0
+    loop {
+        if iter >= 10 then { break }
+        guess = (guess + x / guess) / 2.0
+        iter = iter + 1
+    }
+    return guess
+}
+
+func object_creation_bench(iterations: I32) -> F64 {
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        // Create two points and compute distance
+        let i_f64: F64 = i as F64
+        let p1: Point = Point::create(i_f64, i_f64 * 2.0)
+        let p2: Point = Point::create(i_f64 + 1.0, i_f64 + 3.0)
+        total = total + p1.distance(p2)
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// 3. HTTP Handler Simulation
+// ============================================================================
+
+class HttpHandler {
+    route_id: I32
+
+    static func create(id: I32) -> HttpHandler {
+        return HttpHandler { route_id: id }
+    }
+
+    virtual func handle(this, method: I32, path_hash: I32) -> I32 {
+        return 404
+    }
+}
+
+class GetHandler extends HttpHandler {
+    static func create(id: I32) -> GetHandler {
+        return GetHandler { route_id: id }
+    }
+
+    override func handle(this, method: I32, path_hash: I32) -> I32 {
+        if method == 1 then { // GET
+            return 200 + this.route_id
+        }
+        return 405 // Method not allowed
+    }
+}
+
+class PostHandler extends HttpHandler {
+    requires_auth: Bool
+
+    static func create(id: I32, auth: Bool) -> PostHandler {
+        return PostHandler { route_id: id, requires_auth: auth }
+    }
+
+    override func handle(this, method: I32, path_hash: I32) -> I32 {
+        if method == 2 then { // POST
+            if this.requires_auth then {
+                return 201 + this.route_id
+            }
+            return 200 + this.route_id
+        }
+        return 405
+    }
+}
+
+class DeleteHandler extends HttpHandler {
+    static func create(id: I32) -> DeleteHandler {
+        return DeleteHandler { route_id: id }
+    }
+
+    override func handle(this, method: I32, path_hash: I32) -> I32 {
+        if method == 3 then { // DELETE
+            return 204
+        }
+        return 405
+    }
+}
+
+func http_handler_bench(iterations: I32) -> I32 {
+    let get_h: GetHandler = GetHandler::create(1)
+    let post_h: PostHandler = PostHandler::create(2, true)
+    let del_h: DeleteHandler = DeleteHandler::create(3)
+
+    var total: I32 = 0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        // Simulate different request types
+        let handler_idx: I32 = i % 3
+        let method: I32 = (i % 3) + 1
+        let path_hash: I32 = i * 17 % 100
+
+        if handler_idx == 0 then {
+            total = total + get_h.handle(method, path_hash)
+        } else if handler_idx == 1 then {
+            total = total + post_h.handle(method, path_hash)
+        } else {
+            total = total + del_h.handle(method, path_hash)
+        }
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// 4. Game Loop Simulation
+// ============================================================================
+
+class Entity {
+    eid: I32
+
+    static func create(id: I32) -> Entity {
+        return Entity { eid: id }
+    }
+
+    virtual func update(this, delta: F64) -> F64 {
+        return 0.0
+    }
+
+    virtual func get_x(this) -> F64 {
+        return 0.0
+    }
+
+    virtual func get_y(this) -> F64 {
+        return 0.0
+    }
+}
+
+class Player extends Entity {
+    px: F64
+    py: F64
+    speed: F64
+
+    static func create(x: F64, y: F64, speed: F64) -> Player {
+        return Player { eid: 1, px: x, py: y, speed: speed }
+    }
+
+    override func update(this, delta: F64) -> F64 {
+        // Note: fields are immutable, so we compute but don't modify
+        let new_x: F64 = this.px + this.speed * delta
+        let new_y: F64 = this.py + this.speed * delta * 0.5
+        return new_x + new_y
+    }
+
+    override func get_x(this) -> F64 {
+        return this.px
+    }
+
+    override func get_y(this) -> F64 {
+        return this.py
+    }
+}
+
+class Enemy extends Entity {
+    ex: F64
+    ey: F64
+    speed: F64
+    target_x: F64
+    target_y: F64
+
+    static func create(x: F64, y: F64, speed: F64, tx: F64, ty: F64) -> Enemy {
+        return Enemy { eid: 2, ex: x, ey: y, speed: speed, target_x: tx, target_y: ty }
+    }
+
+    override func update(this, delta: F64) -> F64 {
+        // Move towards target
+        let dx: F64 = this.target_x - this.ex
+        let dy: F64 = this.target_y - this.ey
+        let dist: F64 = sqrt_approx(dx * dx + dy * dy)
+
+        if dist > 0.001 then {
+            let new_x: F64 = this.ex + (dx / dist) * this.speed * delta
+            let new_y: F64 = this.ey + (dy / dist) * this.speed * delta
+            return new_x + new_y
+        }
+
+        return this.ex + this.ey
+    }
+
+    override func get_x(this) -> F64 {
+        return this.ex
+    }
+
+    override func get_y(this) -> F64 {
+        return this.ey
+    }
+}
+
+class Projectile extends Entity {
+    prx: F64
+    pry: F64
+    vx: F64
+    vy: F64
+
+    static func create(x: F64, y: F64, vx: F64, vy: F64) -> Projectile {
+        return Projectile { eid: 3, prx: x, pry: y, vx: vx, vy: vy }
+    }
+
+    override func update(this, delta: F64) -> F64 {
+        let new_x: F64 = this.prx + this.vx * delta
+        let new_y: F64 = this.pry + this.vy * delta
+        return new_x + new_y
+    }
+
+    override func get_x(this) -> F64 {
+        return this.prx
+    }
+
+    override func get_y(this) -> F64 {
+        return this.pry
+    }
+}
+
+func game_loop_bench(iterations: I32) -> F64 {
+    let player: Player = Player::create(0.0, 0.0, 5.0)
+    let enemy: Enemy = Enemy::create(100.0, 100.0, 3.0, 0.0, 0.0)
+    let proj: Projectile = Projectile::create(0.0, 0.0, 10.0, 10.0)
+
+    var total: F64 = 0.0
+    let delta: F64 = 0.016  // ~60 FPS frame time
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        // Update all entities
+        total = total + player.update(delta)
+        total = total + enemy.update(delta)
+        total = total + proj.update(delta)
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// 5. Deep Inheritance Chain
+// ============================================================================
+
+class Base {
+    value: I32
+
+    static func create(v: I32) -> Base {
+        return Base { value: v }
+    }
+
+    virtual func compute(this) -> I32 {
+        return this.value
+    }
+}
+
+class Derived1 extends Base {
+    bonus1: I32
+
+    static func create(v: I32, b: I32) -> Derived1 {
+        return Derived1 { value: v, bonus1: b }
+    }
+
+    override func compute(this) -> I32 {
+        return this.value + this.bonus1
+    }
+}
+
+class Derived2 extends Derived1 {
+    bonus2: I32
+
+    static func create(v: I32, b1: I32, b2: I32) -> Derived2 {
+        return Derived2 { value: v, bonus1: b1, bonus2: b2 }
+    }
+
+    override func compute(this) -> I32 {
+        return this.value + this.bonus1 + this.bonus2
+    }
+}
+
+class Derived3 extends Derived2 {
+    bonus3: I32
+
+    static func create(v: I32, b1: I32, b2: I32, b3: I32) -> Derived3 {
+        return Derived3 { value: v, bonus1: b1, bonus2: b2, bonus3: b3 }
+    }
+
+    override func compute(this) -> I32 {
+        return this.value + this.bonus1 + this.bonus2 + this.bonus3
+    }
+}
+
+class Derived4 extends Derived3 {
+    bonus4: I32
+
+    static func create(v: I32, b1: I32, b2: I32, b3: I32, b4: I32) -> Derived4 {
+        return Derived4 { value: v, bonus1: b1, bonus2: b2, bonus3: b3, bonus4: b4 }
+    }
+
+    override func compute(this) -> I32 {
+        return this.value + this.bonus1 + this.bonus2 + this.bonus3 + this.bonus4
+    }
+}
+
+func deep_inheritance_bench(iterations: I32) -> I32 {
+    let b: Base = Base::create(10)
+    let d1: Derived1 = Derived1::create(10, 5)
+    let d2: Derived2 = Derived2::create(10, 5, 3)
+    let d3: Derived3 = Derived3::create(10, 5, 3, 2)
+    let d4: Derived4 = Derived4::create(10, 5, 3, 2, 1)
+
+    var total: I32 = 0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        // Call through different levels
+        let level: I32 = i % 5
+
+        if level == 0 then {
+            total = total + b.compute()
+        } else if level == 1 then {
+            total = total + d1.compute()
+        } else if level == 2 then {
+            total = total + d2.compute()
+        } else if level == 3 then {
+            total = total + d3.compute()
+        } else {
+            total = total + d4.compute()
+        }
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// 6. Method Chaining Benchmark
+// ============================================================================
+
+sealed class Builder {
+    val: I32
+
+    static func create() -> Builder {
+        return Builder { val: 0 }
+    }
+
+    func with_add(this, n: I32) -> Builder {
+        return Builder { val: this.val + n }
+    }
+
+    func with_multiply(this, n: I32) -> Builder {
+        return Builder { val: this.val * n }
+    }
+
+    func with_subtract(this, n: I32) -> Builder {
+        return Builder { val: this.val - n }
+    }
+
+    func build(this) -> I32 {
+        return this.val
+    }
+}
+
+func method_chaining_bench(iterations: I32) -> I32 {
+    var total: I32 = 0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        let b1: Builder = Builder::create()
+        let b2: Builder = b1.with_add(10)
+        let b3: Builder = b2.with_multiply(2)
+        let b4: Builder = b3.with_subtract(5)
+        let b5: Builder = b4.with_add(i)
+        let result: I32 = b5.build()
+        total = total + result
+
+        i = i + 1
+    }
+
+    return total
+}
+
+// ============================================================================
+// Benchmark Runner
+// ============================================================================
+
+func run_benchmark_1(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: F64 = virtual_dispatch_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: F64 = virtual_dispatch_bench(iterations)
+    return time_ns() - start
+}
+
+func run_benchmark_2(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: F64 = object_creation_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: F64 = object_creation_bench(iterations)
+    return time_ns() - start
+}
+
+func run_benchmark_3(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: I32 = http_handler_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: I32 = http_handler_bench(iterations)
+    return time_ns() - start
+}
+
+func run_benchmark_4(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: F64 = game_loop_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: F64 = game_loop_bench(iterations)
+    return time_ns() - start
+}
+
+func run_benchmark_5(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: I32 = deep_inheritance_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: I32 = deep_inheritance_bench(iterations)
+    return time_ns() - start
+}
+
+func run_benchmark_6(iterations: I32) -> I64 {
+    let warmup: I32 = iterations / 10
+    let _: I32 = method_chaining_bench(warmup)
+
+    let start: I64 = time_ns()
+    let _result: I32 = method_chaining_bench(iterations)
+    return time_ns() - start
+}
+
+pub func main() -> I32 {
+    println("============================================")
+    println("TML OOP Performance Benchmarks")
+    println("============================================")
+    println("")
+
+    let iterations: I32 = 100000
+
+    println("Running 100000 iterations per benchmark...")
+    println("")
+
+    // Run all benchmarks
+    let t1: I64 = run_benchmark_1(iterations)  // Virtual Dispatch
+    let t2: I64 = run_benchmark_2(iterations)  // Object Creation
+    let t3: I64 = run_benchmark_3(iterations)  // HTTP Handler
+    let t4: I64 = run_benchmark_4(iterations)  // Game Loop
+    let t5: I64 = run_benchmark_5(iterations)  // Deep Inheritance
+    let t6: I64 = run_benchmark_6(iterations)  // Method Chaining
+
+    // Print results (time in microseconds)
+    let us1: I64 = t1 / 1000
+    let us2: I64 = t2 / 1000
+    let us3: I64 = t3 / 1000
+    let us4: I64 = t4 / 1000
+    let us5: I64 = t5 / 1000
+    let us6: I64 = t6 / 1000
+
+    println("Virtual Dispatch:     " + us1.to_string() + " us")
+    println("Object Creation:      " + us2.to_string() + " us")
+    println("HTTP Handler:         " + us3.to_string() + " us")
+    println("Game Loop:            " + us4.to_string() + " us")
+    println("Deep Inheritance:     " + us5.to_string() + " us")
+    println("Method Chaining:      " + us6.to_string() + " us")
+
+    println("")
+    println("============================================")
+    println("Benchmarks complete!")
+    println("============================================")
+
+    return 0
+}

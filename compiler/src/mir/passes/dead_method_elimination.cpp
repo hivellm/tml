@@ -159,7 +159,8 @@ void DeadMethodEliminationPass::analyze_function_calls(const Function& func) {
 
             // Check for virtual method calls
             if (auto* method_call = std::get_if<MethodCallInst>(&inst.inst)) {
-                std::string target_name = method_call->receiver_type + "_" + method_call->method_name;
+                std::string target_name =
+                    method_call->receiver_type + "_" + method_call->method_name;
                 info.calls.insert(target_name);
 
                 // For virtual calls, we need to consider all possible targets
@@ -216,7 +217,7 @@ void DeadMethodEliminationPass::propagate_reachability() {
 }
 
 void DeadMethodEliminationPass::add_virtual_targets(const std::string& class_name,
-                                                     const std::string& method_name) {
+                                                    const std::string& method_name) {
     auto class_info = devirt_pass_.get_class_info(class_name);
     if (!class_info) {
         return;
@@ -263,8 +264,7 @@ auto DeadMethodEliminationPass::eliminate_dead_methods(Module& module) -> bool {
     // Note: For now, we just mark them as dead rather than removing
     // to preserve vtable indices. Full removal would require vtable rebuilding.
     for (auto& func : module.functions) {
-        if (std::find(dead_methods.begin(), dead_methods.end(), func.name) !=
-            dead_methods.end()) {
+        if (std::find(dead_methods.begin(), dead_methods.end(), func.name) != dead_methods.end()) {
             // Replace function body with unreachable
             // Keep the function signature for vtable compatibility
             func.blocks.clear();

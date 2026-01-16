@@ -192,8 +192,9 @@ void LLVMIRGen::emit_vtables() {
                 // If explicitly provided but not in functions_, it means the impl comes
                 // from an imported module and wasn't compiled in this unit - skip this vtable
                 if (explicitly_provided) {
-                    TML_DEBUG_LN("[DYN] Skipping vtable " << vtable_name
-                                << " - method " << method.name << " from imported module");
+                    TML_DEBUG_LN("[DYN] Skipping vtable " << vtable_name << " - method "
+                                                          << method.name
+                                                          << " from imported module");
                     all_methods_available = false;
                     break;
                 }
@@ -201,13 +202,14 @@ void LLVMIRGen::emit_vtables() {
                 // Not explicitly provided - check if it has a default implementation
                 // AND if we have the trait definition to generate it
                 bool has_default = (behavior_def->methods_with_defaults.count(method.name) > 0);
-                bool can_generate_default = has_default &&
-                    (trait_decls_.find(behavior_name) != trait_decls_.end());
+                bool can_generate_default =
+                    has_default && (trait_decls_.find(behavior_name) != trait_decls_.end());
 
                 if (!has_default) {
-                    // Required method with no default and not provided by impl - can't generate vtable
-                    TML_DEBUG_LN("[DYN] Skipping vtable " << vtable_name
-                                << " - missing required method " << method.name);
+                    // Required method with no default and not provided by impl - can't generate
+                    // vtable
+                    TML_DEBUG_LN("[DYN] Skipping vtable "
+                                 << vtable_name << " - missing required method " << method.name);
                     all_methods_available = false;
                     break;
                 }
@@ -215,9 +217,9 @@ void LLVMIRGen::emit_vtables() {
                 if (!can_generate_default) {
                     // Has default but we don't have the trait definition to generate it
                     // This happens when impl comes from imported module
-                    TML_DEBUG_LN("[DYN] Skipping vtable " << vtable_name
-                                << " - cannot generate default for " << method.name
-                                << " (trait " << behavior_name << " not in trait_decls_)");
+                    TML_DEBUG_LN("[DYN] Skipping vtable "
+                                 << vtable_name << " - cannot generate default for " << method.name
+                                 << " (trait " << behavior_name << " not in trait_decls_)");
                     all_methods_available = false;
                     break;
                 }

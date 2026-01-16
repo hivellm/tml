@@ -28,6 +28,7 @@
 #include "lexer/lexer.hpp"
 #include "lexer/source.hpp"
 #include "parser/parser.hpp"
+#include "preprocessor/preprocessor.hpp"
 #include "types/env.hpp"
 #include "types/module.hpp"
 
@@ -290,7 +291,24 @@ static ParseResult parse_tml_file(const std::string& file_path) {
         std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
 
-    auto source = lexer::Source::from_string(result.source_code, file_path);
+    // Preprocess the source code (handles #if, #ifdef, etc.)
+    auto pp_config = preprocessor::Preprocessor::host_config();
+    preprocessor::Preprocessor pp(pp_config);
+    auto pp_result = pp.process(result.source_code, file_path);
+
+    // Check for preprocessor errors
+    if (!pp_result.success()) {
+        for (const auto& diag : pp_result.diagnostics) {
+            if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                result.errors.push_back(
+                    parser::ParseError{"Preprocessor error: " + diag.message, SourceSpan{}, {}});
+            }
+        }
+        return result;
+    }
+
+    // Use preprocessed source for lexing
+    auto source = lexer::Source::from_string(pp_result.output, file_path);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
@@ -1308,8 +1326,8 @@ bool TypeEnv::load_module_from_file(const std::string& module_path, const std::s
                         auto it = mod_def.behaviors.find(behavior_name);
                         if (it != mod_def.behaviors.end()) {
                             behavior_def_opt = it->second;
-                            TML_DEBUG_LN("[MODULE] Found behavior " << behavior_name << " in module "
-                                                                    << mod_name);
+                            TML_DEBUG_LN("[MODULE] Found behavior " << behavior_name
+                                                                    << " in module " << mod_name);
                             break;
                         }
                     }

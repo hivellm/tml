@@ -23,17 +23,19 @@
 namespace tml::mir {
 
 class LoadStoreOptPass : public FunctionPass {
-  public:
-    [[nodiscard]] auto name() const -> std::string override { return "LoadStoreOpt"; }
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "LoadStoreOpt";
+    }
 
-  protected:
+protected:
     auto run_on_function(Function& func) -> bool override;
 
-  private:
+private:
     // Track the last value stored to an address
     struct MemState {
-        ValueId stored_value{0};  // Last value stored (0 = unknown)
-        ValueId loaded_value{0};  // Last value loaded (0 = unknown)
+        ValueId stored_value{0}; // Last value stored (0 = unknown)
+        ValueId loaded_value{0}; // Last value loaded (0 = unknown)
         bool has_store{false};
         bool has_load{false};
     };

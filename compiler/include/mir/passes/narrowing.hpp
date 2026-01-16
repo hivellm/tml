@@ -58,8 +58,7 @@ private:
     auto try_narrow_sext_pattern(Function& func, BasicBlock& block, size_t inst_idx) -> bool;
 
     // Check if a value is only used by truncation instructions
-    auto is_only_used_by_trunc(const Function& func, ValueId value,
-                               int target_bits) -> bool;
+    auto is_only_used_by_trunc(const Function& func, ValueId value, int target_bits) -> bool;
 
     // Find the instruction that defines a value
     auto find_def_inst(const Function& func, ValueId id) -> const InstructionData*;

@@ -55,8 +55,8 @@
 #pragma once
 
 #include "common.hpp"
-#include "json/json_value.hpp"
 
+#include "json/json_value.hpp"
 #include <optional>
 #include <string>
 
@@ -119,8 +119,8 @@ struct JsonRpcError {
     /// # Returns
     ///
     /// A `JsonRpcError` with the specified values.
-    static auto make(int code, std::string message,
-                     std::optional<JsonValue> data = std::nullopt) -> JsonRpcError;
+    static auto make(int code, std::string message, std::optional<JsonValue> data = std::nullopt)
+        -> JsonRpcError;
 
     /// Converts this error to a JSON object.
     ///
@@ -182,7 +182,9 @@ struct JsonRpcRequest {
     /// Returns `true` if this is a notification (no id).
     ///
     /// Notifications are requests that do not expect a response.
-    [[nodiscard]] auto is_notification() const -> bool { return !id.has_value(); }
+    [[nodiscard]] auto is_notification() const -> bool {
+        return !id.has_value();
+    }
 };
 
 /// JSON-RPC 2.0 response object.
@@ -259,7 +261,9 @@ struct JsonRpcResponse {
     [[nodiscard]] auto to_json() const -> JsonValue;
 
     /// Returns `true` if this is an error response.
-    [[nodiscard]] auto is_error() const -> bool { return error.has_value(); }
+    [[nodiscard]] auto is_error() const -> bool {
+        return error.has_value();
+    }
 };
 
 } // namespace tml::json

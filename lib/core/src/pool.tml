@@ -455,3 +455,486 @@ func spin_unlock(lock: mut ref I32) {
     fence_release()
     atomic_store(lock, 0)
 }
+
+// ============================================================================
+// ThreadLocalPool[T] - Per-thread object pools
+// ============================================================================
+
+/// Thread-local object pools for high-performance allocation without contention.
+///
+/// `ThreadLocalPool[T]` provides each thread with its own pool instance,
+/// eliminating all synchronization overhead for acquire/release operations.
+///
+/// # Performance
+///
+/// - No atomic operations for acquire/release (single-threaded per pool)
+/// - No cache-line bouncing between cores
+/// - Ideal for short-lived objects in request handling
+///
+/// # Example
+///
+/// ```tml
+/// // Define thread-local pool storage
+/// static var tls_pools: ThreadLocalPoolRegistry[Connection] = ThreadLocalPoolRegistry::new()
+///
+/// // Get the pool for current thread
+/// let pool = tls_pools.get()
+///
+/// // Use the pool (no synchronization!)
+/// let conn = pool.acquire()
+/// // ... use connection ...
+/// pool.release(conn)
+/// ```
+pub type ThreadLocalPool[T] {
+    /// The underlying pool (no synchronization needed)
+    objects: List[Ptr[T]],
+    /// Allocated memory blocks
+    blocks: List[I64],
+    /// Current capacity
+    capacity: I32,
+    /// Available count
+    available: I32,
+    /// Statistics
+    stats: PoolStats,
+    /// Object size
+    object_size: I64,
+}
+
+impl[T] ThreadLocalPool[T] {
+    /// Creates a new thread-local pool.
+    pub func new(initial_capacity: I32) -> ThreadLocalPool[T] {
+        let obj_size: I64 = 8 // Placeholder for size_of[T]()
+
+        var pool = ThreadLocalPool {
+            objects: [],
+            blocks: [],
+            capacity: 0,
+            available: 0,
+            stats: PoolStats::new(),
+            object_size: obj_size,
+        }
+
+        if initial_capacity > 0 {
+            pool.grow_by(initial_capacity)
+        }
+
+        pool
+    }
+
+    /// Creates a thread-local pool with default capacity (32).
+    pub func default() -> ThreadLocalPool[T] {
+        ThreadLocalPool::new(32)
+    }
+
+    /// Acquires an object from the pool.
+    ///
+    /// This operation is extremely fast (no synchronization).
+    ///
+    /// # Returns
+    ///
+    /// - `Just(ptr)` - Pointer to acquired object
+    /// - `Nothing` - Pool exhausted and cannot grow
+    pub func acquire(mut this) -> Maybe[Ptr[T]] {
+        if this.available == 0 {
+            // Try to grow
+            let grow_amount = if this.capacity == 0 { 32 } else { this.capacity }
+            this.grow_by(grow_amount)
+
+            if this.available == 0 {
+                this.stats.misses = this.stats.misses + 1
+                return Nothing
+            }
+        }
+
+        // Pop from the list (fast path - no atomics!)
+        when this.objects.pop() {
+            Just(ptr) => {
+                this.available = this.available - 1
+                this.stats.in_use = this.stats.in_use + 1
+                this.stats.hits = this.stats.hits + 1
+                return Just(ptr)
+            }
+            Nothing => {
+                this.stats.misses = this.stats.misses + 1
+                return Nothing
+            }
+        }
+    }
+
+    /// Releases an object back to the pool.
+    ///
+    /// This operation is extremely fast (no synchronization).
+    pub func release(mut this, obj: Ptr[T]) {
+        this.objects.push(obj)
+        this.available = this.available + 1
+        this.stats.in_use = this.stats.in_use - 1
+    }
+
+    /// Grows the pool by allocating additional objects.
+    func grow_by(mut this, count: I32) {
+        if count <= 0 {
+            return
+        }
+
+        // Allocate a block
+        let block_size = this.object_size * (count as I64)
+        let block = lowlevel { malloc(block_size) } as I64
+
+        if block == 0 {
+            return
+        }
+
+        this.blocks.push(block)
+
+        // Add all objects to the pool
+        var i: I32 = 0
+        loop {
+            if i >= count { break }
+            let obj_addr = block + (i as I64 * this.object_size)
+            this.objects.push(obj_addr as Ptr[T])
+            i = i + 1
+        }
+
+        this.capacity = this.capacity + count
+        this.available = this.available + count
+        this.stats.capacity = this.capacity
+        this.stats.available = this.available
+        this.stats.grows = this.stats.grows + 1
+    }
+
+    /// Returns pool statistics.
+    pub func stats(this) -> PoolStats {
+        this.stats
+    }
+
+    /// Returns available object count.
+    pub func available(this) -> I32 {
+        this.available
+    }
+
+    /// Returns objects in use count.
+    pub func in_use(this) -> I32 {
+        this.stats.in_use
+    }
+
+    /// Clears the pool and frees all memory.
+    pub func clear(mut this) {
+        loop {
+            when this.blocks.pop() {
+                Just(block) => lowlevel { free(block as Ptr[U8]) }
+                Nothing => break
+            }
+        }
+        this.objects.clear()
+        this.capacity = 0
+        this.available = 0
+        this.stats = PoolStats::new()
+    }
+}
+
+impl[T] Drop for ThreadLocalPool[T] {
+    func drop(mut this) {
+        this.clear()
+    }
+}
+
+// ============================================================================
+// ThreadLocalPoolRegistry[T] - Registry of per-thread pools
+// ============================================================================
+
+/// Maximum number of thread-local pool slots.
+const TLS_POOL_SLOTS: I64 = 64
+
+/// Thread ID to pool slot mapping.
+type TlsPoolSlot[T] {
+    /// Thread ID that owns this slot
+    thread_id: I64,
+    /// The pool for this thread
+    pool: ThreadLocalPool[T],
+    /// Whether this slot is in use
+    in_use: Bool,
+}
+
+/// Registry that manages thread-local pools.
+///
+/// Each thread gets its own pool instance for lock-free operations.
+///
+/// # Example
+///
+/// ```tml
+/// static var pools: ThreadLocalPoolRegistry[Request] = ThreadLocalPoolRegistry::new()
+///
+/// func handle_request() {
+///     let pool = pools.get()
+///     let req = pool.acquire()
+///     // ... handle request ...
+///     pool.release(req)
+/// }
+/// ```
+pub type ThreadLocalPoolRegistry[T] {
+    /// Pool slots indexed by thread
+    slots: [TlsPoolSlot[T]; 64],
+    /// Number of slots in use
+    slot_count: I32,
+    /// Lock for slot allocation
+    alloc_lock: I32,
+    /// Default initial capacity for new pools
+    default_capacity: I32,
+}
+
+impl[T] ThreadLocalPoolRegistry[T] {
+    /// Creates a new thread-local pool registry.
+    pub func new() -> ThreadLocalPoolRegistry[T] {
+        ThreadLocalPoolRegistry {
+            slots: default_array(),
+            slot_count: 0,
+            alloc_lock: 0,
+            default_capacity: 32,
+        }
+    }
+
+    /// Creates a registry with custom default pool capacity.
+    pub func with_capacity(capacity: I32) -> ThreadLocalPoolRegistry[T] {
+        ThreadLocalPoolRegistry {
+            slots: default_array(),
+            slot_count: 0,
+            alloc_lock: 0,
+            default_capacity: capacity,
+        }
+    }
+
+    /// Gets the pool for the current thread, creating one if needed.
+    ///
+    /// # Returns
+    ///
+    /// Reference to this thread's pool.
+    pub func get(mut this) -> mut ref ThreadLocalPool[T] {
+        let thread_id = get_current_thread_id()
+
+        // First, try to find existing slot (lock-free read)
+        var i: I64 = 0
+        loop {
+            if i >= this.slot_count as I64 { break }
+            if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
+                return mut ref this.slots[i].pool
+            }
+            i = i + 1
+        }
+
+        // Need to allocate a new slot (requires lock)
+        spin_lock(mut ref this.alloc_lock)
+
+        // Double-check after acquiring lock
+        i = 0
+        loop {
+            if i >= this.slot_count as I64 { break }
+            if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
+                spin_unlock(mut ref this.alloc_lock)
+                return mut ref this.slots[i].pool
+            }
+            i = i + 1
+        }
+
+        // Allocate new slot
+        let slot_idx = this.slot_count as I64
+        if slot_idx < TLS_POOL_SLOTS {
+            this.slots[slot_idx].thread_id = thread_id
+            this.slots[slot_idx].pool = ThreadLocalPool::new(this.default_capacity)
+            this.slots[slot_idx].in_use = true
+            this.slot_count = this.slot_count + 1
+        }
+
+        spin_unlock(mut ref this.alloc_lock)
+
+        return mut ref this.slots[slot_idx].pool
+    }
+
+    /// Returns the total number of pools across all threads.
+    pub func pool_count(this) -> I32 {
+        this.slot_count
+    }
+
+    /// Clears and releases the pool for the current thread.
+    pub func release_current(mut this) {
+        let thread_id = get_current_thread_id()
+
+        spin_lock(mut ref this.alloc_lock)
+
+        var i: I64 = 0
+        loop {
+            if i >= this.slot_count as I64 { break }
+            if this.slots[i].in_use and this.slots[i].thread_id == thread_id {
+                this.slots[i].pool.clear()
+                this.slots[i].in_use = false
+                break
+            }
+            i = i + 1
+        }
+
+        spin_unlock(mut ref this.alloc_lock)
+    }
+
+    /// Clears all pools in the registry.
+    pub func clear_all(mut this) {
+        spin_lock(mut ref this.alloc_lock)
+
+        var i: I64 = 0
+        loop {
+            if i >= this.slot_count as I64 { break }
+            if this.slots[i].in_use {
+                this.slots[i].pool.clear()
+                this.slots[i].in_use = false
+            }
+            i = i + 1
+        }
+        this.slot_count = 0
+
+        spin_unlock(mut ref this.alloc_lock)
+    }
+
+    /// Returns aggregate statistics across all pools.
+    pub func aggregate_stats(this) -> PoolStats {
+        var total = PoolStats::new()
+
+        var i: I64 = 0
+        loop {
+            if i >= this.slot_count as I64 { break }
+            if this.slots[i].in_use {
+                let s = this.slots[i].pool.stats()
+                total.available = total.available + s.available
+                total.in_use = total.in_use + s.in_use
+                total.capacity = total.capacity + s.capacity
+                total.hits = total.hits + s.hits
+                total.misses = total.misses + s.misses
+                total.grows = total.grows + s.grows
+            }
+            i = i + 1
+        }
+
+        total
+    }
+}
+
+impl[T] Drop for ThreadLocalPoolRegistry[T] {
+    func drop(mut this) {
+        this.clear_all()
+    }
+}
+
+// ============================================================================
+// Helper: Get current thread ID
+// ============================================================================
+
+/// Returns the current thread's ID.
+/// This is a platform-specific operation.
+func get_current_thread_id() -> I64 {
+    // Platform-specific thread ID retrieval
+    #if WINDOWS
+    lowlevel { GetCurrentThreadId() as I64 }
+    #elif UNIX
+    lowlevel { pthread_self() as I64 }
+    #else
+    // Fallback: return a unique value per call (not ideal)
+    static var counter: I64 = 0
+    counter = counter + 1
+    counter
+    #endif
+}
+
+/// Default array initializer helper.
+func default_array[T, N]() -> [T; N] {
+    lowlevel { zeroed() }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_pool_basic() {
+    var pool: Pool[I64] = Pool::new(8, GrowthPolicy::Doubling)
+
+    assert_eq(pool.capacity(), 8)
+    assert_eq(pool.available(), 8)
+
+    // Acquire an object
+    let obj1 = pool.acquire()
+    assert(obj1.is_just())
+    assert_eq(pool.available(), 7)
+    assert_eq(pool.in_use(), 1)
+
+    // Release it back
+    when obj1 {
+        Just(ptr) => pool.release(ptr)
+        Nothing => {}
+    }
+    assert_eq(pool.available(), 8)
+    assert_eq(pool.in_use(), 0)
+}
+
+@test
+func test_pool_growth() {
+    var pool: Pool[I64] = Pool::new(2, GrowthPolicy::Doubling)
+
+    // Acquire all objects
+    let obj1 = pool.acquire()
+    let obj2 = pool.acquire()
+    assert_eq(pool.available(), 0)
+
+    // Acquire more - should trigger growth
+    let obj3 = pool.acquire()
+    assert(obj3.is_just())
+    assert(pool.stats().grows > 0)
+}
+
+@test
+func test_pool_fixed() {
+    var pool: Pool[I64] = Pool::fixed(2)
+
+    let obj1 = pool.acquire()
+    let obj2 = pool.acquire()
+    let obj3 = pool.acquire() // Should fail - no growth
+
+    assert(obj1.is_just())
+    assert(obj2.is_just())
+    assert(obj3.is_nothing())
+}
+
+@test
+func test_thread_local_pool() {
+    var pool: ThreadLocalPool[I64] = ThreadLocalPool::new(16)
+
+    assert_eq(pool.capacity, 16)
+    assert_eq(pool.available(), 16)
+
+    // Fast acquire (no atomics)
+    let obj1 = pool.acquire()
+    assert(obj1.is_just())
+    assert_eq(pool.available(), 15)
+
+    // Fast release
+    when obj1 {
+        Just(ptr) => pool.release(ptr)
+        Nothing => {}
+    }
+    assert_eq(pool.available(), 16)
+}
+
+@test
+func test_thread_local_pool_stats() {
+    var pool: ThreadLocalPool[I64] = ThreadLocalPool::new(8)
+
+    let obj1 = pool.acquire()
+    let obj2 = pool.acquire()
+    let obj3 = pool.acquire()
+
+    assert_eq(pool.stats().hits, 3)
+    assert_eq(pool.in_use(), 3)
+
+    when obj1 {
+        Just(ptr) => pool.release(ptr)
+        Nothing => {}
+    }
+
+    assert_eq(pool.in_use(), 2)
+}

@@ -80,11 +80,11 @@ struct InliningStats {
     size_t total_instructions_inlined = 0; ///< Total instructions copied.
 
     // Devirtualized call statistics
-    size_t devirt_calls_analyzed = 0;      ///< Devirtualized calls examined.
-    size_t devirt_calls_inlined = 0;       ///< Devirtualized calls that were inlined.
-    size_t devirt_sealed_inlined = 0;      ///< Inlined from sealed class devirt.
-    size_t devirt_exact_inlined = 0;       ///< Inlined from exact type devirt.
-    size_t devirt_single_inlined = 0;      ///< Inlined from single impl devirt.
+    size_t devirt_calls_analyzed = 0; ///< Devirtualized calls examined.
+    size_t devirt_calls_inlined = 0;  ///< Devirtualized calls that were inlined.
+    size_t devirt_sealed_inlined = 0; ///< Inlined from sealed class devirt.
+    size_t devirt_exact_inlined = 0;  ///< Inlined from exact type devirt.
+    size_t devirt_single_inlined = 0; ///< Inlined from single impl devirt.
 
     // Constructor inlining statistics
     size_t constructor_calls_analyzed = 0; ///< Constructor calls examined.
@@ -104,14 +104,14 @@ struct InliningOptions {
     int optimization_level = 2; ///< Optimization level (affects thresholds).
 
     // Devirtualized call options
-    int devirt_bonus = 100;         ///< Threshold bonus for devirtualized calls.
-    int devirt_exact_bonus = 150;   ///< Extra bonus for exact type devirtualization.
-    int devirt_sealed_bonus = 120;  ///< Extra bonus for sealed class devirtualization.
-    bool prioritize_devirt = true;  ///< Whether to prioritize devirtualized calls.
+    int devirt_bonus = 100;        ///< Threshold bonus for devirtualized calls.
+    int devirt_exact_bonus = 150;  ///< Extra bonus for exact type devirtualization.
+    int devirt_sealed_bonus = 120; ///< Extra bonus for sealed class devirtualization.
+    bool prioritize_devirt = true; ///< Whether to prioritize devirtualized calls.
 
     // Constructor inlining options
-    int constructor_bonus = 200;       ///< Threshold bonus for constructor calls.
-    int base_constructor_bonus = 250;  ///< Extra bonus for base constructor chains.
+    int constructor_bonus = 200;         ///< Threshold bonus for constructor calls.
+    int base_constructor_bonus = 250;    ///< Extra bonus for base constructor chains.
     bool prioritize_constructors = true; ///< Whether to prioritize constructor inlining.
 };
 

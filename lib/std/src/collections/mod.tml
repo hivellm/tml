@@ -3,13 +3,28 @@
 //! This module provides generic collection types for storing and
 //! manipulating groups of elements.
 //!
-//! # Main Types
+//! # Runtime-backed Types
 //!
 //! | Type | Description |
 //! |------|-------------|
 //! | [`List[T]`] | Dynamic array that grows automatically |
 //! | [`HashMap[K, V]`] | Hash-based key-value storage |
 //! | [`Buffer`] | Byte buffer for binary data |
+//!
+//! # OOP Collection Classes
+//!
+//! The `class_collections` submodule provides class-based collections
+//! implementing interfaces from `std::interfaces`:
+//!
+//! | Class | Description |
+//! |-------|-------------|
+//! | [`ArrayList[T]`] | Class-based dynamic array (implements IList, ICollection) |
+//! | [`HashSet[T]`] | Hash-based set for unique elements |
+//! | [`Queue[T]`] | FIFO queue |
+//! | [`Stack[T]`] | LIFO stack |
+//! | [`LinkedList[T]`] | Doubly-linked list |
+//!
+//! Use `std::collections::class_collections::*` to import OOP collections.
 //!
 //! # Example
 //!
@@ -267,3 +282,6 @@ impl Buffer {
         lowlevel { buffer_destroy(this.handle) }
     }
 }
+
+// Export OOP collection classes
+pub mod class_collections

@@ -151,7 +151,9 @@ private:
 
     // Expression checking
     auto check_expr(const parser::Expr& expr) -> TypePtr;
+    auto check_expr(const parser::Expr& expr, TypePtr expected_type) -> TypePtr;
     auto check_literal(const parser::LiteralExpr& lit) -> TypePtr;
+    auto check_literal(const parser::LiteralExpr& lit, TypePtr expected_type) -> TypePtr;
     auto check_ident(const parser::IdentExpr& ident, SourceSpan span) -> TypePtr;
     auto check_binary(const parser::BinaryExpr& binary) -> TypePtr;
     auto check_unary(const parser::UnaryExpr& unary) -> TypePtr;
@@ -170,6 +172,7 @@ private:
     auto check_break(const parser::BreakExpr& brk) -> TypePtr;
     auto check_tuple(const parser::TupleExpr& tuple) -> TypePtr;
     auto check_array(const parser::ArrayExpr& array) -> TypePtr;
+    auto check_array(const parser::ArrayExpr& array, TypePtr expected_type) -> TypePtr;
     auto check_struct_expr(const parser::StructExpr& struct_expr) -> TypePtr;
     auto check_closure(const parser::ClosureExpr& closure) -> TypePtr;
     auto check_try(const parser::TryExpr& try_expr) -> TypePtr;

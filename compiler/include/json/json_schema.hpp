@@ -32,7 +32,6 @@
 #pragma once
 
 #include "json/json_value.hpp"
-
 #include <string>
 #include <vector>
 
@@ -50,7 +49,9 @@ struct ValidationResult {
     std::string path;
 
     /// Creates a successful validation result.
-    static auto ok() -> ValidationResult { return ValidationResult{true, "", ""}; }
+    static auto ok() -> ValidationResult {
+        return ValidationResult{true, "", ""};
+    }
 
     /// Creates a failed validation result.
     ///

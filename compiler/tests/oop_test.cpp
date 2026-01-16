@@ -1598,11 +1598,13 @@ protected:
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens));
         auto module = parser.parse_module("test");
-        if (is_err(module)) return std::nullopt;
+        if (is_err(module))
+            return std::nullopt;
 
         TypeChecker checker;
         auto result = checker.check_module(std::get<parser::Module>(module));
-        if (is_err(result)) return std::nullopt;
+        if (is_err(result))
+            return std::nullopt;
         return std::move(std::get<TypeEnv>(result));
     }
 };
@@ -1646,7 +1648,7 @@ TEST_F(ClassHierarchyAnalysisTest, BuildHierarchyBasic) {
     ASSERT_NE(animal_info, nullptr);
     EXPECT_EQ(animal_info->name, "Animal");
     EXPECT_FALSE(animal_info->base_class.has_value()); // No base class
-    EXPECT_FALSE(animal_info->is_leaf()); // Has subclasses
+    EXPECT_FALSE(animal_info->is_leaf());              // Has subclasses
     EXPECT_TRUE(animal_info->subclasses.count("Dog") > 0);
 }
 
@@ -2039,8 +2041,8 @@ TEST_F(ClassHierarchyAnalysisTest, NonVirtualMethodDevirtualization) {
 // Virtual Call Inlining Tests
 // ============================================================================
 
-#include "mir/passes/inlining.hpp"
 #include "mir/mir_builder.hpp"
+#include "mir/passes/inlining.hpp"
 
 class VirtualCallInliningTest : public ::testing::Test {
 protected:
@@ -2052,11 +2054,13 @@ protected:
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens));
         auto module = parser.parse_module("test");
-        if (is_err(module)) return std::nullopt;
+        if (is_err(module))
+            return std::nullopt;
 
         TypeChecker checker;
         auto env_result = checker.check_module(std::get<parser::Module>(module));
-        if (is_err(env_result)) return std::nullopt;
+        if (is_err(env_result))
+            return std::nullopt;
         auto env = std::move(std::get<TypeEnv>(env_result));
 
         tml::mir::MirBuilder builder(env);
@@ -2176,11 +2180,13 @@ protected:
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens));
         auto module = parser.parse_module("test");
-        if (is_err(module)) return std::nullopt;
+        if (is_err(module))
+            return std::nullopt;
 
         TypeChecker checker;
         auto result = checker.check_module(std::get<parser::Module>(module));
-        if (is_err(result)) return std::nullopt;
+        if (is_err(result))
+            return std::nullopt;
         return std::move(std::get<TypeEnv>(result));
     }
 };
@@ -2318,11 +2324,13 @@ protected:
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens));
         auto module = parser.parse_module("test");
-        if (is_err(module)) return std::nullopt;
+        if (is_err(module))
+            return std::nullopt;
 
         TypeChecker checker;
         auto result = checker.check_module(std::get<parser::Module>(module));
-        if (is_err(result)) return std::nullopt;
+        if (is_err(result))
+            return std::nullopt;
         return std::move(std::get<TypeEnv>(result));
     }
 };

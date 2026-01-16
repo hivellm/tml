@@ -32,13 +32,15 @@
 namespace tml::mir {
 
 class MergeReturnsPass : public FunctionPass {
-  public:
-    [[nodiscard]] auto name() const -> std::string override { return "MergeReturns"; }
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "MergeReturns";
+    }
 
-  protected:
+protected:
     auto run_on_function(Function& func) -> bool override;
 
-  private:
+private:
     auto find_return_blocks(const Function& func) -> std::vector<size_t>;
     auto create_unified_exit(Function& func, const std::vector<size_t>& return_blocks) -> bool;
 };

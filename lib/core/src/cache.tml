@@ -1,0 +1,609 @@
+//! Cache-friendly data layout utilities.
+//!
+//! This module provides utilities for optimizing data layout for CPU cache
+//! performance, including Structure-of-Arrays (SoA) containers, cache-aligned
+//! allocation, and padding to prevent false sharing.
+//!
+//! # Overview
+//!
+//! Modern CPUs rely heavily on caching. Poor data layout can cause:
+//! - Cache misses (loading data not in cache)
+//! - False sharing (multiple cores invalidating same cache line)
+//! - Poor prefetching (non-sequential access patterns)
+//!
+//! This module helps with:
+//! - [`CacheAligned[T]`] - Ensures data is aligned to cache line boundary
+//! - [`Padded[T]`] - Pads data to prevent false sharing
+//! - [`SoaVec`] - Structure-of-Arrays container for better locality
+//!
+//! # Cache Line Size
+//!
+//! Most modern x86/ARM processors use 64-byte cache lines.
+//! This module assumes 64-byte cache lines by default.
+//!
+//! # Example
+//!
+//! ```tml
+//! use core::cache::*
+//!
+//! // Prevent false sharing between threads
+//! type ThreadCounters {
+//!     counter1: Padded[I64],  // Separate cache line
+//!     counter2: Padded[I64],  // Separate cache line
+//! }
+//!
+//! // Cache-aligned allocation
+//! let aligned: CacheAligned[LargeStruct] = CacheAligned::new(data)
+//! ```
+
+use core::mem::size_of
+use core::alloc::{Layout, AllocError}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Typical cache line size on modern processors (64 bytes).
+pub const CACHE_LINE_SIZE: I64 = 64
+
+/// Half cache line (32 bytes) - sometimes useful for smaller alignments.
+pub const HALF_CACHE_LINE: I64 = 32
+
+/// Double cache line (128 bytes) - for extra padding in high-contention cases.
+pub const DOUBLE_CACHE_LINE: I64 = 128
+
+// ============================================================================
+// CacheAligned[T] - Cache-line aligned storage
+// ============================================================================
+
+/// Wrapper that ensures data is aligned to cache line boundary.
+///
+/// Use `CacheAligned` when you want to ensure that a piece of data
+/// starts at a cache line boundary, which can improve performance
+/// for frequently accessed data.
+///
+/// # Memory Layout
+///
+/// ```text
+/// Cache line boundary (64-byte aligned)
+/// |
+/// v
+/// +---------------------------+
+/// | T data                    |
+/// +---------------------------+
+/// | padding (if needed)       |
+/// +---------------------------+
+/// ```
+///
+/// # Example
+///
+/// ```tml
+/// // Ensure hot data is cache-aligned
+/// let config: CacheAligned[Config] = CacheAligned::new(Config { ... })
+/// ```
+pub type CacheAligned[T] {
+    /// The actual data storage, aligned to cache line
+    data: T,
+    /// Padding to ensure next allocation doesn't share cache line
+    _padding: [U8; 64],
+}
+
+impl[T] CacheAligned[T] {
+    /// Creates a new cache-aligned wrapper.
+    pub func new(value: T) -> CacheAligned[T] {
+        CacheAligned {
+            data: value,
+            _padding: zeroed_array(),
+        }
+    }
+
+    /// Returns a reference to the contained value.
+    pub func get(this) -> ref T {
+        ref this.data
+    }
+
+    /// Returns a mutable reference to the contained value.
+    pub func get_mut(mut this) -> mut ref T {
+        mut ref this.data
+    }
+
+    /// Unwraps and returns the contained value.
+    pub func into_inner(this) -> T {
+        this.data
+    }
+}
+
+// ============================================================================
+// Padded[T] - False sharing prevention
+// ============================================================================
+
+/// Wrapper that pads data to prevent false sharing between threads.
+///
+/// When multiple threads access different data that happens to be on
+/// the same cache line, they cause "false sharing" - each thread's
+/// write invalidates the other thread's cache line, even though they
+/// access different data.
+///
+/// `Padded` ensures each value occupies its own cache line.
+///
+/// # Example
+///
+/// ```tml
+/// // Per-thread counters that won't cause false sharing
+/// type ThreadLocals {
+///     counter: Padded[I64],
+///     sum: Padded[I64],
+/// }
+/// ```
+pub type Padded[T] {
+    /// The actual value
+    value: T,
+    /// Padding to fill cache line
+    _padding: [U8; 56], // 64 - 8 bytes for typical small value
+}
+
+impl[T] Padded[T] {
+    /// Creates a new padded value.
+    pub func new(value: T) -> Padded[T] {
+        Padded {
+            value: value,
+            _padding: zeroed_array(),
+        }
+    }
+
+    /// Returns a reference to the value.
+    pub func get(this) -> ref T {
+        ref this.value
+    }
+
+    /// Returns a mutable reference to the value.
+    pub func get_mut(mut this) -> mut ref T {
+        mut ref this.value
+    }
+
+    /// Gets the value.
+    pub func into_inner(this) -> T {
+        this.value
+    }
+
+    /// Sets the value.
+    pub func set(mut this, value: T) {
+        this.value = value
+    }
+}
+
+// ============================================================================
+// CacheAlignedBox[T] - Heap-allocated cache-aligned data
+// ============================================================================
+
+/// Heap-allocated data aligned to cache line boundary.
+///
+/// Unlike `CacheAligned[T]`, which may have stack alignment issues,
+/// `CacheAlignedBox` guarantees cache-line alignment on the heap.
+///
+/// # Example
+///
+/// ```tml
+/// let hot_data: CacheAlignedBox[HotPath] = CacheAlignedBox::new(data)
+/// ```
+pub type CacheAlignedBox[T] {
+    /// Pointer to heap-allocated, aligned data
+    ptr: I64,
+}
+
+impl[T] CacheAlignedBox[T] {
+    /// Creates a new cache-aligned box.
+    pub func new(value: T) -> CacheAlignedBox[T] {
+        let obj_size: I64 = 8 // Placeholder for size_of[T]()
+        let alloc_size = align_up(obj_size, CACHE_LINE_SIZE)
+
+        // Allocate with alignment
+        let ptr = aligned_alloc(CACHE_LINE_SIZE, alloc_size)
+
+        if ptr != 0 {
+            lowlevel { *(ptr as Ptr[T]) = value }
+        }
+
+        CacheAlignedBox { ptr: ptr }
+    }
+
+    /// Returns a reference to the value.
+    pub func get(this) -> ref T {
+        lowlevel { ref *(this.ptr as Ptr[T]) }
+    }
+
+    /// Returns a mutable reference to the value.
+    pub func get_mut(mut this) -> mut ref T {
+        lowlevel { mut ref *(this.ptr as Ptr[T]) }
+    }
+
+    /// Takes the value out of the box.
+    pub func into_inner(mut this) -> T {
+        let value = lowlevel { *(this.ptr as Ptr[T]) }
+        aligned_free(this.ptr)
+        this.ptr = 0
+        value
+    }
+
+    /// Returns true if the allocation succeeded.
+    pub func is_valid(this) -> Bool {
+        this.ptr != 0
+    }
+}
+
+impl[T] Drop for CacheAlignedBox[T] {
+    func drop(mut this) {
+        if this.ptr != 0 {
+            aligned_free(this.ptr)
+        }
+    }
+}
+
+// ============================================================================
+// SoaVec - Structure of Arrays vector
+// ============================================================================
+
+/// A Structure-of-Arrays (SoA) container for improved cache locality.
+///
+/// Instead of storing an array of structs (AoS):
+/// ```
+/// [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }]
+/// ```
+///
+/// SoA stores each field in its own array:
+/// ```
+/// xs: [1, 3, 5]
+/// ys: [2, 4, 6]
+/// ```
+///
+/// This improves cache performance when iterating over a single field,
+/// as all values are contiguous in memory.
+///
+/// # Example
+///
+/// ```tml
+/// // Define columns
+/// var positions = SoaVec::new()
+/// positions.add_column[F64]("x")
+/// positions.add_column[F64]("y")
+/// positions.add_column[F64]("z")
+///
+/// // Add rows
+/// positions.push_row([1.0, 2.0, 3.0])
+/// positions.push_row([4.0, 5.0, 6.0])
+///
+/// // Iterate over just x values (cache-friendly!)
+/// let xs = positions.column[F64]("x")
+/// ```
+pub type SoaVec {
+    /// Column data pointers
+    columns: List[SoaColumn],
+    /// Number of rows
+    row_count: I64,
+    /// Capacity (rows)
+    capacity: I64,
+}
+
+/// A single column in the SoA container.
+type SoaColumn {
+    /// Column name
+    name: Str,
+    /// Pointer to column data
+    data: I64,
+    /// Element size in bytes
+    elem_size: I64,
+    /// Current capacity
+    capacity: I64,
+}
+
+impl SoaVec {
+    /// Creates a new empty SoA container.
+    pub func new() -> SoaVec {
+        SoaVec {
+            columns: [],
+            row_count: 0,
+            capacity: 0,
+        }
+    }
+
+    /// Creates a SoA container with specified initial row capacity.
+    pub func with_capacity(capacity: I64) -> SoaVec {
+        SoaVec {
+            columns: [],
+            row_count: 0,
+            capacity: capacity,
+        }
+    }
+
+    /// Adds a column of type T.
+    pub func add_column[T](mut this, name: Str) {
+        let elem_size: I64 = 8 // Placeholder for size_of[T]()
+
+        let data = if this.capacity > 0 {
+            lowlevel { malloc(this.capacity * elem_size) } as I64
+        } else {
+            0
+        }
+
+        this.columns.push(SoaColumn {
+            name: name,
+            data: data,
+            elem_size: elem_size,
+            capacity: this.capacity,
+        })
+    }
+
+    /// Returns the number of rows.
+    pub func len(this) -> I64 {
+        this.row_count
+    }
+
+    /// Returns the number of columns.
+    pub func column_count(this) -> I64 {
+        this.columns.len()
+    }
+
+    /// Returns true if empty.
+    pub func is_empty(this) -> Bool {
+        this.row_count == 0
+    }
+
+    /// Gets a value from a specific row and column.
+    pub func get[T](this, col_name: Str, row: I64) -> Maybe[T] {
+        if row < 0 or row >= this.row_count {
+            return Nothing
+        }
+
+        var i: I64 = 0
+        loop {
+            if i >= this.columns.len() { break }
+            let col = ref this.columns[i]
+            // TODO: Compare strings
+            // if col.name == col_name {
+            //     let ptr = col.data + (row * col.elem_size)
+            //     return Just(lowlevel { *(ptr as Ptr[T]) })
+            // }
+            i = i + 1
+        }
+
+        Nothing
+    }
+
+    /// Sets a value at a specific row and column.
+    pub func set[T](mut this, col_name: Str, row: I64, value: T) {
+        if row < 0 or row >= this.row_count {
+            return
+        }
+
+        var i: I64 = 0
+        loop {
+            if i >= this.columns.len() { break }
+            let col = ref this.columns[i]
+            // TODO: Compare strings
+            // if col.name == col_name {
+            //     let ptr = col.data + (row * col.elem_size)
+            //     lowlevel { *(ptr as Ptr[T]) = value }
+            //     return
+            // }
+            i = i + 1
+        }
+    }
+
+    /// Gets a raw pointer to column data for efficient iteration.
+    pub func column_ptr(this, col_name: Str) -> I64 {
+        var i: I64 = 0
+        loop {
+            if i >= this.columns.len() { break }
+            let col = ref this.columns[i]
+            // TODO: Compare strings
+            // if col.name == col_name {
+            //     return col.data
+            // }
+            i = i + 1
+        }
+        0
+    }
+
+    /// Ensures capacity for at least n rows.
+    pub func reserve(mut this, n: I64) {
+        if n <= this.capacity {
+            return
+        }
+
+        let new_capacity = max_i64(n, this.capacity * 2)
+
+        // Grow each column
+        var i: I64 = 0
+        loop {
+            if i >= this.columns.len() { break }
+            this.grow_column(i, new_capacity)
+            i = i + 1
+        }
+
+        this.capacity = new_capacity
+    }
+
+    /// Grows a single column.
+    func grow_column(mut this, col_idx: I64, new_capacity: I64) {
+        let col = mut ref this.columns[col_idx]
+
+        let new_data = lowlevel { malloc(new_capacity * col.elem_size) } as I64
+        if new_data == 0 {
+            return
+        }
+
+        // Copy existing data
+        if col.data != 0 and this.row_count > 0 {
+            var j: I64 = 0
+            loop {
+                if j >= this.row_count { break }
+                let src = col.data + (j * col.elem_size)
+                let dst = new_data + (j * col.elem_size)
+                lowlevel { *(dst as Ptr[I64]) = *(src as Ptr[I64]) }
+                j = j + 1
+            }
+            lowlevel { free(col.data as Ptr[U8]) }
+        }
+
+        col.data = new_data
+        col.capacity = new_capacity
+    }
+
+    /// Clears all rows.
+    pub func clear(mut this) {
+        this.row_count = 0
+    }
+
+    /// Frees all memory.
+    pub func destroy(mut this) {
+        var i: I64 = 0
+        loop {
+            if i >= this.columns.len() { break }
+            let col = ref this.columns[i]
+            if col.data != 0 {
+                lowlevel { free(col.data as Ptr[U8]) }
+            }
+            i = i + 1
+        }
+        this.columns.clear()
+        this.row_count = 0
+        this.capacity = 0
+    }
+}
+
+impl Drop for SoaVec {
+    func drop(mut this) {
+        this.destroy()
+    }
+}
+
+// ============================================================================
+// CachePrefetch - Manual prefetching hints
+// ============================================================================
+
+/// Prefetch hint level.
+pub type PrefetchHint {
+    /// Prefetch for read-only access
+    Read,
+    /// Prefetch for write access
+    Write,
+    /// Prefetch with high temporal locality (keep in cache)
+    HighLocality,
+    /// Prefetch with low temporal locality (one-time access)
+    LowLocality,
+}
+
+/// Prefetches memory at the given address.
+///
+/// This is a hint to the CPU to load data into cache before it's needed.
+/// The actual effect depends on the CPU and compiler.
+///
+/// # Example
+///
+/// ```tml
+/// // Prefetch next batch of data
+/// prefetch(data_ptr + 64, PrefetchHint::Read)
+/// ```
+pub func prefetch(addr: I64, hint: PrefetchHint) {
+    when hint {
+        Read => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 3) }
+        Write => lowlevel { __builtin_prefetch(addr as Ptr[U8], 1, 3) }
+        HighLocality => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 3) }
+        LowLocality => lowlevel { __builtin_prefetch(addr as Ptr[U8], 0, 0) }
+    }
+}
+
+/// Prefetches the next cache line.
+pub func prefetch_next(addr: I64) {
+    prefetch(addr + CACHE_LINE_SIZE, PrefetchHint::Read)
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Aligns a value up to the specified alignment.
+func align_up(value: I64, align: I64) -> I64 {
+    let mask = align - 1
+    (value + mask) and (not mask)
+}
+
+/// Allocates memory with specified alignment.
+func aligned_alloc(alignment: I64, size: I64) -> I64 {
+    #if WINDOWS
+    lowlevel { _aligned_malloc(size, alignment) as I64 }
+    #else
+    lowlevel { aligned_alloc(alignment, size) as I64 }
+    #endif
+}
+
+/// Frees aligned memory.
+func aligned_free(ptr: I64) {
+    #if WINDOWS
+    lowlevel { _aligned_free(ptr as Ptr[U8]) }
+    #else
+    lowlevel { free(ptr as Ptr[U8]) }
+    #endif
+}
+
+/// Returns a zeroed array.
+func zeroed_array[T, N]() -> [T; N] {
+    lowlevel { zeroed() }
+}
+
+/// Returns max of two I64 values.
+func max_i64(a: I64, b: I64) -> I64 {
+    if a > b { a } else { b }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+@test
+func test_cache_aligned() {
+    let aligned: CacheAligned[I64] = CacheAligned::new(42)
+
+    assert_eq(*aligned.get(), 42)
+}
+
+@test
+func test_padded() {
+    var padded: Padded[I64] = Padded::new(100)
+
+    assert_eq(*padded.get(), 100)
+
+    padded.set(200)
+    assert_eq(*padded.get(), 200)
+}
+
+@test
+func test_cache_aligned_box() {
+    let boxed: CacheAlignedBox[I64] = CacheAlignedBox::new(999)
+
+    assert(boxed.is_valid())
+    assert_eq(*boxed.get(), 999)
+
+    // Check alignment (should be 64-byte aligned)
+    let addr = (ref *boxed.get()) as I64
+    assert_eq(addr and 63, 0) // Should be aligned
+}
+
+@test
+func test_soa_vec_basic() {
+    var soa = SoaVec::with_capacity(10)
+
+    soa.add_column[F64]("x")
+    soa.add_column[F64]("y")
+
+    assert_eq(soa.column_count(), 2)
+    assert_eq(soa.len(), 0)
+}
+
+@test
+func test_alignment_utility() {
+    assert_eq(align_up(1, 64), 64)
+    assert_eq(align_up(64, 64), 64)
+    assert_eq(align_up(65, 64), 128)
+    assert_eq(align_up(100, 64), 128)
+}

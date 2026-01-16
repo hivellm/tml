@@ -91,8 +91,7 @@ struct JsonError {
     /// # Returns
     ///
     /// A `JsonError` with message and location.
-    static auto make(std::string msg, size_t line, size_t column, size_t offset = 0)
-        -> JsonError {
+    static auto make(std::string msg, size_t line, size_t column, size_t offset = 0) -> JsonError {
         return JsonError{std::move(msg), line, column, offset};
     }
 
@@ -108,8 +107,8 @@ struct JsonError {
     /// A formatted error string suitable for display.
     [[nodiscard]] auto to_string() const -> std::string {
         if (line > 0 && column > 0) {
-            return "line " + std::to_string(line) + ", column " + std::to_string(column) +
-                   ": " + message;
+            return "line " + std::to_string(line) + ", column " + std::to_string(column) + ": " +
+                   message;
         }
         if (line > 0) {
             return "line " + std::to_string(line) + ": " + message;

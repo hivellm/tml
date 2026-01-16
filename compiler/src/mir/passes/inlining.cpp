@@ -378,8 +378,7 @@ auto InliningPass::count_instructions(const Function& func) const -> int {
     return count;
 }
 
-auto InliningPass::analyze_cost(const CallInst& call, const Function& callee) const
-    -> InlineCost {
+auto InliningPass::analyze_cost(const CallInst& call, const Function& callee) const -> InlineCost {
     InlineCost cost;
 
     // Base cost is instruction count
@@ -406,8 +405,8 @@ auto InliningPass::analyze_cost(const CallInst& call, const Function& callee) co
     // - Constant propagation can optimize initial values
     // - Dead store elimination can remove unused fields
     if (is_constructor_name(call.func_name)) {
-        constexpr int field_init_exposure = 15;  // Benefit from exposing field inits
-        constexpr int alloca_exposure = 10;      // Potential stack allocation optimization
+        constexpr int field_init_exposure = 15; // Benefit from exposing field inits
+        constexpr int alloca_exposure = 10;     // Potential stack allocation optimization
         cost.call_overhead_saved += field_init_exposure + alloca_exposure;
     }
 

@@ -51,16 +51,16 @@ private:
     auto get_const_int(const Function& func, ValueId id) -> std::optional<int64_t>;
 
     // Try to reduce a multiply instruction
-    auto reduce_multiply(Function& func, BasicBlock& block, size_t inst_idx,
-                         const BinaryInst& mul) -> bool;
+    auto reduce_multiply(Function& func, BasicBlock& block, size_t inst_idx, const BinaryInst& mul)
+        -> bool;
 
     // Try to reduce a divide instruction
-    auto reduce_divide(Function& func, BasicBlock& block, size_t inst_idx,
-                       const BinaryInst& div) -> bool;
+    auto reduce_divide(Function& func, BasicBlock& block, size_t inst_idx, const BinaryInst& div)
+        -> bool;
 
     // Try to reduce a modulo instruction
-    auto reduce_modulo(Function& func, BasicBlock& block, size_t inst_idx,
-                       const BinaryInst& mod) -> bool;
+    auto reduce_modulo(Function& func, BasicBlock& block, size_t inst_idx, const BinaryInst& mod)
+        -> bool;
 };
 
 } // namespace tml::mir

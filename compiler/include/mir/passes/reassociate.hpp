@@ -61,13 +61,12 @@ private:
     auto try_reassociate(Function& func, BasicBlock& block, size_t inst_idx) -> bool;
 
     // Linearize a chain of associative operations into operands
-    auto linearize(Function& func, ValueId root, BinOp op,
-                   std::vector<ValueId>& operands) -> void;
+    auto linearize(Function& func, ValueId root, BinOp op, std::vector<ValueId>& operands) -> void;
 
     // Rebuild a balanced tree from operands
     auto rebuild_tree(Function& func, BasicBlock& block, size_t insert_pos,
-                      const std::vector<ValueId>& operands, BinOp op,
-                      MirTypePtr result_type) -> ValueId;
+                      const std::vector<ValueId>& operands, BinOp op, MirTypePtr result_type)
+        -> ValueId;
 
     // Get constant value if any
     auto get_const_int(const Function& func, ValueId id) -> std::optional<int64_t>;

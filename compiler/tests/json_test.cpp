@@ -12,8 +12,8 @@
 //! - Roundtrip tests
 
 #include "common.hpp"
-#include "json/json.hpp"
 
+#include "json/json.hpp"
 #include <gtest/gtest.h>
 #include <sstream>
 
@@ -551,13 +551,7 @@ TEST(JsonBuilderTest, BuildString) {
 }
 
 TEST(JsonBuilderTest, BuildSimpleArray) {
-    auto v = JsonBuilder()
-                 .array()
-                 .item(1)
-                 .item(2)
-                 .item(3)
-                 .end()
-                 .build();
+    auto v = JsonBuilder().array().item(1).item(2).item(3).end().build();
 
     EXPECT_TRUE(v.is_array());
     EXPECT_EQ(v.as_array().size(), 3);
@@ -565,12 +559,7 @@ TEST(JsonBuilderTest, BuildSimpleArray) {
 }
 
 TEST(JsonBuilderTest, BuildSimpleObject) {
-    auto v = JsonBuilder()
-                 .object()
-                 .field("name", "Alice")
-                 .field("age", 30)
-                 .end()
-                 .build();
+    auto v = JsonBuilder().object().field("name", "Alice").field("age", 30).end().build();
 
     EXPECT_TRUE(v.is_object());
     EXPECT_EQ(v.get("name")->as_string(), "Alice");
@@ -584,8 +573,7 @@ TEST(JsonBuilderTest, BuildNestedStructure) {
                         JsonBuilder()
                             .object()
                             .field("name", "Bob")
-                            .field("scores",
-                                   JsonBuilder().array().item(95).item(87).end().build())
+                            .field("scores", JsonBuilder().array().item(95).item(87).end().build())
                             .end()
                             .build())
                  .end()
@@ -673,8 +661,8 @@ TEST(JsonRpcTest, ParseSuccessResponse) {
 }
 
 TEST(JsonRpcTest, ParseErrorResponse) {
-    auto json =
-        parse_json(R"({"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":1})");
+    auto json = parse_json(
+        R"({"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":1})");
     ASSERT_TRUE(json_is_ok(json));
 
     auto resp = JsonRpcResponse::from_json(json_unwrap(json));
@@ -791,8 +779,8 @@ TEST(JsonValueTest, MergeObjects) {
     a.merge(std::move(b));
 
     EXPECT_EQ(a.get("a")->as_i64(), 1);
-    EXPECT_EQ(a.get("b")->as_i64(), 3);  // Replaced
-    EXPECT_EQ(a.get("c")->as_i64(), 4);  // Added
+    EXPECT_EQ(a.get("b")->as_i64(), 3); // Replaced
+    EXPECT_EQ(a.get("c")->as_i64(), 4); // Added
 }
 
 TEST(JsonValueTest, ExtendArrays) {

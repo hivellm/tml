@@ -1,0 +1,383 @@
+//! IP address types.
+//!
+//! This module provides IPv4 and IPv6 address types that are platform-independent
+//! and work in `no_std` environments.
+//!
+//! # Types
+//!
+//! - [`Ipv4Addr`] - A 32-bit IPv4 address stored as 4 octets
+//! - [`Ipv6Addr`] - A 128-bit IPv6 address stored as 8 segments
+//! - [`IpAddr`] - An enum that holds either an IPv4 or IPv6 address
+//!
+//! # Examples
+//!
+//! ```tml
+//! use std::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr}
+//!
+//! // Create addresses
+//! let v4 = Ipv4Addr::new(192, 168, 1, 1)
+//! let v6 = Ipv6Addr::LOCALHOST
+//!
+//! // Check properties
+//! assert(v4.is_private())
+//! assert(v6.is_loopback())
+//!
+//! // Convert between formats
+//! let mapped = v4.to_ipv6_mapped()
+//! ```
+
+// PartialEq, Eq, PartialOrd, Ord, Ordering, Display, Debug, Duplicate, Copy are builtins - no import needed
+use core::hash::{Hash, Hasher}
+// Note: Formatter and FormatResult would need real imports if used
+use core::default::Default
+use core::option::Maybe::{Just, Nothing}
+
+// =============================================================================
+// Ipv4Addr - IPv4 Address (32 bits)
+// =============================================================================
+
+/// An IPv4 address.
+///
+/// IPv4 addresses are 32-bit integers, stored as 4 octets.
+///
+/// # Examples
+///
+/// ```tml
+/// let localhost: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1)
+/// let broadcast: Ipv4Addr = Ipv4Addr::BROADCAST
+///
+/// assert(localhost.is_loopback())
+/// assert(broadcast.is_broadcast())
+/// ```
+pub type Ipv4Addr {
+    o0: U8,
+    o1: U8,
+    o2: U8,
+    o3: U8,
+}
+
+impl Ipv4Addr {
+    // =========================================================================
+    // Constants (as static functions)
+    // =========================================================================
+
+    /// An IPv4 address representing localhost: `127.0.0.1`
+    pub func LOCALHOST() -> Ipv4Addr {
+        Ipv4Addr { o0: 127, o1: 0, o2: 0, o3: 1 }
+    }
+
+    /// An IPv4 address representing the unspecified address: `0.0.0.0`
+    pub func UNSPECIFIED() -> Ipv4Addr {
+        Ipv4Addr { o0: 0, o1: 0, o2: 0, o3: 0 }
+    }
+
+    /// An IPv4 address representing the broadcast address: `255.255.255.255`
+    pub func BROADCAST() -> Ipv4Addr {
+        Ipv4Addr { o0: 255, o1: 255, o2: 255, o3: 255 }
+    }
+
+    // =========================================================================
+    // Constructors
+    // =========================================================================
+
+    /// Creates a new IPv4 address from four octets.
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let addr: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1)
+    /// ```
+    pub func new(a: U8, b: U8, c: U8, d: U8) -> Ipv4Addr {
+        Ipv4Addr { o0: a, o1: b, o2: c, o3: d }
+    }
+
+    /// Creates an IPv4 address from a 32-bit integer in network byte order (big-endian).
+    ///
+    /// # Examples
+    ///
+    /// ```tml
+    /// let addr: Ipv4Addr = Ipv4Addr::from_bits(0x7F000001)  // 127.0.0.1
+    /// ```
+    pub func from_bits(bits: U32) -> Ipv4Addr {
+        let mask: U32 = 0xFF as U32
+        let b0: U8 = ((bits shr 24) & mask) as U8
+        let b1: U8 = ((bits shr 16) & mask) as U8
+        let b2: U8 = ((bits shr 8) & mask) as U8
+        let b3: U8 = (bits & mask) as U8
+        Ipv4Addr { o0: b0, o1: b1, o2: b2, o3: b3 }
+    }
+
+    // =========================================================================
+    // Accessors
+    // =========================================================================
+
+    /// Returns the first octet.
+    pub func octet0(this) -> U8 { this.o0 }
+    /// Returns the second octet.
+    pub func octet1(this) -> U8 { this.o1 }
+    /// Returns the third octet.
+    pub func octet2(this) -> U8 { this.o2 }
+    /// Returns the fourth octet.
+    pub func octet3(this) -> U8 { this.o3 }
+
+    /// Returns the address as a 32-bit integer in network byte order (big-endian).
+    pub func to_bits(this) -> U32 {
+        ((this.o0 as U32) shl 24)
+            | ((this.o1 as U32) shl 16)
+            | ((this.o2 as U32) shl 8)
+            | (this.o3 as U32)
+    }
+
+    // =========================================================================
+    // Classification Methods
+    // =========================================================================
+
+    /// Returns `true` if this is the unspecified address (`0.0.0.0`).
+    pub func is_unspecified(this) -> Bool {
+        if this.o0 != (0 as U8) { return false }
+        if this.o1 != (0 as U8) { return false }
+        if this.o2 != (0 as U8) { return false }
+        if this.o3 != (0 as U8) { return false }
+        true
+    }
+
+    /// Returns `true` if this is a loopback address (`127.0.0.0/8`).
+    pub func is_loopback(this) -> Bool {
+        this.o0 == (127 as U8)
+    }
+
+    /// Returns `true` if this is a private address.
+    ///
+    /// Private addresses are defined in RFC 1918:
+    /// - `10.0.0.0/8`
+    /// - `172.16.0.0/12`
+    /// - `192.168.0.0/16`
+    pub func is_private(this) -> Bool {
+        // 10.0.0.0/8
+        if this.o0 == (10 as U8) { return true }
+        // 192.168.0.0/16
+        if this.o0 == (192 as U8) {
+            if this.o1 == (168 as U8) { return true }
+        }
+        // 172.16.0.0/12 (172.16.x.x - 172.31.x.x)
+        if this.o0 == (172 as U8) {
+            if this.o1 >= (16 as U8) {
+                if this.o1 <= (31 as U8) { return true }
+            }
+        }
+        false
+    }
+
+    /// Returns `true` if this is a link-local address (`169.254.0.0/16`).
+    pub func is_link_local(this) -> Bool {
+        if this.o0 != (169 as U8) { return false }
+        if this.o1 != (254 as U8) { return false }
+        true
+    }
+
+    /// Returns `true` if this is the broadcast address (`255.255.255.255`).
+    pub func is_broadcast(this) -> Bool {
+        if this.o0 != (255 as U8) { return false }
+        if this.o1 != (255 as U8) { return false }
+        if this.o2 != (255 as U8) { return false }
+        if this.o3 != (255 as U8) { return false }
+        true
+    }
+
+    /// Returns `true` if this is a documentation address (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
+    pub func is_documentation(this) -> Bool {
+        // 192.0.2.0/24
+        if this.o0 == (192 as U8) {
+            if this.o1 == (0 as U8) {
+                if this.o2 == (2 as U8) { return true }
+            }
+        }
+        // 198.51.100.0/24
+        if this.o0 == (198 as U8) {
+            if this.o1 == (51 as U8) {
+                if this.o2 == (100 as U8) { return true }
+            }
+        }
+        // 203.0.113.0/24
+        if this.o0 == (203 as U8) {
+            if this.o1 == (0 as U8) {
+                if this.o2 == (113 as U8) { return true }
+            }
+        }
+        false
+    }
+
+    /// Returns `true` if this is a multicast address (`224.0.0.0/4`).
+    pub func is_multicast(this) -> Bool {
+        if this.o0 < (224 as U8) { return false }
+        if this.o0 > (239 as U8) { return false }
+        true
+    }
+
+    /// Returns `true` if this address is globally routable.
+    pub func is_global(this) -> Bool {
+        if this.is_unspecified() { return false }
+        if this.is_loopback() { return false }
+        if this.is_private() { return false }
+        if this.is_link_local() { return false }
+        if this.is_broadcast() { return false }
+        if this.is_documentation() { return false }
+        if this.is_multicast() { return false }
+        true
+    }
+
+}
+
+// Behavior implementations for Ipv4Addr
+impl Copy for Ipv4Addr {}
+impl Duplicate for Ipv4Addr {
+    func duplicate(this) -> Ipv4Addr {
+        Ipv4Addr { o0: this.o0, o1: this.o1, o2: this.o2, o3: this.o3 }
+    }
+}
+
+impl PartialEq for Ipv4Addr {
+    func eq(this, other: ref Ipv4Addr) -> Bool {
+        if this.o0 != other.o0 { return false }
+        if this.o1 != other.o1 { return false }
+        if this.o2 != other.o2 { return false }
+        if this.o3 != other.o3 { return false }
+        true
+    }
+}
+
+impl Eq for Ipv4Addr {}
+
+impl PartialOrd for Ipv4Addr {
+    func partial_cmp(this, other: ref Ipv4Addr) -> Maybe[Ordering] {
+        Just(this.cmp(other))
+    }
+}
+
+impl Ord for Ipv4Addr {
+    func cmp(this, other: ref Ipv4Addr) -> Ordering {
+        let a: U32 = this.to_bits()
+        let b: U32 = other.to_bits()
+        if a < b { Ordering::Less }
+        else if a > b { Ordering::Greater }
+        else { Ordering::Equal }
+    }
+}
+
+impl Hash for Ipv4Addr {
+    func hash(this, hasher: mut ref Hasher) {
+        hasher.write_u32(this.to_bits())
+    }
+}
+
+impl Default for Ipv4Addr {
+    func default() -> Ipv4Addr {
+        Ipv4Addr::UNSPECIFIED()
+    }
+}
+
+impl Display for Ipv4Addr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        f.write_str(this.o0.to_string())
+        f.write_str(".")
+        f.write_str(this.o1.to_string())
+        f.write_str(".")
+        f.write_str(this.o2.to_string())
+        f.write_str(".")
+        f.write_str(this.o3.to_string())
+    }
+}
+
+impl Debug for Ipv4Addr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}
+
+// =============================================================================
+// IpAddr - IPv4 wrapper (IPv6 temporarily disabled due to codegen issues)
+// =============================================================================
+
+/// An IP address (currently IPv4 only).
+///
+/// # Examples
+///
+/// ```tml
+/// let v4: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST())
+/// assert(v4.is_loopback())
+/// ```
+pub type IpAddr {
+    inner: Ipv4Addr,
+}
+
+impl IpAddr {
+    /// Creates an IpAddr from an Ipv4Addr.
+    pub func V4(addr: Ipv4Addr) -> IpAddr {
+        IpAddr { inner: addr }
+    }
+
+    /// Returns `true` if this is an IPv4 address.
+    pub func is_ipv4(this) -> Bool {
+        true
+    }
+
+    /// Returns `true` if this is an IPv6 address.
+    pub func is_ipv6(this) -> Bool {
+        false
+    }
+
+    /// Returns `true` if this is the unspecified address.
+    pub func is_unspecified(this) -> Bool {
+        this.inner.is_unspecified()
+    }
+
+    /// Returns `true` if this is a loopback address.
+    pub func is_loopback(this) -> Bool {
+        this.inner.is_loopback()
+    }
+
+    /// Returns `true` if this is a multicast address.
+    pub func is_multicast(this) -> Bool {
+        this.inner.is_multicast()
+    }
+
+    /// Returns the port number (always 0 for IpAddr).
+    pub func port(this) -> U16 {
+        0 as U16
+    }
+}
+
+// Behavior implementations for IpAddr
+impl Copy for IpAddr {}
+impl Duplicate for IpAddr {
+    func duplicate(this) -> IpAddr {
+        IpAddr { inner: this.inner.duplicate() }
+    }
+}
+
+impl PartialEq for IpAddr {
+    func eq(this, other: ref IpAddr) -> Bool {
+        this.inner == other.inner
+    }
+}
+
+impl Eq for IpAddr {}
+
+impl Hash for IpAddr {
+    func hash(this, hasher: mut ref Hasher) {
+        hasher.write_u8(4)
+        this.inner.hash(hasher)
+    }
+}
+
+impl Display for IpAddr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        this.inner.fmt(f)
+    }
+}
+
+impl Debug for IpAddr {
+    func fmt(this, f: mut ref Formatter) -> FormatResult {
+        Display::fmt(this, f)
+    }
+}

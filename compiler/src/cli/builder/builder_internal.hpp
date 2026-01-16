@@ -174,6 +174,9 @@ preprocessor::PreprocessorResult preprocess_source(const std::string& source,
 // Helper to check if any function has @bench decorator
 bool has_bench_functions(const parser::Module& module);
 
+// Helper to check if module uses socket lowlevel functions
+bool has_socket_functions(const parser::Module& module);
+
 // Helper to get runtime object files as a vector
 std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleRegistry>& registry,
                                           const parser::Module& module,

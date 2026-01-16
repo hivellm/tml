@@ -21,16 +21,16 @@ auto LLVMIRGen::gen_maybe_method(const parser::MethodCallExpr& call, const std::
                                  const types::NamedType& named) -> std::optional<std::string> {
     const std::string& method = call.method;
 
-    // is_just() -> Bool (tag == 0)
-    if (method == "is_just") {
+    // is_just() / is_some() -> Bool (tag == 0)
+    if (method == "is_just" || method == "is_some") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 0");
         last_expr_type_ = "i1";
         return result;
     }
 
-    // is_nothing() -> Bool (tag == 1)
-    if (method == "is_nothing") {
+    // is_nothing() / is_none() -> Bool (tag == 1)
+    if (method == "is_nothing" || method == "is_none") {
         std::string result = fresh_reg();
         emit_line("  " + result + " = icmp eq i32 " + tag_val + ", 1");
         last_expr_type_ = "i1";

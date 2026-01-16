@@ -44,7 +44,6 @@
 //! ```
 
 #include "json/json_value.hpp"
-
 #include <cmath>
 #include <iomanip>
 #include <ostream>
@@ -145,8 +144,7 @@ auto format_number(const JsonNumber& num) -> std::string {
         std::string result = oss.str();
 
         // Ensure there's a decimal point for floats
-        if (result.find('.') == std::string::npos &&
-            result.find('e') == std::string::npos &&
+        if (result.find('.') == std::string::npos && result.find('e') == std::string::npos &&
             result.find('E') == std::string::npos) {
             result += ".0";
         }

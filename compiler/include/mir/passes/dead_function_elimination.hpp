@@ -35,11 +35,11 @@ namespace tml::mir {
 
 /// Statistics collected during dead function elimination.
 struct DeadFunctionStats {
-    size_t functions_analyzed = 0;    ///< Total functions examined.
-    size_t functions_removed = 0;     ///< Functions eliminated.
-    size_t functions_kept = 0;        ///< Functions retained (reachable).
-    size_t entry_points = 0;          ///< Number of entry points found.
-    size_t instructions_removed = 0;  ///< Total instructions removed.
+    size_t functions_analyzed = 0;   ///< Total functions examined.
+    size_t functions_removed = 0;    ///< Functions eliminated.
+    size_t functions_kept = 0;       ///< Functions retained (reachable).
+    size_t entry_points = 0;         ///< Number of entry points found.
+    size_t instructions_removed = 0; ///< Total instructions removed.
 };
 
 /// Dead function elimination pass.

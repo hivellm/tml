@@ -37,16 +37,18 @@
 namespace tml::mir {
 
 class LoopRotatePass : public FunctionPass {
-  public:
-    [[nodiscard]] auto name() const -> std::string override { return "LoopRotate"; }
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "LoopRotate";
+    }
 
-  protected:
+protected:
     auto run_on_function(Function& func) -> bool override;
 
-  private:
+private:
     struct LoopInfo {
         uint32_t header;
-        uint32_t latch;  // Back edge source
+        uint32_t latch; // Back edge source
         std::unordered_set<uint32_t> blocks;
     };
 

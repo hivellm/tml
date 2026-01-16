@@ -1,0 +1,247 @@
+//! Platform abstraction layer for low-level socket operations.
+//!
+//! This module provides basic socket types and operations.
+
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr}
+use std::net::error::{NetError, NetErrorKind}
+
+// ============================================================================
+// Platform Constants
+// ============================================================================
+
+/// Invalid socket handle value.
+pub const INVALID_SOCKET: I64 = -1
+
+/// Socket address family constants.
+pub const AF_INET: I32 = 2           // IPv4
+pub const AF_INET6: I32 = 23         // IPv6 (10 on Unix, 23 on Windows)
+
+/// Socket type constants.
+pub const SOCK_STREAM: I32 = 1       // TCP
+pub const SOCK_DGRAM: I32 = 2        // UDP
+pub const SOCK_RAW: I32 = 3          // Raw
+
+/// Protocol constants.
+pub const IPPROTO_TCP: I32 = 6
+pub const IPPROTO_UDP: I32 = 17
+
+/// Socket option levels.
+pub const SOL_SOCKET: I32 = 0xFFFF   // Socket level on Windows
+pub const IPPROTO_TCP_OPT: I32 = 6
+
+/// Socket options.
+pub const SO_REUSEADDR: I32 = 4
+pub const SO_KEEPALIVE: I32 = 8
+pub const TCP_NODELAY: I32 = 1
+
+// ============================================================================
+// Socket Type Enum
+// ============================================================================
+
+/// Type of socket to create.
+pub type SocketType {
+    /// TCP stream socket (SOCK_STREAM)
+    Stream,
+    /// UDP datagram socket (SOCK_DGRAM)
+    Datagram,
+    /// Raw socket (SOCK_RAW)
+    Raw,
+}
+
+impl SocketType {
+    /// Returns the platform constant for this socket type.
+    pub func to_raw(this) -> I32 {
+        when this {
+            SocketType::Stream => 1 as I32
+            SocketType::Datagram => 2 as I32
+            SocketType::Raw => 3 as I32
+        }
+    }
+
+    /// Creates from a raw value.
+    pub func from_raw(raw: I32) -> Maybe[SocketType] {
+        if raw == 1 {
+            Just(SocketType::Stream)
+        } else if raw == 2 {
+            Just(SocketType::Datagram)
+        } else if raw == 3 {
+            Just(SocketType::Raw)
+        } else {
+            Nothing
+        }
+    }
+}
+
+// ============================================================================
+// Socket Protocol Enum
+// ============================================================================
+
+/// Protocol to use with the socket.
+pub type SocketProtocol {
+    /// TCP protocol
+    Tcp,
+    /// UDP protocol
+    Udp,
+    /// Default protocol for socket type
+    Default,
+}
+
+impl SocketProtocol {
+    /// Returns the platform constant for this protocol.
+    pub func to_raw(this) -> I32 {
+        when this {
+            SocketProtocol::Tcp => 6 as I32
+            SocketProtocol::Udp => 17 as I32
+            SocketProtocol::Default => 0 as I32
+        }
+    }
+}
+
+// ============================================================================
+// Address Family Enum
+// ============================================================================
+
+/// Address family for socket operations.
+pub type AddressFamily {
+    /// IPv4 (AF_INET)
+    Inet,
+    /// IPv6 (AF_INET6)
+    Inet6,
+}
+
+impl AddressFamily {
+    /// Returns the platform constant for this address family.
+    pub func to_raw(this) -> I32 {
+        when this {
+            AddressFamily::Inet => 2 as I32
+            AddressFamily::Inet6 => 23 as I32
+        }
+    }
+
+    /// Creates from a raw value.
+    pub func from_raw(raw: I32) -> Maybe[AddressFamily] {
+        if raw == 2 {
+            Just(AddressFamily::Inet)
+        } else if raw == 23 or raw == 10 {
+            Just(AddressFamily::Inet6)
+        } else {
+            Nothing
+        }
+    }
+}
+
+// ============================================================================
+// RawSocket - Platform-specific socket handle
+// ============================================================================
+
+/// A raw socket handle wrapping platform-specific socket descriptor.
+pub type RawSocket {
+    /// Platform socket handle
+    handle: I64,
+    /// Socket type
+    socket_type: SocketType,
+    /// Address family
+    family: AddressFamily,
+    /// Non-blocking flag
+    nonblocking: Bool,
+}
+
+impl RawSocket {
+    /// Creates a new TCP socket.
+    pub func tcp() -> Outcome[RawSocket, NetError] {
+        RawSocket::new_with_family(AddressFamily::Inet, SocketType::Stream, SocketProtocol::Tcp)
+    }
+
+    /// Creates a new UDP socket.
+    pub func udp() -> Outcome[RawSocket, NetError] {
+        RawSocket::new_with_family(AddressFamily::Inet, SocketType::Datagram, SocketProtocol::Udp)
+    }
+
+    /// Creates a new socket with the specified parameters.
+    pub func new_with_family(family: AddressFamily, sock_type: SocketType, protocol: SocketProtocol) -> Outcome[RawSocket, NetError] {
+        let handle: I64 = lowlevel { sys_socket(family.to_raw(), sock_type.to_raw(), protocol.to_raw()) }
+        if handle == INVALID_SOCKET {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(RawSocket {
+            handle: handle,
+            socket_type: sock_type,
+            family: family,
+            nonblocking: false,
+        })
+    }
+
+    /// Checks if the socket handle is valid.
+    pub func is_valid(this) -> Bool {
+        this.handle != INVALID_SOCKET
+    }
+
+    /// Returns the socket type.
+    pub func socket_type(this) -> SocketType {
+        this.socket_type
+    }
+
+    /// Returns the address family.
+    pub func family(this) -> AddressFamily {
+        this.family
+    }
+
+    /// Returns whether the socket is in non-blocking mode.
+    pub func is_nonblocking(this) -> Bool {
+        this.nonblocking
+    }
+
+    /// Sets the socket to non-blocking mode.
+    pub func set_nonblocking(mut this, nonblocking: Bool) -> Outcome[(), NetError] {
+        let result: I32 = lowlevel { sys_set_nonblocking(this.handle, nonblocking) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        this.nonblocking = nonblocking
+        Ok(())
+    }
+
+    /// Enables or disables TCP_NODELAY (Nagle's algorithm).
+    pub func set_nodelay(this, nodelay: Bool) -> Outcome[(), NetError] {
+        let value: I32 = if nodelay { 1 } else { 0 }
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, IPPROTO_TCP_OPT, TCP_NODELAY, value) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Enables or disables SO_KEEPALIVE.
+    pub func set_keepalive(this, keepalive: Bool) -> Outcome[(), NetError] {
+        let value: I32 = if keepalive { 1 } else { 0 }
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_KEEPALIVE, value) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+    /// Enables or disables SO_REUSEADDR.
+    pub func set_reuse_addr(this, reuse: Bool) -> Outcome[(), NetError] {
+        let value: I32 = if reuse { 1 } else { 0 }
+        let result: I32 = lowlevel { sys_setsockopt(this.handle, SOL_SOCKET, SO_REUSEADDR, value) }
+        if result < 0 {
+            return Err(NetError::new(NetErrorKind::Other()))
+        }
+        Ok(())
+    }
+
+}
+
+// ============================================================================
+// Low-level functions (implemented in runtime)
+// ============================================================================
+
+/// Creates a socket.
+pub lowlevel func sys_socket(family: I32, sock_type: I32, protocol: I32) -> I64
+
+/// Sets socket to non-blocking mode.
+pub lowlevel func sys_set_nonblocking(handle: I64, nonblocking: Bool) -> I32
+
+/// Sets a socket option.
+pub lowlevel func sys_setsockopt(handle: I64, level: I32, optname: I32, value: I32) -> I32

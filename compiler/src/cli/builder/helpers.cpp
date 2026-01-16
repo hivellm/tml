@@ -375,6 +375,35 @@ bool has_bench_functions(const parser::Module& module) {
     return false;
 }
 
+// Check if module uses socket lowlevel functions (requires net.c runtime)
+bool has_socket_functions(const parser::Module& module) {
+    static const std::vector<std::string> socket_funcs = {
+        "sys_socket_raw",     "sys_bind_v4",
+        "sys_bind_v6",        "sys_listen_raw",
+        "sys_accept_v4",      "sys_connect_v4",
+        "sys_connect_v6",     "sys_send_raw",
+        "sys_recv_raw",       "sys_sendto_v4",
+        "sys_recvfrom_v4",    "sys_shutdown_raw",
+        "sys_close_raw",      "sys_set_nonblocking_raw",
+        "sys_setsockopt_raw", "sys_getsockname_v4",
+        "sys_getpeername_v4", "sys_get_last_error",
+        "sys_wsa_startup",    "sys_wsa_cleanup"};
+
+    for (const auto& decl : module.decls) {
+        if (decl->is<parser::FuncDecl>()) {
+            const auto& func = decl->as<parser::FuncDecl>();
+            if (func.is_unsafe) { // lowlevel func has is_unsafe = true
+                for (const auto& socket_func : socket_funcs) {
+                    if (func.name == socket_func) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleRegistry>& registry,
                                           const parser::Module& module,
                                           const std::string& deps_cache, const std::string& clang,
@@ -588,6 +617,20 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 "F:/Node/hivellm/tml/compiler/runtime/text.c",
             },
             "std::text");
+    }
+
+    // Link std::net runtime if imported OR if socket lowlevel functions are used
+    if (registry->has_module("std::net") || registry->has_module("std::net::sys") ||
+        registry->has_module("std::net::tcp") || registry->has_module("std::net::udp") ||
+        has_socket_functions(module)) {
+        add_runtime(
+            {
+                "compiler/runtime/net.c",
+                "runtime/net.c",
+                "../runtime/net.c",
+                "F:/Node/hivellm/tml/compiler/runtime/net.c",
+            },
+            "std::net");
     }
 
     return objects;

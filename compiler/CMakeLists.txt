@@ -265,6 +265,9 @@ add_library(tml_mir STATIC
     src/mir/passes/merge_returns.cpp
     src/mir/passes/devirtualization.cpp
     src/mir/passes/dead_method_elimination.cpp
+    src/mir/passes/constructor_fusion.cpp
+    src/mir/passes/destructor_hoist.cpp
+    src/mir/passes/batch_destruction.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
 target_include_directories(tml_mir PUBLIC include src)
@@ -289,6 +292,7 @@ add_library(tml_codegen STATIC
     src/codegen/core/target.cpp
     src/codegen/core/drop.cpp
     src/codegen/core/class_codegen.cpp
+    src/codegen/core/optimization_passes.cpp
     # Expression codegen (split for maintainability)
     src/codegen/expr/core.cpp
     src/codegen/expr/binary.cpp

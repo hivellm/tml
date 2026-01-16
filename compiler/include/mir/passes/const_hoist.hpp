@@ -34,17 +34,19 @@
 namespace tml::mir {
 
 class ConstantHoistPass : public FunctionPass {
-  public:
-    [[nodiscard]] auto name() const -> std::string override { return "ConstHoist"; }
+public:
+    [[nodiscard]] auto name() const -> std::string override {
+        return "ConstHoist";
+    }
 
-  protected:
+protected:
     auto run_on_function(Function& func) -> bool override;
 
-  private:
+private:
     struct LoopInfo {
         uint32_t header;
         std::unordered_set<uint32_t> blocks;
-        uint32_t preheader{0};  // Block before loop header (0 = none)
+        uint32_t preheader{0}; // Block before loop header (0 = none)
     };
 
     auto find_loops(const Function& func) -> std::vector<LoopInfo>;

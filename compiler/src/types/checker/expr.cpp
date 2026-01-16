@@ -158,7 +158,35 @@ auto TypeChecker::check_expr(const parser::Expr& expr) -> TypePtr {
         expr.kind);
 }
 
+auto TypeChecker::check_expr(const parser::Expr& expr, TypePtr expected_type) -> TypePtr {
+    return std::visit(
+        [this, &expr, &expected_type](const auto& e) -> TypePtr {
+            using T = std::decay_t<decltype(e)>;
+
+            if constexpr (std::is_same_v<T, parser::LiteralExpr>) {
+                return check_literal(e, expected_type);
+            } else if constexpr (std::is_same_v<T, parser::UnaryExpr>) {
+                // For unary expressions like -5, propagate expected type to operand
+                if (e.op == parser::UnaryOp::Neg && e.operand->is<parser::LiteralExpr>()) {
+                    return check_literal(e.operand->as<parser::LiteralExpr>(), expected_type);
+                }
+                return check_unary(e);
+            } else if constexpr (std::is_same_v<T, parser::ArrayExpr>) {
+                // For array expressions, propagate expected type for element coercion
+                return check_array(e, expected_type);
+            } else {
+                // For other expressions, fall back to regular check_expr
+                return check_expr(expr);
+            }
+        },
+        expr.kind);
+}
+
 auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
+    return check_literal(lit, nullptr);
+}
+
+auto TypeChecker::check_literal(const parser::LiteralExpr& lit, TypePtr expected_type) -> TypePtr {
     switch (lit.token.kind) {
     case lexer::TokenKind::IntLiteral: {
         const auto& int_val = lit.token.int_value();
@@ -185,6 +213,25 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
             if (suffix == "u128")
                 return make_primitive(PrimitiveKind::U128);
         }
+        // If no suffix, use expected_type if it's an integer type
+        if (expected_type && std::holds_alternative<PrimitiveType>(expected_type->kind)) {
+            auto prim = std::get<PrimitiveType>(expected_type->kind);
+            switch (prim.kind) {
+            case PrimitiveKind::I8:
+            case PrimitiveKind::I16:
+            case PrimitiveKind::I32:
+            case PrimitiveKind::I64:
+            case PrimitiveKind::I128:
+            case PrimitiveKind::U8:
+            case PrimitiveKind::U16:
+            case PrimitiveKind::U32:
+            case PrimitiveKind::U64:
+            case PrimitiveKind::U128:
+                return expected_type;
+            default:
+                break;
+            }
+        }
         return make_i64();
     }
     case lexer::TokenKind::FloatLiteral: {
@@ -194,6 +241,13 @@ auto TypeChecker::check_literal(const parser::LiteralExpr& lit) -> TypePtr {
                 return make_primitive(PrimitiveKind::F32);
             if (float_val.suffix == "f64")
                 return make_primitive(PrimitiveKind::F64);
+        }
+        // If no suffix, use expected_type if it's a float type
+        if (expected_type && std::holds_alternative<PrimitiveType>(expected_type->kind)) {
+            auto prim = std::get<PrimitiveType>(expected_type->kind);
+            if (prim.kind == PrimitiveKind::F32 || prim.kind == PrimitiveKind::F64) {
+                return expected_type;
+            }
         }
         return make_f64();
     }
@@ -543,7 +597,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
             if (!func->type_params.empty()) {
                 std::unordered_map<std::string, TypePtr> substitutions;
                 for (size_t i = 0; i < call.args.size() && i < func->params.size(); ++i) {
-                    auto arg_type = check_expr(*call.args[i]);
+                    // Pass expected parameter type for numeric literal coercion
+                    auto arg_type = check_expr(*call.args[i], func->params[i]);
                     if (func->params[i]->is<NamedType>()) {
                         const auto& named = func->params[i]->as<NamedType>();
                         for (const auto& tp : func->type_params) {
@@ -628,7 +683,8 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
                     }
 
                     for (size_t i = 0; i < call.args.size(); ++i) {
-                        auto arg_type = check_expr(*call.args[i]);
+                        // Pass expected payload type for numeric literal coercion
+                        auto arg_type = check_expr(*call.args[i], payload_types[i]);
                         (void)arg_type;
                     }
 
@@ -803,8 +859,9 @@ auto TypeChecker::check_call(const parser::CallExpr& call) -> TypePtr {
         std::unordered_map<std::string, TypePtr> substitutions;
 
         for (size_t i = 0; i < std::min(call.args.size(), func.params.size()); ++i) {
-            auto arg_type = check_expr(*call.args[i]);
             auto& param_type = func.params[i];
+            // Pass expected parameter type for numeric literal coercion
+            auto arg_type = check_expr(*call.args[i], param_type);
 
             // If the parameter type is a NamedType that could be a type parameter (T, U, etc.)
             // and it has no type_args, it might be a generic type parameter

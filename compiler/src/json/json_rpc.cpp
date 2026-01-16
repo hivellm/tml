@@ -91,8 +91,8 @@ auto JsonRpcError::from_code(JsonRpcErrorCode code) -> JsonRpcError {
 /// auto error = JsonRpcError::make(-32001, "Resource not found",
 ///     JsonValue("user_id: 123"));
 /// ```
-auto JsonRpcError::make(int code, std::string message,
-                        std::optional<JsonValue> data) -> JsonRpcError {
+auto JsonRpcError::make(int code, std::string message, std::optional<JsonValue> data)
+    -> JsonRpcError {
     return JsonRpcError{code, std::move(message), std::move(data)};
 }
 
@@ -155,8 +155,7 @@ auto JsonRpcError::to_json() const -> JsonValue {
 ///     // req.method == "sum"
 /// }
 /// ```
-auto JsonRpcRequest::from_json(const JsonValue& json)
-    -> Result<JsonRpcRequest, JsonRpcError> {
+auto JsonRpcRequest::from_json(const JsonValue& json) -> Result<JsonRpcRequest, JsonRpcError> {
     // Must be an object
     if (!json.is_object()) {
         return JsonRpcError::make(static_cast<int>(JsonRpcErrorCode::InvalidRequest),
@@ -316,8 +315,7 @@ auto JsonRpcResponse::failure(JsonRpcError error, JsonValue id) -> JsonRpcRespon
 ///     // resp.result->as_i64() == 42
 /// }
 /// ```
-auto JsonRpcResponse::from_json(const JsonValue& json)
-    -> Result<JsonRpcResponse, JsonRpcError> {
+auto JsonRpcResponse::from_json(const JsonValue& json) -> Result<JsonRpcResponse, JsonRpcError> {
     // Must be an object
     if (!json.is_object()) {
         return JsonRpcError::make(static_cast<int>(JsonRpcErrorCode::InvalidRequest),

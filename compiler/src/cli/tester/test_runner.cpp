@@ -43,6 +43,7 @@
 #include "cli/builder/object_compiler.hpp"
 #include "cli/commands/cmd_build.hpp"
 #include "cli/tester/tester_internal.hpp"
+#include "preprocessor/preprocessor.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -412,8 +413,25 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
         return result;
     }
 
-    // Lex
-    auto source = lexer::Source::from_string(source_code, test_file);
+    // Preprocess the source code (handles #if, #ifdef, etc.)
+    auto pp_config = preprocessor::Preprocessor::host_config();
+    preprocessor::Preprocessor pp(pp_config);
+    auto pp_result = pp.process(source_code, test_file);
+
+    if (!pp_result.success()) {
+        std::ostringstream oss;
+        oss << "Preprocessor errors:\n";
+        for (const auto& diag : pp_result.diagnostics) {
+            if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                oss << "  " << diag.line << ":" << diag.column << ": " << diag.message << "\n";
+            }
+        }
+        result.error_message = oss.str();
+        return result;
+    }
+
+    // Lex (use preprocessed source)
+    auto source = lexer::Source::from_string(pp_result.output, test_file);
     lexer::Lexer lex(source);
     auto tokens = lex.tokenize();
 
@@ -1353,8 +1371,31 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                     return result;
                 }
 
-                // Generate content hash for this file
-                std::string content_hash = build::generate_content_hash(source_code);
+                // Preprocess the source code (handles #if, #ifdef, etc.)
+                auto pp_config = preprocessor::Preprocessor::host_config();
+                preprocessor::Preprocessor pp(pp_config);
+                auto pp_result = pp.process(source_code, test.file_path);
+
+                if (!pp_result.success()) {
+                    std::ostringstream oss;
+                    oss << "Preprocessor errors in " << test.file_path << ":\n";
+                    for (const auto& diag : pp_result.diagnostics) {
+                        if (diag.severity == preprocessor::DiagnosticSeverity::Error) {
+                            oss << "  " << diag.line << ":" << diag.column << ": " << diag.message
+                                << "\n";
+                        }
+                    }
+                    result.error_message = oss.str();
+                    result.failed_test = test.file_path;
+                    return result;
+                }
+
+                // Use preprocessed source for subsequent steps
+                std::string preprocessed_source = pp_result.output;
+
+                // Generate content hash for this file (use preprocessed source for accurate
+                // caching)
+                std::string content_hash = build::generate_content_hash(preprocessed_source);
                 combined_hash += content_hash;
 
                 // Check for cached object
@@ -1364,8 +1405,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
                 bool use_cached = !no_cache && fs::exists(obj_output);
 
                 if (!use_cached) {
-                    // Lex
-                    auto source = lexer::Source::from_string(source_code, test.file_path);
+                    // Lex (use preprocessed source)
+                    auto source = lexer::Source::from_string(preprocessed_source, test.file_path);
                     lexer::Lexer lex(source);
                     auto tokens = lex.tokenize();
                     if (lex.has_errors()) {
@@ -1514,8 +1555,15 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         // Get runtime objects (only need to do once for the suite)
         // Reuse shared_registry which already has all loaded modules
         // Use first module for runtime deps (they're usually the same)
-        std::string source_code = read_file(suite.tests[0].file_path);
-        auto source = lexer::Source::from_string(source_code, suite.tests[0].file_path);
+        std::string rt_source_code = read_file(suite.tests[0].file_path);
+
+        // Preprocess the source (required for #if WINDOWS etc.)
+        auto rt_pp_config = preprocessor::Preprocessor::host_config();
+        preprocessor::Preprocessor rt_pp(rt_pp_config);
+        auto rt_pp_result = rt_pp.process(rt_source_code, suite.tests[0].file_path);
+        std::string rt_preprocessed = rt_pp_result.success() ? rt_pp_result.output : rt_source_code;
+
+        auto source = lexer::Source::from_string(rt_preprocessed, suite.tests[0].file_path);
         lexer::Lexer lex(source);
         auto tokens = lex.tokenize();
         parser::Parser parser(std::move(tokens));

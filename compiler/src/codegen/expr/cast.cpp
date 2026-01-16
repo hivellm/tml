@@ -274,20 +274,73 @@ auto LLVMIRGen::gen_is_check(const parser::IsExpr& is_expr) -> std::string {
         return "false";
     }
 
-    // Fallback: dynamic check using vtable comparison (exact match only)
+    // Dynamic check using RTTI for inheritance support
+    // The RTTI TypeInfo structure is: { ptr type_name, ptr base_typeinfo }
+    // We walk up the base_typeinfo chain looking for target's typeinfo
+
     std::string result = fresh_reg();
+    std::string target_typeinfo = "@typeinfo." + target_name;
+
+    // Get the object's typeinfo by looking up its vtable
+    // For now, we generate inline code to walk the RTTI chain
+    // Get object's class type (we need to figure out actual runtime type)
+    // The object's typeinfo can be found via vtable-to-typeinfo mapping
+
+    // Simpler approach: compare vtable with target and all known subclasses
+    // Get object vtable
     std::string vtable_ptr_ptr = fresh_reg();
     std::string obj_vtable = fresh_reg();
-
-    // Load vtable pointer from object (first field)
-    std::string class_type = "%class." + target_name;
-    emit_line("  " + vtable_ptr_ptr + " = getelementptr " + class_type + ", ptr " + obj_ptr +
-              ", i32 0, i32 0");
+    emit_line("  " + vtable_ptr_ptr + " = getelementptr %class." + target_name + ", ptr " +
+              obj_ptr + ", i32 0, i32 0");
     emit_line("  " + obj_vtable + " = load ptr, ptr " + vtable_ptr_ptr);
 
-    // Compare with target vtable
-    std::string target_vtable = "@vtable." + target_name;
-    emit_line("  " + result + " = icmp eq ptr " + obj_vtable + ", " + target_vtable);
+    // Check exact match with target vtable
+    std::string exact_match = fresh_reg();
+    emit_line("  " + exact_match + " = icmp eq ptr " + obj_vtable + ", @vtable." + target_name);
+
+    // Also check all known subclasses of target
+    std::vector<std::string> subclass_checks;
+    subclass_checks.push_back(exact_match);
+
+    // Get all known subclasses of target_name
+    std::vector<std::string> subclasses;
+    for (const auto& [class_name, class_def] : env_.all_classes()) {
+        if (class_def.base_class && class_def.base_class.value() == target_name) {
+            subclasses.push_back(class_name);
+        }
+    }
+
+    // Recursively find all descendants
+    std::vector<std::string> to_process = subclasses;
+    while (!to_process.empty()) {
+        std::string cls = to_process.back();
+        to_process.pop_back();
+
+        // Check against this subclass's vtable
+        std::string check = fresh_reg();
+        emit_line("  " + check + " = icmp eq ptr " + obj_vtable + ", @vtable." + cls);
+        subclass_checks.push_back(check);
+
+        // Find subclasses of this class
+        for (const auto& [name, def] : env_.all_classes()) {
+            if (def.base_class && def.base_class.value() == cls) {
+                to_process.push_back(name);
+            }
+        }
+    }
+
+    // OR all the checks together
+    if (subclass_checks.size() == 1) {
+        result = subclass_checks[0];
+    } else {
+        std::string prev = subclass_checks[0];
+        for (size_t i = 1; i < subclass_checks.size(); ++i) {
+            std::string next = fresh_reg();
+            emit_line("  " + next + " = or i1 " + prev + ", " + subclass_checks[i]);
+            prev = next;
+        }
+        result = prev;
+    }
 
     last_expr_type_ = "i1";
     return result;

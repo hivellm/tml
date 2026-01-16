@@ -43,7 +43,7 @@ private:
 
     // Expression representation for hashing
     struct Expression {
-        std::string key;  // String representation for hashing
+        std::string key; // String representation for hashing
 
         bool operator==(const Expression& other) const {
             return key == other.key;

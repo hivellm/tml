@@ -13,7 +13,8 @@ benchmarks/
 │   ├── algorithms.tml         # Classic algorithms (factorial, GCD, etc.)
 │   ├── data_structures.tml    # Data structure operations
 │   ├── math.tml               # Mathematical computations
-│   └── optimization_bench.tml # HIR/MIR optimization benchmarks
+│   ├── optimization_bench.tml # HIR/MIR optimization benchmarks
+│   └── oop_bench.tml          # OOP performance benchmarks
 ├── rust/                      # Rust benchmark implementations
 │   ├── Cargo.toml
 │   └── benches/
@@ -58,6 +59,14 @@ benchmarks/
 - Binomial coefficients
 - Euler's totient function
 - Sum of divisors
+
+### 4. OOP Benchmarks
+- Virtual dispatch (Shape hierarchy)
+- Object creation (Point distance)
+- HTTP handler simulation
+- Game loop simulation (Entity updates)
+- Deep inheritance chains (5 levels)
+- Method chaining (Builder pattern)
 
 ## Running Benchmarks
 

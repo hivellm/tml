@@ -50,9 +50,9 @@
 #pragma once
 
 #include "common.hpp"
+
 #include "json/json_error.hpp"
 #include "json/json_value.hpp"
-
 #include <string_view>
 #include <vector>
 
@@ -67,12 +67,12 @@ namespace tml::json {
 /// These represent the lexical elements of JSON according to RFC 8259.
 enum class JsonTokenKind : uint8_t {
     // Structural tokens
-    LBrace,    ///< `{` - Start of object
-    RBrace,    ///< `}` - End of object
-    LBracket,  ///< `[` - Start of array
-    RBracket,  ///< `]` - End of array
-    Colon,     ///< `:` - Key-value separator
-    Comma,     ///< `,` - Element separator
+    LBrace,   ///< `{` - Start of object
+    RBrace,   ///< `}` - End of object
+    LBracket, ///< `[` - Start of array
+    RBracket, ///< `]` - End of array
+    Colon,    ///< `:` - Key-value separator
+    Comma,    ///< `,` - Element separator
 
     // Value tokens
     String,      ///< `"..."` - String literal
@@ -83,8 +83,8 @@ enum class JsonTokenKind : uint8_t {
     Null,        ///< `null` - Null value
 
     // Special tokens
-    Eof,   ///< End of input
-    Error  ///< Lexer error (check error message)
+    Eof,  ///< End of input
+    Error ///< Lexer error (check error message)
 };
 
 /// A token produced by the JSON lexer.
@@ -154,10 +154,14 @@ public:
     auto next_token() -> JsonToken;
 
     /// Returns `true` if any errors occurred during lexing.
-    [[nodiscard]] auto has_errors() const -> bool { return has_errors_; }
+    [[nodiscard]] auto has_errors() const -> bool {
+        return has_errors_;
+    }
 
     /// Returns the list of errors encountered during lexing.
-    [[nodiscard]] auto errors() const -> const std::vector<JsonError>& { return errors_; }
+    [[nodiscard]] auto errors() const -> const std::vector<JsonError>& {
+        return errors_;
+    }
 
 private:
     std::string_view input_;
@@ -180,8 +184,8 @@ private:
     void skip_whitespace();
 
     /// Creates a token at the given position.
-    auto make_token(JsonTokenKind kind, size_t start_pos, size_t start_line,
-                    size_t start_col) -> JsonToken;
+    auto make_token(JsonTokenKind kind, size_t start_pos, size_t start_line, size_t start_col)
+        -> JsonToken;
 
     /// Scans a string token.
     auto scan_string() -> JsonToken;

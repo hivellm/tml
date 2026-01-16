@@ -291,7 +291,8 @@ void LLVMIRGen::gen_enum_decl(const parser::EnumDecl& e) {
         // Emit the enum type to type_defs_buffer_ (ensures types before functions)
         std::string type_name = "%struct." + e.name;
         // { i32 tag, [N x i8] data }
-        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size) << " x i8] }\n";
+        type_defs_buffer_ << type_name << " = type { i32, [" << std::to_string(max_size)
+                          << " x i8] }\n";
         struct_types_[e.name] = type_name;
 
         // Register variant values
@@ -629,6 +630,25 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         }
 
         return; // Don't generate function body for extern functions
+    }
+
+    // Handle lowlevel functions without body - these are external C functions
+    // pub lowlevel func sys_wsa_startup() -> I32 maps to C function sys_wsa_startup
+    if (func.is_unsafe && !func.body.has_value()) {
+        // Only emit declaration if not already declared by runtime
+        if (declared_externals_.find(func.name) == declared_externals_.end()) {
+            // External C function - emit declaration
+            emit_line("");
+            emit_line("; lowlevel func " + func.name + " (external C function)");
+            emit_line("declare " + ret_type + " @" + func.name + "(" + param_types + ")");
+            declared_externals_.insert(func.name);
+        }
+
+        // Register function - map TML name directly to C symbol
+        std::string func_type = ret_type + " (" + param_types + ")";
+        functions_[func.name] = FuncInfo{"@" + func.name, func_type, ret_type, param_types_vec};
+
+        return; // Don't generate function body for external lowlevel functions
     }
 
     current_func_ = func.name;
