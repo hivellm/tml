@@ -113,6 +113,10 @@ struct InliningOptions {
     int constructor_bonus = 200;         ///< Threshold bonus for constructor calls.
     int base_constructor_bonus = 250;    ///< Extra bonus for base constructor chains.
     bool prioritize_constructors = true; ///< Whether to prioritize constructor inlining.
+
+    // Single-expression method options (getters/setters)
+    bool always_inline_single_expr = true;  ///< Always inline methods with single expression.
+    int single_expr_max_size = 3;           ///< Max instructions to be considered single-expression.
 };
 
 /// Function inlining pass.

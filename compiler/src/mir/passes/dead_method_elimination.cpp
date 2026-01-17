@@ -21,7 +21,7 @@ auto DeadMethodEliminationPass::is_class_method(const std::string& func_name) co
     }
     // Check if the prefix is a known class
     std::string class_name = func_name.substr(0, underscore);
-    return devirt_pass_.get_class_info(class_name) != nullptr;
+    return env_.lookup_class(class_name).has_value();
 }
 
 auto DeadMethodEliminationPass::extract_class_name(const std::string& func_name) const
@@ -66,8 +66,8 @@ auto DeadMethodEliminationPass::is_entry_point(const Function& func) const -> bo
     // since they might be called through dynamic dispatch
     if (is_class_method(func.name)) {
         std::string class_name = extract_class_name(func.name);
-        auto class_info = devirt_pass_.get_class_info(class_name);
-        if (class_info && !class_info->interfaces.empty()) {
+        auto class_def = env_.lookup_class(class_name);
+        if (class_def && !class_def->interfaces.empty()) {
             // This class implements interfaces, keep its methods
             return true;
         }
@@ -114,8 +114,8 @@ void DeadMethodEliminationPass::build_call_graph(const Module& module) {
             info.method_name = extract_method_name(func.name);
 
             // Check if this is a virtual method
-            auto class_info = devirt_pass_.get_class_info(info.class_name);
-            if (class_info && !class_info->is_sealed) {
+            auto class_def = env_.lookup_class(info.class_name);
+            if (class_def && !class_def->is_sealed) {
                 // Method could be virtual if class is not sealed
                 info.is_virtual = true;
                 stats_.virtual_methods++;
@@ -152,7 +152,7 @@ void DeadMethodEliminationPass::analyze_function_calls(const Function& func) {
                 // If this was a devirtualized call, also track the original class method
                 if (call->devirt_info.has_value()) {
                     const auto& devirt = *call->devirt_info;
-                    std::string original_name = devirt.original_class + "_" + devirt.method_name;
+                    std::string original_name = devirt.original_class + "__" + devirt.method_name;
                     info.calls.insert(original_name);
                 }
             }
@@ -160,7 +160,7 @@ void DeadMethodEliminationPass::analyze_function_calls(const Function& func) {
             // Check for virtual method calls
             if (auto* method_call = std::get_if<MethodCallInst>(&inst.inst)) {
                 std::string target_name =
-                    method_call->receiver_type + "_" + method_call->method_name;
+                    method_call->receiver_type + "__" + method_call->method_name;
                 info.calls.insert(target_name);
 
                 // For virtual calls, we need to consider all possible targets
@@ -218,27 +218,33 @@ void DeadMethodEliminationPass::propagate_reachability() {
 
 void DeadMethodEliminationPass::add_virtual_targets(const std::string& class_name,
                                                     const std::string& method_name) {
-    auto class_info = devirt_pass_.get_class_info(class_name);
-    if (!class_info) {
+    auto class_def = env_.lookup_class(class_name);
+    if (!class_def) {
         return;
     }
 
-    // Add all subclass implementations to reachable set
-    for (const auto& subclass : class_info->all_subclasses) {
-        std::string target = subclass + "_" + method_name;
-        if (method_info_.find(target) != method_info_.end()) {
-            if (reachable_methods_.insert(target).second) {
-                auto it = method_info_.find(target);
-                if (it != method_info_.end()) {
-                    it->second.is_reachable = true;
+    // For non-sealed classes, we conservatively mark all methods with this name
+    // as reachable since we don't have direct subclass information.
+    // This could be optimized with a class hierarchy cache.
+    if (!class_def->is_sealed) {
+        // Mark all methods with matching name as potentially reachable
+        for (auto& [name, info] : method_info_) {
+            if (info.method_name == method_name && !info.class_name.empty()) {
+                // Check if this class is related (same hierarchy)
+                auto other_class = env_.lookup_class(info.class_name);
+                if (other_class) {
+                    // For now, conservatively mark all methods with same name
+                    if (reachable_methods_.insert(name).second) {
+                        info.is_reachable = true;
+                    }
                 }
             }
         }
     }
 
     // Also add parent implementations (in case of calling super)
-    if (class_info->base_class) {
-        add_virtual_targets(*class_info->base_class, method_name);
+    if (class_def->base_class) {
+        add_virtual_targets(*class_def->base_class, method_name);
     }
 }
 

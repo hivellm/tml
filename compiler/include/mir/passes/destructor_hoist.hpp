@@ -43,8 +43,8 @@
 
 namespace tml::mir {
 
-/// Information about a loop-local allocation
-struct LoopAllocation {
+/// Information about a loop-local allocation for destructor hoisting
+struct DestructorLoopAllocation {
     ValueId alloc_value;    ///< The allocated pointer
     std::string class_name; ///< Class being allocated
     size_t alloc_block;     ///< Block containing allocation
@@ -90,7 +90,7 @@ private:
 
     /// Find allocations within a loop
     auto find_loop_allocations(const Function& func, const std::vector<size_t>& loop_blocks)
-        -> std::vector<LoopAllocation>;
+        -> std::vector<DestructorLoopAllocation>;
 
     /// Check if a value escapes the loop
     auto escapes_loop(const Function& func, ValueId value,
@@ -105,14 +105,14 @@ private:
         -> std::optional<std::pair<size_t, size_t>>;
 
     /// Hoist allocation before loop
-    auto hoist_allocation(Function& func, const LoopAllocation& alloc, size_t preheader_block)
+    auto hoist_allocation(Function& func, const DestructorLoopAllocation& alloc, size_t preheader_block)
         -> bool;
 
     /// Replace allocation with reset() call in loop
-    auto replace_with_reset(Function& func, const LoopAllocation& alloc) -> bool;
+    auto replace_with_reset(Function& func, const DestructorLoopAllocation& alloc) -> bool;
 
     /// Move drop after loop
-    auto move_drop_after_loop(Function& func, const LoopAllocation& alloc, size_t exit_block)
+    auto move_drop_after_loop(Function& func, const DestructorLoopAllocation& alloc, size_t exit_block)
         -> bool;
 };
 

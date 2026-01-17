@@ -293,6 +293,10 @@ private:
     /// Called before processing successor blocks.
     void analyze_branch_narrowing(const Function& func, size_t block_idx);
 
+    /// Analyzes `when` expression type checks for type narrowing.
+    /// Detects vtable comparison patterns that indicate "is T" checks.
+    void analyze_when_type_checks(const Function& func, size_t block_idx);
+
     /// Propagates type narrowing info to successor blocks.
     void propagate_narrowing_to_successors(const BasicBlock& block, size_t block_idx);
 

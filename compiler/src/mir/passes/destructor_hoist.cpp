@@ -131,8 +131,8 @@ auto DestructorHoistPass::detect_loops(const Function& func)
 
 auto DestructorHoistPass::find_loop_allocations(const Function& func,
                                                 const std::vector<size_t>& loop_blocks)
-    -> std::vector<LoopAllocation> {
-    std::vector<LoopAllocation> allocations;
+    -> std::vector<DestructorLoopAllocation> {
+    std::vector<DestructorLoopAllocation> allocations;
 
     for (size_t block_idx : loop_blocks) {
         const auto& block = func.blocks[block_idx];
@@ -150,7 +150,7 @@ auto DestructorHoistPass::find_loop_allocations(const Function& func,
                 }
 
                 if (pos != std::string::npos && pos > 0) {
-                    LoopAllocation alloc;
+                    DestructorLoopAllocation alloc;
                     alloc.alloc_value = inst.result;
                     alloc.class_name = fn.substr(0, pos);
                     alloc.alloc_block = block_idx;
@@ -256,7 +256,7 @@ auto DestructorHoistPass::find_drop_in_loop(const Function& func, ValueId alloc,
     return std::nullopt;
 }
 
-auto DestructorHoistPass::hoist_allocation(Function& func, const LoopAllocation& alloc,
+auto DestructorHoistPass::hoist_allocation(Function& func, const DestructorLoopAllocation& alloc,
                                            size_t preheader_block) -> bool {
     if (preheader_block >= func.blocks.size())
         return false;
@@ -282,7 +282,8 @@ auto DestructorHoistPass::hoist_allocation(Function& func, const LoopAllocation&
     return true;
 }
 
-auto DestructorHoistPass::replace_with_reset(Function& func, const LoopAllocation& alloc) -> bool {
+auto DestructorHoistPass::replace_with_reset(Function& func, const DestructorLoopAllocation& alloc)
+    -> bool {
     // Find where the original allocation was and insert a reset call there
     // This is a simplified implementation - in practice we'd need to track
     // the new location after hoisting
@@ -322,7 +323,8 @@ auto DestructorHoistPass::replace_with_reset(Function& func, const LoopAllocatio
     return false;
 }
 
-auto DestructorHoistPass::move_drop_after_loop(Function& func, const LoopAllocation& alloc,
+auto DestructorHoistPass::move_drop_after_loop(Function& func,
+                                               const DestructorLoopAllocation& alloc,
                                                size_t exit_block) -> bool {
     if (exit_block >= func.blocks.size())
         return false;

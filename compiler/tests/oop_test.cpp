@@ -2255,8 +2255,7 @@ TEST_F(DeadMethodEliminationTest, PassCreation) {
     ASSERT_TRUE(env_opt.has_value());
     auto& env = *env_opt;
 
-    tml::mir::DevirtualizationPass devirt_pass(env);
-    tml::mir::DeadMethodEliminationPass pass(devirt_pass);
+    tml::mir::DeadMethodEliminationPass pass(env);
 
     EXPECT_EQ(pass.name(), "DeadMethodElimination");
 
@@ -2279,8 +2278,7 @@ TEST_F(DeadMethodEliminationTest, GetDeadMethodsEmpty) {
     ASSERT_TRUE(env_opt.has_value());
     auto& env = *env_opt;
 
-    tml::mir::DevirtualizationPass devirt_pass(env);
-    tml::mir::DeadMethodEliminationPass pass(devirt_pass);
+    tml::mir::DeadMethodEliminationPass pass(env);
 
     // Before running, get_dead_methods should return empty
     auto dead = pass.get_dead_methods();
@@ -2300,8 +2298,7 @@ TEST_F(DeadMethodEliminationTest, ReachabilityQueryBeforeRun) {
     ASSERT_TRUE(env_opt.has_value());
     auto& env = *env_opt;
 
-    tml::mir::DevirtualizationPass devirt_pass(env);
-    tml::mir::DeadMethodEliminationPass pass(devirt_pass);
+    tml::mir::DeadMethodEliminationPass pass(env);
 
     // Before running, method should not be marked reachable
     EXPECT_FALSE(pass.is_method_reachable("Dog_new"));

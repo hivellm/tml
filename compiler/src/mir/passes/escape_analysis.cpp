@@ -64,15 +64,17 @@ auto EscapeAnalysisPass::extract_class_name(const std::string& func_name) const 
 
 void EscapeAnalysisPass::track_this_parameter(const Function& func) {
     // Check if this is a method (has implicit this parameter)
-    // Method pattern: ClassName_methodName
+    // Method pattern: ClassName_methodName or ClassName__methodName
     // The first parameter is typically `this` for instance methods
     if (func.params.empty()) {
         return;
     }
 
     // Check if this looks like a method by examining the function name
-    // Methods typically have format: ClassName_methodName
-    auto underscore_pos = func.name.find('_');
+    // Methods use double underscore (ClassName__methodName) or single underscore for older code
+    auto double_underscore_pos = func.name.find("__");
+    auto underscore_pos =
+        double_underscore_pos != std::string::npos ? double_underscore_pos : func.name.find('_');
     if (underscore_pos == std::string::npos || underscore_pos == 0) {
         return; // Not a method
     }
@@ -82,14 +84,33 @@ void EscapeAnalysisPass::track_this_parameter(const Function& func) {
         return;
     }
 
+    // Extract potential class name
+    std::string potential_class_name = func.name.substr(0, underscore_pos);
+
+    // Validate that this is actually a class method by checking the first parameter type
+    // The first parameter should be a struct type matching the class name
+    const auto& first_param = func.params[0];
+    if (!first_param.type) {
+        return; // No type info, can't validate
+    }
+
+    // Check if first param is a struct type with matching name
+    bool is_valid_method = false;
+    if (auto* struct_type = std::get_if<MirStructType>(&first_param.type->kind)) {
+        is_valid_method = (struct_type->name == potential_class_name);
+    }
+
+    if (!is_valid_method) {
+        return; // First parameter is not the expected class type - not a method
+    }
+
     // First parameter is `this` - mark it as potentially escaping through return
     // since we can't track what happens to it precisely
-    const auto& first_param = func.params[0];
     if (first_param.value_id != INVALID_VALUE) {
         auto& info = escape_info_[first_param.value_id];
         info.state = EscapeState::NoEscape; // Start as no escape
         info.is_class_instance = true;
-        info.class_name = func.name.substr(0, underscore_pos);
+        info.class_name = potential_class_name;
     }
 }
 
@@ -100,6 +121,10 @@ void EscapeAnalysisPass::track_this_parameter(const Function& func) {
 auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
     // Reset state for this function
     escape_info_.clear();
+    conditional_allocs_.clear();
+    loop_allocs_.clear();
+    loop_headers_.clear();
+    block_to_loop_.clear();
     stats_ = Stats{};
 
     // Initialize all values as NoEscape
@@ -120,6 +145,13 @@ auto EscapeAnalysisPass::run_on_function(Function& func) -> bool {
 
     // Propagate escape information
     propagate_escapes(func);
+
+    // Find conditional allocations (phi nodes merging allocations)
+    find_conditional_allocations(func);
+
+    // Identify loops and find loop allocations
+    identify_loops(func);
+    find_loop_allocations(func);
 
     // Update statistics
     for (const auto& [value_id, info] : escape_info_) {
@@ -262,6 +294,9 @@ void EscapeAnalysisPass::analyze_call(const CallInst& call, ValueId result_id) {
         info.is_stack_promotable = true;
         info.is_class_instance = true;
         info.class_name = extract_class_name(call.func_name);
+
+        // Apply sealed class optimizations
+        apply_sealed_class_optimization(info.class_name, info);
     }
 
     // Check if this is a free call that can be removed
@@ -309,11 +344,14 @@ void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId
     // Devirtualized calls are less conservative because we can analyze the target
     bool is_devirtualized = call.devirt_info.has_value();
 
+    // Check if receiver type is a sealed class - enables fast-path analysis
+    bool is_sealed = is_sealed_class(call.receiver_type);
+
     // Check if this is a simple getter/setter pattern (common in OOP)
     // Getters: return a field value, don't store `this`
     // Setters: store to `this` field, don't escape `this`
     bool is_likely_accessor = false;
-    if (is_devirtualized) {
+    if (is_devirtualized || is_sealed) {
         // Simple heuristic: short method names starting with get_/set_/is_/has_
         // and methods returning primitive types are likely accessors
         const auto& method_name = call.method_name;
@@ -336,6 +374,18 @@ void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId
         if (is_devirtualized && is_likely_accessor) {
             // Devirtualized accessor methods typically don't escape `this`
             // Keep current escape state (likely NoEscape if local)
+            stats_.sealed_method_noescapes++;
+        } else if (is_sealed) {
+            // Sealed class method calls - we know all implementations
+            // For sealed classes, method calls don't cause global escape
+            // because there are no unknown overrides
+            if (is_likely_accessor) {
+                // Accessor on sealed class - definitely doesn't escape
+                stats_.sealed_method_noescapes++;
+            } else {
+                // Non-accessor on sealed class - still ArgEscape (better than GlobalEscape)
+                mark_escape(call.receiver.id, EscapeState::ArgEscape);
+            }
         } else if (is_devirtualized) {
             // Devirtualized non-accessor methods - mark as ArgEscape (conservative but not global)
             // The method may store `this` or pass it to other functions
@@ -354,6 +404,10 @@ void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId
             if (is_devirtualized && is_likely_accessor) {
                 // Accessor methods typically don't escape arguments
                 mark_escape(arg.id, EscapeState::ArgEscape);
+            } else if (is_sealed) {
+                // Sealed class method - we know all implementations
+                // Use ArgEscape instead of GlobalEscape
+                mark_escape(arg.id, EscapeState::ArgEscape);
             } else if (is_devirtualized) {
                 // Devirtualized method - less conservative
                 mark_escape(arg.id, EscapeState::ArgEscape);
@@ -367,8 +421,8 @@ void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId
     // Result of method call
     if (result_id != INVALID_VALUE) {
         auto& info = escape_info_[result_id];
-        if (is_devirtualized) {
-            // Devirtualized call - result may alias heap but not necessarily global
+        if (is_devirtualized || is_sealed) {
+            // Devirtualized or sealed class call - result may alias heap but not necessarily global
             info.may_alias_heap = true;
             info.may_alias_global = false;
         } else {
@@ -629,33 +683,352 @@ auto EscapeAnalysisPass::can_remove_free(ValueId value) const -> bool {
 }
 
 // ============================================================================
+// Sealed Class Optimization Helpers
+// ============================================================================
+
+auto EscapeAnalysisPass::is_sealed_class(const std::string& class_name) const -> bool {
+    if (!module_) {
+        return false;
+    }
+    return module_->is_class_sealed(class_name);
+}
+
+auto EscapeAnalysisPass::is_stack_allocatable_class(const std::string& class_name) const -> bool {
+    if (!module_) {
+        return false;
+    }
+    return module_->can_stack_allocate(class_name);
+}
+
+auto EscapeAnalysisPass::get_class_metadata(const std::string& class_name) const
+    -> std::optional<ClassMetadata> {
+    if (!module_) {
+        return std::nullopt;
+    }
+    return module_->get_class_metadata(class_name);
+}
+
+auto EscapeAnalysisPass::get_conditional_allocations() const
+    -> const std::vector<ConditionalAllocation>& {
+    return conditional_allocs_;
+}
+
+void EscapeAnalysisPass::find_conditional_allocations(Function& func) {
+    // Find phi nodes that merge allocations from different branches
+    // These can share a single stack slot since only one allocation
+    // is active at any time
+
+    for (const auto& block : func.blocks) {
+        for (const auto& inst : block.instructions) {
+            if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                analyze_phi_for_allocations(*phi, inst.result, func);
+            }
+        }
+    }
+}
+
+void EscapeAnalysisPass::analyze_phi_for_allocations(const PhiInst& phi, ValueId phi_result,
+                                                     [[maybe_unused]] Function& func) {
+    // Check if all incoming values are allocations
+    bool all_allocations = true;
+    bool all_same_class = true;
+    std::string common_class_name;
+    size_t max_size = 0;
+
+    ConditionalAllocation cond_alloc;
+    cond_alloc.phi_result = phi_result;
+
+    for (const auto& [incoming_val, from_block] : phi.incoming) {
+        auto it = escape_info_.find(incoming_val.id);
+        if (it == escape_info_.end()) {
+            all_allocations = false;
+            break;
+        }
+
+        const auto& info = it->second;
+
+        // Check if this is an allocation that can be promoted
+        if (!info.is_stack_promotable && info.state != EscapeState::NoEscape) {
+            all_allocations = false;
+            break;
+        }
+
+        // Track class information
+        if (info.is_class_instance) {
+            if (common_class_name.empty()) {
+                common_class_name = info.class_name;
+            } else if (common_class_name != info.class_name) {
+                all_same_class = false;
+            }
+        }
+
+        cond_alloc.alloc_ids.push_back(incoming_val.id);
+        cond_alloc.from_blocks.push_back(from_block);
+    }
+
+    // Only track if we have multiple incoming allocations
+    if (all_allocations && cond_alloc.alloc_ids.size() >= 2) {
+        cond_alloc.max_size = max_size;
+        cond_alloc.can_share_slot = true; // Conservative for now
+        cond_alloc.class_name = all_same_class ? common_class_name : "";
+
+        conditional_allocs_.push_back(cond_alloc);
+        stats_.conditional_allocations_found++;
+
+        if (cond_alloc.can_share_slot) {
+            stats_.conditional_allocs_shareable++;
+        }
+
+        // Mark all allocation ids as stack-promotable if they can share
+        for (ValueId alloc_id : cond_alloc.alloc_ids) {
+            auto it = escape_info_.find(alloc_id);
+            if (it != escape_info_.end()) {
+                it->second.is_stack_promotable = true;
+            }
+        }
+    }
+}
+
+auto EscapeAnalysisPass::get_loop_allocations() const -> const std::vector<LoopAllocation>& {
+    return loop_allocs_;
+}
+
+void EscapeAnalysisPass::identify_loops(Function& func) {
+    // Simple loop detection using back edges
+    // A back edge is an edge from a successor to a predecessor (or self-loop)
+    // The target of a back edge is a loop header
+
+    // Build a visited order for each block
+    std::unordered_map<uint32_t, size_t> visit_order;
+    size_t order = 0;
+
+    for (const auto& block : func.blocks) {
+        visit_order[block.id] = order++;
+    }
+
+    // Find back edges
+    for (const auto& block : func.blocks) {
+        for (uint32_t succ_id : block.successors) {
+            // Back edge: edge to a block visited earlier (or same block)
+            if (visit_order.count(succ_id) > 0 && visit_order[succ_id] <= visit_order[block.id]) {
+                // succ_id is a loop header
+                loop_headers_.insert(succ_id);
+            }
+        }
+    }
+
+    // Compute block-to-loop mapping using a simple DFS
+    // For each loop header, find all blocks that can reach it via back edge
+    for (uint32_t header : loop_headers_) {
+        // Mark the header itself
+        block_to_loop_[header] = header;
+
+        // Find all blocks that are part of this loop
+        // A block is in a loop if it's on a path from header to a back edge source
+        std::unordered_set<uint32_t> loop_blocks;
+        loop_blocks.insert(header);
+
+        // Simple approach: mark all predecessors of header that are dominated by header
+        // For simplicity, we'll just mark blocks that have the header as a successor (back edge)
+        for (const auto& block : func.blocks) {
+            for (uint32_t succ_id : block.successors) {
+                if (succ_id == header && block.id != header) {
+                    // This block has a back edge to header
+                    // Mark all blocks between header and this block as in the loop
+                    // Simplified: just mark this block
+                    if (block_to_loop_.count(block.id) == 0) {
+                        block_to_loop_[block.id] = header;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void EscapeAnalysisPass::find_loop_allocations(Function& func) {
+    // Find allocations inside loops
+    for (const auto& block : func.blocks) {
+        uint32_t loop_header = get_loop_header(block.id);
+        if (loop_header == 0 && !is_in_loop(block.id)) {
+            continue; // Block is not in a loop
+        }
+
+        for (const auto& inst : block.instructions) {
+            // Check if this is an allocation
+            bool is_alloc = false;
+            std::string class_name;
+            size_t est_size = 64; // Default estimate
+
+            if (auto* call = std::get_if<CallInst>(&inst.inst)) {
+                is_alloc = call->func_name == "alloc" || call->func_name == "heap_alloc" ||
+                           call->func_name == "Heap::new" || call->func_name == "tml_alloc" ||
+                           is_constructor_call(call->func_name);
+                if (is_constructor_call(call->func_name)) {
+                    class_name = extract_class_name(call->func_name);
+                }
+            } else if (std::holds_alternative<AllocaInst>(inst.inst)) {
+                is_alloc = true;
+            }
+
+            if (is_alloc && inst.result != INVALID_VALUE) {
+                LoopAllocation loop_alloc;
+                loop_alloc.alloc_id = inst.result;
+                loop_alloc.loop_header = loop_header != 0 ? loop_header : block.id;
+                loop_alloc.alloc_block = block.id;
+                loop_alloc.estimated_size = est_size;
+                loop_alloc.class_name = class_name;
+
+                // Analyze if the allocation escapes the iteration
+                analyze_loop_escape(loop_alloc, func);
+
+                loop_allocs_.push_back(loop_alloc);
+                stats_.loop_allocations_found++;
+
+                if (!loop_alloc.escapes_iteration) {
+                    stats_.loop_allocs_promotable++;
+                }
+                if (loop_alloc.is_loop_invariant) {
+                    stats_.loop_allocs_hoistable++;
+                }
+            }
+        }
+    }
+}
+
+auto EscapeAnalysisPass::is_in_loop(uint32_t block_id) const -> bool {
+    return block_to_loop_.count(block_id) > 0 || loop_headers_.count(block_id) > 0;
+}
+
+auto EscapeAnalysisPass::get_loop_header(uint32_t block_id) const -> uint32_t {
+    auto it = block_to_loop_.find(block_id);
+    if (it != block_to_loop_.end()) {
+        return it->second;
+    }
+    if (loop_headers_.count(block_id) > 0) {
+        return block_id;
+    }
+    return 0;
+}
+
+void EscapeAnalysisPass::analyze_loop_escape(LoopAllocation& loop_alloc,
+                                             [[maybe_unused]] Function& func) {
+    // Check if the allocation escapes the current loop iteration
+    // An allocation escapes if:
+    // 1. It's stored to a location outside the loop
+    // 2. It's passed to a function that might store it
+    // 3. It's used across loop iterations (phi node with the allocation)
+
+    auto info = get_escape_info(loop_alloc.alloc_id);
+
+    // If the value escapes globally, it definitely escapes the iteration
+    if (info.state == EscapeState::GlobalEscape || info.state == EscapeState::ReturnEscape) {
+        loop_alloc.escapes_iteration = true;
+        return;
+    }
+
+    // If passed to a function, conservatively assume it escapes
+    if (info.state == EscapeState::ArgEscape) {
+        loop_alloc.escapes_iteration = true;
+        return;
+    }
+
+    // Check if allocation is used in a phi node that spans iterations
+    // (This would require more sophisticated analysis)
+    // For now, we're conservative and allow promotion only for NoEscape
+
+    loop_alloc.escapes_iteration = false;
+
+    // Check for loop-invariant allocation (could be hoisted)
+    // An allocation is loop-invariant if its size/type doesn't depend on loop variables
+    // For simplicity, we mark all non-escaping allocations as potentially hoistable
+    loop_alloc.is_loop_invariant = !loop_alloc.escapes_iteration;
+}
+
+void EscapeAnalysisPass::apply_sealed_class_optimization(const std::string& class_name,
+                                                         EscapeInfo& info) {
+    auto metadata = get_class_metadata(class_name);
+    if (!metadata) {
+        return;
+    }
+
+    // Track sealed class statistics
+    if (metadata->is_sealed) {
+        stats_.sealed_class_instances++;
+
+        // Sealed classes with stack_allocatable flag can be stack-promoted
+        if (metadata->stack_allocatable) {
+            info.is_stack_promotable = true;
+            stats_.sealed_class_promotable++;
+        }
+
+        // For sealed classes, method calls don't cause global escape
+        // because we know all possible implementations
+        // Keep the info state as NoEscape if it was NoEscape
+    }
+
+    // Value classes (no vtable) are always stack-promotable
+    if (metadata->is_value) {
+        info.is_stack_promotable = true;
+    }
+}
+
+// ============================================================================
 // StackPromotionPass Implementation
 // ============================================================================
 
 auto StackPromotionPass::run_on_function(Function& func) -> bool {
     bool changed = false;
     stats_ = Stats{};
+    promoted_values_.clear();
+    shared_stack_slots_.clear();
+    hoisted_loop_allocs_.clear();
+
+    // First, handle conditional allocations (phi nodes merging allocations)
+    promote_conditional_allocations(func);
+
+    // Handle loop allocations (promote to stack, optionally hoist)
+    promote_loop_allocations(func);
 
     // Find and promote stack-promotable allocations
     auto promotable = escape_analysis_.get_stack_promotable();
 
     for (auto& block : func.blocks) {
         for (size_t i = 0; i < block.instructions.size(); ++i) {
-            const auto& inst = block.instructions[i];
+            auto& inst = block.instructions[i];
 
             // Check if this instruction result is promotable
             if (inst.result != INVALID_VALUE) {
+                // Skip if already promoted as part of conditional allocation
+                if (promoted_values_.count(inst.result) > 0) {
+                    continue;
+                }
+
                 auto it = std::find(promotable.begin(), promotable.end(), inst.result);
                 if (it != promotable.end()) {
+                    // Mark instruction as stack-eligible
+                    mark_stack_eligible(inst);
+
                     if (promote_allocation(block, i, func)) {
+                        promoted_values_.insert(inst.result);
                         changed = true;
+
+                        // Check if this is a class instance that needs destructor
+                        auto info = escape_analysis_.get_escape_info(inst.result);
+                        if (info.is_class_instance && !info.class_name.empty()) {
+                            insert_destructor(func, inst.result, info.class_name);
+                        }
                     }
                 }
             }
         }
     }
 
-    return changed;
+    // Remove free calls for promoted allocations
+    for (ValueId promoted : promoted_values_) {
+        remove_free_calls(func, promoted);
+    }
+
+    return changed || !shared_stack_slots_.empty();
 }
 
 auto StackPromotionPass::promote_allocation(BasicBlock& block, size_t inst_index,
@@ -684,6 +1057,23 @@ auto StackPromotionPass::promote_allocation(BasicBlock& block, size_t inst_index
     }
 
     return false;
+}
+
+void StackPromotionPass::mark_stack_eligible(InstructionData& inst) {
+    std::visit(
+        [](auto& i) {
+            using T = std::decay_t<decltype(i)>;
+
+            if constexpr (std::is_same_v<T, CallInst>) {
+                i.is_stack_eligible = true;
+            } else if constexpr (std::is_same_v<T, AllocaInst>) {
+                i.is_stack_eligible = true;
+            } else if constexpr (std::is_same_v<T, StructInitInst>) {
+                i.is_stack_eligible = true;
+            }
+            // Other instruction types don't have stack_eligible flag
+        },
+        inst.inst);
 }
 
 auto StackPromotionPass::estimate_allocation_size(const Instruction& inst) const -> size_t {
@@ -725,6 +1115,247 @@ auto StackPromotionPass::estimate_allocation_size(const Instruction& inst) const
     }
 
     return 8; // Default pointer size
+}
+
+void StackPromotionPass::remove_free_calls(Function& func, ValueId promoted_value) {
+    // Find and remove free/dealloc calls for a promoted allocation
+    // These calls are no longer needed since the object is stack-allocated
+    for (auto& block : func.blocks) {
+        std::vector<size_t> indices_to_remove;
+
+        for (size_t i = 0; i < block.instructions.size(); ++i) {
+            auto& inst = block.instructions[i];
+
+            if (auto* call = std::get_if<CallInst>(&inst.inst)) {
+                // Check if this is a free/dealloc call
+                bool is_free_call = call->func_name == "free" || call->func_name == "dealloc" ||
+                                    call->func_name == "heap_free" ||
+                                    call->func_name == "tml_free" || call->func_name == "drop";
+
+                if (is_free_call && !call->args.empty()) {
+                    // Check if freeing the promoted value
+                    if (call->args[0].id == promoted_value) {
+                        indices_to_remove.push_back(i);
+                        stats_.free_calls_removed++;
+                    }
+                }
+            }
+        }
+
+        // Remove instructions in reverse order to maintain indices
+        for (auto it = indices_to_remove.rbegin(); it != indices_to_remove.rend(); ++it) {
+            block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(*it));
+        }
+    }
+}
+
+void StackPromotionPass::insert_destructor(Function& func, ValueId value,
+                                           const std::string& class_name) {
+    // Find all return paths and insert destructor calls before them
+    // For stack-allocated class instances, we need to call their destructor
+    // at scope exit to ensure proper cleanup
+
+    std::string destructor_name = "drop_" + class_name;
+
+    for (auto& block : func.blocks) {
+        // Check if block has a return terminator
+        if (!block.terminator) {
+            continue;
+        }
+
+        if (!std::holds_alternative<ReturnTerm>(*block.terminator)) {
+            continue;
+        }
+
+        // Insert destructor call before return
+        // Create a call instruction to the destructor
+        CallInst dtor_call;
+        dtor_call.func_name = destructor_name;
+
+        // Pass `this` (the promoted value) as argument
+        Value this_arg;
+        this_arg.id = value;
+        this_arg.type = nullptr; // Type will be pointer to class
+        dtor_call.args.push_back(this_arg);
+
+        // Create instruction data for the destructor call
+        InstructionData dtor_inst;
+        dtor_inst.inst = dtor_call;
+        dtor_inst.result = INVALID_VALUE; // Destructor returns void
+
+        // Insert at end of block (before terminator)
+        block.instructions.push_back(dtor_inst);
+
+        stats_.destructors_inserted++;
+    }
+}
+
+void StackPromotionPass::promote_conditional_allocations(Function& func) {
+    // Handle conditional allocations that can share stack slots
+    // For each phi node that merges allocations from different branches,
+    // we create a single stack slot at the entry block and use it for all branches
+
+    const auto& cond_allocs = escape_analysis_.get_conditional_allocations();
+
+    for (const auto& cond_alloc : cond_allocs) {
+        if (!cond_alloc.can_share_slot || cond_alloc.alloc_ids.empty()) {
+            continue;
+        }
+
+        // Create a shared stack slot in the entry block
+        // The slot should be large enough for the largest allocation
+        size_t max_size = cond_alloc.max_size > 0 ? cond_alloc.max_size : 64;
+
+        // Find entry block (first block)
+        if (func.blocks.empty()) {
+            continue;
+        }
+
+        auto& entry_block = func.blocks[0];
+
+        // Create alloca for the shared slot
+        AllocaInst shared_alloca;
+        shared_alloca.name = "shared_slot_" + std::to_string(cond_alloc.phi_result);
+        shared_alloca.is_stack_eligible = true;
+
+        // Generate a new value ID for the shared slot
+        // We'll use the phi result as a reference point
+        ValueId shared_slot_id = cond_alloc.phi_result;
+
+        InstructionData shared_inst;
+        shared_inst.result = shared_slot_id;
+        shared_inst.inst = shared_alloca;
+
+        // Insert at the beginning of the entry block
+        entry_block.instructions.insert(entry_block.instructions.begin(), shared_inst);
+
+        // Track the shared slot
+        shared_stack_slots_[cond_alloc.phi_result] = shared_slot_id;
+
+        // Mark all original allocations as promoted and remove their free calls
+        for (ValueId alloc_id : cond_alloc.alloc_ids) {
+            promoted_values_.insert(alloc_id);
+
+            // Find and mark the original allocation instruction
+            for (auto& block : func.blocks) {
+                for (auto& inst : block.instructions) {
+                    if (inst.result == alloc_id) {
+                        mark_stack_eligible(inst);
+                        break;
+                    }
+                }
+            }
+        }
+
+        stats_.conditional_slots_shared++;
+        stats_.conditional_allocs_promoted += cond_alloc.alloc_ids.size();
+        stats_.bytes_saved += max_size * (cond_alloc.alloc_ids.size() - 1);
+
+        // If all allocations are same class, insert destructor for shared slot
+        if (!cond_alloc.class_name.empty()) {
+            insert_destructor(func, shared_slot_id, cond_alloc.class_name);
+        }
+    }
+}
+
+void StackPromotionPass::promote_loop_allocations(Function& func) {
+    // Handle loop allocations that can be promoted to stack
+    // For allocations that don't escape the loop iteration,
+    // we can either:
+    // 1. Hoist the allocation out of the loop (reuse same memory)
+    // 2. Keep it in the loop but use stack allocation
+
+    const auto& loop_allocs = escape_analysis_.get_loop_allocations();
+
+    for (const auto& loop_alloc : loop_allocs) {
+        if (loop_alloc.escapes_iteration) {
+            continue; // Can't promote if it escapes
+        }
+
+        // Check if already promoted
+        if (promoted_values_.count(loop_alloc.alloc_id) > 0) {
+            continue;
+        }
+
+        if (loop_alloc.is_loop_invariant) {
+            // Hoist the allocation out of the loop
+            // Find the loop preheader (block before loop header)
+            // and insert the allocation there
+
+            // For simplicity, we insert in the entry block (first block)
+            if (func.blocks.empty()) {
+                continue;
+            }
+
+            auto& entry_block = func.blocks[0];
+
+            // Create alloca for the hoisted allocation
+            AllocaInst hoisted_alloca;
+            hoisted_alloca.name = "loop_hoisted_" + std::to_string(loop_alloc.alloc_id);
+            hoisted_alloca.is_stack_eligible = true;
+
+            InstructionData hoisted_inst;
+            hoisted_inst.result = loop_alloc.alloc_id;
+            hoisted_inst.inst = hoisted_alloca;
+
+            // Insert at the beginning of the entry block
+            entry_block.instructions.insert(entry_block.instructions.begin(), hoisted_inst);
+
+            hoisted_loop_allocs_.insert(loop_alloc.alloc_id);
+            promoted_values_.insert(loop_alloc.alloc_id);
+
+            stats_.loop_allocs_hoisted++;
+            stats_.loop_allocs_promoted++;
+            stats_.bytes_saved += loop_alloc.estimated_size;
+
+            // Insert destructor call if this is a class instance
+            if (!loop_alloc.class_name.empty()) {
+                insert_destructor(func, loop_alloc.alloc_id, loop_alloc.class_name);
+            }
+        } else {
+            // Just mark as stack-eligible but keep in place
+            // The allocation will happen each iteration but on stack
+
+            for (auto& block : func.blocks) {
+                if (block.id != loop_alloc.alloc_block) {
+                    continue;
+                }
+
+                for (auto& inst : block.instructions) {
+                    if (inst.result == loop_alloc.alloc_id) {
+                        mark_stack_eligible(inst);
+
+                        // Find and replace the allocation call with alloca
+                        if (auto* call = std::get_if<CallInst>(&inst.inst)) {
+                            if (call->func_name == "alloc" || call->func_name == "heap_alloc" ||
+                                call->func_name == "Heap::new" || call->func_name == "tml_alloc") {
+                                AllocaInst alloca_inst;
+                                alloca_inst.alloc_type = call->return_type;
+                                alloca_inst.name = "loop_promoted_" + std::to_string(inst.result);
+                                alloca_inst.is_stack_eligible = true;
+                                inst.inst = alloca_inst;
+
+                                promoted_values_.insert(loop_alloc.alloc_id);
+                                stats_.loop_allocs_promoted++;
+                                stats_.bytes_saved += loop_alloc.estimated_size;
+
+                                // Insert destructor for class instances at loop exit
+                                if (!loop_alloc.class_name.empty()) {
+                                    // Note: For non-hoisted allocations, destructor should be
+                                    // inserted at the end of each iteration, not function exit
+                                    // This is a simplification - full implementation would
+                                    // track loop exits and insert destructors there
+                                    insert_destructor(func, loop_alloc.alloc_id,
+                                                      loop_alloc.class_name);
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================

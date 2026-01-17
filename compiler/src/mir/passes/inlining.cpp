@@ -94,6 +94,37 @@ static auto is_base_constructor_call(const CallInst& call, const Function& calle
     return is_constructor_name(call.func_name);
 }
 
+// Check if a function is a single-expression method (getter/setter pattern)
+// These methods are trivial and should always be inlined for OOP performance
+static auto is_single_expression_method(const Function& func, int max_size) -> bool {
+    if (func.blocks.empty()) {
+        return false;
+    }
+
+    // Count total instructions (excluding terminators)
+    int total_instructions = 0;
+    for (const auto& block : func.blocks) {
+        total_instructions += static_cast<int>(block.instructions.size());
+    }
+
+    // Single-expression methods have few instructions
+    if (total_instructions > max_size) {
+        return false;
+    }
+
+    // Should have exactly one block with a return terminator
+    if (func.blocks.size() == 1) {
+        const auto& block = func.blocks[0];
+        if (block.terminator && std::holds_alternative<ReturnTerm>(*block.terminator)) {
+            // This is a single-block function that just returns
+            // Patterns: getter (load + return), setter (store + return), trivial (return constant)
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ============================================================================
 // InliningPass Implementation
 // ============================================================================
@@ -193,8 +224,15 @@ auto InliningPass::run(Module& module) -> bool {
                         continue;
                     }
 
-                    // Check for @inline attribute - always inline regardless of cost
-                    if (has_inline_attr(*callee)) {
+                    // Check for @inline attribute or single-expression methods
+                    // Single-expression methods (getters/setters) are always inlined for OOP
+                    // performance
+                    bool force_inline = has_inline_attr(*callee);
+                    if (!force_inline && options_.always_inline_single_expr) {
+                        force_inline =
+                            is_single_expression_method(*callee, options_.single_expr_max_size);
+                    }
+                    if (force_inline) {
                         // Check recursive limit even for @inline
                         std::string call_key = func.name + "->" + callee->name;
                         if (inline_depth_[call_key] >= options_.recursive_limit) {

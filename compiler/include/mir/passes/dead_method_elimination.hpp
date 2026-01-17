@@ -38,7 +38,7 @@
 #pragma once
 
 #include "mir/mir_pass.hpp"
-#include "mir/passes/devirtualization.hpp"
+#include "types/env.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -80,9 +80,9 @@ struct MethodInfo {
 class DeadMethodEliminationPass : public MirPass {
 public:
     /// Creates a dead method elimination pass.
-    /// @param devirt_pass Reference to devirtualization pass for hierarchy info.
-    explicit DeadMethodEliminationPass(DevirtualizationPass& devirt_pass)
-        : devirt_pass_(devirt_pass) {}
+    /// @param env Reference to type environment for hierarchy info.
+    explicit DeadMethodEliminationPass(types::TypeEnv& env)
+        : env_(env) {}
 
     /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
@@ -104,7 +104,7 @@ public:
     [[nodiscard]] auto get_dead_methods() const -> std::vector<std::string>;
 
 private:
-    DevirtualizationPass& devirt_pass_;
+    types::TypeEnv& env_;
     DeadMethodStats stats_;
 
     // Method reachability data

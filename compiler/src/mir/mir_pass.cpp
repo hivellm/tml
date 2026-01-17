@@ -60,6 +60,16 @@
 #include "mir/passes/tail_call.hpp"
 #include "mir/passes/unreachable_code_elimination.hpp"
 
+// OOP optimization passes
+#include "mir/passes/batch_destruction.hpp"
+#include "mir/passes/builder_opt.hpp"
+#include "mir/passes/constructor_fusion.hpp"
+#include "mir/passes/dead_method_elimination.hpp"
+#include "mir/passes/destructor_hoist.hpp"
+#include "mir/passes/devirtualization.hpp"
+#include "mir/passes/escape_analysis.hpp"
+#include "types/env.hpp"
+
 namespace tml::mir {
 
 // ============================================================================
@@ -289,6 +299,195 @@ void PassManager::configure_standard_pipeline() {
         add_pass(std::make_unique<DeadArgEliminationPass>());
 
         // Merge multiple returns into single exit
+        add_pass(std::make_unique<MergeReturnsPass>());
+    }
+}
+
+void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
+    // Clear existing passes - we'll build a custom pipeline with OOP optimizations
+    // integrated at the right points for maximum effectiveness
+    passes_.clear();
+
+    if (level_ == OptLevel::O0) {
+        return; // No optimizations
+    }
+
+    // ==========================================================================
+    // Phase 1: Early Cleanup and Preparation
+    // ==========================================================================
+    add_pass(std::make_unique<EarlyCSEPass>());
+    add_pass(std::make_unique<InstSimplifyPass>());
+    add_pass(std::make_unique<ConstantFoldingPass>());
+    add_pass(std::make_unique<ConstantPropagationPass>());
+    add_pass(std::make_unique<SimplifyCfgPass>());
+    add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+    if (level_ >= OptLevel::O2) {
+        // ======================================================================
+        // Phase 2: OOP Pre-Inlining Optimizations (CRITICAL ORDER!)
+        // ======================================================================
+        // These MUST run BEFORE inlining so devirtualized calls can be inlined
+
+        // Dead method elimination: Remove unused virtual methods early
+        add_pass(std::make_unique<DeadMethodEliminationPass>(env));
+
+        // FIRST: Devirtualization - convert virtual calls to direct calls
+        // This enables inlining to work on the devirtualized calls
+        add_pass(std::make_unique<DevirtualizationPass>(env));
+
+        // Cleanup after devirtualization
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // ======================================================================
+        // Phase 3: Standard Optimizations with Inlining
+        // ======================================================================
+        add_pass(std::make_unique<SROAPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<PeepholePass>());
+        add_pass(std::make_unique<SimplifySelectPass>());
+        add_pass(std::make_unique<StrengthReductionPass>());
+        add_pass(std::make_unique<ReassociatePass>());
+        add_pass(std::make_unique<GVNPass>());
+        add_pass(std::make_unique<CopyPropagationPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<BlockMergePass>());
+        add_pass(std::make_unique<MatchSimplifyPass>());
+
+        // Inlining with OOP-aware options (higher bonus for devirtualized calls)
+        InliningOptions inline_opts;
+        inline_opts.optimization_level = 2;
+        inline_opts.base_threshold = 75; // Slightly higher for OOP
+        inline_opts.max_callee_size = 40;
+        inline_opts.devirt_bonus = 100;
+        inline_opts.devirt_exact_bonus = 150;
+        inline_opts.devirt_sealed_bonus = 120;
+        inline_opts.prioritize_devirt = true;
+        inline_opts.constructor_bonus = 200;
+        inline_opts.base_constructor_bonus = 250;
+        inline_opts.prioritize_constructors = true;
+        inline_opts.always_inline_single_expr = true;
+        inline_opts.single_expr_max_size = 5;
+        add_pass(std::make_unique<InliningPass>(inline_opts));
+
+        // Post-inlining cleanup
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<ConstantFoldingPass>());
+        add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<GVNPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // ======================================================================
+        // Phase 4: Post-Inlining OOP Optimizations
+        // ======================================================================
+
+        // Second devirtualization pass - inlining may expose new opportunities
+        add_pass(std::make_unique<DevirtualizationPass>(env));
+
+        // Constructor fusion: Merge field stores after inlining
+        add_pass(std::make_unique<ConstructorFusionPass>(env));
+
+        // Builder pattern optimization: Optimize method chaining
+        add_pass(std::make_unique<BuilderOptPass>());
+
+        // Escape analysis + stack promotion: Promote non-escaping objects
+        add_pass(std::make_unique<EscapeAndPromotePass>());
+
+        // Destructor hoisting: Move destructors for better scheduling
+        add_pass(std::make_unique<DestructorHoistPass>(env));
+
+        // Batch destruction: Combine multiple destructor calls
+        add_pass(std::make_unique<BatchDestructionPass>(env));
+
+        // Cleanup after OOP optimizations
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+
+        // ======================================================================
+        // Phase 5: Final Standard Optimizations
+        // ======================================================================
+        add_pass(std::make_unique<LoadStoreOptPass>());
+        add_pass(std::make_unique<LICMPass>());
+        add_pass(std::make_unique<JumpThreadingPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<TailCallPass>());
+        add_pass(std::make_unique<UnreachableCodeEliminationPass>());
+        add_pass(std::make_unique<DeadFunctionEliminationPass>());
+    }
+
+    if (level_ >= OptLevel::O3) {
+        // ======================================================================
+        // O3: Aggressive Optimizations
+        // ======================================================================
+
+        // Third round of devirtualization after aggressive inlining
+        add_pass(std::make_unique<DevirtualizationPass>(env));
+
+        // More aggressive dead method elimination
+        add_pass(std::make_unique<DeadMethodEliminationPass>(env));
+
+        add_pass(std::make_unique<SROAPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<StrengthReductionPass>());
+        add_pass(std::make_unique<ReassociatePass>());
+        add_pass(std::make_unique<ConstantFoldingPass>());
+        add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // More aggressive inlining at O3
+        InliningOptions inline_opts_o3;
+        inline_opts_o3.optimization_level = 3;
+        inline_opts_o3.base_threshold = 150;
+        inline_opts_o3.max_callee_size = 75;
+        inline_opts_o3.devirt_bonus = 150;
+        inline_opts_o3.devirt_exact_bonus = 200;
+        inline_opts_o3.devirt_sealed_bonus = 180;
+        inline_opts_o3.prioritize_devirt = true;
+        inline_opts_o3.constructor_bonus = 300;
+        inline_opts_o3.base_constructor_bonus = 350;
+        inline_opts_o3.prioritize_constructors = true;
+        inline_opts_o3.always_inline_single_expr = true;
+        inline_opts_o3.single_expr_max_size = 8;
+        add_pass(std::make_unique<InliningPass>(inline_opts_o3));
+
+        // Post-aggressive-inlining cleanup
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<Mem2RegPass>());
+        add_pass(std::make_unique<InstSimplifyPass>());
+        add_pass(std::make_unique<ConstantFoldingPass>());
+        add_pass(std::make_unique<ConstantPropagationPass>());
+        add_pass(std::make_unique<CopyPropagationPass>());
+        add_pass(std::make_unique<GVNPass>());
+        add_pass(std::make_unique<DeadCodeEliminationPass>());
+
+        // Final OOP optimization round at O3
+        add_pass(std::make_unique<DevirtualizationPass>(env));
+        add_pass(std::make_unique<ConstructorFusionPass>(env));
+        add_pass(std::make_unique<BuilderOptPass>());
+        add_pass(std::make_unique<EscapeAndPromotePass>());
+        add_pass(std::make_unique<DestructorHoistPass>(env));
+        add_pass(std::make_unique<BatchDestructionPass>(env));
+
+        // Aggressive final optimizations
+        add_pass(std::make_unique<NarrowingPass>());
+        add_pass(std::make_unique<ConstantHoistPass>());
+        add_pass(std::make_unique<LICMPass>());
+        add_pass(std::make_unique<LoopRotatePass>());
+        add_pass(std::make_unique<LoopUnrollPass>());
+        add_pass(std::make_unique<SinkingPass>());
+        add_pass(std::make_unique<MatchSimplifyPass>());
+        add_pass(std::make_unique<JumpThreadingPass>());
+        add_pass(std::make_unique<SimplifyCfgPass>());
+        add_pass(std::make_unique<TailCallPass>());
+        add_pass(std::make_unique<ADCEPass>());
+        add_pass(std::make_unique<BlockMergePass>());
+        add_pass(std::make_unique<DeadFunctionEliminationPass>());
+        add_pass(std::make_unique<DeadArgEliminationPass>());
         add_pass(std::make_unique<MergeReturnsPass>());
     }
 }
