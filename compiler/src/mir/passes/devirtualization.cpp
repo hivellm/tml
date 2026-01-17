@@ -183,8 +183,14 @@ auto DevirtualizationPass::get_single_implementation(const std::string& class_na
 
         for (const auto& method : sub_def->methods) {
             if (method.sig.name == method_name && method.is_override) {
-                if (single_impl && *single_impl != class_name) {
-                    // More than one implementation
+                // If the class itself has the method and a subclass overrides it,
+                // there are multiple implementations (not a single one)
+                if (has_method) {
+                    return std::nullopt;
+                }
+                // If we already found a subclass that implements, and now
+                // we find another one, there are multiple implementations
+                if (single_impl) {
                     return std::nullopt;
                 }
                 single_impl = subclass;
