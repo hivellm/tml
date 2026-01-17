@@ -55,6 +55,7 @@ private:
     MirCodegenOptions options_;
     std::stringstream output_;
     int temp_counter_ = 0;
+    int spill_counter_ = 0; // Counter for struct-to-ptr spill allocas
 
     // Current function context
     std::string current_func_;
@@ -62,11 +63,23 @@ private:
     // Value ID to LLVM register mapping
     std::unordered_map<mir::ValueId, std::string> value_regs_;
 
+    // Value ID to LLVM type string mapping (for type coercion)
+    std::unordered_map<mir::ValueId, std::string> value_types_;
+
+    // Struct name to field types mapping (for type coercion in struct init)
+    std::unordered_map<std::string, std::vector<std::string>> struct_field_types_;
+
     // Block index to LLVM label mapping
     std::unordered_map<uint32_t, std::string> block_labels_;
 
+    // Fallback label for missing block targets (set to first return block)
+    std::string fallback_label_;
+
     // Type definitions emitted (to avoid duplicates)
     std::set<std::string> emitted_types_;
+
+    // String constants (value -> global name)
+    std::unordered_map<std::string, std::string> string_constants_;
 
     // Generate helpers
     void emit_preamble();

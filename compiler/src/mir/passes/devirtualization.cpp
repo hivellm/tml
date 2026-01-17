@@ -260,7 +260,7 @@ auto DevirtualizationPass::try_devirtualize(const MethodCallInst& call) const
         }
     }
 
-    std::string direct_name = target_class + "_" + call.method_name;
+    std::string direct_name = target_class + "__" + call.method_name;
     return {direct_name, reason};
 }
 
@@ -384,9 +384,9 @@ auto DevirtualizationPass::process_block(BasicBlock& block) -> bool {
         CallInst direct_call;
         direct_call.func_name = direct_name;
 
-        // First arg is receiver (this)
+        // First arg is receiver (this) - must be ptr type
         direct_call.args.push_back(method_call.receiver);
-        direct_call.arg_types.push_back(nullptr); // ptr type
+        direct_call.arg_types.push_back(make_ptr_type());
 
         // Add remaining args
         for (size_t i = 0; i < method_call.args.size(); ++i) {

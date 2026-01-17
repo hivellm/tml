@@ -95,12 +95,17 @@ struct EscapeInfo {
     }
 };
 
+// Forward declaration for friend
+class EscapeAndPromotePass;
+
 /// Escape analysis pass.
 ///
 /// Analyzes heap allocations to determine which can be safely
 /// converted to stack allocations. Results are queried by the
 /// `StackPromotionPass`.
 class EscapeAnalysisPass : public FunctionPass {
+    friend class EscapeAndPromotePass;
+
 public:
     /// Returns the pass name for logging.
     [[nodiscard]] auto name() const -> std::string override {
@@ -181,6 +186,8 @@ private:
 /// Converts heap allocations that don't escape to stack allocations.
 /// Runs after `EscapeAnalysisPass` and uses its results.
 class StackPromotionPass : public FunctionPass {
+    friend class EscapeAndPromotePass;
+
 public:
     /// Creates a stack promotion pass using results from escape analysis.
     explicit StackPromotionPass(const EscapeAnalysisPass& escape_analysis)
@@ -215,6 +222,35 @@ private:
 
     /// Estimates the byte size of an allocation.
     [[nodiscard]] auto estimate_allocation_size(const Instruction& inst) const -> size_t;
+};
+
+/// Combined escape analysis and stack promotion pass.
+///
+/// This pass runs escape analysis followed by stack promotion in a single pass.
+/// This is more efficient than running them separately because:
+/// 1. We don't need to store results between passes
+/// 2. Stack promotion runs immediately with fresh analysis results
+class EscapeAndPromotePass : public FunctionPass {
+public:
+    EscapeAndPromotePass() = default;
+
+    [[nodiscard]] auto name() const -> std::string override {
+        return "EscapeAndPromote";
+    }
+
+    auto get_escape_stats() const -> EscapeAnalysisPass::Stats {
+        return escape_pass_.get_stats();
+    }
+    auto get_promotion_stats() const -> StackPromotionPass::Stats {
+        return promotion_pass_ ? promotion_pass_->get_stats() : StackPromotionPass::Stats{};
+    }
+
+protected:
+    auto run_on_function(Function& func) -> bool override;
+
+private:
+    EscapeAnalysisPass escape_pass_;
+    std::unique_ptr<StackPromotionPass> promotion_pass_;
 };
 
 } // namespace tml::mir

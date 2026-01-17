@@ -27,6 +27,7 @@
 
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
 
 namespace tml::codegen {
 
@@ -54,11 +55,59 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
     output_.str("");
     output_.clear();
     temp_counter_ = 0;
+    spill_counter_ = 0;
     value_regs_.clear();
+    value_types_.clear();
+    struct_field_types_.clear();
     block_labels_.clear();
     emitted_types_.clear();
+    string_constants_.clear();
+
+    // First pass: collect string constants from all functions
+    for (const auto& func : module.functions) {
+        for (const auto& block : func.blocks) {
+            for (const auto& inst : block.instructions) {
+                if (auto* const_inst = std::get_if<mir::ConstantInst>(&inst.inst)) {
+                    if (auto* str_const = std::get_if<mir::ConstString>(&const_inst->value)) {
+                        if (string_constants_.find(str_const->value) == string_constants_.end()) {
+                            std::string global_name =
+                                "@.str." + std::to_string(string_constants_.size());
+                            string_constants_[str_const->value] = global_name;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     emit_preamble();
+
+    // Emit string constants after preamble
+    for (const auto& [value, name] : string_constants_) {
+        std::string escaped;
+        for (char c : value) {
+            if (c == '\n') {
+                escaped += "\\0A";
+            } else if (c == '\r') {
+                escaped += "\\0D";
+            } else if (c == '"') {
+                escaped += "\\22";
+            } else if (c == '\\') {
+                escaped += "\\5C";
+            } else if (c == '\0') {
+                escaped += "\\00";
+            } else {
+                escaped += c;
+            }
+        }
+        size_t len = value.size() + 1; // +1 for null terminator
+        emitln(name + " = private constant [" + std::to_string(len) + " x i8] c\"" + escaped +
+               "\\00\"");
+    }
+    if (!string_constants_.empty()) {
+        emitln();
+    }
+
     emit_type_defs(module);
 
     // Emit functions
@@ -74,8 +123,13 @@ void MirCodegen::emit_preamble() {
     emitln("target triple = \"" + options_.target_triple + "\"");
     emitln();
 
-    // Declare printf for print builtin
+    // Declare printf, println, and abort for print builtins
     emitln("declare i32 @printf(ptr, ...)");
+    emitln("declare void @println(ptr)");
+    emitln("declare void @abort() noreturn");
+    emitln("declare ptr @str_concat(ptr, ptr)");
+    emitln("declare ptr @i64_to_string(i64)");
+    emitln("declare i64 @time_ns()");
     emitln();
 
     // String format constants
@@ -86,6 +140,68 @@ void MirCodegen::emit_preamble() {
     emitln("@.str.str = private constant [4 x i8] c\"%s\\0A\\00\"");
     emitln("@.str.bool.true = private constant [5 x i8] c\"true\\00\"");
     emitln("@.str.bool.false = private constant [6 x i8] c\"false\\00\"");
+    emitln("@.str.assert = private constant [18 x i8] c\"assertion failed\\0A\\00\"");
+    emitln();
+
+    // Assert implementation
+    emitln("define void @assert(i1 %cond) {");
+    emitln("entry:");
+    emitln("    br i1 %cond, label %ok, label %fail");
+    emitln("ok:");
+    emitln("    ret void");
+    emitln("fail:");
+    emitln("    %msg = getelementptr [18 x i8], ptr @.str.assert, i32 0, i32 0");
+    emitln("    call i32 @printf(ptr %msg)");
+    emitln("    call void @abort()");
+    emitln("    unreachable");
+    emitln("}");
+    emitln();
+
+    // Assert_eq implementation for i64
+    emitln(
+        "@.str.assert_eq = private constant [32 x i8] c\"assert_eq failed: %lld != %lld\\0A\\00\"");
+    emitln("define void @assert_eq(i64 %a, i64 %b) {");
+    emitln("entry:");
+    emitln("    %cmp = icmp eq i64 %a, %b");
+    emitln("    br i1 %cmp, label %ok, label %fail");
+    emitln("ok:");
+    emitln("    ret void");
+    emitln("fail:");
+    emitln("    %msg = getelementptr [32 x i8], ptr @.str.assert_eq, i32 0, i32 0");
+    emitln("    call i32 (ptr, ...) @printf(ptr %msg, i64 %a, i64 %b)");
+    emitln("    call void @abort()");
+    emitln("    unreachable");
+    emitln("}");
+    emitln();
+
+    // Assert_eq implementation for i32
+    emitln(
+        "@.str.assert_eq_i32 = private constant [28 x i8] c\"assert_eq failed: %d != %d\\0A\\00\"");
+    emitln("define void @assert_eq_i32(i32 %a, i32 %b) {");
+    emitln("entry:");
+    emitln("    %cmp = icmp eq i32 %a, %b");
+    emitln("    br i1 %cmp, label %ok, label %fail");
+    emitln("ok:");
+    emitln("    ret void");
+    emitln("fail:");
+    emitln("    %msg = getelementptr [28 x i8], ptr @.str.assert_eq_i32, i32 0, i32 0");
+    emitln("    call i32 (ptr, ...) @printf(ptr %msg, i32 %a, i32 %b)");
+    emitln("    call void @abort()");
+    emitln("    unreachable");
+    emitln("}");
+    emitln();
+
+    // Drop functions (no-ops for simple types) - alwaysinline for zero overhead
+    emitln("define void @drop_Ptr(ptr %p) alwaysinline {");
+    emitln("entry:");
+    emitln("    ret void");
+    emitln("}");
+    emitln();
+
+    emitln("define void @drop_F64(double %v) alwaysinline {");
+    emitln("entry:");
+    emitln("    ret void");
+    emitln("}");
     emitln();
 }
 
@@ -103,6 +219,17 @@ void MirCodegen::emit_type_defs(const mir::Module& module) {
     if (!module.structs.empty() || !module.enums.empty()) {
         emitln();
     }
+
+    // Emit drop functions for struct types (no-ops, just for RAII compatibility)
+    // Use alwaysinline for zero overhead
+    for (const auto& s : module.structs) {
+        std::string type_name = "%struct." + s.name;
+        emitln("define void @drop_" + s.name + "(" + type_name + " %v) alwaysinline {");
+        emitln("entry:");
+        emitln("    ret void");
+        emitln("}");
+        emitln();
+    }
 }
 
 void MirCodegen::emit_struct_def(const mir::StructDef& s) {
@@ -112,14 +239,21 @@ void MirCodegen::emit_struct_def(const mir::StructDef& s) {
     }
     emitted_types_.insert(type_name);
 
+    // Store field types for later use in struct initialization coercion
+    std::vector<std::string> field_types;
+
     emit(type_name + " = type { ");
     for (size_t i = 0; i < s.fields.size(); ++i) {
         if (i > 0) {
             emit(", ");
         }
-        emit(mir_type_to_llvm(s.fields[i].type));
+        std::string field_type = mir_type_to_llvm(s.fields[i].type);
+        emit(field_type);
+        field_types.push_back(field_type);
     }
     emitln(" }");
+
+    struct_field_types_[s.name] = std::move(field_types);
 }
 
 void MirCodegen::emit_enum_def(const mir::EnumDef& e) {
@@ -167,21 +301,56 @@ void MirCodegen::emit_function(const mir::Function& func) {
     current_func_ = func.name;
     value_regs_.clear();
     block_labels_.clear();
+    value_types_.clear(); // Clear type tracking for new function
 
     // Setup block labels - use block ID, not index
     for (const auto& blk : func.blocks) {
         block_labels_[blk.id] = blk.name;
     }
 
+    // Find fallback label for missing block targets
+    // Prefer first block with a return terminator, otherwise use last block
+    fallback_label_.clear();
+    for (const auto& blk : func.blocks) {
+        if (blk.terminator.has_value()) {
+            if (std::holds_alternative<mir::ReturnTerm>(*blk.terminator)) {
+                fallback_label_ = blk.name;
+                break;
+            }
+        }
+    }
+    // If no return block found, use the last block
+    if (fallback_label_.empty() && !func.blocks.empty()) {
+        fallback_label_ = func.blocks.back().name;
+    }
+
     // Setup parameter registers
     for (const auto& param : func.params) {
         value_regs_[param.value_id] = "%" + param.name;
+        // Also store parameter types for correct type tracking
+        if (param.type) {
+            value_types_[param.value_id] = mir_type_to_llvm(param.type);
+        }
     }
 
     // Function signature
     std::string linkage = "define";
     if (options_.dll_export && func.is_public) {
         linkage = "define dllexport";
+    }
+
+    // Add inline hints for small functions to help LLVM optimizer
+    std::string inline_attr;
+    size_t total_instructions = 0;
+    for (const auto& blk : func.blocks) {
+        total_instructions += blk.instructions.size();
+    }
+    // Small functions (<=10 instructions, single block) get inlinehint
+    // drop_ functions are always empty and get alwaysinline
+    if (func.name.rfind("drop_", 0) == 0) {
+        inline_attr = " alwaysinline";
+    } else if (total_instructions <= 10 && func.blocks.size() <= 2) {
+        inline_attr = " inlinehint";
     }
 
     std::string ret_type = mir_type_to_llvm(func.return_type);
@@ -194,7 +363,7 @@ void MirCodegen::emit_function(const mir::Function& func) {
         emit(mir_type_to_llvm(func.params[i].type) + " %" + func.params[i].name);
     }
 
-    emitln(") {");
+    emitln(")" + inline_attr + " {");
 
     // Emit basic blocks
     for (const auto& block : func.blocks) {
@@ -226,8 +395,11 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
         value_regs_[inst.result] = result_reg;
     }
 
+    // Capture result type for struct init handling (class types need allocation)
+    mir::MirTypePtr result_type = inst.type;
+
     std::visit(
-        [this, &result_reg](const auto& i) {
+        [this, &result_reg, &result_type, &inst](const auto& i) {
             using T = std::decay_t<decltype(i)>;
 
             if constexpr (std::is_same_v<T, mir::BinaryInst>) {
@@ -238,23 +410,91 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 bool is_comparison = (i.op >= mir::BinOp::Eq && i.op <= mir::BinOp::Ge);
 
                 // For comparisons, always use the operand's type (not result_type which is bool)
-                // For other operations, prefer result_type if available
+                // For other operations, prefer InstructionData's type, then BinaryInst's
+                // result_type
                 mir::MirTypePtr type_ptr;
-                if (is_comparison) {
-                    // Comparison uses operand types - prefer left.type
-                    type_ptr = i.left.type ? i.left.type : i.right.type;
-                } else {
-                    // Other ops use result_type if available
-                    type_ptr = i.result_type ? i.result_type : i.left.type;
-                }
-                if (!type_ptr) {
-                    // Fallback to i32 if no type info
-                    type_ptr = mir::make_i32_type();
-                }
-                std::string type_str = mir_type_to_llvm(type_ptr);
+                std::string type_str;
 
-                bool is_float = type_ptr->is_float();
-                bool is_signed = type_ptr->is_signed();
+                // First check value_types_ for actual runtime type (important for intrinsic
+                // results)
+                auto left_it = value_types_.find(i.left.id);
+                auto right_it = value_types_.find(i.right.id);
+                if (left_it != value_types_.end() && !left_it->second.empty()) {
+                    type_str = left_it->second;
+                } else if (right_it != value_types_.end() && !right_it->second.empty()) {
+                    type_str = right_it->second;
+                }
+
+                if (type_str.empty()) {
+                    if (is_comparison) {
+                        // Comparison uses operand types - prefer left.type
+                        type_ptr = i.left.type ? i.left.type : i.right.type;
+                    } else {
+                        // Prefer InstructionData's type (result_type captured from inst.type),
+                        // then BinaryInst's result_type, then operand types
+                        type_ptr = result_type ? result_type : i.result_type;
+                        if (!type_ptr) {
+                            type_ptr = i.left.type ? i.left.type : i.right.type;
+                        }
+                    }
+                    if (!type_ptr) {
+                        // Fallback to i32 if no type info
+                        type_ptr = mir::make_i32_type();
+                    }
+                    type_str = mir_type_to_llvm(type_ptr);
+                }
+
+                bool is_float = (type_str == "double" || type_str == "float");
+                bool is_signed = type_ptr ? type_ptr->is_signed() : true;
+
+                // Get operand types from value_types_ first, then MIR types
+                auto get_operand_type = [this](const mir::Value& v) -> std::string {
+                    auto it = value_types_.find(v.id);
+                    if (it != value_types_.end() && !it->second.empty()) {
+                        return it->second;
+                    }
+                    if (v.type) {
+                        return mir_type_to_llvm(v.type);
+                    }
+                    return "";
+                };
+
+                std::string left_type = get_operand_type(i.left);
+                std::string right_type = get_operand_type(i.right);
+
+                // Helper to coerce operand to target type if needed
+                auto coerce_operand = [this, &type_str,
+                                       is_signed](std::string& operand,
+                                                  const std::string& operand_type_str) {
+                    if (operand_type_str.empty() || operand_type_str == type_str)
+                        return;
+
+                    // Check for integer type widening
+                    bool is_int_target =
+                        type_str[0] == 'i' && type_str.find("x") == std::string::npos;
+                    bool is_int_operand = operand_type_str[0] == 'i' &&
+                                          operand_type_str.find("x") == std::string::npos;
+                    if (is_int_target && is_int_operand) {
+                        int target_bits = std::stoi(type_str.substr(1));
+                        int operand_bits = std::stoi(operand_type_str.substr(1));
+                        if (target_bits > operand_bits) {
+                            std::string ext_tmp = "%ext" + std::to_string(temp_counter_++);
+                            std::string ext_op = is_signed ? "sext" : "zext";
+                            emitln("    " + ext_tmp + " = " + ext_op + " " + operand_type_str +
+                                   " " + operand + " to " + type_str);
+                            operand = ext_tmp;
+                        } else if (target_bits < operand_bits) {
+                            std::string trunc_tmp = "%trunc" + std::to_string(temp_counter_++);
+                            emitln("    " + trunc_tmp + " = trunc " + operand_type_str + " " +
+                                   operand + " to " + type_str);
+                            operand = trunc_tmp;
+                        }
+                    }
+                };
+
+                // Coerce operands if their types don't match the operation type
+                coerce_operand(left, left_type);
+                coerce_operand(right, right_type);
 
                 if (is_comparison) {
                     std::string pred = get_cmp_predicate(i.op, is_float, is_signed);
@@ -265,10 +505,27 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                         emitln("    " + result_reg + " = icmp " + pred + " " + type_str + " " +
                                left + ", " + right);
                     }
+                    // Comparison results are always i1 (bool)
+                    if (inst.result != mir::INVALID_VALUE) {
+                        value_types_[inst.result] = "i1";
+                    }
                 } else {
-                    std::string op_name = get_binop_name(i.op, is_float, is_signed);
-                    emitln("    " + result_reg + " = " + op_name + " " + type_str + " " + left +
-                           ", " + right);
+                    // Special case: string concatenation when adding two pointers (strings)
+                    if (type_str == "ptr" && i.op == mir::BinOp::Add) {
+                        emitln("    " + result_reg + " = call ptr @str_concat(ptr " + left +
+                               ", ptr " + right + ")");
+                        if (inst.result != mir::INVALID_VALUE) {
+                            value_types_[inst.result] = "ptr";
+                        }
+                    } else {
+                        std::string op_name = get_binop_name(i.op, is_float, is_signed);
+                        emitln("    " + result_reg + " = " + op_name + " " + type_str + " " + left +
+                               ", " + right);
+                        // Store result type for subsequent operations
+                        if (inst.result != mir::INVALID_VALUE) {
+                            value_types_[inst.result] = type_str;
+                        }
+                    }
                 }
 
             } else if constexpr (std::is_same_v<T, mir::UnaryInst>) {
@@ -338,13 +595,63 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 emitln();
 
+                // Store result type for subsequent operations
+                if (i.result_type && inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = mir_type_to_llvm(i.result_type);
+                }
+
             } else if constexpr (std::is_same_v<T, mir::InsertValueInst>) {
                 std::string agg = get_value_reg(i.aggregate);
                 std::string val = get_value_reg(i.value);
                 mir::MirTypePtr agg_ptr = i.aggregate_type ? i.aggregate_type : i.aggregate.type;
-                mir::MirTypePtr val_ptr = i.value_type ? i.value_type : i.value.type;
+                mir::MirTypePtr expected_ptr = i.value_type; // Expected type from struct field
                 std::string agg_type = mir_type_to_llvm(agg_ptr);
-                std::string val_type = mir_type_to_llvm(val_ptr);
+
+                // Get expected type string
+                std::string expected_type = expected_ptr ? mir_type_to_llvm(expected_ptr) : "";
+
+                // Get actual type - first try MIR type, then stored type from value_types_
+                std::string actual_type;
+                if (i.value.type) {
+                    actual_type = mir_type_to_llvm(i.value.type);
+                } else {
+                    // Look up from value_types_ (for constants and other values)
+                    auto it = value_types_.find(i.value.id);
+                    if (it != value_types_.end()) {
+                        actual_type = it->second;
+                    }
+                }
+
+                // Use expected type for the insertvalue instruction
+                std::string val_type = !expected_type.empty() ? expected_type : actual_type;
+
+                // Check for integer type width mismatch and insert cast if needed
+                if (!expected_type.empty() && !actual_type.empty() &&
+                    expected_type != actual_type) {
+                    // Both are integer types - need to cast
+                    bool is_int_expected =
+                        expected_type[0] == 'i' && expected_type.find("x") == std::string::npos;
+                    bool is_int_actual =
+                        actual_type[0] == 'i' && actual_type.find("x") == std::string::npos;
+                    if (is_int_expected && is_int_actual) {
+                        int expected_bits = std::stoi(expected_type.substr(1));
+                        int actual_bits = std::stoi(actual_type.substr(1));
+                        if (expected_bits > actual_bits) {
+                            // Need to extend
+                            std::string ext_tmp = "%ext" + std::to_string(temp_counter_++);
+                            emitln("    " + ext_tmp + " = sext " + actual_type + " " + val +
+                                   " to " + expected_type);
+                            val = ext_tmp;
+                        } else if (expected_bits < actual_bits) {
+                            // Need to truncate
+                            std::string trunc_tmp = "%trunc" + std::to_string(temp_counter_++);
+                            emitln("    " + trunc_tmp + " = trunc " + actual_type + " " + val +
+                                   " to " + expected_type);
+                            val = trunc_tmp;
+                        }
+                    }
+                }
+
                 emit("    " + result_reg + " = insertvalue " + agg_type + " " + agg + ", " +
                      val_type + " " + val);
                 for (auto idx : i.indices) {
@@ -366,12 +673,114 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     }
                 }
 
+                // Handle LLVM intrinsics (sqrt, sin, cos, etc.)
+                // These are from core::intrinsics module and map to @llvm.* calls
+                std::string base_name = i.func_name;
+                // Strip module prefix if present (core::intrinsics::sqrt -> sqrt)
+                size_t last_colon = base_name.rfind("::");
+                if (last_colon != std::string::npos) {
+                    base_name = base_name.substr(last_colon + 2);
+                }
+
+                // Check for math intrinsics that map to @llvm.* calls
+                static const std::unordered_set<std::string> llvm_intrinsics = {
+                    "sqrt",  "sin",   "cos", "log",  "exp",    "pow",    "floor",   "ceil",
+                    "round", "trunc", "fma", "fabs", "minnum", "maxnum", "copysign"};
+
+                if (llvm_intrinsics.count(base_name) > 0 && !i.args.empty()) {
+                    // Get the argument type to determine the intrinsic variant (f32 or f64)
+                    std::string arg = get_value_reg(i.args[0]);
+                    std::string arg_type;
+                    if (i.args[0].type) {
+                        arg_type = mir_type_to_llvm(i.args[0].type);
+                    }
+                    if (arg_type.empty()) {
+                        auto it = value_types_.find(i.args[0].id);
+                        if (it != value_types_.end()) {
+                            arg_type = it->second;
+                        }
+                    }
+                    if (arg_type.empty()) {
+                        arg_type = "double"; // Default to double for float intrinsics
+                    }
+
+                    // Emit the LLVM intrinsic call
+                    std::string llvm_name = "@llvm." + base_name + "." + arg_type;
+                    if (!result_reg.empty()) {
+                        emit("    " + result_reg + " = ");
+                    } else {
+                        emit("    ");
+                    }
+
+                    if (base_name == "pow" || base_name == "minnum" || base_name == "maxnum" ||
+                        base_name == "copysign") {
+                        // Binary intrinsics
+                        std::string arg2 = i.args.size() > 1 ? get_value_reg(i.args[1]) : arg;
+                        emitln("call " + arg_type + " " + llvm_name + "(" + arg_type + " " + arg +
+                               ", " + arg_type + " " + arg2 + ")");
+                    } else if (base_name == "fma") {
+                        // Ternary intrinsic
+                        std::string arg2 = i.args.size() > 1 ? get_value_reg(i.args[1]) : arg;
+                        std::string arg3 = i.args.size() > 2 ? get_value_reg(i.args[2]) : arg;
+                        emitln("call " + arg_type + " " + llvm_name + "(" + arg_type + " " + arg +
+                               ", " + arg_type + " " + arg2 + ", " + arg_type + " " + arg3 + ")");
+                    } else {
+                        // Unary intrinsics (sqrt, sin, cos, log, exp, floor, ceil, round, trunc,
+                        // fabs)
+                        emitln("call " + arg_type + " " + llvm_name + "(" + arg_type + " " + arg +
+                               ")");
+                    }
+
+                    // Store the result type
+                    if (inst.result != mir::INVALID_VALUE) {
+                        value_types_[inst.result] = arg_type;
+                    }
+                    return;
+                }
+
                 // Sanitize function name: replace :: with __ for LLVM compatibility
                 std::string func_name = i.func_name;
                 size_t pos = 0;
                 while ((pos = func_name.find("::", pos)) != std::string::npos) {
                     func_name.replace(pos, 2, "__");
                     pos += 2;
+                }
+
+                // Pre-process arguments: use actual value type for structs (pass by value)
+                std::vector<std::string> processed_args;
+                for (size_t j = 0; j < i.args.size(); ++j) {
+                    std::string arg = get_value_reg(i.args[j]);
+
+                    // Get the actual type of the value
+                    std::string actual_type;
+                    if (i.args[j].type) {
+                        actual_type = mir_type_to_llvm(i.args[j].type);
+                    }
+                    if (actual_type.empty()) {
+                        auto it = value_types_.find(i.args[j].id);
+                        if (it != value_types_.end()) {
+                            actual_type = it->second;
+                        }
+                    }
+
+                    // Get declared arg type from MIR
+                    mir::MirTypePtr arg_ptr = (j < i.arg_types.size() && i.arg_types[j])
+                                                  ? i.arg_types[j]
+                                                  : i.args[j].type;
+                    if (!arg_ptr) {
+                        arg_ptr = mir::make_i32_type();
+                    }
+                    std::string declared_type = mir_type_to_llvm(arg_ptr);
+
+                    // For struct values: pass by value, don't spill
+                    // This fixes the type mismatch where MIR says ptr but function expects struct
+                    std::string arg_type = declared_type;
+                    if (actual_type.find("%struct.") == 0) {
+                        // Struct values should be passed by value
+                        arg_type = actual_type;
+                    }
+
+                    processed_args.push_back(arg_type + " " + arg);
                 }
 
                 mir::MirTypePtr ret_ptr = i.return_type ? i.return_type : mir::make_unit_type();
@@ -382,38 +791,100 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     emit("    ");
                 }
                 emit("call " + ret_type + " @" + func_name + "(");
-                for (size_t j = 0; j < i.args.size(); ++j) {
+                for (size_t j = 0; j < processed_args.size(); ++j) {
                     if (j > 0) {
                         emit(", ");
                     }
-                    mir::MirTypePtr arg_ptr = (j < i.arg_types.size() && i.arg_types[j])
-                                                  ? i.arg_types[j]
-                                                  : i.args[j].type;
-                    if (!arg_ptr) {
-                        arg_ptr = mir::make_i32_type();
-                    }
-                    std::string arg_type = mir_type_to_llvm(arg_ptr);
-                    std::string arg = get_value_reg(i.args[j]);
-                    emit(arg_type + " " + arg);
+                    emit(processed_args[j]);
                 }
                 emitln(")");
 
             } else if constexpr (std::is_same_v<T, mir::MethodCallInst>) {
                 // Method calls are similar to regular calls
-                mir::MirTypePtr ret_ptr = i.return_type ? i.return_type : mir::make_unit_type();
+                // If no return type but we have a result ID, assume ptr (common for to_string)
+                mir::MirTypePtr ret_ptr = i.return_type;
+                if (!ret_ptr && inst.result != mir::INVALID_VALUE) {
+                    // Method has a result but no type - default to ptr (e.g., to_string)
+                    ret_ptr = mir::make_ptr_type();
+                } else if (!ret_ptr) {
+                    ret_ptr = mir::make_unit_type();
+                }
+                // Force to_string methods to return ptr (string)
+                if (i.method_name == "to_string" && !result_reg.empty()) {
+                    ret_ptr = mir::make_ptr_type();
+                }
                 std::string ret_type = mir_type_to_llvm(ret_ptr);
+
+                // Method name is mangled: Type__method
+                // Use "Unknown" if receiver type is empty (indicates MIR builder issue)
+                std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
+
+                // Get receiver value and type
+                std::string receiver = get_value_reg(i.receiver);
+                std::string receiver_actual_type;
+                if (i.receiver.type) {
+                    receiver_actual_type = mir_type_to_llvm(i.receiver.type);
+                }
+                if (receiver_actual_type.empty() || receiver_actual_type == "ptr") {
+                    auto it = value_types_.find(i.receiver.id);
+                    if (it != value_types_.end()) {
+                        receiver_actual_type = it->second;
+                    }
+                }
+
+                // Determine if receiver should be passed by value or by pointer
+                // Structs are passed by value, primitives need spilling to ptr
+                bool is_struct_type = receiver_actual_type.find("%struct.") == 0;
+                bool is_primitive = (receiver_actual_type[0] == 'i' &&
+                                     receiver_actual_type.find("x") == std::string::npos) ||
+                                    receiver_actual_type == "double" ||
+                                    receiver_actual_type == "float";
+
+                std::string receiver_type_for_call = receiver_actual_type;
+
+                if (is_primitive && !receiver_actual_type.empty() &&
+                    receiver_actual_type != "ptr") {
+                    // Primitives need spilling to ptr for method calls
+                    std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+                    emitln("    " + spill_ptr + " = alloca " + receiver_actual_type);
+                    emitln("    store " + receiver_actual_type + " " + receiver + ", ptr " +
+                           spill_ptr);
+                    receiver = spill_ptr;
+                    receiver_type_for_call = "ptr";
+                } else if (is_struct_type) {
+                    // Structs are passed by value - no spilling needed
+                    receiver_type_for_call = receiver_actual_type;
+                } else if (receiver_actual_type == "ptr" || receiver_actual_type.empty()) {
+                    // Already a pointer
+                    receiver_type_for_call = "ptr";
+                }
+
                 if (ret_type != "void" && !result_reg.empty()) {
                     emit("    " + result_reg + " = ");
                 } else {
                     emit("    ");
                 }
-                // Method name is mangled: Type__method
-                // Use "Unknown" if receiver type is empty (indicates MIR builder issue)
-                std::string recv_type = i.receiver_type.empty() ? "Unknown" : i.receiver_type;
-                emit("call " + ret_type + " @" + recv_type + "__" + i.method_name + "(");
-                // First argument is self/receiver
-                std::string receiver = get_value_reg(i.receiver);
-                emit("ptr " + receiver);
+
+                // Determine mangled function name
+                // Primitive types use runtime functions: i64_to_string, i32_to_string, etc.
+                std::string func_name;
+                static const std::unordered_set<std::string> primitive_types = {
+                    "I8",  "I16", "I32",  "I64", "I128", "U8",   "U16",
+                    "U32", "U64", "U128", "F32", "F64",  "Bool", "Char"};
+                if (primitive_types.count(recv_type) > 0) {
+                    // Use lowercase runtime function name (e.g., i64_to_string)
+                    std::string lower_type = recv_type;
+                    for (auto& c : lower_type)
+                        c = static_cast<char>(std::tolower(c));
+                    func_name = lower_type + "_" + i.method_name;
+                } else {
+                    // Use standard mangled name (e.g., Shape__area)
+                    func_name = recv_type + "__" + i.method_name;
+                }
+
+                emit("call " + ret_type + " @" + func_name + "(");
+                // First argument is self/receiver - use correct type
+                emit(receiver_type_for_call + " " + receiver);
                 for (size_t j = 0; j < i.args.size(); ++j) {
                     emit(", ");
                     mir::MirTypePtr arg_ptr = (j < i.arg_types.size() && i.arg_types[j])
@@ -438,13 +909,58 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 std::string src_type = mir_type_to_llvm(src_ptr);
                 std::string tgt_type = mir_type_to_llvm(tgt_ptr);
 
-                static const char* cast_names[] = {"bitcast", "trunc",  "zext",     "sext",
-                                                   "fptrunc", "fpext",  "fptosi",   "fptoui",
-                                                   "sitofp",  "uitofp", "ptrtoint", "inttoptr"};
-                std::string cast_name = cast_names[static_cast<int>(i.kind)];
+                // Check if operand is a struct value that needs spilling
+                std::string operand_actual_type;
+                if (i.operand.type) {
+                    operand_actual_type = mir_type_to_llvm(i.operand.type);
+                }
+                if (operand_actual_type.empty()) {
+                    auto it = value_types_.find(i.operand.id);
+                    if (it != value_types_.end()) {
+                        operand_actual_type = it->second;
+                    }
+                }
 
-                emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " + operand +
-                       " to " + tgt_type);
+                // If casting a struct value to ptr, spill it first
+                if (tgt_type == "ptr" && operand_actual_type.find("%struct.") == 0) {
+                    std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+                    emitln("    " + spill_ptr + " = alloca " + operand_actual_type);
+                    emitln("    store " + operand_actual_type + " " + operand + ", ptr " +
+                           spill_ptr);
+                    // Result is the spill pointer
+                    emitln("    " + result_reg + " = bitcast ptr " + spill_ptr + " to ptr");
+                    // Store the result type as ptr so later code knows it's a pointer
+                    if (inst.result != mir::INVALID_VALUE) {
+                        value_types_[inst.result] = "ptr";
+                    }
+                } else if (i.kind == mir::CastKind::Bitcast && src_type.find("%struct.") == 0 &&
+                           tgt_type.find("%struct.") == 0 && src_type != tgt_type) {
+                    // Class upcast: derived struct to base struct
+                    // We can't bitcast structs of different sizes, so extract base class portion
+                    // The base class is always at the beginning, so extractvalue index 0 gives
+                    // us the vtable/tag field that base class expects
+                    // For proper class layout, we spill to memory and load as base type
+                    std::string spill_ptr = "%spill" + std::to_string(spill_counter_++);
+                    emitln("    " + spill_ptr + " = alloca " + src_type);
+                    emitln("    store " + src_type + " " + operand + ", ptr " + spill_ptr);
+                    // Load as target type (base class) - this works because base is at offset 0
+                    emitln("    " + result_reg + " = load " + tgt_type + ", ptr " + spill_ptr);
+                    if (inst.result != mir::INVALID_VALUE) {
+                        value_types_[inst.result] = tgt_type;
+                    }
+                } else {
+                    static const char* cast_names[] = {"bitcast", "trunc",  "zext",     "sext",
+                                                       "fptrunc", "fpext",  "fptosi",   "fptoui",
+                                                       "sitofp",  "uitofp", "ptrtoint", "inttoptr"};
+                    std::string cast_name = cast_names[static_cast<int>(i.kind)];
+
+                    emitln("    " + result_reg + " = " + cast_name + " " + src_type + " " +
+                           operand + " to " + tgt_type);
+                    // Store the result type
+                    if (inst.result != mir::INVALID_VALUE) {
+                        value_types_[inst.result] = tgt_type;
+                    }
+                }
 
             } else if constexpr (std::is_same_v<T, mir::PhiInst>) {
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
@@ -460,28 +976,51 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 }
                 emitln();
 
+                // Store result type for subsequent operations
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = type_str;
+                }
+
             } else if constexpr (std::is_same_v<T, mir::ConstantInst>) {
                 std::visit(
-                    [this, &result_reg](const auto& c) {
+                    [this, &result_reg, &inst](const auto& c) {
                         using C = std::decay_t<decltype(c)>;
                         if constexpr (std::is_same_v<C, mir::ConstInt>) {
                             std::string type_str = "i" + std::to_string(c.bit_width);
                             emitln("    " + result_reg + " = add " + type_str + " 0, " +
                                    std::to_string(c.value));
+                            // Store the actual type for later type coercion
+                            if (inst.result != mir::INVALID_VALUE) {
+                                value_types_[inst.result] = type_str;
+                            }
                         } else if constexpr (std::is_same_v<C, mir::ConstFloat>) {
                             std::string type_str = c.is_f64 ? "double" : "float";
                             std::ostringstream ss;
                             ss << std::scientific << std::setprecision(17) << c.value;
                             emitln("    " + result_reg + " = fadd " + type_str + " 0.0, " +
                                    ss.str());
+                            if (inst.result != mir::INVALID_VALUE) {
+                                value_types_[inst.result] = type_str;
+                            }
                         } else if constexpr (std::is_same_v<C, mir::ConstBool>) {
                             emitln("    " + result_reg + " = add i1 0, " +
                                    std::string(c.value ? "1" : "0"));
+                            if (inst.result != mir::INVALID_VALUE) {
+                                value_types_[inst.result] = "i1";
+                            }
                         } else if constexpr (std::is_same_v<C, mir::ConstString>) {
-                            // Strings are handled specially - emit global constant
-                            std::string global = "@.str." + std::to_string(temp_counter_++);
-                            // Note: String handling would need global emission
-                            emitln("    " + result_reg + " = bitcast ptr " + global + " to ptr");
+                            // Look up the pre-collected string constant
+                            auto it = string_constants_.find(c.value);
+                            if (it != string_constants_.end()) {
+                                emitln("    " + result_reg + " = bitcast ptr " + it->second +
+                                       " to ptr");
+                            } else {
+                                // Fallback: emit inline (shouldn't happen)
+                                emitln("    " + result_reg + " = bitcast ptr null to ptr");
+                            }
+                            if (inst.result != mir::INVALID_VALUE) {
+                                value_types_[inst.result] = "ptr";
+                            }
                         } else if constexpr (std::is_same_v<C, mir::ConstUnit>) {
                             // Unit type - no value needed
                         }
@@ -503,22 +1042,132 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             } else if constexpr (std::is_same_v<T, mir::StructInitInst>) {
                 // Initialize struct by inserting values one by one
                 std::string struct_type = "%struct." + i.struct_name;
-                std::string current = "undef";
-                for (size_t j = 0; j < i.fields.size(); ++j) {
-                    std::string field_val = get_value_reg(i.fields[j]);
-                    mir::MirTypePtr field_ptr = (j < i.field_types.size() && i.field_types[j])
-                                                    ? i.field_types[j]
-                                                    : i.fields[j].type;
-                    if (!field_ptr) {
-                        field_ptr = mir::make_i32_type();
+
+                // Check if result type is pointer (class type) - need to allocate and return ptr
+                bool is_class_type =
+                    result_type && std::holds_alternative<mir::MirPointerType>(result_type->kind);
+
+                // Helper lambda to coerce integer types if needed
+                auto coerce_int_type = [this](std::string& field_val,
+                                              const std::string& expected_type, mir::ValueId val_id,
+                                              mir::MirTypePtr /* actual_type_ptr */) {
+                    std::string actual_type;
+
+                    // Use value_types_ as the authoritative source for the actual generated type
+                    // This is more reliable than MIR types which may not be fully propagated
+                    auto it = value_types_.find(val_id);
+                    if (it != value_types_.end()) {
+                        actual_type = it->second;
                     }
-                    std::string field_type = mir_type_to_llvm(field_ptr);
-                    std::string next = (j == i.fields.size() - 1)
-                                           ? result_reg
-                                           : "%tmp" + std::to_string(temp_counter_++);
-                    emitln("    " + next + " = insertvalue " + struct_type + " " + current + ", " +
-                           field_type + " " + field_val + ", " + std::to_string(j));
-                    current = next;
+
+                    if (!actual_type.empty() && actual_type != expected_type) {
+                        bool is_int_expected = !expected_type.empty() && expected_type[0] == 'i' &&
+                                               expected_type.find("x") == std::string::npos;
+                        bool is_int_actual =
+                            actual_type[0] == 'i' && actual_type.find("x") == std::string::npos;
+                        if (is_int_expected && is_int_actual) {
+                            int expected_bits = std::stoi(expected_type.substr(1));
+                            int actual_bits = std::stoi(actual_type.substr(1));
+                            if (expected_bits > actual_bits) {
+                                std::string ext_tmp = "%ext" + std::to_string(temp_counter_++);
+                                emitln("    " + ext_tmp + " = sext " + actual_type + " " +
+                                       field_val + " to " + expected_type);
+                                field_val = ext_tmp;
+                            } else if (expected_bits < actual_bits) {
+                                std::string trunc_tmp = "%trunc" + std::to_string(temp_counter_++);
+                                emitln("    " + trunc_tmp + " = trunc " + actual_type + " " +
+                                       field_val + " to " + expected_type);
+                                field_val = trunc_tmp;
+                            }
+                        }
+                    }
+                };
+
+                // Look up struct field types from the stored definitions
+                auto struct_it = struct_field_types_.find(i.struct_name);
+                const std::vector<std::string>* expected_field_types = nullptr;
+                if (struct_it != struct_field_types_.end()) {
+                    expected_field_types = &struct_it->second;
+                }
+
+                if (is_class_type) {
+                    // For class types: allocate, initialize, and store
+                    std::string alloc_reg = "%tmp" + std::to_string(temp_counter_++);
+                    emitln("    " + alloc_reg + " = alloca " + struct_type);
+
+                    // Build the struct value
+                    std::string struct_val = "%tmp" + std::to_string(temp_counter_++);
+                    std::string current = "undef";
+                    for (size_t j = 0; j < i.fields.size(); ++j) {
+                        std::string field_val = get_value_reg(i.fields[j]);
+
+                        // Use struct definition's field type (authoritative)
+                        std::string field_type;
+                        if (expected_field_types && j < expected_field_types->size()) {
+                            field_type = (*expected_field_types)[j];
+                        } else {
+                            // Fallback to MIR type
+                            mir::MirTypePtr field_ptr =
+                                (j < i.field_types.size() && i.field_types[j]) ? i.field_types[j]
+                                                                               : i.fields[j].type;
+                            if (!field_ptr) {
+                                field_ptr = mir::make_i32_type();
+                            }
+                            field_type = mir_type_to_llvm(field_ptr);
+                        }
+
+                        // Coerce type if needed
+                        coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+
+                        std::string next = (j == i.fields.size() - 1)
+                                               ? struct_val
+                                               : "%tmp" + std::to_string(temp_counter_++);
+                        emitln("    " + next + " = insertvalue " + struct_type + " " + current +
+                               ", " + field_type + " " + field_val + ", " + std::to_string(j));
+                        current = next;
+                    }
+
+                    // Store the struct into allocated memory
+                    emitln("    store " + struct_type + " " + struct_val + ", ptr " + alloc_reg);
+
+                    // Result is the pointer
+                    emitln("    " + result_reg + " = bitcast ptr " + alloc_reg + " to ptr");
+                } else {
+                    // For non-class types: return struct by value
+                    std::string current = "undef";
+                    for (size_t j = 0; j < i.fields.size(); ++j) {
+                        std::string field_val = get_value_reg(i.fields[j]);
+
+                        // Use struct definition's field type (authoritative)
+                        std::string field_type;
+                        if (expected_field_types && j < expected_field_types->size()) {
+                            field_type = (*expected_field_types)[j];
+                        } else {
+                            // Fallback to MIR type
+                            mir::MirTypePtr field_ptr =
+                                (j < i.field_types.size() && i.field_types[j]) ? i.field_types[j]
+                                                                               : i.fields[j].type;
+                            if (!field_ptr) {
+                                field_ptr = mir::make_i32_type();
+                            }
+                            field_type = mir_type_to_llvm(field_ptr);
+                        }
+
+                        // Coerce type if needed
+                        coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+
+                        std::string next = (j == i.fields.size() - 1)
+                                               ? result_reg
+                                               : "%tmp" + std::to_string(temp_counter_++);
+                        emitln("    " + next + " = insertvalue " + struct_type + " " + current +
+                               ", " + field_type + " " + field_val + ", " + std::to_string(j));
+                        current = next;
+                    }
+                }
+
+                // Store the struct type for later spill detection
+                if (inst.result != mir::INVALID_VALUE) {
+                    value_types_[inst.result] = struct_type;
                 }
 
             } else if constexpr (std::is_same_v<T, mir::EnumInitInst>) {
@@ -582,30 +1231,70 @@ void MirCodegen::emit_terminator(const mir::Terminator& term) {
             if constexpr (std::is_same_v<T, mir::ReturnTerm>) {
                 if (t.value.has_value()) {
                     std::string val = get_value_reg(*t.value);
-                    // Get type from the value itself
-                    std::string type_str = t.value->type ? mir_type_to_llvm(t.value->type) : "void";
+                    // Get type from the value itself, with fallback to value_types_ map
+                    std::string type_str;
+                    if (t.value->type) {
+                        type_str = mir_type_to_llvm(t.value->type);
+                    }
+                    // Check value_types_ for actual type (important for intrinsic calls)
+                    if (type_str.empty() || type_str == "i32") {
+                        auto it = value_types_.find(t.value->id);
+                        if (it != value_types_.end() && !it->second.empty()) {
+                            type_str = it->second;
+                        }
+                    }
+                    if (type_str.empty()) {
+                        type_str = "void";
+                    }
                     emitln("    ret " + type_str + " " + val);
                 } else {
                     emitln("    ret void");
                 }
 
             } else if constexpr (std::is_same_v<T, mir::BranchTerm>) {
-                std::string target = block_labels_[t.target];
-                emitln("    br label %" + target);
+                auto it = block_labels_.find(t.target);
+                if (it != block_labels_.end() && !it->second.empty()) {
+                    emitln("    br label %" + it->second);
+                } else {
+                    // Target block doesn't exist - fall through to next block
+                    // or branch to function exit if no blocks remain
+                    if (!fallback_label_.empty()) {
+                        emitln("    br label %" + fallback_label_);
+                    } else {
+                        emitln("    unreachable ; missing target block");
+                    }
+                }
 
             } else if constexpr (std::is_same_v<T, mir::CondBranchTerm>) {
                 std::string cond = get_value_reg(t.condition);
-                std::string true_label = block_labels_[t.true_block];
-                std::string false_label = block_labels_[t.false_block];
-                emitln("    br i1 " + cond + ", label %" + true_label + ", label %" + false_label);
+                auto true_it = block_labels_.find(t.true_block);
+                auto false_it = block_labels_.find(t.false_block);
+                std::string true_label = (true_it != block_labels_.end()) ? true_it->second : "";
+                std::string false_label = (false_it != block_labels_.end()) ? false_it->second : "";
+                // Use fallback for missing labels
+                if (true_label.empty())
+                    true_label = fallback_label_.empty() ? false_label : fallback_label_;
+                if (false_label.empty())
+                    false_label = fallback_label_.empty() ? true_label : fallback_label_;
+                if (true_label.empty() || false_label.empty()) {
+                    emitln("    unreachable ; missing branch target");
+                } else {
+                    emitln("    br i1 " + cond + ", label %" + true_label + ", label %" +
+                           false_label);
+                }
 
             } else if constexpr (std::is_same_v<T, mir::SwitchTerm>) {
                 std::string disc = get_value_reg(t.discriminant);
-                std::string default_label = block_labels_[t.default_block];
+                auto def_it = block_labels_.find(t.default_block);
+                std::string default_label =
+                    (def_it != block_labels_.end()) ? def_it->second : "unreachable";
                 emit("    switch i32 " + disc + ", label %" + default_label + " [");
                 for (const auto& [val, block] : t.cases) {
-                    std::string label = block_labels_[block];
-                    emit(" i32 " + std::to_string(val) + ", label %" + label);
+                    auto case_it = block_labels_.find(block);
+                    std::string label = (case_it != block_labels_.end()) ? case_it->second : "";
+                    if (!label.empty()) {
+                        emit(" i32 " + std::to_string(val) + ", label %" + label);
+                    }
                 }
                 emitln(" ]");
 

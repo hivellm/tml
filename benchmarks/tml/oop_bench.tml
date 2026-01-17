@@ -8,6 +8,8 @@
 // - Deep inheritance chains
 // - Method chaining
 
+use core::intrinsics::sqrt
+
 // ============================================================================
 // 1. Virtual Dispatch Benchmark - Shapes
 // ============================================================================
@@ -29,7 +31,7 @@ class Shape {
     }
 }
 
-class Circle extends Shape {
+sealed class Circle extends Shape {
     radius: F64
 
     static func create(r: F64) -> Circle {
@@ -45,7 +47,7 @@ class Circle extends Shape {
     }
 }
 
-class Rectangle extends Shape {
+sealed class Rectangle extends Shape {
     width: F64
     height: F64
 
@@ -62,7 +64,7 @@ class Rectangle extends Shape {
     }
 }
 
-class Triangle extends Shape {
+sealed class Triangle extends Shape {
     base_len: F64
     height: F64
     side1: F64
@@ -125,23 +127,8 @@ sealed class Point {
     func distance(this, other: Point) -> F64 {
         let dx: F64 = this.x - other.x
         let dy: F64 = this.y - other.y
-        return sqrt_approx(dx * dx + dy * dy)
+        return sqrt(dx * dx + dy * dy)
     }
-}
-
-func sqrt_approx(x: F64) -> F64 {
-    // Newton's method for square root
-    if x <= 0.0 then {
-        return 0.0
-    }
-    var guess: F64 = x / 2.0
-    var iter: I32 = 0
-    loop {
-        if iter >= 10 then { break }
-        guess = (guess + x / guess) / 2.0
-        iter = iter + 1
-    }
-    return guess
 }
 
 func object_creation_bench(iterations: I32) -> F64 {
@@ -179,7 +166,7 @@ class HttpHandler {
     }
 }
 
-class GetHandler extends HttpHandler {
+sealed class GetHandler extends HttpHandler {
     static func create(id: I32) -> GetHandler {
         return GetHandler { route_id: id }
     }
@@ -192,7 +179,7 @@ class GetHandler extends HttpHandler {
     }
 }
 
-class PostHandler extends HttpHandler {
+sealed class PostHandler extends HttpHandler {
     requires_auth: Bool
 
     static func create(id: I32, auth: Bool) -> PostHandler {
@@ -210,7 +197,7 @@ class PostHandler extends HttpHandler {
     }
 }
 
-class DeleteHandler extends HttpHandler {
+sealed class DeleteHandler extends HttpHandler {
     static func create(id: I32) -> DeleteHandler {
         return DeleteHandler { route_id: id }
     }
@@ -277,7 +264,7 @@ class Entity {
     }
 }
 
-class Player extends Entity {
+sealed class Player extends Entity {
     px: F64
     py: F64
     speed: F64
@@ -302,7 +289,7 @@ class Player extends Entity {
     }
 }
 
-class Enemy extends Entity {
+sealed class Enemy extends Entity {
     ex: F64
     ey: F64
     speed: F64
@@ -317,7 +304,7 @@ class Enemy extends Entity {
         // Move towards target
         let dx: F64 = this.target_x - this.ex
         let dy: F64 = this.target_y - this.ey
-        let dist: F64 = sqrt_approx(dx * dx + dy * dy)
+        let dist: F64 = sqrt(dx * dx + dy * dy)
 
         if dist > 0.001 then {
             let new_x: F64 = this.ex + (dx / dist) * this.speed * delta
@@ -337,7 +324,7 @@ class Enemy extends Entity {
     }
 }
 
-class Projectile extends Entity {
+sealed class Projectile extends Entity {
     prx: F64
     pry: F64
     vx: F64
@@ -437,7 +424,7 @@ class Derived3 extends Derived2 {
     }
 }
 
-class Derived4 extends Derived3 {
+sealed class Derived4 extends Derived3 {
     bonus4: I32
 
     static func create(v: I32, b1: I32, b2: I32, b3: I32, b4: I32) -> Derived4 {

@@ -483,6 +483,20 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
         inlined_blocks[i].id = new_id;
     }
 
+    // Remap block IDs in phi nodes (critical for loop back-edges)
+    for (auto& inlined_block : inlined_blocks) {
+        for (auto& phi_inst : inlined_block.instructions) {
+            if (auto* phi = std::get_if<PhiInst>(&phi_inst.inst)) {
+                for (auto& [val, from_block] : phi->incoming) {
+                    auto it = block_id_map.find(from_block);
+                    if (it != block_id_map.end()) {
+                        from_block = it->second;
+                    }
+                }
+            }
+        }
+    }
+
     // Remap block references in terminators of inlined blocks
     // and convert returns to branches to continuation
     ValueId call_result_id = inst.result;
@@ -501,25 +515,38 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
                     auto it = block_id_map.find(term.target);
                     if (it != block_id_map.end()) {
                         term.target = it->second;
+                    } else {
+                        // Target block not found in callee - branch to continuation
+                        term.target = continuation_block.id;
                     }
                 } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
                     auto it_true = block_id_map.find(term.true_block);
                     if (it_true != block_id_map.end()) {
                         term.true_block = it_true->second;
+                    } else {
+                        // True target not found - branch to continuation
+                        term.true_block = continuation_block.id;
                     }
                     auto it_false = block_id_map.find(term.false_block);
                     if (it_false != block_id_map.end()) {
                         term.false_block = it_false->second;
+                    } else {
+                        // False target not found - branch to continuation
+                        term.false_block = continuation_block.id;
                     }
                 } else if constexpr (std::is_same_v<T, SwitchTerm>) {
                     auto it_default = block_id_map.find(term.default_block);
                     if (it_default != block_id_map.end()) {
                         term.default_block = it_default->second;
+                    } else {
+                        term.default_block = continuation_block.id;
                     }
                     for (auto& case_block : term.cases) {
                         auto it_case = block_id_map.find(case_block.second);
                         if (it_case != block_id_map.end()) {
                             case_block.second = it_case->second;
+                        } else {
+                            case_block.second = continuation_block.id;
                         }
                     }
                 } else if constexpr (std::is_same_v<T, ReturnTerm>) {
@@ -650,7 +677,83 @@ auto InliningPass::clone_function_body(const Function& callee, ValueId first_new
                         it = value_map.find(i.false_val.id);
                         if (it != value_map.end())
                             i.false_val.id = it->second;
+                    } else if constexpr (std::is_same_v<T, MethodCallInst>) {
+                        // Remap receiver
+                        auto it = value_map.find(i.receiver.id);
+                        if (it != value_map.end())
+                            i.receiver.id = it->second;
+                        // Remap arguments
+                        for (auto& arg : i.args) {
+                            it = value_map.find(arg.id);
+                            if (it != value_map.end())
+                                arg.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
+                        auto it = value_map.find(i.base.id);
+                        if (it != value_map.end())
+                            i.base.id = it->second;
+                        for (auto& idx : i.indices) {
+                            it = value_map.find(idx.id);
+                            if (it != value_map.end())
+                                idx.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
+                        auto it = value_map.find(i.aggregate.id);
+                        if (it != value_map.end())
+                            i.aggregate.id = it->second;
+                    } else if constexpr (std::is_same_v<T, InsertValueInst>) {
+                        auto it = value_map.find(i.aggregate.id);
+                        if (it != value_map.end())
+                            i.aggregate.id = it->second;
+                        it = value_map.find(i.value.id);
+                        if (it != value_map.end())
+                            i.value.id = it->second;
+                    } else if constexpr (std::is_same_v<T, CastInst>) {
+                        auto it = value_map.find(i.operand.id);
+                        if (it != value_map.end())
+                            i.operand.id = it->second;
+                    } else if constexpr (std::is_same_v<T, PhiInst>) {
+                        for (auto& [val, block_id] : i.incoming) {
+                            auto it = value_map.find(val.id);
+                            if (it != value_map.end())
+                                val.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, StructInitInst>) {
+                        for (auto& field : i.fields) {
+                            auto it = value_map.find(field.id);
+                            if (it != value_map.end())
+                                field.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, EnumInitInst>) {
+                        for (auto& p : i.payload) {
+                            auto it = value_map.find(p.id);
+                            if (it != value_map.end())
+                                p.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, TupleInitInst>) {
+                        for (auto& elem : i.elements) {
+                            auto it = value_map.find(elem.id);
+                            if (it != value_map.end())
+                                elem.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, ArrayInitInst>) {
+                        for (auto& elem : i.elements) {
+                            auto it = value_map.find(elem.id);
+                            if (it != value_map.end())
+                                elem.id = it->second;
+                        }
+                    } else if constexpr (std::is_same_v<T, AwaitInst>) {
+                        auto it = value_map.find(i.poll_value.id);
+                        if (it != value_map.end())
+                            i.poll_value.id = it->second;
+                    } else if constexpr (std::is_same_v<T, ClosureInitInst>) {
+                        for (auto& [name, val] : i.captures) {
+                            auto it = value_map.find(val.id);
+                            if (it != value_map.end())
+                                val.id = it->second;
+                        }
                     }
+                    // AllocaInst and ConstantInst don't have Value references
                 },
                 new_inst.inst);
 

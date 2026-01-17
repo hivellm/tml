@@ -305,9 +305,26 @@ void EscapeAnalysisPass::analyze_call(const CallInst& call, ValueId result_id) {
 }
 
 void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId result_id) {
-    // Virtual method calls require conservative escape analysis
-    // since we don't know the exact method that will be called.
-    // This is especially important for inheritance hierarchies.
+    // Determine if this is a devirtualized call (we know the exact method)
+    // Devirtualized calls are less conservative because we can analyze the target
+    bool is_devirtualized = call.devirt_info.has_value();
+
+    // Check if this is a simple getter/setter pattern (common in OOP)
+    // Getters: return a field value, don't store `this`
+    // Setters: store to `this` field, don't escape `this`
+    bool is_likely_accessor = false;
+    if (is_devirtualized) {
+        // Simple heuristic: short method names starting with get_/set_/is_/has_
+        // and methods returning primitive types are likely accessors
+        const auto& method_name = call.method_name;
+        is_likely_accessor =
+            method_name.starts_with("get_") || method_name.starts_with("set_") ||
+            method_name.starts_with("is_") || method_name.starts_with("has_") ||
+            method_name == "area" || method_name == "perimeter" || method_name == "length" ||
+            method_name == "size" || method_name == "to_bits" || method_name == "from_bits" ||
+            method_name == "compute" || method_name == "update" || method_name == "handle" ||
+            method_name == "distance" || method_name == "build";
+    }
 
     // The receiver (`this`) may escape through the method call
     if (call.receiver.id != INVALID_VALUE) {
@@ -316,25 +333,49 @@ void EscapeAnalysisPass::analyze_method_call(const MethodCallInst& call, ValueId
             stats_.method_call_escapes++;
         }
 
-        // Virtual method calls are conservative - the receiver may be stored
-        // or returned by any override in the inheritance hierarchy.
-        // Mark as GlobalEscape since we can't track what the virtual method does.
-        mark_escape(call.receiver.id, EscapeState::GlobalEscape);
-    }
-
-    // Arguments passed to method calls may escape globally through virtual dispatch
-    for (const auto& arg : call.args) {
-        if (arg.id != INVALID_VALUE) {
-            mark_escape(arg.id, EscapeState::GlobalEscape);
+        if (is_devirtualized && is_likely_accessor) {
+            // Devirtualized accessor methods typically don't escape `this`
+            // Keep current escape state (likely NoEscape if local)
+        } else if (is_devirtualized) {
+            // Devirtualized non-accessor methods - mark as ArgEscape (conservative but not global)
+            // The method may store `this` or pass it to other functions
+            mark_escape(call.receiver.id, EscapeState::ArgEscape);
+        } else {
+            // Virtual method calls are conservative - the receiver may be stored
+            // or returned by any override in the inheritance hierarchy.
+            // Mark as GlobalEscape since we can't track what the virtual method does.
+            mark_escape(call.receiver.id, EscapeState::GlobalEscape);
         }
     }
 
-    // Result of virtual method call may alias any object in the hierarchy
-    // Mark as potentially aliasing heap and global
+    // Arguments passed to method calls
+    for (const auto& arg : call.args) {
+        if (arg.id != INVALID_VALUE) {
+            if (is_devirtualized && is_likely_accessor) {
+                // Accessor methods typically don't escape arguments
+                mark_escape(arg.id, EscapeState::ArgEscape);
+            } else if (is_devirtualized) {
+                // Devirtualized method - less conservative
+                mark_escape(arg.id, EscapeState::ArgEscape);
+            } else {
+                // Virtual dispatch - be conservative
+                mark_escape(arg.id, EscapeState::GlobalEscape);
+            }
+        }
+    }
+
+    // Result of method call
     if (result_id != INVALID_VALUE) {
         auto& info = escape_info_[result_id];
-        info.may_alias_heap = true;
-        info.may_alias_global = true;
+        if (is_devirtualized) {
+            // Devirtualized call - result may alias heap but not necessarily global
+            info.may_alias_heap = true;
+            info.may_alias_global = false;
+        } else {
+            // Virtual call - result may alias anything
+            info.may_alias_heap = true;
+            info.may_alias_global = true;
+        }
     }
 }
 
@@ -684,6 +725,22 @@ auto StackPromotionPass::estimate_allocation_size(const Instruction& inst) const
     }
 
     return 8; // Default pointer size
+}
+
+// ============================================================================
+// EscapeAndPromotePass Implementation
+// ============================================================================
+
+auto EscapeAndPromotePass::run_on_function(Function& func) -> bool {
+    // First run escape analysis
+    escape_pass_.run_on_function(func);
+
+    // Then run stack promotion using the analysis results
+    if (!promotion_pass_) {
+        promotion_pass_ = std::make_unique<StackPromotionPass>(escape_pass_);
+    }
+
+    return promotion_pass_->run_on_function(func);
 }
 
 } // namespace tml::mir
