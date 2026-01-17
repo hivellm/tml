@@ -640,8 +640,14 @@ auto InliningPass::clone_function_body(const Function& callee, ValueId first_new
 
     // Build value remapping from callee parameters to call arguments
     std::unordered_map<ValueId, ValueId> value_map;
+    // Also build type map for parameter -> argument type propagation
+    // This is critical for ExtractValueInst to use the correct aggregate type
+    std::unordered_map<ValueId, MirTypePtr> type_map;
     for (size_t i = 0; i < callee.params.size() && i < args.size(); ++i) {
         value_map[callee.params[i].value_id] = args[i].id;
+        if (args[i].type) {
+            type_map[callee.params[i].value_id] = args[i].type;
+        }
     }
 
     // Generate new value IDs for all instructions
@@ -674,7 +680,7 @@ auto InliningPass::clone_function_body(const Function& callee, ValueId first_new
 
             // Remap operands
             std::visit(
-                [&value_map](auto& i) {
+                [&value_map, &type_map](auto& i) {
                     using T = std::decay_t<decltype(i)>;
 
                     if constexpr (std::is_same_v<T, BinaryInst>) {
@@ -736,16 +742,34 @@ auto InliningPass::clone_function_body(const Function& callee, ValueId first_new
                                 idx.id = it->second;
                         }
                     } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
-                        auto it = value_map.find(i.aggregate.id);
+                        // Save original ID for type lookup before remapping
+                        ValueId orig_id = i.aggregate.id;
+                        auto it = value_map.find(orig_id);
                         if (it != value_map.end())
                             i.aggregate.id = it->second;
+                        // Propagate type from argument to aggregate
+                        // This is critical for correct LLVM IR generation when
+                        // inlining methods - the aggregate type must match the
+                        // actual receiver type, not the parameter type
+                        auto type_it = type_map.find(orig_id);
+                        if (type_it != type_map.end()) {
+                            i.aggregate.type = type_it->second;
+                            i.aggregate_type = type_it->second;
+                        }
                     } else if constexpr (std::is_same_v<T, InsertValueInst>) {
-                        auto it = value_map.find(i.aggregate.id);
+                        ValueId orig_agg_id = i.aggregate.id;
+                        auto it = value_map.find(orig_agg_id);
                         if (it != value_map.end())
                             i.aggregate.id = it->second;
                         it = value_map.find(i.value.id);
                         if (it != value_map.end())
                             i.value.id = it->second;
+                        // Propagate type for aggregate
+                        auto type_it = type_map.find(orig_agg_id);
+                        if (type_it != type_map.end()) {
+                            i.aggregate.type = type_it->second;
+                            i.aggregate_type = type_it->second;
+                        }
                     } else if constexpr (std::is_same_v<T, CastInst>) {
                         auto it = value_map.find(i.operand.id);
                         if (it != value_map.end())

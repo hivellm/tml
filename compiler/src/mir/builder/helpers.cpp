@@ -473,11 +473,15 @@ void MirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
 void MirBuilder::emit_scope_drops() {
     auto drops = ctx_.get_drops_for_current_scope();
     emit_drop_calls(drops);
+    // Mark these drops as emitted to avoid duplicate drops on return/break paths
+    ctx_.mark_scope_dropped();
 }
 
 void MirBuilder::emit_all_drops() {
     auto drops = ctx_.get_all_drops();
     emit_drop_calls(drops);
+    // Mark all drops as emitted
+    ctx_.mark_all_dropped();
 }
 
 } // namespace tml::mir

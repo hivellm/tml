@@ -54,11 +54,12 @@ struct BuildContext {
     // Drop scope tracking for RAII
     // Each scope tracks variables that need drop calls when exiting
     struct DropInfo {
-        std::string var_name;  // Variable name
-        Value value;           // SSA value to drop
-        std::string type_name; // Type name for drop call resolution
-        MirTypePtr type;       // Full type for codegen
-        bool is_moved = false; // True if value was moved (don't drop)
+        std::string var_name;    // Variable name
+        Value value;             // SSA value to drop
+        std::string type_name;   // Type name for drop call resolution
+        MirTypePtr type;         // Full type for codegen
+        bool is_moved = false;   // True if value was moved (don't drop)
+        bool is_dropped = false; // True if drop was already emitted (for break paths)
     };
     std::vector<std::vector<DropInfo>> drop_scopes;
 
@@ -99,7 +100,7 @@ struct BuildContext {
         }
         std::vector<DropInfo> drops;
         for (auto it = drop_scopes.back().rbegin(); it != drop_scopes.back().rend(); ++it) {
-            if (!it->is_moved) {
+            if (!it->is_moved && !it->is_dropped) {
                 drops.push_back(*it);
             }
         }
@@ -113,12 +114,30 @@ struct BuildContext {
         for (auto scope_it = drop_scopes.rbegin(); scope_it != drop_scopes.rend(); ++scope_it) {
             // Within each scope, drop in reverse order
             for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
-                if (!it->is_moved) {
+                if (!it->is_moved && !it->is_dropped) {
                     drops.push_back(*it);
                 }
             }
         }
         return drops;
+    }
+
+    // Mark drops as emitted (for break/continue paths to avoid double drops)
+    void mark_scope_dropped() {
+        if (!drop_scopes.empty()) {
+            for (auto& info : drop_scopes.back()) {
+                info.is_dropped = true;
+            }
+        }
+    }
+
+    // Mark all drops as emitted (for return paths)
+    void mark_all_dropped() {
+        for (auto& scope : drop_scopes) {
+            for (auto& info : scope) {
+                info.is_dropped = true;
+            }
+        }
     }
 };
 

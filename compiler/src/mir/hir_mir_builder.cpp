@@ -267,9 +267,14 @@ auto convert_type_impl(const types::TypePtr& type) -> MirTypePtr {
         return std::make_shared<MirType>(MirType{MirFunctionType{std::move(params), ret}});
     }
 
-    // Class types are always heap-allocated and passed as pointers
+    // Class types are returned as struct values (like regular structs)
+    // When passed as parameters or stored, they may be passed by pointer
     if (auto* class_type = std::get_if<types::ClassType>(&type->kind)) {
-        return make_ptr_type();
+        std::vector<MirTypePtr> type_args;
+        for (const auto& arg : class_type->type_args) {
+            type_args.push_back(convert_type_impl(arg));
+        }
+        return make_struct_type(class_type->name, std::move(type_args));
     }
 
     // Interface types are also passed as pointers (trait objects)
@@ -644,11 +649,15 @@ void HirMirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
 void HirMirBuilder::emit_scope_drops() {
     auto drops = ctx_.get_drops_for_current_scope();
     emit_drop_calls(drops);
+    // Mark these drops as emitted to avoid duplicate drops on return/break paths
+    ctx_.mark_scope_dropped();
 }
 
 void HirMirBuilder::emit_all_drops() {
     auto drops = ctx_.get_all_drops();
     emit_drop_calls(drops);
+    // Mark all drops as emitted
+    ctx_.mark_all_dropped();
 }
 
 auto HirMirBuilder::get_type_name(const MirTypePtr& type) const -> std::string {
