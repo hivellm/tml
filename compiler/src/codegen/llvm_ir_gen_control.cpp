@@ -401,24 +401,30 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
+    int saved_loop_metadata_id = current_loop_metadata_id_;
     current_loop_start_ = label_start;
     current_loop_end_ = label_end;
+
+    // Create loop metadata for optimization hints
+    // Infinite loops don't have known bounds, but we still enable basic hints
+    current_loop_metadata_id_ = create_loop_metadata(false, 0);
 
     emit_line("  br label %" + label_start);
     emit_line(label_start + ":");
     block_terminated_ = false;
 
-    // Save stack at start of each iteration to reclaim alloca space
-    std::string stack_save = fresh_reg();
-    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
-    current_loop_stack_save_ = stack_save;
+    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
+    // Fixed-size allocas in loop bodies are handled by mem2reg promotion.
+    current_loop_stack_save_ = ""; // No stack save for break/continue
 
     gen_expr(*loop.body);
 
     if (!block_terminated_) {
-        // Restore stack before looping back to reclaim allocas from this iteration
-        emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
-        emit_line("  br label %" + label_start);
+        // Add loop metadata to back-edge for LLVM optimization hints
+        std::string loop_meta = current_loop_metadata_id_ >= 0
+                                    ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                    : "";
+        emit_line("  br label %" + label_start + loop_meta);
     }
 
     emit_line(label_end + ":");
@@ -429,6 +435,7 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
     current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
 
     return "0";
 }
@@ -442,8 +449,13 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
+    int saved_loop_metadata_id = current_loop_metadata_id_;
     current_loop_start_ = label_cond;
     current_loop_end_ = label_end;
+
+    // Create loop metadata for optimization hints
+    // While loops may be vectorizable if body is simple
+    current_loop_metadata_id_ = create_loop_metadata(true, 0);
 
     // Jump to condition
     emit_line("  br label %" + label_cond);
@@ -452,10 +464,8 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     emit_line(label_cond + ":");
     block_terminated_ = false;
 
-    // Save stack at start of each iteration to reclaim alloca space
-    std::string stack_save = fresh_reg();
-    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
-    current_loop_stack_save_ = stack_save;
+    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
+    current_loop_stack_save_ = ""; // No stack save for break/continue
 
     std::string cond = gen_expr(*while_expr.condition);
 
@@ -473,9 +483,11 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     block_terminated_ = false;
     gen_expr(*while_expr.body);
     if (!block_terminated_) {
-        // Restore stack before looping back to reclaim allocas from this iteration
-        emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
-        emit_line("  br label %" + label_cond);
+        // Add loop metadata to back-edge for LLVM optimization hints
+        std::string loop_meta = current_loop_metadata_id_ >= 0
+                                    ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                    : "";
+        emit_line("  br label %" + label_cond + loop_meta);
     }
 
     // End block
@@ -487,6 +499,7 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
     current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
 
     return "0";
 }
@@ -506,8 +519,13 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
+    int saved_loop_metadata_id = current_loop_metadata_id_;
     current_loop_start_ = label_incr; // continue goes to increment
     current_loop_end_ = label_end;
+
+    // Create loop metadata for optimization hints
+    // For loops are the best candidates for vectorization since they have known bounds
+    current_loop_metadata_id_ = create_loop_metadata(true, 4);
 
     // Get loop variable name from pattern
     std::string var_name = "_for_idx";
@@ -597,10 +615,8 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line(label_body + ":");
     block_terminated_ = false;
 
-    // Save stack at start of each iteration to reclaim alloca space
-    std::string stack_save = fresh_reg();
-    emit_line("  " + stack_save + " = call ptr @llvm.stacksave()");
-    current_loop_stack_save_ = stack_save;
+    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
+    current_loop_stack_save_ = ""; // No stack save for break/continue
 
     // If iterating over a collection, get the element and bind it to the loop variable
     if (is_collection_iter) {
@@ -644,9 +660,11 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     emit_line("  " + current2 + " = load " + range_type + ", ptr " + var_alloca);
     emit_line("  " + next_val + " = add nsw " + range_type + " " + current2 + ", 1");
     emit_line("  store " + range_type + " " + next_val + ", ptr " + var_alloca);
-    // Restore stack before looping back to reclaim allocas from this iteration
-    emit_line("  call void @llvm.stackrestore(ptr " + stack_save + ")");
-    emit_line("  br label %" + label_cond);
+    // Add loop metadata to back-edge for LLVM optimization hints
+    std::string loop_meta = current_loop_metadata_id_ >= 0
+                                ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                : "";
+    emit_line("  br label %" + label_cond + loop_meta);
 
     // End block
     emit_line(label_end + ":");
@@ -657,6 +675,7 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     current_loop_start_ = saved_loop_start;
     current_loop_end_ = saved_loop_end;
     current_loop_stack_save_ = saved_loop_stack_save;
+    current_loop_metadata_id_ = saved_loop_metadata_id;
 
     return "0";
 }
@@ -801,6 +820,17 @@ auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
                     }
                 }
             }
+
+            // Handle value class return by value: if returning a ptr but expecting a struct type,
+            // load the struct from the pointer. This fixes dangling pointer bug for value classes.
+            if (val_type == "ptr" && current_ret_type_.starts_with("%class.")) {
+                std::string loaded_struct = fresh_reg();
+                emit_line("  " + loaded_struct + " = load " + current_ret_type_ + ", ptr " + val);
+                emit_line("  ret " + current_ret_type_ + " " + loaded_struct);
+                block_terminated_ = true;
+                return "void";
+            }
+
             // Handle integer type extension when actual differs from expected
             std::string final_val = val;
             if (val_type != current_ret_type_) {

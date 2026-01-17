@@ -143,6 +143,7 @@ private:
     std::string current_loop_start_;
     std::string current_loop_end_;
     std::string current_loop_stack_save_; // For stacksave/stackrestore in loops
+    int current_loop_metadata_id_ = -1;   // Metadata ID for current loop (-1 = none)
 
     // Track last expression type for type-aware codegen
     std::string last_expr_type_ = "i32";
@@ -752,6 +753,18 @@ private:
 
     // Storage for builtin generic enum declarations (keeps AST alive)
     std::vector<std::unique_ptr<parser::EnumDecl>> builtin_enum_decls_;
+
+    // ============ Loop Metadata Support ============
+    // LLVM loop metadata for optimization hints (vectorization, unrolling)
+    int loop_metadata_counter_ =
+        1000; // Counter for loop metadata IDs (start high to avoid debug ID conflicts)
+    std::vector<std::string> loop_metadata_; // Loop metadata nodes to emit at end
+
+    // Create loop metadata node and return its ID
+    int create_loop_metadata(bool enable_vectorize = false, int unroll_count = 0);
+
+    // Emit all loop metadata at end of module
+    void emit_loop_metadata();
 
     // ============ Debug Info Support ============
     // LLVM debug metadata for DWARF generation

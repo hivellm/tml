@@ -34,6 +34,11 @@
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::string {
+    // Clear expected literal type context - it should only apply within explicit type annotations
+    // (like "let x: F64 = 5") and not leak into method call arguments
+    expected_literal_type_.clear();
+    expected_literal_is_unsigned_ = false;
+
     const std::string& method = call.method;
     TML_DEBUG_LN("[METHOD] gen_method_call: " << method << " where_constraints.size="
                                               << current_where_constraints_.size());
@@ -891,7 +896,13 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                 typed_args.push_back({arg_type, val});
             }
 
+            // Use registered function's return type if available (handles value class by-value
+            // returns)
             std::string ret_type = llvm_type_from_semantic(func_sig->return_type);
+            if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
+                ret_type = method_it->second.ret_type;
+            }
+
             std::string args_str;
             for (size_t i = 0; i < typed_args.size(); ++i) {
                 if (i > 0)
@@ -1772,8 +1783,49 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             "@tml_" + get_suite_prefix() + current_class + "_" + method;
                         std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
 
+                        // Use registered function's return type if available (handles value class
+                        // by-value returns)
+                        std::string method_key = current_class + "_" + method;
+                        auto method_it = functions_.find(method_key);
+                        if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
+                            ret_type = method_it->second.ret_type;
+                        }
+
                         // Get receiver pointer (for 'this')
                         std::string this_ptr = receiver;
+
+                        // For value classes (stored as struct type), use the alloca pointer
+                        // For regular classes, gen_ident already loads the pointer value
+                        if (call.receiver->is<parser::IdentExpr>()) {
+                            const auto& ident_recv = call.receiver->as<parser::IdentExpr>();
+                            auto it = locals_.find(ident_recv.name);
+                            if (it != locals_.end()) {
+                                // Check if this is a value class (struct type, no asterisk)
+                                // Value class: type is "%class.Name" -> use the alloca directly
+                                // Regular class: type is "%class.Name*" -> receiver already has
+                                // loaded ptr
+                                bool is_value_class_struct =
+                                    it->second.type.starts_with("%class.") &&
+                                    !it->second.type.ends_with("*");
+                                if (is_value_class_struct) {
+                                    // Value class: use the alloca which is a ptr to struct
+                                    this_ptr = it->second.reg;
+                                }
+                                // For regular classes, gen_ident already loads the pointer
+                                // so 'receiver' is correct as-is
+                            }
+                        }
+                        // Handle method chaining on value classes: when receiver is a method call
+                        // that returns a struct by value, store it to a temp alloca
+                        else if (last_expr_type_.starts_with("%class.") &&
+                                 !last_expr_type_.ends_with("*")) {
+                            // Receiver returned a value class struct - need to store to temp alloca
+                            std::string temp_alloca = fresh_reg();
+                            emit_line("  " + temp_alloca + " = alloca " + last_expr_type_);
+                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " +
+                                      temp_alloca);
+                            this_ptr = temp_alloca;
+                        }
 
                         // If receiver was 'ref ClassType', we have a pointer to the class variable
                         // which itself holds a pointer. Need to load to get the actual class ptr.
@@ -1781,6 +1833,74 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
                             std::string loaded_this = fresh_reg();
                             emit_line("  " + loaded_this + " = load ptr, ptr " + receiver);
                             this_ptr = loaded_this;
+                        }
+
+                        // Generate arguments: this pointer + regular args
+                        std::string args_str = "ptr " + this_ptr;
+                        for (const auto& arg : call.args) {
+                            std::string arg_val = gen_expr(*arg);
+                            args_str += ", " + last_expr_type_ + " " + arg_val;
+                        }
+
+                        // Generate call
+                        if (ret_type == "void") {
+                            emit_line("  call void " + func_name + "(" + args_str + ")");
+                            last_expr_type_ = "void";
+                            return "void";
+                        } else {
+                            std::string result = fresh_reg();
+                            emit_line("  " + result + " = call " + ret_type + " " + func_name +
+                                      "(" + args_str + ")");
+                            last_expr_type_ = ret_type;
+                            return result;
+                        }
+                    }
+                }
+
+                // Move to parent class
+                current_class = current_def->base_class.value_or("");
+            }
+        }
+    }
+
+    // =========================================================================
+    // 16. Handle NamedType that refers to a class (for method chaining on return values)
+    // =========================================================================
+    if (effective_receiver_type && effective_receiver_type->is<types::NamedType>()) {
+        const auto& named_type = effective_receiver_type->as<types::NamedType>();
+        auto class_def = env_.lookup_class(named_type.name);
+        if (class_def.has_value()) {
+            std::string current_class = named_type.name;
+            while (!current_class.empty()) {
+                auto current_def = env_.lookup_class(current_class);
+                if (!current_def.has_value())
+                    break;
+
+                for (const auto& m : current_def->methods) {
+                    if (m.sig.name == method && !m.is_static) {
+                        // Generate call to instance method
+                        std::string func_name =
+                            "@tml_" + get_suite_prefix() + current_class + "_" + method;
+                        std::string ret_type = llvm_type_from_semantic(m.sig.return_type);
+
+                        // Use registered function's return type if available
+                        std::string method_key = current_class + "_" + method;
+                        auto method_it = functions_.find(method_key);
+                        if (method_it != functions_.end() && !method_it->second.ret_type.empty()) {
+                            ret_type = method_it->second.ret_type;
+                        }
+
+                        // For method chaining on value class returns, receiver is already a struct
+                        // value Need to store it to a temp alloca to get a pointer for 'this'
+                        std::string this_ptr = receiver;
+                        if (last_expr_type_.starts_with("%class.") &&
+                            !last_expr_type_.ends_with("*")) {
+                            // Value class struct - store to temp alloca
+                            std::string temp_alloca = fresh_reg();
+                            emit_line("  " + temp_alloca + " = alloca " + last_expr_type_);
+                            emit_line("  store " + last_expr_type_ + " " + receiver + ", ptr " +
+                                      temp_alloca);
+                            this_ptr = temp_alloca;
                         }
 
                         // Generate arguments: this pointer + regular args

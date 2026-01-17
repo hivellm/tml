@@ -1146,6 +1146,9 @@ auto LLVMIRGen::generate(const parser::Module& module)
     emit_line("; Function attributes for optimization");
     emit_line("attributes #0 = { nounwind mustprogress willreturn }");
 
+    // Emit loop metadata at the end
+    emit_loop_metadata();
+
     // Emit debug info metadata at the end
     emit_debug_info_footer();
 
@@ -1154,6 +1157,58 @@ auto LLVMIRGen::generate(const parser::Module& module)
     }
 
     return output_.str();
+}
+
+// ============ Loop Metadata Implementation ============
+
+auto LLVMIRGen::create_loop_metadata(bool enable_vectorize, int unroll_count) -> int {
+    int loop_id = loop_metadata_counter_++;
+
+    // Build the loop metadata node
+    // Format: !N = distinct !{!N, !M, !O, ...} where M, O are property nodes
+    std::stringstream meta;
+    meta << "!" << loop_id << " = distinct !{!" << loop_id;
+
+    // Add property nodes
+    std::vector<int> prop_ids;
+
+    // Vectorization hint
+    if (enable_vectorize) {
+        int vec_id = loop_metadata_counter_++;
+        loop_metadata_.push_back("!" + std::to_string(vec_id) +
+                                 " = !{!\"llvm.loop.vectorize.enable\", i1 true}");
+        prop_ids.push_back(vec_id);
+    }
+
+    // Unroll hint
+    if (unroll_count > 0) {
+        int unroll_id = loop_metadata_counter_++;
+        loop_metadata_.push_back("!" + std::to_string(unroll_id) +
+                                 " = !{!\"llvm.loop.unroll.count\", i32 " +
+                                 std::to_string(unroll_count) + "}");
+        prop_ids.push_back(unroll_id);
+    }
+
+    // Add property references to loop node
+    for (int prop_id : prop_ids) {
+        meta << ", !" << prop_id;
+    }
+    meta << "}";
+
+    loop_metadata_.push_back(meta.str());
+    return loop_id;
+}
+
+void LLVMIRGen::emit_loop_metadata() {
+    if (loop_metadata_.empty()) {
+        return;
+    }
+
+    emit_line("");
+    emit_line("; Loop optimization metadata");
+    for (const auto& meta : loop_metadata_) {
+        emit_line(meta);
+    }
 }
 
 // Infer print argument type from expression

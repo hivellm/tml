@@ -28,6 +28,11 @@
 namespace tml::codegen {
 
 auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
+    // Clear expected literal type context - it should only apply within explicit type annotations
+    // (like "let x: F64 = 5") and not leak into function call arguments
+    expected_literal_type_.clear();
+    expected_literal_is_unsigned_ = false;
+
     // Get function name
     std::string fn_name;
     if (call.callee->is<parser::IdentExpr>()) {

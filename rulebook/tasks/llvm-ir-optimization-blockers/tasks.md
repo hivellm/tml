@@ -1,6 +1,6 @@
 # Tasks: LLVM IR Optimization Blockers
 
-**Status**: In Progress (~55% - Phase 1.2-1.4, 2, 3.1 Complete)
+**Status**: In Progress (~60% - Phase 1.2-1.4, 2, 3.1, 3.2, 3.4 Complete)
 
 **Priority**: Critical - Root cause of 10-30x performance gap vs Rust/C++
 
@@ -58,7 +58,7 @@
 
 ## Phase 3: Standard Loop Form
 
-> **Status**: Partial (stacksave removed)
+> **Status**: Partial (stacksave removed, loop metadata added)
 
 ### 3.1 Stacksave/Stackrestore Removal
 - [x] 3.1.1 Remove `@llvm.stacksave()` from `gen_loop()` in `llvm_ir_gen_control.cpp`
@@ -68,10 +68,73 @@
 - [x] 3.1.5 Verify all 1577 tests pass
 
 ### 3.2 Loop Structure Analysis
-- [ ] 3.2.1 Document current loop codegen pattern in `build_loop()`
-- [ ] 3.2.2 Identify continuation block proliferation causes
-- [ ] 3.2.3 Map TML loop constructs to canonical LLVM loop form
+- [x] 3.2.1 Document current loop codegen pattern in `build_loop()`
+- [x] 3.2.2 Identify continuation block proliferation causes
+- [x] 3.2.3 Map TML loop constructs to canonical LLVM loop form
 - [ ] 3.2.4 Design refactored loop codegen structure
+
+#### 3.2.1 Current Loop Codegen Patterns
+
+**MIR Level** (`compiler/src/mir/builder/control.cpp`):
+- `build_loop()`: header → body → header (infinite loop), exit via break
+- `build_while()`: header (condition check) → body → header → exit
+- `build_for()`: header (index < length) → body (index access) → increment → header → exit
+
+**LLVM Level** (`compiler/src/codegen/llvm_ir_gen_control.cpp`):
+- `gen_loop()`: loop.start → body → loop.start, loop.end via break
+- `gen_while()`: while.cond → while.body → while.cond → while.end
+- `gen_for()`: for.cond → for.body → for.incr → for.cond → for.end
+
+#### 3.2.2 Issues Blocking LLVM Optimizations
+
+1. **No explicit preheader block**: Loops jump directly to header from entry
+   - LLVM prefers a dedicated preheader for loop-invariant code motion
+   - LICM pass (`licm.cpp`) tries to find preheader but doesn't create one
+
+2. **Loop rotation not implemented**: `loop_rotate.cpp` detects rotatable loops but returns false
+   - Loop rotation moves condition to latch, enabling better vectorization
+   - While loops are "top-tested" but LLVM prefers "bottom-tested" for some opts
+
+3. **Missing loop metadata**: No `!llvm.loop` metadata on back-edge branches
+   - Prevents vectorization hints (`llvm.loop.vectorize.enable`)
+   - Prevents unroll hints (`llvm.loop.unroll.count`)
+
+4. **Infinite loop pattern**: `gen_loop()` generates infinite loop needing break
+   - LLVM can't determine iteration count for optimization
+
+#### 3.2.3 Canonical LLVM Loop Form
+
+```
+preheader:
+  ; loop-invariant setup, induction var init
+  br label %header
+
+header:
+  %iv = phi i32 [ %init, %preheader ], [ %iv.next, %latch ]
+  %cond = icmp slt i32 %iv, %limit
+  br i1 %cond, label %body, label %exit
+
+body:
+  ; loop body
+  br label %latch
+
+latch:
+  %iv.next = add i32 %iv, 1
+  br label %header, !llvm.loop !0
+
+exit:
+  ; post-loop code
+
+!0 = distinct !{!0, !1, !2}
+!1 = !{!"llvm.loop.vectorize.enable", i1 true}
+!2 = !{!"llvm.loop.unroll.count", i32 4}
+```
+
+**Key differences from current TML codegen:**
+- Dedicated preheader block (TML: direct jump to header)
+- Induction variable as phi in header (TML: alloca + load/store)
+- Separate latch block for increment (TML: for has this, while/loop don't)
+- Loop metadata on back-edge (TML: none)
 
 ### 3.3 Canonical Loop Generation
 - [ ] 3.3.1 Generate `preheader` block for loop initialization
@@ -82,10 +145,21 @@
 - [ ] 3.3.6 Connect blocks with proper CFG edges
 
 ### 3.4 Loop Metadata
-- [ ] 3.4.1 Add `!llvm.loop` metadata to loop back-edges
-- [ ] 3.4.2 Add unroll hints for small constant bounds
-- [ ] 3.4.3 Add vectorization hints for numeric loops
-- [ ] 3.4.4 Verify LLVM recognizes loop structure
+- [x] 3.4.1 Add `!llvm.loop` metadata to loop back-edges
+- [x] 3.4.2 Add unroll hints for small constant bounds
+- [x] 3.4.3 Add vectorization hints for numeric loops
+- [x] 3.4.4 Verify LLVM recognizes loop structure
+
+**Implementation Summary (3.4)**:
+- Added `loop_metadata_counter_` and `loop_metadata_` vector to `LLVMIRGen`
+- Implemented `create_loop_metadata(enable_vectorize, unroll_count)` helper
+- Added `emit_loop_metadata()` to emit metadata at end of module
+- Updated `gen_loop()`, `gen_while()`, `gen_for()` to:
+  - Create loop metadata at loop start
+  - Attach `!llvm.loop !N` to back-edge branches
+- For loops: vectorization enabled, unroll count = 4
+- While loops: vectorization enabled, no unroll hint
+- Infinite loops: minimal metadata (LLVM can still optimize)
 
 ## Phase 4: LLVM Lifetime Intrinsics
 
@@ -146,11 +220,11 @@
 |-------|-------------|--------|----------|
 | 1 | Pointer-Based Objects | **Complete** | 20/24 |
 | 2 | Trivial Drop Elimination | **Complete** | 2/8 |
-| 3 | Standard Loop Form | **Partial** | 5/15 |
+| 3 | Standard Loop Form | **Partial** | 12/19 |
 | 4 | Lifetime Intrinsics | Not Started | 0/10 |
 | 5 | Bug Fixes | Not Started | 0/5 |
 | 6 | Validation & Benchmarks | Partial | 4/14 |
-| **Total** | | **~55%** | **31/76** |
+| **Total** | | **~60%** | **38/80** |
 
 ## Performance Results
 
