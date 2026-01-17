@@ -157,12 +157,29 @@ void panic(const char* message) {
  * Maps to TML's `assert(condition: Bool, message: Str) -> Unit` builtin.
  * Note: Named `assert_tml` to avoid conflict with C's `assert` macro.
  *
+ * When panic catching is active (in test mode), this uses the panic
+ * mechanism to properly longjmp back to the test harness instead of
+ * calling exit() which can cause stack corruption in DLL context.
+ *
  * @param condition The condition to check (0 = false, non-zero = true).
  * @param message The message to display if assertion fails.
  */
 void assert_tml(int32_t condition, const char* message) {
     if (!condition) {
-        fprintf(stderr, "assertion failed: %s\n", message ? message : "(no message)");
+        // Build assertion failed message
+        static char assert_msg[1024];
+        snprintf(assert_msg, sizeof(assert_msg), "assertion failed: %s",
+                 message ? message : "(no message)");
+
+        // Use panic mechanism if catching is enabled (DLL test context)
+        // This properly longjmps back instead of calling exit()
+        if (tml_catching_panic) {
+            snprintf(tml_panic_msg, sizeof(tml_panic_msg), "%s", assert_msg);
+            longjmp(tml_panic_jmp_buf, 1);
+        }
+
+        // Normal mode - print and exit
+        fprintf(stderr, "%s\n", assert_msg);
         exit(1);
     }
 }
@@ -418,10 +435,10 @@ static LONG WINAPI tml_exception_filter(EXCEPTION_POINTERS* info) {
     snprintf(tml_panic_msg, sizeof(tml_panic_msg), "CRASH: %s (0x%08lX)",
              tml_get_exception_name(code), (unsigned long)code);
 
-    // If we're in panic catching mode, try to longjmp back
-    if (tml_catching_panic) {
-        longjmp(tml_panic_jmp_buf, 2);
-    }
+    // NOTE: Do NOT call longjmp from exception filter!
+    // longjmp from a Windows exception handler causes STATUS_BAD_STACK (0xC0000028)
+    // because the stack state is undefined during exception handling.
+    // Instead, let the test runner's SEH (__try/__except) handle the exception.
 
     // Let the default handler run
     if (tml_prev_filter) {

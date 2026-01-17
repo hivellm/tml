@@ -97,6 +97,8 @@ static const char* get_exception_name(DWORD code) {
         return "FLOAT_DIVIDE_BY_ZERO";
     case EXCEPTION_FLT_INVALID_OPERATION:
         return "FLOAT_INVALID_OPERATION";
+    case 0xC0000028: // STATUS_BAD_STACK
+        return "BAD_STACK (Stack corruption)";
     default:
         return "UNKNOWN_EXCEPTION";
     }
