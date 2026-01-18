@@ -151,28 +151,44 @@ This project uses @hivellm/rulebook for task management. Key rules:
 
 ### tasks.md Format
 
-**IMPORTANT**: All `rulebook/tasks/*/tasks.md` files must follow a simple checklist format:
+**IMPORTANT**: All `rulebook/tasks/*/tasks.md` files must be **simple checklists only**.
 
-````markdown
+- **NO prose explanations** - tasks.md is for tracking, not documentation
+- **NO "Fixed Issues" sections** with detailed descriptions
+- **NO code examples** or implementation details
+- **NO root cause analysis** or technical explanations
+
+If you need to document implementation details, root causes, or technical explanations, put them in `proposal.md` instead.
+
+**Correct format:**
+
+```markdown
 # Tasks: Feature Name
 
-**Status**: In Progress (X% - Phase N Complete)
-
-**Priority**: High/Medium/Low - Brief description
+**Status**: In Progress (X%)
 
 ## Phase 1: Phase Name
-
-> **Status**: Complete/In Progress/Not Started
-
-### 1.1 Section Name
 
 - [x] 1.1.1 Completed task description
 - [ ] 1.1.2 Pending task description
 - [ ] 1.1.3 Another pending task
 
-### 1.2 Another Section
+## Phase 2: Another Phase
 
-- [ ] 1.2.1 Task description
+- [ ] 2.1.1 Task description
+```
+
+**Wrong format (DO NOT do this):**
+
+```markdown
+## Fixed Issues
+
+### Bug Name (FIXED 2026-01-18)
+
+**Status**: Fixed in `file.cpp`
+
+The bug was caused by X. Root cause was Y. We fixed it by Z.
+```
 
 ## File Extension
 

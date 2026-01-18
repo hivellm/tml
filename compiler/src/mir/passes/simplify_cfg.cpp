@@ -260,6 +260,9 @@ auto SimplifyCfgPass::merge_blocks(Function& func) -> bool {
 auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
     bool changed = false;
 
+    // Build predecessor map to know who jumps to each block
+    auto preds = build_predecessor_map(func);
+
     // Find blocks that only contain an unconditional branch
     for (size_t i = 1; i < func.blocks.size(); ++i) { // Skip entry block
         auto& block = func.blocks[i];
@@ -281,19 +284,80 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
                 continue;
             }
 
-            // Redirect all predecessors to the target
-            redirect_block_references(func, block.id, branch->target);
+            uint32_t target_id = branch->target;
+            uint32_t removed_id = block.id;
+
+            // Get predecessors of the block being removed
+            auto& block_preds = preds[removed_id];
+
+            // Update terminators in predecessors to jump directly to target
+            for (auto& other_block : func.blocks) {
+                if (!other_block.terminator) {
+                    continue;
+                }
+
+                std::visit(
+                    [removed_id, target_id](auto& term) {
+                        using T = std::decay_t<decltype(term)>;
+
+                        if constexpr (std::is_same_v<T, BranchTerm>) {
+                            if (term.target == removed_id) {
+                                term.target = target_id;
+                            }
+                        } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                            if (term.true_block == removed_id) {
+                                term.true_block = target_id;
+                            }
+                            if (term.false_block == removed_id) {
+                                term.false_block = target_id;
+                            }
+                        } else if constexpr (std::is_same_v<T, SwitchTerm>) {
+                            if (term.default_block == removed_id) {
+                                term.default_block = target_id;
+                            }
+                            for (auto& [_, t] : term.cases) {
+                                if (t == removed_id) {
+                                    t = target_id;
+                                }
+                            }
+                        }
+                    },
+                    *other_block.terminator);
+            }
+
+            // Update PHI nodes in target block: replace entries from removed_id
+            // with entries from each predecessor of removed_id
+            int target_idx = get_block_index(func, target_id);
+            if (target_idx >= 0) {
+                auto& target_block = func.blocks[static_cast<size_t>(target_idx)];
+                for (auto& inst : target_block.instructions) {
+                    if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                        // Find and replace entries from removed_id
+                        std::vector<std::pair<Value, uint32_t>> new_incoming;
+                        for (const auto& [val, from_block] : phi->incoming) {
+                            if (from_block == removed_id) {
+                                // Replace with entries from each predecessor of removed block
+                                for (uint32_t pred_id : block_preds) {
+                                    new_incoming.push_back({val, pred_id});
+                                }
+                            } else {
+                                new_incoming.push_back({val, from_block});
+                            }
+                        }
+                        phi->incoming = std::move(new_incoming);
+                    }
+                }
+            }
 
             // Mark for removal
             block.terminator = std::nullopt;
             changed = true;
+
+            // Rebuild predecessor map after changes
+            preds = build_predecessor_map(func);
         } else {
-            // Block has no terminator - this is a dangling block
-            // Redirect references to the next block or entry block as fallback
-            uint32_t fallback_target =
-                (i + 1 < func.blocks.size()) ? func.blocks[i + 1].id : func.blocks[0].id;
-            redirect_block_references(func, block.id, fallback_target);
-            changed = true;
+            // Block has no terminator - this is a dangling block, skip it
+            // (will be removed by the cleanup below)
         }
     }
 
@@ -343,8 +407,28 @@ auto SimplifyCfgPass::simplify_constant_branches(Function& func) -> bool {
         }
 
         if (const_cond.has_value()) {
-            // Replace with unconditional branch
+            // Determine which branch is taken and which is removed
             uint32_t target = *const_cond ? cond_branch->true_block : cond_branch->false_block;
+            uint32_t removed_target =
+                *const_cond ? cond_branch->false_block : cond_branch->true_block;
+
+            // Remove PHI entries in the removed target that come from this block
+            int removed_idx = get_block_index(func, removed_target);
+            if (removed_idx >= 0) {
+                auto& removed_block = func.blocks[static_cast<size_t>(removed_idx)];
+                for (auto& inst : removed_block.instructions) {
+                    if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                        phi->incoming.erase(std::remove_if(phi->incoming.begin(),
+                                                           phi->incoming.end(),
+                                                           [&block](const auto& entry) {
+                                                               return entry.second == block.id;
+                                                           }),
+                                            phi->incoming.end());
+                    }
+                }
+            }
+
+            // Replace with unconditional branch
             block.terminator = BranchTerm{target};
             changed = true;
         }
@@ -407,6 +491,37 @@ auto SimplifyCfgPass::remove_unreachable_blocks(Function& func) -> bool {
                 }
             },
             *block.terminator);
+    }
+
+    // Collect IDs of unreachable blocks
+    std::unordered_set<uint32_t> unreachable_ids;
+    for (const auto& block : func.blocks) {
+        if (reachable.find(block.id) == reachable.end()) {
+            unreachable_ids.insert(block.id);
+        }
+    }
+
+    if (unreachable_ids.empty()) {
+        return false;
+    }
+
+    // Clean up PHI nodes in reachable blocks: remove entries from unreachable blocks
+    for (auto& block : func.blocks) {
+        if (reachable.find(block.id) == reachable.end()) {
+            continue; // Skip unreachable blocks
+        }
+
+        for (auto& inst : block.instructions) {
+            if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                // Remove entries from unreachable predecessors
+                phi->incoming.erase(std::remove_if(phi->incoming.begin(), phi->incoming.end(),
+                                                   [&unreachable_ids](const auto& entry) {
+                                                       return unreachable_ids.find(entry.second) !=
+                                                              unreachable_ids.end();
+                                                   }),
+                                    phi->incoming.end());
+            }
+        }
     }
 
     // Remove unreachable blocks
