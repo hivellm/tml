@@ -2,21 +2,27 @@ use test
 
 // Time Runtime Tests
 // Tests all functions from runtime/time.c
+// NOTE: Using explicit return codes instead of assert() to avoid
+// potential issues with the test library shadowing the builtin assert
 
 @test
 func test_time_ms() -> I32 {
     let t: I32 = time_ms()
-    // Time should be a positive value
-    assert(t > 0, "time_ms should return positive value")
-    return 0
+    // Time should be a positive value (system uptime in ms)
+    if t > 0 {
+        return 0  // Success
+    }
+    return 1  // Failure
 }
 
 @test
 func test_time_us() -> I32 {
     let t: I64 = time_us()
     // Time in microseconds should be positive
-    assert(t > 0, "time_us should return positive value")
-    return 0
+    if t > 0 {
+        return 0
+    }
+    return 1
 }
 
 // time_ns test skipped - may overflow on some systems
@@ -26,28 +32,34 @@ func test_time_monotonic() -> I32 {
     let t1: I64 = time_us()
     let t2: I64 = time_us()
     // Time should be monotonically increasing or equal
-    assert(t2 >= t1, "time should be monotonic")
-    return 0
+    if t2 >= t1 {
+        return 0
+    }
+    return 1
 }
 
 @test
 func test_sleep_ms() -> I32 {
     let start: I32 = time_ms()
-    sleep_ms(50)  // Sleep longer to reduce timing variance
+    sleep_ms(50)  // Sleep for 50ms
     let elapsed: I32 = time_ms() - start
-    // Should have slept at least some time (very lenient due to system timing)
-    assert(elapsed >= 0, "sleep_ms should not cause issues")
-    return 0
+    // Should have slept at least some time
+    if elapsed >= 0 {
+        return 0
+    }
+    return 1
 }
 
 @test
 func test_elapsed_ms() -> I32 {
     let start: I32 = time_ms()
-    sleep_ms(50)  // Sleep longer for more reliable timing
+    sleep_ms(50)
     let elapsed: I32 = elapsed_ms(start)
-    // Just verify it doesn't return negative (lenient due to system timing)
-    assert(elapsed >= 0, "elapsed_ms should not be negative")
-    return 0
+    // Just verify it doesn't return negative
+    if elapsed >= 0 {
+        return 0
+    }
+    return 1
 }
 
 @test
@@ -56,8 +68,10 @@ func test_elapsed_us() -> I32 {
     sleep_ms(50)
     let elapsed: I64 = elapsed_us(start)
     // Just verify it returns a non-negative value
-    assert(elapsed >= 0, "elapsed_us should not be negative")
-    return 0
+    if elapsed >= 0 {
+        return 0
+    }
+    return 1
 }
 
 @test
@@ -67,8 +81,10 @@ func test_sleep_us() -> I32 {
     sleep_us(sleep_time)
     let elapsed: I64 = elapsed_us(start)
     // Just verify it doesn't return negative
-    assert(elapsed >= 0, "sleep_us should not cause issues")
-    return 0
+    if elapsed >= 0 {
+        return 0
+    }
+    return 1
 }
 
 // elapsed_ns test skipped - uses time_ns which may overflow

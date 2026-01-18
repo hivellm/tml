@@ -138,26 +138,6 @@ static int call_test_with_seh(TestMainFunc func) {
     return result;
 }
 
-// SEH wrapper for calling test via runtime wrapper
-static int call_test_wrapper_with_seh(TmlRunTestWithCatch wrapper, TestMainFunc func) {
-    g_crash_occurred = false;
-    g_crash_msg[0] = '\0';
-
-    // Disable Windows Error Reporting to allow SEH to work
-    UINT oldMode =
-        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-
-    int result = 0;
-    __try {
-        result = wrapper(func);
-    } __except (crash_filter(GetExceptionInformation())) {
-        SetErrorMode(oldMode);
-        return -2;
-    }
-
-    SetErrorMode(oldMode);
-    return result;
-}
 #endif
 
 // Using build helpers
@@ -1728,28 +1708,23 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
     std::fflush(stderr);
 
     // Execute test with crash protection
-    // On Windows, use SEH to catch access violations etc.
-    // On other platforms, rely on the runtime's signal handlers
+    // The runtime's tml_run_test_with_catch handles both panics (via setjmp/longjmp)
+    // and crashes (via exception filter on Windows, signal handlers on Unix).
+    //
+    // IMPORTANT: On Windows, do NOT wrap tml_run_test_with_catch in SEH (__try/__except)
+    // because combining SEH with setjmp/longjmp causes BAD_STACK (0xC0000028).
+    // The runtime's exception filter handles crashes, so SEH is not needed.
     if (run_with_catch) {
         if (verbose) {
             std::cerr << "[DEBUG]   Calling tml_run_test_with_catch wrapper...\n" << std::flush;
         }
-#ifdef _WIN32
-        // Use SEH wrapper which catches access violations at the C++ level
-        result.exit_code = call_test_wrapper_with_seh(run_with_catch, test_func);
-        if (g_crash_occurred) {
-            result.success = false;
-            result.error = std::string("Test crashed: ") + g_crash_msg;
-        } else
-#else
         result.exit_code = run_with_catch(test_func);
-#endif
-            if (result.exit_code == -1) {
-            // Panic was caught - the message was printed to stderr
+        if (result.exit_code == -1) {
+            // Panic was caught
             result.success = false;
             result.error = "Test panicked";
         } else if (result.exit_code == -2) {
-            // Crash was caught - the message was printed to stderr
+            // Crash was caught
             result.success = false;
             result.error = "Test crashed (SIGSEGV/SIGFPE/etc)";
         } else {
@@ -1760,8 +1735,11 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
                       << std::flush;
         }
     } else {
+        // Fallback: direct call with platform-specific crash protection
 #ifdef _WIN32
-        // Use SEH wrapper for direct call
+        if (verbose) {
+            std::cerr << "[DEBUG]   Calling test function with SEH protection...\n" << std::flush;
+        }
         result.exit_code = call_test_with_seh(test_func);
         if (g_crash_occurred) {
             result.success = false;
@@ -1770,10 +1748,13 @@ SuiteTestResult run_suite_test(DynamicLibrary& lib, int test_index, bool verbose
             result.success = (result.exit_code == 0);
         }
 #else
-        // Fallback to direct call (may exit on panic)
+        // Unix: direct call (may exit on panic)
         result.exit_code = test_func();
         result.success = (result.exit_code == 0);
 #endif
+        if (verbose) {
+            std::cerr << "[DEBUG]   Test returned: " << result.exit_code << "\n" << std::flush;
+        }
     }
 
     if (verbose) {
@@ -1841,26 +1822,39 @@ SuiteTestResult run_suite_test_profiled(DynamicLibrary& lib, int test_index, Pha
     record_phase("exec.capture_start", phase_start);
 
     // Phase: Execute the test
+    // Use tml_run_test_with_catch if available (handles panic and crashes)
+    // On Windows, do NOT wrap in SEH to avoid BAD_STACK issues with setjmp/longjmp
     phase_start = Clock::now();
-    try {
-        if (run_with_catch) {
-            // Use the panic-catching wrapper for better error reporting
-            result.exit_code = run_with_catch(test_func);
-            if (result.exit_code == -1) {
-                // Panic was caught - the message was printed to stderr
-                result.success = false;
-                result.error = "Test panicked";
-            } else {
-                result.success = (result.exit_code == 0);
-            }
+    if (run_with_catch) {
+        result.exit_code = run_with_catch(test_func);
+        if (result.exit_code == -1) {
+            result.success = false;
+            result.error = "Test panicked";
+        } else if (result.exit_code == -2) {
+            result.success = false;
+            result.error = "Test crashed";
         } else {
-            // Fallback to direct call (may exit on panic)
-            result.exit_code = test_func();
             result.success = (result.exit_code == 0);
         }
-    } catch (...) {
-        result.error = "Exception during test execution";
-        result.exit_code = 1;
+    } else {
+        // Fallback: direct call with platform-specific crash protection
+#ifdef _WIN32
+        result.exit_code = call_test_with_seh(test_func);
+        if (g_crash_occurred) {
+            result.success = false;
+            result.error = std::string("Test crashed: ") + g_crash_msg;
+        } else {
+            result.success = (result.exit_code == 0);
+        }
+#else
+        try {
+            result.exit_code = test_func();
+            result.success = (result.exit_code == 0);
+        } catch (...) {
+            result.error = "Exception during test execution";
+            result.exit_code = 1;
+        }
+#endif
     }
     result.duration_us =
         std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - phase_start).count();
