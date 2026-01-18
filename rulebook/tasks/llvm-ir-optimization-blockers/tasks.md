@@ -25,7 +25,7 @@
 - [x] 1.3.2 Update method call sites to pass pointer
 - [x] 1.3.3 Update method body to access fields via `getelementptr` + `load`
 - [x] 1.3.4 Add `sret` parameter for methods returning large structs
-- [ ] 1.3.5 Verify LLVM's SROA can break down stack-allocated structs
+- [x] 1.3.5 Verify LLVM's SROA can break down stack-allocated structs
 - [x] 1.3.6 Add tests for method calling convention
 
 ### 1.4 Codegen Updates
@@ -129,10 +129,10 @@
 
 ### 6.1 IR Quality Verification
 - [ ] 6.1.1 Compare TML IR with Rust IR for same benchmark
-- [ ] 6.1.2 Verify SROA successfully breaks down structs
-- [ ] 6.1.3 Verify constant propagation through methods
-- [ ] 6.1.4 Verify DCE eliminates unused computations
-- [ ] 6.1.5 Check loop optimization diagnostics
+- [x] 6.1.2 Verify SROA successfully breaks down structs
+- [x] 6.1.3 Verify constant propagation through methods
+- [x] 6.1.4 Verify DCE eliminates unused computations
+- [x] 6.1.5 Check loop optimization diagnostics
 
 ### 6.2 Performance Benchmarks
 - [x] 6.2.1 Run OOP benchmark suite before changes
@@ -151,10 +151,10 @@
 
 | Phase | Description | Progress |
 |-------|-------------|----------|
-| 1 | Pointer-Based Objects | 20/24 |
+| 1 | Pointer-Based Objects | 21/24 |
 | 2 | Trivial Drop Elimination | 2/8 |
 | 3 | Standard Loop Form | 12/19 |
 | 4 | Lifetime Intrinsics | 7/10 |
 | 5 | Bug Fixes | 17/17 |
-| 6 | Validation & Benchmarks | 4/14 |
-| **Total** | | **62/92** |
+| 6 | Validation & Benchmarks | 8/14 |
+| **Total** | | **67/92** |
