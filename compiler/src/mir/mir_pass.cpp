@@ -466,10 +466,10 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         add_pass(std::make_unique<DeadCodeEliminationPass>());
 
         // Final OOP optimization round at O3
+        // Note: EscapeAndPromotePass runs only once (earlier) to avoid duplicate allocas
         add_pass(std::make_unique<DevirtualizationPass>(env));
         add_pass(std::make_unique<ConstructorFusionPass>(env));
         add_pass(std::make_unique<BuilderOptPass>());
-        add_pass(std::make_unique<EscapeAndPromotePass>());
         add_pass(std::make_unique<DestructorHoistPass>(env));
         add_pass(std::make_unique<BatchDestructionPass>(env));
 

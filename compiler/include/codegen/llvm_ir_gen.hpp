@@ -766,6 +766,34 @@ private:
     // Emit all loop metadata at end of module
     void emit_loop_metadata();
 
+    // ============ Lifetime Intrinsics Support ============
+    // Track stack allocations for lifetime intrinsics
+    struct AllocaInfo {
+        std::string reg; // Alloca register (e.g., %v1)
+        int64_t size;    // Size in bytes (-1 if unknown)
+    };
+
+    // Stack of scope allocations - each scope has its list of allocas
+    std::vector<std::vector<AllocaInfo>> scope_allocas_;
+
+    // Push a new scope for tracking allocas
+    void push_lifetime_scope();
+
+    // Pop scope and emit lifetime.end for all allocas in scope
+    void pop_lifetime_scope();
+
+    // Emit lifetime.start for an alloca
+    void emit_lifetime_start(const std::string& alloca_reg, int64_t size);
+
+    // Emit lifetime.end for an alloca
+    void emit_lifetime_end(const std::string& alloca_reg, int64_t size);
+
+    // Register an alloca in current scope (for automatic lifetime.end on scope exit)
+    void register_alloca_in_scope(const std::string& alloca_reg, int64_t size);
+
+    // Get size in bytes for LLVM type
+    int64_t get_type_size(const std::string& llvm_type);
+
     // ============ Debug Info Support ============
     // LLVM debug metadata for DWARF generation
     int debug_metadata_counter_ = 0;          // Counter for unique metadata IDs

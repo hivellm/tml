@@ -82,6 +82,7 @@ auto MergeReturnsPass::create_unified_exit(Function& func, const std::vector<siz
 
         InstructionData phi_mir;
         phi_mir.result = func.next_value_id++;
+        phi_mir.type = phi.result_type; // Store the type before moving phi
         phi_mir.inst = std::move(phi);
 
         return_value_id = phi_mir.result;
@@ -91,7 +92,10 @@ auto MergeReturnsPass::create_unified_exit(Function& func, const std::vector<siz
     // Set terminator for exit block
     ReturnTerm exit_ret;
     if (has_return_value) {
-        exit_ret.value = Value{return_value_id};
+        // Get the return type from the function's return_type
+        Value ret_val{return_value_id};
+        ret_val.type = func.return_type; // Use the function's declared return type
+        exit_ret.value = ret_val;
     }
     exit_block.terminator = exit_ret;
 

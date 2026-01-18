@@ -152,6 +152,31 @@ struct MirType {
     [[nodiscard]] auto is_signed() const -> bool;
     /// Returns the bit width for integer types.
     [[nodiscard]] auto bit_width() const -> int;
+    /// Returns true if this is a pointer type.
+    [[nodiscard]] auto is_pointer() const -> bool {
+        return std::holds_alternative<MirPointerType>(kind);
+    }
+    /// Returns true if this is a struct type.
+    [[nodiscard]] auto is_struct() const -> bool {
+        return std::holds_alternative<MirStructType>(kind);
+    }
+    /// Returns true if this is an enum type.
+    [[nodiscard]] auto is_enum() const -> bool {
+        return std::holds_alternative<MirEnumType>(kind);
+    }
+    /// Returns true if this is a tuple type.
+    [[nodiscard]] auto is_tuple() const -> bool {
+        return std::holds_alternative<MirTupleType>(kind);
+    }
+    /// Returns true if this is an array type.
+    [[nodiscard]] auto is_array() const -> bool {
+        return std::holds_alternative<MirArrayType>(kind);
+    }
+    /// Returns true if this is an aggregate type (struct, enum, tuple, array).
+    /// Aggregate types benefit from alloca+store+load instead of phi nodes.
+    [[nodiscard]] auto is_aggregate() const -> bool {
+        return is_struct() || is_enum() || is_tuple() || is_array();
+    }
 };
 
 // Type constructors
@@ -288,7 +313,8 @@ struct StoreInst {
 // Allocate stack memory: result = alloca type
 struct AllocaInst {
     MirTypePtr alloc_type;
-    std::string name; // Original variable name (for debugging)
+    std::string name;              // Original variable name (for debugging)
+    bool is_stack_eligible = true; // Always stack-eligible since it's already alloca
 };
 
 // Get element pointer: result = &aggregate[index]
@@ -333,10 +359,18 @@ struct CallInst {
     std::vector<MirTypePtr> arg_types; // Types of arguments
     MirTypePtr return_type;
     std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
+    bool is_stack_eligible = false;        ///< True if result can be stack-allocated (for allocs).
 
     /// Returns true if this call was devirtualized from a virtual method call.
     [[nodiscard]] auto is_devirtualized() const -> bool {
         return devirt_info.has_value();
+    }
+
+    /// Returns true if this is a heap allocation that can be stack-promoted.
+    [[nodiscard]] auto can_stack_promote() const -> bool {
+        return is_stack_eligible &&
+               (func_name == "alloc" || func_name == "heap_alloc" || func_name == "tml_alloc" ||
+                func_name == "malloc" || func_name == "Heap::new");
     }
 };
 
@@ -348,6 +382,12 @@ struct MethodCallInst {
     std::vector<Value> args;
     std::vector<MirTypePtr> arg_types; // Types of arguments
     MirTypePtr return_type;
+    std::optional<DevirtInfo> devirt_info; ///< Set if this was a devirtualized call.
+
+    /// Returns true if this call was devirtualized.
+    [[nodiscard]] bool is_devirtualized() const {
+        return devirt_info.has_value();
+    }
 };
 
 // Cast instruction: result = cast value to target_type
@@ -397,6 +437,7 @@ struct StructInitInst {
     std::string struct_name;
     std::vector<Value> fields;
     std::vector<MirTypePtr> field_types; // Types of field values
+    bool is_stack_eligible = false;      ///< True if instance can be stack-allocated.
 };
 
 // Enum variant construction: result = EnumName::Variant(payload...)
@@ -622,6 +663,44 @@ struct EnumDef {
 };
 
 // ============================================================================
+// Class Metadata (for OOP escape analysis optimization)
+// ============================================================================
+
+/// Metadata about a class for escape analysis and optimization.
+///
+/// This information enables aggressive optimizations for sealed classes
+/// and classes with known allocation characteristics.
+struct ClassMetadata {
+    std::string name;                         ///< Class name.
+    bool is_sealed = false;                   ///< True if class cannot be inherited from.
+    bool is_abstract = false;                 ///< True if class cannot be instantiated.
+    bool is_value = false;                    ///< True for @value classes (no vtable).
+    bool stack_allocatable = false;           ///< True if instances can be stack-allocated.
+    size_t estimated_size = 0;                ///< Estimated size in bytes (vtable ptr + fields).
+    size_t inheritance_depth = 0;             ///< Depth in inheritance hierarchy.
+    std::optional<std::string> base_class;    ///< Parent class name (if any).
+    std::vector<std::string> subclasses;      ///< Known subclasses (empty if sealed).
+    std::vector<std::string> virtual_methods; ///< Virtual method names.
+    std::vector<std::string> final_methods;   ///< Final method names.
+
+    /// Returns true if this class has no virtual methods (pure value type).
+    [[nodiscard]] auto is_pure_value() const -> bool {
+        return is_value && virtual_methods.empty();
+    }
+
+    /// Returns true if all method calls can be devirtualized.
+    [[nodiscard]] auto can_devirtualize_all() const -> bool {
+        return is_sealed || is_value || subclasses.empty();
+    }
+
+    /// Returns true if instances of this class don't escape through method calls.
+    /// This is true for sealed classes where we know all possible method implementations.
+    [[nodiscard]] auto methods_preserve_noescapse() const -> bool {
+        return is_sealed && !is_abstract;
+    }
+};
+
+// ============================================================================
 // Module
 // ============================================================================
 
@@ -633,6 +712,31 @@ struct Module {
 
     // Global constants
     std::unordered_map<std::string, Constant> constants;
+
+    // Class metadata for OOP optimization (keyed by class name)
+    std::unordered_map<std::string, ClassMetadata> class_metadata;
+
+    /// Looks up class metadata by name.
+    [[nodiscard]] auto get_class_metadata(const std::string& class_name) const
+        -> std::optional<ClassMetadata> {
+        auto it = class_metadata.find(class_name);
+        if (it != class_metadata.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    /// Returns true if class is sealed (cannot be inherited).
+    [[nodiscard]] auto is_class_sealed(const std::string& class_name) const -> bool {
+        auto it = class_metadata.find(class_name);
+        return it != class_metadata.end() && it->second.is_sealed;
+    }
+
+    /// Returns true if class instances can be stack-allocated.
+    [[nodiscard]] auto can_stack_allocate(const std::string& class_name) const -> bool {
+        auto it = class_metadata.find(class_name);
+        return it != class_metadata.end() && it->second.stack_allocatable;
+    }
 };
 
 // ============================================================================

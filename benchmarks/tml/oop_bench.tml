@@ -505,12 +505,8 @@ func method_chaining_bench(iterations: I32) -> I32 {
     loop {
         if i >= iterations then { break }
 
-        let b1: Builder = Builder::create()
-        let b2: Builder = b1.with_add(10)
-        let b3: Builder = b2.with_multiply(2)
-        let b4: Builder = b3.with_subtract(5)
-        let b5: Builder = b4.with_add(i)
-        let result: I32 = b5.build()
+        // Method chaining like C++ - no intermediate variables needed
+        let result: I32 = Builder::create().with_add(10).with_multiply(2).with_subtract(5).with_add(i).build()
         total = total + result
 
         i = i + 1

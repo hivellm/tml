@@ -1211,6 +1211,70 @@ void LLVMIRGen::emit_loop_metadata() {
     }
 }
 
+// ============ Lifetime Intrinsics Implementation ============
+
+void LLVMIRGen::push_lifetime_scope() {
+    scope_allocas_.push_back({});
+}
+
+void LLVMIRGen::pop_lifetime_scope() {
+    if (scope_allocas_.empty()) {
+        return;
+    }
+
+    // Emit lifetime.end for all allocas in this scope (in reverse order)
+    auto& allocas = scope_allocas_.back();
+    for (auto it = allocas.rbegin(); it != allocas.rend(); ++it) {
+        emit_lifetime_end(it->reg, it->size);
+    }
+
+    scope_allocas_.pop_back();
+}
+
+void LLVMIRGen::emit_lifetime_start(const std::string& alloca_reg, int64_t size) {
+    // Use -1 for unknown size (LLVM will figure it out)
+    std::string size_str = size > 0 ? std::to_string(size) : "-1";
+    emit_line("  call void @llvm.lifetime.start.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
+}
+
+void LLVMIRGen::emit_lifetime_end(const std::string& alloca_reg, int64_t size) {
+    // Use -1 for unknown size (LLVM will figure it out)
+    std::string size_str = size > 0 ? std::to_string(size) : "-1";
+    emit_line("  call void @llvm.lifetime.end.p0(i64 " + size_str + ", ptr " + alloca_reg + ")");
+}
+
+void LLVMIRGen::register_alloca_in_scope(const std::string& alloca_reg, int64_t size) {
+    if (scope_allocas_.empty()) {
+        return; // No scope to register in
+    }
+    scope_allocas_.back().push_back(AllocaInfo{alloca_reg, size});
+}
+
+auto LLVMIRGen::get_type_size(const std::string& llvm_type) -> int64_t {
+    // Return size in bytes for common LLVM types
+    if (llvm_type == "i1")
+        return 1;
+    if (llvm_type == "i8")
+        return 1;
+    if (llvm_type == "i16")
+        return 2;
+    if (llvm_type == "i32")
+        return 4;
+    if (llvm_type == "i64")
+        return 8;
+    if (llvm_type == "i128")
+        return 16;
+    if (llvm_type == "float")
+        return 4;
+    if (llvm_type == "double")
+        return 8;
+    if (llvm_type == "ptr")
+        return 8; // 64-bit pointers
+
+    // For struct types, tuples, etc. - return -1 (unknown, LLVM will compute)
+    return -1;
+}
+
 // Infer print argument type from expression
 auto LLVMIRGen::infer_print_type(const parser::Expr& expr) -> PrintArgType {
     if (expr.is<parser::LiteralExpr>()) {

@@ -656,6 +656,27 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
     // Handle call expressions (including enum constructors like Just, Ok, Err)
     if (expr.is<parser::CallExpr>()) {
         const auto& call = expr.as<parser::CallExpr>();
+
+        // Handle PathExpr callee (like Builder::create)
+        if (call.callee->is<parser::PathExpr>()) {
+            const auto& path = call.callee->as<parser::PathExpr>();
+            // For Type::method() syntax, segments are [Type, method]
+            if (path.path.segments.size() == 2) {
+                const std::string& type_name = path.path.segments[0];
+                const std::string& method_name = path.path.segments[1];
+
+                // Check if it's a class static method
+                auto class_def = env_.lookup_class(type_name);
+                if (class_def.has_value()) {
+                    for (const auto& m : class_def->methods) {
+                        if (m.sig.name == method_name && m.is_static) {
+                            return m.sig.return_type;
+                        }
+                    }
+                }
+            }
+        }
+
         if (call.callee->is<parser::IdentExpr>()) {
             const auto& callee_ident = call.callee->as<parser::IdentExpr>();
             // Check if it's a generic enum constructor
@@ -772,6 +793,16 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
 
                 if (func_sig && func_sig->return_type) {
                     return func_sig->return_type;
+                }
+
+                // Check if type_name is a class and look up static method
+                auto class_def = env_.lookup_class(type_name);
+                if (class_def.has_value()) {
+                    for (const auto& m : class_def->methods) {
+                        if (m.sig.name == call.method && m.is_static) {
+                            return m.sig.return_type;
+                        }
+                    }
                 }
             }
         }
@@ -1065,6 +1096,24 @@ auto LLVMIRGen::infer_expr_type(const parser::Expr& expr) -> types::TypePtr {
                         }
                         return func_it->second.return_type;
                     }
+                }
+            }
+
+            // Check if named type is a class and look up instance methods
+            auto class_def = env_.lookup_class(named.name);
+            if (class_def.has_value()) {
+                std::string current_class = named.name;
+                while (!current_class.empty()) {
+                    auto cls = env_.lookup_class(current_class);
+                    if (!cls.has_value())
+                        break;
+                    for (const auto& m : cls->methods) {
+                        if (m.sig.name == call.method && !m.is_static) {
+                            return m.sig.return_type;
+                        }
+                    }
+                    // Move to parent class
+                    current_class = cls->base_class.value_or("");
                 }
             }
         }

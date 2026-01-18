@@ -237,6 +237,7 @@ add_library(tml_mir STATIC
     src/mir/passes/common_subexpression_elimination.cpp
     src/mir/passes/copy_propagation.cpp
     src/mir/passes/escape_analysis.cpp
+    src/mir/passes/builder_opt.cpp
     src/mir/passes/inlining.cpp
     src/mir/passes/async_lowering.cpp
     src/mir/passes/simplify_cfg.cpp
@@ -268,6 +269,7 @@ add_library(tml_mir STATIC
     src/mir/passes/constructor_fusion.cpp
     src/mir/passes/destructor_hoist.cpp
     src/mir/passes/batch_destruction.cpp
+    src/mir/passes/infinite_loop_check.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
 target_include_directories(tml_mir PUBLIC include src)
@@ -449,6 +451,8 @@ if(TML_BUILD_TESTS)
         tests/ir_test.cpp
         tests/hir_test.cpp
         tests/mir_test.cpp
+        tests/escape_analysis_test.cpp
+        tests/devirtualization_test.cpp
         tests/format_test.cpp
         tests/codegen_test.cpp
         tests/codegen_builtins_test.cpp

@@ -768,10 +768,16 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
             ctor_key += "_" + pt;
         }
     }
-    functions_[ctor_key] = FuncInfo{func_name, "ptr", "ptr", param_types};
+    // Check if this is a value class - they return by value to prevent dangling pointers
+    bool is_value_class = has_decorator(c, "value") || env_.is_value_class_candidate(c.name);
 
-    // Function signature - returns class pointer
-    std::string sig = "define " + class_type + "* " + func_name + "(";
+    // Register constructor info: value classes return struct type, others return ptr
+    std::string ret_type = is_value_class ? class_type : "ptr";
+    functions_[ctor_key] = FuncInfo{func_name, ret_type, ret_type, param_types};
+
+    // Function signature - value classes return by value, others return pointer
+    std::string sig =
+        "define " + (is_value_class ? class_type : class_type + "*") + " " + func_name + "(";
     for (size_t i = 0; i < param_types.size(); ++i) {
         if (i > 0)
             sig += ", ";
@@ -783,7 +789,6 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
 
     // Allocate object
     std::string obj = fresh_reg();
-    bool is_value_class = has_decorator(c, "value") || env_.is_value_class_candidate(c.name);
     bool is_pool_class = has_decorator(c, "pool");
     bool is_tls_pool = has_decorator_bool_arg(c, "pool", "thread_local");
 
@@ -904,7 +909,14 @@ void LLVMIRGen::gen_class_constructor(const parser::ClassDecl& c,
     }
 
     // Return the object
-    emit_line("  ret " + class_type + "* " + obj);
+    // For value classes, load the struct and return by value to prevent dangling pointers
+    if (is_value_class) {
+        std::string loaded_obj = fresh_reg();
+        emit_line("  " + loaded_obj + " = load " + class_type + ", ptr " + obj);
+        emit_line("  ret " + class_type + " " + loaded_obj);
+    } else {
+        emit_line("  ret " + class_type + "* " + obj);
+    }
     emit_line("}");
     emit_line("");
 }
@@ -1267,8 +1279,24 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
 
     // Return type
     std::string ret_type = "void";
+    bool return_value_class_by_value = false;
+    std::string value_class_struct_type;
     if (method.return_type) {
         ret_type = llvm_type_ptr(*method.return_type);
+
+        // Check if return type is a value class - return by value instead of ptr
+        // This fixes dangling pointer bug for stack-allocated value class objects
+        if (ret_type == "ptr" && (*method.return_type)->is<parser::NamedType>()) {
+            const auto& named = (*method.return_type)->as<parser::NamedType>();
+            std::string return_class_name =
+                named.path.segments.empty() ? "" : named.path.segments.back();
+            if (!return_class_name.empty() && env_.is_value_class_candidate(return_class_name)) {
+                // Return value class by value (struct type) instead of ptr
+                value_class_struct_type = "%class." + return_class_name;
+                ret_type = value_class_struct_type;
+                return_value_class_by_value = true;
+            }
+        }
     }
 
     // Function signature
@@ -1327,7 +1355,15 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
             // Note: If the expression was a ReturnExpr, gen_expr already emitted ret
             // and set block_terminated_, so we check again here
             if (ret_type != "void" && !block_terminated_) {
-                emit_line("  ret " + ret_type + " " + expr_val);
+                // For value classes returned by value, load the struct from pointer
+                if (return_value_class_by_value && last_expr_type_ == "ptr") {
+                    std::string loaded_struct = fresh_reg();
+                    emit_line("  " + loaded_struct + " = load " + value_class_struct_type +
+                              ", ptr " + expr_val);
+                    emit_line("  ret " + ret_type + " " + loaded_struct);
+                } else {
+                    emit_line("  ret " + ret_type + " " + expr_val);
+                }
                 block_terminated_ = true;
             }
         }
@@ -1704,16 +1740,24 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
         }
     }
 
-    // Look up the constructor in functions_ map to get mangled name
+    // Look up the constructor in functions_ map to get mangled name and return type
     std::string ctor_name;
+    std::string ctor_ret_type = "ptr"; // Default: pointer return
     auto func_it = functions_.find(ctor_key);
     if (func_it != functions_.end()) {
         ctor_name = func_it->second.llvm_name;
+        // Use the registered return type (value classes return struct, not ptr)
+        if (!func_it->second.ret_type.empty()) {
+            ctor_ret_type = func_it->second.ret_type;
+        }
     } else {
         // Fallback: try without overload suffix for default constructor
         auto default_it = functions_.find(class_name + "_new");
         if (default_it != functions_.end()) {
             ctor_name = default_it->second.llvm_name;
+            if (!default_it->second.ret_type.empty()) {
+                ctor_ret_type = default_it->second.ret_type;
+            }
         } else {
             // Last resort: generate basic name
             ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
@@ -1721,7 +1765,7 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
     }
 
     std::string result = fresh_reg();
-    std::string call = "  " + result + " = call ptr " + ctor_name + "(";
+    std::string call = "  " + result + " = call " + ctor_ret_type + " " + ctor_name + "(";
     for (size_t i = 0; i < args.size(); ++i) {
         if (i > 0)
             call += ", ";
@@ -1730,6 +1774,7 @@ auto LLVMIRGen::gen_new_expr(const parser::NewExpr& new_expr) -> std::string {
     call += ")";
     emit_line(call);
 
+    last_expr_type_ = ctor_ret_type;
     return result;
 }
 

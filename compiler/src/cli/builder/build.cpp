@@ -153,6 +153,13 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         mir::HirMirBuilder hir_mir_builder(env);
         mir_module = hir_mir_builder.build(hir_module);
 
+        // Run infinite loop detection (early static analysis)
+        mir::InfiniteLoopCheckPass loop_check;
+        loop_check.run(mir_module);
+        if (loop_check.has_warnings()) {
+            loop_check.print_warnings();
+        }
+
         // Apply MIR optimizations based on optimization level
         int opt_level = tml::CompilerOptions::optimization_level;
         if (opt_level > 0) {
@@ -165,7 +172,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
                 mir_opt = mir::OptLevel::O3;
 
             mir::PassManager pm(mir_opt);
-            pm.configure_standard_pipeline();
+            pm.configure_standard_pipeline(env_copy); // Use OOP-optimized pipeline
             int passes_changed = pm.run(mir_module);
             if (verbose && passes_changed > 0) {
                 std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
@@ -210,6 +217,13 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
         mir::HirMirBuilder hir_mir_builder(env);
         auto mir_module = hir_mir_builder.build(hir_module);
 
+        // Run infinite loop detection (early static analysis)
+        mir::InfiniteLoopCheckPass loop_check;
+        loop_check.run(mir_module);
+        if (loop_check.has_warnings()) {
+            loop_check.print_warnings();
+        }
+
         // Apply MIR optimizations
         mir::OptLevel mir_opt = mir::OptLevel::O0;
         if (opt_level == 1)
@@ -220,7 +234,7 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
             mir_opt = mir::OptLevel::O3;
 
         mir::PassManager pm(mir_opt);
-        pm.configure_standard_pipeline();
+        pm.configure_standard_pipeline(env_copy); // Use OOP-optimized pipeline with inlining fix
         int passes_changed = pm.run(mir_module);
         if (verbose && passes_changed > 0) {
             std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";

@@ -384,7 +384,20 @@ auto HirBuilder::lower_call(const parser::CallExpr& call) -> HirExprPtr {
         }
     }
 
-    return make_hir_call(fresh_id(), func_name, {}, std::move(args), return_type, call.span);
+    // Mangle func_name for class static methods: "Class::method" -> "Class__method"
+    std::string mangled_func_name = func_name;
+    auto pos = func_name.find("::");
+    if (pos != std::string::npos) {
+        std::string class_name = func_name.substr(0, pos);
+        std::string method_name = func_name.substr(pos + 2);
+        // Check if it's a class static method
+        if (type_env_.lookup_class(class_name).has_value()) {
+            mangled_func_name = class_name + "__" + method_name;
+        }
+    }
+
+    return make_hir_call(fresh_id(), mangled_func_name, {}, std::move(args), return_type,
+                         call.span);
 }
 
 // ============================================================================
@@ -446,15 +459,31 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
 
     // Get field index
     std::string type_name;
-    if (object_type && object_type->is<types::NamedType>()) {
-        type_name = object_type->as<types::NamedType>().name;
-    } else if (object_type && object_type->is<types::ClassType>()) {
-        type_name = object_type->as<types::ClassType>().name;
+    int field_index = -1;
+    HirType field_type = types::make_unit();
+
+    // Handle tuple types - field name is numeric index like "0", "1"
+    if (object_type && object_type->is<types::TupleType>()) {
+        const auto& tuple = object_type->as<types::TupleType>();
+        try {
+            field_index = std::stoi(field.field);
+            if (field_index >= 0 && static_cast<size_t>(field_index) < tuple.elements.size()) {
+                field_type = type_env_.resolve(tuple.elements[field_index]);
+            }
+        } catch (...) {
+            // Not a numeric field name
+            field_index = -1;
+        }
+    } else {
+        if (object_type && object_type->is<types::NamedType>()) {
+            type_name = object_type->as<types::NamedType>().name;
+        } else if (object_type && object_type->is<types::ClassType>()) {
+            type_name = object_type->as<types::ClassType>().name;
+        }
+        field_index = get_field_index(type_name, field.field);
     }
-    int field_index = get_field_index(type_name, field.field);
 
     // Look up field type from struct definition or class definition
-    HirType field_type = types::make_unit();
     if (!type_name.empty()) {
         if (auto struct_def = type_env_.lookup_struct(type_name)) {
             for (const auto& f : struct_def->fields) {
@@ -464,10 +493,29 @@ auto HirBuilder::lower_field(const parser::FieldExpr& field) -> HirExprPtr {
                 }
             }
         } else if (auto class_def = type_env_.lookup_class(type_name)) {
-            for (const auto& f : class_def->fields) {
-                if (f.name == field.field) {
-                    field_type = type_env_.resolve(f.type);
+            // Search for field in current class and all ancestor classes
+            std::string current_class = type_name;
+            bool found = false;
+            while (!found && !current_class.empty()) {
+                auto cur_class_def = type_env_.lookup_class(current_class);
+                if (!cur_class_def.has_value()) {
                     break;
+                }
+                for (const auto& f : cur_class_def->fields) {
+                    if (f.name == field.field) {
+                        field_type = type_env_.resolve(f.type);
+                        found = true;
+                        break;
+                    }
+                }
+                // Move to base class if field not found
+                if (!found) {
+                    if (cur_class_def->base_class.has_value() &&
+                        !cur_class_def->base_class->empty()) {
+                        current_class = *cur_class_def->base_class;
+                    } else {
+                        break;
+                    }
                 }
             }
         }

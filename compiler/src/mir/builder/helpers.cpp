@@ -80,6 +80,24 @@ void MirBuilder::emit_void(Instruction inst) {
     block->instructions.push_back(std::move(data));
 }
 
+auto MirBuilder::emit_at_entry(Instruction inst, MirTypePtr type) -> Value {
+    // Insert instruction at the start of the entry block.
+    // This is used for allocas that need to dominate all uses (for LLVM's mem2reg).
+    auto& entry = ctx_.current_func->entry_block();
+
+    auto id = ctx_.current_func->fresh_value();
+
+    InstructionData data;
+    data.result = id;
+    data.type = type;
+    data.inst = std::move(inst);
+
+    // Insert at the beginning of the entry block
+    entry.instructions.insert(entry.instructions.begin(), std::move(data));
+
+    return {id, type};
+}
+
 // ============================================================================
 // Terminator Emission
 // ============================================================================

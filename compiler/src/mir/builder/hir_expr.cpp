@@ -430,11 +430,51 @@ auto HirMirBuilder::build_field(const hir::HirFieldExpr& field) -> Value {
     Value base = build_expr(field.object);
     MirTypePtr result_type = convert_type(field.type);
 
+    // For class types (pointers), we need to load the struct first
+    Value aggregate = base;
+    MirTypePtr aggregate_type = base.type;
+
+    // Check for pointer types - either MirPointerType or primitive Ptr (used for classes)
+    bool is_pointer = false;
+    MirTypePtr pointee_type;
+
+    if (aggregate_type) {
+        if (std::holds_alternative<MirPointerType>(aggregate_type->kind)) {
+            const auto& ptr_type = std::get<MirPointerType>(aggregate_type->kind);
+            is_pointer = true;
+            pointee_type = ptr_type.pointee;
+        } else if (std::holds_alternative<MirPrimitiveType>(aggregate_type->kind)) {
+            const auto& prim = std::get<MirPrimitiveType>(aggregate_type->kind);
+            if (prim.kind == PrimitiveType::Ptr) {
+                // Class type - need to get the struct type from the HIR object type
+                is_pointer = true;
+                // Get the underlying struct type from field.object's type
+                if (field.object) {
+                    auto obj_type = field.object->type();
+                    if (obj_type && obj_type->is<types::ClassType>()) {
+                        const auto& class_type = obj_type->as<types::ClassType>();
+                        // Create struct type for the class
+                        pointee_type = make_struct_type(class_type.name);
+                    }
+                }
+            }
+        }
+    }
+
+    if (is_pointer && pointee_type) {
+        // Load the struct from the pointer
+        LoadInst load;
+        load.ptr = base;
+        load.result_type = pointee_type;
+        aggregate = emit(load, pointee_type, field.span);
+        aggregate_type = pointee_type;
+    }
+
     // HIR already has field_index resolved
     ExtractValueInst inst;
-    inst.aggregate = base;
+    inst.aggregate = aggregate;
     inst.indices = {static_cast<uint32_t>(field.field_index)};
-    inst.aggregate_type = base.type;
+    inst.aggregate_type = aggregate_type;
     inst.result_type = result_type;
 
     return emit(inst, result_type, field.span);
@@ -480,45 +520,89 @@ auto HirMirBuilder::build_if(const hir::HirIfExpr& if_expr) -> Value {
 
     emit_cond_branch(cond, then_block, else_block);
 
-    // Then branch
+    // Then branch (don't emit terminator yet - we may need to insert store)
     switch_to_block(then_block);
     ctx_.push_drop_scope();
     Value then_val = build_expr(if_expr.then_branch);
     emit_scope_drops();
     ctx_.pop_drop_scope();
     uint32_t then_end = ctx_.current_block;
-    if (!is_terminated()) {
-        emit_branch(merge_block);
-    }
+    bool then_needs_branch = !is_terminated();
 
     // Else branch
     switch_to_block(else_block);
     Value else_val;
     uint32_t else_end = else_block;
+    bool else_needs_branch = false;
     if (if_expr.else_branch) {
         ctx_.push_drop_scope();
         else_val = build_expr(*if_expr.else_branch);
         emit_scope_drops();
         ctx_.pop_drop_scope();
         else_end = ctx_.current_block;
+        else_needs_branch = !is_terminated();
     } else {
         else_val = const_unit();
+        else_needs_branch = !is_terminated();
     }
-    if (!is_terminated()) {
+
+    // Now we know the types - decide between phi and alloca+store+load
+    if (!result_type->is_unit()) {
+        if (result_type->is_aggregate()) {
+            // Use alloca+store+load pattern for aggregate types.
+            // This enables LLVM's SROA to break aggregates into scalars.
+            auto ptr_type = make_pointer_type(result_type, true);
+            auto alloca_val = emit_at_entry(AllocaInst{result_type, "_if_merge"}, ptr_type);
+
+            // Store in then branch
+            switch_to_block(then_end);
+            emit_void(StoreInst{alloca_val, then_val, result_type});
+            if (then_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Store in else branch
+            switch_to_block(else_end);
+            emit_void(StoreInst{alloca_val, else_val, result_type});
+            if (else_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Load at merge
+            switch_to_block(merge_block);
+            return emit(LoadInst{alloca_val, result_type}, result_type);
+        } else {
+            // Use phi for non-aggregate types (primitives, pointers)
+            // First emit the deferred terminators
+            switch_to_block(then_end);
+            if (then_needs_branch) {
+                emit_branch(merge_block);
+            }
+            switch_to_block(else_end);
+            if (else_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Create phi at merge
+            switch_to_block(merge_block);
+            PhiInst phi;
+            phi.incoming = {{then_val, then_end}, {else_val, else_end}};
+            phi.result_type = result_type;
+            return emit(phi, result_type);
+        }
+    }
+
+    // Unit type - just emit terminators
+    switch_to_block(then_end);
+    if (then_needs_branch) {
+        emit_branch(merge_block);
+    }
+    switch_to_block(else_end);
+    if (else_needs_branch) {
         emit_branch(merge_block);
     }
 
-    // Merge block
     switch_to_block(merge_block);
-
-    // If both branches produce values, create phi
-    if (!result_type->is_unit()) {
-        PhiInst phi;
-        phi.incoming = {{then_val, then_end}, {else_val, else_end}};
-        phi.result_type = result_type;
-        return emit(phi, result_type);
-    }
-
     return const_unit();
 }
 
@@ -554,17 +638,39 @@ auto HirMirBuilder::build_block(const hir::HirBlockExpr& block) -> Value {
 // ============================================================================
 
 auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
+    uint32_t entry_block = ctx_.current_block;
     uint32_t header_block = create_block("loop.header");
     uint32_t body_block = create_block("loop.body");
     uint32_t exit_block = create_block("loop.exit");
 
+    // Save all variables before the loop (their pre-loop values)
+    auto pre_loop_vars = ctx_.variables;
+
+    // Branch to header
+    emit_branch(header_block);
+
+    // Switch to header block
+    switch_to_block(header_block);
+
+    // Create phi nodes for all variables that exist before the loop
+    // These will merge pre-loop values with values from the back-edge
+    std::unordered_map<std::string, ValueId> phi_map; // var name -> phi value id
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}}; // Initial value from before loop
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result); // Variable now points to phi
+    }
+
     // Push loop context
     ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
 
-    emit_branch(header_block);
-
-    // Header (just branch to body for infinite loop)
-    switch_to_block(header_block);
+    // Header branches to body
     emit_branch(body_block);
 
     // Body
@@ -573,7 +679,27 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
     (void)build_expr(loop.body);
     emit_scope_drops();
     ctx_.pop_drop_scope();
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi nodes with back-edge values
     if (!is_terminated()) {
+        auto* header = ctx_.current_func->get_block(header_block);
+        if (header) {
+            for (auto& inst : header->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    // Find which variable this phi is for
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            // Add back-edge value (current value of the variable after body)
+                            Value current_val = get_variable(var_name);
+                            phi->incoming.push_back({current_val, body_end_block});
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         emit_branch(header_block);
     }
 
@@ -586,16 +712,37 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
 }
 
 auto HirMirBuilder::build_while(const hir::HirWhileExpr& while_expr) -> Value {
+    uint32_t entry_block = ctx_.current_block;
     uint32_t header_block = create_block("while.header");
     uint32_t body_block = create_block("while.body");
     uint32_t exit_block = create_block("while.exit");
 
-    ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
+    // Save all variables before the loop (their pre-loop values)
+    auto pre_loop_vars = ctx_.variables;
 
+    // Branch to header
     emit_branch(header_block);
 
-    // Header with condition
+    // Switch to header block
     switch_to_block(header_block);
+
+    // Create phi nodes for all variables that exist before the loop
+    std::unordered_map<std::string, ValueId> phi_map;
+    for (const auto& [var_name, var_value] : pre_loop_vars) {
+        if (var_value.id == INVALID_VALUE)
+            continue;
+
+        PhiInst phi;
+        phi.incoming = {{var_value, entry_block}};
+        phi.result_type = var_value.type;
+        Value phi_result = emit(phi, var_value.type);
+        phi_map[var_name] = phi_result.id;
+        set_variable(var_name, phi_result);
+    }
+
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
+
+    // Header with condition (uses phi values for variables)
     Value cond = build_expr(while_expr.condition);
     emit_cond_branch(cond, body_block, exit_block);
 
@@ -605,7 +752,25 @@ auto HirMirBuilder::build_while(const hir::HirWhileExpr& while_expr) -> Value {
     (void)build_expr(while_expr.body);
     emit_scope_drops();
     ctx_.pop_drop_scope();
+
+    uint32_t body_end_block = ctx_.current_block;
+
+    // Complete phi nodes with back-edge values
     if (!is_terminated()) {
+        auto* header = ctx_.current_func->get_block(header_block);
+        if (header) {
+            for (auto& inst : header->instructions) {
+                if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                    for (const auto& [var_name, phi_id] : phi_map) {
+                        if (inst.result == phi_id) {
+                            Value current_val = get_variable(var_name);
+                            phi->incoming.push_back({current_val, body_end_block});
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         emit_branch(header_block);
     }
 
@@ -820,7 +985,12 @@ auto HirMirBuilder::build_when(const hir::HirWhenExpr& when) -> Value {
 
     uint32_t exit_block = create_block("when.exit");
 
-    std::vector<std::pair<Value, uint32_t>> phi_inputs;
+    // Track arm results for deferred branch emission
+    struct ArmResult {
+        Value value;
+        uint32_t end_block;
+    };
+    std::vector<ArmResult> arm_results;
 
     for (size_t i = 0; i < when.arms.size(); ++i) {
         const auto& arm = when.arms[i];
@@ -833,7 +1003,7 @@ auto HirMirBuilder::build_when(const hir::HirWhenExpr& when) -> Value {
         Value matches = build_pattern_match(arm.pattern, scrutinee);
         emit_cond_branch(matches, arm_block, next_block);
 
-        // Arm body
+        // Arm body (don't emit terminator yet - we may need to insert store)
         switch_to_block(arm_block);
         ctx_.push_drop_scope();
 
@@ -848,8 +1018,7 @@ auto HirMirBuilder::build_when(const hir::HirWhenExpr& when) -> Value {
 
         uint32_t arm_end = ctx_.current_block;
         if (!is_terminated()) {
-            phi_inputs.push_back({arm_result, arm_end});
-            emit_branch(exit_block);
+            arm_results.push_back({arm_result, arm_end});
         }
 
         if (i + 1 < when.arms.size()) {
@@ -857,16 +1026,48 @@ auto HirMirBuilder::build_when(const hir::HirWhenExpr& when) -> Value {
         }
     }
 
-    // Exit block
-    switch_to_block(exit_block);
+    // Now we know the result type - decide between phi and alloca+store+load
+    if (!result_type->is_unit() && !arm_results.empty()) {
+        if (result_type->is_aggregate()) {
+            // Use alloca+store+load pattern for aggregate types.
+            // This enables LLVM's SROA to break aggregates into scalars.
+            auto ptr_type = make_pointer_type(result_type, true);
+            auto alloca_val = emit_at_entry(AllocaInst{result_type, "_when_merge"}, ptr_type);
 
-    if (!result_type->is_unit() && !phi_inputs.empty()) {
-        PhiInst phi;
-        phi.incoming = std::move(phi_inputs);
-        phi.result_type = result_type;
-        return emit(phi, result_type);
+            // Insert stores at end of each arm
+            for (const auto& arm : arm_results) {
+                switch_to_block(arm.end_block);
+                emit_void(StoreInst{alloca_val, arm.value, result_type});
+                emit_branch(exit_block);
+            }
+
+            // Load at exit
+            switch_to_block(exit_block);
+            return emit(LoadInst{alloca_val, result_type}, result_type);
+        } else {
+            // Use phi for non-aggregate types
+            std::vector<std::pair<Value, uint32_t>> phi_inputs;
+            for (const auto& arm : arm_results) {
+                switch_to_block(arm.end_block);
+                emit_branch(exit_block);
+                phi_inputs.push_back({arm.value, arm.end_block});
+            }
+
+            switch_to_block(exit_block);
+            PhiInst phi;
+            phi.incoming = std::move(phi_inputs);
+            phi.result_type = result_type;
+            return emit(phi, result_type);
+        }
     }
 
+    // Unit type or no results - emit deferred terminators
+    for (const auto& arm : arm_results) {
+        switch_to_block(arm.end_block);
+        emit_branch(exit_block);
+    }
+
+    switch_to_block(exit_block);
     return const_unit();
 }
 

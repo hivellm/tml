@@ -225,6 +225,9 @@ private:
     void emit_cond_branch(Value cond, uint32_t true_block, uint32_t false_block);
     void emit_unreachable();
 
+    // Emit instruction at function entry block (for allocas that need to dominate uses)
+    auto emit_at_entry(Instruction inst, MirTypePtr type) -> Value;
+
     // Create constants
     auto const_int(int64_t value, int bit_width = 32, bool is_signed = true) -> Value;
     auto const_float(double value, bool is_f64 = false) -> Value;

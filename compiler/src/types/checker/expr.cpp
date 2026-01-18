@@ -1088,6 +1088,28 @@ auto TypeChecker::check_method_call(const parser::MethodCallExpr& call) -> TypeP
                 }
             }
         }
+
+        // Check if NamedType refers to a class - handle class instance methods
+        auto class_def = env_.lookup_class(named.name);
+        if (class_def.has_value()) {
+            std::string current_class = named.name;
+            while (!current_class.empty()) {
+                auto current_def = env_.lookup_class(current_class);
+                if (!current_def.has_value())
+                    break;
+                for (const auto& method : current_def->methods) {
+                    if (method.sig.name == call.method && !method.is_static) {
+                        return method.sig.return_type;
+                    }
+                }
+                // Check parent class
+                if (current_def->base_class.has_value()) {
+                    current_class = current_def->base_class.value();
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     // Handle class type method calls with visibility checking

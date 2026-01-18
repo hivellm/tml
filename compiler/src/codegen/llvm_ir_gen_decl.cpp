@@ -576,6 +576,19 @@ void LLVMIRGen::gen_func_decl(const parser::FuncDecl& func) {
         current_poll_type_.clear();
         current_poll_inner_type_.clear();
 
+        // Check if return type is a value class - return by value instead of ptr
+        // This fixes dangling pointer bug for stack-allocated value class objects
+        if (ret_type == "ptr" && func.return_type.has_value() &&
+            (*func.return_type)->is<parser::NamedType>()) {
+            const auto& named = (*func.return_type)->as<parser::NamedType>();
+            std::string return_class_name =
+                named.path.segments.empty() ? "" : named.path.segments.back();
+            if (!return_class_name.empty() && env_.is_value_class_candidate(return_class_name)) {
+                // Return value class by value (struct type) instead of ptr
+                ret_type = "%class." + return_class_name;
+            }
+        }
+
         // Record semantic return type for use in infer_expr_type
         if (semantic_ret) {
             func_return_types_[func.name] = semantic_ret;

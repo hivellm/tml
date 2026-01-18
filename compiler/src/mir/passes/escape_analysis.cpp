@@ -1193,7 +1193,10 @@ void StackPromotionPass::insert_destructor(Function& func, ValueId value,
 void StackPromotionPass::promote_conditional_allocations(Function& func) {
     // Handle conditional allocations that can share stack slots
     // For each phi node that merges allocations from different branches,
-    // we create a single stack slot at the entry block and use it for all branches
+    // just mark the individual allocations as stack-eligible.
+    // NOTE: Creating shared_slot allocas is disabled because it requires complex
+    // phi node rewriting to avoid ID conflicts. Individual branches are still
+    // promoted by the regular promotion logic.
 
     const auto& cond_allocs = escape_analysis_.get_conditional_allocations();
 
@@ -1202,41 +1205,12 @@ void StackPromotionPass::promote_conditional_allocations(Function& func) {
             continue;
         }
 
-        // Create a shared stack slot in the entry block
-        // The slot should be large enough for the largest allocation
-        size_t max_size = cond_alloc.max_size > 0 ? cond_alloc.max_size : 64;
-
-        // Find entry block (first block)
-        if (func.blocks.empty()) {
-            continue;
-        }
-
-        auto& entry_block = func.blocks[0];
-
-        // Create alloca for the shared slot
-        AllocaInst shared_alloca;
-        shared_alloca.name = "shared_slot_" + std::to_string(cond_alloc.phi_result);
-        shared_alloca.is_stack_eligible = true;
-
-        // Generate a new value ID for the shared slot
-        // We'll use the phi result as a reference point
-        ValueId shared_slot_id = cond_alloc.phi_result;
-
-        InstructionData shared_inst;
-        shared_inst.result = shared_slot_id;
-        shared_inst.inst = shared_alloca;
-
-        // Insert at the beginning of the entry block
-        entry_block.instructions.insert(entry_block.instructions.begin(), shared_inst);
-
-        // Track the shared slot
-        shared_stack_slots_[cond_alloc.phi_result] = shared_slot_id;
-
-        // Mark all original allocations as promoted and remove their free calls
+        // Mark all allocations as promoted (stack-eligible)
+        // Each allocation in each branch will be handled individually
         for (ValueId alloc_id : cond_alloc.alloc_ids) {
             promoted_values_.insert(alloc_id);
 
-            // Find and mark the original allocation instruction
+            // Find and mark the original allocation instruction as stack-eligible
             for (auto& block : func.blocks) {
                 for (auto& inst : block.instructions) {
                     if (inst.result == alloc_id) {
@@ -1247,23 +1221,16 @@ void StackPromotionPass::promote_conditional_allocations(Function& func) {
             }
         }
 
-        stats_.conditional_slots_shared++;
         stats_.conditional_allocs_promoted += cond_alloc.alloc_ids.size();
-        stats_.bytes_saved += max_size * (cond_alloc.alloc_ids.size() - 1);
-
-        // If all allocations are same class, insert destructor for shared slot
-        if (!cond_alloc.class_name.empty()) {
-            insert_destructor(func, shared_slot_id, cond_alloc.class_name);
-        }
     }
 }
 
 void StackPromotionPass::promote_loop_allocations(Function& func) {
     // Handle loop allocations that can be promoted to stack
     // For allocations that don't escape the loop iteration,
-    // we can either:
-    // 1. Hoist the allocation out of the loop (reuse same memory)
-    // 2. Keep it in the loop but use stack allocation
+    // mark them as stack-eligible. The codegen will handle stack allocation.
+    // NOTE: Loop hoisting is disabled because inserting allocas with the same ID
+    // as the original allocation creates duplicate value definitions.
 
     const auto& loop_allocs = escape_analysis_.get_loop_allocations();
 
@@ -1273,46 +1240,14 @@ void StackPromotionPass::promote_loop_allocations(Function& func) {
         }
 
         // Check if already promoted
-        if (promoted_values_.count(loop_alloc.alloc_id) > 0) {
+        if (promoted_values_.count(loop_alloc.alloc_id) > 0 ||
+            hoisted_loop_allocs_.count(loop_alloc.alloc_id) > 0) {
             continue;
         }
 
-        if (loop_alloc.is_loop_invariant) {
-            // Hoist the allocation out of the loop
-            // Find the loop preheader (block before loop header)
-            // and insert the allocation there
-
-            // For simplicity, we insert in the entry block (first block)
-            if (func.blocks.empty()) {
-                continue;
-            }
-
-            auto& entry_block = func.blocks[0];
-
-            // Create alloca for the hoisted allocation
-            AllocaInst hoisted_alloca;
-            hoisted_alloca.name = "loop_hoisted_" + std::to_string(loop_alloc.alloc_id);
-            hoisted_alloca.is_stack_eligible = true;
-
-            InstructionData hoisted_inst;
-            hoisted_inst.result = loop_alloc.alloc_id;
-            hoisted_inst.inst = hoisted_alloca;
-
-            // Insert at the beginning of the entry block
-            entry_block.instructions.insert(entry_block.instructions.begin(), hoisted_inst);
-
-            hoisted_loop_allocs_.insert(loop_alloc.alloc_id);
-            promoted_values_.insert(loop_alloc.alloc_id);
-
-            stats_.loop_allocs_hoisted++;
-            stats_.loop_allocs_promoted++;
-            stats_.bytes_saved += loop_alloc.estimated_size;
-
-            // Insert destructor call if this is a class instance
-            if (!loop_alloc.class_name.empty()) {
-                insert_destructor(func, loop_alloc.alloc_id, loop_alloc.class_name);
-            }
-        } else {
+        // Mark as stack-eligible but keep allocation in place
+        // The allocation instruction will be modified to use stack instead of heap
+        {
             // Just mark as stack-eligible but keep in place
             // The allocation will happen each iteration but on stack
 

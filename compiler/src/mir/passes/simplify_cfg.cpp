@@ -264,30 +264,37 @@ auto SimplifyCfgPass::remove_empty_blocks(Function& func) -> bool {
     for (size_t i = 1; i < func.blocks.size(); ++i) { // Skip entry block
         auto& block = func.blocks[i];
 
-        // Must be empty (no instructions) and have unconditional branch
+        // Must be empty (no instructions)
         if (!block.instructions.empty()) {
             continue;
         }
-        if (!block.terminator) {
-            continue;
+
+        // If block has a terminator (unconditional branch), redirect to its target
+        if (block.terminator) {
+            auto* branch = std::get_if<BranchTerm>(&*block.terminator);
+            if (!branch) {
+                continue;
+            }
+
+            // Don't remove if it branches to itself
+            if (branch->target == block.id) {
+                continue;
+            }
+
+            // Redirect all predecessors to the target
+            redirect_block_references(func, block.id, branch->target);
+
+            // Mark for removal
+            block.terminator = std::nullopt;
+            changed = true;
+        } else {
+            // Block has no terminator - this is a dangling block
+            // Redirect references to the next block or entry block as fallback
+            uint32_t fallback_target =
+                (i + 1 < func.blocks.size()) ? func.blocks[i + 1].id : func.blocks[0].id;
+            redirect_block_references(func, block.id, fallback_target);
+            changed = true;
         }
-
-        auto* branch = std::get_if<BranchTerm>(&*block.terminator);
-        if (!branch) {
-            continue;
-        }
-
-        // Don't remove if it branches to itself
-        if (branch->target == block.id) {
-            continue;
-        }
-
-        // Redirect all predecessors to the target
-        redirect_block_references(func, block.id, branch->target);
-
-        // Mark for removal
-        block.terminator = std::nullopt;
-        changed = true;
     }
 
     // Remove marked blocks

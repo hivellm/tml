@@ -104,6 +104,12 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare void @llvm.stackrestore(ptr) nounwind");
     emit_line("");
 
+    // Lifetime intrinsics (for stack slot optimization)
+    emit_line("; Lifetime intrinsics for stack optimization");
+    emit_line("declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) nounwind");
+    emit_line("declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) nounwind");
+    emit_line("");
+
     // Threading runtime declarations
     emit_line("; Threading runtime (tml_runtime.c)");
     emit_line("declare ptr @thread_spawn(ptr, ptr)");

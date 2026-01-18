@@ -410,6 +410,14 @@ auto LLVMIRGen::gen_static_method_call(const parser::MethodCallExpr& call,
                 // Generate function name
                 std::string fn_name = "@tml_" + get_suite_prefix() + type_name + "_" + method;
 
+                // Use registered function's return type if available (handles value class by-value
+                // returns)
+                std::string method_key = type_name + "_" + method;
+                auto fn_info_it = functions_.find(method_key);
+                if (fn_info_it != functions_.end() && !fn_info_it->second.ret_type.empty()) {
+                    ret_type = fn_info_it->second.ret_type;
+                }
+
                 // Generate arguments
                 std::vector<std::pair<std::string, std::string>> typed_args;
                 for (size_t i = 0; i < call.args.size(); ++i) {

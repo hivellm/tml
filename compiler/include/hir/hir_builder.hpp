@@ -246,6 +246,16 @@ public:
     /// @return The lowered HIR constant
     auto lower_const(const parser::ConstDecl& const_decl) -> HirConst;
 
+    /// Lower a class to struct (for data layout).
+    /// @param class_decl The class AST node
+    /// @return The lowered HIR struct representing the class data
+    auto lower_class_to_struct(const parser::ClassDecl& class_decl) -> HirStruct;
+
+    /// Lower a class to impl block (for methods).
+    /// @param class_decl The class AST node
+    /// @return The lowered HIR impl with methods
+    auto lower_class_to_impl(const parser::ClassDecl& class_decl) -> HirImpl;
+
 private:
     // ========================================================================
     // Expression Lowering

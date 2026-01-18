@@ -183,6 +183,10 @@ auto HirBuilder::lower_module(const parser::Module& ast_module) -> HirModule {
                         import_path += d.path.segments[i];
                     }
                     module.imports.push_back(import_path);
+                } else if constexpr (std::is_same_v<T, parser::ClassDecl>) {
+                    // Lower class to struct + impl block
+                    module.structs.push_back(lower_class_to_struct(d));
+                    module.impls.push_back(lower_class_to_impl(d));
                 }
                 // TypeAliasDecl and ModDecl are handled during type checking
             },
@@ -441,6 +445,189 @@ auto HirBuilder::lower_const(const parser::ConstDecl& const_decl) -> HirConst {
 }
 
 // ============================================================================
+// Class Lowering (OOP)
+// ============================================================================
+
+auto HirBuilder::lower_class_to_struct(const parser::ClassDecl& class_decl) -> HirStruct {
+    HirStruct hir_struct;
+    hir_struct.id = fresh_id();
+    hir_struct.name = class_decl.name;
+    hir_struct.mangled_name = class_decl.name;
+    hir_struct.is_public = class_decl.vis == parser::Visibility::Public;
+    hir_struct.span = class_decl.span;
+
+    // Add vtable pointer as first field for classes with virtual methods
+    // (This is implicit in the type system but needed for codegen)
+
+    // First, collect ALL inherited fields from ancestor classes (recursive)
+    // We need to walk up the inheritance chain to get fields in correct order
+    std::vector<std::pair<std::string, types::TypePtr>> inherited_fields;
+    std::string current_base;
+    if (class_decl.extends.has_value() && !class_decl.extends->segments.empty()) {
+        current_base = class_decl.extends->segments.back();
+    }
+
+    // Collect fields from all ancestors (stored in reverse order initially)
+    std::vector<std::vector<std::pair<std::string, types::TypePtr>>> ancestor_fields;
+    while (!current_base.empty()) {
+        auto base_class_def = type_env_.lookup_class(current_base);
+        if (!base_class_def.has_value()) {
+            break;
+        }
+        // Collect this ancestor's declared fields
+        std::vector<std::pair<std::string, types::TypePtr>> fields;
+        for (const auto& field : base_class_def->fields) {
+            fields.emplace_back(field.name, field.type);
+        }
+        ancestor_fields.push_back(std::move(fields));
+
+        // Move to next ancestor
+        if (!base_class_def->base_class.has_value() || base_class_def->base_class->empty()) {
+            break;
+        }
+        current_base = *base_class_def->base_class;
+    }
+
+    // Add fields in correct order: oldest ancestor first
+    for (auto it = ancestor_fields.rbegin(); it != ancestor_fields.rend(); ++it) {
+        for (const auto& [name, type] : *it) {
+            HirField hir_field;
+            hir_field.name = name;
+            hir_field.type = type_env_.resolve(type);
+            hir_field.is_public = true; // Inherited fields are accessible
+            hir_struct.fields.push_back(std::move(hir_field));
+        }
+    }
+
+    // Then add this class's own fields
+    for (const auto& field : class_decl.fields) {
+        if (!field.is_static) { // Only instance fields
+            HirField hir_field;
+            hir_field.name = field.name;
+            hir_field.type = resolve_type(*field.type);
+            hir_field.is_public = field.vis == parser::MemberVisibility::Public;
+            hir_field.span = field.span;
+            hir_struct.fields.push_back(std::move(hir_field));
+        }
+    }
+
+    return hir_struct;
+}
+
+auto HirBuilder::lower_class_to_impl(const parser::ClassDecl& class_decl) -> HirImpl {
+    HirImpl hir_impl;
+    hir_impl.id = fresh_id();
+    hir_impl.span = class_decl.span;
+    hir_impl.type_name = class_decl.name;
+
+    // Create self type as ClassType
+    auto self_type = std::make_shared<types::Type>();
+    self_type->kind = types::ClassType{class_decl.name};
+    hir_impl.self_type = self_type;
+
+    // Set context for resolving 'This'/'Self' in methods
+    current_impl_self_type_ = hir_impl.self_type;
+
+    // Lower class methods directly (avoiding copy issues with BlockExpr)
+    for (const auto& method : class_decl.methods) {
+        if (!method.is_abstract && method.body) {
+            HirFunction hir_func;
+            hir_func.id = fresh_id();
+            hir_func.name = method.name;
+            // Use double underscore to match call site naming (Type__method)
+            hir_func.mangled_name = class_decl.name + "__" + method.name;
+            hir_func.is_public = method.vis == parser::MemberVisibility::Public;
+            hir_func.is_async = false;
+            hir_func.is_extern = false;
+            hir_func.span = method.span;
+
+            for (const auto& decorator : method.decorators) {
+                hir_func.attributes.push_back(decorator.name);
+            }
+
+            current_func_name_ = method.name;
+
+            // Add self parameter for instance methods
+            // Only if not already present (TML allows explicit this in params)
+            bool has_explicit_this = false;
+            for (const auto& param : method.params) {
+                if (param.pattern->is<parser::IdentPattern>()) {
+                    const auto& ident = param.pattern->as<parser::IdentPattern>();
+                    if (ident.name == "this" || ident.name == "self") {
+                        has_explicit_this = true;
+                        break;
+                    }
+                }
+            }
+            if (!method.is_static && !has_explicit_this) {
+                HirParam self_param;
+                self_param.name = "this";
+                self_param.is_mut = true;
+                self_param.type = hir_impl.self_type;
+                self_param.span = method.span;
+                hir_func.params.push_back(std::move(self_param));
+            }
+
+            // Lower regular parameters
+            for (const auto& param : method.params) {
+                HirParam hir_param;
+                bool is_this_param = false;
+                if (param.pattern->is<parser::IdentPattern>()) {
+                    const auto& ident = param.pattern->as<parser::IdentPattern>();
+                    hir_param.name = ident.name;
+                    hir_param.is_mut = ident.is_mut;
+                    is_this_param = (ident.name == "this" || ident.name == "self");
+                } else {
+                    hir_param.name = "_";
+                    hir_param.is_mut = false;
+                }
+                // Use class type for explicit this/self parameter
+                if (is_this_param) {
+                    hir_param.type = hir_impl.self_type;
+                } else {
+                    hir_param.type = resolve_type(*param.type);
+                }
+                hir_param.span = param.span;
+                hir_func.params.push_back(std::move(hir_param));
+            }
+
+            // Lower return type
+            if (method.return_type) {
+                hir_func.return_type = resolve_type(**method.return_type);
+            } else {
+                hir_func.return_type = types::make_unit();
+            }
+            current_return_type_ = hir_func.return_type;
+
+            // Lower body
+            scopes_.emplace_back();
+            type_env_.push_scope();
+            for (const auto& param : hir_func.params) {
+                scopes_.back().insert(param.name);
+                type_env_.current_scope()->define(param.name, param.type, param.is_mut, param.span);
+            }
+
+            hir_func.body = lower_block(*method.body);
+
+            type_env_.pop_scope();
+            scopes_.pop_back();
+
+            current_func_name_.clear();
+            current_return_type_ = nullptr;
+
+            hir_impl.methods.push_back(std::move(hir_func));
+        }
+    }
+
+    // NOTE: Constructors are handled by AST codegen's class_codegen.cpp
+    // They're generated as factory methods (ClassName__create) with proper
+    // field initialization. Skip them here for MIR pipeline.
+
+    current_impl_self_type_ = std::nullopt;
+    return hir_impl;
+}
+
+// ============================================================================
 // Helper Methods
 // ============================================================================
 //
@@ -689,6 +876,7 @@ auto HirBuilder::get_expr_type(const parser::Expr& expr) -> HirType {
 
 auto HirBuilder::get_field_index(const std::string& struct_name, const std::string& field_name)
     -> int {
+    // First try the lowered struct in current_module_
     if (current_module_) {
         if (auto* s = current_module_->find_struct(struct_name)) {
             for (size_t i = 0; i < s->fields.size(); ++i) {
@@ -698,6 +886,46 @@ auto HirBuilder::get_field_index(const std::string& struct_name, const std::stri
             }
         }
     }
+
+    // For classes, look up from type_env_ and account for inherited fields
+    if (auto class_def = type_env_.lookup_class(struct_name)) {
+        // Build list of all fields from all ancestors in order: oldest ancestor first
+        std::vector<std::string> all_fields;
+        std::vector<std::string> class_chain;
+
+        // Build chain from current class to root
+        std::string current = struct_name;
+        while (!current.empty()) {
+            class_chain.push_back(current);
+            auto cur_class = type_env_.lookup_class(current);
+            if (!cur_class.has_value()) {
+                break;
+            }
+            if (cur_class->base_class.has_value() && !cur_class->base_class->empty()) {
+                current = *cur_class->base_class;
+            } else {
+                break;
+            }
+        }
+
+        // Add fields from oldest ancestor first
+        for (auto it = class_chain.rbegin(); it != class_chain.rend(); ++it) {
+            auto cur_class = type_env_.lookup_class(*it);
+            if (cur_class.has_value()) {
+                for (const auto& f : cur_class->fields) {
+                    all_fields.push_back(f.name);
+                }
+            }
+        }
+
+        // Find the field index
+        for (size_t i = 0; i < all_fields.size(); ++i) {
+            if (all_fields[i] == field_name) {
+                return static_cast<int>(i);
+            }
+        }
+    }
+
     return -1;
 }
 

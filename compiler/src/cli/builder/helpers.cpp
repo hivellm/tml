@@ -534,6 +534,18 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
                 std::cout << "Including text runtime: " << text_obj << "\n";
             }
         }
+
+        // Include net.c by default (commonly used by std::net, and needed for test suites)
+        // The cost of including it is minimal and prevents hard-to-debug linking errors
+        fs::path net_c = runtime_dir / "net.c";
+        if (fs::exists(net_c)) {
+            std::string net_obj =
+                ensure_c_compiled(to_forward_slashes(net_c.string()), deps_cache, clang, verbose);
+            objects.push_back(fs::path(net_obj));
+            if (verbose) {
+                std::cout << "Including net runtime: " << net_obj << "\n";
+            }
+        }
     }
 
     // Link core module runtimes if they were imported
@@ -632,35 +644,7 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
             "std::text");
     }
 
-    // Link std::net runtime if imported OR if socket lowlevel functions are used
-    // Check both exact module names and also iterate through all registered modules
-    // to catch cases where net modules are loaded with different path formats
-    bool needs_net_runtime = registry->has_module("std::net") ||
-                             registry->has_module("std::net::sys") ||
-                             registry->has_module("std::net::tcp") ||
-                             registry->has_module("std::net::udp") || has_socket_functions(module);
-
-    // Also check if any registered module contains "net" in the path
-    if (!needs_net_runtime) {
-        for (const auto& mod_name : registry->list_modules()) {
-            if (mod_name.find("::net") != std::string::npos ||
-                mod_name.find(".net") != std::string::npos) {
-                needs_net_runtime = true;
-                break;
-            }
-        }
-    }
-
-    if (needs_net_runtime) {
-        add_runtime(
-            {
-                "compiler/runtime/net.c",
-                "runtime/net.c",
-                "../runtime/net.c",
-                "F:/Node/hivellm/tml/compiler/runtime/net.c",
-            },
-            "std::net");
-    }
+    // Note: net.c is now included by default (see above), so no conditional linking needed
 
     return objects;
 }

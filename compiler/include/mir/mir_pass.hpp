@@ -39,6 +39,11 @@
 #include <string>
 #include <vector>
 
+// Forward declaration for TypeEnv
+namespace tml::types {
+class TypeEnv;
+}
+
 namespace tml::mir {
 
 // ============================================================================
@@ -113,6 +118,10 @@ public:
 
     /// Configures the standard optimization pipeline based on optimization level.
     void configure_standard_pipeline();
+
+    /// Configures the standard optimization pipeline with OOP optimizations.
+    /// Requires TypeEnv for devirtualization and escape analysis passes.
+    void configure_standard_pipeline(types::TypeEnv& env);
 
     /// Returns the optimization level.
     [[nodiscard]] auto opt_level() const -> OptLevel {

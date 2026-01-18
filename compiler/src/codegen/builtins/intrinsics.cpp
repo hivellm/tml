@@ -120,9 +120,22 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
         // Math intrinsics
         "sqrt", "sin", "cos", "log", "exp", "pow", "floor", "ceil", "round", "trunc"};
 
-    if (intrinsics.find(fn_name) == intrinsics.end()) {
+    // Extract base name for intrinsic matching - handles qualified paths like
+    // "core::intrinsics::sqrt" by extracting just "sqrt"
+    std::string base_name = fn_name;
+    if (fn_name.find("::") != std::string::npos) {
+        size_t last_sep = fn_name.rfind("::");
+        if (last_sep != std::string::npos) {
+            base_name = fn_name.substr(last_sep + 2);
+        }
+    }
+
+    if (intrinsics.find(base_name) == intrinsics.end()) {
         return std::nullopt;
     }
+
+    // Use base_name for all subsequent intrinsic checks
+    const std::string& intrinsic_name = base_name;
 
     // Function signature lookup (used by some intrinsics for type info)
     auto func_sig = env_.lookup_func(fn_name);
@@ -132,7 +145,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // llvm_add[T](a: T, b: T) -> T
-    if (fn_name == "llvm_add") {
+    if (intrinsic_name == "llvm_add") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -151,7 +164,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_sub[T](a: T, b: T) -> T
-    if (fn_name == "llvm_sub") {
+    if (intrinsic_name == "llvm_sub") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -170,7 +183,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_mul[T](a: T, b: T) -> T
-    if (fn_name == "llvm_mul") {
+    if (intrinsic_name == "llvm_mul") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -189,7 +202,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_div[T](a: T, b: T) -> T
-    if (fn_name == "llvm_div") {
+    if (intrinsic_name == "llvm_div") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -209,7 +222,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_rem[T](a: T, b: T) -> T
-    if (fn_name == "llvm_rem") {
+    if (intrinsic_name == "llvm_rem") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -229,7 +242,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_neg[T](a: T) -> T
-    if (fn_name == "llvm_neg") {
+    if (intrinsic_name == "llvm_neg") {
         if (!call.args.empty()) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -251,7 +264,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // llvm_eq[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_eq") {
+    if (intrinsic_name == "llvm_eq") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -270,7 +283,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_ne[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_ne") {
+    if (intrinsic_name == "llvm_ne") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -289,7 +302,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_lt[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_lt") {
+    if (intrinsic_name == "llvm_lt") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -309,7 +322,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_le[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_le") {
+    if (intrinsic_name == "llvm_le") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -328,7 +341,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_gt[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_gt") {
+    if (intrinsic_name == "llvm_gt") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -347,7 +360,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_ge[T](a: T, b: T) -> Bool
-    if (fn_name == "llvm_ge") {
+    if (intrinsic_name == "llvm_ge") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -370,7 +383,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // llvm_and[T](a: T, b: T) -> T
-    if (fn_name == "llvm_and") {
+    if (intrinsic_name == "llvm_and") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -384,7 +397,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_or[T](a: T, b: T) -> T
-    if (fn_name == "llvm_or") {
+    if (intrinsic_name == "llvm_or") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -398,7 +411,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_xor[T](a: T, b: T) -> T
-    if (fn_name == "llvm_xor") {
+    if (intrinsic_name == "llvm_xor") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -412,7 +425,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_not[T](a: T) -> T
-    if (fn_name == "llvm_not") {
+    if (intrinsic_name == "llvm_not") {
         if (!call.args.empty()) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -425,7 +438,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_shl[T](a: T, b: T) -> T
-    if (fn_name == "llvm_shl") {
+    if (intrinsic_name == "llvm_shl") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -439,7 +452,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // llvm_shr[T](a: T, b: T) -> T (arithmetic shift right for signed)
-    if (fn_name == "llvm_shr") {
+    if (intrinsic_name == "llvm_shr") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -458,7 +471,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // ptr_read[T](ptr: Ptr[T]) -> T
-    if (fn_name == "ptr_read") {
+    if (intrinsic_name == "ptr_read") {
         if (!call.args.empty()) {
             std::string ptr = gen_expr(*call.args[0]);
 
@@ -481,7 +494,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ptr_write[T](ptr: Ptr[T], val: T)
-    if (fn_name == "ptr_write") {
+    if (intrinsic_name == "ptr_write") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
             std::string val = gen_expr(*call.args[1]);
@@ -495,7 +508,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // ptr_offset[T](ptr: Ptr[T], count: I64) -> Ptr[T]
     // Also handles ptr_offset(ptr: mut ref T, count: I32) -> mut ref T for memory tests
-    if (fn_name == "ptr_offset") {
+    if (intrinsic_name == "ptr_offset") {
         if (call.args.size() >= 2) {
             std::string ptr = gen_expr(*call.args[0]);
 
@@ -550,7 +563,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // slice_get[T](data: ref T, index: I64) -> ref T
     // Returns a reference to element at index
-    if (fn_name == "slice_get") {
+    if (intrinsic_name == "slice_get") {
         if (call.args.size() >= 2) {
             std::string data = gen_expr(*call.args[0]);
             std::string data_type = last_expr_type_; // ptr
@@ -576,7 +589,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // slice_get_mut[T](data: mut ref T, index: I64) -> mut ref T
     // Same as slice_get but for mutable references
-    if (fn_name == "slice_get_mut") {
+    if (intrinsic_name == "slice_get_mut") {
         if (call.args.size() >= 2) {
             std::string data = gen_expr(*call.args[0]);
             std::string data_type = last_expr_type_;
@@ -603,7 +616,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // slice_set[T](data: mut ref T, index: I64, value: T)
     // Sets element at index to value
-    if (fn_name == "slice_set") {
+    if (intrinsic_name == "slice_set") {
         if (call.args.size() >= 3) {
             std::string data = gen_expr(*call.args[0]);
 
@@ -633,7 +646,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // slice_offset[T](data: ref T, count: I64) -> ref T
     // Returns pointer offset by count elements
-    if (fn_name == "slice_offset") {
+    if (intrinsic_name == "slice_offset") {
         if (call.args.size() >= 2) {
             std::string data = gen_expr(*call.args[0]);
 
@@ -659,7 +672,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // slice_swap[T](data: mut ref T, a: I64, b: I64)
     // Swaps elements at indices a and b
-    if (fn_name == "slice_swap") {
+    if (intrinsic_name == "slice_swap") {
         if (call.args.size() >= 3) {
             std::string data = gen_expr(*call.args[0]);
 
@@ -705,7 +718,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // array_as_ptr[T](data: T) -> ref T
     // Returns a pointer to the first element of an array (for creating slices)
-    if (fn_name == "array_as_ptr") {
+    if (intrinsic_name == "array_as_ptr") {
         if (!call.args.empty()) {
             // The argument should be an array field (like this.data)
             // We just need to get its address
@@ -720,7 +733,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // array_as_mut_ptr[T](data: T) -> mut ref T
     // Same as array_as_ptr but for mutable references
-    if (fn_name == "array_as_mut_ptr") {
+    if (intrinsic_name == "array_as_mut_ptr") {
         if (!call.args.empty()) {
             std::string arr = gen_expr(*call.args[0]);
             last_expr_type_ = "ptr";
@@ -731,7 +744,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // array_offset_ptr[T](data: ref T, count: I64) -> ref T
     // Computes an offset pointer within an array
-    if (fn_name == "array_offset_ptr") {
+    if (intrinsic_name == "array_offset_ptr") {
         if (call.args.size() >= 2) {
             std::string data = gen_expr(*call.args[0]);
 
@@ -759,7 +772,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // array_offset_mut_ptr[T](data: mut ref T, count: I64) -> mut ref T
     // Same as array_offset_ptr but for mutable references
-    if (fn_name == "array_offset_mut_ptr") {
+    if (intrinsic_name == "array_offset_mut_ptr") {
         if (call.args.size() >= 2) {
             std::string data = gen_expr(*call.args[0]);
 
@@ -790,7 +803,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // size_of[T]() -> I64
-    if (fn_name == "size_of") {
+    if (intrinsic_name == "size_of") {
         std::string type_llvm = "i64"; // Default
         int size_bytes = 8;            // Default
 
@@ -838,7 +851,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // align_of[T]() / alignof_type[T]() -> I64
-    if (fn_name == "align_of" || fn_name == "alignof_type") {
+    if (intrinsic_name == "align_of" || fn_name == "alignof_type") {
         int align_bytes = 8; // Default
 
         // Try to extract type argument from PathExpr generics
@@ -872,7 +885,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // sizeof_type[T]() -> I64 (alias for size_of)
-    if (fn_name == "sizeof_type") {
+    if (intrinsic_name == "sizeof_type") {
         // Reuse size_of logic - same implementation needed
         int size_bytes = 8;
 
@@ -917,7 +930,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
 
     // type_id[T]() -> U64
     // Returns a unique ID for each monomorphized type
-    if (fn_name == "type_id") {
+    if (intrinsic_name == "type_id") {
         // Get type argument from call
         std::string type_name = "unknown";
 
@@ -955,7 +968,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // transmute[T, U](val: T) -> U
-    if (fn_name == "transmute") {
+    if (intrinsic_name == "transmute") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -971,7 +984,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // cast[T, U](val: T) -> U
-    if (fn_name == "cast") {
+    if (intrinsic_name == "cast") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             // Cast would need type argument resolution
@@ -986,7 +999,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // unreachable() -> Unit
-    if (fn_name == "unreachable") {
+    if (intrinsic_name == "unreachable") {
         emit_line("  unreachable");
         block_terminated_ = true;
         last_expr_type_ = "void";
@@ -994,7 +1007,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // assume(cond: Bool)
-    if (fn_name == "assume") {
+    if (intrinsic_name == "assume") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
             emit_line("  call void @llvm.assume(i1 " + cond + ")");
@@ -1005,7 +1018,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // likely(cond: Bool) -> Bool
-    if (fn_name == "likely") {
+    if (intrinsic_name == "likely") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -1017,7 +1030,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // unlikely(cond: Bool) -> Bool
-    if (fn_name == "unlikely") {
+    if (intrinsic_name == "unlikely") {
         if (!call.args.empty()) {
             std::string cond = gen_expr(*call.args[0]);
             std::string result = fresh_reg();
@@ -1029,7 +1042,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // fence()
-    if (fn_name == "fence") {
+    if (intrinsic_name == "fence") {
         emit_line("  fence seq_cst");
         last_expr_type_ = "void";
         return "0";
@@ -1040,7 +1053,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // ctlz[T](val: T) -> T (count leading zeros)
-    if (fn_name == "ctlz") {
+    if (intrinsic_name == "ctlz") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1054,7 +1067,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // cttz[T](val: T) -> T (count trailing zeros)
-    if (fn_name == "cttz") {
+    if (intrinsic_name == "cttz") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1068,7 +1081,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ctpop[T](val: T) -> T (population count)
-    if (fn_name == "ctpop") {
+    if (intrinsic_name == "ctpop") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1082,7 +1095,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // bswap[T](val: T) -> T (byte swap)
-    if (fn_name == "bswap") {
+    if (intrinsic_name == "bswap") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1096,7 +1109,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // bitreverse[T](val: T) -> T
-    if (fn_name == "bitreverse") {
+    if (intrinsic_name == "bitreverse") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1114,7 +1127,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // ============================================================================
 
     // sqrt[T](val: T) -> T
-    if (fn_name == "sqrt") {
+    if (intrinsic_name == "sqrt") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1128,7 +1141,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // sin[T](val: T) -> T
-    if (fn_name == "sin") {
+    if (intrinsic_name == "sin") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1142,7 +1155,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // cos[T](val: T) -> T
-    if (fn_name == "cos") {
+    if (intrinsic_name == "cos") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1156,7 +1169,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // log[T](val: T) -> T
-    if (fn_name == "log") {
+    if (intrinsic_name == "log") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1170,7 +1183,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // exp[T](val: T) -> T
-    if (fn_name == "exp") {
+    if (intrinsic_name == "exp") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1186,7 +1199,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     // pow[T](base: T, exp: T) -> T
     // Only use LLVM intrinsic when both args are floats
     // For integer exponent, fall through to math handler (uses @float_pow)
-    if (fn_name == "pow") {
+    if (intrinsic_name == "pow") {
         if (call.args.size() >= 2) {
             std::string base = gen_expr(*call.args[0]);
             std::string base_type = last_expr_type_;
@@ -1207,7 +1220,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // floor[T](val: T) -> T
-    if (fn_name == "floor") {
+    if (intrinsic_name == "floor") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1221,7 +1234,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // ceil[T](val: T) -> T
-    if (fn_name == "ceil") {
+    if (intrinsic_name == "ceil") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1235,7 +1248,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // round[T](val: T) -> T
-    if (fn_name == "round") {
+    if (intrinsic_name == "round") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1249,7 +1262,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // trunc[T](val: T) -> T
-    if (fn_name == "trunc") {
+    if (intrinsic_name == "trunc") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1263,7 +1276,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // fma[T](a: T, b: T, c: T) -> T (fused multiply-add)
-    if (fn_name == "fma") {
+    if (intrinsic_name == "fma") {
         if (call.args.size() >= 3) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -1279,7 +1292,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // minnum[T](a: T, b: T) -> T
-    if (fn_name == "minnum") {
+    if (intrinsic_name == "minnum") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -1294,7 +1307,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // maxnum[T](a: T, b: T) -> T
-    if (fn_name == "maxnum") {
+    if (intrinsic_name == "maxnum") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;
@@ -1309,7 +1322,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // fabs[T](val: T) -> T
-    if (fn_name == "fabs") {
+    if (intrinsic_name == "fabs") {
         if (!call.args.empty()) {
             std::string val = gen_expr(*call.args[0]);
             std::string val_type = last_expr_type_;
@@ -1323,7 +1336,7 @@ auto LLVMIRGen::try_gen_intrinsic(const std::string& fn_name, const parser::Call
     }
 
     // copysign[T](a: T, b: T) -> T
-    if (fn_name == "copysign") {
+    if (intrinsic_name == "copysign") {
         if (call.args.size() >= 2) {
             std::string a = gen_expr(*call.args[0]);
             std::string a_type = last_expr_type_;

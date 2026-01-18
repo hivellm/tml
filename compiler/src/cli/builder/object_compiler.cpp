@@ -171,6 +171,11 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
     cmd << " -fomit-frame-pointer";
     cmd << " -funroll-loops";
 
+    // SROA (Scalar Replacement of Aggregates) optimization is enabled by default at -O2+
+    // LLVM's SROA pass breaks up stack-allocated structs into individual registers
+    // This is critical for OOP performance - stack-promoted objects become zero-cost
+    // Note: Custom LLVM options removed as they vary by LLVM version
+
     // Link-Time Optimization
     if (options.lto) {
         if (options.thin_lto) {

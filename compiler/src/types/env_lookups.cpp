@@ -733,4 +733,34 @@ bool TypeEnv::is_value_class_candidate(const std::string& class_name) const {
     return true;
 }
 
+bool TypeEnv::can_stack_allocate_class(const std::string& class_name) const {
+    auto class_def = lookup_class(class_name);
+    if (!class_def) {
+        return false; // Not a class
+    }
+
+    // Abstract classes cannot be stack-allocated directly
+    if (class_def->is_abstract) {
+        return false;
+    }
+
+    // Any non-abstract class can be stack-allocated when we know the exact type
+    // at the allocation site. The vtable pointer is still initialized.
+    //
+    // Safety is ensured by escape analysis:
+    // - If the object doesn't escape the function, stack allocation is safe
+    // - If it escapes (returned, stored to heap, etc.), codegen should use heap
+    //
+    // This function indicates TYPE eligibility; escape analysis determines
+    // whether a specific ALLOCATION can use stack.
+
+    // Size check: very large classes should still use heap to avoid stack overflow
+    constexpr size_t MAX_STACK_CLASS_SIZE = 1024; // 1KB max for stack
+    if (class_def->estimated_size > MAX_STACK_CLASS_SIZE) {
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace tml::types

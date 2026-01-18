@@ -111,10 +111,16 @@ void DeadFunctionEliminationPass::build_call_graph(const Module& module) {
                 // Check for method calls
                 else if (auto* mcall = std::get_if<MethodCallInst>(&inst.inst)) {
                     // Method calls use mangled names like "TypeName_method"
-                    // We can't easily resolve these without type info, so
-                    // conservatively mark as potentially calling any method
-                    // with that name pattern
-                    call_graph_[func.name].insert(mcall->method_name);
+                    // Construct the full mangled name from receiver_type and method_name
+                    std::string mangled_name = mcall->receiver_type + "__" + mcall->method_name;
+                    call_graph_[func.name].insert(mangled_name);
+
+                    // If devirtualized, also add the devirtualized target
+                    if (mcall->devirt_info.has_value()) {
+                        std::string devirt_target = mcall->devirt_info->original_class + "__" +
+                                                    mcall->devirt_info->method_name;
+                        call_graph_[func.name].insert(devirt_target);
+                    }
                 }
             }
         }

@@ -59,6 +59,7 @@ struct ObjectCompileOptions {
     bool verbose = false;              // Print commands
     bool lto = false;                  // Enable Link-Time Optimization
     bool thin_lto = false;             // Use ThinLTO (faster, less memory)
+    bool aggressive_sroa = true;       // Aggressive scalar replacement of aggregates
     std::string target_triple;         // Target triple for cross-compilation (empty = host)
     std::string sysroot;               // Sysroot path for cross-compilation
 };

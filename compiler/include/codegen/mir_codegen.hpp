@@ -17,6 +17,22 @@
 //! ```
 //! TML Source -> AST -> MIR -> LLVM IR -> Object Code
 //! ```
+//!
+//! ## SROA (Scalar Replacement of Aggregates)
+//!
+//! This generator produces LLVM IR optimized for SROA, which breaks up
+//! stack-allocated structs into individual registers. This is critical
+//! for OOP performance - stack-promoted objects become zero-cost:
+//!
+//! 1. `is_stack_eligible` constructor calls use `alloca` instead of heap
+//! 2. Function attributes (`nounwind`, `willreturn`) enable aggressive opts
+//! 3. Proper alignment (8-byte) for SROA eligibility
+//! 4. No escaping pointers from stack allocations
+//!
+//! After LLVM's SROA pass runs:
+//! - Stack-allocated Point(x, y) becomes two registers (%x, %y)
+//! - No memory operations for field access
+//! - Virtual dispatch inlined where possible
 
 #pragma once
 

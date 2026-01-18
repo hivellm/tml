@@ -362,6 +362,29 @@ void HirMirBuilder::emit_void(Instruction inst, SourceSpan span) {
     block->instructions.push_back(std::move(data));
 }
 
+auto HirMirBuilder::emit_at_entry(Instruction inst, MirTypePtr type) -> Value {
+    // Insert instruction at the start of the entry block.
+    // This is used for allocas that need to dominate all uses (for LLVM's mem2reg).
+    if (!ctx_.current_func) {
+        throw std::runtime_error("No current function in HirMirBuilder::emit_at_entry");
+    }
+
+    auto& entry = ctx_.current_func->entry_block();
+
+    ValueId result_id = ctx_.current_func->fresh_value();
+    Value result{result_id, type};
+
+    InstructionData data;
+    data.result = result_id;
+    data.type = type;
+    data.inst = std::move(inst);
+
+    // Insert at the beginning of the entry block
+    entry.instructions.insert(entry.instructions.begin(), std::move(data));
+
+    return result;
+}
+
 void HirMirBuilder::emit_return(std::optional<Value> value) {
     if (!ctx_.current_func) {
         return;
@@ -634,11 +657,6 @@ void HirMirBuilder::emit_drop_calls(const std::vector<BuildContext::DropInfo>& d
 
 void HirMirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
                                         const std::string& type_name) {
-    // Skip drop for types that don't need it (POD types, primitives, etc.)
-    if (!type_name.empty() && !env_.type_needs_drop(type_name)) {
-        return;
-    }
-
     // Generate drop call: drop_TypeName(value)
     std::string drop_func = "drop_" + type_name;
 

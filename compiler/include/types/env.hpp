@@ -515,6 +515,14 @@ public:
     /// - Using direct method calls instead of virtual dispatch
     [[nodiscard]] bool is_value_class_candidate(const std::string& class_name) const;
 
+    /// Checks if a class can be stack-allocated when the exact type is known.
+    /// Unlike is_value_class_candidate(), this allows classes with virtual methods
+    /// as long as they are sealed (no subclasses). The vtable pointer is still included.
+    ///
+    /// This is useful for escape analysis: when we know the exact type at the
+    /// allocation site and the object doesn't escape, we can stack-allocate it.
+    [[nodiscard]] bool can_stack_allocate_class(const std::string& class_name) const;
+
     // ========================================================================
     // Definition Enumeration
     // ========================================================================

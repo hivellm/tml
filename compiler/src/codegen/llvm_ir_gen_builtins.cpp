@@ -868,26 +868,34 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                         }
                     }
 
-                    // Look up the constructor in functions_ map to get mangled name
+                    // Look up the constructor in functions_ map to get mangled name and return type
                     std::string ctor_name;
+                    std::string ctor_ret_type = class_type + "*"; // Default: pointer return
                     auto func_it = functions_.find(ctor_key);
                     if (func_it != functions_.end()) {
                         ctor_name = func_it->second.llvm_name;
+                        // Use the registered return type (value classes return struct, not ptr)
+                        if (!func_it->second.ret_type.empty()) {
+                            ctor_ret_type = func_it->second.ret_type;
+                        }
                     } else {
                         // Fallback: try without overload suffix for default constructor
                         auto default_it = functions_.find(class_name + "_new");
                         if (default_it != functions_.end()) {
                             ctor_name = default_it->second.llvm_name;
+                            if (!default_it->second.ret_type.empty()) {
+                                ctor_ret_type = default_it->second.ret_type;
+                            }
                         } else {
                             // Last resort: generate basic name
                             ctor_name = "@tml_" + get_suite_prefix() + class_name + "_new";
                         }
                     }
 
-                    // Generate call
+                    // Generate call using the correct return type
                     std::string result = fresh_reg();
                     std::string call_str =
-                        "  " + result + " = call " + class_type + "* " + ctor_name + "(";
+                        "  " + result + " = call " + ctor_ret_type + " " + ctor_name + "(";
                     for (size_t i = 0; i < args.size(); ++i) {
                         if (i > 0)
                             call_str += ", ";
@@ -896,7 +904,7 @@ auto LLVMIRGen::gen_call(const parser::CallExpr& call) -> std::string {
                     call_str += ")";
                     emit_line(call_str);
 
-                    last_expr_type_ = class_type + "*";
+                    last_expr_type_ = ctor_ret_type;
                     return result;
                 }
             }

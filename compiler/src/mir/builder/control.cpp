@@ -37,36 +37,82 @@ auto MirBuilder::build_if(const parser::IfExpr& if_expr) -> Value {
 
     emit_cond_branch(cond, then_block, else_block ? else_block : merge_block);
 
-    // Then branch
+    // Build then branch (don't emit terminator yet - we may need to insert store)
     switch_to_block(then_block);
     auto then_val = build_expr(*if_expr.then_branch);
     auto then_end = ctx_.current_block;
-    if (!is_terminated()) {
-        emit_branch(merge_block);
-    }
+    bool then_needs_branch = !is_terminated();
 
-    // Else branch
+    // Build else branch
     Value else_val = const_unit();
     uint32_t else_end = 0;
+    bool else_needs_branch = false;
     if (if_expr.else_branch.has_value()) {
+        // Switch to else block (leave then_end without terminator temporarily)
         switch_to_block(else_block);
         else_val = build_expr(**if_expr.else_branch);
         else_end = ctx_.current_block;
-        if (!is_terminated()) {
+        else_needs_branch = !is_terminated();
+    }
+
+    // Now we know the types - decide between phi and alloca+store+load
+    if (if_expr.else_branch.has_value() && !then_val.type->is_unit()) {
+        if (then_val.type->is_aggregate()) {
+            // Use alloca+store+load pattern for aggregate types.
+            // This enables LLVM's SROA to break aggregates into scalars.
+            auto ptr_type = make_pointer_type(then_val.type, true);
+            auto alloca_val = emit_at_entry(AllocaInst{then_val.type, "_if_merge"}, ptr_type);
+
+            // Store in then branch
+            switch_to_block(then_end);
+            emit_void(StoreInst{alloca_val, then_val});
+            if (then_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Store in else branch
+            switch_to_block(else_end);
+            emit_void(StoreInst{alloca_val, else_val});
+            if (else_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Load at merge
+            switch_to_block(merge_block);
+            return emit(LoadInst{alloca_val}, then_val.type);
+        } else {
+            // Use phi for non-aggregate types (primitives, pointers)
+            // First emit the deferred terminators
+            switch_to_block(then_end);
+            if (then_needs_branch) {
+                emit_branch(merge_block);
+            }
+            switch_to_block(else_end);
+            if (else_needs_branch) {
+                emit_branch(merge_block);
+            }
+
+            // Create phi at merge
+            switch_to_block(merge_block);
+            PhiInst phi;
+            phi.incoming = {{then_val, then_end}, {else_val, else_end}};
+            return emit(std::move(phi), then_val.type);
+        }
+    }
+
+    // No else branch or unit type - just emit terminators
+    switch_to_block(then_end);
+    if (then_needs_branch) {
+        emit_branch(merge_block);
+    }
+    if (if_expr.else_branch.has_value()) {
+        switch_to_block(else_end);
+        if (else_needs_branch) {
             emit_branch(merge_block);
         }
     }
 
-    // Merge block
     switch_to_block(merge_block);
-
-    // If both branches return a value, create phi
-    if (if_expr.else_branch.has_value() && !then_val.type->is_unit()) {
-        PhiInst phi;
-        phi.incoming = {{then_val, then_end}, {else_val, else_end}};
-        return emit(std::move(phi), then_val.type);
-    }
-
     return const_unit();
 }
 
@@ -315,8 +361,13 @@ auto MirBuilder::build_when(const parser::WhenExpr& when) -> Value {
     auto scrutinee = build_expr(*when.scrutinee);
     auto merge_block = create_block("when_merge");
 
-    // Collect all arm results for phi node
-    std::vector<std::pair<Value, uint32_t>> arm_results;
+    // Track arm results and their end blocks (for deferred branch emission)
+    struct ArmResult {
+        Value value;
+        uint32_t end_block;
+        bool needs_branch;
+    };
+    std::vector<ArmResult> arm_results;
     MirTypePtr result_type = make_unit_type();
 
     // For each arm, create a test block and body block
@@ -408,30 +459,63 @@ auto MirBuilder::build_when(const parser::WhenExpr& when) -> Value {
             switch_to_block(guard_pass);
         }
 
-        // Execute body
+        // Execute body (don't emit terminator yet - we may need to insert store)
         auto body_val = build_expr(*arm.body);
         auto body_end_block = ctx_.current_block;
+        bool needs_branch = !is_terminated();
 
-        if (!is_terminated()) {
-            if (i == 0) {
+        if (needs_branch) {
+            if (arm_results.empty()) {
                 result_type = body_val.type;
             }
-            arm_results.push_back({body_val, body_end_block});
-            emit_branch(merge_block);
+            arm_results.push_back({body_val, body_end_block, true});
         }
     }
 
-    // Merge block
-    switch_to_block(merge_block);
-
-    // Create phi node if we have results
+    // Now we know the result type - decide between phi and alloca+store+load
     if (!arm_results.empty() && !result_type->is_unit()) {
-        PhiInst phi;
-        phi.incoming = arm_results;
-        phi.result_type = result_type;
-        return emit(std::move(phi), result_type);
+        if (result_type->is_aggregate()) {
+            // Use alloca+store+load pattern for aggregate types.
+            // This enables LLVM's SROA to break aggregates into scalars.
+            auto ptr_type = make_pointer_type(result_type, true);
+            auto alloca_val = emit_at_entry(AllocaInst{result_type, "_when_merge"}, ptr_type);
+
+            // Insert stores at end of each arm
+            for (const auto& arm : arm_results) {
+                switch_to_block(arm.end_block);
+                emit_void(StoreInst{alloca_val, arm.value});
+                emit_branch(merge_block);
+            }
+
+            // Load at merge
+            switch_to_block(merge_block);
+            return emit(LoadInst{alloca_val}, result_type);
+        } else {
+            // Use phi for non-aggregate types
+            // First emit the deferred terminators
+            std::vector<std::pair<Value, uint32_t>> phi_incoming;
+            for (const auto& arm : arm_results) {
+                switch_to_block(arm.end_block);
+                emit_branch(merge_block);
+                phi_incoming.push_back({arm.value, arm.end_block});
+            }
+
+            // Create phi at merge
+            switch_to_block(merge_block);
+            PhiInst phi;
+            phi.incoming = phi_incoming;
+            phi.result_type = result_type;
+            return emit(std::move(phi), result_type);
+        }
     }
 
+    // No results or unit type - emit any deferred terminators
+    for (const auto& arm : arm_results) {
+        switch_to_block(arm.end_block);
+        emit_branch(merge_block);
+    }
+
+    switch_to_block(merge_block);
     return const_unit();
 }
 

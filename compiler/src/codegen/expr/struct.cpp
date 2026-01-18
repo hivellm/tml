@@ -151,21 +151,22 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
         }
     }
 
-    // Allocate struct - heap for classes (unless value class), stack for structs
+    // Allocate struct - stack for structs and eligible classes, heap otherwise
     std::string ptr = fresh_reg();
     bool is_class = struct_type.starts_with("%class.");
 
     // Check if this class is a value class candidate (sealed, no virtual methods)
+    // Value classes are returned by value and can be stack allocated safely.
+    // Non-value classes must be heap allocated since they're returned by pointer.
     bool is_value_class = false;
     if (is_class) {
-        auto class_def = env_.lookup_class(base_name);
-        if (class_def) {
-            is_value_class = env_.is_value_class_candidate(base_name);
-        }
+        is_value_class = env_.is_value_class_candidate(base_name);
     }
 
     if (is_class && !is_value_class) {
-        // Heap allocate for regular classes (reference types)
+        // Heap allocate for non-value classes
+        // Non-value classes are returned by pointer, so stack allocation would create
+        // dangling pointers when returned from factory methods.
         // Calculate actual size of the class struct using LLVM GEP trick:
         // Get the address offset from element 0 to element 1, which equals the struct size
         std::string size_ptr = fresh_reg();
@@ -180,7 +181,7 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
                   ", i32 0, i32 0");
         emit_line("  store ptr @vtable." + base_name + ", ptr " + vtable_ptr);
     } else {
-        // Stack allocate for structs and value classes
+        // Stack allocate for structs and value classes (no vtable needed)
         emit_line("  " + ptr + " = alloca " + struct_type);
     }
 

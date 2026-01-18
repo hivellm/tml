@@ -1837,9 +1837,40 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                         // Generate arguments: this pointer + regular args
                         std::string args_str = "ptr " + this_ptr;
-                        for (const auto& arg : call.args) {
-                            std::string arg_val = gen_expr(*arg);
-                            args_str += ", " + last_expr_type_ + " " + arg_val;
+                        for (size_t arg_idx = 0; arg_idx < call.args.size(); ++arg_idx) {
+                            const auto& arg = call.args[arg_idx];
+                            std::string arg_val;
+                            std::string arg_type;
+
+                            // Get expected parameter type from method signature
+                            std::string expected_param_type = "ptr"; // Default for class params
+                            if (arg_idx + 1 < m.sig.params.size()) {
+                                expected_param_type =
+                                    llvm_type_from_semantic(m.sig.params[arg_idx + 1]);
+                            }
+
+                            // For value class arguments (IdentExpr) where method expects ptr,
+                            // pass the alloca pointer instead of loading the value
+                            if (expected_param_type == "ptr" && arg->is<parser::IdentExpr>()) {
+                                const auto& ident_arg = arg->as<parser::IdentExpr>();
+                                auto local_it = locals_.find(ident_arg.name);
+                                if (local_it != locals_.end() &&
+                                    local_it->second.type.starts_with("%class.") &&
+                                    !local_it->second.type.ends_with("*")) {
+                                    // Value class stored as struct: pass alloca pointer
+                                    arg_val = local_it->second.reg;
+                                    arg_type = "ptr";
+                                } else {
+                                    // Not a value class struct: use normal expression generation
+                                    arg_val = gen_expr(*arg);
+                                    arg_type = last_expr_type_;
+                                }
+                            } else {
+                                arg_val = gen_expr(*arg);
+                                arg_type = last_expr_type_;
+                            }
+
+                            args_str += ", " + arg_type + " " + arg_val;
                         }
 
                         // Generate call
@@ -1905,9 +1936,40 @@ auto LLVMIRGen::gen_method_call(const parser::MethodCallExpr& call) -> std::stri
 
                         // Generate arguments: this pointer + regular args
                         std::string args_str = "ptr " + this_ptr;
-                        for (const auto& arg : call.args) {
-                            std::string arg_val = gen_expr(*arg);
-                            args_str += ", " + last_expr_type_ + " " + arg_val;
+                        for (size_t arg_idx = 0; arg_idx < call.args.size(); ++arg_idx) {
+                            const auto& arg = call.args[arg_idx];
+                            std::string arg_val;
+                            std::string arg_type;
+
+                            // Get expected parameter type from method signature
+                            std::string expected_param_type = "ptr"; // Default for class params
+                            if (arg_idx + 1 < m.sig.params.size()) {
+                                expected_param_type =
+                                    llvm_type_from_semantic(m.sig.params[arg_idx + 1]);
+                            }
+
+                            // For value class arguments (IdentExpr) where method expects ptr,
+                            // pass the alloca pointer instead of loading the value
+                            if (expected_param_type == "ptr" && arg->is<parser::IdentExpr>()) {
+                                const auto& ident_arg = arg->as<parser::IdentExpr>();
+                                auto local_it = locals_.find(ident_arg.name);
+                                if (local_it != locals_.end() &&
+                                    local_it->second.type.starts_with("%class.") &&
+                                    !local_it->second.type.ends_with("*")) {
+                                    // Value class stored as struct: pass alloca pointer
+                                    arg_val = local_it->second.reg;
+                                    arg_type = "ptr";
+                                } else {
+                                    // Not a value class struct: use normal expression generation
+                                    arg_val = gen_expr(*arg);
+                                    arg_type = last_expr_type_;
+                                }
+                            } else {
+                                arg_val = gen_expr(*arg);
+                                arg_type = last_expr_type_;
+                            }
+
+                            args_str += ", " + arg_type + " " + arg_val;
                         }
 
                         // Generate call

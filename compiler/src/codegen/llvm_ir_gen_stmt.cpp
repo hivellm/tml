@@ -399,6 +399,28 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         return;
     }
 
+    // For class struct literals (e.g., let p: Point = Point { x: 1, y: 2 }),
+    // we also track the alloca pointer directly - no extra indirection needed.
+    // This is similar to structs but for class types which have var_type = "ptr".
+    if (let.init.has_value() && let.init.value()->is<parser::StructExpr>()) {
+        const auto& struct_expr = let.init.value()->as<parser::StructExpr>();
+        if (!struct_expr.path.segments.empty()) {
+            std::string base_name = struct_expr.path.segments.back();
+            auto class_def = env_.lookup_class(base_name);
+            if (class_def.has_value()) {
+                // This is a class struct literal - allocate and store pointer directly
+                std::string init_ptr = gen_struct_expr_ptr(struct_expr);
+                std::string class_type = "%class." + base_name;
+                locals_[var_name] = VarInfo{init_ptr, class_type, semantic_var_type, std::nullopt};
+
+                // Register for drop if type implements Drop
+                std::string type_name = extract_type_name_for_drop(class_type);
+                register_for_drop(var_name, init_ptr, type_name, class_type);
+                return;
+            }
+        }
+    }
+
     // Handle dyn coercion: let d: dyn Describable = c (where c is Counter)
     // This also handles interface casting: let d: dyn Drawable = circle
     if (var_type.starts_with("%dyn.") && let.init.has_value()) {
@@ -543,6 +565,28 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
     // For pointer variables, allocate space and store the pointer value
     if (is_ptr && let.init.has_value()) {
         std::string ptr_val = gen_expr(*let.init.value());
+        std::string expr_type = last_expr_type_;
+
+        // Handle value class returned by value: if var_type is ptr (class type) but
+        // last_expr_type_ is a struct type, use the struct type for storage
+        if (expr_type.starts_with("%class.")) {
+            // Method returned a value class by value - store the struct directly
+            std::string alloca_reg = fresh_reg();
+            emit_line("  " + alloca_reg + " = alloca " + expr_type);
+            emit_line("  store " + expr_type + " " + ptr_val + ", ptr " + alloca_reg);
+            // Store with struct type so field access uses correct GEP
+            types::TypePtr semantic_type = nullptr;
+            if (let.type_annotation) {
+                semantic_type = resolve_parser_type_with_subs(**let.type_annotation, {});
+            }
+            locals_[var_name] = VarInfo{alloca_reg, expr_type, semantic_type, std::nullopt};
+            // Register for drop if type implements Drop
+            std::string type_name = extract_type_name_for_drop(expr_type);
+            register_for_drop(var_name, alloca_reg, type_name, expr_type);
+            return;
+        }
+
+        // Regular pointer case
         // Allocate space to hold the pointer
         std::string alloca_reg = fresh_reg();
         emit_line("  " + alloca_reg + " = alloca ptr");
@@ -648,9 +692,33 @@ void LLVMIRGen::gen_let_stmt(const parser::LetStmt& let) {
         }
     }
 
+    // Handle value class returned by value: if var_type is ptr (class type) but
+    // last_expr_type_ is a struct type, use the struct type for storage
+    if (let.init.has_value() && var_type == "ptr" && last_expr_type_.starts_with("%class.")) {
+        // Method returned a value class by value - store the struct directly
+        std::string struct_type = last_expr_type_;
+        std::string alloca_reg = fresh_reg();
+        emit_line("  " + alloca_reg + " = alloca " + struct_type);
+        // Emit lifetime.start for LLVM stack slot optimization
+        int64_t struct_size = get_type_size(struct_type);
+        emit_lifetime_start(alloca_reg, struct_size);
+        register_alloca_in_scope(alloca_reg, struct_size);
+        emit_line("  store " + struct_type + " " + init_val + ", ptr " + alloca_reg);
+        // Store with struct type so field access uses correct GEP
+        locals_[var_name] = VarInfo{alloca_reg, struct_type, semantic_var_type, std::nullopt};
+        // Register for drop if type implements Drop
+        std::string type_name = extract_type_name_for_drop(struct_type);
+        register_for_drop(var_name, alloca_reg, type_name, struct_type);
+        return;
+    }
+
     // Allocate on stack
     std::string alloca_reg = fresh_reg();
     emit_line("  " + alloca_reg + " = alloca " + var_type);
+    // Emit lifetime.start for LLVM stack slot optimization
+    int64_t type_size = get_type_size(var_type);
+    emit_lifetime_start(alloca_reg, type_size);
+    register_alloca_in_scope(alloca_reg, type_size);
 
     // Store the value
     if (let.init.has_value()) {

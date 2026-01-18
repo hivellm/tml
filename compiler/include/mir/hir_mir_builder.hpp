@@ -236,6 +236,9 @@ private:
     /// Emits a void instruction (no result value).
     void emit_void(Instruction inst, SourceSpan span = SourceSpan{});
 
+    /// Emits an instruction at function entry block (for allocas that dominate all uses).
+    [[nodiscard]] auto emit_at_entry(Instruction inst, MirTypePtr type) -> Value;
+
     /// Emits a return terminator.
     void emit_return(std::optional<Value> value = std::nullopt);
 

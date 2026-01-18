@@ -92,6 +92,14 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                                         inner.true_val.id = stored;
                                     if (inner.false_val.id == result)
                                         inner.false_val.id = stored;
+                                } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
+                                    if (inner.aggregate.id == result)
+                                        inner.aggregate.id = stored;
+                                } else if constexpr (std::is_same_v<T, InsertValueInst>) {
+                                    if (inner.aggregate.id == result)
+                                        inner.aggregate.id = stored;
+                                    if (inner.value.id == result)
+                                        inner.value.id = stored;
                                 }
                             },
                             block.instructions[j].inst);
@@ -100,6 +108,8 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                     // Mark this load for removal
                     dead_stores.push_back(i);
                     changed = true;
+                    // Don't update mem_state - the stored value is still valid
+                    // for subsequent loads
                 } else if (it->second.has_load) {
                     // Redundant load: reuse previous load result
                     ValueId prev_load = it->second.loaded_value;
@@ -136,6 +146,14 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                                         inner.true_val.id = prev_load;
                                     if (inner.false_val.id == result)
                                         inner.false_val.id = prev_load;
+                                } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
+                                    if (inner.aggregate.id == result)
+                                        inner.aggregate.id = prev_load;
+                                } else if constexpr (std::is_same_v<T, InsertValueInst>) {
+                                    if (inner.aggregate.id == result)
+                                        inner.aggregate.id = prev_load;
+                                    if (inner.value.id == result)
+                                        inner.value.id = prev_load;
                                 }
                             },
                             block.instructions[j].inst);
@@ -143,15 +161,15 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
 
                     dead_stores.push_back(i);
                     changed = true;
+                    // Don't update mem_state - keep the previous load's value
+                    // so subsequent redundant loads also get forwarded to original
+                } else {
+                    // No previous store or load for this pointer - record this load
+                    mem_state[ptr] = MemState{0, result, false, true};
                 }
-            }
-
-            // Update memory state with this load
-            if (mem_state.find(ptr) == mem_state.end()) {
-                mem_state[ptr] = MemState{0, result, false, true};
             } else {
-                mem_state[ptr].loaded_value = result;
-                mem_state[ptr].has_load = true;
+                // First load from this pointer - record it
+                mem_state[ptr] = MemState{0, result, false, true};
             }
         } else if (std::holds_alternative<CallInst>(inst.inst) ||
                    std::holds_alternative<MethodCallInst>(inst.inst)) {

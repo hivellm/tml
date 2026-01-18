@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **TML (To Machine Language)** is a programming language designed specifically for LLM code generation and analysis. This repository contains:
+
 - Complete language specification documentation in `/docs/`
 - Full compiler implementation in `/compiler/`
 - Standard library modules in `/lib/` (core, std, test)
@@ -34,6 +35,7 @@ scripts\clean.bat
 **Why scripts only?** The build scripts handle environment setup, path configuration, and proper sequencing that direct cmake calls miss. Using cmake directly can result in tests that appear to pass but actually fail silently or hang indefinitely.
 
 Output directories:
+
 - `build/debug/tml.exe` - Debug compiler
 - `build/release/tml.exe` - Release compiler
 - `build/debug/tml_tests.exe` - Test executable
@@ -52,28 +54,28 @@ The `/docs/` directory contains the complete TML v1.0 specification:
 
 TML has its own identity, optimized for LLM comprehension with self-documenting syntax:
 
-| Rust | TML | Reason |
-|------|-----|--------|
-| `<T>` | `[T]` | `<` conflicts with comparison |
-| `\|x\| expr` | `do(x) expr` | `\|` conflicts with OR |
-| `&&` `\|\|` `!` | `and` `or` `not` | Keywords are clearer |
-| `fn` | `func` | More explicit |
-| `match` | `when` | More intuitive |
-| `for`/`while`/`loop` | `loop` unified | Single keyword |
-| `&T` / `&mut T` | `ref T` / `mut ref T` | Words over symbols |
-| `trait` | `behavior` | Self-documenting |
-| `#[...]` | `@...` | Cleaner directives |
-| `Option[T]` | `Maybe[T]` | Intent is clear |
-| `Some(x)` / `None` | `Just(x)` / `Nothing` | Self-documenting |
-| `Result[T,E]` | `Outcome[T,E]` | Describes what it is |
-| `Ok(x)` / `Err(e)` | `Ok(x)` / `Err(e)` | Same as Rust (concise) |
-| `..` / `..=` | `to` / `through` | Readable ranges |
-| `Box[T]` | `Heap[T]` | Describes storage |
-| `Rc[T]` / `Arc[T]` | `Shared[T]` / `Sync[T]` | Describes purpose |
-| `.clone()` | `.duplicate()` | No confusion with Git |
-| `Clone` trait | `Duplicate` behavior | Consistent naming |
-| `unsafe` | `lowlevel` | Less scary, accurate |
-| Lifetimes `'a` | Always inferred | No syntax noise |
+| Rust                 | TML                     | Reason                        |
+| -------------------- | ----------------------- | ----------------------------- |
+| `<T>`                | `[T]`                   | `<` conflicts with comparison |
+| `\|x\| expr`         | `do(x) expr`            | `\|` conflicts with OR        |
+| `&&` `\|\|` `!`      | `and` `or` `not`        | Keywords are clearer          |
+| `fn`                 | `func`                  | More explicit                 |
+| `match`              | `when`                  | More intuitive                |
+| `for`/`while`/`loop` | `loop` unified          | Single keyword                |
+| `&T` / `&mut T`      | `ref T` / `mut ref T`   | Words over symbols            |
+| `trait`              | `behavior`              | Self-documenting              |
+| `#[...]`             | `@...`                  | Cleaner directives            |
+| `Option[T]`          | `Maybe[T]`              | Intent is clear               |
+| `Some(x)` / `None`   | `Just(x)` / `Nothing`   | Self-documenting              |
+| `Result[T,E]`        | `Outcome[T,E]`          | Describes what it is          |
+| `Ok(x)` / `Err(e)`   | `Ok(x)` / `Err(e)`      | Same as Rust (concise)        |
+| `..` / `..=`         | `to` / `through`        | Readable ranges               |
+| `Box[T]`             | `Heap[T]`               | Describes storage             |
+| `Rc[T]` / `Arc[T]`   | `Shared[T]` / `Sync[T]` | Describes purpose             |
+| `.clone()`           | `.duplicate()`          | No confusion with Git         |
+| `Clone` trait        | `Duplicate` behavior    | Consistent naming             |
+| `unsafe`             | `lowlevel`              | Less scary, accurate          |
+| Lifetimes `'a`       | Always inferred         | No syntax noise               |
 
 ## Project Structure
 
@@ -147,6 +149,31 @@ This project uses @hivellm/rulebook for task management. Key rules:
 3. **Validate before commit**: `rulebook task validate <id>`
 4. **Update /docs/** when modifying specifications
 
+### tasks.md Format
+
+**IMPORTANT**: All `rulebook/tasks/*/tasks.md` files must follow a simple checklist format:
+
+````markdown
+# Tasks: Feature Name
+
+**Status**: In Progress (X% - Phase N Complete)
+
+**Priority**: High/Medium/Low - Brief description
+
+## Phase 1: Phase Name
+
+> **Status**: Complete/In Progress/Not Started
+
+### 1.1 Section Name
+
+- [x] 1.1.1 Completed task description
+- [ ] 1.1.2 Pending task description
+- [ ] 1.1.3 Another pending task
+
+### 1.2 Another Section
+
+- [ ] 1.2.1 Task description
+
 ## File Extension
 
 TML source files use `.tml` extension.
@@ -187,6 +214,7 @@ tml build file.tml -DVERSION=1.0  # Define symbol with value
 tml build file.tml --define=FEAT  # Alternative syntax
 tml build file.tml --target=x86_64-unknown-linux-gnu  # Cross-compile
 ```
+````
 
 ## Conditional Compilation
 
@@ -209,6 +237,7 @@ func feature_a_only() { ... }
 ```
 
 **Predefined Symbols:**
+
 - OS: `WINDOWS`, `LINUX`, `MACOS`, `ANDROID`, `IOS`, `FREEBSD`, `UNIX`, `POSIX`
 - Architecture: `X86_64`, `X86`, `ARM64`, `ARM`, `WASM32`, `RISCV64`
 - Pointer width: `PTR_32`, `PTR_64`
@@ -217,6 +246,7 @@ func feature_a_only() { ... }
 - Build mode: `DEBUG`, `RELEASE`, `TEST`
 
 **Key Files:**
+
 - `compiler/include/preprocessor/preprocessor.hpp` - Preprocessor interface
 - `compiler/src/preprocessor/preprocessor.cpp` - Full implementation
 - `compiler/src/cli/builder/helpers.cpp` - CLI integration helpers
@@ -224,6 +254,7 @@ func feature_a_only() { ... }
 ## Important Development Rules
 
 **NEVER simplify or comment out tests!** When a test fails, the correct approach is to:
+
 1. Fix the compiler or library implementation to make the test pass
 2. Investigate why the feature isn't working
 3. Implement missing functionality
@@ -235,6 +266,7 @@ Tests represent the specification of what the code should do. Simplifying tests 
 The CLI is organized into subfolders:
 
 ### Commands (`compiler/src/cli/commands/`)
+
 - `cmd_build.cpp/.hpp` - Main build command implementation
 - `cmd_test.cpp/.hpp` - Test command (TestOptions struct)
 - `cmd_cache.cpp/.hpp` - Cache management
@@ -246,6 +278,7 @@ The CLI is organized into subfolders:
 - `cmd_rlib.cpp/.hpp` - Library format handling
 
 ### Builder (`compiler/src/cli/builder/`)
+
 - `build.cpp` - Main build orchestration
 - `parallel_build.cpp/.hpp` - Multi-threaded compilation
 - `object_compiler.cpp/.hpp` - LLVM IR to object file compilation
@@ -256,6 +289,7 @@ The CLI is organized into subfolders:
 - `rlib.cpp/.hpp` - TML library format (.rlib)
 
 ### Tester (`compiler/src/cli/tester/`)
+
 - `test_runner.cpp/.hpp` - DLL-based test execution
 - `suite_execution.cpp` - Suite mode (multiple tests per DLL)
 - `run.cpp` - Test orchestration
@@ -264,6 +298,7 @@ The CLI is organized into subfolders:
 - `fuzzer.cpp` - Fuzz testing
 
 ### Core
+
 - `compiler/src/cli/dispatcher.cpp` - CLI argument parsing
 - `compiler/src/cli/utils.cpp/.hpp` - Shared utilities
 - `compiler/src/cli/diagnostic.cpp/.hpp` - Error formatting
