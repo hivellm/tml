@@ -539,12 +539,20 @@ auto SimplifyCfgPass::remove_unreachable_blocks(Function& func) -> bool {
 auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
     bool changed = false;
 
-    for (auto& block : func.blocks) {
-        // Build a map of values to replace (for single-incoming PHIs)
-        std::unordered_map<ValueId, Value> replacements;
+    // IMPORTANT: Collect ALL replacements from ALL blocks first,
+    // then apply them across the ENTIRE function.
+    // This fixes a bug where single-incoming phis were removed but uses
+    // in OTHER blocks were not updated, leaving undefined value references.
 
-        // First pass: identify PHIs to remove or replace
+    // First pass: collect all single-incoming phi replacements
+    std::unordered_map<ValueId, Value> all_replacements;
+    std::vector<std::pair<size_t, std::vector<size_t>>>
+        blocks_to_clean; // block index -> instruction indices
+
+    for (size_t block_idx = 0; block_idx < func.blocks.size(); ++block_idx) {
+        auto& block = func.blocks[block_idx];
         std::vector<size_t> to_remove;
+
         for (size_t i = 0; i < block.instructions.size(); ++i) {
             auto* phi = std::get_if<PhiInst>(&block.instructions[i].inst);
             if (!phi) {
@@ -557,25 +565,31 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                 changed = true;
             } else if (phi->incoming.size() == 1) {
                 // Single incoming value - replace uses with that value
-                replacements[block.instructions[i].result] = phi->incoming[0].first;
+                all_replacements[block.instructions[i].result] = phi->incoming[0].first;
                 to_remove.push_back(i);
                 changed = true;
             }
         }
 
-        // Second pass: replace uses of removed PHIs
-        if (!replacements.empty()) {
+        if (!to_remove.empty()) {
+            blocks_to_clean.push_back({block_idx, std::move(to_remove)});
+        }
+    }
+
+    // Second pass: apply replacements across ALL blocks
+    if (!all_replacements.empty()) {
+        auto replace_value = [&all_replacements](Value& v) {
+            auto it = all_replacements.find(v.id);
+            if (it != all_replacements.end()) {
+                v = it->second;
+            }
+        };
+
+        for (auto& block : func.blocks) {
             for (auto& inst : block.instructions) {
                 std::visit(
-                    [&replacements](auto& i) {
+                    [&replace_value](auto& i) {
                         using T = std::decay_t<decltype(i)>;
-
-                        auto replace_value = [&replacements](Value& v) {
-                            auto it = replacements.find(v.id);
-                            if (it != replacements.end()) {
-                                v = it->second;
-                            }
-                        };
 
                         if constexpr (std::is_same_v<T, BinaryInst>) {
                             replace_value(i.left);
@@ -591,11 +605,21 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                             for (auto& arg : i.args) {
                                 replace_value(arg);
                             }
+                        } else if constexpr (std::is_same_v<T, MethodCallInst>) {
+                            replace_value(i.receiver);
+                            for (auto& arg : i.args) {
+                                replace_value(arg);
+                            }
                         } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
                             replace_value(i.base);
                             for (auto& idx : i.indices) {
                                 replace_value(idx);
                             }
+                        } else if constexpr (std::is_same_v<T, ExtractValueInst>) {
+                            replace_value(i.aggregate);
+                        } else if constexpr (std::is_same_v<T, InsertValueInst>) {
+                            replace_value(i.aggregate);
+                            replace_value(i.value);
                         } else if constexpr (std::is_same_v<T, CastInst>) {
                             replace_value(i.operand);
                         } else if constexpr (std::is_same_v<T, PhiInst>) {
@@ -606,6 +630,22 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                             replace_value(i.condition);
                             replace_value(i.true_val);
                             replace_value(i.false_val);
+                        } else if constexpr (std::is_same_v<T, StructInitInst>) {
+                            for (auto& field : i.fields) {
+                                replace_value(field);
+                            }
+                        } else if constexpr (std::is_same_v<T, EnumInitInst>) {
+                            for (auto& p : i.payload) {
+                                replace_value(p);
+                            }
+                        } else if constexpr (std::is_same_v<T, TupleInitInst>) {
+                            for (auto& elem : i.elements) {
+                                replace_value(elem);
+                            }
+                        } else if constexpr (std::is_same_v<T, ArrayInitInst>) {
+                            for (auto& elem : i.elements) {
+                                replace_value(elem);
+                            }
                         }
                     },
                     inst.inst);
@@ -614,15 +654,8 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
             // Also replace in terminator
             if (block.terminator) {
                 std::visit(
-                    [&replacements](auto& term) {
+                    [&replace_value](auto& term) {
                         using T = std::decay_t<decltype(term)>;
-
-                        auto replace_value = [&replacements](Value& v) {
-                            auto it = replacements.find(v.id);
-                            if (it != replacements.end()) {
-                                v = it->second;
-                            }
-                        };
 
                         if constexpr (std::is_same_v<T, ReturnTerm>) {
                             if (term.value) {
@@ -637,8 +670,11 @@ auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
                     *block.terminator);
             }
         }
+    }
 
-        // Remove marked instructions (in reverse order to preserve indices)
+    // Third pass: remove the marked phi instructions (in reverse order within each block)
+    for (auto& [block_idx, to_remove] : blocks_to_clean) {
+        auto& block = func.blocks[block_idx];
         for (auto it = to_remove.rbegin(); it != to_remove.rend(); ++it) {
             block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(*it));
         }

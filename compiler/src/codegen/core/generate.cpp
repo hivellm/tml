@@ -1231,6 +1231,14 @@ void LLVMIRGen::pop_lifetime_scope() {
     scope_allocas_.pop_back();
 }
 
+void LLVMIRGen::clear_lifetime_scope() {
+    // Just pop the scope without emitting lifetime.end
+    // Used when lifetime.end was already emitted via emit_scope_lifetime_ends()
+    if (!scope_allocas_.empty()) {
+        scope_allocas_.pop_back();
+    }
+}
+
 void LLVMIRGen::emit_lifetime_start(const std::string& alloca_reg, int64_t size) {
     // Use -1 for unknown size (LLVM will figure it out)
     std::string size_str = size > 0 ? std::to_string(size) : "-1";

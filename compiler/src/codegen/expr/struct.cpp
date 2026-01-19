@@ -342,9 +342,39 @@ auto LLVMIRGen::gen_struct_expr_ptr(const parser::StructExpr& s) -> std::string 
             }
         }
 
-        std::string field_ptr = fresh_reg();
-        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
-                  ", i32 0, i32 " + std::to_string(field_idx));
+        std::string field_ptr;
+
+        // Check if this is an inherited field that needs chained GEP
+        bool is_inherited = false;
+        if (is_class) {
+            auto field_info = get_class_field_info(struct_name_for_lookup, field_name);
+            if (field_info && field_info->is_inherited && !field_info->inheritance_path.empty()) {
+                is_inherited = true;
+
+                // Generate chained GEPs through inheritance path
+                std::string current_ptr = ptr;
+                std::string current_type = struct_type;
+
+                for (size_t step_idx = 0; step_idx < field_info->inheritance_path.size();
+                     ++step_idx) {
+                    const auto& step = field_info->inheritance_path[step_idx];
+                    std::string next_ptr = fresh_reg();
+                    emit_line("  " + next_ptr + " = getelementptr " + current_type + ", ptr " +
+                              current_ptr + ", i32 0, i32 " + std::to_string(step.index));
+                    current_ptr = next_ptr;
+                    current_type = "%class." + step.class_name;
+                }
+                field_ptr = current_ptr;
+            }
+        }
+
+        if (!is_inherited) {
+            // Direct field access
+            field_ptr = fresh_reg();
+            emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + ptr +
+                      ", i32 0, i32 " + std::to_string(field_idx));
+        }
+
         emit_line("  store " + field_type + " " + field_val + ", ptr " + field_ptr);
     }
 
@@ -494,6 +524,20 @@ auto LLVMIRGen::get_field_type(const std::string& struct_name, const std::string
     return "i32";
 }
 
+// Helper to get full class field info (including inheritance details)
+auto LLVMIRGen::get_class_field_info(const std::string& class_name, const std::string& field_name)
+    -> std::optional<ClassFieldInfo> {
+    auto class_it = class_fields_.find(class_name);
+    if (class_it != class_fields_.end()) {
+        for (const auto& field : class_it->second) {
+            if (field.name == field_name) {
+                return field;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     // Handle static field access (ClassName.field)
     if (field.object->is<parser::IdentExpr>()) {
@@ -599,11 +643,24 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
                 emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
                 struct_ptr = loaded_ptr;
             } else if (semantic_type->is<types::ClassType>()) {
-                // Class types - 'this' is already a direct pointer parameter
+                // Class types are heap-allocated pointers
                 // Use %class.ClassName as the struct type
                 const auto& cls = semantic_type->as<types::ClassType>();
                 struct_type = "%class." + cls.name;
-                // No need to load - struct_ptr (%this) is already the pointer
+                // For local variables, the alloca stores a pointer to the class instance
+                // We need to load the pointer first (unless it's a direct parameter)
+                if (field.object->is<parser::IdentExpr>()) {
+                    const auto& ident = field.object->as<parser::IdentExpr>();
+                    auto it = locals_.find(ident.name);
+                    bool is_direct_param = (it != locals_.end() && it->second.is_direct_param);
+                    if (!is_direct_param) {
+                        // Local variable - load the pointer from the alloca
+                        std::string loaded_ptr = fresh_reg();
+                        emit_line("  " + loaded_ptr + " = load ptr, ptr " + struct_ptr);
+                        struct_ptr = loaded_ptr;
+                    }
+                    // Direct parameters (this, other method params) are already pointers
+                }
             } else {
                 struct_type = llvm_type_from_semantic(semantic_type);
             }
@@ -684,10 +741,29 @@ auto LLVMIRGen::gen_field(const parser::FieldExpr& field) -> std::string {
     int field_idx = get_field_index(type_name, field.field);
     std::string field_type = get_field_type(type_name, field.field);
 
-    // Use getelementptr to access field, then load
-    std::string field_ptr = fresh_reg();
-    emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr +
-              ", i32 0, i32 " + std::to_string(field_idx));
+    std::string field_ptr;
+
+    // Check if this is an inherited field (for class types)
+    auto field_info = get_class_field_info(type_name, field.field);
+    if (field_info && field_info->is_inherited && !field_info->inheritance_path.empty()) {
+        // Generate chained GEPs through inheritance path
+        std::string current_ptr = struct_ptr;
+        std::string current_type = struct_type;
+
+        for (const auto& step : field_info->inheritance_path) {
+            std::string next_ptr = fresh_reg();
+            emit_line("  " + next_ptr + " = getelementptr " + current_type + ", ptr " +
+                      current_ptr + ", i32 0, i32 " + std::to_string(step.index));
+            current_ptr = next_ptr;
+            current_type = "%class." + step.class_name;
+        }
+        field_ptr = current_ptr;
+    } else {
+        // Direct field access
+        field_ptr = fresh_reg();
+        emit_line("  " + field_ptr + " = getelementptr " + struct_type + ", ptr " + struct_ptr +
+                  ", i32 0, i32 " + std::to_string(field_idx));
+    }
 
     std::string result = fresh_reg();
     emit_line("  " + result + " = load " + field_type + ", ptr " + field_ptr);

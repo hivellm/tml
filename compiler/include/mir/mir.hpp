@@ -609,6 +609,11 @@ struct Function {
     std::optional<AsyncStateMachine> state_machine; // State machine for async functions
     std::vector<std::string> attributes;            // @inline, @noinline, etc.
 
+    // sret (struct return) calling convention support
+    bool uses_sret = false;                ///< True if function uses sret parameter for return
+    MirTypePtr original_return_type;       ///< Original return type before sret conversion
+    ValueId sret_param_id = INVALID_VALUE; ///< Value ID of the sret parameter
+
     // Entry block is always blocks[0]
     [[nodiscard]] auto entry_block() -> BasicBlock& {
         return blocks[0];

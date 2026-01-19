@@ -110,6 +110,19 @@ const char* float_to_string(double value) {
     return float_buffer;
 }
 
+// f64_to_string(value: F64) -> Str
+// Alias for float_to_string, used by MIR codegen
+const char* f64_to_string(double value) {
+    return float_to_string(value);
+}
+
+// f32_to_string(value: F32) -> Str
+// Used by MIR codegen for F32.to_string()
+const char* f32_to_string(float value) {
+    snprintf(float_buffer, sizeof(float_buffer), "%g", (double)value);
+    return float_buffer;
+}
+
 // Note: float_to_precision, float_to_exp, f64_is_nan, f64_is_infinite
 // are defined in essential.c to avoid duplicate symbol errors
 

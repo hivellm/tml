@@ -1,0 +1,77 @@
+// Minimal repro for PHI node regression in loops with if-else chains
+// Test: phi_loop_regression
+
+sealed class Circle {
+    radius: F64
+
+    static func create(r: F64) -> Circle {
+        return Circle { radius: r }
+    }
+
+    func area(this) -> F64 {
+        return 3.14159265 * this.radius * this.radius
+    }
+}
+
+sealed class Rectangle {
+    width: F64
+    height: F64
+
+    static func create(w: F64, h: F64) -> Rectangle {
+        return Rectangle { width: w, height: h }
+    }
+
+    func area(this) -> F64 {
+        return this.width * this.height
+    }
+}
+
+sealed class Triangle {
+    base_len: F64
+    height: F64
+
+    static func create(b: F64, h: F64) -> Triangle {
+        return Triangle { base_len: b, height: h }
+    }
+
+    func area(this) -> F64 {
+        return 0.5 * this.base_len * this.height
+    }
+}
+
+func test_loop_with_if_else(iterations: I32) -> F64 {
+    let c: Circle = Circle::create(5.0)
+    let r: Rectangle = Rectangle::create(4.0, 6.0)
+    let t: Triangle = Triangle::create(3.0, 4.0)
+
+    var total: F64 = 0.0
+    var i: I32 = 0
+
+    loop {
+        if i >= iterations then { break }
+
+        let shape_idx: I32 = i % 3
+
+        if shape_idx == 0 then {
+            total = total + c.area()
+        } else if shape_idx == 1 then {
+            total = total + r.area()
+        } else {
+            total = total + t.area()
+        }
+
+        i = i + 1
+    }
+
+    return total
+}
+
+@test func test_phi_loop() {
+    let result: F64 = test_loop_with_if_else(9)
+    // 3 iterations of each shape
+    // Circle: 3 * 78.54 = 235.62
+    // Rectangle: 3 * 24 = 72
+    // Triangle: 3 * 6 = 18
+    // Total ≈ 325.62
+    assert(result > 300.0)
+}

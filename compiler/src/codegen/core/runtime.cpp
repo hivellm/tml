@@ -154,6 +154,8 @@ void LLVMIRGen::emit_runtime_decls() {
     emit_line("declare ptr @float_to_fixed(double, i32)");
     emit_line("declare ptr @float_to_precision(double, i32)");
     emit_line("declare ptr @float_to_string(double)");
+    emit_line("declare ptr @f64_to_string(double)"); // F64.to_string() method
+    emit_line("declare ptr @f32_to_string(float)");  // F32.to_string() method
     emit_line("declare ptr @float_to_exp(double, i32)");
     emit_line("declare i32 @f64_is_nan(double)");
     emit_line("declare i32 @f64_is_infinite(double)");

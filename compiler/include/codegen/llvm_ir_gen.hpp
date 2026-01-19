@@ -176,6 +176,7 @@ public:
         types::TypePtr semantic_type; ///< Full semantic type (for complex types).
         std::optional<ClosureCaptureInfo> closure_captures; ///< Capture info if closure.
         bool is_ptr_to_value = false; ///< True if reg is a pointer to the value (needs loading).
+        bool is_direct_param = false; ///< True if reg is a direct parameter (not an alloca).
     };
 
     /// Drop tracking information for RAII.
@@ -280,12 +281,24 @@ private:
     // ============ OOP Class Support (C#-style) ============
     // Tracks classes with single inheritance and virtual dispatch
 
+    // Path element for multi-level inheritance access
+    struct InheritancePathStep {
+        std::string class_name; // Class to GEP into
+        int index;              // Index within that class
+    };
+
     // Class field info for field access
     struct ClassFieldInfo {
         std::string name;
-        int index; // Field index in LLVM struct
+        int index; // Field index in LLVM struct (-1 for inherited)
         std::string llvm_type;
         parser::MemberVisibility vis;
+        // For inherited fields: full path through inheritance chain
+        bool is_inherited = false;
+        // Path from current class to the field (each step is a GEP)
+        // Example: For Derived4.value (4 levels deep):
+        // [{Derived3, 1}, {Derived2, 1}, {Derived1, 1}, {Base, 1}]
+        std::vector<InheritancePathStep> inheritance_path;
     };
 
     // Virtual method info for vtable layout
@@ -782,6 +795,9 @@ private:
     // Pop scope and emit lifetime.end for all allocas in scope
     void pop_lifetime_scope();
 
+    // Clear scope without emitting lifetime.end (used when already emitted)
+    void clear_lifetime_scope();
+
     // Emit lifetime.start for an alloca
     void emit_lifetime_start(const std::string& alloca_reg, int64_t size);
 
@@ -1040,6 +1056,8 @@ private:
     auto get_field_index(const std::string& struct_name, const std::string& field_name) -> int;
     auto get_field_type(const std::string& struct_name, const std::string& field_name)
         -> std::string;
+    auto get_class_field_info(const std::string& class_name, const std::string& field_name)
+        -> std::optional<ClassFieldInfo>;
 
     // Type inference for generics instantiation
     auto infer_expr_type(const parser::Expr& expr) -> types::TypePtr;

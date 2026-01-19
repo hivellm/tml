@@ -97,6 +97,9 @@ private:
     // String constants (value -> global name)
     std::unordered_map<std::string, std::string> string_constants_;
 
+    // sret function tracking (func_name -> original return type as LLVM string)
+    std::unordered_map<std::string, std::string> sret_functions_;
+
     // Generate helpers
     void emit_preamble();
     void emit_type_defs(const mir::Module& module);

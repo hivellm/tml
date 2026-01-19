@@ -110,6 +110,14 @@ auto MirCodegen::generate(const mir::Module& module) -> std::string {
 
     emit_type_defs(module);
 
+    // Collect sret functions (those with uses_sret flag set by RVO pass)
+    sret_functions_.clear();
+    for (const auto& func : module.functions) {
+        if (func.uses_sret && func.original_return_type) {
+            sret_functions_[func.name] = mir_type_to_llvm(func.original_return_type);
+        }
+    }
+
     // Emit functions
     for (const auto& func : module.functions) {
         emit_function(func);
@@ -360,7 +368,14 @@ void MirCodegen::emit_function(const mir::Function& func) {
         if (i > 0) {
             emit(", ");
         }
-        emit(mir_type_to_llvm(func.params[i].type) + " %" + func.params[i].name);
+        std::string param_type = mir_type_to_llvm(func.params[i].type);
+        // If this function uses sret, the first parameter gets the sret attribute
+        if (func.uses_sret && i == 0 && func.original_return_type) {
+            std::string orig_ret_type = mir_type_to_llvm(func.original_return_type);
+            emit(param_type + " sret(" + orig_ret_type + ") %" + func.params[i].name);
+        } else {
+            emit(param_type + " %" + func.params[i].name);
+        }
     }
 
     emitln(")" + inline_attr + " {");
@@ -586,31 +601,19 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 emitln();
 
             } else if constexpr (std::is_same_v<T, mir::ExtractValueInst>) {
-                // Use alloca + getelementptr + load pattern for field extraction.
-                // This enables LLVM's SROA to break aggregates into scalars.
+                // Use LLVM's native extractvalue instruction for direct field access.
+                // This is much more efficient than alloca+gep+load and enables better optimization.
                 std::string agg = get_value_reg(i.aggregate);
                 mir::MirTypePtr type_ptr = i.aggregate_type ? i.aggregate_type : i.aggregate.type;
                 std::string agg_type = mir_type_to_llvm(type_ptr);
                 std::string field_type = i.result_type ? mir_type_to_llvm(i.result_type) : "i32";
 
-                // Allocate temp storage for aggregate
-                std::string alloc_reg = "%tmp" + std::to_string(temp_counter_++);
-                emitln("    " + alloc_reg + " = alloca " + agg_type);
-
-                // Store aggregate to temp
-                emitln("    store " + agg_type + " " + agg + ", ptr " + alloc_reg);
-
-                // Use getelementptr to get field pointer
-                std::string gep_reg = "%gep" + std::to_string(temp_counter_++);
-                emit("    " + gep_reg + " = getelementptr inbounds " + agg_type + ", ptr " +
-                     alloc_reg + ", i32 0");
+                // Emit: %result = extractvalue <agg_type> <agg>, <idx1>, <idx2>, ...
+                emit("    " + result_reg + " = extractvalue " + agg_type + " " + agg);
                 for (auto idx : i.indices) {
-                    emit(", i32 " + std::to_string(idx));
+                    emit(", " + std::to_string(idx));
                 }
                 emitln();
-
-                // Load field value
-                emitln("    " + result_reg + " = load " + field_type + ", ptr " + gep_reg);
 
                 // Store result type for subsequent operations
                 if (i.result_type && inst.result != mir::INVALID_VALUE) {
@@ -798,32 +801,59 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     processed_args.push_back(arg_type + " " + arg);
                 }
 
-                mir::MirTypePtr ret_ptr = i.return_type;
-                // If we have a result but no return type, the function must return something
-                // Default to ptr for runtime functions like i64_to_string
-                if (!ret_ptr && inst.result != mir::INVALID_VALUE) {
-                    ret_ptr = mir::make_ptr_type();
-                } else if (!ret_ptr) {
-                    ret_ptr = mir::make_unit_type();
-                }
-                std::string ret_type = mir_type_to_llvm(ret_ptr);
-                if (ret_type != "void" && !result_reg.empty()) {
-                    emit("    " + result_reg + " = ");
-                } else {
-                    emit("    ");
-                }
-                emit("call " + ret_type + " @" + func_name + "(");
-                for (size_t j = 0; j < processed_args.size(); ++j) {
-                    if (j > 0) {
-                        emit(", ");
-                    }
-                    emit(processed_args[j]);
-                }
-                emitln(")");
+                // Check if calling an sret function
+                auto sret_it = sret_functions_.find(func_name);
+                if (sret_it != sret_functions_.end()) {
+                    // This is an sret call - allocate space and pass as first arg
+                    std::string orig_ret_type = sret_it->second;
+                    std::string sret_slot = "%sret.slot." + std::to_string(spill_counter_++);
 
-                // Register the return type for subsequent operations
-                if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
-                    value_types_[inst.result] = ret_type;
+                    // Allocate space for return value
+                    emitln("    " + sret_slot + " = alloca " + orig_ret_type + ", align 8");
+
+                    // Emit call with sret pointer as first argument
+                    emit("    call void @" + func_name + "(ptr sret(" + orig_ret_type + ") " +
+                         sret_slot);
+                    for (const auto& arg : processed_args) {
+                        emit(", " + arg);
+                    }
+                    emitln(")");
+
+                    // Load the result if needed
+                    if (!result_reg.empty()) {
+                        emitln("    " + result_reg + " = load " + orig_ret_type + ", ptr " +
+                               sret_slot + ", align 8");
+                        value_types_[inst.result] = orig_ret_type;
+                    }
+                } else {
+                    // Normal call (non-sret)
+                    mir::MirTypePtr ret_ptr = i.return_type;
+                    // If we have a result but no return type, the function must return something
+                    // Default to ptr for runtime functions like i64_to_string
+                    if (!ret_ptr && inst.result != mir::INVALID_VALUE) {
+                        ret_ptr = mir::make_ptr_type();
+                    } else if (!ret_ptr) {
+                        ret_ptr = mir::make_unit_type();
+                    }
+                    std::string ret_type = mir_type_to_llvm(ret_ptr);
+                    if (ret_type != "void" && !result_reg.empty()) {
+                        emit("    " + result_reg + " = ");
+                    } else {
+                        emit("    ");
+                    }
+                    emit("call " + ret_type + " @" + func_name + "(");
+                    for (size_t j = 0; j < processed_args.size(); ++j) {
+                        if (j > 0) {
+                            emit(", ");
+                        }
+                        emit(processed_args[j]);
+                    }
+                    emitln(")");
+
+                    // Register the return type for subsequent operations
+                    if (inst.result != mir::INVALID_VALUE && ret_type != "void") {
+                        value_types_[inst.result] = ret_type;
+                    }
                 }
 
             } else if constexpr (std::is_same_v<T, mir::MethodCallInst>) {
@@ -1036,7 +1066,17 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                             emit(", ");
                         }
                         std::string val = get_value_reg(i.incoming[j].first);
-                        std::string label = block_labels_[i.incoming[j].second];
+                        uint32_t block_id = i.incoming[j].second;
+                        auto label_it = block_labels_.find(block_id);
+                        std::string label;
+                        if (label_it != block_labels_.end()) {
+                            label = label_it->second;
+                        } else {
+                            // Block ID not found - emit debug comment
+                            label = "MISSING_BLOCK_" + std::to_string(block_id);
+                            std::cerr << "[CODEGEN] PHI references block " << block_id
+                                      << " which is not in block_labels_\n";
+                        }
                         emit("[ " + val + ", %" + label + " ]");
                     }
                     emitln();
@@ -1110,9 +1150,28 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                 // This enables LLVM's SROA to break aggregates into scalars.
                 std::string struct_type = "%struct." + i.struct_name;
 
+                // DEBUG: Always emit a marker comment to confirm we entered this path
+                emitln("    ; STRUCTINIT: " + i.struct_name + " result=" + result_reg);
+
                 // Check if result type is pointer (class type) - need to return ptr
                 bool is_class_type =
                     result_type && std::holds_alternative<mir::MirPointerType>(result_type->kind);
+
+                // Debug: emit which path is taken
+                if (options_.emit_comments) {
+                    std::string type_info = result_type ? "has_type" : "null_type";
+                    if (result_type) {
+                        if (std::holds_alternative<mir::MirPointerType>(result_type->kind)) {
+                            type_info += "_ptr";
+                        } else if (std::holds_alternative<mir::MirStructType>(result_type->kind)) {
+                            type_info += "_struct";
+                        } else {
+                            type_info += "_other";
+                        }
+                    }
+                    emitln("    ; StructInit " + i.struct_name + " is_class=" +
+                           (is_class_type ? "true" : "false") + " type=" + type_info);
+                }
 
                 // Helper lambda to coerce integer types if needed
                 auto coerce_int_type = [this](std::string& field_val,
@@ -1157,47 +1216,76 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
                     expected_field_types = &struct_it->second;
                 }
 
-                // Allocate struct on stack
-                std::string alloc_reg = "%tmp" + std::to_string(temp_counter_++);
-                emitln("    " + alloc_reg + " = alloca " + struct_type);
-
-                // Initialize each field using getelementptr + store
-                for (size_t j = 0; j < i.fields.size(); ++j) {
-                    std::string field_val = get_value_reg(i.fields[j]);
-
-                    // Use struct definition's field type (authoritative)
-                    std::string field_type;
-                    if (expected_field_types && j < expected_field_types->size()) {
-                        field_type = (*expected_field_types)[j];
-                    } else {
-                        // Fallback to MIR type
-                        mir::MirTypePtr field_ptr = (j < i.field_types.size() && i.field_types[j])
-                                                        ? i.field_types[j]
-                                                        : i.fields[j].type;
-                        if (!field_ptr) {
-                            field_ptr = mir::make_i32_type();
-                        }
-                        field_type = mir_type_to_llvm(field_ptr);
-                    }
-
-                    // Coerce type if needed
-                    coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
-
-                    // Get pointer to field using getelementptr
-                    std::string field_ptr_reg = "%gep" + std::to_string(temp_counter_++);
-                    emitln("    " + field_ptr_reg + " = getelementptr inbounds " + struct_type +
-                           ", ptr " + alloc_reg + ", i32 0, i32 " + std::to_string(j));
-
-                    // Store field value
-                    emitln("    store " + field_type + " " + field_val + ", ptr " + field_ptr_reg);
-                }
-
                 if (is_class_type) {
-                    // For class types: return pointer
+                    // For class types: use alloca pattern (need to return pointer)
+                    std::string alloc_reg = "%tmp" + std::to_string(temp_counter_++);
+                    emitln("    " + alloc_reg + " = alloca " + struct_type);
+
+                    for (size_t j = 0; j < i.fields.size(); ++j) {
+                        std::string field_val = get_value_reg(i.fields[j]);
+
+                        std::string field_type;
+                        if (expected_field_types && j < expected_field_types->size()) {
+                            field_type = (*expected_field_types)[j];
+                        } else {
+                            mir::MirTypePtr field_ptr =
+                                (j < i.field_types.size() && i.field_types[j]) ? i.field_types[j]
+                                                                               : i.fields[j].type;
+                            if (!field_ptr) {
+                                field_ptr = mir::make_i32_type();
+                            }
+                            field_type = mir_type_to_llvm(field_ptr);
+                        }
+
+                        coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+
+                        std::string field_ptr_reg = "%gep" + std::to_string(temp_counter_++);
+                        emitln("    " + field_ptr_reg + " = getelementptr inbounds " + struct_type +
+                               ", ptr " + alloc_reg + ", i32 0, i32 " + std::to_string(j));
+                        emitln("    store " + field_type + " " + field_val + ", ptr " +
+                               field_ptr_reg);
+                    }
                     emitln("    " + result_reg + " = bitcast ptr " + alloc_reg + " to ptr");
                 } else {
-                    // For non-class types: load and return struct by value
-                    emitln("    " + result_reg + " = load " + struct_type + ", ptr " + alloc_reg);
+                    // For non-class types: use insertvalue chain (much more efficient!)
+                    // Generates: %t0 = insertvalue T undef, fieldtype %val, 0
+                    //            %t1 = insertvalue T %t0, fieldtype %val, 1
+                    //            ...
+                    std::string current_val = "undef";
+
+                    for (size_t j = 0; j < i.fields.size(); ++j) {
+                        std::string field_val = get_value_reg(i.fields[j]);
+
+                        std::string field_type;
+                        if (expected_field_types && j < expected_field_types->size()) {
+                            field_type = (*expected_field_types)[j];
+                        } else {
+                            mir::MirTypePtr field_ptr =
+                                (j < i.field_types.size() && i.field_types[j]) ? i.field_types[j]
+                                                                               : i.fields[j].type;
+                            if (!field_ptr) {
+                                field_ptr = mir::make_i32_type();
+                            }
+                            field_type = mir_type_to_llvm(field_ptr);
+                        }
+
+                        coerce_int_type(field_val, field_type, i.fields[j].id, i.fields[j].type);
+
+                        // Use result_reg for the last field, temp for intermediate values
+                        std::string next_reg = (j == i.fields.size() - 1)
+                                                   ? result_reg
+                                                   : ("%insert" + std::to_string(temp_counter_++));
+                        emitln("    " + next_reg + " = insertvalue " + struct_type + " " +
+                               current_val + ", " + field_type + " " + field_val + ", " +
+                               std::to_string(j));
+                        current_val = next_reg;
+                    }
+
+                    // Handle empty struct case
+                    if (i.fields.empty()) {
+                        emitln("    " + result_reg + " = insertvalue " + struct_type +
+                               " undef, i32 0, 0");
+                    }
                 }
 
                 // Store the struct type for later spill detection

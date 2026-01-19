@@ -825,6 +825,7 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
     // CRITICAL: Update PHIs in other blocks that reference the original block
     // Since we moved the terminator to the continuation block, any PHIs that
     // expected edges from the original block now need to reference the continuation
+    int phi_updates = 0;
     for (auto& caller_block : caller.blocks) {
         // Skip the original block and continuation block themselves
         if (caller_block.id == original_block_id || caller_block.id == continuation_block_id) {
@@ -837,11 +838,14 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
                     // If the PHI references the original block, update to continuation
                     if (from_block == original_block_id) {
                         from_block = continuation_block_id;
+                        phi_updates++;
                     }
                 }
             }
         }
     }
+    // Debug: print if we made any updates (disabled)
+    (void)phi_updates; // Suppress unused warning
 
     return true;
 }

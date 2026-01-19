@@ -42,12 +42,17 @@ auto RvoPass::run_on_function(Function& func) -> bool {
     }
 
     // Phase 3: Check if function should use sret calling convention
-    if (should_use_sret(func)) {
-        if (convert_to_sret(func)) {
-            stats_.sret_conversions++;
-            changed = true;
-        }
-    }
+    // DISABLED: sret conversion breaks inlining - functions become void returns
+    // and inlining doesn't handle this case properly. Need to either:
+    // 1. Run RVO after all inlining
+    // 2. Make inlining aware of sret
+    // For now, disable sret and focus on extractvalue/insertvalue optimizations
+    // if (should_use_sret(func)) {
+    //     if (convert_to_sret(func)) {
+    //         stats_.sret_conversions++;
+    //         changed = true;
+    //     }
+    // }
 
     return changed;
 }
@@ -132,8 +137,6 @@ auto RvoPass::should_use_sret(const Function& func) const -> bool {
     if (func.return_type) {
         if (auto* struct_type = std::get_if<MirStructType>(&func.return_type->kind)) {
             // Named struct types should use sret
-            // In a full implementation, we would compute actual size
-            // For now, mark any struct return as sret-eligible
             (void)struct_type;
             return true;
         }
@@ -158,15 +161,65 @@ void RvoPass::mark_for_return_slot(Function& func, ValueId local_var) {
 }
 
 auto RvoPass::convert_to_sret(Function& func) -> bool {
-    // In a full implementation, this would:
-    // 1. Add an sret parameter at the beginning of the parameter list
-    // 2. Change all store instructions to the return variable to use sret ptr
-    // 3. Change return instructions to just return void
-    //
-    // For now, we mark the function for sret conversion
-    // The actual transformation happens in codegen
-    (void)func;
-    return false; // Not yet implemented
+    // Skip if already converted or no return type
+    if (func.uses_sret || !func.return_type || func.return_type->is_unit()) {
+        return false;
+    }
+
+    // Skip main function - it must return I32 by convention
+    if (func.name == "main" || func.name == "tml_main") {
+        return false;
+    }
+
+    // Save original return type for codegen
+    func.original_return_type = func.return_type;
+
+    // Create sret parameter with a new value ID
+    ValueId sret_id = func.fresh_value();
+    func.sret_param_id = sret_id;
+
+    FunctionParam sret_param;
+    sret_param.name = "sret";
+    sret_param.type = make_pointer_type(func.return_type, true); // mutable pointer
+    sret_param.value_id = sret_id;
+
+    // Insert sret as first parameter
+    func.params.insert(func.params.begin(), sret_param);
+
+    // Transform all return statements:
+    // 1. Add store of return value to sret pointer before return
+    // 2. Change return to return void
+    for (auto& block : func.blocks) {
+        if (!block.terminator)
+            continue;
+
+        if (auto* ret = std::get_if<ReturnTerm>(&*block.terminator)) {
+            if (ret->value.has_value()) {
+                // Create store instruction: store return_value to sret pointer
+                StoreInst store;
+                store.ptr = Value{sret_id, sret_param.type};
+                store.value = *ret->value;
+                store.value_type = func.original_return_type;
+
+                InstructionData store_inst;
+                store_inst.result = INVALID_VALUE; // Store has no result
+                store_inst.type = nullptr;
+                store_inst.inst = store;
+                store_inst.span = {}; // No span for generated instructions
+
+                block.instructions.push_back(store_inst);
+
+                // Change return to void
+                ret->value = std::nullopt;
+            }
+        }
+    }
+
+    // Change function return type to void
+    func.return_type = make_unit_type();
+    func.uses_sret = true;
+
+    return true;
 }
 
 auto RvoPass::apply_nrvo(Function& func, ValueId local_var) -> bool {

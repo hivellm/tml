@@ -151,24 +151,59 @@ void LLVMIRGen::gen_class_decl(const parser::ClassDecl& c) {
     }
 
     // If class extends another, include base class as embedded struct
+    std::string base_class_name;
+    int base_class_idx = -1;
     if (c.extends) {
-        std::string base_name = c.extends->segments.back();
+        base_class_name = c.extends->segments.back();
         // Make sure base class type is generated first
-        auto base_class = env_.lookup_class(base_name);
+        auto base_class = env_.lookup_class(base_class_name);
         if (base_class) {
             // If base class type hasn't been generated yet (external module), emit it now
-            if (class_types_.find(base_name) == class_types_.end()) {
-                emit_external_class_type(base_name, *base_class);
+            if (class_types_.find(base_class_name) == class_types_.end()) {
+                emit_external_class_type(base_class_name, *base_class);
             }
             // Base class fields are embedded (excluding vtable since we have our own)
             // For simplicity, include base as embedded struct
-            field_types.push_back("%class." + base_name);
+            base_class_idx = static_cast<int>(field_types.size());
+            field_types.push_back("%class." + base_class_name);
         }
     }
 
     // Add own instance fields (non-static)
     std::vector<ClassFieldInfo> field_info;
     size_t field_offset = field_types.size(); // Start after vtable (if present) and base
+
+    // First, add inherited fields from base class (for initialization)
+    // Build full inheritance path for multi-level inheritance
+    if (!base_class_name.empty()) {
+        auto base_fields_it = class_fields_.find(base_class_name);
+        if (base_fields_it != class_fields_.end()) {
+            for (const auto& base_field : base_fields_it->second) {
+                // Add inherited field with full path
+                ClassFieldInfo inherited;
+                inherited.name = base_field.name;
+                inherited.index = -1; // Not a direct index
+                inherited.llvm_type = base_field.llvm_type;
+                inherited.vis = base_field.vis;
+                inherited.is_inherited = true;
+
+                // Build the inheritance path: first step is to access base in current class
+                // Then if the base field is inherited, append its path
+                inherited.inheritance_path.push_back({base_class_name, base_class_idx});
+
+                if (base_field.is_inherited) {
+                    // Append the path from the base class to the actual field
+                    for (const auto& step : base_field.inheritance_path) {
+                        inherited.inheritance_path.push_back(step);
+                    }
+                } else {
+                    // Field is directly in the base class - add final step
+                    inherited.inheritance_path.push_back({base_class_name, base_field.index});
+                }
+                field_info.push_back(inherited);
+            }
+        }
+    }
 
     for (const auto& field : c.fields) {
         if (field.is_static)
@@ -1315,7 +1350,9 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
         // Create semantic type for 'this' so field access can infer the correct class type
         auto this_type = std::make_shared<types::Type>();
         this_type->kind = types::ClassType{c.name};
-        locals_["this"] = VarInfo{"%this", "ptr", this_type, std::nullopt};
+        // Mark 'this' as direct param - it's a pointer parameter, not an alloca
+        locals_["this"] =
+            VarInfo{"%this", "ptr", this_type, std::nullopt, false, true /*is_direct_param*/};
     }
 
     // Set up locals for other parameters (non-this)
@@ -1333,8 +1370,13 @@ void LLVMIRGen::gen_class_method(const parser::ClassDecl& c, const parser::Class
             semantic = resolve_parser_type_with_subs(*param.type, {});
         }
 
-        locals_[param_names[param_idx]] =
-            VarInfo{"%" + param_names[param_idx], param_types[param_idx], semantic, std::nullopt};
+        // Mark all class method params as direct - they're pointer parameters, not allocas
+        locals_[param_names[param_idx]] = VarInfo{"%" + param_names[param_idx],
+                                                  param_types[param_idx],
+                                                  semantic,
+                                                  std::nullopt,
+                                                  false,
+                                                  true /*is_direct_param*/};
         ++param_idx;
     }
 
