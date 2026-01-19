@@ -19,6 +19,8 @@
 - [x] 4.2.6 `docs/search` - Search documentation
 - [x] 4.2.7 `run` - Build and execute TML file, return output
 - [x] 4.2.8 `build` - Full build with options (output, optimize, release, crate_type)
+- [x] 4.2.9 `format` - Format TML source files (check mode supported)
+- [x] 4.2.10 `lint` - Lint TML source files (fix mode supported)
 
 ### 4.3 Claude Code Integration
 - [x] 4.3.1 Create `.mcp.json` configuration file
