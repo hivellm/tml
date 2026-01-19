@@ -270,6 +270,13 @@ add_library(tml_mir STATIC
     src/mir/passes/destructor_hoist.cpp
     src/mir/passes/batch_destruction.cpp
     src/mir/passes/infinite_loop_check.cpp
+    src/mir/passes/bounds_check_elimination.cpp
+    src/mir/passes/rvo.cpp
+    src/mir/passes/alias_analysis.cpp
+    src/mir/passes/ipo.cpp
+    src/mir/passes/loop_opts.cpp
+    src/mir/passes/pgo.cpp
+    src/mir/passes/vectorization.cpp
 )
 target_link_libraries(tml_mir PUBLIC tml_hir tml_types)
 target_include_directories(tml_mir PUBLIC include src)

@@ -46,13 +46,16 @@ void HirMirBuilder::build_let_stmt(const hir::HirLetStmt& let) {
     // Bind pattern to value
     build_pattern_binding(let.pattern, init_value);
 
-    // Register for drop if the type needs dropping
+    // Register for drop if the type needs dropping (not trivially destructible)
     MirTypePtr var_type = init_value.type;
     std::string type_name = get_type_name(var_type);
 
     // For simple binding patterns, register the variable for drop
+    // Only if the type actually needs drop (implements Drop or contains non-trivial fields)
     if (auto* binding = std::get_if<hir::HirBindingPattern>(&let.pattern->kind)) {
-        ctx_.register_for_drop(binding->name, init_value, type_name, var_type);
+        if (!type_name.empty() && !env_.is_trivially_destructible(type_name)) {
+            ctx_.register_for_drop(binding->name, init_value, type_name, var_type);
+        }
     }
 }
 

@@ -49,6 +49,8 @@ void register_compiler_tools(McpServer& server) {
     server.register_tool(make_emit_ir_tool(), handle_emit_ir);
     server.register_tool(make_emit_mir_tool(), handle_emit_mir);
     server.register_tool(make_test_tool(), handle_test);
+    server.register_tool(make_format_tool(), handle_format);
+    server.register_tool(make_lint_tool(), handle_lint);
     server.register_tool(make_docs_search_tool(), handle_docs_search);
 }
 
@@ -57,54 +59,51 @@ void register_compiler_tools(McpServer& server) {
 // ============================================================================
 
 auto make_compile_tool() -> Tool {
-    return Tool{
-        .name = "compile",
-        .description = "Compile a TML source file to executable or library",
-        .parameters = {
-            {"file", "string", "Path to the source file", true},
-            {"output", "string", "Output file path", false},
-            {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
-            {"release", "boolean", "Build in release mode with optimizations", false},
-        }};
+    return Tool{.name = "compile",
+                .description = "Compile a TML source file to executable or library",
+                .parameters = {
+                    {"file", "string", "Path to the source file", true},
+                    {"output", "string", "Output file path", false},
+                    {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
+                    {"release", "boolean", "Build in release mode with optimizations", false},
+                }};
 }
 
 auto make_check_tool() -> Tool {
-    return Tool{
-        .name = "check",
-        .description = "Type check a TML source file without compiling",
-        .parameters = {
-            {"file", "string", "Path to the source file", true},
-        }};
+    return Tool{.name = "check",
+                .description = "Type check a TML source file without compiling",
+                .parameters = {
+                    {"file", "string", "Path to the source file", true},
+                }};
 }
 
 auto make_run_tool() -> Tool {
-    return Tool{
-        .name = "run",
-        .description = "Build and execute a TML source file, returning program output",
-        .parameters = {
-            {"file", "string", "Path to the source file", true},
-            {"args", "array", "Arguments to pass to the program", false},
-            {"release", "boolean", "Build in release mode with optimizations", false},
-        }};
+    return Tool{.name = "run",
+                .description = "Build and execute a TML source file, returning program output",
+                .parameters = {
+                    {"file", "string", "Path to the source file", true},
+                    {"args", "array", "Arguments to pass to the program", false},
+                    {"release", "boolean", "Build in release mode with optimizations", false},
+                }};
 }
 
 auto make_build_tool() -> Tool {
-    return Tool{
-        .name = "build",
-        .description = "Build a TML source file to executable with full options",
-        .parameters = {
-            {"file", "string", "Path to the source file", true},
-            {"output", "string", "Output file path", false},
-            {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
-            {"release", "boolean", "Build in release mode with optimizations", false},
-            {"crate_type", "string", "Output type: bin, lib, dylib, rlib", false},
-        }};
+    return Tool{.name = "build",
+                .description = "Build a TML source file to executable with full options",
+                .parameters = {
+                    {"file", "string", "Path to the source file", true},
+                    {"output", "string", "Output file path", false},
+                    {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
+                    {"release", "boolean", "Build in release mode with optimizations", false},
+                    {"crate_type", "string", "Output type: bin, lib, dylib, rlib", false},
+                }};
 }
 
 auto make_emit_ir_tool() -> Tool {
     return Tool{
         .name = "emit-ir",
-        .description = "Emit LLVM IR for a TML source file. Supports chunked output to avoid token limits.",
+        .description =
+            "Emit LLVM IR for a TML source file. Supports chunked output to avoid token limits.",
         .parameters = {
             {"file", "string", "Path to the source file", true},
             {"optimize", "string", "Optimization level (O0, O1, O2, O3)", false},
@@ -115,33 +114,48 @@ auto make_emit_ir_tool() -> Tool {
 }
 
 auto make_emit_mir_tool() -> Tool {
-    return Tool{
-        .name = "emit-mir",
-        .description = "Emit MIR (Mid-level IR) for a TML source file",
-        .parameters = {
-            {"file", "string", "Path to the source file", true},
-        }};
+    return Tool{.name = "emit-mir",
+                .description = "Emit MIR (Mid-level IR) for a TML source file",
+                .parameters = {
+                    {"file", "string", "Path to the source file", true},
+                }};
 }
 
 auto make_test_tool() -> Tool {
-    return Tool{
-        .name = "test",
-        .description = "Run TML tests",
-        .parameters = {
-            {"path", "string", "Path to test file or directory", false},
-            {"filter", "string", "Test name filter", false},
-            {"release", "boolean", "Run in release mode", false},
-        }};
+    return Tool{.name = "test",
+                .description = "Run TML tests",
+                .parameters = {
+                    {"path", "string", "Path to test file or directory", false},
+                    {"filter", "string", "Test name filter", false},
+                    {"release", "boolean", "Run in release mode", false},
+                }};
+}
+
+auto make_format_tool() -> Tool {
+    return Tool{.name = "format",
+                .description = "Format TML source files",
+                .parameters = {
+                    {"file", "string", "Path to the source file or directory", true},
+                    {"check", "boolean", "Check formatting without modifying files", false},
+                }};
+}
+
+auto make_lint_tool() -> Tool {
+    return Tool{.name = "lint",
+                .description = "Lint TML source files for style and potential issues",
+                .parameters = {
+                    {"file", "string", "Path to the source file or directory", true},
+                    {"fix", "boolean", "Automatically fix issues where possible", false},
+                }};
 }
 
 auto make_docs_search_tool() -> Tool {
-    return Tool{
-        .name = "docs/search",
-        .description = "Search TML documentation",
-        .parameters = {
-            {"query", "string", "Search query", true},
-            {"limit", "number", "Maximum results (default: 10)", false},
-        }};
+    return Tool{.name = "docs/search",
+                .description = "Search TML documentation",
+                .parameters = {
+                    {"query", "string", "Search query", true},
+                    {"limit", "number", "Maximum results (default: 10)", false},
+                }};
 }
 
 // ============================================================================
@@ -289,8 +303,8 @@ auto handle_compile(const json::JsonValue& params) -> ToolResult {
 
     // Check for release mode
     auto* release_param = params.get("release");
-    bool release = (release_param != nullptr && release_param->is_bool() &&
-                    release_param->as_bool());
+    bool release =
+        (release_param != nullptr && release_param->is_bool() && release_param->as_bool());
     if (release && opt_level == "O0") {
         opt_level = "O2";
     }
@@ -740,6 +754,95 @@ auto handle_test(const json::JsonValue& params) -> ToolResult {
     output << "\n[Test runner integration pending]\n";
 
     return ToolResult::text(output.str());
+}
+
+auto handle_format(const json::JsonValue& params) -> ToolResult {
+    // Get file parameter
+    auto* file_param = params.get("file");
+    if (file_param == nullptr || !file_param->is_string()) {
+        return ToolResult::error("Missing or invalid 'file' parameter");
+    }
+    std::string file_path = file_param->as_string();
+
+    // Check file/directory exists
+    if (!fs::exists(file_path)) {
+        return ToolResult::error("Path not found: " + file_path);
+    }
+
+    // Build command
+    std::string tml_exe = get_tml_executable();
+    std::stringstream cmd;
+    cmd << "\"" << tml_exe << "\" format \"" << file_path << "\"";
+
+    // Add check flag if specified
+    auto* check_param = params.get("check");
+    if (check_param != nullptr && check_param->is_bool() && check_param->as_bool()) {
+        cmd << " --check";
+    }
+
+    // Execute
+    auto [output, exit_code] = execute_command(cmd.str());
+
+    std::stringstream result;
+    if (exit_code == 0) {
+        result << "Format successful!\n";
+        result << "Path: " << file_path << "\n";
+    } else {
+        result << "Format failed or found unformatted files (exit code " << exit_code << ")\n";
+    }
+
+    if (!output.empty()) {
+        result << "\n--- Output ---\n" << output;
+    }
+
+    if (exit_code != 0) {
+        return ToolResult::error(result.str());
+    }
+
+    return ToolResult::text(result.str());
+}
+
+auto handle_lint(const json::JsonValue& params) -> ToolResult {
+    // Get file parameter
+    auto* file_param = params.get("file");
+    if (file_param == nullptr || !file_param->is_string()) {
+        return ToolResult::error("Missing or invalid 'file' parameter");
+    }
+    std::string file_path = file_param->as_string();
+
+    // Check file/directory exists
+    if (!fs::exists(file_path)) {
+        return ToolResult::error("Path not found: " + file_path);
+    }
+
+    // Build command
+    std::string tml_exe = get_tml_executable();
+    std::stringstream cmd;
+    cmd << "\"" << tml_exe << "\" lint \"" << file_path << "\"";
+
+    // Add fix flag if specified
+    auto* fix_param = params.get("fix");
+    if (fix_param != nullptr && fix_param->is_bool() && fix_param->as_bool()) {
+        cmd << " --fix";
+    }
+
+    // Execute
+    auto [output, exit_code] = execute_command(cmd.str());
+
+    std::stringstream result;
+    if (exit_code == 0) {
+        result << "Lint passed!\n";
+        result << "Path: " << file_path << "\n";
+    } else {
+        result << "Lint found issues (exit code " << exit_code << ")\n";
+    }
+
+    if (!output.empty()) {
+        result << "\n--- Output ---\n" << output;
+    }
+
+    // Lint errors are not fatal - return text even with non-zero exit
+    return ToolResult::text(result.str());
 }
 
 auto handle_docs_search(const json::JsonValue& params) -> ToolResult {

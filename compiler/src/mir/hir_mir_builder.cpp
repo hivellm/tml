@@ -657,6 +657,11 @@ void HirMirBuilder::emit_drop_calls(const std::vector<BuildContext::DropInfo>& d
 
 void HirMirBuilder::emit_drop_for_value(Value value, const MirTypePtr& type,
                                         const std::string& type_name) {
+    // Skip drop for trivially destructible types (defense in depth)
+    if (type_name.empty() || env_.is_trivially_destructible(type_name)) {
+        return;
+    }
+
     // Generate drop call: drop_TypeName(value)
     std::string drop_func = "drop_" + type_name;
 

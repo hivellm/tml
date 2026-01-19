@@ -19,7 +19,6 @@
 #include "mcp/mcp_server.hpp"
 
 #include "json/json_parser.hpp"
-
 #include <iostream>
 
 namespace tml::mcp {
@@ -123,8 +122,7 @@ void McpServer::process_request(const json::JsonRpcRequest& request) {
         response = handle_tools_call(std::move(params), std::move(id));
     } else {
         response = json::JsonRpcResponse::failure(
-            json::JsonRpcError::from_code(json::JsonRpcErrorCode::MethodNotFound),
-            std::move(id));
+            json::JsonRpcError::from_code(json::JsonRpcErrorCode::MethodNotFound), std::move(id));
     }
 
     send_response(response);

@@ -12,6 +12,12 @@
 //!
 //! - **Store-to-Load Forwarding**: If we store value V to address A, and later
 //!   load from A with no intervening store, use V directly.
+//!
+//! ## Alias Analysis Integration
+//!
+//! When constructed with an AliasAnalysisPass pointer, uses precise alias
+//! information to avoid conservative invalidation. Without alias analysis,
+//! falls back to conservative behavior (assumes all pointers may alias).
 
 #pragma once
 
@@ -22,8 +28,18 @@
 
 namespace tml::mir {
 
+// Forward declaration
+class AliasAnalysisPass;
+
 class LoadStoreOptPass : public FunctionPass {
 public:
+    /// Construct without alias analysis (conservative mode)
+    LoadStoreOptPass() = default;
+
+    /// Construct with alias analysis for precise optimization
+    explicit LoadStoreOptPass(AliasAnalysisPass* alias_analysis)
+        : alias_analysis_(alias_analysis) {}
+
     [[nodiscard]] auto name() const -> std::string override {
         return "LoadStoreOpt";
     }
@@ -32,6 +48,8 @@ protected:
     auto run_on_function(Function& func) -> bool override;
 
 private:
+    AliasAnalysisPass* alias_analysis_ = nullptr;
+
     // Track the last value stored to an address
     struct MemState {
         ValueId stored_value{0}; // Last value stored (0 = unknown)
@@ -42,6 +60,8 @@ private:
 
     auto optimize_block(Function& func, BasicBlock& block) -> bool;
     auto may_alias(ValueId ptr1, ValueId ptr2) -> bool;
+    auto invalidate_aliasing(std::unordered_map<ValueId, MemState>& mem_state, ValueId store_ptr)
+        -> void;
     auto invalidate_all(std::unordered_map<ValueId, MemState>& mem_state) -> void;
 };
 

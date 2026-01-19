@@ -31,7 +31,10 @@
 
 #include "mir/passes/inlining.hpp"
 
+#include "mir/passes/pgo.hpp"
+
 #include <algorithm>
+#include <unordered_set>
 
 namespace tml::mir {
 
@@ -57,6 +60,137 @@ static auto has_noinline_attr(const Function& func) -> bool {
         }
     }
     return false;
+}
+
+// Rebuild predecessors and successors from terminators
+// This MUST be called after any transformation that modifies block structure
+static void rebuild_cfg(Function& func) {
+    // Build block ID to index map
+    std::unordered_map<uint32_t, size_t> block_id_to_idx;
+    for (size_t i = 0; i < func.blocks.size(); ++i) {
+        block_id_to_idx[func.blocks[i].id] = i;
+    }
+
+    // Clear all predecessors and successors
+    for (auto& block : func.blocks) {
+        block.predecessors.clear();
+        block.successors.clear();
+    }
+
+    // Rebuild from terminators
+    for (auto& block : func.blocks) {
+        if (!block.terminator)
+            continue;
+
+        std::vector<uint32_t> succs;
+        std::visit(
+            [&succs](const auto& t) {
+                using T = std::decay_t<decltype(t)>;
+
+                if constexpr (std::is_same_v<T, BranchTerm>) {
+                    succs.push_back(t.target);
+                } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                    succs.push_back(t.true_block);
+                    succs.push_back(t.false_block);
+                } else if constexpr (std::is_same_v<T, SwitchTerm>) {
+                    succs.push_back(t.default_block);
+                    for (const auto& [_, target] : t.cases) {
+                        succs.push_back(target);
+                    }
+                }
+                // ReturnTerm and UnreachableTerm have no successors
+            },
+            *block.terminator);
+
+        for (uint32_t succ_id : succs) {
+            block.successors.push_back(succ_id);
+
+            // Add this block as predecessor of successor
+            auto it = block_id_to_idx.find(succ_id);
+            if (it != block_id_to_idx.end()) {
+                func.blocks[it->second].predecessors.push_back(block.id);
+            }
+        }
+    }
+}
+
+// Reorder blocks in reverse post-order (RPO) which approximates dominance order.
+// This ensures that for acyclic CFG edges, the definition block comes before use blocks.
+// For loops, back-edges will point to blocks with lower indices.
+// This is CRITICAL for passes like LICM and ConstantHoist that use block indices
+// as a proxy for dominance.
+static void reorder_blocks_rpo(Function& func) {
+    if (func.blocks.empty())
+        return;
+
+    // Build block ID to index map
+    std::unordered_map<uint32_t, size_t> block_id_to_idx;
+    for (size_t i = 0; i < func.blocks.size(); ++i) {
+        block_id_to_idx[func.blocks[i].id] = i;
+    }
+
+    // DFS to compute post-order
+    std::vector<uint32_t> post_order;
+    std::unordered_set<uint32_t> visited;
+    std::vector<std::pair<uint32_t, size_t>> stack; // (block_id, next_successor_index)
+
+    // Start from entry block (first block)
+    uint32_t entry_id = func.blocks[0].id;
+    stack.push_back({entry_id, 0});
+    visited.insert(entry_id);
+
+    while (!stack.empty()) {
+        auto& [block_id, succ_idx] = stack.back();
+
+        auto idx_it = block_id_to_idx.find(block_id);
+        if (idx_it == block_id_to_idx.end()) {
+            stack.pop_back();
+            continue;
+        }
+
+        const auto& block = func.blocks[idx_it->second];
+        const auto& succs = block.successors;
+
+        // Find next unvisited successor
+        while (succ_idx < succs.size() && visited.count(succs[succ_idx])) {
+            succ_idx++;
+        }
+
+        if (succ_idx < succs.size()) {
+            // Visit this successor
+            uint32_t succ_id = succs[succ_idx];
+            succ_idx++; // Move to next successor for when we return
+            visited.insert(succ_id);
+            stack.push_back({succ_id, 0});
+        } else {
+            // All successors visited, add to post-order
+            post_order.push_back(block_id);
+            stack.pop_back();
+        }
+    }
+
+    // Reverse post-order is the dominance order
+    std::reverse(post_order.begin(), post_order.end());
+
+    // Add any unreachable blocks at the end (shouldn't happen normally)
+    for (const auto& block : func.blocks) {
+        if (!visited.count(block.id)) {
+            post_order.push_back(block.id);
+        }
+    }
+
+    // Reorder blocks according to RPO
+    std::vector<BasicBlock> new_blocks;
+    new_blocks.reserve(func.blocks.size());
+
+    for (uint32_t block_id : post_order) {
+        auto idx_it = block_id_to_idx.find(block_id);
+        if (idx_it != block_id_to_idx.end()) {
+            new_blocks.push_back(std::move(func.blocks[idx_it->second]));
+        }
+    }
+
+    func.blocks = std::move(new_blocks);
 }
 
 // Check if function is directly recursive (calls itself)
@@ -271,6 +405,12 @@ auto InliningPass::run(Module& module) -> bool {
                                 }
                             }
 
+                            // Rebuild CFG after inlining to ensure predecessors/successors are
+                            // correct This is critical for passes like LICM that depend on CFG
+                            // structure
+                            rebuild_cfg(func);
+
+                            // Restart block processing
                             i = static_cast<size_t>(-1);
                         }
                         continue;
@@ -324,6 +464,11 @@ auto InliningPass::run(Module& module) -> bool {
                                 }
                             }
 
+                            // Rebuild CFG after inlining to ensure predecessors/successors are
+                            // correct This is critical for passes like LICM that depend on CFG
+                            // structure
+                            rebuild_cfg(func);
+
                             // Restart block processing
                             i = static_cast<size_t>(-1);
                         }
@@ -332,6 +477,16 @@ auto InliningPass::run(Module& module) -> bool {
                     }
                 }
             }
+        }
+    }
+
+    // After all inlining is complete, reorder blocks in each modified function
+    // to maintain the dominance order invariant. This is critical for passes like
+    // LICM and ConstantHoist that use block indices as a proxy for dominance.
+    if (changed) {
+        for (auto& func : module.functions) {
+            rebuild_cfg(func);
+            reorder_blocks_rpo(func);
         }
     }
 
@@ -402,7 +557,41 @@ auto InliningPass::calculate_threshold([[maybe_unused]] const Function& caller,
         }
     }
 
+    // PGO bonus for hot call sites
+    if (profile_data_ && options_.inline_hot) {
+        // Look up call site in profile data
+        for (const auto& cs : profile_data_->call_sites) {
+            if (cs.caller == caller.name && cs.callee == call.func_name) {
+                if (cs.call_count >= options_.pgo_hot_threshold) {
+                    // Hot call site: significantly increase threshold
+                    threshold += options_.pgo_hot_bonus;
+                } else if (options_.pgo_skip_cold &&
+                           cs.call_count < options_.pgo_hot_threshold / 10) {
+                    // Cold call site: significantly reduce threshold
+                    threshold -= options_.base_threshold / 2;
+                }
+                break;
+            }
+        }
+    }
+
     return threshold;
+}
+
+auto InliningPass::get_call_site_profile(const std::string& caller, const std::string& callee,
+                                         uint32_t block_id, size_t inst_index) const
+    -> const CallSiteProfile* {
+    if (!profile_data_) {
+        return nullptr;
+    }
+
+    for (const auto& cs : profile_data_->call_sites) {
+        if (cs.caller == caller && cs.callee == callee && cs.block_id == block_id &&
+            cs.inst_index == inst_index) {
+            return &cs;
+        }
+    }
+    return nullptr;
 }
 
 auto InliningPass::count_instructions(const Function& func) const -> int {
@@ -468,6 +657,10 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
     // Don't inline empty functions or extern functions
     if (callee.blocks.empty())
         return false;
+
+    // CRITICAL: Capture original block ID BEFORE any modifications to caller.blocks
+    // because push_back may cause reallocation and invalidate the block reference.
+    uint32_t original_block_id = block.id;
 
     // Clone callee's body with unique inline ID
     int inline_id = inline_counter_++;
@@ -624,11 +817,31 @@ auto InliningPass::inline_call(Function& caller, BasicBlock& block, size_t call_
     }
 
     // Add the continuation block
+    // Note: original_block_id was captured at the start of the function to avoid
+    // reading from potentially invalidated reference after push_back
+    uint32_t continuation_block_id = continuation_block.id;
     caller.blocks.push_back(std::move(continuation_block));
 
-    // Mark the original block reference as potentially invalid
-    // since we modified the blocks vector
-    (void)block_index;
+    // CRITICAL: Update PHIs in other blocks that reference the original block
+    // Since we moved the terminator to the continuation block, any PHIs that
+    // expected edges from the original block now need to reference the continuation
+    for (auto& caller_block : caller.blocks) {
+        // Skip the original block and continuation block themselves
+        if (caller_block.id == original_block_id || caller_block.id == continuation_block_id) {
+            continue;
+        }
+
+        for (auto& phi_inst : caller_block.instructions) {
+            if (auto* phi = std::get_if<PhiInst>(&phi_inst.inst)) {
+                for (auto& [val, from_block] : phi->incoming) {
+                    // If the PHI references the original block, update to continuation
+                    if (from_block == original_block_id) {
+                        from_block = continuation_block_id;
+                    }
+                }
+            }
+        }
+    }
 
     return true;
 }

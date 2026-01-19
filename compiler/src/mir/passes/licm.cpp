@@ -4,6 +4,8 @@
 
 #include "mir/passes/licm.hpp"
 
+#include "mir/passes/alias_analysis.hpp"
+
 #include <algorithm>
 #include <queue>
 
@@ -152,8 +154,16 @@ auto LICMPass::is_loop_invariant(const Function& func, const InstructionData& in
             } else if constexpr (std::is_same_v<T, SelectInst>) {
                 return check_operand(i.condition.id) && check_operand(i.true_val.id) &&
                        check_operand(i.false_val.id);
+            } else if constexpr (std::is_same_v<T, LoadInst>) {
+                // Loads can be hoisted if:
+                // 1. The pointer is loop-invariant
+                // 2. No stores in the loop may alias with this load (requires alias analysis)
+                if (!check_operand(i.ptr.id)) {
+                    return false;
+                }
+                return can_hoist_load(func, i, i.ptr.id, loop);
             } else {
-                // Other instructions (loads, stores, calls) are not safe to hoist
+                // Other instructions (stores, calls) are not safe to hoist
                 return false;
             }
         },
@@ -162,20 +172,77 @@ auto LICMPass::is_loop_invariant(const Function& func, const InstructionData& in
 
 auto LICMPass::can_hoist(const InstructionData& inst) -> bool {
     return std::visit(
-        [](const auto& i) -> bool {
+        [this](const auto& i) -> bool {
             using T = std::decay_t<decltype(i)>;
             (void)i;
 
-            // Only pure, side-effect-free instructions can be hoisted
+            // Pure, side-effect-free instructions can always be hoisted
             if constexpr (std::is_same_v<T, BinaryInst> || std::is_same_v<T, UnaryInst> ||
                           std::is_same_v<T, CastInst> || std::is_same_v<T, ConstantInst> ||
                           std::is_same_v<T, SelectInst>) {
                 return true;
+            } else if constexpr (std::is_same_v<T, LoadInst>) {
+                // Loads can potentially be hoisted if we have alias analysis
+                // The actual safety check is done in is_loop_invariant
+                return alias_analysis_ != nullptr;
             } else {
                 return false;
             }
         },
         inst.inst);
+}
+
+auto LICMPass::can_hoist_load(const Function& func, const LoadInst& /*load*/, ValueId load_ptr,
+                              const Loop& loop) -> bool {
+    // Without alias analysis, we cannot hoist loads
+    if (!alias_analysis_) {
+        return false;
+    }
+
+    // Check if any store in the loop may alias with the load pointer
+    return !has_aliasing_store_in_loop(func, load_ptr, loop);
+}
+
+auto LICMPass::has_aliasing_store_in_loop(const Function& func, ValueId ptr, const Loop& loop)
+    -> bool {
+    // Scan all blocks in the loop for stores that may alias with ptr
+    for (uint32_t block_id : loop.blocks) {
+        int idx = get_block_index(func, block_id);
+        if (idx < 0)
+            continue;
+
+        const auto& block = func.blocks[static_cast<size_t>(idx)];
+        for (const auto& inst : block.instructions) {
+            // Check for stores
+            if (auto* store = std::get_if<StoreInst>(&inst.inst)) {
+                // Check if store may alias with our load pointer
+                if (store->ptr.id == ptr) {
+                    return true; // Definitely aliases
+                }
+
+                // Use alias analysis if available
+                if (alias_analysis_) {
+                    auto result = alias_analysis_->alias(store->ptr.id, ptr);
+                    if (result != AliasResult::NoAlias) {
+                        return true; // May alias
+                    }
+                } else {
+                    // Conservative: assume all stores may alias
+                    return true;
+                }
+            }
+
+            // Check for calls (may have side effects on memory)
+            if (std::holds_alternative<CallInst>(inst.inst) ||
+                std::holds_alternative<MethodCallInst>(inst.inst)) {
+                // Conservative: calls may write to any memory
+                // A more sophisticated analysis would check for pure/const functions
+                return true;
+            }
+        }
+    }
+
+    return false; // No aliasing stores found
 }
 
 auto LICMPass::hoist_invariants(Function& func, Loop& loop) -> bool {

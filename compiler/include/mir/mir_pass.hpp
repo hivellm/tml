@@ -101,6 +101,9 @@ enum class OptLevel {
     O3, ///< Aggressive optimizations.
 };
 
+// Forward declaration for PGO
+struct ProfileData;
+
 /// Pass manager - runs optimization passes in order.
 ///
 /// Manages a pipeline of optimization passes and runs them on a module.
@@ -123,6 +126,10 @@ public:
     /// Requires TypeEnv for devirtualization and escape analysis passes.
     void configure_standard_pipeline(types::TypeEnv& env);
 
+    /// Sets profile data for PGO-guided optimizations.
+    /// This will be passed to InliningPass instances in the pipeline.
+    void set_profile_data(const ProfileData* profile);
+
     /// Returns the optimization level.
     [[nodiscard]] auto opt_level() const -> OptLevel {
         return level_;
@@ -131,6 +138,7 @@ public:
 private:
     OptLevel level_;
     std::vector<std::unique_ptr<MirPass>> passes_;
+    const ProfileData* profile_data_ = nullptr;
 };
 
 // ============================================================================

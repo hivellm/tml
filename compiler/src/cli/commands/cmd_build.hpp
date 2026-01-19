@@ -62,6 +62,10 @@ struct BuildOptions {
     std::string output_dir;
     std::string target;               // Target triple (e.g., x86_64-unknown-linux-gnu)
     std::vector<std::string> defines; // -D defines for preprocessor
+
+    // PGO (Profile-Guided Optimization) options
+    bool profile_generate = false; // Generate profile data during execution
+    std::string profile_use;       // Use profile data from file (empty = disabled)
 };
 
 // Build commands

@@ -4,6 +4,8 @@
 
 #include "mir/passes/gvn.hpp"
 
+#include "mir/passes/alias_analysis.hpp"
+
 #include <sstream>
 
 namespace tml::mir {
@@ -26,6 +28,38 @@ auto GVNPass::run_on_function(Function& func) -> bool {
             if (inst.result != INVALID_VALUE &&
                 value_numbers_.find(inst.result) == value_numbers_.end()) {
                 value_numbers_[inst.result] = next_vn_++;
+            }
+
+            // Handle stores: invalidate loads that may alias
+            if (auto* store = std::get_if<StoreInst>(&inst.inst)) {
+                invalidate_loads_for_store(store->ptr.id);
+                continue;
+            }
+
+            // Handle calls: conservatively invalidate all loads
+            if (std::holds_alternative<CallInst>(inst.inst) ||
+                std::holds_alternative<MethodCallInst>(inst.inst)) {
+                load_table_.clear(); // Calls may modify any memory
+                continue;
+            }
+
+            // Handle loads with alias analysis (Load GVN)
+            if (auto* load = std::get_if<LoadInst>(&inst.inst)) {
+                if (alias_analysis_) {
+                    auto available = find_available_load(load->ptr.id, block_idx);
+                    if (available) {
+                        // Found a redundant load!
+                        replace_uses(func, inst.result, *available);
+                        to_remove.push_back(i);
+                        changed = true;
+                        continue;
+                    }
+
+                    // Record this load for future elimination
+                    ValueNumber ptr_vn = get_value_number(load->ptr.id);
+                    load_table_[ptr_vn] = LoadInfo{inst.result, load->ptr.id, block_idx};
+                }
+                continue;
             }
 
             if (!can_gvn(inst.inst)) {
@@ -289,7 +323,46 @@ auto GVNPass::replace_uses(Function& func, ValueId old_value, ValueId new_value)
 auto GVNPass::reset() -> void {
     value_numbers_.clear();
     expr_table_.clear();
+    load_table_.clear();
     next_vn_ = 0;
+}
+
+auto GVNPass::find_available_load(ValueId ptr, size_t /*current_block_idx*/)
+    -> std::optional<ValueId> {
+    // Get value number for the pointer
+    ValueNumber ptr_vn = get_value_number(ptr);
+
+    // Look for an existing load from the same pointer (by VN)
+    auto it = load_table_.find(ptr_vn);
+    if (it != load_table_.end()) {
+        // Found a previous load from the same address
+        return it->second.result;
+    }
+
+    return std::nullopt;
+}
+
+auto GVNPass::invalidate_loads_for_store(ValueId store_ptr) -> void {
+    if (!alias_analysis_) {
+        // Without alias analysis, conservatively clear all loads
+        load_table_.clear();
+        return;
+    }
+
+    // With alias analysis, only invalidate loads that may alias with the store
+    std::vector<ValueNumber> to_invalidate;
+
+    for (const auto& [ptr_vn, load_info] : load_table_) {
+        // Check if the stored pointer may alias with this load's pointer
+        auto result = alias_analysis_->alias(store_ptr, load_info.ptr);
+        if (result != AliasResult::NoAlias) {
+            to_invalidate.push_back(ptr_vn);
+        }
+    }
+
+    for (ValueNumber vn : to_invalidate) {
+        load_table_.erase(vn);
+    }
 }
 
 } // namespace tml::mir

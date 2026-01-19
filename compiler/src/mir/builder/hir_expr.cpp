@@ -518,6 +518,9 @@ auto HirMirBuilder::build_if(const hir::HirIfExpr& if_expr) -> Value {
     uint32_t else_block = create_block("if.else");
     uint32_t merge_block = create_block("if.merge");
 
+    // Save variable state before branching - both branches start with same values
+    auto pre_branch_vars = ctx_.variables;
+
     emit_cond_branch(cond, then_block, else_block);
 
     // Then branch (don't emit terminator yet - we may need to insert store)
@@ -528,6 +531,13 @@ auto HirMirBuilder::build_if(const hir::HirIfExpr& if_expr) -> Value {
     ctx_.pop_drop_scope();
     uint32_t then_end = ctx_.current_block;
     bool then_needs_branch = !is_terminated();
+
+    // Save variable state after then branch
+    auto then_vars = ctx_.variables;
+
+    // Restore pre-branch state before processing else branch
+    // This ensures else branch sees the same variable values as then branch did
+    ctx_.variables = pre_branch_vars;
 
     // Else branch
     switch_to_block(else_block);
@@ -546,53 +556,10 @@ auto HirMirBuilder::build_if(const hir::HirIfExpr& if_expr) -> Value {
         else_needs_branch = !is_terminated();
     }
 
-    // Now we know the types - decide between phi and alloca+store+load
-    if (!result_type->is_unit()) {
-        if (result_type->is_aggregate()) {
-            // Use alloca+store+load pattern for aggregate types.
-            // This enables LLVM's SROA to break aggregates into scalars.
-            auto ptr_type = make_pointer_type(result_type, true);
-            auto alloca_val = emit_at_entry(AllocaInst{result_type, "_if_merge"}, ptr_type);
+    // Save variable state after else branch
+    auto else_vars = ctx_.variables;
 
-            // Store in then branch
-            switch_to_block(then_end);
-            emit_void(StoreInst{alloca_val, then_val, result_type});
-            if (then_needs_branch) {
-                emit_branch(merge_block);
-            }
-
-            // Store in else branch
-            switch_to_block(else_end);
-            emit_void(StoreInst{alloca_val, else_val, result_type});
-            if (else_needs_branch) {
-                emit_branch(merge_block);
-            }
-
-            // Load at merge
-            switch_to_block(merge_block);
-            return emit(LoadInst{alloca_val, result_type}, result_type);
-        } else {
-            // Use phi for non-aggregate types (primitives, pointers)
-            // First emit the deferred terminators
-            switch_to_block(then_end);
-            if (then_needs_branch) {
-                emit_branch(merge_block);
-            }
-            switch_to_block(else_end);
-            if (else_needs_branch) {
-                emit_branch(merge_block);
-            }
-
-            // Create phi at merge
-            switch_to_block(merge_block);
-            PhiInst phi;
-            phi.incoming = {{then_val, then_end}, {else_val, else_end}};
-            phi.result_type = result_type;
-            return emit(phi, result_type);
-        }
-    }
-
-    // Unit type - just emit terminators
+    // Emit terminators for both branches
     switch_to_block(then_end);
     if (then_needs_branch) {
         emit_branch(merge_block);
@@ -602,7 +569,104 @@ auto HirMirBuilder::build_if(const hir::HirIfExpr& if_expr) -> Value {
         emit_branch(merge_block);
     }
 
+    // Switch to merge block for PHI creation
     switch_to_block(merge_block);
+
+    // Create PHIs for variables that were modified in either branch
+    // This is critical for correct SSA form in loops with if-else
+    if (then_needs_branch || else_needs_branch) {
+        for (const auto& [var_name, pre_val] : pre_branch_vars) {
+            if (pre_val.id == INVALID_VALUE)
+                continue;
+
+            // Get the value of this variable at the end of each branch
+            auto then_it = then_vars.find(var_name);
+            auto else_it = else_vars.find(var_name);
+
+            Value then_var_val = (then_it != then_vars.end()) ? then_it->second : pre_val;
+            Value else_var_val = (else_it != else_vars.end()) ? else_it->second : pre_val;
+
+            // If both branches have the same value, no PHI needed
+            if (then_var_val.id == else_var_val.id) {
+                set_variable(var_name, then_var_val);
+                continue;
+            }
+
+            // Create PHI to merge the different values
+            // Only include paths that actually reach the merge block
+            PhiInst var_phi;
+            var_phi.result_type = then_var_val.type ? then_var_val.type : else_var_val.type;
+
+            if (then_needs_branch) {
+                var_phi.incoming.push_back({then_var_val, then_end});
+            }
+            if (else_needs_branch) {
+                var_phi.incoming.push_back({else_var_val, else_end});
+            }
+
+            // Only emit PHI if we have multiple incoming values
+            if (var_phi.incoming.size() > 1) {
+                Value phi_val = emit(var_phi, var_phi.result_type);
+                set_variable(var_name, phi_val);
+            } else if (var_phi.incoming.size() == 1) {
+                // Only one path reaches merge, use that value directly
+                set_variable(var_name, var_phi.incoming[0].first);
+            }
+        }
+    }
+
+    // Now handle the if expression result
+    if (!result_type->is_unit()) {
+        if (result_type->is_aggregate()) {
+            // Use alloca+store+load pattern for aggregate types.
+            // This enables LLVM's SROA to break aggregates into scalars.
+            auto ptr_type = make_pointer_type(result_type, true);
+            auto alloca_val = emit_at_entry(AllocaInst{result_type, "_if_merge"}, ptr_type);
+
+            // Store in then branch - need to go back and insert stores
+            // Since we already emitted terminators, we need to insert before them
+            auto* then_block_ptr = ctx_.current_func->get_block(then_end);
+            auto* else_block_ptr = ctx_.current_func->get_block(else_end);
+
+            if (then_block_ptr && then_needs_branch) {
+                // Insert store before the terminator
+                StoreInst store{alloca_val, then_val, result_type};
+                InstructionData store_inst;
+                store_inst.inst = store;
+                store_inst.result = INVALID_VALUE;
+                then_block_ptr->instructions.push_back(store_inst);
+            }
+
+            if (else_block_ptr && else_needs_branch) {
+                // Insert store before the terminator
+                StoreInst store{alloca_val, else_val, result_type};
+                InstructionData store_inst;
+                store_inst.inst = store;
+                store_inst.result = INVALID_VALUE;
+                else_block_ptr->instructions.push_back(store_inst);
+            }
+
+            // Load at merge (we're already at merge_block)
+            return emit(LoadInst{alloca_val, result_type}, result_type);
+        } else {
+            // Use phi for non-aggregate types (primitives, pointers)
+            PhiInst phi;
+            if (then_needs_branch) {
+                phi.incoming.push_back({then_val, then_end});
+            }
+            if (else_needs_branch) {
+                phi.incoming.push_back({else_val, else_end});
+            }
+            phi.result_type = result_type;
+
+            if (phi.incoming.size() > 1) {
+                return emit(phi, result_type);
+            } else if (phi.incoming.size() == 1) {
+                return phi.incoming[0].first;
+            }
+        }
+    }
+
     return const_unit();
 }
 
@@ -703,9 +767,65 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
         emit_branch(header_block);
     }
 
+    // Get break sources before popping loop context
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
     // Exit block
     switch_to_block(exit_block);
     ctx_.loop_stack.pop();
+
+    // Restore variable values at exit - loop can only exit via break
+    // If there are break sources, use their variable values
+    if (!break_sources.empty()) {
+        // Save the variables that existed before the loop (from loop header PHIs)
+        auto header_vars = ctx_.variables;
+
+        for (const auto& [var_name, header_val] : header_vars) {
+            if (header_val.id == INVALID_VALUE)
+                continue;
+
+            // Check if we need a PHI (multiple breaks with different values)
+            bool needs_phi = false;
+            ValueId first_break_val = INVALID_VALUE;
+
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end()) {
+                    if (first_break_val == INVALID_VALUE) {
+                        first_break_val = it->second.id;
+                    } else if (it->second.id != first_break_val) {
+                        needs_phi = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needs_phi) {
+                // Multiple breaks with different values - need a PHI
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else if (break_sources.size() == 1) {
+                // Single break - use its value directly
+                const auto& [break_block, break_vars] = break_sources[0];
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end()) {
+                    set_variable(var_name, it->second);
+                }
+            }
+        }
+    }
 
     // Loop returns unit unless broken with value
     return const_unit();

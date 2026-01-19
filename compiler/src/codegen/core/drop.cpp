@@ -46,8 +46,9 @@ void LLVMIRGen::pop_drop_scope() {
 
 void LLVMIRGen::register_for_drop(const std::string& var_name, const std::string& var_reg,
                                   const std::string& type_name, const std::string& llvm_type) {
-    // Only register if the type needs drop (implements Drop behavior)
-    if (type_name.empty() || !env_.type_needs_drop(type_name)) {
+    // Only register if the type is NOT trivially destructible
+    // (i.e., it implements Drop or contains non-trivial fields)
+    if (type_name.empty() || env_.is_trivially_destructible(type_name)) {
         return;
     }
 

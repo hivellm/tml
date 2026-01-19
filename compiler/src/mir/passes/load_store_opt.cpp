@@ -4,6 +4,8 @@
 
 #include "mir/passes/load_store_opt.hpp"
 
+#include "mir/passes/alias_analysis.hpp"
+
 #include <algorithm>
 
 namespace tml::mir {
@@ -45,11 +47,12 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
                 }
             }
 
-            // Update memory state
-            mem_state[ptr] = MemState{value, 0, true, false};
+            // Invalidate aliasing pointers before updating (a store to ptr may
+            // invalidate other memory locations that alias with ptr)
+            invalidate_aliasing(mem_state, ptr);
 
-            // Conservatively invalidate other pointers that may alias
-            // (Simple approach: only track non-aliasing for now)
+            // Update memory state for this pointer
+            mem_state[ptr] = MemState{value, 0, true, false};
         } else if (auto* load = std::get_if<LoadInst>(&inst.inst)) {
             ValueId ptr = load->ptr.id;
             ValueId result = inst.result;
@@ -192,9 +195,41 @@ auto LoadStoreOptPass::optimize_block(Function& func, BasicBlock& block) -> bool
 }
 
 auto LoadStoreOptPass::may_alias(ValueId ptr1, ValueId ptr2) -> bool {
-    // Conservative: assume everything may alias unless it's the same pointer
-    // A more sophisticated analysis would use points-to analysis
-    return ptr1 != ptr2;
+    // Same pointer always aliases
+    if (ptr1 == ptr2) {
+        return true;
+    }
+
+    // Use alias analysis if available
+    if (alias_analysis_) {
+        auto result = alias_analysis_->alias(ptr1, ptr2);
+        // NoAlias means definitely don't alias
+        return result != AliasResult::NoAlias;
+    }
+
+    // Conservative: assume everything may alias
+    return true;
+}
+
+auto LoadStoreOptPass::invalidate_aliasing(std::unordered_map<ValueId, MemState>& mem_state,
+                                           ValueId store_ptr) -> void {
+    if (!alias_analysis_) {
+        // Without alias analysis, must invalidate everything
+        mem_state.clear();
+        return;
+    }
+
+    // With alias analysis, only invalidate entries that may alias with store_ptr
+    std::vector<ValueId> to_invalidate;
+    for (const auto& [ptr, _] : mem_state) {
+        if (ptr != store_ptr && may_alias(ptr, store_ptr)) {
+            to_invalidate.push_back(ptr);
+        }
+    }
+
+    for (ValueId ptr : to_invalidate) {
+        mem_state.erase(ptr);
+    }
 }
 
 auto LoadStoreOptPass::invalidate_all(std::unordered_map<ValueId, MemState>& mem_state) -> void {

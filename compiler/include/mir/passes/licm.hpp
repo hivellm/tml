@@ -16,6 +16,12 @@
 //! 3. Mark loop-invariant instructions
 //! 4. Move safe instructions to preheader
 //!
+//! ## Alias Analysis Integration
+//!
+//! With alias analysis, LICM can also hoist:
+//! - Loads from addresses that are not modified in the loop
+//! - Loads from loop-invariant addresses where no aliasing stores exist
+//!
 //! ## Example
 //!
 //! Before:
@@ -49,8 +55,17 @@
 
 namespace tml::mir {
 
+// Forward declaration
+class AliasAnalysisPass;
+
 class LICMPass : public FunctionPass {
 public:
+    /// Construct without alias analysis (conservative mode)
+    LICMPass() = default;
+
+    /// Construct with alias analysis for load hoisting
+    explicit LICMPass(AliasAnalysisPass* alias_analysis) : alias_analysis_(alias_analysis) {}
+
     [[nodiscard]] auto name() const -> std::string override {
         return "LICM";
     }
@@ -59,6 +74,7 @@ protected:
     auto run_on_function(Function& func) -> bool override;
 
 private:
+    AliasAnalysisPass* alias_analysis_ = nullptr;
     // Represents a natural loop
     struct Loop {
         uint32_t header_id;                       // Loop header block
@@ -82,6 +98,13 @@ private:
 
     // Check if it's safe to hoist an instruction
     auto can_hoist(const InstructionData& inst) -> bool;
+
+    // Check if a load can be hoisted (no aliasing stores in loop)
+    auto can_hoist_load(const Function& func, const LoadInst& load, ValueId load_ptr,
+                        const Loop& loop) -> bool;
+
+    // Check if any store in the loop may alias with the given pointer
+    auto has_aliasing_store_in_loop(const Function& func, ValueId ptr, const Loop& loop) -> bool;
 
     // Hoist invariant instructions to preheader
     auto hoist_invariants(Function& func, Loop& loop) -> bool;

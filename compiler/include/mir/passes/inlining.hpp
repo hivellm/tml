@@ -115,9 +115,18 @@ struct InliningOptions {
     bool prioritize_constructors = true; ///< Whether to prioritize constructor inlining.
 
     // Single-expression method options (getters/setters)
-    bool always_inline_single_expr = true;  ///< Always inline methods with single expression.
-    int single_expr_max_size = 3;           ///< Max instructions to be considered single-expression.
+    bool always_inline_single_expr = true; ///< Always inline methods with single expression.
+    int single_expr_max_size = 3;          ///< Max instructions to be considered single-expression.
+
+    // PGO options
+    int pgo_hot_bonus = 300;          ///< Threshold bonus for hot call sites from profile data.
+    uint64_t pgo_hot_threshold = 100; ///< Call count threshold to consider a site "hot".
+    bool pgo_skip_cold = true;        ///< Skip inlining cold call sites (count < threshold/10).
 };
+
+// Forward declarations for PGO
+struct ProfileData;
+struct CallSiteProfile;
 
 /// Function inlining pass.
 ///
@@ -154,9 +163,15 @@ public:
         options_ = opts;
     }
 
+    /// Sets profile data for PGO-guided inlining decisions.
+    void set_profile_data(const ProfileData* profile) {
+        profile_data_ = profile;
+    }
+
 private:
     InliningOptions options_;
     InliningStats stats_;
+    const ProfileData* profile_data_ = nullptr; ///< Optional PGO profile data.
     std::unordered_map<std::string, const Function*> function_map_;
     std::unordered_map<std::string, std::unordered_set<std::string>> call_graph_;
     std::unordered_map<std::string, int> inline_depth_;
@@ -173,6 +188,11 @@ private:
         -> std::vector<BasicBlock>;
     void remap_values(std::vector<BasicBlock>& blocks,
                       const std::unordered_map<ValueId, ValueId>& value_map);
+
+    /// Looks up call site profile for PGO decisions.
+    [[nodiscard]] auto get_call_site_profile(const std::string& caller, const std::string& callee,
+                                             uint32_t block_id, size_t inst_index) const
+        -> const CallSiteProfile*;
 };
 
 /// Always-inline pass.

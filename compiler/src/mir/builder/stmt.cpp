@@ -198,10 +198,11 @@ void MirBuilder::build_let_stmt(const parser::LetStmt& let) {
     build_pattern_binding(*let.pattern, init_value);
 
     // Register for drop if the pattern is a simple identifier
+    // Only if the type is NOT trivially destructible
     if (let.pattern->is<parser::IdentPattern>()) {
         const auto& ident = let.pattern->as<parser::IdentPattern>();
         std::string type_name = get_type_name(init_value.type);
-        if (!type_name.empty() && env_.type_needs_drop(type_name)) {
+        if (!type_name.empty() && !env_.is_trivially_destructible(type_name)) {
             ctx_.register_for_drop(ident.name, init_value, type_name, init_value.type);
         }
     }
@@ -222,8 +223,9 @@ void MirBuilder::build_var_stmt(const parser::VarStmt& var) {
 
     // Register for drop - for mutable vars we need to load before dropping
     // Note: we register the alloca pointer; codegen will handle loading
+    // Only if the type is NOT trivially destructible
     std::string type_name = get_type_name(init_value.type);
-    if (!type_name.empty() && env_.type_needs_drop(type_name)) {
+    if (!type_name.empty() && !env_.is_trivially_destructible(type_name)) {
         ctx_.register_for_drop(var.name, alloca_val, type_name, init_value.type);
     }
 }

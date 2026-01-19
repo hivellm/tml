@@ -81,20 +81,20 @@ auto LoopUnrollPass::run_on_function(Function& func) -> bool {
                                 continue; // Inside loop is fine
                             }
                             for (const auto& use_inst : block.instructions) {
-                                auto check_uses_phi = [phi_result = inst.result](
-                                                          const InstructionData& check_inst) {
-                                    if (auto* bin = std::get_if<BinaryInst>(&check_inst.inst)) {
-                                        return bin->left.id == phi_result ||
-                                               bin->right.id == phi_result;
-                                    }
-                                    if (auto* phi = std::get_if<PhiInst>(&check_inst.inst)) {
-                                        for (const auto& [val, _] : phi->incoming) {
-                                            if (val.id == phi_result)
-                                                return true;
+                                auto check_uses_phi =
+                                    [phi_result = inst.result](const InstructionData& check_inst) {
+                                        if (auto* bin = std::get_if<BinaryInst>(&check_inst.inst)) {
+                                            return bin->left.id == phi_result ||
+                                                   bin->right.id == phi_result;
                                         }
-                                    }
-                                    return false;
-                                };
+                                        if (auto* phi = std::get_if<PhiInst>(&check_inst.inst)) {
+                                            for (const auto& [val, _] : phi->incoming) {
+                                                if (val.id == phi_result)
+                                                    return true;
+                                            }
+                                        }
+                                        return false;
+                                    };
                                 bool uses_phi = check_uses_phi(use_inst);
                                 if (uses_phi) {
                                     phi_used_outside = true;

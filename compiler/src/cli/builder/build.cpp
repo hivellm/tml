@@ -173,9 +173,30 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
             mir::PassManager pm(mir_opt);
             pm.configure_standard_pipeline(env_copy); // Use OOP-optimized pipeline
+
+            // PGO instrumentation for --profile-generate
+            if (options.profile_generate) {
+                mir::ProfileInstrumentationPass inst_pass;
+                inst_pass.run(mir_module);
+                if (verbose) {
+                    auto stats = inst_pass.get_stats();
+                    std::cout << "  PGO instrumentation: " << stats.functions_profiled
+                              << " functions instrumented\n";
+                }
+            }
+
             int passes_changed = pm.run(mir_module);
             if (verbose && passes_changed > 0) {
                 std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
+            }
+
+            // Apply PGO when using profile data
+            if (!options.profile_use.empty()) {
+                auto profile_opt = mir::ProfileData::load(options.profile_use);
+                if (profile_opt && mir::ProfileIO::validate(*profile_opt, mir_module)) {
+                    mir::PgoPass pgo_pass(*profile_opt);
+                    pgo_pass.run(mir_module);
+                }
             }
         }
 
@@ -235,9 +256,51 @@ static int run_build_impl(const std::string& path, const BuildOptions& options) 
 
         mir::PassManager pm(mir_opt);
         pm.configure_standard_pipeline(env_copy); // Use OOP-optimized pipeline with inlining fix
+
+        // Profile-Guided Optimization: Add instrumentation pass for --profile-generate
+        if (options.profile_generate) {
+            mir::ProfileInstrumentationPass inst_pass;
+            inst_pass.run(mir_module);
+            if (verbose) {
+                auto stats = inst_pass.get_stats();
+                std::cout << "  PGO instrumentation: " << stats.functions_profiled
+                          << " functions instrumented\n";
+            }
+        }
+
+        // Profile-Guided Optimization: Load profile data and pass to InliningPass
+        std::optional<mir::ProfileData> loaded_profile;
+        if (!options.profile_use.empty()) {
+            loaded_profile = mir::ProfileData::load(options.profile_use);
+            if (loaded_profile) {
+                if (verbose) {
+                    std::cout << "  PGO: Loaded profile from " << options.profile_use << "\n";
+                }
+                // Pass profile data to InliningPass in the pipeline
+                pm.set_profile_data(&*loaded_profile);
+            } else {
+                std::cerr << "error: Cannot load profile data from " << options.profile_use << "\n";
+                return 1;
+            }
+        }
+
         int passes_changed = pm.run(mir_module);
         if (verbose && passes_changed > 0) {
             std::cout << "  MIR optimization: " << passes_changed << " passes applied\n";
+        }
+
+        // Apply additional PGO passes (branch hints, block layout) after inlining
+        if (loaded_profile && mir::ProfileIO::validate(*loaded_profile, mir_module)) {
+            mir::PgoPass pgo_pass(*loaded_profile);
+            if (pgo_pass.run(mir_module)) {
+                auto stats = pgo_pass.get_stats();
+                if (verbose) {
+                    std::cout << "  PGO applied: " << stats.branch_hints_applied
+                              << " branch hints, " << stats.blocks_reordered
+                              << " blocks reordered, " << stats.hot_functions
+                              << " hot functions identified\n";
+                }
+            }
         }
 
         // Generate LLVM IR from optimized MIR

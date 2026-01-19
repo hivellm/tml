@@ -166,6 +166,8 @@ int tml_main(int argc, char* argv[]) {
             std::cerr << "  --error-format=json Output diagnostics as JSON\n";
             std::cerr
                 << "  --no-check-leaks    Disable memory leak detection (enabled by default)\n";
+            std::cerr << "  --profile-generate  Generate profile data for PGO\n";
+            std::cerr << "  --profile-use=<file> Use profile data for PGO\n";
             return 1;
         }
 
@@ -204,6 +206,10 @@ int tml_main(int argc, char* argv[]) {
         bool show_timings = false;
         bool lto = false;
         std::vector<std::string> defines; // Preprocessor defines (-D)
+
+        // PGO options
+        bool profile_generate = false;
+        std::string profile_use;
 
         // Parse command-line arguments (override manifest settings)
         for (int i = 3; i < argc; ++i) {
@@ -301,6 +307,10 @@ int tml_main(int argc, char* argv[]) {
             } else if (arg.starts_with("--define=")) {
                 // Preprocessor define: --define=SYMBOL or --define=SYMBOL=VALUE
                 defines.push_back(arg.substr(9));
+            } else if (arg == "--profile-generate") {
+                profile_generate = true;
+            } else if (arg.starts_with("--profile-use=")) {
+                profile_use = arg.substr(14);
             }
         }
 
@@ -317,7 +327,7 @@ int tml_main(int argc, char* argv[]) {
         tml::CompilerOptions::sysroot = sysroot;
 
         // Use extended build if new features are requested or if defines are present
-        if (show_timings || lto || !defines.empty()) {
+        if (show_timings || lto || !defines.empty() || profile_generate || !profile_use.empty()) {
             BuildOptions opts;
             opts.verbose = verbose;
             opts.emit_ir_only = emit_ir_only;
@@ -333,6 +343,8 @@ int tml_main(int argc, char* argv[]) {
             opts.optimization_level = opt_level;
             opts.target = target_triple;
             opts.defines = std::move(defines);
+            opts.profile_generate = profile_generate;
+            opts.profile_use = std::move(profile_use);
             return run_build_ex(argv[2], opts);
         }
 

@@ -13,6 +13,8 @@
 //! | `emit-ir` | Emit LLVM IR for a source file (supports chunking) |
 //! | `emit-mir` | Emit MIR for a source file |
 //! | `test` | Run tests |
+//! | `format` | Format TML source files |
+//! | `lint` | Lint TML source files |
 //! | `docs/search` | Search documentation |
 //!
 //! ## Usage
@@ -42,6 +44,8 @@ namespace tml::mcp {
 /// - `emit-ir` - LLVM IR emission (with chunking support)
 /// - `emit-mir` - MIR emission
 /// - `test` - Test runner
+/// - `format` - Code formatting
+/// - `lint` - Code linting
 /// - `docs/search` - Documentation search
 ///
 /// # Arguments
@@ -109,6 +113,20 @@ auto make_emit_mir_tool() -> Tool;
 /// - `filter` (string, optional): Test name filter
 /// - `release` (boolean, optional): Run in release mode
 auto make_test_tool() -> Tool;
+
+/// Returns the `format` tool definition.
+///
+/// Parameters:
+/// - `file` (string, required): Path to the source file or directory
+/// - `check` (boolean, optional): Check formatting without modifying files
+auto make_format_tool() -> Tool;
+
+/// Returns the `lint` tool definition.
+///
+/// Parameters:
+/// - `file` (string, required): Path to the source file or directory
+/// - `fix` (boolean, optional): Automatically fix issues where possible
+auto make_lint_tool() -> Tool;
 
 /// Returns the `docs/search` tool definition.
 ///
@@ -197,6 +215,28 @@ auto handle_emit_mir(const json::JsonValue& params) -> ToolResult;
 ///
 /// Result with test results summary.
 auto handle_test(const json::JsonValue& params) -> ToolResult;
+
+/// Handles the `format` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (file, check)
+///
+/// # Returns
+///
+/// Result with formatting status.
+auto handle_format(const json::JsonValue& params) -> ToolResult;
+
+/// Handles the `lint` tool invocation.
+///
+/// # Arguments
+///
+/// * `params` - Tool parameters (file, fix)
+///
+/// # Returns
+///
+/// Result with lint diagnostics.
+auto handle_lint(const json::JsonValue& params) -> ToolResult;
 
 /// Handles the `docs/search` tool invocation.
 ///

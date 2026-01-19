@@ -15,6 +15,12 @@
 //! - Works across basic block boundaries
 //! - Can discover more redundancies through value numbering
 //! - Handles algebraic identities (x + 0 = x)
+//!
+//! ## Alias Analysis Integration (Load GVN)
+//!
+//! With alias analysis, GVN can also eliminate redundant loads:
+//! - Two loads from the same pointer (same VN) can be merged
+//! - But only if no intervening stores may alias with the load address
 
 #pragma once
 
@@ -27,8 +33,17 @@
 
 namespace tml::mir {
 
+// Forward declaration
+class AliasAnalysisPass;
+
 class GVNPass : public FunctionPass {
 public:
+    /// Construct without alias analysis
+    GVNPass() = default;
+
+    /// Construct with alias analysis for Load GVN
+    explicit GVNPass(AliasAnalysisPass* alias_analysis) : alias_analysis_(alias_analysis) {}
+
     [[nodiscard]] auto name() const -> std::string override {
         return "GVN";
     }
@@ -37,6 +52,7 @@ protected:
     auto run_on_function(Function& func) -> bool override;
 
 private:
+    AliasAnalysisPass* alias_analysis_ = nullptr;
     // Value number for an expression
     using ValueNumber = uint32_t;
     static constexpr ValueNumber INVALID_VN = UINT32_MAX;
@@ -76,6 +92,21 @@ private:
 
     // Expression table: Expression -> (ValueNumber, defining ValueId)
     std::unordered_map<Expression, std::pair<ValueNumber, ValueId>, ExpressionHash> expr_table_;
+
+    // Load table for Load GVN: pointer VN -> (load result ValueId, pointer ValueId)
+    // Used to find redundant loads from the same address
+    struct LoadInfo {
+        ValueId result;   // Result of the load
+        ValueId ptr;      // Pointer being loaded from
+        size_t block_idx; // Block where load occurred (for invalidation)
+    };
+    std::unordered_map<ValueNumber, LoadInfo> load_table_;
+
+    // Check if a load from ptr can be replaced with a previous load
+    auto find_available_load(ValueId ptr, size_t current_block_idx) -> std::optional<ValueId>;
+
+    // Invalidate loads that may be affected by a store
+    auto invalidate_loads_for_store(ValueId store_ptr) -> void;
 
     // Next value number to assign
     ValueNumber next_vn_ = 0;

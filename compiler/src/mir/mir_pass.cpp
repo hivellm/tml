@@ -27,10 +27,9 @@
 
 #include "mir/mir_pass.hpp"
 
-#include <iostream>
-
 #include "mir/passes/adce.hpp"
 #include "mir/passes/block_merge.hpp"
+#include "mir/passes/bounds_check_elimination.hpp"
 #include "mir/passes/common_subexpression_elimination.hpp"
 #include "mir/passes/const_hoist.hpp"
 #include "mir/passes/constant_folding.hpp"
@@ -53,6 +52,7 @@
 #include "mir/passes/merge_returns.hpp"
 #include "mir/passes/narrowing.hpp"
 #include "mir/passes/peephole.hpp"
+#include "mir/passes/pgo.hpp"
 #include "mir/passes/reassociate.hpp"
 #include "mir/passes/simplify_cfg.hpp"
 #include "mir/passes/simplify_select.hpp"
@@ -61,8 +61,12 @@
 #include "mir/passes/strength_reduction.hpp"
 #include "mir/passes/tail_call.hpp"
 #include "mir/passes/unreachable_code_elimination.hpp"
+#include "mir/passes/vectorization.hpp"
+
+#include <iostream>
 
 // OOP optimization passes
+#include "mir/passes/alias_analysis.hpp"
 #include "mir/passes/batch_destruction.hpp"
 #include "mir/passes/builder_opt.hpp"
 #include "mir/passes/constructor_fusion.hpp"
@@ -70,6 +74,10 @@
 #include "mir/passes/destructor_hoist.hpp"
 #include "mir/passes/devirtualization.hpp"
 #include "mir/passes/escape_analysis.hpp"
+#include "mir/passes/ipo.hpp"
+#include "mir/passes/loop_opts.hpp"
+#include "mir/passes/pgo.hpp"
+#include "mir/passes/rvo.hpp"
 #include "types/env.hpp"
 
 namespace tml::mir {
@@ -140,14 +148,14 @@ static bool verify_mir(const Module& module, const std::string& after_pass) {
                 if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
                     if (defined.find(bin->left.id) == defined.end()) {
                         std::cerr << "MIR VERIFICATION FAILED after " << after_pass
-                                  << ": undefined value %" << bin->left.id
-                                  << " used in " << func.name << " block " << block.id << "\n";
+                                  << ": undefined value %" << bin->left.id << " used in "
+                                  << func.name << " block " << block.id << "\n";
                         return false;
                     }
                     if (defined.find(bin->right.id) == defined.end()) {
                         std::cerr << "MIR VERIFICATION FAILED after " << after_pass
-                                  << ": undefined value %" << bin->right.id
-                                  << " used in " << func.name << " block " << block.id << "\n";
+                                  << ": undefined value %" << bin->right.id << " used in "
+                                  << func.name << " block " << block.id << "\n";
                         return false;
                     }
                 }
@@ -161,6 +169,15 @@ auto PassManager::run(Module& module) -> int {
     int changes = 0;
     bool debug_mir = false; // Set to true to debug MIR passes
 
+    // If profile data is set, pass it to InliningPass instances
+    if (profile_data_) {
+        for (auto& pass : passes_) {
+            if (auto* inline_pass = dynamic_cast<InliningPass*>(pass.get())) {
+                inline_pass->set_profile_data(profile_data_);
+            }
+        }
+    }
+
     for (auto& pass : passes_) {
         if (pass->run(module)) {
             ++changes;
@@ -173,6 +190,10 @@ auto PassManager::run(Module& module) -> int {
         }
     }
     return changes;
+}
+
+void PassManager::set_profile_data(const ProfileData* profile) {
+    profile_data_ = profile;
 }
 
 void PassManager::configure_standard_pipeline() {
@@ -244,6 +265,10 @@ void PassManager::configure_standard_pipeline() {
         // Match/switch simplification
         add_pass(std::make_unique<MatchSimplifyPass>());
 
+        // IPO: Interprocedural optimization (attribute inference, arg promotion)
+        add_pass(std::make_unique<IpoPass>());
+        add_pass(std::make_unique<AttrInferencePass>());
+
         // Inlining at O2 with conservative thresholds
         InliningOptions inline_opts;
         inline_opts.optimization_level = 2;
@@ -260,11 +285,17 @@ void PassManager::configure_standard_pipeline() {
         add_pass(std::make_unique<GVNPass>());
         add_pass(std::make_unique<DeadCodeEliminationPass>());
 
-        // Load-store optimization: eliminate redundant memory operations
-        add_pass(std::make_unique<LoadStoreOptPass>());
+        // Alias analysis: Required for memory optimization passes
+        // Create a shared instance that will be used by consumer passes
+        auto alias_analysis = std::make_unique<AliasAnalysisPass>();
+        AliasAnalysisPass* alias_ptr = alias_analysis.get();
+        add_pass(std::move(alias_analysis));
 
-        // LICM: Move loop-invariant code out of loops
-        add_pass(std::make_unique<LICMPass>());
+        // Load-store optimization: with alias analysis for precise invalidation
+        add_pass(std::make_unique<LoadStoreOptPass>(alias_ptr));
+
+        // LICM: with alias analysis for load hoisting
+        add_pass(std::make_unique<LICMPass>(alias_ptr));
 
         // Jump threading after CFG is simplified
         add_pass(std::make_unique<JumpThreadingPass>());
@@ -321,14 +352,29 @@ void PassManager::configure_standard_pipeline() {
         // Constant hoisting: move expensive constants out of loops
         add_pass(std::make_unique<ConstantHoistPass>());
 
-        // Loop optimization
-        add_pass(std::make_unique<LICMPass>());
+        // Alias analysis for O3 loop optimizations
+        auto alias_analysis_o3_std = std::make_unique<AliasAnalysisPass>();
+        AliasAnalysisPass* alias_ptr_o3_std = alias_analysis_o3_std.get();
+        add_pass(std::move(alias_analysis_o3_std));
+
+        // Loop optimization with alias analysis
+        add_pass(std::make_unique<LICMPass>(alias_ptr_o3_std));
 
         // Loop rotation: transform loops for better optimization
         add_pass(std::make_unique<LoopRotatePass>());
 
-        // Loop unrolling (small constant-bound loops)
+        // SIMD Vectorization (requires rotated loops for best results)
+        VectorizationConfig vec_config;
+        vec_config.target_width = TargetVectorWidth::SSE; // 128-bit vectors
+        vec_config.vectorization_factor = 4;
+        vec_config.vectorize_reductions = true;
+        add_pass(std::make_unique<VectorizationPass>(vec_config));
+
+        // Loop unrolling (small constant-bound loops, after vectorization)
         add_pass(std::make_unique<LoopUnrollPass>());
+
+        // Bounds check elimination (after loop analysis)
+        add_pass(std::make_unique<BoundsCheckEliminationPass>());
 
         // Code sinking: move computations closer to uses
         add_pass(std::make_unique<SinkingPass>());
@@ -450,6 +496,9 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         // Builder pattern optimization: Optimize method chaining
         add_pass(std::make_unique<BuilderOptPass>());
 
+        // RVO: Named return value optimization for struct returns
+        add_pass(std::make_unique<RvoPass>());
+
         // Escape analysis + stack promotion: Promote non-escaping objects
         add_pass(std::make_unique<EscapeAndPromotePass>());
 
@@ -464,10 +513,14 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         add_pass(std::make_unique<SimplifyCfgPass>());
 
         // ======================================================================
-        // Phase 5: Final Standard Optimizations
+        // Phase 5: Final Standard Optimizations with Alias Analysis
         // ======================================================================
-        add_pass(std::make_unique<LoadStoreOptPass>());
-        add_pass(std::make_unique<LICMPass>());
+        auto alias_analysis_final = std::make_unique<AliasAnalysisPass>();
+        AliasAnalysisPass* alias_ptr_final = alias_analysis_final.get();
+        add_pass(std::move(alias_analysis_final));
+
+        add_pass(std::make_unique<LoadStoreOptPass>(alias_ptr_final));
+        add_pass(std::make_unique<LICMPass>(alias_ptr_final));
         add_pass(std::make_unique<JumpThreadingPass>());
         add_pass(std::make_unique<SimplifyCfgPass>());
         add_pass(std::make_unique<TailCallPass>());
@@ -530,12 +583,26 @@ void PassManager::configure_standard_pipeline(types::TypeEnv& env) {
         add_pass(std::make_unique<DestructorHoistPass>(env));
         add_pass(std::make_unique<BatchDestructionPass>(env));
 
-        // Aggressive final optimizations
+        // Aggressive final optimizations with alias analysis
+        auto alias_analysis_o3 = std::make_unique<AliasAnalysisPass>();
+        AliasAnalysisPass* alias_ptr_o3 = alias_analysis_o3.get();
+        add_pass(std::move(alias_analysis_o3));
+
         add_pass(std::make_unique<NarrowingPass>());
         add_pass(std::make_unique<ConstantHoistPass>());
-        add_pass(std::make_unique<LICMPass>());
+        add_pass(std::make_unique<LICMPass>(alias_ptr_o3));
         add_pass(std::make_unique<LoopRotatePass>());
+
+        // SIMD Vectorization (best after loop rotation)
+        VectorizationConfig vec_config_o3;
+        vec_config_o3.target_width = TargetVectorWidth::SSE; // 128-bit vectors
+        vec_config_o3.vectorization_factor = 4;
+        vec_config_o3.vectorize_reductions = true;
+        add_pass(std::make_unique<VectorizationPass>(vec_config_o3));
+
         add_pass(std::make_unique<LoopUnrollPass>());
+        add_pass(std::make_unique<AdvancedLoopOptPass>()); // Loop interchange, tiling, fusion
+        add_pass(std::make_unique<BoundsCheckEliminationPass>());
         add_pass(std::make_unique<SinkingPass>());
         add_pass(std::make_unique<MatchSimplifyPass>());
         add_pass(std::make_unique<JumpThreadingPass>());
