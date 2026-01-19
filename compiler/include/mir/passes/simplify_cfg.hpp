@@ -95,6 +95,11 @@ private:
 
     /// Updates all references to old_block_id to point to new_block_id.
     void redirect_block_references(Function& func, uint32_t old_block_id, uint32_t new_block_id);
+
+    /// Cleans up PHI nodes that have become empty or have only one incoming value.
+    /// Empty PHIs are removed, single-incoming PHIs are replaced with the value.
+    /// Returns true if any changes were made.
+    auto cleanup_phi_nodes(Function& func) -> bool;
 };
 
 } // namespace tml::mir

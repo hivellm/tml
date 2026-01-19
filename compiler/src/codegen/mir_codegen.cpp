@@ -1025,16 +1025,22 @@ void MirCodegen::emit_instruction(const mir::InstructionData& inst) {
             } else if constexpr (std::is_same_v<T, mir::PhiInst>) {
                 mir::MirTypePtr type_ptr = i.result_type ? i.result_type : mir::make_i32_type();
                 std::string type_str = mir_type_to_llvm(type_ptr);
-                emit("    " + result_reg + " = phi " + type_str + " ");
-                for (size_t j = 0; j < i.incoming.size(); ++j) {
-                    if (j > 0) {
-                        emit(", ");
+
+                // Safety check: if PHI has no incoming values, emit undef
+                if (i.incoming.empty()) {
+                    emitln("    " + result_reg + " = add " + type_str + " undef, 0");
+                } else {
+                    emit("    " + result_reg + " = phi " + type_str + " ");
+                    for (size_t j = 0; j < i.incoming.size(); ++j) {
+                        if (j > 0) {
+                            emit(", ");
+                        }
+                        std::string val = get_value_reg(i.incoming[j].first);
+                        std::string label = block_labels_[i.incoming[j].second];
+                        emit("[ " + val + ", %" + label + " ]");
                     }
-                    std::string val = get_value_reg(i.incoming[j].first);
-                    std::string label = block_labels_[i.incoming[j].second];
-                    emit("[ " + val + ", %" + label + " ]");
+                    emitln();
                 }
-                emitln();
 
                 // Store result type for subsequent operations
                 if (inst.result != mir::INVALID_VALUE) {

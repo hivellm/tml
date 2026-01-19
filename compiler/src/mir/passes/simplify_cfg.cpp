@@ -26,6 +26,7 @@ auto SimplifyCfgPass::run_on_function(Function& func) -> bool {
         made_progress |= merge_blocks(func);
         made_progress |= remove_empty_blocks(func);
         made_progress |= remove_unreachable_blocks(func);
+        made_progress |= cleanup_phi_nodes(func);
 
         changed |= made_progress;
     }
@@ -533,6 +534,117 @@ auto SimplifyCfgPass::remove_unreachable_blocks(Function& func) -> bool {
                       func.blocks.end());
 
     return func.blocks.size() < original_size;
+}
+
+auto SimplifyCfgPass::cleanup_phi_nodes(Function& func) -> bool {
+    bool changed = false;
+
+    for (auto& block : func.blocks) {
+        // Build a map of values to replace (for single-incoming PHIs)
+        std::unordered_map<ValueId, Value> replacements;
+
+        // First pass: identify PHIs to remove or replace
+        std::vector<size_t> to_remove;
+        for (size_t i = 0; i < block.instructions.size(); ++i) {
+            auto* phi = std::get_if<PhiInst>(&block.instructions[i].inst);
+            if (!phi) {
+                continue;
+            }
+
+            if (phi->incoming.empty()) {
+                // Empty PHI - mark for removal
+                to_remove.push_back(i);
+                changed = true;
+            } else if (phi->incoming.size() == 1) {
+                // Single incoming value - replace uses with that value
+                replacements[block.instructions[i].result] = phi->incoming[0].first;
+                to_remove.push_back(i);
+                changed = true;
+            }
+        }
+
+        // Second pass: replace uses of removed PHIs
+        if (!replacements.empty()) {
+            for (auto& inst : block.instructions) {
+                std::visit(
+                    [&replacements](auto& i) {
+                        using T = std::decay_t<decltype(i)>;
+
+                        auto replace_value = [&replacements](Value& v) {
+                            auto it = replacements.find(v.id);
+                            if (it != replacements.end()) {
+                                v = it->second;
+                            }
+                        };
+
+                        if constexpr (std::is_same_v<T, BinaryInst>) {
+                            replace_value(i.left);
+                            replace_value(i.right);
+                        } else if constexpr (std::is_same_v<T, UnaryInst>) {
+                            replace_value(i.operand);
+                        } else if constexpr (std::is_same_v<T, LoadInst>) {
+                            replace_value(i.ptr);
+                        } else if constexpr (std::is_same_v<T, StoreInst>) {
+                            replace_value(i.ptr);
+                            replace_value(i.value);
+                        } else if constexpr (std::is_same_v<T, CallInst>) {
+                            for (auto& arg : i.args) {
+                                replace_value(arg);
+                            }
+                        } else if constexpr (std::is_same_v<T, GetElementPtrInst>) {
+                            replace_value(i.base);
+                            for (auto& idx : i.indices) {
+                                replace_value(idx);
+                            }
+                        } else if constexpr (std::is_same_v<T, CastInst>) {
+                            replace_value(i.operand);
+                        } else if constexpr (std::is_same_v<T, PhiInst>) {
+                            for (auto& [val, _] : i.incoming) {
+                                replace_value(val);
+                            }
+                        } else if constexpr (std::is_same_v<T, SelectInst>) {
+                            replace_value(i.condition);
+                            replace_value(i.true_val);
+                            replace_value(i.false_val);
+                        }
+                    },
+                    inst.inst);
+            }
+
+            // Also replace in terminator
+            if (block.terminator) {
+                std::visit(
+                    [&replacements](auto& term) {
+                        using T = std::decay_t<decltype(term)>;
+
+                        auto replace_value = [&replacements](Value& v) {
+                            auto it = replacements.find(v.id);
+                            if (it != replacements.end()) {
+                                v = it->second;
+                            }
+                        };
+
+                        if constexpr (std::is_same_v<T, ReturnTerm>) {
+                            if (term.value) {
+                                replace_value(*term.value);
+                            }
+                        } else if constexpr (std::is_same_v<T, CondBranchTerm>) {
+                            replace_value(term.condition);
+                        } else if constexpr (std::is_same_v<T, SwitchTerm>) {
+                            replace_value(term.discriminant);
+                        }
+                    },
+                    *block.terminator);
+            }
+        }
+
+        // Remove marked instructions (in reverse order to preserve indices)
+        for (auto it = to_remove.rbegin(); it != to_remove.rend(); ++it) {
+            block.instructions.erase(block.instructions.begin() + static_cast<std::ptrdiff_t>(*it));
+        }
+    }
+
+    return changed;
 }
 
 } // namespace tml::mir
