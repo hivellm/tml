@@ -15,7 +15,42 @@ auto LoopUnrollPass::run_on_function(Function& func) -> bool {
 
     auto loops = find_unrollable_loops(func);
 
+    // Collect all loop headers to detect nesting
+    std::unordered_set<uint32_t> all_loop_headers;
     for (const auto& loop : loops) {
+        all_loop_headers.insert(loop.header_id);
+    }
+
+    for (const auto& loop : loops) {
+        // Skip nested inner loops: if this loop's body contains another loop header,
+        // this is an outer loop containing an inner loop. We should not unroll inner
+        // loops because the outer loop may depend on values defined by the inner loop.
+        bool is_nested_inner = false;
+        for (uint32_t block_id : loop.body_blocks) {
+            if (block_id != loop.header_id && all_loop_headers.count(block_id) > 0) {
+                // This loop contains another loop header in its body
+                // This loop is an OUTER loop, which is fine to skip
+            }
+        }
+
+        // Check if this loop's header is inside another loop's body
+        for (const auto& other_loop : loops) {
+            if (other_loop.header_id == loop.header_id) {
+                continue; // Same loop
+            }
+            // If this loop's header is in another loop's body, this is an inner loop
+            if (other_loop.body_blocks.count(loop.header_id) > 0) {
+                is_nested_inner = true;
+                break;
+            }
+        }
+
+        if (is_nested_inner) {
+            // Don't unroll inner loops in nested scenarios - the outer loop
+            // may depend on values defined by inner loop phi nodes
+            continue;
+        }
+
         if (!is_loop_body_small(func, loop)) {
             continue;
         }
@@ -32,6 +67,53 @@ auto LoopUnrollPass::run_on_function(Function& func) -> bool {
         }
 
         if (trip_count <= options_.max_full_unroll_count) {
+            // Check if any phi node result is used outside the loop body
+            // If so, we can't safely unroll because the outer code depends
+            // on the final value which would be lost
+            bool phi_used_outside = false;
+            const auto* header_block = get_block(func, loop.header_id);
+            if (header_block) {
+                for (const auto& inst : header_block->instructions) {
+                    if (auto* phi = std::get_if<PhiInst>(&inst.inst)) {
+                        // Check if this phi result is used anywhere outside the loop
+                        for (const auto& block : func.blocks) {
+                            if (loop.body_blocks.count(block.id) > 0) {
+                                continue; // Inside loop is fine
+                            }
+                            for (const auto& use_inst : block.instructions) {
+                                auto check_uses_phi = [phi_result = inst.result](
+                                                          const InstructionData& check_inst) {
+                                    if (auto* bin = std::get_if<BinaryInst>(&check_inst.inst)) {
+                                        return bin->left.id == phi_result ||
+                                               bin->right.id == phi_result;
+                                    }
+                                    if (auto* phi = std::get_if<PhiInst>(&check_inst.inst)) {
+                                        for (const auto& [val, _] : phi->incoming) {
+                                            if (val.id == phi_result)
+                                                return true;
+                                        }
+                                    }
+                                    return false;
+                                };
+                                bool uses_phi = check_uses_phi(use_inst);
+                                if (uses_phi) {
+                                    phi_used_outside = true;
+                                    break;
+                                }
+                            }
+                            if (phi_used_outside)
+                                break;
+                        }
+                        if (phi_used_outside)
+                            break;
+                    }
+                }
+            }
+
+            if (phi_used_outside) {
+                continue;
+            }
+
             if (fully_unroll(func, loop)) {
                 changed = true;
             }

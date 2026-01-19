@@ -152,7 +152,7 @@ auto MirBuilder::build_loop(const parser::LoopExpr& loop) -> Value {
     emit_branch(body);
 
     // Push loop context
-    ctx_.loop_stack.push({header, exit, std::nullopt});
+    ctx_.loop_stack.push({header, exit, std::nullopt, {}});
 
     // Body
     switch_to_block(body);
@@ -180,7 +180,7 @@ auto MirBuilder::build_while(const parser::WhileExpr& while_expr) -> Value {
     emit_cond_branch(cond, body, exit);
 
     // Push loop context
-    ctx_.loop_stack.push({header, exit, std::nullopt});
+    ctx_.loop_stack.push({header, exit, std::nullopt, {}});
 
     // Body
     switch_to_block(body);
@@ -252,7 +252,7 @@ auto MirBuilder::build_for(const parser::ForExpr& for_expr) -> Value {
     emit_cond_branch(cond, body, exit);
 
     // Push loop context
-    ctx_.loop_stack.push({header, exit, std::nullopt});
+    ctx_.loop_stack.push({header, exit, std::nullopt, {}});
 
     // Body: extract element, bind to pattern, execute body
     switch_to_block(body);

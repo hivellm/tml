@@ -617,8 +617,81 @@ bool TypeEnv::is_trivially_destructible(const std::string& type_name) const {
         return true;
     }
 
-    // Unknown types are conservatively NOT trivially destructible
-    return false;
+    // Handle mangled generic type names like "NonNull__I64" or "Skip__RangeIterI64"
+    // These are monomorphized types where __ separates the base type from type arguments
+    auto sep_pos = type_name.find("__");
+    if (sep_pos != std::string::npos) {
+        std::string base_type = type_name.substr(0, sep_pos);
+
+        // If the base type implements Drop, not trivially destructible
+        if (type_implements(base_type, "Drop")) {
+            return false;
+        }
+
+        // Check if the base struct exists and doesn't implement Drop
+        auto base_struct = lookup_struct(base_type);
+        if (base_struct) {
+            // Base type exists and doesn't implement Drop
+            // Check if any type argument is non-trivially destructible
+            std::string remaining = type_name.substr(sep_pos + 2);
+
+            // Parse the remaining type arguments (separated by __)
+            size_t pos = 0;
+            while (pos < remaining.size()) {
+                auto next_sep = remaining.find("__", pos);
+                std::string type_arg;
+                if (next_sep != std::string::npos) {
+                    type_arg = remaining.substr(pos, next_sep - pos);
+                    pos = next_sep + 2;
+                } else {
+                    type_arg = remaining.substr(pos);
+                    pos = remaining.size();
+                }
+
+                if (!type_arg.empty() && !is_trivially_destructible(type_arg)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Also check for enum
+        auto base_enum = lookup_enum(base_type);
+        if (base_enum) {
+            // Similar logic - base enum exists and doesn't implement Drop
+            std::string remaining = type_name.substr(sep_pos + 2);
+            size_t pos = 0;
+            while (pos < remaining.size()) {
+                auto next_sep = remaining.find("__", pos);
+                std::string type_arg;
+                if (next_sep != std::string::npos) {
+                    type_arg = remaining.substr(pos, next_sep - pos);
+                    pos = next_sep + 2;
+                } else {
+                    type_arg = remaining.substr(pos);
+                    pos = remaining.size();
+                }
+
+                if (!type_arg.empty() && !is_trivially_destructible(type_arg)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // If we can't find the base struct/enum but the base type doesn't implement Drop,
+        // it's from an imported module and is trivially destructible (otherwise it would
+        // have registered its Drop implementation)
+        return true;
+    }
+
+    // For unknown types that we can't find in our type registry:
+    // If the type doesn't implement Drop (which we already checked above), it's
+    // trivially destructible. TML types don't have implicit destructors - only types
+    // that explicitly implement Drop need drop calls.
+    // This handles types imported from modules (like OnceI32 from core::iter) that
+    // aren't in our local struct registry but don't implement Drop.
+    return true;
 }
 
 bool TypeEnv::is_trivially_destructible(const TypePtr& type) const {
@@ -634,7 +707,26 @@ bool TypeEnv::is_trivially_destructible(const TypePtr& type) const {
                 // Primitives are always trivially destructible
                 return true;
             } else if constexpr (std::is_same_v<T, NamedType>) {
-                // Check the named type
+                // For generic instantiations like Maybe[I32], we need to check:
+                // 1. The base type doesn't implement Drop
+                // 2. All type arguments are trivially destructible
+                // This avoids the issue where checking the generic definition
+                // would fail because it contains type parameter T which is
+                // conservatively NOT trivially destructible.
+                if (!t.type_args.empty()) {
+                    // This is a generic instantiation
+                    // If the base type doesn't implement Drop, check all type args
+                    if (!type_implements(t.name, "Drop")) {
+                        for (const auto& arg : t.type_args) {
+                            if (!is_trivially_destructible(arg)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                    return false; // Base type implements Drop
+                }
+                // Non-generic named type - check by name
                 return is_trivially_destructible(t.name);
             } else if constexpr (std::is_same_v<T, RefType>) {
                 // References don't own data - trivially destructible

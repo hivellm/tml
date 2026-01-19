@@ -791,6 +791,12 @@ private:
     // Register an alloca in current scope (for automatic lifetime.end on scope exit)
     void register_alloca_in_scope(const std::string& alloca_reg, int64_t size);
 
+    // Emit lifetime.end for all allocas in all scopes (for early return)
+    void emit_all_lifetime_ends();
+
+    // Emit lifetime.end for allocas in current scope only (for break/continue)
+    void emit_scope_lifetime_ends();
+
     // Get size in bytes for LLVM type
     int64_t get_type_size(const std::string& llvm_type);
 

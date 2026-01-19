@@ -1,0 +1,171 @@
+// Edge case tests for CFG and PHI node handling - standalone version
+// These tests verify that SimplifyCfgPass correctly handles PHI nodes
+
+// Test 1: Empty block removal with PHI nodes
+func test_empty_block_phi() -> I32 {
+    let x: I32 = 10
+    let y: I32 = 20
+
+    // This creates control flow that may have empty blocks after optimization
+    let result: I32 = if x > 5 then {
+        if y > 10 then { x + y } else { x }
+    } else {
+        y
+    }
+
+    if result == 30 {
+        return 0
+    }
+    return 1
+}
+
+// Test 2: Unreachable block removal with PHI nodes
+func test_unreachable_phi() -> I32 {
+    let x: I32 = 10
+
+    // One branch is always taken, other becomes unreachable
+    let result: I32 = if true then {
+        x + 5
+    } else {
+        x * 2  // unreachable
+    }
+
+    if result == 15 {
+        return 0
+    }
+    return 1
+}
+
+// Test 3: Constant branch simplification with PHI in target
+func test_constant_branch_phi() -> I32 {
+    let a: I32 = 1
+    let b: I32 = 2
+
+    // Multiple paths merging with different values
+    let result: I32 = if a == 1 then {
+        if b == 2 then { 100 } else { 200 }
+    } else {
+        300
+    }
+
+    if result == 100 {
+        return 0
+    }
+    return 1
+}
+
+// Test 4: Loop with PHI nodes
+func test_loop_phi() -> I32 {
+    var sum: I32 = 0
+    for i in 0 to 5 {
+        sum = sum + i  // PHI for sum at loop header
+    }
+    // 0+1+2+3+4 = 10
+    if sum == 10 {
+        return 0
+    }
+    return 1
+}
+
+// Test 5: Nested loops with PHI nodes
+func test_nested_loop_phi() -> I32 {
+    var total: I32 = 0
+    for i in 0 to 3 {
+        for j in 0 to 3 {
+            total = total + 1
+        }
+    }
+    if total == 9 {
+        return 0
+    }
+    return 1
+}
+
+// Test 6: While loop with early exit
+func test_while_early_exit() -> I32 {
+    var count: I32 = 0
+    var i: I32 = 0
+
+    while i < 10 {
+        count = count + 1
+        if count == 5 then {
+            break
+        }
+        i = i + 1
+    }
+
+    if count == 5 {
+        return 0
+    }
+    return 1
+}
+
+// Test 7: Complex control flow with multiple PHI merges
+func test_complex_cfg() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 4
+
+    let result: I32 = if a > 2 then {
+        let temp: I32 = if b > 3 then { a + b } else { a }
+        temp * 2
+    } else {
+        if b > 5 then { b } else { 0 }
+    }
+
+    // (3+4)*2 = 14
+    if result == 14 {
+        return 0
+    }
+    return 1
+}
+
+// Test 8: Switch-like pattern with multiple branches
+func test_switch_pattern() -> I32 {
+    let x: I32 = 2
+
+    let result: I32 = if x == 1 then {
+        10
+    } else if x == 2 then {
+        20
+    } else if x == 3 then {
+        30
+    } else {
+        0
+    }
+
+    if result == 20 {
+        return 0
+    }
+    return 1
+}
+
+func main() -> I32 {
+    var failed: I32 = 0
+
+    if test_empty_block_phi() != 0 {
+        failed = failed + 1
+    }
+    if test_unreachable_phi() != 0 {
+        failed = failed + 1
+    }
+    if test_constant_branch_phi() != 0 {
+        failed = failed + 1
+    }
+    if test_loop_phi() != 0 {
+        failed = failed + 1
+    }
+    if test_nested_loop_phi() != 0 {
+        failed = failed + 1
+    }
+    if test_while_early_exit() != 0 {
+        failed = failed + 1
+    }
+    if test_complex_cfg() != 0 {
+        failed = failed + 1
+    }
+    if test_switch_pattern() != 0 {
+        failed = failed + 1
+    }
+
+    return failed
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tml": {
+      "command": "./build/debug/tml.exe",
+      "args": ["mcp"]
+    }
+  }
+}

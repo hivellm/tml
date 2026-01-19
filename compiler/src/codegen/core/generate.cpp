@@ -1250,6 +1250,28 @@ void LLVMIRGen::register_alloca_in_scope(const std::string& alloca_reg, int64_t 
     scope_allocas_.back().push_back(AllocaInfo{alloca_reg, size});
 }
 
+void LLVMIRGen::emit_all_lifetime_ends() {
+    // Emit lifetime.end for all allocas in all scopes (innermost first)
+    // Used for early return - doesn't pop the scopes since we're exiting
+    for (auto scope_it = scope_allocas_.rbegin(); scope_it != scope_allocas_.rend(); ++scope_it) {
+        for (auto it = scope_it->rbegin(); it != scope_it->rend(); ++it) {
+            emit_lifetime_end(it->reg, it->size);
+        }
+    }
+}
+
+void LLVMIRGen::emit_scope_lifetime_ends() {
+    // Emit lifetime.end for allocas in current scope only (for break/continue)
+    // Doesn't pop the scope since the block will handle that
+    if (scope_allocas_.empty()) {
+        return;
+    }
+    auto& allocas = scope_allocas_.back();
+    for (auto it = allocas.rbegin(); it != allocas.rend(); ++it) {
+        emit_lifetime_end(it->reg, it->size);
+    }
+}
+
 auto LLVMIRGen::get_type_size(const std::string& llvm_type) -> int64_t {
     // Return size in bytes for common LLVM types
     if (llvm_type == "i1")

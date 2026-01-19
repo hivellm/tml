@@ -1,0 +1,133 @@
+// Edge case tests for CFG and PHI node handling
+// These tests verify that SimplifyCfgPass correctly handles PHI nodes
+
+use test
+
+// Test 1: Empty block removal with PHI nodes
+// Verifies fix for remove_empty_blocks PHI update
+@test
+func test_empty_block_phi() -> I32 {
+    let x: I32 = 10
+    let y: I32 = 20
+
+    // This creates control flow that may have empty blocks after optimization
+    let result: I32 = if x > 5 then {
+        if y > 10 then { x + y } else { x }
+    } else {
+        y
+    }
+
+    assert_eq(result, 30, "nested if result should be 30")
+    return 0
+}
+
+// Test 2: Unreachable block removal with PHI nodes
+@test
+func test_unreachable_phi() -> I32 {
+    let x: I32 = 10
+
+    // One branch is always taken, other becomes unreachable
+    let result: I32 = if true then {
+        x + 5
+    } else {
+        x * 2  // unreachable
+    }
+
+    assert_eq(result, 15, "constant branch result should be 15")
+    return 0
+}
+
+// Test 3: Constant branch simplification with PHI in target
+@test
+func test_constant_branch_phi() -> I32 {
+    let a: I32 = 1
+    let b: I32 = 2
+
+    // Multiple paths merging with different values
+    let result: I32 = if a == 1 then {
+        if b == 2 then { 100 } else { 200 }
+    } else {
+        300
+    }
+
+    assert_eq(result, 100, "constant branches should evaluate to 100")
+    return 0
+}
+
+// Test 4: Loop with PHI nodes
+@test
+func test_loop_phi() -> I32 {
+    var sum: I32 = 0
+    for i in 0 to 5 {
+        sum = sum + i  // PHI for sum at loop header
+    }
+    assert_eq(sum, 10, "loop sum should be 10")  // 0+1+2+3+4 = 10
+    return 0
+}
+
+// Test 5: Nested loops with PHI nodes
+@test
+func test_nested_loop_phi() -> I32 {
+    var total: I32 = 0
+    for i in 0 to 3 {
+        for j in 0 to 3 {
+            total = total + 1
+        }
+    }
+    assert_eq(total, 9, "nested loop count should be 9")
+    return 0
+}
+
+// Test 6: While loop with early exit
+@test
+func test_while_early_exit() -> I32 {
+    var count: I32 = 0
+    var i: I32 = 0
+
+    while i < 10 {
+        count = count + 1
+        if count == 5 then {
+            break
+        }
+        i = i + 1
+    }
+
+    assert_eq(count, 5, "early exit count should be 5")
+    return 0
+}
+
+// Test 7: Complex control flow with multiple PHI merges
+@test
+func test_complex_cfg() -> I32 {
+    let a: I32 = 3
+    let b: I32 = 4
+
+    let result: I32 = if a > 2 then {
+        let temp: I32 = if b > 3 then { a + b } else { a }
+        temp * 2
+    } else {
+        if b > 5 then { b } else { 0 }
+    }
+
+    assert_eq(result, 14, "complex cfg result should be 14")  // (3+4)*2 = 14
+    return 0
+}
+
+// Test 8: Switch-like pattern with multiple branches
+@test
+func test_switch_pattern() -> I32 {
+    let x: I32 = 2
+
+    let result: I32 = if x == 1 then {
+        10
+    } else if x == 2 then {
+        20
+    } else if x == 3 then {
+        30
+    } else {
+        0
+    }
+
+    assert_eq(result, 20, "switch pattern for x=2 should be 20")
+    return 0
+}

@@ -366,6 +366,15 @@ add_library(tml_doc STATIC
 target_link_libraries(tml_doc PUBLIC tml_parser)
 target_include_directories(tml_doc PUBLIC include src)
 
+# MCP library (Model Context Protocol server)
+add_library(tml_mcp STATIC
+    src/mcp/mcp_types.cpp
+    src/mcp/mcp_server.cpp
+    src/mcp/mcp_tools.cpp
+)
+target_link_libraries(tml_mcp PUBLIC tml_json tml_codegen)
+target_include_directories(tml_mcp PUBLIC include src)
+
 # CLI library
 add_library(tml_cli STATIC
     # Core CLI files
@@ -381,6 +390,7 @@ add_library(tml_cli STATIC
     src/cli/commands/cmd_format.cpp
     src/cli/commands/cmd_init.cpp
     src/cli/commands/cmd_lint.cpp
+    src/cli/commands/cmd_mcp.cpp
     src/cli/commands/cmd_pkg.cpp
     src/cli/commands/cmd_rlib.cpp
     src/cli/commands/cmd_test.cpp
@@ -414,7 +424,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc)
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp)
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)

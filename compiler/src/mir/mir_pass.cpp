@@ -27,6 +27,8 @@
 
 #include "mir/mir_pass.hpp"
 
+#include <iostream>
+
 #include "mir/passes/adce.hpp"
 #include "mir/passes/block_merge.hpp"
 #include "mir/passes/common_subexpression_elimination.hpp"
@@ -108,11 +110,66 @@ void PassManager::add_pass(std::unique_ptr<MirPass> pass) {
     passes_.push_back(std::move(pass));
 }
 
+// MIR verification helper - checks for basic SSA validity
+static bool verify_mir(const Module& module, const std::string& after_pass) {
+    for (const auto& func : module.functions) {
+        // Build set of all defined values
+        std::unordered_set<ValueId> defined;
+
+        // Parameters are defined at entry
+        for (const auto& param : func.params) {
+            defined.insert(param.value_id);
+        }
+
+        // Check each block
+        for (const auto& block : func.blocks) {
+            // Phi nodes can use values from predecessors (not checked here for simplicity)
+            // but other instructions must use already-defined values
+
+            for (const auto& inst : block.instructions) {
+                // First, mark this instruction's result as defined
+                if (inst.result != INVALID_VALUE) {
+                    defined.insert(inst.result);
+                }
+            }
+        }
+
+        // Now check uses - for simplicity, just check that comparison operands exist
+        for (const auto& block : func.blocks) {
+            for (const auto& inst : block.instructions) {
+                if (auto* bin = std::get_if<BinaryInst>(&inst.inst)) {
+                    if (defined.find(bin->left.id) == defined.end()) {
+                        std::cerr << "MIR VERIFICATION FAILED after " << after_pass
+                                  << ": undefined value %" << bin->left.id
+                                  << " used in " << func.name << " block " << block.id << "\n";
+                        return false;
+                    }
+                    if (defined.find(bin->right.id) == defined.end()) {
+                        std::cerr << "MIR VERIFICATION FAILED after " << after_pass
+                                  << ": undefined value %" << bin->right.id
+                                  << " used in " << func.name << " block " << block.id << "\n";
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 auto PassManager::run(Module& module) -> int {
     int changes = 0;
+    bool debug_mir = false; // Set to true to debug MIR passes
+
     for (auto& pass : passes_) {
         if (pass->run(module)) {
             ++changes;
+
+            if (debug_mir) {
+                if (!verify_mir(module, pass->name())) {
+                    std::cerr << "Pass " << pass->name() << " corrupted MIR!\n";
+                }
+            }
         }
     }
     return changes;

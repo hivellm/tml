@@ -668,7 +668,7 @@ auto HirMirBuilder::build_loop(const hir::HirLoopExpr& loop) -> Value {
     }
 
     // Push loop context
-    ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
 
     // Header branches to body
     emit_branch(body_block);
@@ -740,7 +740,10 @@ auto HirMirBuilder::build_while(const hir::HirWhileExpr& while_expr) -> Value {
         set_variable(var_name, phi_result);
     }
 
-    ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
+    // Save header variable values (for condition-false path to exit)
+    auto header_vars = ctx_.variables;
+
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
 
     // Header with condition (uses phi values for variables)
     Value cond = build_expr(while_expr.condition);
@@ -774,9 +777,64 @@ auto HirMirBuilder::build_while(const hir::HirWhileExpr& while_expr) -> Value {
         emit_branch(header_block);
     }
 
+    // Get break sources before popping loop context
+    auto break_sources = ctx_.loop_stack.top().break_sources;
+
     // Exit
     switch_to_block(exit_block);
     ctx_.loop_stack.pop();
+
+    // After a while loop, variables used after the loop need correct values.
+    // The exit block can be reached from:
+    // 1. Header (condition false) - variables have header_vars values
+    // 2. Break statements - variables have break_sources values
+    //
+    // If there are no breaks, variables must use header_vars (the only valid
+    // values at exit). If there are breaks with different values, we need PHIs.
+    for (const auto& [var_name, header_val] : header_vars) {
+        if (header_val.id == INVALID_VALUE)
+            continue;
+
+        if (break_sources.empty()) {
+            // No breaks: the only path to exit is from header, use header values
+            set_variable(var_name, header_val);
+        } else {
+            // Check if any break source has a different value for this variable
+            bool needs_phi = false;
+            for (const auto& [break_block, break_vars] : break_sources) {
+                auto it = break_vars.find(var_name);
+                if (it != break_vars.end() && it->second.id != header_val.id) {
+                    needs_phi = true;
+                    break;
+                }
+            }
+
+            if (needs_phi) {
+                PhiInst exit_phi;
+                exit_phi.result_type = header_val.type;
+
+                // Add incoming from header (condition false path)
+                exit_phi.incoming.push_back({header_val, header_block});
+
+                // Add incoming from each break source
+                for (const auto& [break_block, break_vars] : break_sources) {
+                    auto it = break_vars.find(var_name);
+                    if (it != break_vars.end()) {
+                        exit_phi.incoming.push_back({it->second, break_block});
+                    } else {
+                        // Variable not in break vars, use header value as fallback
+                        exit_phi.incoming.push_back({header_val, break_block});
+                    }
+                }
+
+                Value exit_val = emit(exit_phi, header_val.type);
+                set_variable(var_name, exit_val);
+            } else {
+                // All paths have same value, use header value
+                set_variable(var_name, header_val);
+            }
+        }
+    }
 
     return const_unit();
 }
@@ -828,7 +886,7 @@ auto HirMirBuilder::build_for(const hir::HirForExpr& for_expr) -> Value {
     uint32_t body_block = create_block("for.body");
     uint32_t exit_block = create_block("for.exit");
 
-    ctx_.loop_stack.push({header_block, exit_block, std::nullopt});
+    ctx_.loop_stack.push({header_block, exit_block, std::nullopt, {}});
 
     emit_branch(header_block);
 
@@ -958,6 +1016,10 @@ auto HirMirBuilder::build_break(const hir::HirBreakExpr& brk) -> Value {
         Value val = build_expr(*brk.value);
         loop_ctx.break_value = val;
     }
+
+    // Record break source: current block and all variable values
+    // This is needed to create PHI nodes at the exit block
+    loop_ctx.break_sources.push_back({ctx_.current_block, ctx_.variables});
 
     emit_branch(loop_ctx.exit_block);
     return const_unit();

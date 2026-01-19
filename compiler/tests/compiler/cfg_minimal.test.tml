@@ -1,0 +1,14 @@
+// Minimal CFG test - standalone
+
+func test_simple_if() -> I32 {
+    let x: I32 = 10
+    let result: I32 = if x > 5 then { x + 1 } else { x }
+    if result == 11 {
+        return 0
+    }
+    return 1
+}
+
+func main() -> I32 {
+    return test_simple_if()
+}

@@ -21,6 +21,7 @@
 //!   ├─ rlib           → run_rlib()
 //!   ├─ cache          → run_cache()
 //!   ├─ build-all      → run_parallel_build()
+//!   ├─ mcp            → cmd_mcp()
 //!   └─ add/update/rm  → package management
 //! ```
 //!
@@ -50,6 +51,7 @@
 #include "commands/cmd_format.hpp"
 #include "commands/cmd_init.hpp"
 #include "commands/cmd_lint.hpp"
+#include "commands/cmd_mcp.hpp"
 #include "commands/cmd_pkg.hpp"
 #include "commands/cmd_rlib.hpp"
 #include "commands/cmd_test.hpp"
@@ -439,6 +441,14 @@ int tml_main(int argc, char* argv[]) {
 
     if (command == "publish") {
         return run_publish(argc, argv);
+    }
+
+    if (command == "mcp") {
+        std::vector<std::string> args;
+        for (int i = 2; i < argc; ++i) {
+            args.push_back(argv[i]);
+        }
+        return cmd_mcp(args);
     }
 
     std::cerr << "Error: Unknown command '" << command << "'\n";

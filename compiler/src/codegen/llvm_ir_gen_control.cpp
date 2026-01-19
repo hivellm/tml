@@ -363,8 +363,9 @@ auto LLVMIRGen::gen_if_let(const parser::IfLetExpr& if_let) -> std::string {
 auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
     std::string result = "0";
 
-    // Push a new drop scope for this block
+    // Push new scopes for this block
     push_drop_scope();
+    push_lifetime_scope();
 
     for (const auto& stmt : block.stmts) {
         if (block_terminated_) {
@@ -382,9 +383,16 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
         last_expr_type_ = "void";
     }
 
-    // Emit drops for variables in this scope before exiting
+    // Emit drops and lifetime.end for variables in this scope before exiting
     if (!block_terminated_) {
         emit_scope_drops();
+        pop_lifetime_scope();
+    } else {
+        // Block was terminated by return/break/continue - lifetime.end already emitted
+        // Just pop the scope without emitting (prevents double emission)
+        if (!scope_allocas_.empty()) {
+            scope_allocas_.pop_back();
+        }
     }
 
     pop_drop_scope();
@@ -393,42 +401,62 @@ auto LLVMIRGen::gen_block(const parser::BlockExpr& block) -> std::string {
 }
 
 auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
-    std::string label_start = fresh_label("loop.start");
+    // Canonical LLVM loop form for infinite loop:
+    //   preheader -> header -> body -> latch -> header (backedge)
+    //                               \-> exit (via break)
+    std::string label_preheader = fresh_label("loop.preheader");
+    std::string label_header = fresh_label("loop.header");
     std::string label_body = fresh_label("loop.body");
-    std::string label_end = fresh_label("loop.end");
+    std::string label_latch = fresh_label("loop.latch");
+    std::string label_exit = fresh_label("loop.exit");
 
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
     int saved_loop_metadata_id = current_loop_metadata_id_;
-    current_loop_start_ = label_start;
-    current_loop_end_ = label_end;
+    current_loop_start_ = label_latch; // continue goes to latch (canonical form)
+    current_loop_end_ = label_exit;
 
     // Create loop metadata for optimization hints
-    // Infinite loops don't have known bounds, but we still enable basic hints
     current_loop_metadata_id_ = create_loop_metadata(false, 0);
 
-    emit_line("  br label %" + label_start);
-    emit_line(label_start + ":");
-    block_terminated_ = false;
+    // Preheader block - single entry to loop
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+    emit_line("  br label %" + label_header);
 
-    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
-    // Fixed-size allocas in loop bodies are handled by mem2reg promotion.
+    // Header block - loop entry point
+    emit_line(label_header + ":");
+    current_block_ = label_header;
+    block_terminated_ = false;
+    emit_line("  br label %" + label_body);
+
+    // Body block
+    emit_line(label_body + ":");
+    current_block_ = label_body;
+    block_terminated_ = false;
     current_loop_stack_save_ = ""; // No stack save for break/continue
 
     gen_expr(*loop.body);
 
     if (!block_terminated_) {
-        // Add loop metadata to back-edge for LLVM optimization hints
-        std::string loop_meta = current_loop_metadata_id_ >= 0
-                                    ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
-                                    : "";
-        emit_line("  br label %" + label_start + loop_meta);
+        emit_line("  br label %" + label_latch);
     }
 
-    emit_line(label_end + ":");
-    current_block_ = label_end;
+    // Latch block - single backedge
+    emit_line(label_latch + ":");
+    current_block_ = label_latch;
+    block_terminated_ = false;
+    // Add loop metadata to back-edge for LLVM optimization hints
+    std::string loop_meta = current_loop_metadata_id_ >= 0
+                                ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                : "";
+    emit_line("  br label %" + label_header + loop_meta);
+
+    // Exit block (reached via break)
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -441,30 +469,35 @@ auto LLVMIRGen::gen_loop(const parser::LoopExpr& loop) -> std::string {
 }
 
 auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
-    std::string label_cond = fresh_label("while.cond");
+    // Canonical LLVM loop form:
+    //   preheader -> header -> body -> latch -> header (backedge)
+    //                      \-> exit
+    std::string label_preheader = fresh_label("while.preheader");
+    std::string label_header = fresh_label("while.header");
     std::string label_body = fresh_label("while.body");
-    std::string label_end = fresh_label("while.end");
+    std::string label_latch = fresh_label("while.latch");
+    std::string label_exit = fresh_label("while.exit");
 
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
     int saved_loop_metadata_id = current_loop_metadata_id_;
-    current_loop_start_ = label_cond;
-    current_loop_end_ = label_end;
+    current_loop_start_ = label_latch; // continue goes to latch (canonical form)
+    current_loop_end_ = label_exit;
 
     // Create loop metadata for optimization hints
-    // While loops may be vectorizable if body is simple
     current_loop_metadata_id_ = create_loop_metadata(true, 0);
 
-    // Jump to condition
-    emit_line("  br label %" + label_cond);
+    // Preheader block - single entry to loop (for loop-invariant code motion)
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+    emit_line("  br label %" + label_header);
 
-    // Condition block
-    emit_line(label_cond + ":");
+    // Header block - condition evaluation
+    emit_line(label_header + ":");
+    current_block_ = label_header;
     block_terminated_ = false;
-
-    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
     current_loop_stack_save_ = ""; // No stack save for break/continue
 
     std::string cond = gen_expr(*while_expr.condition);
@@ -476,23 +509,30 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
         cond = bool_cond;
     }
 
-    emit_line("  br i1 " + cond + ", label %" + label_body + ", label %" + label_end);
+    emit_line("  br i1 " + cond + ", label %" + label_body + ", label %" + label_exit);
 
     // Body block
     emit_line(label_body + ":");
+    current_block_ = label_body;
     block_terminated_ = false;
     gen_expr(*while_expr.body);
     if (!block_terminated_) {
-        // Add loop metadata to back-edge for LLVM optimization hints
-        std::string loop_meta = current_loop_metadata_id_ >= 0
-                                    ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
-                                    : "";
-        emit_line("  br label %" + label_cond + loop_meta);
+        emit_line("  br label %" + label_latch);
     }
 
-    // End block
-    emit_line(label_end + ":");
-    current_block_ = label_end;
+    // Latch block - single backedge (allows LLVM to identify loop structure)
+    emit_line(label_latch + ":");
+    current_block_ = label_latch;
+    block_terminated_ = false;
+    // Add loop metadata to back-edge for LLVM optimization hints
+    std::string loop_meta = current_loop_metadata_id_ >= 0
+                                ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
+                                : "";
+    emit_line("  br label %" + label_header + loop_meta);
+
+    // Exit block
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -505,23 +545,22 @@ auto LLVMIRGen::gen_while(const parser::WhileExpr& while_expr) -> std::string {
 }
 
 auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
-    // For loops: for pattern in iter { body }
-    // We support range expressions: for i in 0 to 10 { ... }
-    // And collection iteration: for item in list { ... }
-
-    std::string label_init = fresh_label("for.init");
-    std::string label_cond = fresh_label("for.cond");
+    // Canonical LLVM loop form:
+    //   preheader -> header -> body -> latch -> header (backedge)
+    //                      \-> exit
+    std::string label_preheader = fresh_label("for.preheader");
+    std::string label_header = fresh_label("for.header");
     std::string label_body = fresh_label("for.body");
-    std::string label_incr = fresh_label("for.incr");
-    std::string label_end = fresh_label("for.end");
+    std::string label_latch = fresh_label("for.latch");
+    std::string label_exit = fresh_label("for.exit");
 
     // Save current loop labels for break/continue
     std::string saved_loop_start = current_loop_start_;
     std::string saved_loop_end = current_loop_end_;
     std::string saved_loop_stack_save = current_loop_stack_save_;
     int saved_loop_metadata_id = current_loop_metadata_id_;
-    current_loop_start_ = label_incr; // continue goes to increment
-    current_loop_end_ = label_end;
+    current_loop_start_ = label_latch; // continue goes to latch (canonical form)
+    current_loop_end_ = label_exit;
 
     // Create loop metadata for optimization hints
     // For loops are the best candidates for vectorization since they have known bounds
@@ -587,17 +626,22 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         }
     }
 
-    // Allocate loop variable with correct type
+    // Preheader block - loop initialization (for loop-invariant code motion)
+    emit_line("  br label %" + label_preheader);
+    emit_line(label_preheader + ":");
+
+    // Allocate and initialize loop variable
     std::string var_alloca = fresh_reg();
     emit_line("  " + var_alloca + " = alloca " + range_type);
     emit_line("  store " + range_type + " " + range_start + ", ptr " + var_alloca);
     locals_[var_name] = VarInfo{var_alloca, range_type, nullptr, std::nullopt};
 
-    // Jump to condition
-    emit_line("  br label %" + label_cond);
+    // Jump to header
+    emit_line("  br label %" + label_header);
 
-    // Condition block
-    emit_line(label_cond + ":");
+    // Header block - condition check
+    emit_line(label_header + ":");
+    current_block_ = label_header;
     block_terminated_ = false;
     std::string current = fresh_reg();
     emit_line("  " + current + " = load " + range_type + ", ptr " + var_alloca);
@@ -609,13 +653,12 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
         emit_line("  " + cmp_result + " = icmp slt " + range_type + " " + current + ", " +
                   range_end);
     }
-    emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_end);
+    emit_line("  br i1 " + cmp_result + ", label %" + label_body + ", label %" + label_exit);
 
     // Body block
     emit_line(label_body + ":");
+    current_block_ = label_body;
     block_terminated_ = false;
-
-    // Note: Removed stacksave/stackrestore - they block LLVM optimizations.
     current_loop_stack_save_ = ""; // No stack save for break/continue
 
     // If iterating over a collection, get the element and bind it to the loop variable
@@ -649,11 +692,12 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
 
     gen_expr(*for_expr.body);
     if (!block_terminated_) {
-        emit_line("  br label %" + label_incr);
+        emit_line("  br label %" + label_latch);
     }
 
-    // Increment block
-    emit_line(label_incr + ":");
+    // Latch block - increment and backedge (single backedge for canonical form)
+    emit_line(label_latch + ":");
+    current_block_ = label_latch;
     block_terminated_ = false;
     std::string next_val = fresh_reg();
     std::string current2 = fresh_reg();
@@ -664,11 +708,11 @@ auto LLVMIRGen::gen_for(const parser::ForExpr& for_expr) -> std::string {
     std::string loop_meta = current_loop_metadata_id_ >= 0
                                 ? ", !llvm.loop !" + std::to_string(current_loop_metadata_id_)
                                 : "";
-    emit_line("  br label %" + label_cond + loop_meta);
+    emit_line("  br label %" + label_header + loop_meta);
 
-    // End block
-    emit_line(label_end + ":");
-    current_block_ = label_end;
+    // Exit block
+    emit_line(label_exit + ":");
+    current_block_ = label_exit;
     block_terminated_ = false;
 
     // Restore loop labels
@@ -727,6 +771,9 @@ static std::vector<std::string> parse_tuple_types_for_coercion(const std::string
 }
 
 auto LLVMIRGen::gen_return(const parser::ReturnExpr& ret) -> std::string {
+    // Emit lifetime.end for all allocas before returning
+    emit_all_lifetime_ends();
+
     // Emit drops for all variables in all scopes before returning
     emit_all_drops();
 

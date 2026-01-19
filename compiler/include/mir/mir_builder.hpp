@@ -44,6 +44,10 @@ struct BuildContext {
         uint32_t header_block;            // Loop header (for continue)
         uint32_t exit_block;              // Loop exit (for break)
         std::optional<Value> break_value; // Value to use for break (if loop returns value)
+
+        // Track break sources for exit PHI creation
+        // Each entry: (source_block_id, variable_snapshot)
+        std::vector<std::pair<uint32_t, std::unordered_map<std::string, Value>>> break_sources;
     };
     std::stack<LoopContext> loop_stack;
 

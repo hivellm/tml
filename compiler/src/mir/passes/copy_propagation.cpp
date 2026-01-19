@@ -109,12 +109,19 @@ auto CopyPropagationPass::is_copy(const Instruction& inst) -> std::optional<Valu
             using T = std::decay_t<decltype(i)>;
 
             if constexpr (std::is_same_v<T, PhiInst>) {
-                // Single-incoming phi is just a copy
-                if (i.incoming.size() == 1) {
-                    return i.incoming[0].first.id;
-                }
-                // All incoming values are the same
-                if (!i.incoming.empty()) {
+                // NOTE: We intentionally do NOT treat single-incoming phis as copies.
+                // While semantically they are copies, the original value may not
+                // dominate the use site. For example:
+                //   bb6: %13 = phi [...]
+                //   bb8: br bb4
+                //   bb4: %1 = phi [%13, bb8]  ; single incoming
+                //        %3 = eq %1, %2      ; uses %1
+                // If we replace %1 with %13, we get use-before-def because %13
+                // is only defined in bb6, which may not dominate bb4.
+                //
+                // Only treat as copy when ALL incoming values are the same
+                // (meaning the phi doesn't depend on control flow).
+                if (i.incoming.size() >= 2) {
                     ValueId first = i.incoming[0].first.id;
                     bool all_same = true;
                     for (const auto& [val, _] : i.incoming) {
