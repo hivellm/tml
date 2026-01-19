@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(tml VERSION 0.1.0 LANGUAGES CXX)
+project(tml VERSION 0.1.0 LANGUAGES CXX C)
 
 # C++20 required for concepts, ranges, etc.
 set(CMAKE_CXX_STANDARD 20)
@@ -82,6 +82,65 @@ endif()
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# ============================================================================
+# Pre-compiled C Runtime Library
+# ============================================================================
+# Build the TML runtime as a static library at compile time.
+# This eliminates the need for clang at runtime to compile C files.
+
+# Runtime source files
+# Note: io.c is excluded - essential.c provides the same functions plus panic catching
+set(TML_RUNTIME_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/essential.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/string.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/mem.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/time.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/async.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/text.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/math.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/net.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/thread.c
+)
+
+# Create static library
+add_library(tml_runtime STATIC ${TML_RUNTIME_SOURCES})
+
+# C compiler flags for runtime (use generator expressions for build-type-specific flags)
+if(MSVC)
+    # Debug: no optimization (avoid /O2 vs /RTC1 conflict)
+    # Release: full optimization
+    # /std:c11 and /experimental:c11atomics required for C11 atomics in thread.c
+    target_compile_options(tml_runtime PRIVATE
+        /W3
+        /std:c11
+        /experimental:c11atomics
+        $<$<CONFIG:Debug>:/Od>
+        $<$<NOT:$<CONFIG:Debug>>:/O2>
+    )
+    target_compile_definitions(tml_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(tml_runtime PRIVATE
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<NOT:$<CONFIG:Debug>>:-O3 -fomit-frame-pointer -funroll-loops>
+    )
+    if(WIN32)
+        # MinGW: enable MSVC extensions for SEH support
+        target_compile_options(tml_runtime PRIVATE -fms-extensions)
+    endif()
+endif()
+
+# Put runtime library in output directory (alongside tml.exe)
+set_target_properties(tml_runtime PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${TML_OUTPUT_DIR}
+)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(tml_runtime PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_TYPE} ${TML_OUTPUT_DIR}
+    )
+endforeach()
+
+message(STATUS "TML Runtime: Building static library (tml_runtime)")
 
 # Preprocessor library (C-style conditional compilation)
 add_library(tml_preprocessor STATIC
@@ -382,6 +441,171 @@ add_library(tml_mcp STATIC
 target_link_libraries(tml_mcp PUBLIC tml_json tml_codegen)
 target_include_directories(tml_mcp PUBLIC include src)
 
+# ============================================================================
+# LLVM Backend (optional, for self-contained compilation)
+# ============================================================================
+option(TML_USE_LLVM_BACKEND "Use LLVM C API for self-contained compilation" OFF)
+
+if(TML_USE_LLVM_BACKEND)
+    # Find LLVM package
+    find_package(LLVM CONFIG QUIET)
+
+    if(NOT LLVM_FOUND)
+        # Search paths for LLVM headers (C API headers needed)
+        # Priority: local build > local source > system installation
+        set(LLVM_HEADER_PATHS
+            "${CMAKE_SOURCE_DIR}/../src/llvm-install/include"       # Local build (run scripts/build_llvm.bat)
+            "${CMAKE_SOURCE_DIR}/../src/llvm-project/llvm/include"  # Local clone (source headers)
+            "$ENV{LLVM_DIR}/include"
+            "$ENV{LLVM_ROOT}/include"
+            "C:/Program Files/LLVM/include"
+            "F:/LLVM/include"
+            "/usr/lib/llvm-18/include"
+            "/usr/lib/llvm-17/include"
+            "/usr/local/opt/llvm/include"
+        )
+
+        # Search paths for LLVM libraries (pre-compiled)
+        # Priority: local build output > local install > system installation
+        set(LLVM_LIB_PATHS
+            "${CMAKE_SOURCE_DIR}/../build/llvm/Release/lib"         # Local build output (raw build artifacts)
+            "${CMAKE_SOURCE_DIR}/../src/llvm-install/lib"           # Local install (run scripts/build_llvm.bat)
+            "$ENV{LLVM_DIR}/lib"
+            "$ENV{LLVM_ROOT}/lib"
+            "C:/Program Files/LLVM/lib"
+            "F:/LLVM/lib"
+            "/usr/lib/llvm-18/lib"
+            "/usr/lib/llvm-17/lib"
+            "/usr/local/opt/llvm/lib"
+        )
+
+        # Find headers
+        foreach(HEADER_PATH ${LLVM_HEADER_PATHS})
+            if(EXISTS "${HEADER_PATH}/llvm-c/Core.h")
+                set(LLVM_INCLUDE_DIRS "${HEADER_PATH}")
+                message(STATUS "Found LLVM headers at: ${HEADER_PATH}")
+                break()
+            endif()
+        endforeach()
+
+        # Find libraries
+        foreach(LIB_PATH ${LLVM_LIB_PATHS})
+            if(WIN32)
+                if(EXISTS "${LIB_PATH}/LLVM-C.lib" OR EXISTS "${LIB_PATH}/LLVM.lib")
+                    set(LLVM_LIBRARY_DIRS "${LIB_PATH}")
+                    message(STATUS "Found LLVM libraries at: ${LIB_PATH}")
+                    set(LLVM_FOUND TRUE)
+                    break()
+                endif()
+            else()
+                if(EXISTS "${LIB_PATH}/libLLVM.so" OR EXISTS "${LIB_PATH}/libLLVM.a")
+                    set(LLVM_LIBRARY_DIRS "${LIB_PATH}")
+                    message(STATUS "Found LLVM libraries at: ${LIB_PATH}")
+                    set(LLVM_FOUND TRUE)
+                    break()
+                endif()
+            endif()
+        endforeach()
+    endif()
+
+    if(LLVM_FOUND OR EXISTS "${LLVM_INCLUDE_DIRS}/llvm-c/Core.h")
+        message(STATUS "LLVM Backend: Enabled")
+        message(STATUS "  Include: ${LLVM_INCLUDE_DIRS}")
+        message(STATUS "  Library: ${LLVM_LIBRARY_DIRS}")
+
+        # LLVM Backend library
+        add_library(tml_backend STATIC
+            src/backend/llvm_backend.cpp
+        )
+        target_include_directories(tml_backend PUBLIC include src ${LLVM_INCLUDE_DIRS})
+
+        if(LLVM_LIBRARY_DIRS)
+            target_link_directories(tml_backend PUBLIC ${LLVM_LIBRARY_DIRS})
+
+            # Link against LLVM-C library
+            if(WIN32)
+                target_link_libraries(tml_backend PUBLIC LLVM-C)
+            else()
+                target_link_libraries(tml_backend PUBLIC LLVM)
+            endif()
+        else()
+            message(STATUS "  Note: Headers found but no pre-compiled libraries")
+            message(STATUS "        Building requires LLVM libs (set LLVM_DIR or build LLVM)")
+        endif()
+
+        target_compile_definitions(tml_backend PUBLIC TML_HAS_LLVM_BACKEND=1)
+
+        set(TML_BACKEND_LIB tml_backend)
+    else()
+        message(WARNING "LLVM not found - backend disabled. Install LLVM or set LLVM_DIR.")
+        set(TML_BACKEND_LIB "")
+    endif()
+else()
+    message(STATUS "LLVM Backend: Disabled (use -DTML_USE_LLVM_BACKEND=ON to enable)")
+    set(TML_BACKEND_LIB "")
+endif()
+
+# ============================================================================
+# LLD/Zig Linker Support (optional, for self-contained linking)
+# ============================================================================
+option(TML_USE_LLD "Use LLD for self-contained linking" OFF)
+option(TML_USE_ZIG_LINKER "Use Zig's linker for optimized linking" OFF)
+
+# LLD Linker library (always built, uses external lld-link.exe or ld.lld)
+add_library(tml_lld STATIC
+    src/backend/lld_linker.cpp
+)
+target_include_directories(tml_lld PUBLIC include src)
+
+if(TML_USE_ZIG_LINKER)
+    # Search for Zig installation
+    find_program(ZIG_EXECUTABLE zig
+        HINTS
+        "$ENV{ZIG_DIR}"
+        "C:/Program Files/zig"
+        "C:/zig"
+        "/usr/local/bin"
+        "/usr/bin"
+    )
+
+    if(ZIG_EXECUTABLE)
+        message(STATUS "Zig Linker: Found at ${ZIG_EXECUTABLE}")
+        target_compile_definitions(tml_lld PRIVATE TML_USE_ZIG_LINKER=1)
+        target_compile_definitions(tml_lld PRIVATE TML_ZIG_PATH="${ZIG_EXECUTABLE}")
+    else()
+        message(WARNING "Zig not found - falling back to LLD")
+    endif()
+endif()
+
+if(TML_USE_LLD)
+    # Search for LLD (priority: local build > system)
+    set(LLD_SEARCH_PATHS
+        "${CMAKE_SOURCE_DIR}/../src/llvm-install/bin"  # Local build
+        "${CMAKE_SOURCE_DIR}/../src/llvm-project/lld"
+        "F:/LLVM/bin"
+        "C:/Program Files/LLVM/bin"
+        "$ENV{LLVM_DIR}/bin"
+        "/usr/bin"
+        "/usr/local/bin"
+    )
+
+    foreach(LLD_PATH ${LLD_SEARCH_PATHS})
+        if(WIN32)
+            if(EXISTS "${LLD_PATH}/lld-link.exe")
+                message(STATUS "LLD: Found at ${LLD_PATH}")
+                target_compile_definitions(tml_lld PRIVATE TML_USE_LLD=1)
+                break()
+            endif()
+        else()
+            if(EXISTS "${LLD_PATH}/ld.lld")
+                message(STATUS "LLD: Found at ${LLD_PATH}")
+                target_compile_definitions(tml_lld PRIVATE TML_USE_LLD=1)
+                break()
+            endif()
+        endif()
+    endforeach()
+endif()
+
 # CLI library
 add_library(tml_cli STATIC
     # Core CLI files
@@ -431,7 +655,7 @@ add_library(tml_cli STATIC
     src/cli/linter/semantic.cpp
     src/cli/linter/style.cpp
 )
-target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp)
+target_link_libraries(tml_cli PUBLIC tml_codegen tml_format tml_doc tml_mcp tml_lld ${TML_BACKEND_LIB})
 target_include_directories(tml_cli PUBLIC include src)
 
 # OpenSSL for SHA256 hashing (non-Windows)

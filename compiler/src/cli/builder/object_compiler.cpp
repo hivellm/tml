@@ -32,6 +32,13 @@
 
 #include "object_compiler.hpp"
 
+#include "backend/lld_linker.hpp"
+#include "common.hpp"
+
+#ifdef TML_HAS_LLVM_BACKEND
+#include "backend/llvm_backend.hpp"
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
@@ -46,6 +53,20 @@
 #endif
 
 namespace tml::cli {
+
+// Forward declarations for LLD integration
+static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_files,
+                                        const fs::path& output_file, const LinkOptions& options);
+static bool is_lld_available();
+
+// Forward declarations for LLVM backend integration
+static ObjectCompileResult compile_ll_with_llvm(const fs::path& ll_file,
+                                                const fs::path& output_file,
+                                                const ObjectCompileOptions& options);
+static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
+                                                 const fs::path& output_file,
+                                                 const std::string& clang_path,
+                                                 const ObjectCompileOptions& options);
 
 /// Returns the platform-specific object file extension.
 std::string get_object_extension() {
@@ -94,18 +115,25 @@ static std::string quote_command(const std::string& cmd) {
     return cmd;
 }
 
+/// Check if LLVM backend is available for self-contained compilation
+bool is_llvm_backend_available() {
+#ifdef TML_HAS_LLVM_BACKEND
+    return backend::is_llvm_backend_available();
+#else
+    return false;
+#endif
+}
+
 /// Compiles an LLVM IR file to a native object file.
 ///
-/// ## Clang Flags Used
+/// Routes to either the built-in LLVM backend (self-contained) or clang
+/// subprocess depending on the compiler_backend option.
 ///
-/// - `-c`: Compile only (no linking)
-/// - `-target`: Target triple for cross-compilation
-/// - `-march=native -mtune=native`: CPU-specific optimizations
-/// - `-fomit-frame-pointer`: Better code generation
-/// - `-funroll-loops`: Loop unrolling optimization
-/// - `-flto[=thin]`: Link-Time Optimization (if enabled)
-/// - `-g`: Debug information (if enabled)
-/// - `-fPIC`: Position-independent code (for shared libs)
+/// ## Backend Selection
+///
+/// - `Auto`: Use LLVM backend if available, otherwise fall back to clang
+/// - `LLVM`: Use built-in LLVM C API (no external dependencies)
+/// - `Clang`: Use clang subprocess (requires clang installation)
 ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
                                          const std::optional<fs::path>& output_file,
                                          const std::string& clang_path,
@@ -127,6 +155,119 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
         // Auto-generate: same name as .ll but with .o/.obj extension
         obj_file = ll_file;
         obj_file.replace_extension(get_object_extension());
+    }
+
+    // Determine which backend to use
+    bool use_llvm_backend = false;
+    if (CompilerOptions::use_external_tools) {
+        // --use-external-tools: force clang backend
+        use_llvm_backend = false;
+    } else if (options.compiler_backend == CompilerBackend::LLVM) {
+        use_llvm_backend = true;
+    } else if (options.compiler_backend == CompilerBackend::Auto) {
+        // Auto-detect: prefer LLVM if available (unless LTO enabled, which needs clang)
+        if (!options.lto && is_llvm_backend_available()) {
+            use_llvm_backend = true;
+        }
+    }
+
+    // Route to appropriate backend
+    if (use_llvm_backend) {
+        if (options.verbose) {
+            std::cout << "[object_compiler] Using LLVM backend\n";
+        }
+        return compile_ll_with_llvm(ll_file, obj_file, options);
+    } else {
+        if (options.verbose) {
+            std::cout << "[object_compiler] Using clang backend\n";
+        }
+        return compile_ll_with_clang(ll_file, obj_file, clang_path, options);
+    }
+}
+
+// ============================================================================
+// LLVM Backend Compilation
+// ============================================================================
+
+/// Compiles LLVM IR to object using the built-in LLVM C API backend.
+///
+/// This is the self-contained compilation path that doesn't require
+/// external tools like clang.
+static ObjectCompileResult
+compile_ll_with_llvm([[maybe_unused]] const fs::path& ll_file,
+                     [[maybe_unused]] const fs::path& output_file,
+                     [[maybe_unused]] const ObjectCompileOptions& options) {
+    ObjectCompileResult result;
+    result.success = false;
+
+#ifdef TML_HAS_LLVM_BACKEND
+    backend::LLVMBackend llvm_backend;
+    if (!llvm_backend.initialize()) {
+        result.error_message =
+            "Failed to initialize LLVM backend: " + llvm_backend.get_last_error();
+        return result;
+    }
+
+    // Convert ObjectCompileOptions to LLVMCompileOptions
+    backend::LLVMCompileOptions llvm_opts;
+    llvm_opts.optimization_level = options.optimization_level;
+    llvm_opts.debug_info = options.debug_info;
+    llvm_opts.target_triple = options.target_triple;
+    llvm_opts.position_independent = options.position_independent;
+    llvm_opts.verbose = options.verbose;
+    llvm_opts.cpu = "native";
+
+    // Compile IR file to object
+    auto llvm_result = llvm_backend.compile_ir_file_to_object(ll_file, output_file, llvm_opts);
+
+    if (!llvm_result.success) {
+        result.error_message = "LLVM backend compilation failed: " + llvm_result.error_message;
+        return result;
+    }
+
+    result.success = true;
+    result.object_file = llvm_result.object_file;
+    return result;
+#else
+    result.error_message = "LLVM backend not available (TML_HAS_LLVM_BACKEND not defined)";
+    return result;
+#endif
+}
+
+// ============================================================================
+// Clang Subprocess Compilation
+// ============================================================================
+
+/// Compiles LLVM IR to object using clang subprocess.
+///
+/// ## Clang Flags Used
+///
+/// - `-c`: Compile only (no linking)
+/// - `-target`: Target triple for cross-compilation
+/// - `-march=native -mtune=native`: CPU-specific optimizations
+/// - `-fomit-frame-pointer`: Better code generation
+/// - `-funroll-loops`: Loop unrolling optimization
+/// - `-flto[=thin]`: Link-Time Optimization (if enabled)
+/// - `-g`: Debug information (if enabled)
+/// - `-fPIC`: Position-independent code (for shared libs)
+static ObjectCompileResult compile_ll_with_clang(const fs::path& ll_file,
+                                                 const fs::path& output_file,
+                                                 const std::string& clang_path,
+                                                 const ObjectCompileOptions& options) {
+    ObjectCompileResult result;
+    result.success = false;
+
+    // Check if clang is available
+    if (clang_path.empty()) {
+        result.error_message =
+            "Compiler backend not available. Neither the built-in LLVM backend nor clang is "
+            "available.\n"
+            "  This typically means TML was built without LLVM support and clang is not "
+            "installed.\n"
+            "  Solutions:\n"
+            "  1. Install clang/LLVM and ensure it's in your PATH\n"
+            "  2. Rebuild TML with -DTML_USE_LLVM_BACKEND=ON for self-contained compilation";
+        return result;
     }
 
     // Build clang command
@@ -189,13 +330,13 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
     cmd << " -Wno-override-module";
 
     // Input and output
-    cmd << " -o \"" << to_forward_slashes(obj_file) << "\"";
+    cmd << " -o \"" << to_forward_slashes(output_file) << "\"";
     cmd << " \"" << to_forward_slashes(ll_file) << "\"";
 
     std::string command = cmd.str();
 
     if (options.verbose) {
-        std::cout << "[object_compiler] " << command << "\n";
+        std::cout << "[clang] " << command << "\n";
     }
 
     // Execute compilation
@@ -207,13 +348,13 @@ ObjectCompileResult compile_ll_to_object(const fs::path& ll_file,
     }
 
     // Verify object file was created
-    if (!fs::exists(obj_file)) {
-        result.error_message = "Object file was not created: " + obj_file.string();
+    if (!fs::exists(output_file)) {
+        result.error_message = "Object file was not created: " + output_file.string();
         return result;
     }
 
     result.success = true;
-    result.object_file = obj_file;
+    result.object_file = output_file;
     return result;
 }
 
@@ -249,6 +390,40 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
             result.error_message = "Object file not found: " + obj.string();
             return result;
         }
+    }
+
+    // Check if we should use LLD directly
+    bool use_lld = false;
+    if (CompilerOptions::use_external_tools) {
+        // --use-external-tools: force clang linker driver
+        use_lld = false;
+    } else if (options.linker_backend == LinkerBackend::LLD) {
+        use_lld = true;
+    } else if (options.linker_backend == LinkerBackend::Auto) {
+        // Auto-detect: use LLD if available and not using LTO (LTO needs clang driver)
+        if (!options.lto && is_lld_available()) {
+            use_lld = true;
+        }
+    }
+
+    // Use LLD for direct linking (self-contained)
+    if (use_lld) {
+        if (options.verbose) {
+            std::cout << "[linker] Using LLD backend\n";
+        }
+        return link_objects_with_lld(object_files, output_file, options);
+    }
+
+    // Fall back to clang as linker driver
+    // Check if clang is available for fallback
+    if (clang_path.empty()) {
+        result.error_message = "Linker not available. Neither LLD nor clang is installed.\n"
+                               "  The TML compiler normally uses LLD for self-contained linking.\n"
+                               "  Solutions:\n"
+                               "  1. Ensure lld-link.exe (Windows) or ld.lld (Unix) is available\n"
+                               "  2. Install clang/LLVM and ensure it's in your PATH\n"
+                               "  3. Set LLVM_DIR environment variable to your LLVM installation";
+        return result;
     }
 
     std::ostringstream cmd;
@@ -428,6 +603,77 @@ LinkResult link_objects(const std::vector<fs::path>& object_files, const fs::pat
     result.success = true;
     result.output_file = output_file;
     return result;
+}
+
+// ============================================================================
+// LLD-based Linking
+// ============================================================================
+
+/// Links objects using LLD directly (self-contained, no clang dependency)
+static LinkResult link_objects_with_lld(const std::vector<fs::path>& object_files,
+                                        const fs::path& output_file, const LinkOptions& options) {
+    LinkResult result;
+    result.success = false;
+
+    // Initialize LLD linker
+    backend::LLDLinker linker;
+    if (!linker.initialize()) {
+        result.error_message = "Failed to initialize LLD linker: " + linker.get_last_error();
+        return result;
+    }
+
+    if (options.verbose) {
+        std::cout << "[lld_linker] Using LLD at: " << linker.get_lld_path() << "\n";
+    }
+
+    // Convert LinkOptions to LLDLinkOptions
+    backend::LLDLinkOptions lld_opts;
+
+    switch (options.output_type) {
+    case LinkOptions::OutputType::Executable:
+        lld_opts.output_type = backend::LLDOutputType::Executable;
+        break;
+    case LinkOptions::OutputType::StaticLib:
+        lld_opts.output_type = backend::LLDOutputType::StaticLib;
+        break;
+    case LinkOptions::OutputType::DynamicLib:
+        lld_opts.output_type = backend::LLDOutputType::SharedLib;
+        break;
+    }
+
+    lld_opts.verbose = options.verbose;
+    lld_opts.debug_info = false; // Could be added to LinkOptions if needed
+    lld_opts.target_triple = options.target_triple;
+    lld_opts.extra_flags = options.link_flags;
+
+    // Convert additional objects to library paths
+    for (const auto& obj : options.additional_objects) {
+        lld_opts.library_paths.push_back(obj.parent_path());
+    }
+
+    // Combine object files
+    std::vector<fs::path> all_objects = object_files;
+    for (const auto& obj : options.additional_objects) {
+        all_objects.push_back(obj);
+    }
+
+    // Link
+    auto lld_result = linker.link(all_objects, output_file, lld_opts);
+
+    if (!lld_result.success) {
+        result.error_message = "LLD linking failed: " + lld_result.error_message;
+        return result;
+    }
+
+    result.success = true;
+    result.output_file = lld_result.output_file;
+    return result;
+}
+
+/// Check if LLD is available for linking
+static bool is_lld_available() {
+    backend::LLDLinker linker;
+    return linker.initialize();
 }
 
 // ============================================================================

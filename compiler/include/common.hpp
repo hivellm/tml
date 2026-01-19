@@ -125,6 +125,11 @@ struct CompilerOptions {
     /// When enabled, compiled programs track all allocations and report
     /// unfreed memory at exit. Always enabled in debug builds by default.
     static inline bool check_leaks = true;
+
+    /// Force use of external tools (clang, system linker) instead of
+    /// built-in LLVM backend and LLD. Useful for debugging or when
+    /// the self-contained tools are not available.
+    static inline bool use_external_tools = false;
 };
 
 // ============================================================================

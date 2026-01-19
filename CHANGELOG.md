@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Self-Contained Compiler** (2026-01-19) - TML compiler now works without external tool dependencies
+  - Built-in LLVM backend for IR-to-object compilation (no clang required)
+  - Built-in LLD linker integration (no system linkers required)
+  - Pre-compiled runtime library bundled with compiler distribution
+  - `--use-external-tools` flag for fallback/debugging
+  - Auto-detection: uses built-in backends when available, falls back to clang if needed
+  - Improved error messages with actionable solutions when tools are unavailable
+  - Files added:
+    - `compiler/include/backend/lld_linker.hpp` - LLD linker wrapper interface
+    - `compiler/src/backend/lld_linker.cpp` - LLD linker implementation
+  - Files modified:
+    - `compiler/CMakeLists.txt` - LLVM/LLD library dependencies, runtime build
+    - `compiler/src/cli/builder/object_compiler.cpp` - Backend routing (LLVM/clang)
+    - `compiler/src/cli/builder/compiler_setup.cpp` - Optional clang detection
+    - `compiler/src/cli/dispatcher.cpp` - `--use-external-tools` flag
+    - `compiler/include/common.hpp` - `CompilerOptions::use_external_tools`
+    - `docs/user/ch01-01-installation.md` - Updated installation docs
+
 - **Text Type with Template Literals** (2026-01-15) - Complete dynamic string type implementation
   - New `Text` type in `std::text` module - heap-allocated, growable strings with SSO
   - Small String Optimization (SSO) for strings ≤23 bytes - no heap allocation

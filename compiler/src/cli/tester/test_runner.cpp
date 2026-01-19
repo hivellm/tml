@@ -486,11 +486,8 @@ CompileToSharedLibResult compile_test_to_shared_lib(const std::string& test_file
     std::string lib_ext = get_shared_lib_extension();
     fs::path lib_output = cache_dir / (module_name + "_" + cache_key + lib_ext);
 
+    // Note: clang may be empty if LLVM backend is available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty()) {
-        result.error_message = "clang not found";
-        return result;
-    }
 
     // Check for cached object
     bool use_cached_obj = !no_cache && fs::exists(obj_output);
@@ -820,11 +817,8 @@ CompileToSharedLibResult compile_fuzz_to_shared_lib(const std::string& fuzz_file
     std::string lib_ext = get_shared_lib_extension();
     fs::path lib_output = cache_dir / (module_name + "_fuzz_" + cache_key + lib_ext);
 
+    // Note: clang may be empty if LLVM backend is available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty()) {
-        result.error_message = "clang not found";
-        return result;
-    }
 
     // Check for cached object
     bool use_cached_obj = !no_cache && fs::exists(obj_output);
@@ -1010,12 +1004,8 @@ CompileToSharedLibResult compile_test_to_shared_lib_profiled(const std::string& 
     std::string lib_ext = get_shared_lib_extension();
     fs::path lib_output = cache_dir / (module_name + "_" + cache_key + lib_ext);
 
+    // Note: clang may be empty if LLVM backend is available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty()) {
-        result.error_message = "clang not found";
-        record_phase("setup", phase_start);
-        return result;
-    }
     record_phase("setup", phase_start);
 
     // Phase: Compile to object (if not cached)
@@ -1318,11 +1308,8 @@ SuiteCompileResult compile_test_suite(const TestSuite& suite, bool verbose, bool
         }
 
         fs::path cache_dir = get_run_cache_dir();
+        // Note: clang may be empty if LLVM backend is available (self-contained mode)
         std::string clang = find_clang();
-        if (clang.empty()) {
-            result.error_message = "clang not found";
-            return result;
-        }
 
         // Create a SHARED ModuleRegistry for all tests in this suite
         // This prevents re-parsing the same library modules for each test file

@@ -680,13 +680,9 @@ bool ParallelBuilder::compile_job(std::shared_ptr<BuildJob> job, bool verbose) {
             out << llvm_ir;
         }
 
-        // Compile to object file
+        // Compile to object file (uses LLVM backend if available, otherwise clang)
+        // Note: clang may be empty if LLVM backend is available (self-contained mode)
         std::string clang = find_clang();
-        if (clang.empty()) {
-            job->error_message = "clang not found";
-            fs::remove(unique_ll_file);
-            return false;
-        }
 
         ObjectCompileOptions obj_options;
         obj_options.optimization_level = options.optimization_level;

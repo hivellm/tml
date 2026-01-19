@@ -417,34 +417,35 @@ void waitgroup_free(WaitGroup* wg) {
 }
 
 // ============ ATOMIC COUNTER ============
+// Note: Functions prefixed with tml_ to avoid conflict with C11 stdatomic macros
 
 typedef struct AtomicCounter {
     atomic_int_fast64_t value;
 } AtomicCounter;
 
-AtomicCounter* atomic_new(int64_t initial) {
+AtomicCounter* tml_atomic_new(int64_t initial) {
     AtomicCounter* a = (AtomicCounter*)malloc(sizeof(AtomicCounter));
     atomic_init(&a->value, initial);
     return a;
 }
 
-int64_t atomic_load(AtomicCounter* a) {
-    return atomic_load(&a->value);
+int64_t tml_atomic_load(AtomicCounter* a) {
+    return atomic_load_explicit(&a->value, memory_order_seq_cst);
 }
 
-void atomic_store(AtomicCounter* a, int64_t value) {
-    atomic_store(&a->value, value);
+void tml_atomic_store(AtomicCounter* a, int64_t value) {
+    atomic_store_explicit(&a->value, value, memory_order_seq_cst);
 }
 
-int64_t atomic_add(AtomicCounter* a, int64_t delta) {
-    return atomic_fetch_add(&a->value, delta);
+int64_t tml_atomic_add(AtomicCounter* a, int64_t delta) {
+    return atomic_fetch_add_explicit(&a->value, delta, memory_order_seq_cst);
 }
 
-int64_t atomic_sub(AtomicCounter* a, int64_t delta) {
-    return atomic_fetch_sub(&a->value, delta);
+int64_t tml_atomic_sub(AtomicCounter* a, int64_t delta) {
+    return atomic_fetch_sub_explicit(&a->value, delta, memory_order_seq_cst);
 }
 
-void atomic_free(AtomicCounter* a) {
+void tml_atomic_free(AtomicCounter* a) {
     free(a);
 }
 

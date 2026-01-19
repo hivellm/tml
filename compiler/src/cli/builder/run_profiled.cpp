@@ -207,12 +207,8 @@ int run_run_profiled(const std::string& path, const std::vector<std::string>& ar
     exe_output += ".exe";
 #endif
 
+    // Note: clang may be empty if LLVM backend and LLD are available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
-        if (output)
-            *output = "compilation error: clang not found";
-        return EXIT_COMPILATION_ERROR;
-    }
     record_phase("setup", phase_start);
 
     // Phase 7: Compile to object (if not cached)

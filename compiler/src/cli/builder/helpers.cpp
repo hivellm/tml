@@ -438,112 +438,125 @@ std::vector<fs::path> get_runtime_objects(const std::shared_ptr<types::ModuleReg
         }
     };
 
-    // Essential runtime (IO functions)
-    std::string runtime_path = find_runtime();
-    if (!runtime_path.empty()) {
-        std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
-        objects.push_back(fs::path(obj));
+    // Check for pre-compiled runtime library first (self-contained mode)
+    std::string runtime_lib = find_runtime_library();
+    bool use_precompiled = !runtime_lib.empty() && !CompilerOptions::check_leaks;
+
+    if (use_precompiled) {
+        // Use pre-compiled runtime library (no clang needed)
+        objects.push_back(fs::path(runtime_lib));
         if (verbose) {
-            std::cout << "Including runtime: " << obj << "\n";
+            std::cout << "Using pre-compiled runtime: " << runtime_lib << "\n";
         }
-
-        // Also include string.c and mem.c by default (commonly used)
-        fs::path runtime_dir = fs::path(runtime_path).parent_path();
-
-        fs::path string_c = runtime_dir / "string.c";
-        if (fs::exists(string_c)) {
-            std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
-                                                       deps_cache, clang, verbose);
-            objects.push_back(fs::path(string_obj));
+    } else {
+        // Fall back to compiling individual C files with clang
+        // Essential runtime (IO functions)
+        std::string runtime_path = find_runtime();
+        if (!runtime_path.empty()) {
+            std::string obj = ensure_c_compiled(runtime_path, deps_cache, clang, verbose);
+            objects.push_back(fs::path(obj));
             if (verbose) {
-                std::cout << "Including string runtime: " << string_obj << "\n";
+                std::cout << "Including runtime: " << obj << "\n";
             }
-        }
 
-        // Determine if memory tracking is enabled
-        std::string mem_flags = "";
-        if (CompilerOptions::check_leaks) {
-            mem_flags = "-DTML_DEBUG_MEMORY";
-        }
+            // Also include string.c and mem.c by default (commonly used)
+            fs::path runtime_dir = fs::path(runtime_path).parent_path();
 
-        fs::path mem_c = runtime_dir / "mem.c";
-        if (fs::exists(mem_c)) {
-            std::string mem_obj = ensure_c_compiled(to_forward_slashes(mem_c.string()), deps_cache,
-                                                    clang, verbose, mem_flags);
-            objects.push_back(fs::path(mem_obj));
-            if (verbose) {
-                std::cout << "Including mem runtime: " << mem_obj << "\n";
-            }
-        }
-
-        // Include memory tracking runtime when leak checking is enabled
-        if (CompilerOptions::check_leaks) {
-            fs::path mem_track_c = runtime_dir / "mem_track.c";
-            if (fs::exists(mem_track_c)) {
-                std::string mem_track_obj =
-                    ensure_c_compiled(to_forward_slashes(mem_track_c.string()), deps_cache, clang,
-                                      verbose, mem_flags);
-                objects.push_back(fs::path(mem_track_obj));
+            fs::path string_c = runtime_dir / "string.c";
+            if (fs::exists(string_c)) {
+                std::string string_obj = ensure_c_compiled(to_forward_slashes(string_c.string()),
+                                                           deps_cache, clang, verbose);
+                objects.push_back(fs::path(string_obj));
                 if (verbose) {
-                    std::cout << "Including mem_track runtime (leak checking): " << mem_track_obj
-                              << "\n";
+                    std::cout << "Including string runtime: " << string_obj << "\n";
                 }
             }
-        }
 
-        // Also include time.c by default (commonly used for timing/sleep)
-        fs::path time_c = runtime_dir / "time.c";
-        if (fs::exists(time_c)) {
-            std::string time_obj =
-                ensure_c_compiled(to_forward_slashes(time_c.string()), deps_cache, clang, verbose);
-            objects.push_back(fs::path(time_obj));
-            if (verbose) {
-                std::cout << "Including time runtime: " << time_obj << "\n";
+            // Determine if memory tracking is enabled
+            std::string mem_flags = "";
+            if (CompilerOptions::check_leaks) {
+                mem_flags = "-DTML_DEBUG_MEMORY";
             }
-        }
 
-        // Include async.c for async/await executor support
-        fs::path async_c = runtime_dir / "async.c";
-        if (fs::exists(async_c)) {
-            std::string async_obj =
-                ensure_c_compiled(to_forward_slashes(async_c.string()), deps_cache, clang, verbose);
-            objects.push_back(fs::path(async_obj));
-            if (verbose) {
-                std::cout << "Including async runtime: " << async_obj << "\n";
+            fs::path mem_c = runtime_dir / "mem.c";
+            if (fs::exists(mem_c)) {
+                std::string mem_obj = ensure_c_compiled(to_forward_slashes(mem_c.string()),
+                                                        deps_cache, clang, verbose, mem_flags);
+                objects.push_back(fs::path(mem_obj));
+                if (verbose) {
+                    std::cout << "Including mem runtime: " << mem_obj << "\n";
+                }
             }
-        }
 
-        // Include math.c for math builtins (sqrt, pow, int_to_float, etc.)
-        fs::path math_c = runtime_dir / "math.c";
-        if (fs::exists(math_c)) {
-            std::string math_obj =
-                ensure_c_compiled(to_forward_slashes(math_c.string()), deps_cache, clang, verbose);
-            objects.push_back(fs::path(math_obj));
-            if (verbose) {
-                std::cout << "Including math runtime: " << math_obj << "\n";
+            // Include memory tracking runtime when leak checking is enabled
+            if (CompilerOptions::check_leaks) {
+                fs::path mem_track_c = runtime_dir / "mem_track.c";
+                if (fs::exists(mem_track_c)) {
+                    std::string mem_track_obj =
+                        ensure_c_compiled(to_forward_slashes(mem_track_c.string()), deps_cache,
+                                          clang, verbose, mem_flags);
+                    objects.push_back(fs::path(mem_track_obj));
+                    if (verbose) {
+                        std::cout << "Including mem_track runtime (leak checking): "
+                                  << mem_track_obj << "\n";
+                    }
+                }
             }
-        }
 
-        // Include text.c for Text type (used by template literals $"...")
-        fs::path text_c = runtime_dir / "text.c";
-        if (fs::exists(text_c)) {
-            std::string text_obj =
-                ensure_c_compiled(to_forward_slashes(text_c.string()), deps_cache, clang, verbose);
-            objects.push_back(fs::path(text_obj));
-            if (verbose) {
-                std::cout << "Including text runtime: " << text_obj << "\n";
+            // Also include time.c by default (commonly used for timing/sleep)
+            fs::path time_c = runtime_dir / "time.c";
+            if (fs::exists(time_c)) {
+                std::string time_obj = ensure_c_compiled(to_forward_slashes(time_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(time_obj));
+                if (verbose) {
+                    std::cout << "Including time runtime: " << time_obj << "\n";
+                }
             }
-        }
 
-        // Include net.c by default (commonly used by std::net, and needed for test suites)
-        // The cost of including it is minimal and prevents hard-to-debug linking errors
-        fs::path net_c = runtime_dir / "net.c";
-        if (fs::exists(net_c)) {
-            std::string net_obj =
-                ensure_c_compiled(to_forward_slashes(net_c.string()), deps_cache, clang, verbose);
-            objects.push_back(fs::path(net_obj));
-            if (verbose) {
-                std::cout << "Including net runtime: " << net_obj << "\n";
+            // Include async.c for async/await executor support
+            fs::path async_c = runtime_dir / "async.c";
+            if (fs::exists(async_c)) {
+                std::string async_obj = ensure_c_compiled(to_forward_slashes(async_c.string()),
+                                                          deps_cache, clang, verbose);
+                objects.push_back(fs::path(async_obj));
+                if (verbose) {
+                    std::cout << "Including async runtime: " << async_obj << "\n";
+                }
+            }
+
+            // Include math.c for math builtins (sqrt, pow, int_to_float, etc.)
+            fs::path math_c = runtime_dir / "math.c";
+            if (fs::exists(math_c)) {
+                std::string math_obj = ensure_c_compiled(to_forward_slashes(math_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(math_obj));
+                if (verbose) {
+                    std::cout << "Including math runtime: " << math_obj << "\n";
+                }
+            }
+
+            // Include text.c for Text type (used by template literals $"...")
+            fs::path text_c = runtime_dir / "text.c";
+            if (fs::exists(text_c)) {
+                std::string text_obj = ensure_c_compiled(to_forward_slashes(text_c.string()),
+                                                         deps_cache, clang, verbose);
+                objects.push_back(fs::path(text_obj));
+                if (verbose) {
+                    std::cout << "Including text runtime: " << text_obj << "\n";
+                }
+            }
+
+            // Include net.c by default (commonly used by std::net, and needed for test suites)
+            // The cost of including it is minimal and prevents hard-to-debug linking errors
+            fs::path net_c = runtime_dir / "net.c";
+            if (fs::exists(net_c)) {
+                std::string net_obj = ensure_c_compiled(to_forward_slashes(net_c.string()),
+                                                        deps_cache, clang, verbose);
+                objects.push_back(fs::path(net_obj));
+                if (verbose) {
+                    std::cout << "Including net runtime: " << net_obj << "\n";
+                }
             }
         }
     }

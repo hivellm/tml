@@ -173,6 +173,42 @@ std::string find_runtime() {
     return "";
 }
 
+std::string find_runtime_library() {
+    // Search for pre-compiled runtime library
+    // Priority: same dir as executable > build dir > known locations
+#ifdef _WIN32
+    std::string lib_name = "tml_runtime.lib";
+#else
+    std::string lib_name = "libtml_runtime.a";
+#endif
+
+    std::vector<std::string> search_paths = {
+        // Same directory as the executable (standard distribution)
+        ".",
+        // Build output directories
+        "build/debug",
+        "build/release",
+        "../build/debug",
+        "../build/release",
+        // Development paths
+        "F:/Node/hivellm/tml/build/debug",
+        "F:/Node/hivellm/tml/build/release",
+    };
+
+    for (const auto& path : search_paths) {
+        fs::path lib_path = fs::path(path) / lib_name;
+        if (fs::exists(lib_path)) {
+            return to_forward_slashes(fs::absolute(lib_path).string());
+        }
+    }
+
+    return "";
+}
+
+bool is_precompiled_runtime_available() {
+    return !find_runtime_library().empty();
+}
+
 std::string ensure_runtime_compiled(const std::string& runtime_c_path, const std::string& clang,
                                     bool verbose) {
     fs::path c_path = runtime_c_path;

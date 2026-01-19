@@ -168,6 +168,7 @@ int tml_main(int argc, char* argv[]) {
                 << "  --no-check-leaks    Disable memory leak detection (enabled by default)\n";
             std::cerr << "  --profile-generate  Generate profile data for PGO\n";
             std::cerr << "  --profile-use=<file> Use profile data for PGO\n";
+            std::cerr << "  --use-external-tools Force use of clang/system linker\n";
             return 1;
         }
 
@@ -311,6 +312,8 @@ int tml_main(int argc, char* argv[]) {
                 profile_generate = true;
             } else if (arg.starts_with("--profile-use=")) {
                 profile_use = arg.substr(14);
+            } else if (arg == "--use-external-tools") {
+                tml::CompilerOptions::use_external_tools = true;
             }
         }
 

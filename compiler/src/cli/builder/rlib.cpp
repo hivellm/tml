@@ -52,6 +52,57 @@ namespace tml::cli {
 
 namespace {
 
+/// Find llvm-ar for self-contained archiving.
+/// Returns path to llvm-ar if found, empty string otherwise.
+std::string find_llvm_ar() {
+    std::vector<fs::path> search_paths = {
+        // Local LLVM build output (raw build artifacts)
+        fs::current_path() / "build" / "llvm" / "Release" / "bin",
+        // Local LLVM install
+        fs::current_path() / "src" / "llvm-install" / "bin",
+    // System installations
+#ifdef _WIN32
+        "F:/LLVM/bin",
+        "C:/Program Files/LLVM/bin",
+        "C:/LLVM/bin",
+#else
+        "/usr/bin",
+        "/usr/local/bin",
+        "/opt/llvm/bin",
+#endif
+    };
+
+    // Check LLVM_DIR environment variable (suppress MSVC warning)
+#ifdef _WIN32
+    char* llvm_dir_buf = nullptr;
+    size_t llvm_dir_len = 0;
+    if (_dupenv_s(&llvm_dir_buf, &llvm_dir_len, "LLVM_DIR") == 0 && llvm_dir_buf != nullptr) {
+        search_paths.insert(search_paths.begin(), fs::path(llvm_dir_buf) / "bin");
+        free(llvm_dir_buf);
+    }
+#else
+    if (const char* llvm_dir = std::getenv("LLVM_DIR")) {
+        search_paths.insert(search_paths.begin(), fs::path(llvm_dir) / "bin");
+    }
+#endif
+
+#ifdef _WIN32
+    const std::string ar_name = "llvm-ar.exe";
+#else
+    const std::string ar_name = "llvm-ar";
+#endif
+
+    for (const auto& dir : search_paths) {
+        std::error_code ec;
+        fs::path ar_candidate = dir / ar_name;
+        if (fs::exists(ar_candidate, ec)) {
+            return ar_candidate.string();
+        }
+    }
+
+    return "";
+}
+
 /// Escapes special characters in a JSON string.
 std::string json_escape(const std::string& str) {
     std::string result;
@@ -413,35 +464,57 @@ RlibResult create_rlib(const std::vector<fs::path>& object_files, const RlibMeta
         }
         exports_out.close();
 
-        // Build lib.exe command
+        // Build archiver command (prefer llvm-ar for self-containment)
         std::ostringstream cmd;
+        std::string archiver = find_llvm_ar();
+        bool using_llvm_ar = !archiver.empty();
 
+        if (archiver.empty()) {
+            // Fall back to system archiver
 #ifdef _WIN32
-        cmd << options.archiver << " /OUT:\"" << output_rlib.string() << "\"";
-
-        // Add object files
-        for (const auto& obj : object_files) {
-            cmd << " \"" << obj.string() << "\"";
-        }
-
-        // Add metadata and exports
-        cmd << " \"" << metadata_file.string() << "\"";
-        cmd << " \"" << exports_file.string() << "\"";
-
-        if (!options.verbose) {
-            cmd << " /NOLOGO";
-        }
+            archiver = options.archiver;
 #else
-        // Linux/macOS: use ar
-        cmd << "ar rcs \"" << output_rlib.string() << "\"";
-
-        for (const auto& obj : object_files) {
-            cmd << " \"" << obj.string() << "\"";
+            archiver = "ar";
+#endif
         }
 
-        cmd << " \"" << metadata_file.string() << "\"";
-        cmd << " \"" << exports_file.string() << "\"";
+        if (using_llvm_ar) {
+            // llvm-ar uses GNU ar syntax on all platforms
+            cmd << "\"" << archiver << "\" rcs \"" << output_rlib.string() << "\"";
+
+            for (const auto& obj : object_files) {
+                cmd << " \"" << obj.string() << "\"";
+            }
+
+            cmd << " \"" << metadata_file.string() << "\"";
+            cmd << " \"" << exports_file.string() << "\"";
+        } else {
+#ifdef _WIN32
+            // MSVC lib.exe syntax
+            cmd << archiver << " /OUT:\"" << output_rlib.string() << "\"";
+
+            for (const auto& obj : object_files) {
+                cmd << " \"" << obj.string() << "\"";
+            }
+
+            cmd << " \"" << metadata_file.string() << "\"";
+            cmd << " \"" << exports_file.string() << "\"";
+
+            if (!options.verbose) {
+                cmd << " /NOLOGO";
+            }
+#else
+            // GNU ar syntax
+            cmd << archiver << " rcs \"" << output_rlib.string() << "\"";
+
+            for (const auto& obj : object_files) {
+                cmd << " \"" << obj.string() << "\"";
+            }
+
+            cmd << " \"" << metadata_file.string() << "\"";
+            cmd << " \"" << exports_file.string() << "\"";
 #endif
+        }
 
         if (options.verbose) {
             std::cout << "Creating RLIB: " << cmd.str() << "\n";
@@ -474,21 +547,28 @@ bool extract_rlib_member(const fs::path& rlib_file, const std::string& member_na
         return false;
     }
 
+    // Prefer llvm-ar for self-containment
+    std::string llvm_ar = find_llvm_ar();
+    std::string cmd;
+
+    if (!llvm_ar.empty()) {
+        // llvm-ar uses GNU ar syntax on all platforms
+        cmd = "\"" + llvm_ar + "\" p \"" + rlib_file.string() + "\" \"" + member_name + "\" > \"" +
+              output_path.string() + "\"";
+    } else {
 #ifdef _WIN32
-    // Windows: Use lib.exe to extract
-    std::string cmd = "lib.exe /NOLOGO /EXTRACT:\"" + member_name + "\" /OUT:\"" +
-                      output_path.string() + "\" \"" + rlib_file.string() + "\" 2>nul";
-
-    int result = std::system(cmd.c_str());
-    return result == 0 && fs::exists(output_path);
+        // Windows: Use lib.exe to extract
+        cmd = "lib.exe /NOLOGO /EXTRACT:\"" + member_name + "\" /OUT:\"" + output_path.string() +
+              "\" \"" + rlib_file.string() + "\" 2>nul";
 #else
-    // Linux/macOS: Use ar to extract
-    std::string cmd = "ar p \"" + rlib_file.string() + "\" \"" + member_name + "\" > \"" +
-                      output_path.string() + "\"";
+        // Linux/macOS: Use ar to extract
+        cmd = "ar p \"" + rlib_file.string() + "\" \"" + member_name + "\" > \"" +
+              output_path.string() + "\"";
+#endif
+    }
 
     int result = std::system(cmd.c_str());
     return result == 0 && fs::exists(output_path);
-#endif
 }
 
 std::optional<RlibMetadata> read_rlib_metadata(const fs::path& rlib_file) {
@@ -567,9 +647,23 @@ std::vector<std::string> list_rlib_members(const fs::path& rlib_file) {
         return result;
     }
 
+    // Prefer llvm-ar for self-containment
+    std::string llvm_ar = find_llvm_ar();
+    std::string cmd;
+
+    if (!llvm_ar.empty()) {
+        // llvm-ar uses GNU ar syntax on all platforms
+        cmd = "\"" + llvm_ar + "\" t \"" + rlib_file.string() + "\"";
+    } else {
 #ifdef _WIN32
-    // Windows: Use lib.exe to list members
-    std::string cmd = "lib.exe /NOLOGO /LIST \"" + rlib_file.string() + "\"";
+        // Windows: Use lib.exe to list members
+        cmd = "lib.exe /NOLOGO /LIST \"" + rlib_file.string() + "\"";
+#else
+        // Linux/macOS: Use ar to list members
+        cmd = "ar t \"" + rlib_file.string() + "\"";
+#endif
+    }
+
     std::string output = exec_command(cmd);
 
     // Parse output
@@ -584,22 +678,6 @@ std::vector<std::string> list_rlib_members(const fs::path& rlib_file) {
             result.push_back(line);
         }
     }
-#else
-    // Linux/macOS: Use ar to list members
-    std::string cmd = "ar t \"" + rlib_file.string() + "\"";
-    std::string output = exec_command(cmd);
-
-    std::istringstream iss(output);
-    std::string line;
-    while (std::getline(iss, line)) {
-        line.erase(0, line.find_first_not_of(" \t\r\n"));
-        line.erase(line.find_last_not_of(" \t\r\n") + 1);
-
-        if (!line.empty()) {
-            result.push_back(line);
-        }
-    }
-#endif
 
     return result;
 }

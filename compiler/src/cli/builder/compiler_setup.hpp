@@ -48,7 +48,14 @@ std::string ensure_c_compiled(const std::string& c_path, const std::string& cach
                               const std::string& clang, bool verbose,
                               const std::string& extra_flags = "");
 
-// Find runtime path
+// Find runtime path (source .c file for fallback compilation)
 std::string find_runtime();
+
+// Find pre-compiled runtime library (tml_runtime.lib or libtml_runtime.a)
+// Returns empty string if not found
+std::string find_runtime_library();
+
+// Check if pre-compiled runtime is available
+bool is_precompiled_runtime_available();
 
 } // namespace tml::cli

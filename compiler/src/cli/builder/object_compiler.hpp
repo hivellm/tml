@@ -50,6 +50,15 @@ struct LinkResult {
 };
 
 /**
+ * Compiler backend to use for IR-to-object compilation
+ */
+enum class CompilerBackend {
+    Auto,  // Auto-detect (prefer LLVM if available)
+    Clang, // Use clang subprocess (external tool)
+    LLVM   // Use LLVM C API directly (self-contained)
+};
+
+/**
  * Compilation options for object file generation
  */
 struct ObjectCompileOptions {
@@ -62,6 +71,17 @@ struct ObjectCompileOptions {
     bool aggressive_sroa = true;       // Aggressive scalar replacement of aggregates
     std::string target_triple;         // Target triple for cross-compilation (empty = host)
     std::string sysroot;               // Sysroot path for cross-compilation
+    CompilerBackend compiler_backend = CompilerBackend::Auto; // Which compiler to use
+};
+
+/**
+ * Linker backend to use
+ */
+enum class LinkerBackend {
+    Auto,  // Auto-detect (prefer LLD if available)
+    Clang, // Use clang as linker driver
+    LLD,   // Use LLD directly
+    Zig    // Use Zig's linker
 };
 
 /**
@@ -75,6 +95,7 @@ struct LinkOptions {
     };
 
     OutputType output_type = OutputType::Executable;
+    LinkerBackend linker_backend = LinkerBackend::Auto; // Which linker to use
     bool verbose = false;
     bool lto = false;                         // Enable Link-Time Optimization
     bool thin_lto = false;                    // Use ThinLTO (faster, less memory)
@@ -149,6 +170,11 @@ std::string get_object_extension();
  * 5 -> -Oz (optimize for size, aggressive)
  */
 std::string get_optimization_flag(int level);
+
+/**
+ * Check if LLVM backend is available for self-contained compilation
+ */
+bool is_llvm_backend_available();
 
 } // namespace tml::cli
 

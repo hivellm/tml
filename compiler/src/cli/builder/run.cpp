@@ -150,12 +150,8 @@ int run_run(const std::string& path, const std::vector<std::string>& args, bool 
     exe_output += ".exe";
 #endif
 
+    // Note: clang may be empty if LLVM backend and LLD are available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
-        std::cerr << "error: clang not found.\n";
-        std::cerr << "Please install LLVM/clang\n";
-        return 1;
-    }
 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
@@ -458,12 +454,8 @@ int run_run_quiet(const std::string& path, const std::vector<std::string>& args,
     exe_output += ".exe";
 #endif
 
+    // Note: clang may be empty if LLVM backend and LLD are available (self-contained mode)
     std::string clang = find_clang();
-    if (clang.empty() || (!fs::exists(clang) && clang != "clang")) {
-        if (output)
-            *output = "compilation error: clang not found";
-        return EXIT_COMPILATION_ERROR;
-    }
 
     // Use global deps cache for precompiled runtimes
     std::string deps_cache = to_forward_slashes(get_deps_cache_dir().string());
