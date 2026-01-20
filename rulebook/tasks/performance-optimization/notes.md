@@ -100,3 +100,13 @@ Compile-time constant string length detection eliminates `str_len` FFI calls:
 ## Memory Intrinsics (MIR Codegen)
 
 - `store_byte(ptr, offset, byte)`: Direct byte store at ptr+offset without FFI (25.8B ops/sec)
+
+## Remaining Bottleneck: Integer-to-String Conversion
+
+The remaining performance gap (Build HTML 0.32x, Build CSV 0.21x, Log Messages 0.27x, Path Building 0.18x) is due to FFI overhead from `tml_text_push_i64_unsafe` calls. The runtime uses an optimized lookup table algorithm but each call still has FFI overhead.
+
+**Potential future optimizations:**
+1. Enable LTO (Link-Time Optimization) to allow LLVM to inline FFI functions
+2. Generate int-to-string conversion directly in LLVM IR
+3. Use small integer lookup tables (0-99, 0-999) for common cases
+4. Specialize for known value ranges during compilation
