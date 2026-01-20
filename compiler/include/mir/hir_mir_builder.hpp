@@ -204,6 +204,9 @@ private:
     /// Builds a compound assignment expression.
     [[nodiscard]] auto build_compound_assign(const hir::HirCompoundAssignExpr& assign) -> Value;
 
+    /// Builds a lowlevel block expression.
+    [[nodiscard]] auto build_lowlevel(const hir::HirLowlevelExpr& lowlevel) -> Value;
+
     // ============ Pattern Building ============
 
     /// Builds pattern binding, binding matched values to variables.

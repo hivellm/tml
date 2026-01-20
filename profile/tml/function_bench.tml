@@ -1,0 +1,173 @@
+// Function Call Benchmarks (TML)
+//
+// Tests function call overhead: direct, indirect, recursive, inlined.
+
+// Simple function (should be inlined)
+@inline
+func add_inline(a: I64, b: I64) -> I64 {
+    return a + b
+}
+
+// Non-inline function
+@noinline
+func add_noinline(a: I64, b: I64) -> I64 {
+    return a + b
+}
+
+// Function with more parameters
+@noinline
+func add_many_params(a: I64, b: I64, c: I64, d: I64, e: I64, f: I64) -> I64 {
+    return a + b + c + d + e + f
+}
+
+// Recursive function
+func fib_recursive(n: I32) -> I64 {
+    if n <= 1 then {
+        return n as I64
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2)
+}
+
+// Tail recursive (optimizable)
+func fib_tail_helper(n: I32, a: I64, b: I64) -> I64 {
+    if n == 0 then { return a }
+    if n == 1 then { return b }
+    return fib_tail_helper(n - 1, b, a + b)
+}
+
+func fib_tail(n: I32) -> I64 {
+    return fib_tail_helper(n, 0, 1)
+}
+
+// Mutual recursion
+func is_even(n: I64) -> I64
+func is_odd(n: I64) -> I64
+
+func is_even(n: I64) -> I64 {
+    if n == 0 then { return 1 }
+    return is_odd(n - 1)
+}
+
+func is_odd(n: I64) -> I64 {
+    if n == 0 then { return 0 }
+    return is_even(n - 1)
+}
+
+// Benchmarks - return results to prevent dead code elimination
+func bench_inline_call(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = add_inline(sum, i)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_direct_call(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = add_noinline(sum, i)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_many_params(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = add_many_params(i, i+1, i+2, i+3, i+4, i+5)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_fib_recursive(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + fib_recursive(20)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_fib_tail(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + fib_tail(50)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_mutual_recursion(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + is_even(100)
+        i = i + 1
+    }
+    return sum
+}
+
+// Helper to run and print a benchmark
+func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64) {
+    // Warmup
+    let _w: I64 = bench_fn(iterations / 10)
+
+    var best_ns: I64 = 9223372036854775807  // I64 max
+    var run: I32 = 0
+    loop {
+        if run >= runs then { break }
+        let start: I64 = time_ns()
+        let _r: I64 = bench_fn(iterations)
+        let end: I64 = time_ns()
+        let elapsed: I64 = end - start
+        if elapsed < best_ns then {
+            best_ns = elapsed
+        }
+        run = run + 1
+    }
+
+    let per_op: I64 = best_ns / iterations
+    let ops_sec: I64 = if best_ns > 0 then {
+        (iterations * 1000000000) / best_ns
+    } else {
+        0
+    }
+
+    println("  " + name + ":")
+    println("    " + per_op.to_string() + " ns/op")
+    println("    " + ops_sec.to_string() + " ops/sec")
+    println("")
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Function Call Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000   // 10M
+    let FIB_ITER: I64 = 1000         // Fewer for recursive
+
+    run_bench("Inline Call", ITERATIONS, 10, bench_inline_call)
+    run_bench("Direct Call (noinline)", ITERATIONS, 10, bench_direct_call)
+    run_bench("Many Parameters (6 args)", ITERATIONS, 10, bench_many_params)
+    run_bench("Fibonacci Recursive (n=20)", FIB_ITER, 5, bench_fib_recursive)
+    run_bench("Fibonacci Tail (n=50)", ITERATIONS, 10, bench_fib_tail)
+    run_bench("Mutual Recursion (n=100)", ITERATIONS, 10, bench_mutual_recursion)
+
+    return 0
+}

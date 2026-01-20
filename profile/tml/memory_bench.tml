@@ -1,0 +1,306 @@
+// Memory Benchmarks (TML)
+//
+// Tests struct creation, memory access patterns.
+// Uses fixed-size arrays and sealed classes.
+
+// Test structures (same sizes as C++)
+sealed class SmallStruct {
+    a: I64
+    b: I64
+
+    static func create(a_val: I64, b_val: I64) -> SmallStruct {
+        return SmallStruct { a: a_val, b: b_val }
+    }
+}
+
+sealed class MediumStruct {
+    a: I64
+    b: I64
+    c: I64
+    d: I64
+    x: F64
+    y: F64
+    z: F64
+    w: F64
+
+    static func create(a_val: I64, b_val: I64, c_val: I64, d_val: I64) -> MediumStruct {
+        return MediumStruct {
+            a: a_val, b: b_val, c: c_val, d: d_val,
+            x: 1.0, y: 2.0, z: 3.0, w: 4.0
+        }
+    }
+}
+
+// Nested structures
+sealed class Point {
+    x: F64
+    y: F64
+
+    static func create(x_val: F64, y_val: F64) -> Point {
+        return Point { x: x_val, y: y_val }
+    }
+}
+
+sealed class Triangle {
+    ax: F64
+    ay: F64
+    bx: F64
+    by: F64
+    cx: F64
+    cy: F64
+
+    static func create() -> Triangle {
+        return Triangle {
+            ax: 0.0, ay: 0.0,
+            bx: 1.0, by: 0.0,
+            cx: 0.5, cy: 1.0
+        }
+    }
+}
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// Stack struct creation (small)
+func bench_stack_struct_small(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let s: SmallStruct = SmallStruct::create(i, i + 1)
+        sum = sum + s.a + s.b
+        i = i + 1
+    }
+    return sum
+}
+
+// Stack struct creation (medium)
+func bench_stack_struct_medium(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let s: MediumStruct = MediumStruct::create(i, i + 1, i + 2, i + 3)
+        sum = sum + s.a + s.d
+        i = i + 1
+    }
+    return sum
+}
+
+// Sequential access through array
+func bench_sequential_access(iterations: I64) -> I64 {
+    var data: [I64; 10000] = [0; 10000]
+    var i: I64 = 0
+    loop {
+        if i >= 10000 then { break }
+        data[i as U64] = i
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    i = 0
+    loop {
+        if i >= iterations then { break }
+        let idx: U64 = (i % 10000) as U64
+        sum = sum + data[idx]
+        i = i + 1
+    }
+    return sum
+}
+
+// Pseudo-random access (cache unfriendly)
+func bench_random_access(iterations: I64) -> I64 {
+    var data: [I64; 10000] = [0; 10000]
+    var indices: [I64; 10000] = [0; 10000]
+
+    var i: I64 = 0
+    loop {
+        if i >= 10000 then { break }
+        data[i as U64] = i
+        indices[i as U64] = (i * 7919 + 1) % 10000
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    i = 0
+    loop {
+        if i >= iterations then { break }
+        let idx_pos: U64 = (i % 10000) as U64
+        let idx: U64 = indices[idx_pos] as U64
+        sum = sum + data[idx]
+        i = i + 1
+    }
+    return sum
+}
+
+// Struct field access
+func bench_struct_field_access(iterations: I64) -> I64 {
+    let s: MediumStruct = MediumStruct::create(1, 2, 3, 4)
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + s.a + s.b + s.c + s.d
+        i = i + 1
+    }
+    return sum
+}
+
+// Nested struct access
+func bench_nested_struct_access(iterations: I64) -> F64 {
+    let tri: Triangle = Triangle::create()
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + tri.ax + tri.by + tri.cx
+        i = i + 1
+    }
+    return sum
+}
+
+// Array copy benchmark
+func bench_array_copy(iterations: I64) -> I64 {
+    var src: [I64; 1000] = [0; 1000]
+    var dst: [I64; 1000] = [0; 1000]
+
+    var i: I64 = 0
+    loop {
+        if i >= 1000 then { break }
+        src[i as U64] = i
+        i = i + 1
+    }
+
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 1000 then { break }
+        i = 0
+        loop {
+            if i >= 1000 then { break }
+            dst[i as U64] = src[i as U64]
+            i = i + 1
+        }
+        round = round + 1
+    }
+    return dst[500]
+}
+
+// Array fill benchmark
+func bench_array_fill(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 1000 then { break }
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            arr[i as U64] = round
+            i = i + 1
+        }
+        round = round + 1
+    }
+    return arr[0]
+}
+
+// Point creation benchmark
+func bench_point_creation(iterations: I64) -> F64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let p: Point = Point::create((i as F64), (i as F64) + 1.0)
+        sum = sum + p.x + p.y
+        i = i + 1
+    }
+    return sum
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Memory Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ACCESS_ITER: I64 = 10000000  // 10M access ops
+    let STRUCT_ITER: I64 = 10000000  // 10M struct ops
+    let COPY_ITER: I64 = 1000000     // 1M copy ops
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 100 then { break }
+        let s: SmallStruct = SmallStruct::create(1, 2)
+        let _: I64 = s.a + s.b
+        warmup = warmup + 1
+    }
+
+    // Stack Struct Small
+    var start: I64 = time_ns()
+    let _sss: I64 = bench_stack_struct_small(STRUCT_ITER)
+    var end: I64 = time_ns()
+    run_and_print("Stack Struct Small (16 bytes)", STRUCT_ITER, end - start)
+
+    // Stack Struct Medium
+    start = time_ns()
+    let _ssm: I64 = bench_stack_struct_medium(STRUCT_ITER)
+    end = time_ns()
+    run_and_print("Stack Struct Medium (64 bytes)", STRUCT_ITER, end - start)
+
+    // Sequential Access
+    start = time_ns()
+    let _sa: I64 = bench_sequential_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Sequential Access", ACCESS_ITER, end - start)
+
+    // Random Access
+    start = time_ns()
+    let _ra: I64 = bench_random_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Random Access", ACCESS_ITER, end - start)
+
+    // Struct Field Access
+    start = time_ns()
+    let _sfa: I64 = bench_struct_field_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Struct Field Access", ACCESS_ITER, end - start)
+
+    // Nested Struct Access
+    start = time_ns()
+    let _nsa: F64 = bench_nested_struct_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Nested Struct Access", ACCESS_ITER, end - start)
+
+    // Point Creation
+    start = time_ns()
+    let _pc: F64 = bench_point_creation(STRUCT_ITER)
+    end = time_ns()
+    run_and_print("Point Creation", STRUCT_ITER, end - start)
+
+    // Array Copy
+    start = time_ns()
+    let _ac: I64 = bench_array_copy(COPY_ITER)
+    end = time_ns()
+    run_and_print("Array Copy (1000 elements)", COPY_ITER, end - start)
+
+    // Array Fill
+    start = time_ns()
+    let _af: I64 = bench_array_fill(COPY_ITER)
+    end = time_ns()
+    run_and_print("Array Fill (1000 elements)", COPY_ITER, end - start)
+
+    return 0
+}

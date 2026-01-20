@@ -1,0 +1,79 @@
+{
+  "category": "Text/StringBuilder",
+  "language": "cpp",
+  "results": [
+    {
+      "name": "stringstream Append",
+      "iterations": 100000,
+      "total_ns": 14213800,
+      "per_op_ns": 142,
+      "ops_per_sec": 7035416
+    },
+    {
+      "name": "string Reserve+Append",
+      "iterations": 100000,
+      "total_ns": 736400,
+      "per_op_ns": 7,
+      "ops_per_sec": 135795763
+    },
+    {
+      "name": "string Naive Append",
+      "iterations": 100000,
+      "total_ns": 248800,
+      "per_op_ns": 2,
+      "ops_per_sec": 401929260
+    },
+    {
+      "name": "Build JSON",
+      "iterations": 10000,
+      "total_ns": 2900100,
+      "per_op_ns": 290,
+      "ops_per_sec": 3448156,
+      "notes": "10K items"
+    },
+    {
+      "name": "Build HTML",
+      "iterations": 10000,
+      "total_ns": 92800,
+      "per_op_ns": 9,
+      "ops_per_sec": 107758620,
+      "notes": "10K items"
+    },
+    {
+      "name": "Build CSV",
+      "iterations": 10000,
+      "total_ns": 251800,
+      "per_op_ns": 25,
+      "ops_per_sec": 39714058,
+      "notes": "10K rows"
+    },
+    {
+      "name": "Small Appends (1 char)",
+      "iterations": 1000000,
+      "total_ns": 705800,
+      "per_op_ns": 0,
+      "ops_per_sec": 1416831963
+    },
+    {
+      "name": "Number Formatting",
+      "iterations": 100000,
+      "total_ns": 52189500,
+      "per_op_ns": 521,
+      "ops_per_sec": 1916094
+    },
+    {
+      "name": "Log Messages",
+      "iterations": 100000,
+      "total_ns": 2588900,
+      "per_op_ns": 25,
+      "ops_per_sec": 38626443
+    },
+    {
+      "name": "Path Building",
+      "iterations": 100000,
+      "total_ns": 1354800,
+      "per_op_ns": 13,
+      "ops_per_sec": 73811632
+    }
+  ]
+}

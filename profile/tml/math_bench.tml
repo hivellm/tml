@@ -1,0 +1,241 @@
+// Math Benchmarks (TML)
+//
+// Tests basic arithmetic operations and loop performance.
+// Must produce identical results to C++ for fair comparison.
+
+// Integer addition benchmark
+func bench_int_add(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+// Integer multiplication benchmark
+func bench_int_mul(iterations: I64) -> I64 {
+    var prod: I64 = 1
+    var i: I64 = 1
+    loop {
+        if i > iterations then { break }
+        prod = (prod * i) % 1000000007  // Prevent overflow with modulo
+        i = i + 1
+    }
+    return prod
+}
+
+// Float addition benchmark
+func bench_float_add(iterations: I64) -> F64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + (i as F64) * 0.001
+        i = i + 1
+    }
+    return sum
+}
+
+// Float multiplication benchmark
+func bench_float_mul(iterations: I64) -> F64 {
+    var prod: F64 = 1.0
+    var i: I64 = 1
+    loop {
+        if i > iterations then { break }
+        prod = prod * 1.0000001  // Small multiplier to avoid infinity
+        i = i + 1
+    }
+    return prod
+}
+
+// Fibonacci (recursive) - tests function call overhead
+func fib(n: I32) -> I64 {
+    if n <= 1 then { return n as I64 }
+    return fib(n - 1) + fib(n - 2)
+}
+
+func bench_fib_recursive(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + fib(20)  // fib(20) = 6765
+        i = i + 1
+    }
+    return sum
+}
+
+// Fibonacci (iterative) - tests loop performance
+func fib_iter(n: I32) -> I64 {
+    if n <= 1 then { return n as I64 }
+    var a: I64 = 0
+    var b: I64 = 1
+    var i: I32 = 2
+    loop {
+        if i > n then { break }
+        let temp: I64 = a + b
+        a = b
+        b = temp
+        i = i + 1
+    }
+    return b
+}
+
+func bench_fib_iterative(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + fib_iter(50)
+        i = i + 1
+    }
+    return sum
+}
+
+// Empty loop - measures loop overhead
+func bench_empty_loop(iterations: I64) -> I64 {
+    var counter: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        counter = i
+        i = i + 1
+    }
+    return counter
+}
+
+// Division benchmark (integer)
+func bench_int_div(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 1
+    loop {
+        if i > iterations then { break }
+        sum = sum + (i * 1000000) / (i + 1)
+        i = i + 1
+    }
+    return sum
+}
+
+// Modulo benchmark
+func bench_int_mod(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 1
+    loop {
+        if i > iterations then { break }
+        sum = sum + (i % 17)
+        i = i + 1
+    }
+    return sum
+}
+
+// Bitwise operations
+func bench_bitwise(iterations: I64) -> I64 {
+    var result: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        result = (result ^ i) | (i & 255) | ((i << 3) >> 1)
+        i = i + 1
+    }
+    return result
+}
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Math Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000  // 10M for most tests
+    let FIB_ITERATIONS: I64 = 1000   // Fewer for recursive fib
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 10 then { break }
+        let _: I64 = bench_int_add(1000)
+        warmup = warmup + 1
+    }
+
+    // Integer Addition
+    var start: I64 = time_ns()
+    let _add: I64 = bench_int_add(ITERATIONS)
+    var end: I64 = time_ns()
+    run_and_print("Integer Addition", ITERATIONS, end - start)
+
+    // Integer Multiplication
+    start = time_ns()
+    let _mul: I64 = bench_int_mul(ITERATIONS)
+    end = time_ns()
+    run_and_print("Integer Multiplication", ITERATIONS, end - start)
+
+    // Integer Division
+    start = time_ns()
+    let _div: I64 = bench_int_div(ITERATIONS)
+    end = time_ns()
+    run_and_print("Integer Division", ITERATIONS, end - start)
+
+    // Integer Modulo
+    start = time_ns()
+    let _mod: I64 = bench_int_mod(ITERATIONS)
+    end = time_ns()
+    run_and_print("Integer Modulo", ITERATIONS, end - start)
+
+    // Bitwise Operations
+    start = time_ns()
+    let _bit: I64 = bench_bitwise(ITERATIONS)
+    end = time_ns()
+    run_and_print("Bitwise Operations", ITERATIONS, end - start)
+
+    // Float Addition
+    start = time_ns()
+    let _fadd: F64 = bench_float_add(ITERATIONS)
+    end = time_ns()
+    run_and_print("Float Addition", ITERATIONS, end - start)
+
+    // Float Multiplication
+    start = time_ns()
+    let _fmul: F64 = bench_float_mul(ITERATIONS)
+    end = time_ns()
+    run_and_print("Float Multiplication", ITERATIONS, end - start)
+
+    // Fibonacci Recursive
+    start = time_ns()
+    let _fibr: I64 = bench_fib_recursive(FIB_ITERATIONS)
+    end = time_ns()
+    run_and_print("Fibonacci Recursive (n=20)", FIB_ITERATIONS, end - start)
+
+    // Fibonacci Iterative
+    start = time_ns()
+    let _fibi: I64 = bench_fib_iterative(ITERATIONS)
+    end = time_ns()
+    run_and_print("Fibonacci Iterative (n=50)", ITERATIONS, end - start)
+
+    // Empty Loop
+    start = time_ns()
+    let _empty: I64 = bench_empty_loop(ITERATIONS)
+    end = time_ns()
+    run_and_print("Empty Loop", ITERATIONS, end - start)
+
+    return 0
+}

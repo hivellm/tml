@@ -1,0 +1,293 @@
+// Control Flow Benchmarks (TML)
+//
+// Tests branching and loop performance.
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// Simple if/else chain
+func bench_if_else_chain(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let x: I64 = i % 100
+        if x < 25 then {
+            sum = sum + 1
+        } else if x < 50 then {
+            sum = sum + 2
+        } else if x < 75 then {
+            sum = sum + 3
+        } else {
+            sum = sum + 4
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+// Deeply nested if
+func bench_nested_if(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let x: I64 = i % 16
+        if (x & 1) != 0 then {
+            if (x & 2) != 0 then {
+                if (x & 4) != 0 then {
+                    if (x & 8) != 0 then {
+                        sum = sum + 15
+                    } else {
+                        sum = sum + 7
+                    }
+                } else {
+                    sum = sum + 3
+                }
+            } else {
+                sum = sum + 1
+            }
+        } else {
+            sum = sum + 0
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+// When expression (like switch dense)
+func bench_when_dense(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let x: I64 = i % 10
+        // Using if-else chain since when may not be fully optimized yet
+        if x == 0 then { sum = sum + 0 }
+        else if x == 1 then { sum = sum + 1 }
+        else if x == 2 then { sum = sum + 2 }
+        else if x == 3 then { sum = sum + 3 }
+        else if x == 4 then { sum = sum + 4 }
+        else if x == 5 then { sum = sum + 5 }
+        else if x == 6 then { sum = sum + 6 }
+        else if x == 7 then { sum = sum + 7 }
+        else if x == 8 then { sum = sum + 8 }
+        else if x == 9 then { sum = sum + 9 }
+        else { sum = sum + 10 }
+        i = i + 1
+    }
+    return sum
+}
+
+// Switch sparse (using if-else)
+func bench_when_sparse(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let x: I64 = (i * 100) % 1000
+        if x == 0 then { sum = sum + 0 }
+        else if x == 100 then { sum = sum + 1 }
+        else if x == 200 then { sum = sum + 2 }
+        else if x == 300 then { sum = sum + 3 }
+        else if x == 400 then { sum = sum + 4 }
+        else if x == 500 then { sum = sum + 5 }
+        else if x == 600 then { sum = sum + 6 }
+        else if x == 700 then { sum = sum + 7 }
+        else if x == 800 then { sum = sum + 8 }
+        else if x == 900 then { sum = sum + 9 }
+        else { sum = sum + 10 }
+        i = i + 1
+    }
+    return sum
+}
+
+// Simple loop
+func bench_loop(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+// Nested loops (matrix style)
+func bench_nested_loops(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    let n: I64 = 1000
+    var rounds: I64 = iterations / (n * n)
+    if rounds < 1 then { rounds = 1 }
+
+    var r: I64 = 0
+    loop {
+        if r >= rounds then { break }
+        var i: I64 = 0
+        loop {
+            if i >= n then { break }
+            var j: I64 = 0
+            loop {
+                if j >= n then { break }
+                sum = sum + (i * n + j)
+                j = j + 1
+            }
+            i = i + 1
+        }
+        r = r + 1
+    }
+    return sum
+}
+
+// Loop with continue
+func bench_loop_continue(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if i % 2 == 0 then {
+            i = i + 1
+            continue
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+// Ternary/conditional expression chain
+func bench_ternary_chain(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let x: I64 = i % 100
+        let val: I64 = if x < 25 then { 1 } else if x < 50 then { 2 } else if x < 75 then { 3 } else { 4 }
+        sum = sum + val
+        i = i + 1
+    }
+    return sum
+}
+
+// Boolean short-circuit AND
+func bench_short_circuit_and(iterations: I64) -> I64 {
+    var count: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if (i % 2 == 0) and (i % 3 == 0) and (i % 5 == 0) then {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+// Boolean short-circuit OR
+func bench_short_circuit_or(iterations: I64) -> I64 {
+    var count: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if (i % 2 == 0) or (i % 3 == 0) or (i % 5 == 0) then {
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Control Flow Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000    // 10M
+    let NESTED_ITER: I64 = 1000000    // 1M for nested loops
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 10 then { break }
+        let _: I64 = bench_if_else_chain(1000)
+        warmup = warmup + 1
+    }
+
+    // If-Else Chain
+    var start: I64 = time_ns()
+    let _ie: I64 = bench_if_else_chain(ITERATIONS)
+    var end: I64 = time_ns()
+    run_and_print("If-Else Chain (4 branches)", ITERATIONS, end - start)
+
+    // Nested If
+    start = time_ns()
+    let _ni: I64 = bench_nested_if(ITERATIONS)
+    end = time_ns()
+    run_and_print("Nested If (4 levels)", ITERATIONS, end - start)
+
+    // When Dense
+    start = time_ns()
+    let _wd: I64 = bench_when_dense(ITERATIONS)
+    end = time_ns()
+    run_and_print("When Dense (10 cases)", ITERATIONS, end - start)
+
+    // When Sparse
+    start = time_ns()
+    let _ws: I64 = bench_when_sparse(ITERATIONS)
+    end = time_ns()
+    run_and_print("When Sparse (10 cases)", ITERATIONS, end - start)
+
+    // Loop
+    start = time_ns()
+    let _lp: I64 = bench_loop(ITERATIONS)
+    end = time_ns()
+    run_and_print("Loop", ITERATIONS, end - start)
+
+    // Nested Loops
+    start = time_ns()
+    let _nl: I64 = bench_nested_loops(NESTED_ITER)
+    end = time_ns()
+    run_and_print("Nested Loops (1000x1000)", NESTED_ITER, end - start)
+
+    // Loop + Continue
+    start = time_ns()
+    let _lc: I64 = bench_loop_continue(ITERATIONS)
+    end = time_ns()
+    run_and_print("Loop + Continue", ITERATIONS, end - start)
+
+    // Ternary Chain
+    start = time_ns()
+    let _tc: I64 = bench_ternary_chain(ITERATIONS)
+    end = time_ns()
+    run_and_print("Ternary Chain", ITERATIONS, end - start)
+
+    // Short-Circuit AND
+    start = time_ns()
+    let _sa: I64 = bench_short_circuit_and(ITERATIONS)
+    end = time_ns()
+    run_and_print("Short-Circuit AND", ITERATIONS, end - start)
+
+    // Short-Circuit OR
+    start = time_ns()
+    let _so: I64 = bench_short_circuit_or(ITERATIONS)
+    end = time_ns()
+    run_and_print("Short-Circuit OR", ITERATIONS, end - start)
+
+    return 0
+}

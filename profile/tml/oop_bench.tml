@@ -1,0 +1,262 @@
+// OOP Benchmarks (TML)
+//
+// Tests object-oriented programming overhead: class creation, virtual dispatch,
+// inheritance, method calls.
+
+// ============================================================================
+// Simple class (no inheritance)
+// ============================================================================
+
+class Point {
+    x: F64
+    y: F64
+
+    pub func new() -> Point {
+        return Point { x: 0.0, y: 0.0 }
+    }
+
+    pub func with_coords(x: F64, y: F64) -> Point {
+        return Point { x: x, y: y }
+    }
+
+    pub func distance_squared(self) -> F64 {
+        return self.x * self.x + self.y * self.y
+    }
+
+    pub func add(self, other: Point) -> Point {
+        return Point { x: self.x + other.x, y: self.y + other.y }
+    }
+}
+
+// ============================================================================
+// Virtual dispatch hierarchy
+// ============================================================================
+
+class Circle {
+    radius: F64
+
+    pub func new(r: F64) -> Circle {
+        return Circle { radius: r }
+    }
+
+    pub func area(self) -> F64 {
+        return 3.14159265359 * self.radius * self.radius
+    }
+
+    pub func perimeter(self) -> F64 {
+        return 2.0 * 3.14159265359 * self.radius
+    }
+}
+
+class Rectangle {
+    width: F64
+    height: F64
+
+    pub func new(w: F64, h: F64) -> Rectangle {
+        return Rectangle { width: w, height: h }
+    }
+
+    pub func area(self) -> F64 {
+        return self.width * self.height
+    }
+
+    pub func perimeter(self) -> F64 {
+        return 2.0 * (self.width + self.height)
+    }
+}
+
+// ============================================================================
+// Deep inheritance simulation (using composition)
+// ============================================================================
+
+class Level1 {
+    value: I64
+
+    pub func new() -> Level1 {
+        return Level1 { value: 1 }
+    }
+
+    pub func compute(self, x: I64) -> I64 {
+        return x + self.value
+    }
+}
+
+class Level2 {
+    level1: Level1
+    value: I64
+
+    pub func new() -> Level2 {
+        return Level2 { level1: Level1::new(), value: 1 }
+    }
+
+    pub func compute(self, x: I64) -> I64 {
+        return self.level1.compute(x) + self.value
+    }
+}
+
+class Level3 {
+    level2: Level2
+    value: I64
+
+    pub func new() -> Level3 {
+        return Level3 { level2: Level2::new(), value: 1 }
+    }
+
+    pub func compute(self, x: I64) -> I64 {
+        return self.level2.compute(x) + self.value
+    }
+}
+
+class Level4 {
+    level3: Level3
+    value: I64
+
+    pub func new() -> Level4 {
+        return Level4 { level3: Level3::new(), value: 1 }
+    }
+
+    pub func compute(self, x: I64) -> I64 {
+        return self.level3.compute(x) + self.value
+    }
+}
+
+// ============================================================================
+// Benchmarks - return results to prevent dead code elimination
+// ============================================================================
+
+func bench_object_creation(iterations: I64) -> I64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let p: Point = Point::with_coords(i as F64, (i + 1) as F64)
+        sum = sum + p.distance_squared()
+        i = i + 1
+    }
+    return sum as I64
+}
+
+func bench_method_call(iterations: I64) -> I64 {
+    let p: Point = Point::with_coords(3.0, 4.0)
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + p.distance_squared()
+        i = i + 1
+    }
+    return sum as I64
+}
+
+func bench_method_chaining(iterations: I64) -> I64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let p: Point = Point::with_coords(1.0, 2.0)
+        let result: Point = p.add(Point::with_coords(2.0, 3.0)).add(Point::with_coords(3.0, 4.0))
+        sum = sum + result.distance_squared()
+        i = i + 1
+    }
+    return sum as I64
+}
+
+func bench_circle_dispatch(iterations: I64) -> I64 {
+    let c: Circle = Circle::new(5.0)
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + c.area() + c.perimeter()
+        i = i + 1
+    }
+    return sum as I64
+}
+
+func bench_rectangle_dispatch(iterations: I64) -> I64 {
+    let r: Rectangle = Rectangle::new(3.0, 4.0)
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + r.area() + r.perimeter()
+        i = i + 1
+    }
+    return sum as I64
+}
+
+func bench_deep_composition(iterations: I64) -> I64 {
+    let obj: Level4 = Level4::new()
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + obj.compute(i % 100)
+        i = i + 1
+    }
+    return sum
+}
+
+func bench_stack_allocation(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let p: Point = Point::with_coords(i as F64, i as F64)
+        sum = sum + (p.x + p.y) as I64
+        i = i + 1
+    }
+    return sum
+}
+
+// Helper to run and print a benchmark
+func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64) {
+    // Warmup
+    let _w: I64 = bench_fn(iterations / 10)
+
+    var best_ns: I64 = 9223372036854775807  // I64 max
+    var run: I32 = 0
+    loop {
+        if run >= runs then { break }
+        let start: I64 = time_ns()
+        let _r: I64 = bench_fn(iterations)
+        let end: I64 = time_ns()
+        let elapsed: I64 = end - start
+        if elapsed < best_ns then {
+            best_ns = elapsed
+        }
+        run = run + 1
+    }
+
+    let per_op: I64 = best_ns / iterations
+    let ops_sec: I64 = if best_ns > 0 then {
+        (iterations * 1000000000) / best_ns
+    } else {
+        0
+    }
+
+    println("  " + name + ":")
+    println("    " + per_op.to_string() + " ns/op")
+    println("    " + ops_sec.to_string() + " ops/sec")
+    println("")
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  OOP Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000  // 10M
+
+    run_bench("Object Creation (stack)", ITERATIONS, 10, bench_object_creation)
+    run_bench("Method Call (non-virtual)", ITERATIONS, 10, bench_method_call)
+    run_bench("Method Chaining", ITERATIONS, 10, bench_method_chaining)
+    run_bench("Circle Method Calls", ITERATIONS, 10, bench_circle_dispatch)
+    run_bench("Rectangle Method Calls", ITERATIONS, 10, bench_rectangle_dispatch)
+    run_bench("Deep Composition (4 levels)", ITERATIONS, 10, bench_deep_composition)
+    run_bench("Stack Allocation", ITERATIONS, 10, bench_stack_allocation)
+
+    return 0
+}

@@ -1,0 +1,283 @@
+// Closure and Iterator Benchmarks (TML)
+//
+// Tests closure overhead: function pointers, simple closures, iteration.
+
+// ============================================================================
+// Function Pointer Benchmarks
+// ============================================================================
+
+func double_it(x: I64) -> I64 {
+    return x * 2
+}
+
+func triple_it(x: I64) -> I64 {
+    return x * 3
+}
+
+func add_ten(x: I64) -> I64 {
+    return x + 10
+}
+
+// Function pointer no capture
+func bench_func_pointer(iterations: I64) -> I64 {
+    let f: func(I64) -> I64 = double_it
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + f(i)
+        i = i + 1
+    }
+    return sum
+}
+
+// Function pointer switching
+func bench_func_pointer_switch(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let f: func(I64) -> I64 = if (i % 2) == 0 then { double_it } else { triple_it }
+        sum = sum + f(i)
+        i = i + 1
+    }
+    return sum
+}
+
+// Higher-order function
+func apply_n_times(f: func(I64) -> I64, x: I64, n: I64) -> I64 {
+    var result: I64 = x
+    var i: I64 = 0
+    loop {
+        if i >= n then { break }
+        result = f(result)
+        i = i + 1
+    }
+    return result
+}
+
+func bench_higher_order(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + apply_n_times(add_ten, i % 100, 5)
+        i = i + 1
+    }
+    return sum
+}
+
+// Function composition simulation
+func compose_and_apply(f: func(I64) -> I64, g: func(I64) -> I64, x: I64) -> I64 {
+    return f(g(x))
+}
+
+func bench_composition(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        sum = sum + compose_and_apply(double_it, triple_it, i % 100)
+        i = i + 1
+    }
+    return sum
+}
+
+// ============================================================================
+// Iterator Simulation Benchmarks
+// ============================================================================
+
+// Manual array iteration
+func bench_manual_loop(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var k: I64 = 0
+    loop {
+        if k >= 1000 then { break }
+        arr[k] = k
+        k = k + 1
+    }
+
+    var total: I64 = 0
+    var iter: I64 = 0
+    loop {
+        if iter >= iterations / 1000 then { break }
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            total = total + arr[i]
+            i = i + 1
+        }
+        iter = iter + 1
+    }
+    return total
+}
+
+// Map simulation (transform in place)
+func bench_map_simulation(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var k: I64 = 0
+    loop {
+        if k >= 1000 then { break }
+        arr[k] = k
+        k = k + 1
+    }
+
+    var iter: I64 = 0
+    loop {
+        if iter >= iterations / 1000 then { break }
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            arr[i] = arr[i] * 2
+            i = i + 1
+        }
+        // Reset for next iteration
+        i = 0
+        loop {
+            if i >= 1000 then { break }
+            arr[i] = i
+            i = i + 1
+        }
+        iter = iter + 1
+    }
+    return arr[0]
+}
+
+// Filter simulation
+func bench_filter_simulation(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var k: I64 = 0
+    loop {
+        if k >= 1000 then { break }
+        arr[k] = k
+        k = k + 1
+    }
+
+    var total: I64 = 0
+    var iter: I64 = 0
+    loop {
+        if iter >= iterations / 1000 then { break }
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            if (arr[i] % 2) == 0 then {
+                total = total + arr[i]
+            }
+            i = i + 1
+        }
+        iter = iter + 1
+    }
+    return total
+}
+
+// Fold/reduce simulation
+func bench_fold_simulation(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var k: I64 = 0
+    loop {
+        if k >= 1000 then { break }
+        arr[k] = k
+        k = k + 1
+    }
+
+    var total: I64 = 0
+    var iter: I64 = 0
+    loop {
+        if iter >= iterations / 1000 then { break }
+        var acc: I64 = 0
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            acc = acc + arr[i]
+            i = i + 1
+        }
+        total = total + acc
+        iter = iter + 1
+    }
+    return total
+}
+
+// Chain: filter -> map -> fold
+func bench_chain_operations(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var k: I64 = 0
+    loop {
+        if k >= 1000 then { break }
+        arr[k] = k
+        k = k + 1
+    }
+
+    var total: I64 = 0
+    var iter: I64 = 0
+    loop {
+        if iter >= iterations / 1000 then { break }
+        var i: I64 = 0
+        loop {
+            if i >= 1000 then { break }
+            // Filter even, map to double, accumulate
+            if (arr[i] % 2) == 0 then {
+                total = total + (arr[i] * 2)
+            }
+            i = i + 1
+        }
+        iter = iter + 1
+    }
+    return total
+}
+
+// Helper to run and print a benchmark
+func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64) {
+    // Warmup
+    let _w: I64 = bench_fn(iterations / 10)
+
+    var best_ns: I64 = 9223372036854775807  // I64 max
+    var run: I32 = 0
+    loop {
+        if run >= runs then { break }
+        let start: I64 = time_ns()
+        let _r: I64 = bench_fn(iterations)
+        let end: I64 = time_ns()
+        let elapsed: I64 = end - start
+        if elapsed < best_ns then {
+            best_ns = elapsed
+        }
+        run = run + 1
+    }
+
+    let per_op: I64 = best_ns / iterations
+    let ops_sec: I64 = if best_ns > 0 then {
+        (iterations * 1000000000) / best_ns
+    } else {
+        0
+    }
+
+    println("  " + name + ":")
+    println("    " + per_op.to_string() + " ns/op")
+    println("    " + ops_sec.to_string() + " ops/sec")
+    println("")
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Closure and Iterator Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000  // 10M
+
+    // Function pointer benchmarks
+    run_bench("Function Pointer", ITERATIONS, 10, bench_func_pointer)
+    run_bench("Function Pointer Switch", ITERATIONS, 10, bench_func_pointer_switch)
+    run_bench("Higher Order Function", ITERATIONS, 10, bench_higher_order)
+    run_bench("Function Composition", ITERATIONS, 10, bench_composition)
+
+    // Iterator simulation benchmarks
+    run_bench("Manual Loop (array)", ITERATIONS, 10, bench_manual_loop)
+    run_bench("Map Simulation", ITERATIONS, 10, bench_map_simulation)
+    run_bench("Filter Simulation", ITERATIONS, 10, bench_filter_simulation)
+    run_bench("Fold/Reduce Simulation", ITERATIONS, 10, bench_fold_simulation)
+    run_bench("Chain Operations", ITERATIONS, 10, bench_chain_operations)
+
+    return 0
+}

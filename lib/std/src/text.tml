@@ -152,14 +152,41 @@ impl Text {
         lowlevel { text_push(this.handle, byte) }
     }
 
-    /// Append a string
+    /// Append a string (uses pre-computed length to avoid strlen overhead)
     pub func push_str(this, s: Str) {
-        lowlevel { text_push_str(this.handle, s) }
+        let len: I64 = s.len() as I64
+        lowlevel { text_push_str_len(this.handle, s, len) }
+    }
+
+    /// Append an integer directly (avoids intermediate string allocation)
+    pub func push_i64(this, value: I64) {
+        lowlevel { text_push_i64(this.handle, value) }
+    }
+
+    /// Append formatted: prefix + integer + suffix in one call (avoids 3 FFI calls)
+    pub func push_formatted(this, prefix: Str, value: I64, suffix: Str) {
+        let prefix_len: I64 = prefix.len() as I64
+        let suffix_len: I64 = suffix.len() as I64
+        lowlevel { text_push_formatted(this.handle, prefix, prefix_len, value, suffix, suffix_len) }
     }
 
     /// Reserve additional capacity
     pub func reserve(this, additional: I64) {
         lowlevel { text_reserve(this.handle, additional) }
+    }
+
+    /// Fill with N copies of the same byte character (batch operation)
+    pub func fill_char(this, byte: I32, count: I64) {
+        lowlevel { text_fill_char(this.handle, byte, count) }
+    }
+
+    /// Append log-style message: s1 + n1 + s2 + n2 + s3 + n3 + s4 (avoids 7 FFI calls)
+    pub func push_log(this, s1: Str, n1: I64, s2: Str, n2: I64, s3: Str, n3: I64, s4: Str) {
+        let s1_len: I64 = s1.len() as I64
+        let s2_len: I64 = s2.len() as I64
+        let s3_len: I64 = s3.len() as I64
+        let s4_len: I64 = s4.len() as I64
+        lowlevel { text_push_log(this.handle, s1, s1_len, n1, s2, s2_len, n2, s3, s3_len, n3, s4, s4_len) }
     }
 
     // ========================================================================

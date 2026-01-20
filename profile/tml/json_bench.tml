@@ -1,0 +1,276 @@
+// JSON Benchmarks (TML)
+//
+// Tests JSON parsing and access performance through FFI.
+// Compares with C++ raw parser to measure FFI overhead.
+
+use std::json
+
+// Test JSON strings (same as C++)
+func get_tiny_json() -> Str {
+    return "{\"name\":\"John\",\"age\":30}"
+}
+
+func get_small_json() -> Str {
+    return "{\"name\":\"John Doe\",\"age\":30,\"active\":true,\"email\":\"john@example.com\",\"scores\":[95,87,92,88,91],\"address\":{\"street\":\"123 Main St\",\"city\":\"New York\",\"zip\":\"10001\"}}"
+}
+
+func get_medium_json() -> Str {
+    return "{\"users\":[{\"id\":1,\"name\":\"Alice\",\"email\":\"alice@example.com\",\"active\":true},{\"id\":2,\"name\":\"Bob\",\"email\":\"bob@example.com\",\"active\":false},{\"id\":3,\"name\":\"Charlie\",\"email\":\"charlie@example.com\",\"active\":true},{\"id\":4,\"name\":\"Diana\",\"email\":\"diana@example.com\",\"active\":true},{\"id\":5,\"name\":\"Eve\",\"email\":\"eve@example.com\",\"active\":false}],\"metadata\":{\"total\":5,\"page\":1,\"per_page\":10,\"has_more\":false}}"
+}
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// Parse tiny JSON
+func bench_parse_tiny(iterations: I64) -> I64 {
+    let json_str: Str = get_tiny_json()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        json::free(h)
+        i = i + 1
+    }
+    return iterations
+}
+
+// Parse small JSON
+func bench_parse_small(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        json::free(h)
+        i = i + 1
+    }
+    return iterations
+}
+
+// Parse medium JSON
+func bench_parse_medium(iterations: I64) -> I64 {
+    let json_str: Str = get_medium_json()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        json::free(h)
+        i = i + 1
+    }
+    return iterations
+}
+
+// Parse with standard parser (non-SIMD)
+func bench_parse_standard(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse(json_str)
+        json::free(h)
+        i = i + 1
+    }
+    return iterations
+}
+
+// Field access
+func bench_field_access(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var total_age: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        let age: I64 = json::object_get_i64(h, "age")
+        total_age = total_age + age
+        json::free(h)
+        i = i + 1
+    }
+    return total_age
+}
+
+// Array iteration
+func bench_array_iterate(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var total: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        let scores: I64 = json::object_get(h, "scores")
+        let len: I64 = json::array_len(scores)
+        var j: I64 = 0
+        loop {
+            if j >= len then { break }
+            let val: I64 = json::array_get_i64(scores, j)
+            total = total + val
+            j = j + 1
+        }
+        json::free(scores)
+        json::free(h)
+        i = i + 1
+    }
+    return total
+}
+
+// Nested object access
+func bench_nested_access(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var count: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        let addr: I64 = json::object_get(h, "address")
+        let city: Str = json::object_get_string(addr, "city")
+        if city.len() > 0 then {
+            count = count + 1
+        }
+        json::free(addr)
+        json::free(h)
+        i = i + 1
+    }
+    return count
+}
+
+// Parse + validate
+func bench_parse_validate(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var valid: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        let t: I32 = json::get_type(h)
+        if t == 6 then {  // Object type
+            let name_h: I64 = json::object_get(h, "name")
+            let age_h: I64 = json::object_get(h, "age")
+            let active_h: I64 = json::object_get(h, "active")
+            let scores_h: I64 = json::object_get(h, "scores")
+            let addr_h: I64 = json::object_get(h, "address")
+
+            let ok: Bool = (json::get_type(name_h) == 4) and  // String
+                          (json::get_type(age_h) == 3) and    // Number
+                          (json::get_type(active_h) == 1 or json::get_type(active_h) == 2) and  // Bool
+                          (json::get_type(scores_h) == 5) and // Array
+                          (json::get_type(addr_h) == 6)       // Object
+            if ok then {
+                valid = valid + 1
+            }
+            json::free(name_h)
+            json::free(age_h)
+            json::free(active_h)
+            json::free(scores_h)
+            json::free(addr_h)
+        }
+        json::free(h)
+        i = i + 1
+    }
+    return valid
+}
+
+// Object traversal (count keys)
+func bench_object_traverse(iterations: I64) -> I64 {
+    let json_str: Str = get_small_json()
+    var keys: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let h: I64 = json::parse_fast(json_str)
+        let len: I64 = json::object_len(h)
+        keys = keys + len
+        json::free(h)
+        i = i + 1
+    }
+    return keys
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  JSON Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let PARSE_ITER: I64 = 100000   // 100K parses
+    let ACCESS_ITER: I64 = 100000  // 100K access ops
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 100 then { break }
+        let h: I64 = json::parse_fast(get_tiny_json())
+        json::free(h)
+        warmup = warmup + 1
+    }
+
+    // Parse Tiny
+    var start: I64 = time_ns()
+    let _pt: I64 = bench_parse_tiny(PARSE_ITER)
+    var end: I64 = time_ns()
+    run_and_print("Parse Tiny (27 bytes)", PARSE_ITER, end - start)
+
+    // Parse Small
+    start = time_ns()
+    let _ps: I64 = bench_parse_small(PARSE_ITER)
+    end = time_ns()
+    run_and_print("Parse Small (200 bytes)", PARSE_ITER, end - start)
+
+    // Parse Medium
+    start = time_ns()
+    let _pm: I64 = bench_parse_medium(PARSE_ITER)
+    end = time_ns()
+    run_and_print("Parse Medium (500 bytes)", PARSE_ITER, end - start)
+
+    // Parse Standard (non-SIMD)
+    start = time_ns()
+    let _pstd: I64 = bench_parse_standard(PARSE_ITER)
+    end = time_ns()
+    run_and_print("Parse Standard (non-SIMD)", PARSE_ITER, end - start)
+
+    // Field Access
+    start = time_ns()
+    let _fa: I64 = bench_field_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Field Access", ACCESS_ITER, end - start)
+
+    // Array Iteration
+    start = time_ns()
+    let _ai: I64 = bench_array_iterate(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Array Iteration", ACCESS_ITER, end - start)
+
+    // Nested Object Access
+    start = time_ns()
+    let _na: I64 = bench_nested_access(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Nested Object Access", ACCESS_ITER, end - start)
+
+    // Parse + Validate
+    start = time_ns()
+    let _pv: I64 = bench_parse_validate(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Parse + Validate", ACCESS_ITER, end - start)
+
+    // Object Traversal
+    start = time_ns()
+    let _ot: I64 = bench_object_traverse(ACCESS_ITER)
+    end = time_ns()
+    run_and_print("Object Traversal", ACCESS_ITER, end - start)
+
+    json::free_all()
+    return 0
+}

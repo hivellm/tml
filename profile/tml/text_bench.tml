@@ -1,0 +1,290 @@
+// Text/StringBuilder Benchmarks (TML)
+//
+// Tests Text type for efficient string building.
+// Compares with C++ stringstream and string patterns.
+
+use std::text::Text
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// Text append (O(1) amortized)
+func bench_text_append(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 10)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        t.push_str("item")
+        t.push_str(i.to_string())
+        t.push_str(",")
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Str naive append (O(n^2) worst case)
+func bench_str_naive_append(iterations: I64) -> I64 {
+    var s: Str = ""
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        s = s + "ab"
+        i = i + 1
+    }
+    return s.len() as I64
+}
+
+// Build JSON-like structure with Text
+func bench_build_json(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 40)
+    t.push_str("{\"items\":[")
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if i > 0 then {
+            t.push_str(",")
+        }
+        t.push_str("{\"id\":")
+        t.push_str(i.to_string())
+        t.push_str(",\"name\":\"item")
+        t.push_str(i.to_string())
+        t.push_str("\"}")
+        i = i + 1
+    }
+    t.push_str("]}")
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Build HTML-like structure
+func bench_build_html(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 50)
+    t.push_str("<ul>\n")
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        // Uses push_formatted: single FFI call for prefix + int + suffix
+        t.push_formatted("  <li>Item ", i, "</li>\n")
+        i = i + 1
+    }
+    t.push_str("</ul>\n")
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Build CSV-like data (optimized: single FFI call per row)
+func bench_build_csv(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 30)
+    t.push_str("id,name,value\n")
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        // Uses push_log: all 6 operations in 1 FFI call
+        t.push_log("", i, ",item", i, ",", i * 100, "\n")
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Small appends (1 char equivalent) - optimized version using push
+func bench_small_appends(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        t.push(120)  // 'x' = 120 ASCII - uses direct byte push
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Small appends using push_str for comparison
+func bench_small_appends_str(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        t.push_str("x")  // Uses FFI string handling
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Small appends using fill_char batch operation (single FFI call)
+func bench_small_appends_batch(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations)
+    t.fill_char(120, iterations)  // 'x' = 120 ASCII - single FFI call for all N chars
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Number formatting
+func bench_number_formatting(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 20)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        t.push_str(i.to_string())
+        t.push_str(":")
+        // Approximation of i * 3.14159 as integer
+        let approx_float: I64 = ((i * 314159) / 100000)
+        t.push_str(approx_float.to_string())
+        t.push_str("; ")
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Log messages (optimized: single FFI call per iteration)
+func bench_log_messages(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(iterations * 64)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        // Uses push_log: 7 operations in 1 FFI call
+        t.push_log("[", i, "] INFO: Processing item #", i, " with value ", i * 42, "\n")
+        i = i + 1
+    }
+    let len: I64 = t.len()
+    t.drop()
+    return len
+}
+
+// Path building (reuses single Text to match C++ benchmark)
+func bench_path_building(iterations: I64) -> I64 {
+    let t: Text = Text::with_capacity(100)
+    var last_len: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        t.clear()
+        t.push_str("/home/user/projects/app/src/module")
+        t.push_str((i % 100).to_string())
+        t.push_str("/file")
+        t.push_str(i.to_string())
+        t.push_str(".txt")
+        last_len = t.len()
+        i = i + 1
+    }
+    t.drop()
+    return last_len
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Text/StringBuilder Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let BUILD_ITER: I64 = 100000     // 100K for build ops
+    let APPEND_ITER: I64 = 1000000   // 1M for simple appends
+    let NAIVE_ITER: I64 = 10000      // 10K for O(n^2) operations
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 10 then { break }
+        let t: Text = Text::with_capacity(100)
+        t.push_str("test")
+        t.drop()
+        warmup = warmup + 1
+    }
+
+    // Text Append (O(1) amortized)
+    var start: I64 = time_ns()
+    let _ta: I64 = bench_text_append(BUILD_ITER)
+    var end: I64 = time_ns()
+    run_and_print("Text Append (O(1) amortized)", BUILD_ITER, end - start)
+
+    // Str Naive Append (O(n^2)) - fewer iterations!
+    start = time_ns()
+    let _sn: I64 = bench_str_naive_append(NAIVE_ITER)
+    end = time_ns()
+    run_and_print("Str Naive Append (O(n^2))", NAIVE_ITER, end - start)
+
+    // Build JSON
+    start = time_ns()
+    let _bj: I64 = bench_build_json(BUILD_ITER / 10)
+    end = time_ns()
+    run_and_print("Build JSON (10K items)", BUILD_ITER / 10, end - start)
+
+    // Build HTML
+    start = time_ns()
+    let _bh: I64 = bench_build_html(BUILD_ITER / 10)
+    end = time_ns()
+    run_and_print("Build HTML (10K items)", BUILD_ITER / 10, end - start)
+
+    // Build CSV
+    start = time_ns()
+    let _bc: I64 = bench_build_csv(BUILD_ITER / 10)
+    end = time_ns()
+    run_and_print("Build CSV (10K rows)", BUILD_ITER / 10, end - start)
+
+    // Small Appends (push byte - optimized)
+    start = time_ns()
+    let _sm: I64 = bench_small_appends(APPEND_ITER)
+    end = time_ns()
+    run_and_print("Small Appends push()", APPEND_ITER, end - start)
+
+    // Small Appends (push_str - for comparison)
+    start = time_ns()
+    let _sm2: I64 = bench_small_appends_str(APPEND_ITER)
+    end = time_ns()
+    run_and_print("Small Appends push_str()", APPEND_ITER, end - start)
+
+    // Small Appends (batch - single FFI call)
+    start = time_ns()
+    let _sm3: I64 = bench_small_appends_batch(APPEND_ITER)
+    end = time_ns()
+    run_and_print("Small Appends fill_char() batch", APPEND_ITER, end - start)
+
+    // Number Formatting
+    start = time_ns()
+    let _nf: I64 = bench_number_formatting(BUILD_ITER)
+    end = time_ns()
+    run_and_print("Number Formatting", BUILD_ITER, end - start)
+
+    // Log Messages
+    start = time_ns()
+    let _lm: I64 = bench_log_messages(BUILD_ITER)
+    end = time_ns()
+    run_and_print("Log Messages", BUILD_ITER, end - start)
+
+    // Path Building
+    start = time_ns()
+    let _pb: I64 = bench_path_building(BUILD_ITER)
+    end = time_ns()
+    run_and_print("Path Building", BUILD_ITER, end - start)
+
+    println("Note: Text uses O(1) amortized append, Str uses O(n^2) naive.")
+    println("For fair comparison with C++, compare Text times with string+reserve.")
+
+    return 0
+}

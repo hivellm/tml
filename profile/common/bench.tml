@@ -1,0 +1,127 @@
+// TML Profile Benchmark Framework
+//
+// Common utilities for consistent benchmarking across all TML tests.
+// Mirrors the C++ bench.hpp interface for fair comparison.
+
+// Benchmark result structure
+pub struct BenchResult {
+    name: Str,
+    category: Str,
+    iterations: I64,
+    total_ns: I64,
+    per_op_ns: I64,
+    ops_per_sec: I64
+}
+
+impl BenchResult {
+    pub func new(name: Str, category: Str, iterations: I64, total_ns: I64) -> BenchResult {
+        let per_op: I64 = total_ns / iterations
+        let ops_sec: I64 = if total_ns > 0 then {
+            (iterations * 1000000000) / total_ns
+        } else {
+            0
+        }
+        return BenchResult {
+            name: name,
+            category: category,
+            iterations: iterations,
+            total_ns: total_ns,
+            per_op_ns: per_op,
+            ops_per_sec: ops_sec
+        }
+    }
+
+    pub func print(self: ref BenchResult) {
+        println("  " + self.name + ":")
+        println("    Iterations: " + self.iterations.to_string())
+        println("    Total time: " + (self.total_ns / 1000000).to_string() + " ms")
+        println("    Per op:     " + self.per_op_ns.to_string() + " ns")
+        println("    Ops/sec:    " + self.ops_per_sec.to_string())
+    }
+}
+
+// Run a benchmark with warmup
+pub func run_bench(name: Str, category: Str, iterations: I64, warmup: I64, func: func() -> ()) -> BenchResult {
+    // Warmup
+    var w: I64 = 0
+    loop {
+        if w >= warmup then { break }
+        func()
+        w = w + 1
+    }
+
+    // Actual benchmark
+    let start: I64 = time_ns()
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        func()
+        i = i + 1
+    }
+    let end: I64 = time_ns()
+
+    return BenchResult::new(name, category, iterations, end - start)
+}
+
+// Run benchmark that takes iteration count as parameter
+pub func run_bench_iter(name: Str, category: Str, iterations: I64, warmup: I64, func: func(I64) -> ()) -> BenchResult {
+    // Warmup
+    var w: I64 = 0
+    loop {
+        if w >= warmup then { break }
+        func(100)
+        w = w + 1
+    }
+
+    // Actual benchmark
+    let start: I64 = time_ns()
+    func(iterations)
+    let end: I64 = time_ns()
+
+    return BenchResult::new(name, category, iterations, end - start)
+}
+
+// Print benchmark header
+pub func print_header(category: Str) {
+    println("")
+    println("================================================================")
+    println("  " + category + " Benchmarks (TML)")
+    println("================================================================")
+    println("")
+}
+
+// Print results as JSON (for comparison tools)
+pub func results_to_json(results: ref Vec[BenchResult], category: Str) -> Str {
+    var json: Str = "{\n"
+    json = json + "  \"category\": \"" + category + "\",\n"
+    json = json + "  \"language\": \"tml\",\n"
+    json = json + "  \"results\": [\n"
+
+    var i: I64 = 0
+    let len: I64 = results.len() as I64
+    loop {
+        if i >= len then { break }
+        let r: ref BenchResult = results.get(i as U64)
+        json = json + "    {\n"
+        json = json + "      \"name\": \"" + r.name + "\",\n"
+        json = json + "      \"iterations\": " + r.iterations.to_string() + ",\n"
+        json = json + "      \"total_ns\": " + r.total_ns.to_string() + ",\n"
+        json = json + "      \"per_op_ns\": " + r.per_op_ns.to_string() + ",\n"
+        json = json + "      \"ops_per_sec\": " + r.ops_per_sec.to_string() + "\n"
+        json = json + "    }"
+        if i < len - 1 then {
+            json = json + ","
+        }
+        json = json + "\n"
+        i = i + 1
+    }
+
+    json = json + "  ]\n"
+    json = json + "}\n"
+    return json
+}
+
+// Prevent compiler from optimizing away a value
+pub func black_box[T](value: T) -> T {
+    return value
+}

@@ -332,10 +332,157 @@ TML_EXPORT void tml_text_push_str(TmlText* t, const char* data) {
     text_push_bytes(t, (const uint8_t*)data, strlen(data));
 }
 
+/**
+ * @brief Push string with known length (avoids strlen overhead)
+ */
+TML_EXPORT void tml_text_push_str_len(TmlText* t, const char* data, uint64_t data_len) {
+    if (!t || !data || data_len == 0)
+        return;
+    text_push_bytes(t, (const uint8_t*)data, data_len);
+}
+
+// Lookup table for fast 2-digit conversion (00-99)
+static const char text_digit_pairs[201] = "00010203040506070809"
+                                          "10111213141516171819"
+                                          "20212223242526272829"
+                                          "30313233343536373839"
+                                          "40414243444546474849"
+                                          "50515253545556575859"
+                                          "60616263646566676869"
+                                          "70717273747576777879"
+                                          "80818283848586878889"
+                                          "90919293949596979899";
+
+/**
+ * @brief Push integer directly without intermediate string allocation.
+ * Uses the same lookup table algorithm as fast_i64_to_str.
+ */
+TML_EXPORT void tml_text_push_i64(TmlText* t, int64_t n) {
+    if (!t)
+        return;
+
+    // Convert to temp buffer using fast algorithm
+    char buf[21]; // Max 20 digits + sign
+    char* end = buf + 21;
+    char* p = end;
+    int neg = 0;
+
+    if (n < 0) {
+        neg = 1;
+        // Handle INT64_MIN specially
+        if (n == (-9223372036854775807LL - 1)) {
+            text_push_bytes(t, (const uint8_t*)"-9223372036854775808", 20);
+            return;
+        }
+        n = -n;
+    }
+
+    if (n == 0) {
+        text_push_bytes(t, (const uint8_t*)"0", 1);
+        return;
+    }
+
+    // Process 2 digits at a time
+    while (n >= 100) {
+        int idx = (int)((n % 100) * 2);
+        n /= 100;
+        *--p = text_digit_pairs[idx + 1];
+        *--p = text_digit_pairs[idx];
+    }
+
+    // Handle remaining 1-2 digits
+    if (n >= 10) {
+        int idx = (int)(n * 2);
+        *--p = text_digit_pairs[idx + 1];
+        *--p = text_digit_pairs[idx];
+    } else {
+        *--p = (char)('0' + n);
+    }
+
+    if (neg) {
+        *--p = '-';
+    }
+
+    text_push_bytes(t, (const uint8_t*)p, (uint64_t)(end - p));
+}
+
+/**
+ * @brief Push formatted message: prefix + integer + suffix
+ * Combines three operations into one for efficiency.
+ */
+TML_EXPORT void tml_text_push_formatted(TmlText* t, const char* prefix, uint64_t prefix_len,
+                                        int64_t n, const char* suffix, uint64_t suffix_len) {
+    if (!t)
+        return;
+
+    // Reserve space for all parts to minimize reallocations
+    // Max int length is 20 digits + sign = 21
+    text_ensure_heap(t, text_len(t) + prefix_len + 21 + suffix_len);
+
+    if (prefix && prefix_len > 0) {
+        text_push_bytes(t, (const uint8_t*)prefix, prefix_len);
+    }
+
+    // Push the integer
+    tml_text_push_i64(t, n);
+
+    if (suffix && suffix_len > 0) {
+        text_push_bytes(t, (const uint8_t*)suffix, suffix_len);
+    }
+}
+
 TML_EXPORT void tml_text_reserve(TmlText* t, uint64_t additional) {
     if (!t)
         return;
     text_ensure_heap(t, text_len(t) + additional);
+}
+
+/**
+ * @brief Push log-style message: s1 + n1 + s2 + n2 + s3 + n3 + s4
+ * Combines 7 operations into 1 FFI call for efficiency.
+ */
+TML_EXPORT void tml_text_push_log(TmlText* t, const char* s1, uint64_t s1_len, int64_t n1,
+                                  const char* s2, uint64_t s2_len, int64_t n2, const char* s3,
+                                  uint64_t s3_len, int64_t n3, const char* s4, uint64_t s4_len) {
+    if (!t)
+        return;
+
+    // Reserve space for all parts (3 ints max 21 chars each)
+    text_ensure_heap(t, text_len(t) + s1_len + s2_len + s3_len + s4_len + 63);
+
+    if (s1 && s1_len > 0)
+        text_push_bytes(t, (const uint8_t*)s1, s1_len);
+    tml_text_push_i64(t, n1);
+    if (s2 && s2_len > 0)
+        text_push_bytes(t, (const uint8_t*)s2, s2_len);
+    tml_text_push_i64(t, n2);
+    if (s3 && s3_len > 0)
+        text_push_bytes(t, (const uint8_t*)s3, s3_len);
+    tml_text_push_i64(t, n3);
+    if (s4 && s4_len > 0)
+        text_push_bytes(t, (const uint8_t*)s4, s4_len);
+}
+
+/**
+ * @brief Fill with N copies of the same character.
+ * Much faster than calling push() N times due to reduced FFI overhead.
+ */
+TML_EXPORT void tml_text_fill_char(TmlText* t, int32_t c, uint64_t count) {
+    if (!t || count == 0)
+        return;
+
+    uint64_t len = text_len(t);
+    text_ensure_heap(t, len + count);
+
+    uint8_t* data = text_data_mut(t);
+    memset(data + len, (uint8_t)c, count);
+
+    if (text_is_inline(t)) {
+        t->sso.len = (uint8_t)(len + count);
+    } else {
+        t->heap.len = len + count;
+        t->heap.data[len + count] = '\0';
+    }
 }
 
 // ============================================================================

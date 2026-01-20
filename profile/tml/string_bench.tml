@@ -1,0 +1,228 @@
+// String Benchmarks (TML)
+//
+// Tests string operations performance.
+// Compares with C++ baseline for optimization opportunities.
+
+use std::text::Text
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// String concatenation (small strings)
+func bench_concat_small(iterations: I64) -> I64 {
+    var count: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let result: Str = "Hello" + " " + "World" + "!"
+        count = count + 1
+        i = i + 1
+    }
+    return count
+}
+
+// String concatenation in loop (using Str - O(n^2) pattern)
+func bench_concat_naive(iterations: I64) -> I64 {
+    var result: Str = ""
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        result = result + "ab"
+        i = i + 1
+    }
+    return result.len() as I64
+}
+
+// String concatenation with Text (O(n) amortized)
+func bench_concat_text(iterations: I64) -> I64 {
+    let result: Text = Text::with_capacity(iterations * 2)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        result.push_str("ab")
+        i = i + 1
+    }
+    let len: I64 = result.len()
+    result.drop()
+    return len
+}
+
+// String length
+func bench_strlen(iterations: I64) -> I64 {
+    let str: Str = "The quick brown fox jumps over the lazy dog"
+    var total: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        total = total + (str.len() as I64)
+        i = i + 1
+    }
+    return total
+}
+
+// String comparison (equal)
+func bench_strcmp_equal(iterations: I64) -> I64 {
+    let s1: Str = "Hello, World!"
+    let s2: Str = "Hello, World!"
+    var matches: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if s1 == s2 then {
+            matches = matches + 1
+        }
+        i = i + 1
+    }
+    return matches
+}
+
+// String comparison (different)
+func bench_strcmp_different(iterations: I64) -> I64 {
+    let s1: Str = "Hello, World!"
+    let s2: Str = "Hello, World?"
+    var matches: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        if s1 == s2 then {
+            matches = matches + 1
+        }
+        i = i + 1
+    }
+    return matches
+}
+
+// Integer to string conversion
+func bench_int_to_str(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let s: Str = i.to_string()
+        total = total + (s.len() as I64)
+        i = i + 1
+    }
+    return total
+}
+
+// Log building with Str (O(n^2))
+func bench_log_naive(iterations: I64) -> I64 {
+    var log: Str = ""
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        log = log + "[INFO] Message number " + i.to_string() + "\n"
+        i = i + 1
+    }
+    return log.len() as I64
+}
+
+// Log building with Text (O(n))
+func bench_log_text(iterations: I64) -> I64 {
+    let log: Text = Text::with_capacity(iterations * 32)
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        log.push_str("[INFO] Message number ")
+        log.push_str(i.to_string())
+        log.push_str("\n")
+        i = i + 1
+    }
+    let len: I64 = log.len()
+    log.drop()
+    return len
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  String Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 1000000     // 1M for fast ops
+    let CONCAT_ITER: I64 = 10000      // 10K for naive concat (slow!)
+    let TEXT_ITER: I64 = 100000       // 100K for Text concat
+    let LOG_ITER: I64 = 1000          // 1K for log building (naive is very slow)
+    let TEXT_LOG_ITER: I64 = 10000    // 10K for Text log building
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 10 then { break }
+        let _: I64 = bench_concat_small(100)
+        warmup = warmup + 1
+    }
+
+    // Concat Small
+    var start: I64 = time_ns()
+    let _cs: I64 = bench_concat_small(ITERATIONS)
+    var end: I64 = time_ns()
+    run_and_print("Concat Small (3 strings)", ITERATIONS, end - start)
+
+    // Concat Loop with Text (O(n))
+    start = time_ns()
+    let _ct: I64 = bench_concat_text(TEXT_ITER)
+    end = time_ns()
+    run_and_print("Concat Loop (Text - O(n))", TEXT_ITER, end - start)
+
+    // Concat Loop naive (O(n^2)) - use fewer iterations!
+    start = time_ns()
+    let _cn: I64 = bench_concat_naive(CONCAT_ITER)
+    end = time_ns()
+    run_and_print("Concat Loop (Str - O(n^2))", CONCAT_ITER, end - start)
+
+    // String Length
+    start = time_ns()
+    let _sl: I64 = bench_strlen(ITERATIONS)
+    end = time_ns()
+    run_and_print("String Length", ITERATIONS, end - start)
+
+    // String Compare (equal)
+    start = time_ns()
+    let _sce: I64 = bench_strcmp_equal(ITERATIONS)
+    end = time_ns()
+    run_and_print("String Compare (equal)", ITERATIONS, end - start)
+
+    // String Compare (different)
+    start = time_ns()
+    let _scd: I64 = bench_strcmp_different(ITERATIONS)
+    end = time_ns()
+    run_and_print("String Compare (different)", ITERATIONS, end - start)
+
+    // Int to String
+    start = time_ns()
+    let _its: I64 = bench_int_to_str(ITERATIONS)
+    end = time_ns()
+    run_and_print("Int to String", ITERATIONS, end - start)
+
+    // Log Building with Text (O(n))
+    start = time_ns()
+    let _lt: I64 = bench_log_text(TEXT_LOG_ITER)
+    end = time_ns()
+    run_and_print("Log Building (Text - O(n))", TEXT_LOG_ITER, end - start)
+
+    // Log Building naive (O(n^2)) - use fewer iterations!
+    start = time_ns()
+    let _ln: I64 = bench_log_naive(LOG_ITER)
+    end = time_ns()
+    run_and_print("Log Building (Str - O(n^2))", LOG_ITER, end - start)
+
+    println("Note: Str uses O(n^2) concatenation, Text uses O(n) amortized.")
+    println("For fair comparison with C++, compare Text times with reserve.")
+
+    return 0
+}

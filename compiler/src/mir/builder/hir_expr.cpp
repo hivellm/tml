@@ -85,6 +85,8 @@ auto HirMirBuilder::build_expr(const hir::HirExprPtr& expr) -> Value {
                 return build_assign(e);
             } else if constexpr (std::is_same_v<T, hir::HirCompoundAssignExpr>) {
                 return build_compound_assign(e);
+            } else if constexpr (std::is_same_v<T, hir::HirLowlevelExpr>) {
+                return build_lowlevel(e);
             } else {
                 // Unknown expression type
                 return const_unit();
@@ -495,6 +497,20 @@ auto HirMirBuilder::build_index(const hir::HirIndexExpr& index) -> Value {
     gep.indices = {idx};
     gep.base_type = base.type;
     gep.result_type = make_pointer_type(result_type, false);
+
+    // Check if base is an array type and record size for bounds check elimination
+    if (base.type) {
+        if (auto* arr_type = std::get_if<MirArrayType>(&base.type->kind)) {
+            gep.known_array_size = static_cast<int64_t>(arr_type->size);
+        } else if (auto* ptr_type = std::get_if<MirPointerType>(&base.type->kind)) {
+            // Check if pointee is array
+            if (ptr_type->pointee) {
+                if (auto* inner_arr = std::get_if<MirArrayType>(&ptr_type->pointee->kind)) {
+                    gep.known_array_size = static_cast<int64_t>(inner_arr->size);
+                }
+            }
+        }
+    }
 
     Value ptr = emit(gep, gep.result_type, index.span);
 
@@ -1609,6 +1625,35 @@ auto HirMirBuilder::build_compound_assign(const hir::HirCompoundAssignExpr& assi
     }
 
     return const_unit();
+}
+
+// ============================================================================
+// Lowlevel Block Expression
+// ============================================================================
+
+auto HirMirBuilder::build_lowlevel(const hir::HirLowlevelExpr& lowlevel) -> Value {
+    // Lowlevel blocks are like regular blocks but without safety checks.
+    // The HIR already ensures correct typing for the statements and expressions.
+    ctx_.push_drop_scope();
+
+    Value result = const_unit();
+
+    for (const auto& stmt : lowlevel.stmts) {
+        bool terminated = build_stmt(*stmt);
+        if (terminated) {
+            ctx_.pop_drop_scope();
+            return result; // Block terminated early
+        }
+    }
+
+    if (lowlevel.expr) {
+        result = build_expr(*lowlevel.expr);
+    }
+
+    emit_scope_drops();
+    ctx_.pop_drop_scope();
+
+    return result;
 }
 
 } // namespace tml::mir

@@ -1,0 +1,206 @@
+// Collections Benchmarks (TML)
+//
+// Tests basic collection-like operations.
+// Uses fixed-size arrays to test access patterns.
+
+// Helper to run and print a benchmark
+func run_and_print(name: Str, iterations: I64, total_ns: I64) {
+    let per_op: I64 = total_ns / iterations
+    let ops_sec: I64 = if total_ns > 0 then {
+        (iterations * 1000000000) / total_ns
+    } else {
+        0
+    }
+    println("  " + name + ":")
+    println("    Iterations: " + iterations.to_string())
+    println("    Total time: " + (total_ns / 1000000).to_string() + " ms")
+    println("    Per op:     " + per_op.to_string() + " ns")
+    println("    Ops/sec:    " + ops_sec.to_string())
+    println("")
+}
+
+// Array sequential read
+func bench_array_sequential(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var i: I64 = 0
+    loop {
+        if i >= 1000 then { break }
+        arr[i as U64] = i
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 1000 then { break }
+        i = 0
+        loop {
+            if i >= 1000 then { break }
+            sum = sum + arr[i as U64]
+            i = i + 1
+        }
+        round = round + 1
+    }
+    return sum
+}
+
+// Array random access
+func bench_array_random(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var i: I64 = 0
+    loop {
+        if i >= 1000 then { break }
+        arr[i as U64] = i
+        i = i + 1
+    }
+
+    var sum: I64 = 0
+    i = 0
+    loop {
+        if i >= iterations then { break }
+        let idx: I64 = (i * 7919 + 1) % 1000
+        sum = sum + arr[idx as U64]
+        i = i + 1
+    }
+    return sum
+}
+
+// Array write
+func bench_array_write(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let idx: U64 = (i % 1000) as U64
+        arr[idx] = i
+        i = i + 1
+    }
+    return arr[0]
+}
+
+// Array initialization
+func bench_array_init(iterations: I64) -> I64 {
+    var total: I64 = 0
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 1000 then { break }
+        var arr: [I64; 1000] = [0; 1000]
+        total = total + arr[0]
+        round = round + 1
+    }
+    return total
+}
+
+// Linear search
+func bench_linear_search(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var i: I64 = 0
+    loop {
+        if i >= 1000 then { break }
+        arr[i as U64] = i * 2
+        i = i + 1
+    }
+
+    var found: I64 = 0
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 100 then { break }
+        let target: I64 = round % 2000
+        i = 0
+        loop {
+            if i >= 1000 then { break }
+            if arr[i as U64] == target then {
+                found = found + 1
+                break
+            }
+            i = i + 1
+        }
+        round = round + 1
+    }
+    return found
+}
+
+// Accumulate sum
+func bench_accumulate(iterations: I64) -> I64 {
+    var arr: [I64; 1000] = [0; 1000]
+    var i: I64 = 0
+    loop {
+        if i >= 1000 then { break }
+        arr[i as U64] = i
+        i = i + 1
+    }
+
+    var total_sum: I64 = 0
+    var round: I64 = 0
+    loop {
+        if round >= iterations / 1000 then { break }
+        var sum: I64 = 0
+        i = 0
+        loop {
+            if i >= 1000 then { break }
+            sum = sum + arr[i as U64]
+            i = i + 1
+        }
+        total_sum = total_sum + sum
+        round = round + 1
+    }
+    return total_sum
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Collections Benchmarks (TML)")
+    println("================================================================")
+    println("")
+    println("Note: Using fixed-size arrays for benchmarking.")
+    println("")
+
+    let ITERATIONS: I64 = 1000000    // 1M operations
+
+    // Warmup
+    var warmup: I64 = 0
+    loop {
+        if warmup >= 10 then { break }
+        let _: I64 = bench_array_sequential(10000)
+        warmup = warmup + 1
+    }
+
+    // Array Sequential Read
+    var start: I64 = time_ns()
+    let _seq: I64 = bench_array_sequential(ITERATIONS)
+    var end: I64 = time_ns()
+    run_and_print("Array Sequential Read", ITERATIONS, end - start)
+
+    // Array Random Access
+    start = time_ns()
+    let _rand: I64 = bench_array_random(ITERATIONS)
+    end = time_ns()
+    run_and_print("Array Random Access", ITERATIONS, end - start)
+
+    // Array Write
+    start = time_ns()
+    let _write: I64 = bench_array_write(ITERATIONS)
+    end = time_ns()
+    run_and_print("Array Write", ITERATIONS, end - start)
+
+    // Array Initialization
+    start = time_ns()
+    let _init: I64 = bench_array_init(ITERATIONS)
+    end = time_ns()
+    run_and_print("Array Initialization", ITERATIONS, end - start)
+
+    // Linear Search
+    start = time_ns()
+    let _search: I64 = bench_linear_search(ITERATIONS)
+    end = time_ns()
+    run_and_print("Linear Search", ITERATIONS, end - start)
+
+    // Accumulate
+    start = time_ns()
+    let _acc: I64 = bench_accumulate(ITERATIONS)
+    end = time_ns()
+    run_and_print("Accumulate Sum", ITERATIONS, end - start)
+
+    return 0
+}

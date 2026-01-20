@@ -1,0 +1,203 @@
+// Type Conversion Benchmarks (TML)
+//
+// Tests type conversion overhead: int casts, float conversions.
+
+// Integer widening (I32 -> I64)
+func bench_int_widen(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let small: I32 = (i & 0x7FFFFFFF) as I32
+        let big: I64 = small as I64
+        sum = sum + big
+        i = i + 1
+    }
+    return sum
+}
+
+// Integer narrowing (I64 -> I32)
+func bench_int_narrow(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let big: I64 = i
+        let small: I32 = big as I32
+        sum = sum + (small as I64)
+        i = i + 1
+    }
+    return sum
+}
+
+// Unsigned to signed
+func bench_unsigned_to_signed(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let u: U64 = i as U64
+        let s: I64 = u as I64
+        sum = sum + s
+        i = i + 1
+    }
+    return sum
+}
+
+// Signed to unsigned
+func bench_signed_to_unsigned(iterations: I64) -> I64 {
+    var sum: U64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let s: I64 = i
+        let u: U64 = s as U64
+        sum = sum + u
+        i = i + 1
+    }
+    return sum as I64
+}
+
+// Int to float
+func bench_int_to_float(iterations: I64) -> I64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let f: F64 = i as F64
+        sum = sum + f
+        i = i + 1
+    }
+    return sum as I64
+}
+
+// Float to int
+func bench_float_to_int(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let f: F64 = (i as F64) + 0.5
+        let n: I64 = f as I64
+        sum = sum + n
+        i = i + 1
+    }
+    return sum
+}
+
+// Float widening (F32 -> F64)
+func bench_float_widen(iterations: I64) -> I64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let small: F32 = (i % 1000) as F32
+        let big: F64 = small as F64
+        sum = sum + big
+        i = i + 1
+    }
+    return sum as I64
+}
+
+// Float narrowing (F64 -> F32)
+func bench_float_narrow(iterations: I64) -> I64 {
+    var sum: F32 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let big: F64 = (i % 1000) as F64
+        let small: F32 = big as F32
+        sum = sum + small
+        i = i + 1
+    }
+    return (sum as F64) as I64
+}
+
+// Byte to int chain (I8 -> I16 -> I32 -> I64)
+func bench_byte_chain(iterations: I64) -> I64 {
+    var sum: I64 = 0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let b: I8 = (i & 0x7F) as I8
+        let s: I16 = b as I16
+        let m: I32 = s as I32
+        let l: I64 = m as I64
+        sum = sum + l
+        i = i + 1
+    }
+    return sum
+}
+
+// Mixed type arithmetic
+func bench_mixed_arithmetic(iterations: I64) -> I64 {
+    var sum: F64 = 0.0
+    var i: I64 = 0
+    loop {
+        if i >= iterations then { break }
+        let a: I32 = (i % 100) as I32
+        let b: F32 = (i % 50) as F32
+        let c: I64 = i % 25
+        let d: F64 = (i % 10) as F64
+
+        // Forces multiple conversions
+        sum = sum + (a as F64) + (b as F64) + (c as F64) + d
+        i = i + 1
+    }
+    return sum as I64
+}
+
+// Helper to run and print a benchmark
+func run_bench(name: Str, iterations: I64, runs: I32, bench_fn: func(I64) -> I64) {
+    // Warmup
+    let _w: I64 = bench_fn(iterations / 10)
+
+    var best_ns: I64 = 9223372036854775807  // I64 max
+    var run: I32 = 0
+    loop {
+        if run >= runs then { break }
+        let start: I64 = time_ns()
+        let _r: I64 = bench_fn(iterations)
+        let end: I64 = time_ns()
+        let elapsed: I64 = end - start
+        if elapsed < best_ns then {
+            best_ns = elapsed
+        }
+        run = run + 1
+    }
+
+    let per_op: I64 = best_ns / iterations
+    let ops_sec: I64 = if best_ns > 0 then {
+        (iterations * 1000000000) / best_ns
+    } else {
+        0
+    }
+
+    println("  " + name + ":")
+    println("    " + per_op.to_string() + " ns/op")
+    println("    " + ops_sec.to_string() + " ops/sec")
+    println("")
+}
+
+pub func main() -> I32 {
+    println("")
+    println("================================================================")
+    println("  Type Conversion Benchmarks (TML)")
+    println("================================================================")
+    println("")
+
+    let ITERATIONS: I64 = 10000000  // 10M
+
+    run_bench("Int Widen (I32->I64)", ITERATIONS, 10, bench_int_widen)
+    run_bench("Int Narrow (I64->I32)", ITERATIONS, 10, bench_int_narrow)
+    run_bench("Unsigned to Signed", ITERATIONS, 10, bench_unsigned_to_signed)
+    run_bench("Signed to Unsigned", ITERATIONS, 10, bench_signed_to_unsigned)
+    run_bench("Int to Float (I64->F64)", ITERATIONS, 10, bench_int_to_float)
+    run_bench("Float to Int (F64->I64)", ITERATIONS, 10, bench_float_to_int)
+    run_bench("Float Widen (F32->F64)", ITERATIONS, 10, bench_float_widen)
+    run_bench("Float Narrow (F64->F32)", ITERATIONS, 10, bench_float_narrow)
+    run_bench("Byte Chain (I8->I64)", ITERATIONS, 10, bench_byte_chain)
+    run_bench("Mixed Type Arithmetic", ITERATIONS, 10, bench_mixed_arithmetic)
+
+    return 0
+}
